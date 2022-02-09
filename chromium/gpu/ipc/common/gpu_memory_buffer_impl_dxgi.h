@@ -9,9 +9,10 @@
 #include <stdint.h>
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_pool.h"
+#include "base/unguessable_token.h"
 #include "base/win/scoped_handle.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl.h"
@@ -62,12 +63,14 @@ class GPU_EXPORT GpuMemoryBufferImplDXGI : public GpuMemoryBufferImpl {
                           gfx::BufferFormat format,
                           DestructionCallback callback,
                           base::win::ScopedHandle dxgi_handle,
+                          gfx::DXGIHandleToken dxgi_token,
                           GpuMemoryBufferManager* gpu_memory_buffer_manager,
                           scoped_refptr<base::UnsafeSharedMemoryPool> pool,
                           base::UnsafeSharedMemoryRegion region);
 
   base::win::ScopedHandle dxgi_handle_;
-  GpuMemoryBufferManager* gpu_memory_buffer_manager_;
+  gfx::DXGIHandleToken dxgi_token_;
+  raw_ptr<GpuMemoryBufferManager> gpu_memory_buffer_manager_;
 
   // Used to create and store shared memory for data, copied via request to
   // gpu process.

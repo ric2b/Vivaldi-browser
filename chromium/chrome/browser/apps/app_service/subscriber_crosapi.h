@@ -11,6 +11,7 @@
 
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list.h"
 #include "components/services/app_service/public/mojom/app_service.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -47,11 +48,6 @@ class SubscriberCrosapi : public KeyedService,
   void OnCapabilityAccesses(
       std::vector<apps::mojom::CapabilityAccessPtr> deltas) override;
   void Clone(mojo::PendingReceiver<apps::mojom::Subscriber> receiver) override;
-  void OnPreferredAppSet(const std::string& app_id,
-                         apps::mojom::IntentFilterPtr intent_filter) override;
-  void OnPreferredAppRemoved(
-      const std::string& app_id,
-      apps::mojom::IntentFilterPtr intent_filter) override;
   void OnPreferredAppsChanged(
       apps::mojom::PreferredAppChangesPtr changes) override;
   void InitializePreferredApps(
@@ -65,9 +61,11 @@ class SubscriberCrosapi : public KeyedService,
   void Launch(crosapi::mojom::LaunchParamsPtr launch_params) override;
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconType icon_type,
+                IconType icon_type,
                 int32_t size_hint_in_dip,
-                LoadIconCallback callback) override;
+                apps::LoadIconCallback callback) override;
+  void AddPreferredApp(const std::string& app_id,
+                       crosapi::mojom::IntentPtr intent) override;
 
   void OnSubscriberDisconnected();
 

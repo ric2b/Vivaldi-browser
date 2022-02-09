@@ -18,7 +18,9 @@ enum
     // Editable labels
     wxDIRCTRL_EDIT_LABELS    = 0x0100,
     // Allow multiple selection
-    wxDIRCTRL_MULTIPLE       = 0x0200
+    wxDIRCTRL_MULTIPLE       = 0x0200,
+
+    wxDIRCTRL_DEFAULT_STYLE  = wxDIRCTRL_3D_INTERNAL
 };
 
 
@@ -35,7 +37,7 @@ enum
     @style{wxDIRCTRL_DIR_ONLY}
            Only show directories, and not files.
     @style{wxDIRCTRL_3D_INTERNAL}
-           Use 3D borders for internal controls.
+           Use 3D borders for internal controls. This is the default.
     @style{wxDIRCTRL_SELECT_FIRST}
            When setting the default path, select the first file in the
            directory.
@@ -50,7 +52,7 @@ enum
     @library{wxcore}
     @category{ctrl}
     @appearance{genericdirctrl}
-    
+
     @beginEventEmissionTable
     @event{EVT_DIRCTRL_SELECTIONCHANGED(id, func)}
           Selected directory has changed.
@@ -96,11 +98,11 @@ public:
         @param name
             The window name.
     */
-    wxGenericDirCtrl(wxWindow* parent, const wxWindowID id = wxID_ANY,
+    wxGenericDirCtrl(wxWindow* parent, wxWindowID id = wxID_ANY,
                      const wxString& dir = wxDirDialogDefaultFolderStr,
                      const wxPoint& pos = wxDefaultPosition,
                      const wxSize& size = wxDefaultSize,
-                     long style = wxDIRCTRL_3D_INTERNAL,
+                     long style = wxDIRCTRL_DEFAULT_STYLE,
                      const wxString& filter = wxEmptyString,
                      int defaultFilter = 0,
                      const wxString& name = wxTreeCtrlNameStr);
@@ -124,11 +126,11 @@ public:
         Create function for two-step construction. See wxGenericDirCtrl() for
         details.
     */
-    bool Create(wxWindow* parent, const wxWindowID id = wxID_ANY,
+    bool Create(wxWindow* parent, wxWindowID id = wxID_ANY,
                 const wxString& dir = wxDirDialogDefaultFolderStr,
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
-                long style = wxDIRCTRL_3D_INTERNAL,
+                long style = wxDIRCTRL_DEFAULT_STYLE,
                 const wxString& filter = wxEmptyString, int defaultFilter = 0,
                 const wxString& name = wxTreeCtrlNameStr);
 
@@ -266,16 +268,16 @@ class wxDirFilterListCtrl: public wxChoice
 {
 public:
     wxDirFilterListCtrl();
-    wxDirFilterListCtrl(wxGenericDirCtrl* parent, const wxWindowID id = wxID_ANY,
+    wxDirFilterListCtrl(wxGenericDirCtrl* parent, wxWindowID id = wxID_ANY,
                         const wxPoint& pos = wxDefaultPosition,
                         const wxSize& size = wxDefaultSize,
                         long style = 0);
-    bool Create(wxGenericDirCtrl* parent, const wxWindowID id = wxID_ANY,
+    bool Create(wxGenericDirCtrl* parent, wxWindowID id = wxID_ANY,
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = 0);
 
-    virtual ~wxDirFilterListCtrl() {}
+    virtual ~wxDirFilterListCtrl();
 
     void Init();
 

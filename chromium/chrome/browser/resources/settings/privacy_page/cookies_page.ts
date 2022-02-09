@@ -34,27 +34,19 @@ import {PrefsMixin, PrefsMixinInterface} from '../prefs/prefs_mixin.js';
 import {routes} from '../route.js';
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
 import {ContentSetting, ContentSettingsTypes} from '../site_settings/constants.js';
+import {CookiePrimarySetting} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
-/**
- * The primary cookie setting associated with each radio button. Must be kept in
- * sync with the C++ enum of the same name in
- * chrome/browser/content_settings/generated_cookie_prefs.h
- */
-enum CookiePrimarySetting {
-  ALLOW_ALL = 0,
-  BLOCK_THIRD_PARTY_INCOGNITO = 1,
-  BLOCK_THIRD_PARTY = 2,
-  BLOCK_ALL = 3,
-}
+import {SettingsCollapseRadioButtonElement} from './collapse_radio_button.js';
 
 /**
  * Must be kept in sync with the C++ enum of the same name (see
- * chrome/browser/net/prediction_options.h).
+ * chrome/browser/prefetch/prefetch_prefs.h).
  */
 enum NetworkPredictionOptions {
-  ALWAYS = 0,
-  WIFI_ONLY = 1,
-  NEVER = 2,
+  STANDARD = 0,
+  WIFI_ONLY_DEPRECATED = 1,
+  DISABLED = 2,
+  EXTENDED = 3,
   DEFAULT = 1,
 }
 
@@ -62,8 +54,12 @@ type FocusConfig = Map<string, (string|(() => void))>;
 
 export interface SettingsCookiesPageElement {
   $: {
-    toast: CrToastElement,
+    allowAll: SettingsCollapseRadioButtonElement,
+    blockAll: SettingsCollapseRadioButtonElement,
+    blockThirdPartyIncognito: SettingsCollapseRadioButtonElement,
+    blockThirdParty: SettingsCollapseRadioButtonElement,
     primarySettingGroup: SettingsRadioGroupElement,
+    toast: CrToastElement,
   };
 }
 
@@ -119,7 +115,7 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
        */
       networkPredictionUncheckedValue_: {
         type: Number,
-        value: NetworkPredictionOptions.NEVER,
+        value: NetworkPredictionOptions.DISABLED,
       },
 
       contentSetting_: {
@@ -299,6 +295,12 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
     // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call.
     this.shadowRoot!.querySelector<HTMLAnchorElement>(
                         '#privacySandboxLink')!.click();
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-cookies-page': SettingsCookiesPageElement;
   }
 }
 

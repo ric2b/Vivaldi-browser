@@ -4,7 +4,9 @@
 
 import {dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-// <if expr="chromeos">
+import {loadTimeData} from '../i18n_setup.js';
+
+// <if expr="chromeos or lacros">
 import {BlockingRequestManager} from './blocking_request_manager.js';
 // </if>
 import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
@@ -24,7 +26,7 @@ export const ShowPasswordMixin = dedupingMixin(
           return {
             entry: Object,
 
-            // <if expr="chromeos">
+            // <if expr="chromeos or lacros">
             tokenRequestManager: Object
             // </if>
           };
@@ -32,7 +34,7 @@ export const ShowPasswordMixin = dedupingMixin(
 
         entry: MultiStorePasswordUiEntry;
 
-        // <if expr="chromeos">
+        // <if expr="chromeos or lacros">
         tokenRequestManager: BlockingRequestManager;
         // </if>
 
@@ -43,6 +45,12 @@ export const ShowPasswordMixin = dedupingMixin(
 
         showPasswordTitle(password: string, hide: string, show: string) {
           return password ? hide : show;
+        }
+
+        getShowButtonLabel(password: string) {
+          return loadTimeData.getStringF(
+              (password) ? 'hidePasswordLabel' : 'showPasswordLabel',
+              this.entry.username, this.entry.urls.shown);
         }
 
         getIconClass() {
@@ -70,7 +78,7 @@ export const ShowPasswordMixin = dedupingMixin(
                     this.set('entry.password', password);
                   },
                   _error => {
-                    // <if expr="chromeos">
+                    // <if expr="chromeos or lacros">
                     // If no password was found, refresh auth token and retry.
                     this.tokenRequestManager.request(
                         () => this.onShowPasswordButtonTap());
@@ -100,6 +108,11 @@ export interface ShowPasswordMixinInterface {
    * Gets the title text for the show/hide icon.
    */
   showPasswordTitle(password: string, hide: string, show: string): string;
+
+  /**
+   * Gets the a11y label for the show/hide button.
+   */
+  getShowButtonLabel(password: string): string;
 
   /**
    * Get the right icon to display when hiding/showing a password.

@@ -46,14 +46,14 @@
 //  - It *must* be a trivial type, that is zero-initialized.
 //
 //  - It provides an is_null() const method, which should return true
-//    iff the corresponding node matches a 'free' entry in the hash
+//    if the corresponding node matches a 'free' entry in the hash
 //    table, i.e. one that has not been assigned to an item, or
 //    to a deletion tombstone (see below).
 //
 //    Of course, a default (zeroed) value, should always return true.
 //
 //  - It provides an is_tombstone() const method, which should return
-//    return true iff the corresponding node indicates a previously
+//    return true if the corresponding node indicates a previously
 //    deleted item.
 //
 //    Note that if your hash table does not need deletion support,
@@ -127,7 +127,7 @@
 //        }
 //      }
 //
-//      // Returns true iff this set contains |key|.
+//      // Returns true if this set contains |key|.
 //      bool contains(const Foo& key) const {
 //        Node* node = BaseType::NodeLookup(
 //            MakeHash(key),
@@ -171,6 +171,7 @@
 //        delete node->foo;
 //        node->foo = Node::kTombstone;
 //        UpdateAfterDeletion().
+//        return true;
 //      }
 //
 //      static size_t MakeHash(const Foo& foo) {
@@ -241,7 +242,7 @@ class HashTableBase {
     return *this;
   }
 
-  // Return true iff the table is empty.
+  // Return true if the table is empty.
   bool empty() const { return count_ == 0; }
 
   // Return the number of keys in the set.
@@ -259,8 +260,45 @@ class HashTableBase {
   // own iterator/const_iterator/begin()/end() types and methods, possibly as
   // simple wrappers around the NodeIterator/NodeBegin/NodeEnd below.
   //
+  // Defining a custom iterator is as easy as deriving from NodeIterator
+  // and overloading operator*() and operator->(), as in:
+  //
+  //  struct FooNode {
+  //     size_t hash;
+  //     Foo*   foo_ptr;
+  //     ...
+  //  };
+  //
+  //  class FooTable : public HashTableBase<FooNode> {
+  //  public:
+  //     ...
+  //
+  //     // Iterators point to Foo instances, not table nodes.
+  //     struct ConstIterator : NodeIterator {
+  //       const Foo* operator->() { return node_->foo_ptr; }
+  //       const Foo& operator*)) { return *(node_->foo_ptr); }
+  //     };
+  //
+  //     ConstIterator begin() const { return { NodeBegin() }; }
+  //     ConstIterator end() const { return { NodeEnd() }; }
+  //
+  // The NodeIterator type has a valid() method that can be used to perform
+  // faster iteration though at the cost of using a slightly more annoying
+  // syntax:
+  //
+  //    for (auto it = my_table.begin(); it.valid(); ++it) {
+  //      const Foo& foo = *it;
+  //      ...
+  //    }
+  //
+  // Instead of:
+  //
+  //    for (const Foo& foo : my_table) {
+  //      ...
+  //    }
+  //
   // The ValidNodesRange() method also returns a object that has begin() and
-  // end() methods to be used in for-range loops as in:
+  // end() methods to be used in for-range loops over Node values as in:
   //
   //    for (Node& node : my_table.ValidNodesRange()) { ... }
   //
@@ -295,6 +333,9 @@ class HashTableBase {
       return result;
     }
 
+    // Returns true if the iterator points to a valid node.
+    bool valid() const { return node_ != node_limit_; }
+
     Node* node_ = nullptr;
     Node* node_limit_ = nullptr;
   };
@@ -323,11 +364,9 @@ class HashTableBase {
   //     ...
   //
   //     // Iterators point to Foo instances, not table nodes.
-  //     struct ConstIterator {
-  //       const Foo* operator->() { return iter_->foo_ptr; }
-  //       const Foo& operator->() { return *(iter_->foo_ptr); }
-  //       ...
-  //       NodeIterator iter_;
+  //     struct ConstIterator : NodeIterator {
+  //       const Foo* operator->() { return node_->foo_ptr; }
+  //       const Foo& operator*)) { return *(node_->foo_ptr); }
   //     };
   //
   // and compare two ways to implement its begin() method:
@@ -400,7 +439,7 @@ class HashTableBase {
 
   // Lookup for a node in the hash table that matches the |node_equal|
   // predicate, which takes a const Node* pointer argument, and returns
-  // true iff this corresponds to a lookup match.
+  // true if this corresponds to a lookup match.
   //
   // IMPORTANT: |node_equal| may or may not check the node hash value,
   // the choice is left to the implementation.

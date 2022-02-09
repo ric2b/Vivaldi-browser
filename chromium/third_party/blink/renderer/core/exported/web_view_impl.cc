@@ -35,6 +35,8 @@
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
@@ -43,9 +45,11 @@
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/frame/event_page_show_persisted.h"
 #include "third_party/blink/public/common/history/session_history_constants.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
+#include "third_party/blink/public/common/page/page_lifecycle_state_updater.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/switches.h"
@@ -295,12 +299,6 @@ void SetFantasyFontFamilyWrapper(WebSettings* settings,
   settings->SetFantasyFontFamily(WebString::FromUTF16(font), script);
 }
 
-void SetPictographFontFamilyWrapper(WebSettings* settings,
-                                    const std::u16string& font,
-                                    UScriptCode script) {
-  settings->SetPictographFontFamily(WebString::FromUTF16(font), script);
-}
-
 // If |scriptCode| is a member of a family of "similar" script codes, returns
 // the script code in that family that is used by WebKit for font selection
 // purposes.  For example, USCRIPT_KATAKANA_OR_HIRAGANA and USCRIPT_JAPANESE are
@@ -448,6 +446,7 @@ WebView* WebView::Create(
     bool is_hidden,
     bool is_prerendering,
     bool is_inside_portal,
+    bool is_fenced_frame,
     bool compositing_enabled,
     bool widgets_never_composited,
     WebView* opener,
@@ -460,7 +459,7 @@ WebView* WebView::Create(
       client,
       is_hidden ? mojom::blink::PageVisibilityState::kHidden
                 : mojom::blink::PageVisibilityState::kVisible,
-      is_prerendering, is_inside_portal, compositing_enabled,
+      is_prerendering, is_inside_portal, is_fenced_frame, compositing_enabled,
       widgets_never_composited, To<WebViewImpl>(opener), std::move(page_handle),
       agent_group_scheduler, session_storage_namespace_id,
       std::move(page_base_background_color));
@@ -471,6 +470,7 @@ WebViewImpl* WebViewImpl::Create(
     mojom::blink::PageVisibilityState visibility,
     bool is_prerendering,
     bool is_inside_portal,
+    bool is_fenced_frame,
     bool compositing_enabled,
     bool widgets_never_composited,
     WebViewImpl* opener,
@@ -481,7 +481,7 @@ WebViewImpl* WebViewImpl::Create(
   // Take a self-reference for WebViewImpl that is released by calling Close(),
   // then return a raw pointer to the caller.
   auto web_view = base::AdoptRef(new WebViewImpl(
-      client, visibility, is_prerendering, is_inside_portal,
+      client, visibility, is_prerendering, is_inside_portal, is_fenced_frame,
       compositing_enabled, widgets_never_composited, opener,
       std::move(page_handle), agent_group_scheduler,
       session_storage_namespace_id, std::move(page_base_background_color)));
@@ -544,6 +544,7 @@ WebViewImpl::WebViewImpl(
     mojom::blink::PageVisibilityState visibility,
     bool is_prerendering,
     bool is_inside_portal,
+    bool is_fenced_frame,
     bool does_composite,
     bool widgets_never_composited,
     WebViewImpl* opener,
@@ -579,6 +580,11 @@ WebViewImpl::WebViewImpl(
   // page.
   SetInsidePortal(is_inside_portal);
 
+  if (is_fenced_frame && features::IsFencedFramesEnabled() &&
+      features::IsFencedFramesMPArchBased()) {
+    page_->SetIsMainFrameFencedFrameRoot();
+  }
+
   // When not compositing, keep the Page in the loop so that it will paint all
   // content into the root layer, as multiple layers can only be used when
   // compositing them together later.
@@ -606,7 +612,7 @@ void WebViewImpl::SetTabKeyCyclesThroughElements(bool value) {
     page_->SetTabKeyCyclesThroughElements(value);
 }
 
-bool WebViewImpl::StartPageScaleAnimation(const IntPoint& target_position,
+bool WebViewImpl::StartPageScaleAnimation(const gfx::Point& target_position,
                                           bool use_anchor,
                                           float new_scale,
                                           base::TimeDelta duration) {
@@ -626,7 +632,7 @@ bool WebViewImpl::StartPageScaleAnimation(const IntPoint& target_position,
       LocalFrameView* view = MainFrameImpl()->GetFrameView();
       if (view && view->GetScrollableArea()) {
         view->GetScrollableArea()->SetScrollOffset(
-            ScrollOffset(clamped_point.x(), clamped_point.y()),
+            ScrollOffset(gfx::Vector2dF(clamped_point.OffsetFromOrigin())),
             mojom::blink::ScrollType::kProgrammatic);
       }
 
@@ -642,15 +648,14 @@ bool WebViewImpl::StartPageScaleAnimation(const IntPoint& target_position,
     fake_page_scale_animation_page_scale_factor_ = new_scale;
   } else {
     MainFrameImpl()->FrameWidgetImpl()->StartPageScaleAnimation(
-        static_cast<gfx::Vector2d>(target_position), use_anchor, new_scale,
-        duration);
+        target_position, use_anchor, new_scale, duration);
   }
   return true;
 }
 
 void WebViewImpl::EnableFakePageScaleAnimationForTesting(bool enable) {
   enable_fake_page_scale_animation_for_testing_ = enable;
-  fake_page_scale_animation_target_position_ = IntPoint();
+  fake_page_scale_animation_target_position_ = gfx::Point();
   fake_page_scale_animation_use_anchor_ = false;
   fake_page_scale_animation_page_scale_factor_ = 0;
 }
@@ -672,8 +677,7 @@ gfx::Rect WebViewImpl::WidenRectWithinPageBounds(const gfx::Rect& source,
   DCHECK(MainFrame());
   DCHECK(MainFrame()->IsWebLocalFrame());
   gfx::Size max_size = MainFrame()->ToWebLocalFrame()->DocumentSize();
-  gfx::Vector2dF scroll_offset =
-      MainFrame()->ToWebLocalFrame()->GetScrollOffset();
+  gfx::PointF scroll_offset = MainFrame()->ToWebLocalFrame()->GetScrollOffset();
 
   int left_margin = target_margin;
   int right_margin = target_margin;
@@ -718,9 +722,9 @@ void WebViewImpl::ComputeScaleAndScrollForBlockRect(
     float padding,
     float default_scale_when_already_legible,
     float& scale,
-    IntPoint& scroll) {
+    gfx::Point& scroll) {
   scale = PageScaleFactor();
-  scroll = IntPoint();
+  scroll = gfx::Point();
 
   gfx::Rect rect = block_rect_in_root_frame;
 
@@ -772,8 +776,8 @@ void WebViewImpl::ComputeScaleAndScrollForBlockRect(
     rect.set_x(std::max<float>(
         rect.x(), hit_point_in_root_frame.x() + padding - screen_width));
   }
-  scroll.SetX(rect.x());
-  scroll.SetY(rect.y());
+  scroll.set_x(rect.x());
+  scroll.set_y(rect.y());
 
   scale = ClampPageScaleFactorToLimits(scale);
   scroll = MainFrameImpl()->GetFrameView()->RootFrameToDocument(scroll);
@@ -861,7 +865,7 @@ void WebViewImpl::AnimateDoubleTapZoom(const gfx::Point& point_in_root_frame,
   DCHECK(MainFrameImpl());
 
   float scale;
-  IntPoint scroll;
+  gfx::Point scroll;
 
   ComputeScaleAndScrollForBlockRect(
       point_in_root_frame, rect_to_zoom, touchPointPadding,
@@ -881,9 +885,9 @@ void WebViewImpl::AnimateDoubleTapZoom(const gfx::Point& point_in_root_frame,
 
   if (should_zoom_out) {
     scale = MinimumPageScaleFactor();
-    IntPoint target_position =
+    gfx::Point target_position =
         MainFrameImpl()->GetFrameView()->RootFrameToDocument(
-            IntPoint(point_in_root_frame.x(), point_in_root_frame.y()));
+            gfx::Point(point_in_root_frame.x(), point_in_root_frame.y()));
     is_animating = StartPageScaleAnimation(target_position, true, scale,
                                            kDoubleTapZoomAnimationDuration);
   } else {
@@ -917,7 +921,7 @@ void WebViewImpl::ZoomToFindInPageRect(const gfx::Rect& rect_in_root_frame) {
   }
 
   float scale;
-  IntPoint scroll;
+  gfx::Point scroll;
 
   ComputeScaleAndScrollForBlockRect(rect_in_root_frame.origin(), block_bounds,
                                     nonUserInitiatedPointPadding,
@@ -1077,6 +1081,10 @@ void WebViewImpl::Close() {
   DCHECK(AllInstances().Contains(this));
   AllInstances().erase(this);
 
+  // Ensure if we have a page popup we cancel it immediately as we do not
+  // want page popups to re-enter WebViewImpl during our shutdown.
+  CancelPagePopup();
+
   // Invalidate any weak ptrs as we are starting to shutdown.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
@@ -1101,7 +1109,7 @@ gfx::Size WebViewImpl::Size() {
 }
 
 void WebViewImpl::ResizeVisualViewport(const gfx::Size& new_size) {
-  GetPage()->GetVisualViewport().SetSize(IntSize(new_size));
+  GetPage()->GetVisualViewport().SetSize(new_size);
   GetPage()->GetVisualViewport().ClampToBoundaries();
 }
 
@@ -1111,16 +1119,16 @@ void WebViewImpl::DidFirstVisuallyNonEmptyPaint() {
 }
 
 void WebViewImpl::UpdateICBAndResizeViewport(
-    const IntSize& visible_viewport_size) {
+    const gfx::Size& visible_viewport_size) {
   // We'll keep the initial containing block size from changing when the top
   // controls hide so that the ICB will always be the same size as the
   // viewport with the browser controls shown.
-  IntSize icb_size = IntSize(size_);
+  gfx::Size icb_size = size_;
   if (GetBrowserControls().PermittedState() ==
           cc::BrowserControlsState::kBoth &&
       !GetBrowserControls().ShrinkViewport()) {
-    icb_size.Expand(0, -(GetBrowserControls().TotalHeight() -
-                         GetBrowserControls().TotalMinHeight()));
+    icb_size.Enlarge(0, -(GetBrowserControls().TotalHeight() -
+                          GetBrowserControls().TotalMinHeight()));
   }
 
   GetPageScaleConstraintsSet().DidChangeInitialContainingBlockSize(icb_size);
@@ -1210,7 +1218,7 @@ BrowserControls& WebViewImpl::GetBrowserControls() {
 
 void WebViewImpl::ResizeViewWhileAnchored(
     cc::BrowserControlsParams params,
-    const IntSize& visible_viewport_size) {
+    const gfx::Size& visible_viewport_size) {
   DCHECK(MainFrameImpl());
 
   GetBrowserControls().SetParams(params);
@@ -1220,12 +1228,12 @@ void WebViewImpl::ResizeViewWhileAnchored(
     // TextAutosizer are updated.
     TextAutosizer::DeferUpdatePageInfo defer_update_page_info(GetPage());
     LocalFrameView* frame_view = MainFrameImpl()->GetFrameView();
-    IntSize old_size = frame_view->Size();
+    gfx::Size old_size = frame_view->Size();
     UpdateICBAndResizeViewport(visible_viewport_size);
-    IntSize new_size = frame_view->Size();
+    gfx::Size new_size = frame_view->Size();
     frame_view->MarkViewportConstrainedObjectsForLayout(
-        old_size.Width() != new_size.Width(),
-        old_size.Height() != new_size.Height());
+        old_size.width() != new_size.width(),
+        old_size.height() != new_size.height());
   }
 
   fullscreen_controller_->UpdateSize();
@@ -1261,7 +1269,7 @@ void WebViewImpl::ResizeWithBrowserControls(
   }
 
   if (size_ == main_frame_widget_size &&
-      GetPage()->GetVisualViewport().Size() == IntSize(visible_viewport_size) &&
+      GetPage()->GetVisualViewport().Size() == visible_viewport_size &&
       GetBrowserControls().Params() == browser_controls_params)
     return;
 
@@ -1271,9 +1279,8 @@ void WebViewImpl::ResizeWithBrowserControls(
     // so that it can be used for initialization if the main frame gets
     // swapped to a LocalFrame at a later time.
     size_ = main_frame_widget_size;
-    GetPageScaleConstraintsSet().DidChangeInitialContainingBlockSize(
-        IntSize(size_));
-    GetPage()->GetVisualViewport().SetSize(IntSize(size_));
+    GetPageScaleConstraintsSet().DidChangeInitialContainingBlockSize(size_);
+    GetPage()->GetVisualViewport().SetSize(size_);
     GetPage()->GetBrowserControls().SetParams(browser_controls_params);
     return;
   }
@@ -1290,22 +1297,21 @@ void WebViewImpl::ResizeWithBrowserControls(
 
   bool is_rotation =
       GetPage()->GetSettings().GetMainFrameResizesAreOrientationChanges() &&
-      size_.width() && ContentsSize().Width() &&
+      size_.width() && ContentsSize().width() &&
       main_frame_widget_size.width() != size_.width() &&
       !fullscreen_controller_->IsFullscreenOrTransitioning();
   size_ = main_frame_widget_size;
 
-  FloatSize viewport_anchor_coords(viewportAnchorCoordX, viewportAnchorCoordY);
   if (is_rotation) {
+    gfx::PointF viewport_anchor_coords(viewportAnchorCoordX,
+                                       viewportAnchorCoordY);
     RotationViewportAnchor anchor(*view, visual_viewport,
                                   viewport_anchor_coords,
                                   GetPageScaleConstraintsSet());
-    ResizeViewWhileAnchored(browser_controls_params,
-                            IntSize(visible_viewport_size));
+    ResizeViewWhileAnchored(browser_controls_params, visible_viewport_size);
   } else {
     ResizeViewportAnchor::ResizeScope resize_scope(*resize_viewport_anchor_);
-    ResizeViewWhileAnchored(browser_controls_params,
-                            IntSize(visible_viewport_size));
+    ResizeViewWhileAnchored(browser_controls_params, visible_viewport_size);
   }
   SendResizeEventForMainFrame();
 }
@@ -1391,7 +1397,7 @@ void WebViewImpl::PaintContent(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
 
   auto* builder = MakeGarbageCollected<PaintRecordBuilder>();
   main_view.PaintOutsideOfLifecycle(builder->Context(), kGlobalPaintNormalPhase,
-                                    CullRect(IntRect(rect)));
+                                    CullRect(rect));
   // Don't bother to save/restore here as the caller is expecting the canvas
   // to be modified and take care of it.
   canvas->clipRect(gfx::RectToSkRect(rect));
@@ -1418,8 +1424,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
                     settings);
   ApplyFontsFromMap(prefs.fantasy_font_family_map, SetFantasyFontFamilyWrapper,
                     settings);
-  ApplyFontsFromMap(prefs.pictograph_font_family_map,
-                    SetPictographFontFamilyWrapper, settings);
   settings->SetDefaultFontSize(prefs.default_font_size);
   settings->SetDefaultFixedFontSize(prefs.default_fixed_font_size);
   settings->SetMinimumFontSize(prefs.minimum_font_size);
@@ -1447,8 +1451,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetAllowNonEmptyNavigatorPlugins(
       prefs.allow_non_empty_navigator_plugins);
   RuntimeEnabledFeatures::SetDatabaseEnabled(prefs.databases_enabled);
-  settings->SetOfflineWebApplicationCacheEnabled(
-      prefs.application_cache_enabled);
   settings->SetShouldProtectAgainstIpcFlooding(
       !prefs.disable_ipc_flooding_protection);
   settings->SetHyperlinkAuditingEnabled(prefs.hyperlink_auditing_enabled);
@@ -1476,6 +1478,10 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   // Enable gpu-accelerated 2d canvas if requested on the command line.
   RuntimeEnabledFeatures::SetAccelerated2dCanvasEnabled(
       prefs.accelerated_2d_canvas_enabled);
+
+  // Enable canvas to clear its context when it is running in background.
+  RuntimeEnabledFeatures::SetCanvasContextLostInBackgroundEnabled(
+      prefs.canvas_context_lost_in_background_enabled);
 
   // Enable new canvas 2d api features
   RuntimeEnabledFeatures::SetNewCanvas2DAPIEnabled(
@@ -2040,11 +2046,11 @@ bool WebViewImpl::ShouldZoomToLegibleScale(const Element& element) {
 }
 
 void WebViewImpl::ZoomAndScrollToFocusedEditableElementRect(
-    const IntRect& element_bounds_in_document,
-    const IntRect& caret_bounds_in_document,
+    const gfx::Rect& element_bounds_in_document,
+    const gfx::Rect& caret_bounds_in_document,
     bool zoom_into_legible_scale) {
   float scale;
-  IntPoint scroll;
+  gfx::Point scroll;
   bool need_animation = false;
   ComputeScaleAndScrollForEditableElementRects(
       element_bounds_in_document, caret_bounds_in_document,
@@ -2058,16 +2064,16 @@ void WebViewImpl::ZoomAndScrollToFocusedEditableElementRect(
 void WebViewImpl::SmoothScroll(int target_x,
                                int target_y,
                                base::TimeDelta duration) {
-  IntPoint target_position(target_x, target_y);
+  gfx::Point target_position(target_x, target_y);
   StartPageScaleAnimation(target_position, false, PageScaleFactor(), duration);
 }
 
 void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
-    const IntRect& element_bounds_in_document,
-    const IntRect& caret_bounds_in_document,
+    const gfx::Rect& element_bounds_in_document,
+    const gfx::Rect& caret_bounds_in_document,
     bool zoom_into_legible_scale,
     float& new_scale,
-    IntPoint& new_scroll,
+    gfx::Point& new_scroll,
     bool& need_animation) {
   VisualViewport& visual_viewport = GetPage()->GetVisualViewport();
 
@@ -2075,8 +2081,8 @@ void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
       GetPage()->GlobalRootScrollerController();
   Node* root_scroller = controller.GlobalRootScroller();
 
-  IntRect element_bounds_in_content = element_bounds_in_document;
-  IntRect caret_bounds_in_content = caret_bounds_in_document;
+  gfx::Rect element_bounds_in_content = element_bounds_in_document;
+  gfx::Rect caret_bounds_in_content = caret_bounds_in_document;
 
   // If the page has a non-default root scroller then we need to scroll that
   // rather than the "real" viewport. However, the given coordinates are in the
@@ -2087,8 +2093,8 @@ void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
   if (root_scroller != MainFrameImpl()->GetFrame()->GetDocument() &&
       controller.RootScrollerArea()) {
     ScrollOffset offset = controller.RootScrollerArea()->GetScrollOffset();
-    element_bounds_in_content.Move(FlooredIntSize(offset));
-    caret_bounds_in_content.Move(FlooredIntSize(offset));
+    element_bounds_in_content.Offset(gfx::ToFlooredVector2d(offset));
+    caret_bounds_in_content.Offset(gfx::ToFlooredVector2d(offset));
   }
 
   if (!zoom_into_legible_scale) {
@@ -2098,14 +2104,14 @@ void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
     // the caret height will become minReadableCaretHeightForNode (adjusted
     // for dpi and font scale factor).
     const int min_readable_caret_height_for_node =
-        (element_bounds_in_content.Height() >=
-                 2 * caret_bounds_in_content.Height()
+        (element_bounds_in_content.height() >=
+                 2 * caret_bounds_in_content.height()
              ? minReadableCaretHeightForTextArea
              : minReadableCaretHeight) *
         MainFrameImpl()->GetFrame()->PageZoomFactor();
     new_scale = ClampPageScaleFactorToLimits(
         MaximumLegiblePageScale() * min_readable_caret_height_for_node /
-        caret_bounds_in_content.Height());
+        caret_bounds_in_content.height());
     new_scale = std::max(new_scale, PageScaleFactor());
   }
   const float delta_scale = new_scale / PageScaleFactor();
@@ -2127,10 +2133,10 @@ void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
 
   // If the box is partially offscreen and it's possible to bring it fully
   // onscreen, then animate.
-  if (visual_viewport.VisibleRect().Width() >=
-          element_bounds_in_content.Width() &&
-      visual_viewport.VisibleRect().Height() >=
-          element_bounds_in_content.Height() &&
+  if (visual_viewport.VisibleRect().width() >=
+          element_bounds_in_content.width() &&
+      visual_viewport.VisibleRect().height() >=
+          element_bounds_in_content.height() &&
       !root_viewport->VisibleContentRect().Contains(element_bounds_in_content))
     need_animation = true;
 
@@ -2140,37 +2146,37 @@ void WebViewImpl::ComputeScaleAndScrollForEditableElementRects(
   FloatSize target_viewport_size(visual_viewport.Size());
   target_viewport_size.Scale(1 / new_scale);
 
-  if (element_bounds_in_content.Width() <= target_viewport_size.Width()) {
+  if (element_bounds_in_content.width() <= target_viewport_size.width()) {
     // Field is narrower than screen. Try to leave padding on left so field's
     // label is visible, but it's more important to ensure entire field is
     // onscreen.
-    int ideal_left_padding = target_viewport_size.Width() * leftBoxRatio;
+    int ideal_left_padding = target_viewport_size.width() * leftBoxRatio;
     int max_left_padding_keeping_box_onscreen =
-        target_viewport_size.Width() - element_bounds_in_content.Width();
-    new_scroll.SetX(element_bounds_in_content.X() -
-                    std::min<int>(ideal_left_padding,
-                                  max_left_padding_keeping_box_onscreen));
+        target_viewport_size.width() - element_bounds_in_content.width();
+    new_scroll.set_x(element_bounds_in_content.x() -
+                     std::min<int>(ideal_left_padding,
+                                   max_left_padding_keeping_box_onscreen));
   } else {
     // Field is wider than screen. Try to left-align field, unless caret would
     // be offscreen, in which case right-align the caret.
-    new_scroll.SetX(std::max<int>(
-        element_bounds_in_content.X(),
-        caret_bounds_in_content.X() + caret_bounds_in_content.Width() +
-            caretPadding - target_viewport_size.Width()));
+    new_scroll.set_x(std::max<int>(
+        element_bounds_in_content.x(),
+        caret_bounds_in_content.x() + caret_bounds_in_content.width() +
+            caretPadding - target_viewport_size.width()));
   }
-  if (element_bounds_in_content.Height() <= target_viewport_size.Height()) {
+  if (element_bounds_in_content.height() <= target_viewport_size.height()) {
     // Field is shorter than screen. Vertically center it.
-    new_scroll.SetY(
-        element_bounds_in_content.Y() -
-        (target_viewport_size.Height() - element_bounds_in_content.Height()) /
+    new_scroll.set_y(
+        element_bounds_in_content.y() -
+        (target_viewport_size.height() - element_bounds_in_content.height()) /
             2);
   } else {
     // Field is taller than screen. Try to top align field, unless caret would
     // be offscreen, in which case bottom-align the caret.
-    new_scroll.SetY(std::max<int>(
-        element_bounds_in_content.Y(),
-        caret_bounds_in_content.Y() + caret_bounds_in_content.Height() +
-            caretPadding - target_viewport_size.Height()));
+    new_scroll.set_y(std::max<int>(
+        element_bounds_in_content.y(),
+        caret_bounds_in_content.y() + caret_bounds_in_content.height() +
+            caretPadding - target_viewport_size.height()));
   }
 }
 
@@ -2252,22 +2258,22 @@ float WebViewImpl::ClampPageScaleFactorToLimits(float scale_factor) const {
 
 void WebViewImpl::SetVisualViewportOffset(const gfx::PointF& offset) {
   DCHECK(GetPage());
-  GetPage()->GetVisualViewport().SetLocation(FloatPoint(offset));
+  GetPage()->GetVisualViewport().SetLocation(offset);
 }
 
 gfx::PointF WebViewImpl::VisualViewportOffset() const {
   DCHECK(GetPage());
-  return GetPage()->GetVisualViewport().VisibleRect().Location();
+  return GetPage()->GetVisualViewport().VisibleRect().origin();
 }
 
 gfx::SizeF WebViewImpl::VisualViewportSize() const {
   DCHECK(GetPage());
-  return gfx::SizeF(GetPage()->GetVisualViewport().VisibleRect().Size());
+  return GetPage()->GetVisualViewport().VisibleRect().size();
 }
 
 void WebViewImpl::SetPageScaleFactorAndLocation(float scale_factor,
                                                 bool is_pinch_gesture_active,
-                                                const FloatPoint& location) {
+                                                const gfx::PointF& location) {
   DCHECK(GetPage());
 
   GetPage()->GetVisualViewport().SetScaleAndLocation(
@@ -2304,6 +2310,8 @@ void WebViewImpl::SetZoomFactorForDeviceScaleFactor(
 void WebViewImpl::SetPageLifecycleStateFromNewPageCommit(
     mojom::blink::PageVisibilityState visibility,
     mojom::blink::PagehideDispatch pagehide_dispatch) {
+  TRACE_EVENT0("navigation",
+               "WebViewImpl::SetPageLifecycleStateFromNewPageCommit");
   mojom::blink::PageLifecycleStatePtr state =
       GetPage()->GetPageLifecycleState().Clone();
   state->visibility = visibility;
@@ -2316,6 +2324,12 @@ void WebViewImpl::SetPageLifecycleState(
     mojom::blink::PageLifecycleStatePtr state,
     mojom::blink::PageRestoreParamsPtr page_restore_params,
     SetPageLifecycleStateCallback callback) {
+  TRACE_EVENT0("navigation", "WebViewImpl::SetPageLifecycleState");
+  // TODO(https://crbug.com/1234634): Remove this.
+  if (state->should_dispatch_pageshow_for_debugging) {
+    blink::RecordUMAEventPageShowPersisted(
+        blink::EventPageShowPersisted::kBrowserYesInRenderer);
+  }
   SetPageLifecycleStateInternal(std::move(state),
                                 std::move(page_restore_params));
   // Tell the browser that the lifecycle update was successful.
@@ -2329,6 +2343,13 @@ void WebViewImpl::SetPageLifecycleStateInternal(
   if (!page)
     return;
   auto& old_state = page->GetPageLifecycleState();
+  TRACE_EVENT2("navigation", "WebViewImpl::SetPageLifecycleStateInternal",
+               "old_state", old_state, "new_state", new_state);
+  if (new_state->should_dispatch_pageshow_for_debugging) {
+    blink::RecordUMAEventPageShowPersisted(
+        blink::EventPageShowPersisted::kBrowserYesInRendererWithPage);
+  }
+
   bool storing_in_bfcache = new_state->is_in_back_forward_cache &&
                             !old_state->is_in_back_forward_cache;
   bool restoring_from_bfcache = !new_state->is_in_back_forward_cache &&
@@ -2346,11 +2367,23 @@ void WebViewImpl::SetPageLifecycleStateInternal(
        mojom::blink::PagehideDispatch::kNotDispatched) &&
       !GetPage()->DispatchedPagehideAndStillHidden();
   bool dispatching_pageshow =
-      (new_state->pagehide_dispatch ==
-       mojom::blink::PagehideDispatch::kNotDispatched) &&
-      GetPage()->DispatchedPagehideAndStillHidden();
+      IsRestoredFromBackForwardCache(old_state, new_state);
   bool eviction_changed =
       new_state->eviction_enabled != old_state->eviction_enabled;
+
+  if (new_state->should_dispatch_pageshow_for_debugging) {
+    if (!dispatching_pageshow) {
+      SCOPED_CRASH_KEY_NUMBER("Bug1234634", "old-pagehide-dispatch",
+                              static_cast<int>(old_state->pagehide_dispatch));
+      SCOPED_CRASH_KEY_NUMBER("Bug1234634", "new-pagehide-dispatch",
+                              static_cast<int>(new_state->pagehide_dispatch));
+      base::debug::DumpWithoutCrashing();
+      NOTREACHED();
+    }
+  }
+  // Reset to false as this object can be reused in same-site main frame
+  // navigations.
+  new_state->should_dispatch_pageshow_for_debugging = false;
 
   if (dispatching_pagehide) {
     RemoveFocusAndTextInputState();
@@ -2529,8 +2562,8 @@ void WebViewImpl::HookBackForwardCacheEviction(bool hook) {
 void WebViewImpl::EnableAutoResizeMode(const gfx::Size& min_size,
                                        const gfx::Size& max_size) {
   should_auto_resize_ = true;
-  min_auto_size_ = IntSize(min_size);
-  max_auto_size_ = IntSize(max_size);
+  min_auto_size_ = min_size;
+  max_auto_size_ = max_size;
   ConfigureAutoResizeMode();
 }
 
@@ -2605,10 +2638,10 @@ void WebViewImpl::SetIgnoreViewportTagScaleLimits(bool ignore) {
   GetPage()->SetUserAgentPageScaleConstraints(constraints);
 }
 
-IntSize WebViewImpl::MainFrameSize() {
+gfx::Size WebViewImpl::MainFrameSize() {
   // The frame size should match the viewport size at minimum scale, since the
   // viewport must always be contained by the frame.
-  return IntSize(gfx::ScaleToCeiledSize(size_, 1 / MinimumPageScaleFactor()));
+  return gfx::ScaleToCeiledSize(size_, 1 / MinimumPageScaleFactor());
 }
 
 PageScaleConstraintsSet& WebViewImpl::GetPageScaleConstraintsSet() const {
@@ -2722,22 +2755,22 @@ void WebViewImpl::UpdateMainFrameLayoutSize() {
   gfx::Size layout_size = size_;
 
   if (GetSettings()->ViewportEnabled())
-    layout_size = gfx::Size(GetPageScaleConstraintsSet().GetLayoutSize());
+    layout_size = GetPageScaleConstraintsSet().GetLayoutSize();
 
   if (GetPage()->GetSettings().GetForceZeroLayoutHeight())
     layout_size.set_height(0);
 
-  view->SetLayoutSize(IntSize(layout_size));
+  view->SetLayoutSize(layout_size);
 }
 
-IntSize WebViewImpl::ContentsSize() const {
+gfx::Size WebViewImpl::ContentsSize() const {
   if (!GetPage()->MainFrame()->IsLocalFrame())
-    return IntSize();
+    return gfx::Size();
   auto* layout_view =
       GetPage()->DeprecatedLocalMainFrame()->ContentLayoutObject();
   if (!layout_view)
-    return IntSize();
-  return PixelSnappedIntRect(layout_view->DocumentRect()).Size();
+    return gfx::Size();
+  return ToPixelSnappedRect(layout_view->DocumentRect()).size();
 }
 
 gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
@@ -2848,6 +2881,11 @@ void WebViewImpl::SendWindowRectToMainFrameHost(
     base::OnceClosure ack_callback) {
   DCHECK(local_main_frame_host_remote_);
   local_main_frame_host_remote_->SetWindowRect(bounds, std::move(ack_callback));
+}
+
+void WebViewImpl::DidAccessInitialMainDocument() {
+  DCHECK(local_main_frame_host_remote_);
+  local_main_frame_host_remote_->DidAccessInitialMainDocument();
 }
 
 void WebViewImpl::UpdateTargetURL(const WebURL& url,
@@ -3241,10 +3279,10 @@ void WebViewImpl::UpdateRendererPreferences(
   GetSettings()->SetCaretBrowsingEnabled(
       renderer_preferences_.caret_browsing_enabled);
 
-#if defined(USE_X11) || defined(USE_OZONE)
+#if defined(USE_OZONE)
   GetSettings()->SetSelectionClipboardBufferAvailable(
       renderer_preferences_.selection_clipboard_buffer_available);
-#endif  // defined(USE_X11) || defined(USE_OZONE)
+#endif  // defined(USE_OZONE)
 
   SetExplicitlyAllowedPorts(
       renderer_preferences_.explicitly_allowed_network_ports);
@@ -3366,14 +3404,13 @@ void WebViewImpl::ResizeAfterLayout() {
 
   if (should_auto_resize_) {
     LocalFrameView* view = MainFrameImpl()->GetFrame()->View();
-    gfx::Size frame_size = gfx::Size(view->Size());
+    gfx::Size frame_size = view->Size();
     if (frame_size != size_) {
       size_ = frame_size;
 
-      GetPage()->GetVisualViewport().SetSize(IntSize(size_));
-      GetPageScaleConstraintsSet().DidChangeInitialContainingBlockSize(
-          IntSize(size_));
-      view->SetInitialViewportSize(IntSize(size_));
+      GetPage()->GetVisualViewport().SetSize(size_);
+      GetPageScaleConstraintsSet().DidChangeInitialContainingBlockSize(size_);
+      view->SetInitialViewportSize(size_);
 
       web_view_client_->DidAutoResize(size_);
       web_widget_->DidAutoResize(size_);
@@ -3493,7 +3530,7 @@ WebHitTestResult WebViewImpl::HitTestResultForTap(
                             WebInputEvent::kNoModifiers, base::TimeTicks::Now(),
                             WebGestureDevice::kTouchscreen);
   // GestureTap is only ever from a touchscreen.
-  tap_event.SetPositionInWidget(FloatPoint(IntPoint(tap_point_window_pos)));
+  tap_event.SetPositionInWidget(gfx::PointF(tap_point_window_pos));
   tap_event.data.tap.tap_count = 1;
   tap_event.data.tap.width = tap_area.width();
   tap_event.data.tap.height = tap_area.height();
@@ -3560,8 +3597,8 @@ void WebViewImpl::ApplyViewportChanges(const ApplyViewportChangesArgs& args) {
   // controls ratio since doing so will change the bounds and move the
   // viewports to keep the offsets valid. The compositor may have already
   // done that so we don't want to double apply the deltas here.
-  FloatPoint visual_viewport_offset = visual_viewport.VisibleRect().Location();
-  visual_viewport_offset.Move(args.inner_delta.x(), args.inner_delta.y());
+  gfx::PointF visual_viewport_offset = visual_viewport.VisibleRect().origin();
+  visual_viewport_offset.Offset(args.inner_delta.x(), args.inner_delta.y());
 
   GetBrowserControls().SetShownRatio(
       GetBrowserControls().TopShownRatio() + args.top_controls_delta,
@@ -3710,6 +3747,10 @@ void WebViewImpl::SetDeviceColorSpaceForTesting(
 const SessionStorageNamespaceId& WebViewImpl::GetSessionStorageNamespaceId() {
   CHECK(!session_storage_namespace_id_.empty());
   return session_storage_namespace_id_;
+}
+
+bool WebViewImpl::IsFencedFrameRoot() const {
+  return GetPage()->IsMainFrameFencedFrameRoot();
 }
 
 }  // namespace blink

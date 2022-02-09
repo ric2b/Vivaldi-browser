@@ -153,6 +153,50 @@ LaunchHandlerNavigateExistingClientToProto(
   }
 }
 
+ApiApprovalState ProtoToApiApprovalState(
+    WebAppProto::ApiApprovalState approval_state) {
+  switch (approval_state) {
+    case WebAppProto_ApiApprovalState_REQUIRES_PROMPT:
+      return ApiApprovalState::kRequiresPrompt;
+    case WebAppProto_ApiApprovalState_ALLOWED:
+      return ApiApprovalState::kAllowed;
+    case WebAppProto_ApiApprovalState_DISALLOWED:
+      return ApiApprovalState::kDisallowed;
+  }
+}
+
+WebAppProto::ApiApprovalState ApiApprovalStateToProto(
+    ApiApprovalState approval_state) {
+  switch (approval_state) {
+    case ApiApprovalState::kRequiresPrompt:
+      return WebAppProto_ApiApprovalState_REQUIRES_PROMPT;
+    case ApiApprovalState::kAllowed:
+      return WebAppProto_ApiApprovalState_ALLOWED;
+    case ApiApprovalState::kDisallowed:
+      return WebAppProto_ApiApprovalState_DISALLOWED;
+  }
+}
+
+OsIntegrationState ProtoToOsIntegrationState(
+    WebAppProto::OsIntegrationState state) {
+  switch (state) {
+    case WebAppProto_OsIntegrationState_ENABLED:
+      return OsIntegrationState::kEnabled;
+    case WebAppProto_OsIntegrationState_DISABLED:
+      return OsIntegrationState::kDisabled;
+  }
+}
+
+WebAppProto::OsIntegrationState OsIntegrationStateToProto(
+    OsIntegrationState state) {
+  switch (state) {
+    case OsIntegrationState::kEnabled:
+      return WebAppProto_OsIntegrationState_ENABLED;
+    case OsIntegrationState::kDisabled:
+      return WebAppProto_OsIntegrationState_DISABLED;
+  }
+}
+
 }  // anonymous namespace
 
 WebAppDatabase::WebAppDatabase(AbstractWebAppDatabaseFactory* database_factory,
@@ -259,11 +303,15 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     local_data->set_scope(web_app.scope().spec());
   if (web_app.theme_color().has_value())
     local_data->set_theme_color(web_app.theme_color().value());
-  if (web_app.background_color().has_value())
-    local_data->set_background_color(web_app.background_color().value());
   if (web_app.dark_mode_theme_color().has_value())
     local_data->set_dark_mode_theme_color(
         web_app.dark_mode_theme_color().value());
+  if (web_app.background_color().has_value())
+    local_data->set_background_color(web_app.background_color().value());
+  if (web_app.dark_mode_background_color().has_value()) {
+    local_data->set_dark_mode_background_color(
+        web_app.dark_mode_background_color().value());
+  }
   if (!web_app.last_badging_time().is_null()) {
     local_data->set_last_badging_time(
         syncer::TimeToProtoTime(web_app.last_badging_time()));
@@ -306,6 +354,7 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
       ToWebAppProtoRunOnOsLoginMode(web_app.run_on_os_login_mode()));
   local_data->set_is_from_sync_and_pending_installation(
       web_app.is_from_sync_and_pending_installation());
+  local_data->set_is_uninstalling(web_app.is_uninstalling());
 
   for (const apps::IconInfo& icon_info : web_app.manifest_icons())
     *(local_data->add_manifest_icons()) = AppIconInfoToSyncProto(icon_info);
@@ -373,14 +422,14 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     }
   }
 
-  for (const WebApplicationShortcutsMenuItemInfo& shortcut_info :
+  for (const WebAppShortcutsMenuItemInfo& shortcut_info :
        web_app.shortcuts_menu_item_infos()) {
     WebAppShortcutsMenuItemInfoProto* shortcut_info_proto =
         local_data->add_shortcuts_menu_item_infos();
     shortcut_info_proto->set_name(base::UTF16ToUTF8(shortcut_info.name));
     shortcut_info_proto->set_url(shortcut_info.url.spec());
     for (IconPurpose purpose : kIconPurposes) {
-      for (const WebApplicationShortcutsMenuItemInfo::Icon& icon_info :
+      for (const WebAppShortcutsMenuItemInfo::Icon& icon_info :
            shortcut_info.GetShortcutIconInfosForPurpose(purpose)) {
         sync_pb::WebAppIconInfo* shortcut_icon_info_proto;
         switch (purpose) {
@@ -467,8 +516,11 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
   if (!web_app.manifest_url().is_empty())
     local_data->set_manifest_url(web_app.manifest_url().spec());
 
-  local_data->set_file_handler_permission_blocked(
-      web_app.file_handler_permission_blocked());
+  local_data->set_file_handler_approval_state(
+      ApiApprovalStateToProto(web_app.file_handler_approval_state()));
+
+  local_data->set_file_handler_os_integration_state(
+      OsIntegrationStateToProto(web_app.file_handler_os_integration_state()));
 
   local_data->set_window_controls_overlay_enabled(
       web_app.window_controls_overlay_enabled());
@@ -483,6 +535,10 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     launch_handler_proto.set_navigate_existing_client(
         LaunchHandlerNavigateExistingClientToProto(
             web_app.launch_handler()->navigate_existing_client));
+  }
+
+  if (web_app.parent_app_id_) {
+    local_data->set_parent_app_id(*web_app.parent_app_id_);
   }
 
   return local_data;
@@ -523,7 +579,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     return nullptr;
   }
 
-  WebApp::Sources sources;
+  WebAppSources sources;
   sources[Source::kSystem] = local_data.sources().system();
   sources[Source::kPolicy] = local_data.sources().policy();
   sources[Source::kWebAppStore] = local_data.sources().web_app_store();
@@ -638,12 +694,21 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     web_app->SetDarkModeThemeColor(local_data.dark_mode_theme_color());
   }
 
-  if (local_data.has_background_color())
+  if (local_data.has_background_color()) {
     web_app->SetBackgroundColor(local_data.background_color());
+  }
+
+  if (local_data.has_dark_mode_background_color()) {
+    web_app->SetDarkModeBackgroundColor(
+        local_data.dark_mode_background_color());
+  }
 
   if (local_data.has_is_from_sync_and_pending_installation())
     web_app->SetIsFromSyncAndPendingInstallation(
         local_data.is_from_sync_and_pending_installation());
+
+  if (local_data.has_is_uninstalling())
+    web_app->SetIsUninstalling(local_data.is_uninstalling());
 
   if (local_data.has_last_badging_time()) {
     web_app->SetLastBadgingTime(
@@ -786,10 +851,10 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     web_app->SetShareTarget(std::move(share_target));
   }
 
-  std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos;
+  std::vector<WebAppShortcutsMenuItemInfo> shortcuts_menu_item_infos;
   for (const auto& shortcut_info_proto :
        local_data.shortcuts_menu_item_infos()) {
-    WebApplicationShortcutsMenuItemInfo shortcut_info;
+    WebAppShortcutsMenuItemInfo shortcut_info;
     shortcut_info.name = base::UTF8ToUTF16(shortcut_info_proto.name());
     shortcut_info.url = GURL(shortcut_info_proto.url());
     for (IconPurpose purpose : kIconPurposes) {
@@ -812,9 +877,9 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
           break;
       }
 
-      std::vector<WebApplicationShortcutsMenuItemInfo::Icon> manifest_icons;
+      std::vector<WebAppShortcutsMenuItemInfo::Icon> manifest_icons;
       for (const auto& icon_info_proto : *shortcut_manifest_icons) {
-        WebApplicationShortcutsMenuItemInfo::Icon shortcut_icon_info;
+        WebAppShortcutsMenuItemInfo::Icon shortcut_icon_info;
         shortcut_icon_info.square_size_px = icon_info_proto.size_in_px();
         shortcut_icon_info.url = GURL(icon_info_proto.url());
         manifest_icons.emplace_back(std::move(shortcut_icon_info));
@@ -940,9 +1005,16 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     }
     web_app->SetManifestUrl(manifest_url);
   }
-  if (local_data.has_file_handler_permission_blocked())
-    web_app->SetFileHandlerPermissionBlocked(
-        local_data.file_handler_permission_blocked());
+
+  if (local_data.has_file_handler_approval_state()) {
+    web_app->SetFileHandlerApprovalState(
+        ProtoToApiApprovalState(local_data.file_handler_approval_state()));
+  }
+
+  if (local_data.has_file_handler_os_integration_state()) {
+    web_app->SetFileHandlerOsIntegrationState(ProtoToOsIntegrationState(
+        local_data.file_handler_os_integration_state()));
+  }
 
   if (local_data.has_window_controls_overlay_enabled()) {
     web_app->SetWindowControlsOverlayEnabled(
@@ -965,6 +1037,10 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
               launch_handler_proto.navigate_existing_client());
     }
     web_app->SetLaunchHandler(std::move(launch_handler));
+  }
+
+  if (local_data.has_parent_app_id()) {
+    web_app->parent_app_id_ = local_data.parent_app_id();
   }
 
   return web_app;

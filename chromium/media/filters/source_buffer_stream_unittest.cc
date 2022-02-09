@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -68,6 +67,10 @@ MATCHER_P(ContainsTrackBufferExhaustionSkipLog, skip_milliseconds, "") {
   { EXPECT_EQ(SourceBufferStreamStatus::status_suffix, stream_->operation); }
 
 class SourceBufferStreamTest : public testing::Test {
+ public:
+  SourceBufferStreamTest(const SourceBufferStreamTest&) = delete;
+  SourceBufferStreamTest& operator=(const SourceBufferStreamTest&) = delete;
+
  protected:
   SourceBufferStreamTest() {
     video_config_ = TestVideoConfig::Normal();
@@ -503,7 +506,7 @@ class SourceBufferStreamTest : public testing::Test {
 
   void UpdateLastBufferDuration(DecodeTimestamp current_dts,
                                 BufferQueue* buffers) {
-    if (buffers->empty() || buffers->back()->duration() > base::TimeDelta())
+    if (buffers->empty() || buffers->back()->duration().is_positive())
       return;
 
     DecodeTimestamp last_dts = buffers->back()->GetDecodeTimestamp();
@@ -697,7 +700,6 @@ class SourceBufferStreamTest : public testing::Test {
   int frames_per_second_;
   int keyframes_per_second_;
   base::TimeDelta frame_duration_;
-  DISALLOW_COPY_AND_ASSIGN(SourceBufferStreamTest);
 };
 
 TEST_F(SourceBufferStreamTest, Append_SingleRange) {
@@ -2078,7 +2080,7 @@ TEST_F(SourceBufferStreamTest, Seek_InBetweenTimestamps) {
   NewCodedFrameGroupAppend(0, 10);
 
   base::TimeDelta bump = frame_duration() / 4;
-  CHECK(bump > base::TimeDelta());
+  CHECK(bump.is_positive());
 
   // Seek to buffer a little after position 5.
   stream_->Seek(5 * frame_duration() + bump);
@@ -2117,7 +2119,7 @@ TEST_F(SourceBufferStreamTest, Seek_After_TrackBuffer_Filled) {
 
 TEST_F(SourceBufferStreamTest, Seek_StartOfGroup) {
   base::TimeDelta bump = frame_duration() / 4;
-  CHECK(bump > base::TimeDelta());
+  CHECK(bump.is_positive());
 
   // Append 5 buffers at position (5 + |bump|) through 9, where the coded frame
   // group begins at position 5.

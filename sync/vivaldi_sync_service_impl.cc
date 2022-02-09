@@ -155,12 +155,13 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
                                 base::Unretained(this), error));
 }
 
-void VivaldiSyncServiceImpl::ResetEngine(syncer::ShutdownReason reason) {
+void VivaldiSyncServiceImpl::ResetEngine(syncer::ShutdownReason reason,
+                                         ResetEngineReason reset_reason) {
   if (reason == syncer::ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA) {
     sync_client_->GetPrefService()->ClearPref(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword);
   }
-  SyncServiceImpl::ResetEngine(reason);
+  SyncServiceImpl::ResetEngine(reason, reset_reason);
 }
 
 void VivaldiSyncServiceImpl::OnClearDataComplete(

@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -23,6 +24,7 @@
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/registration_data.h"
+#include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/setup.h"
 #include "chrome/updater/tag.h"
 #include "chrome/updater/update_service.h"
@@ -95,7 +97,8 @@ void AppInstall::FirstTaskRun() {
   splash_screen_->Show();
 
   // Capture `update_service` to manage the object lifetime.
-  scoped_refptr<UpdateService> update_service = CreateUpdateService();
+  scoped_refptr<UpdateService> update_service =
+      CreateUpdateServiceProxy(updater_scope());
   update_service->GetVersion(
       base::BindOnce(&AppInstall::GetVersionDone, this, update_service));
 }
@@ -143,7 +146,7 @@ void AppInstall::WakeCandidate() {
   // |UpdateServiceInternal| instance has sequence affinity. Bind it in the
   // closure to ensure it is released in this sequence.
   scoped_refptr<UpdateServiceInternal> update_service_internal =
-      CreateUpdateServiceInternal();
+      CreateUpdateServiceInternalProxy(updater_scope());
   update_service_internal->InitializeUpdateService(base::BindOnce(
       [](scoped_refptr<UpdateServiceInternal> /*update_service_internal*/,
          scoped_refptr<AppInstall> app_install) {
@@ -152,18 +155,28 @@ void AppInstall::WakeCandidate() {
       update_service_internal, base::WrapRefCounted(this)));
 }
 
+#if defined(OS_LINUX)
+// TODO(crbug.com/1276114) - implement.
+void AppInstall::WakeCandidateDone() {
+  NOTIMPLEMENTED();
+}
+#endif  // OS_LINUX
+
 void AppInstall::RegisterUpdater() {
   RegistrationRequest request;
   request.app_id = kUpdaterAppId;
   request.version = base::Version(kUpdaterVersion);
   // update_service is bound in the callback to ensure it is released in this
   // sequence.
-  scoped_refptr<UpdateService> update_service = CreateUpdateService();
+  scoped_refptr<UpdateService> update_service =
+      CreateUpdateServiceProxy(updater_scope());
   update_service->RegisterApp(
       request, base::BindOnce(
                    [](scoped_refptr<UpdateService> /*update_service*/,
                       scoped_refptr<AppInstall> app_install,
-                      const RegistrationResponse& unused) {
+                      const RegistrationResponse& registration_response) {
+                     VLOG(2) << "Updater registration complete: "
+                             << registration_response.status_code;
                      app_install->MaybeInstallApp();
                    },
                    update_service, base::WrapRefCounted(this)));

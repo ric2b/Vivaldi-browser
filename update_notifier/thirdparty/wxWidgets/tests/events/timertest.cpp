@@ -12,9 +12,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
 #endif // WX_PRECOMP
@@ -52,7 +49,7 @@ private:
 
     int m_events;
 
-    DECLARE_NO_COPY_CLASS(TimerCounterHandler)
+    wxDECLARE_NO_COPY_CLASS(TimerCounterHandler);
 };
 
 // --------------------------------------------------------------------------
@@ -73,7 +70,7 @@ private:
     void OneShot();
     void Multiple();
 
-    DECLARE_NO_COPY_CLASS(TimerEventTestCase)
+    wxDECLARE_NO_COPY_CLASS(TimerEventTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -94,11 +91,11 @@ void TimerEventTestCase::OneShot()
         }
 
     private:
-        virtual void Tick() { m_loop.Exit(); }
+        virtual void Tick() wxOVERRIDE { m_loop.Exit(); }
 
         wxEventLoopBase& m_loop;
 
-        // don't use DECLARE_NO_COPY_CLASS() to avoid upsetting MSVC
+        // don't use wxDECLARE_NO_COPY_CLASS() to avoid upsetting MSVC
     };
 
     wxEventLoop loop;

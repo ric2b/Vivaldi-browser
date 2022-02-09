@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "gn/build_settings.h"
 #include "gn/c_tool.h"
 #include "gn/err.h"
@@ -83,7 +82,8 @@ class TestWithScope {
 
   std::string print_output_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestWithScope);
+  TestWithScope(const TestWithScope&) = delete;
+  TestWithScope& operator=(const TestWithScope&) = delete;
 };
 
 // Helper class to treat some string input as a file.
@@ -111,7 +111,8 @@ class TestParseInput {
 
   Err parse_err_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestParseInput);
+  TestParseInput(const TestParseInput&) = delete;
+  TestParseInput& operator=(const TestParseInput&) = delete;
 };
 
 // Shortcut for creating targets for tests that take the test setup, a pretty-

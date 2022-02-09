@@ -16,7 +16,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.datareduction.DataReductionMainMenuItem;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
-import org.chromium.chrome.browser.feed.shared.FeedFeatures;
+import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedFaviconFetcher;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedMainMenuItem;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController;
@@ -50,6 +50,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     // Vivaldi
     private final ObservableSupplier<BookmarkBridge> mVivaldiBookmarkBridgeSupplier;
+    private BookmarkBridge mBookmarkBridge;
 
     public TabbedAppMenuPropertiesDelegate(Context context, ActivityTabProvider activityTabProvider,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
@@ -120,9 +121,11 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             if (mBookmarkBridge == null && mVivaldiBookmarkBridgeSupplier != null)
                 mBookmarkBridge = mVivaldiBookmarkBridgeSupplier.get();
 
-            ((AppMenuIconRowFooter) view)
-                    .initialize(appMenuHandler, mBookmarkBridge, mActivityTabProvider.get(),
-                            mAppMenuDelegate);
+            if (mBookmarkBridge != null) {
+                ((AppMenuIconRowFooter) view)
+                        .initialize(appMenuHandler, mBookmarkBridge, mActivityTabProvider.get(),
+                                mAppMenuDelegate);
+            }
         }
     }
 
@@ -160,7 +163,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     @Override
     protected boolean shouldShowManagedByMenuItem(Tab currentTab) {
         Profile profile = Profile.fromWebContents(currentTab.getWebContents());
-        return profile != null && ManagedBrowserUtils.hasBrowserPoliciesApplied(profile);
+        return profile != null && ManagedBrowserUtils.isBrowserManaged(profile);
     }
 
     @Override

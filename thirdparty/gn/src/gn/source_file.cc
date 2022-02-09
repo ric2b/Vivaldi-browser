@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string.h>
+
 #include "gn/source_file.h"
 
 #include "base/logging.h"
@@ -21,39 +23,92 @@ void AssertValueSourceFileString(const std::string& s) {
   DCHECK(!EndsWithSlash(s)) << s;
 }
 
+bool EndsWithExtension(std::string_view str, std::string_view ext) {
+  return str.size() > ext.size() && str[str.size() - ext.size() - 1] == '.' &&
+         !::memcmp(str.data() + str.size() - ext.size(), ext.data(),
+                   ext.size());
+}
+
 SourceFile::Type GetSourceFileType(const std::string& file) {
-  std::string_view extension = FindExtension(&file);
-  if (extension == "cc" || extension == "cpp" || extension == "cxx" ||
-      extension == "c++")
-    return SourceFile::SOURCE_CPP;
-  if (extension == "h" || extension == "hpp" || extension == "hxx" ||
-      extension == "hh" || extension == "inc" || extension == "ipp" ||
-      extension == "inl")
-    return SourceFile::SOURCE_H;
-  if (extension == "c")
-    return SourceFile::SOURCE_C;
-  if (extension == "m")
-    return SourceFile::SOURCE_M;
-  if (extension == "mm")
-    return SourceFile::SOURCE_MM;
-  if (extension == "modulemap")
-    return SourceFile::SOURCE_MODULEMAP;
-  if (extension == "rc")
-    return SourceFile::SOURCE_RC;
-  if (extension == "S" || extension == "s" || extension == "asm")
-    return SourceFile::SOURCE_S;
-  if (extension == "o" || extension == "obj")
-    return SourceFile::SOURCE_O;
-  if (extension == "def")
-    return SourceFile::SOURCE_DEF;
-  if (extension == "rs")
-    return SourceFile::SOURCE_RS;
-  if (extension == "go")
-    return SourceFile::SOURCE_GO;
-  if (extension == "swift")
+  size_t size = file.size();
+  const char* str = file.data();
+
+  // First, single-char extensions.
+  if (size > 2 && str[size - 2] == '.') {
+    switch (str[size - 1]) {
+      case 'c':
+        return SourceFile::SOURCE_C;  // .c
+      case 'h':
+        return SourceFile::SOURCE_H;  // .h
+      case 'm':
+        return SourceFile::SOURCE_M;  // .m
+      case 'o':
+        return SourceFile::SOURCE_O;  // .o
+      case 'S':
+      case 's':
+        return SourceFile::SOURCE_S;  // .S and .s
+      default:
+        return SourceFile::SOURCE_UNKNOWN;
+    }
+  }
+
+  // Second, two-char extensions
+  if (size > 3 && str[size - 3] == '.') {
+#define TAG2(c1, c2) ((unsigned)(c1) | ((unsigned)(c2) << 8))
+    switch (TAG2(str[size - 2], str[size - 1])) {
+      case TAG2('c', 'c'):
+        return SourceFile::SOURCE_CPP;  // .cc
+      case TAG2('g', 'o'):
+        return SourceFile::SOURCE_GO;  // .go
+      case TAG2('h', 'h'):
+        return SourceFile::SOURCE_H;   // .hh
+      case TAG2('m', 'm'):
+        return SourceFile::SOURCE_MM;  // .mm
+      case TAG2('r', 'c'):
+        return SourceFile::SOURCE_RC;  // .rc
+      case TAG2('r', 's'):
+        return SourceFile::SOURCE_RS;  // .rs
+      default:
+        return SourceFile::SOURCE_UNKNOWN;
+    }
+#undef TAG2
+  }
+
+  if (size > 4 && str[size - 4] == '.') {
+#define TAG3(c1, c2, c3) \
+  ((unsigned)(c1) | ((unsigned)(c2) << 8) | ((unsigned)(c3) << 16))
+    switch (TAG3(str[size - 3], str[size - 2], str[size - 1])) {
+      case TAG3('c', 'p', 'p'):
+      case TAG3('c', 'x', 'x'):
+      case TAG3('c', '+', '+'):
+        return SourceFile::SOURCE_CPP;
+      case TAG3('h', 'p', 'p'):
+      case TAG3('h', 'x', 'x'):
+      case TAG3('i', 'n', 'c'):
+      case TAG3('i', 'p', 'p'):
+      case TAG3('i', 'n', 'l'):
+        return SourceFile::SOURCE_H;
+      case TAG3('a', 's', 'm'):
+        return SourceFile::SOURCE_S;
+      case TAG3('d', 'e', 'f'):
+        return SourceFile::SOURCE_DEF;
+      case TAG3('o', 'b', 'j'):
+        return SourceFile::SOURCE_O;
+      default:
+        return SourceFile::SOURCE_UNKNOWN;
+    }
+#undef TAG3
+  }
+
+  // Other cases
+  if (EndsWithExtension(file, "swift"))
     return SourceFile::SOURCE_SWIFT;
-  if (extension == "swiftmodule")
+
+  if (EndsWithExtension(file, "swiftmodule"))
     return SourceFile::SOURCE_SWIFTMODULE;
+
+  if (EndsWithExtension(file, "modulemap"))
+    return SourceFile::SOURCE_MODULEMAP;
 
   return SourceFile::SOURCE_UNKNOWN;
 }
@@ -74,14 +129,40 @@ SourceFile::SourceFile(std::string&& value)
     : SourceFile(StringAtom(Normalized(std::move(value)))) {}
 
 SourceFile::SourceFile(StringAtom value) : value_(value) {
-  type_ = GetSourceFileType(value_.str());
   actual_path_ =
       StringAtom(BuildSettings::RemapSourcePathToActual(value_.str()));
 }
 
 SourceFile::SourceFile(const std::string& p, const std::string& p_act)
-    : value_(Normalized(p)), actual_path_(Normalized(p_act)) {
-  type_ = GetSourceFileType(value_.str());
+    : value_(Normalized(p)), actual_path_(Normalized(p_act)) {}
+
+SourceFile::Type SourceFile::GetType() const {
+  return GetSourceFileType(value_.str());
+}
+
+bool SourceFile::IsDefType() const {
+  std::string_view v = value_.str();
+  return EndsWithExtension(v, "def");
+}
+
+bool SourceFile::IsObjectType() const {
+  std::string_view v = value_.str();
+  return EndsWithExtension(v, "o") || EndsWithExtension(v, "obj");
+}
+
+bool SourceFile::IsModuleMapType() const {
+  std::string_view v = value_.str();
+  return EndsWithExtension(v, "modulemap");
+}
+
+bool SourceFile::IsSwiftType() const {
+  std::string_view v = value_.str();
+  return EndsWithExtension(v, "swift");
+}
+
+bool SourceFile::IsSwiftModuleType() const {
+  std::string_view v = value_.str();
+  return EndsWithExtension(v, "swiftmodule");
 }
 
 std::string SourceFile::GetName() const {
@@ -112,7 +193,6 @@ base::FilePath SourceFile::Resolve(const base::FilePath& source_root,
 
 void SourceFile::SetValue(const std::string& value) {
   value_ = StringAtom(value);
-  type_ = GetSourceFileType(value);
 }
 
 SourceFileTypeSet::SourceFileTypeSet() : empty_(true) {

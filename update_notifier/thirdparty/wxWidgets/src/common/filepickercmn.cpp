@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_FILEPICKERCTRL || wxUSE_DIRPICKERCTRL
 
@@ -45,7 +42,7 @@ const char wxDirPickerWidgetLabel[] = wxTRANSLATE("Browse");
 
 wxDEFINE_EVENT( wxEVT_FILEPICKER_CHANGED, wxFileDirPickerEvent );
 wxDEFINE_EVENT( wxEVT_DIRPICKER_CHANGED,  wxFileDirPickerEvent );
-IMPLEMENT_DYNAMIC_CLASS(wxFileDirPickerEvent, wxCommandEvent)
+wxIMPLEMENT_DYNAMIC_CLASS(wxFileDirPickerEvent, wxCommandEvent);
 
 // ----------------------------------------------------------------------------
 // wxFileDirPickerCtrlBase
@@ -175,7 +172,7 @@ void wxFileDirPickerCtrlBase::OnFileDirChange(wxFileDirPickerEvent &ev)
 
 #if wxUSE_FILEPICKERCTRL
 
-IMPLEMENT_DYNAMIC_CLASS(wxFilePickerCtrl, wxPickerBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxFilePickerCtrl, wxPickerBase);
 
 bool wxFilePickerCtrl::Create(wxWindow *parent,
                               wxWindowID id,
@@ -203,6 +200,8 @@ bool wxFilePickerCtrl::Create(wxWindow *parent,
 
 wxString wxFilePickerCtrl::GetTextCtrlValue() const
 {
+    wxCHECK_MSG( m_text, wxString(), "Can't be used if no text control" );
+
     // filter it through wxFileName to remove any spurious path separator
     return wxFileName(m_text->GetValue()).GetFullPath();
 }
@@ -214,7 +213,7 @@ wxString wxFilePickerCtrl::GetTextCtrlValue() const
 // ----------------------------------------------------------------------------
 
 #if wxUSE_DIRPICKERCTRL
-IMPLEMENT_DYNAMIC_CLASS(wxDirPickerCtrl, wxPickerBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxDirPickerCtrl, wxPickerBase);
 
 bool wxDirPickerCtrl::Create(wxWindow *parent,
                              wxWindowID id,
@@ -241,6 +240,8 @@ bool wxDirPickerCtrl::Create(wxWindow *parent,
 
 wxString wxDirPickerCtrl::GetTextCtrlValue() const
 {
+    wxCHECK_MSG( m_text, wxString(), "Can't be used if no text control" );
+
     // filter it through wxFileName to remove any spurious path separator
     return wxFileName::DirName(m_text->GetValue()).GetPath();
 }

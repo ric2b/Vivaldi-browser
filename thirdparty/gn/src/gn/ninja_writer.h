@@ -10,8 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
-
 class Builder;
 class BuildSettings;
 class Err;
@@ -43,7 +41,8 @@ class NinjaWriter {
 
   const Builder& builder_;
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaWriter);
+  NinjaWriter(const NinjaWriter&) = delete;
+  NinjaWriter& operator=(const NinjaWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_WRITER_H_

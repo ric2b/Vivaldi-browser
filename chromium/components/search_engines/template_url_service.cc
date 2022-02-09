@@ -15,6 +15,7 @@
 #include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/format_macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
@@ -272,7 +273,7 @@ class TemplateURLService::Scoper {
 
  private:
   std::unique_ptr<KeywordWebDataService::BatchModeScoper> batch_mode_scoper_;
-  TemplateURLService* service_;
+  raw_ptr<TemplateURLService> service_;
 };
 
 // TemplateURLService ---------------------------------------------------------
@@ -741,6 +742,9 @@ void TemplateURLService::SetUserSelectedDefaultSearchProvider(
   // engines can be made default only by the extension itself because they
   // aren't persisted.
   DCHECK(!url || !IsCreatedByExtension(url));
+  if (url) {
+    url->data_.is_active = TemplateURLData::ActiveStatus::kTrue;
+  }
   if (load_failed_) {
     // Skip the DefaultSearchManager, which will persist to user preferences.
     if ((default_search_provider_source_ == DefaultSearchManager::FROM_USER) ||
@@ -752,15 +756,16 @@ void TemplateURLService::SetUserSelectedDefaultSearchProvider(
   } else {
     // We rely on the DefaultSearchManager to call ApplyDefaultSearchChange if,
     // in fact, the effective DSE changes.
-    if (url)
+    if (url) {
       default_search_manager_.SetUserSelectedDefaultSearchEngine(url->data());
-    else
+    } else {
       default_search_manager_.ClearUserSelectedDefaultSearchEngine();
+    }
   }
 }
 
 const TemplateURL* TemplateURLService::GetDefaultSearchProvider() const {
-  return loaded_ ? default_search_provider_
+  return loaded_ ? default_search_provider_.get()
                  : initial_default_search_provider_.get();
 }
 
@@ -1996,6 +2001,7 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
       new_data.GenerateSyncGUID();
     new_data.created_by_policy = true;
     new_data.safe_for_autoreplace = false;
+    new_data.is_active = TemplateURLData::ActiveStatus::kTrue;
     std::unique_ptr<TemplateURL> new_dse_ptr =
         std::make_unique<TemplateURL>(new_data);
     TemplateURL* new_dse = new_dse_ptr.get();

@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -27,34 +28,37 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
   When changing this variant changes need to verified against histograms there.
 -->
 
-  <variant name="" summary="Any scenario."/>
-  <variant name=".AllTabsHidden" summary="Chrome had tabs, but none visible"/>
+  <variant name="" summary="all intervals"/>
+  <variant name=".AllTabsHidden"
+      summary="intervals during which Chrome had tabs, but none visible"/>
   <variant name=".Audio"
-      summary="Chrome had at least 1 visible tab and was audible, but there
-               was no video playback or video capture"/>
+      summary="intervals during which Chrome had at least 1 visible tab and
+               was audible, but there was no video playback or video capture"/>
   <variant name=".EmbeddedVideo_NoNavigation"
-      summary="Chrome played a video in a visible tab, and there was no
-               navigation or video capture"/>
+      summary="intervals during which Chrome played a video in a visible tab,
+               and there was no navigation or video capture"/>
   <variant name=".EmbeddedVideo_WithNavigation"
-      summary="Chrome played a video in a visible tab, there was a
-               navigation, but no video capture"/>
+      summary="intervals during which Chrome played a video in a visible tab,
+               there was a navigation, but no video capture"/>
   <variant name=".FullscreenVideo"
-      summary="Chrome played a video in fullscreen, and there was no video
-               capture"/>
+      summary="intervals during which Chrome played a video in fullscreen,
+               and there was no video capture"/>
   <variant name=".Interaction"
-      summary="Chrome had at least 1 visible tab and received a user
-               interaction, but no navigation, audio, video playback or video
-               capture"/>
+      summary="intervals during which Chrome had at least 1 visible tab and
+               received a user interaction, but no navigation, audio, video
+               playback or video capture"/>
   <variant name=".Navigation"
-      summary="Chrome had at least 1 visible tab and a navigation, but no
-               audio, video playback or video capture"/>
+      summary="intervals during which Chrome had at least 1 visible tab and a
+               navigation, but no audio, video playback or video capture"/>
   <variant name=".Passive"
-      summary="Chrome had at least 1 visible tab, but there was no user
-               interaction, navigation, audio, video playback or video
-               capture"/>
+      summary="intervals during which Chrome had at least 1 visible tab, but
+               there was no user interaction, navigation, audio, video
+               playback or video capture"/>
   <variant name=".VideoCapture"
-      summary="Chrome had at least 1 visible tab and captured video"/>
-  <variant name=".ZeroWindow" summary="Chrome had no window"/>
+      summary="intervals during which Chrome had at least 1 visible tab and
+               captured video"/>
+  <variant name=".ZeroWindow"
+      summary="intervals during which Chrome had no window"/>
 </variants>
 
 <histogram name="Power.ApproxCpuTimeSecondsPerCoreTypeAndFrequency"
@@ -130,20 +134,20 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.BatteryDischargeMode{UsageScenario}"
-    enum="BatteryDischargeMode" expires_after="2021-11-26">
+    enum="BatteryDischargeMode" expires_after="2022-11-30">
   <owner>etiennep@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
     Battery discharge mode describing whether BatteryDischargeRate2 could be
-    reported or not, and why. Reported every time the battery charge level is
-    sampled. This is reported on Mac and Windows. See
-    go/chrome_power_use_per_scenario for more details.
+    reported or not, and why. This is recorded for {UsageScenario} (an interval
+    represents 2 minutes of Chrome runtime, see
+    go/chrome_power_use_per_scenario).
   </summary>
   <token key="UsageScenario" variants="UsageScenario"/>
 </histogram>
 
 <histogram name="Power.BatteryDischargeRate" units="mW"
-    expires_after="2022-04-10">
+    expires_after="2022-11-30">
   <owner>puthik@chromium.org</owner>
   <owner>chromeos-platform-power@google.com</owner>
   <summary>
@@ -153,7 +157,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.BatteryDischargeRate2{UsageScenario}"
-    units="hundredth of percent" expires_after="2021-11-26">
+    units="hundredth of percent" expires_after="2022-11-30">
   <owner>etiennep@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <owner>lgrey@chromium.org</owner>
@@ -163,7 +167,9 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
     the interval: 3900 mAh; - Battery charge at the end of the interval: 3700
     mAh; - Discharge proportion: (3900-3700) / 4000 = 0.05 - Reported value:
     500. This metric is only recorded when on battery power. This is reported on
-    Mac and Windows. See go/chrome_power_use_per_scenario for more details.
+    Mac and Windows. This is recorded for {UsageScenario} (an interval
+    represents 2 minutes of Chrome runtime, see
+    go/chrome_power_use_per_scenario).
   </summary>
   <token key="UsageScenario" variants="UsageScenario"/>
 </histogram>
@@ -254,7 +260,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.BatterySamplingDelay" units="microseconds"
-    expires_after="2021-11-26">
+    expires_after="2022-11-30">
   <owner>etiennep@chromium.org</owner>
   <owner>fdoray@chromium.org</owner>
   <summary>
@@ -324,7 +330,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.CpuTimeSecondsPerCoreTypeAndFrequency" units="50 MHz"
-    expires_after="2022-03-06">
+    expires_after="2022-05-08">
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
@@ -343,9 +349,9 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.CpuTimeSecondsPerPowerMode.{ProcessType}"
-    enum="PowerMode" expires_after="2021-12-31">
+    enum="PowerMode" expires_after="2022-06-30">
   <owner>eseckler@chromium.org</owner>
-  <owner>skyostil@chromium.org</owner>
+  <owner>oksamyt@chromium.org</owner>
   <summary>
     Total seconds of CPU time consumed by Chrome's {ProcessType} process, split
     by power mode. Currently only implemented on Android. For every second of
@@ -367,7 +373,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.CpuTimeSecondsPerProcessType" enum="ProcessType2"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
@@ -563,8 +569,64 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram
+    name="Power.ForegroundBatteryDrain.30SecondsAvg2{Exclusive}{DarkeningType}"
+    units="uAh" expires_after="2022-11-07">
+  <owner>eseckler@chromium.org</owner>
+  <owner>khokhlov@chromium.org</owner>
+  <summary>
+    Periodically samples the battery capacity drained while Chrome is the
+    foreground app and the device is on battery power {DarkeningType}. Sampled
+    every 30 seconds while foregrounded. Also sampled when Chrome is
+    backgrounded or the device connects to a charger. {Exclusive}
+
+    Sample values are reported in microampere-hours and averaged over successive
+    sampling points without a change in capacity counter values. Since the
+    capacity counter resolution differs between device models, averaging the
+    values allows us to make comparisons between frequent small capacity drops
+    and infrequent large drops. For example, a 20,000 uAh drop over two
+    successive periods of 30 seconds will be reported as two samples of 10,000
+    uAh.
+
+    For more details, see http://bit.ly/chrome-android-foreground-battery-drain.
+
+    Only supported on Android. For WebView, the metric considers the time during
+    in which at least one WebView is visible on the screen as
+    &quot;foreground&quot; time.
+  </summary>
+  <token key="Exclusive">
+    <variant name="" summary=""/>
+    <variant name=".Exclusive"
+        summary="However, only battery drain that can be attributed
+                 exclusively to Chrome is reported: The first drain after
+                 becoming the foreground app is not reported. As a result,
+                 this metric typically doesn't include drain related to app
+                 startup. Similarly, no values are reported for the time
+                 after the last capacity drop in a session, since these would
+                 likely under-account the actual battery drain in that time."/>
+  </token>
+  <token key="DarkeningType">
+    <variant name="" summary=""/>
+    <variant name=".DarkMode"
+        summary="and the browser has dark theme preferred (web page darkening
+                 only) for all WebContents"/>
+    <variant name=".ForcedDarkMode"
+        summary="and the browser has forced dark mode (user-agent darkening)
+                 enabled for all WebContents"/>
+    <variant name=".LightMode"
+        summary="and the browser has forced dark mode disabled and light
+                 theme preferred for all WebContents"/>
+    <variant name=".MixedMode"
+        summary="and there is a mix of WebContents that have forced dark mode
+                 enabled, dark theme preferred, or light theme preferred"/>
+  </token>
+</histogram>
+
+<histogram
     name="Power.ForegroundBatteryDrain.30SecondsAvg{Exclusive}{DarkeningType}"
     units="uAh" expires_after="2022-11-07">
+  <obsolete>
+    Replaced with Power.ForegroundBatteryDrain.30SecondsAvg2.* in Dec 2021.
+  </obsolete>
   <owner>eseckler@chromium.org</owner>
   <owner>skyostil@chromium.org</owner>
   <summary>
@@ -586,6 +648,12 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
     Only supported on Android. For WebView, the metric considers the time during
     in which at least one WebView is visible on the screen as
     &quot;foreground&quot; time.
+
+    This histogram was superseded by the corresponding histogram under
+    Power.ForegroundBatteryDrain.30SecondsAvg2 in Dec 2021. The new histograms
+    also emit zero values for the time after the last capacity drop but before
+    sampling was stopped due to Chrome leaving foreground / the device being
+    connected to a charger, fixing an oversight in the original metrics.
   </summary>
   <token key="Exclusive">
     <variant name="" summary=""/>
@@ -756,9 +824,9 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.FrameDamageAreaInDip.{ProcessType}" units="dip"
-    expires_after="M98">
+    expires_after="2022-06-30">
   <owner>eseckler@chromium.org</owner>
-  <owner>skyostil@chromium.org</owner>
+  <owner>khokhlov@chromium.org</owner>
   <summary>
     Damaged area of a LayerTree's CompositorFrame in device-independent pixels.
     Recorded every time a new frame is produced.
@@ -770,9 +838,9 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.FrameDamageDiagonalInDip.{ProcessType}" units="dip"
-    expires_after="M98">
+    expires_after="2022-06-30">
   <owner>eseckler@chromium.org</owner>
-  <owner>skyostil@chromium.org</owner>
+  <owner>khokhlov@chromium.org</owner>
   <summary>
     Diagonal length of the damaged area of a LayerTree's CompositorFrame in
     device-independent pixels. Recorded every time a new frame is produced.
@@ -977,7 +1045,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
   </summary>
 </histogram>
 
-<histogram base="true" name="Power.Mac" units="mW" expires_after="2022-07-03">
+<histogram base="true" name="Power.Mac" units="mW" expires_after="2022-11-30">
   <owner>olivierli@chromium.org</owner>
   <owner>markchang@chromium.org</owner>
   <summary>
@@ -1032,7 +1100,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.Mac.IsOnBattery2" enum="BooleanOnBattery"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>avi@chromium.org</owner>
   <owner>lgrey@chromium.org</owner>
   <summary>
@@ -1043,7 +1111,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.Mac.ThermalState" enum="MacThermalState"
-    expires_after="2022-05-13">
+    expires_after="2022-11-30">
   <owner>lgrey@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -1099,7 +1167,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.NumberOfAlsAdjustmentsPerSession" units="units"
-    expires_after="M100">
+    expires_after="2022-05-01">
   <owner>tbroch@chromium.org</owner>
   <owner>napper@chromium.org</owner>
   <summary>
@@ -1143,14 +1211,14 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="Power.PowerButtonMenuAction" enum="PowerButtonMenuActionType"
-    expires_after="2021-12-05">
+    expires_after="2022-10-01">
   <owner>minch@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <summary>Actions performed while the power button menu is open.</summary>
 </histogram>
 
 <histogram name="Power.PowerButtonPressInLaptopMode"
-    enum="PowerButtonPressType" expires_after="2021-12-26">
+    enum="PowerButtonPressType" expires_after="2022-10-01">
   <owner>minch@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <summary>
@@ -1377,7 +1445,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="PowerML.NonModelDim.Result" enum="PowerMLFinalResult"
-    expires_after="2022-03-27">
+    expires_after="2022-05-29">
   <owner>napper@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
   <summary>
@@ -1442,7 +1510,7 @@ Also used in tools/metrics/histograms/metadata/others/histograms.xml
 </histogram>
 
 <histogram name="PowerML.SmartDimModel.RequestCanceledDuration" units="ms"
-    expires_after="2022-02-20">
+    expires_after="2022-04-24">
   <owner>amoylan@chromium.org</owner>
   <owner>napper@chromium.org</owner>
   <owner>napper@chromium.org</owner>

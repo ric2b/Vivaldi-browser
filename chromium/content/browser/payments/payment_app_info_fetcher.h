@@ -8,12 +8,10 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/stored_payment_app.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -34,19 +32,16 @@ class PaymentAppInfoFetcher {
   using PaymentAppInfoFetchCallback =
       base::OnceCallback<void(std::unique_ptr<PaymentAppInfo> app_info)>;
 
+  PaymentAppInfoFetcher() = delete;
+  PaymentAppInfoFetcher(const PaymentAppInfoFetcher&) = delete;
+  PaymentAppInfoFetcher& operator=(const PaymentAppInfoFetcher&) = delete;
+
   static void Start(
       const GURL& context_url,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       PaymentAppInfoFetchCallback callback);
 
  private:
-  // Keeps track of the web contents.
-  class WebContentsHelper : public WebContentsObserver {
-   public:
-    explicit WebContentsHelper(WebContents* web_contents);
-    ~WebContentsHelper() override;
-  };
-
   class SelfDeleteFetcher {
    public:
     explicit SelfDeleteFetcher(PaymentAppInfoFetchCallback callback);
@@ -76,13 +71,11 @@ class PaymentAppInfoFetcher {
 
     GURL manifest_url_;
     GURL icon_url_;
-    std::unique_ptr<WebContentsHelper> web_contents_helper_;
+    base::WeakPtr<WebContents> web_contents_;
     std::unique_ptr<PaymentAppInfo> fetched_payment_app_info_;
     PaymentAppInfoFetchCallback callback_;
     base::WeakPtrFactory<SelfDeleteFetcher> weak_ptr_factory_{this};
   };
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(PaymentAppInfoFetcher);
 };
 
 }  // namespace content

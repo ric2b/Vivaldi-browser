@@ -47,6 +47,11 @@ enum class AttributionReportingIssueType {
   kInvalidAttributionData,
   kAttributionSourceUntrustworthyOrigin,
   kAttributionUntrustworthyOrigin,
+  kInvalidAttributionSourceExpiry,
+  kInvalidAttributionSourcePriority,
+  kInvalidEventSourceTriggerData,
+  kInvalidTriggerPriority,
+  kInvalidTriggerDedupKey,
 };
 
 enum class SharedArrayBufferIssueType {
@@ -131,6 +136,9 @@ class CORE_EXPORT AuditsIssue {
       ExecutionContext* execution_context,
       bool shared_buffer_transfer_allowed,
       SharedArrayBufferIssueType issue_type);
+
+  static void ReportDeprecationIssue(ExecutionContext* execution_context,
+                                     const String& message);
 
   static AuditsIssue CreateBlockedByResponseIssue(
       network::mojom::BlockedByResponseReason reason,

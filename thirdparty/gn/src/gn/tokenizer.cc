@@ -389,8 +389,7 @@ void Tokenizer::Advance() {
 }
 
 Location Tokenizer::GetCurrentLocation() const {
-  return Location(input_file_, line_number_, column_number_,
-                  static_cast<int>(cur_));
+  return Location(input_file_, line_number_, column_number_);
 }
 
 Err Tokenizer::GetErrorForInvalidToken(const Location& location) const {

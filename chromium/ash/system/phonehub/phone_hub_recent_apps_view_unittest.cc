@@ -4,10 +4,10 @@
 
 #include "ash/system/phonehub/phone_hub_recent_apps_view.h"
 
+#include "ash/components/phonehub/fake_recent_apps_interaction_handler.h"
+#include "ash/components/phonehub/notification.h"
 #include "ash/system/phonehub/phone_hub_recent_app_button.h"
 #include "ash/test/ash_test_base.h"
-#include "chromeos/components/phonehub/fake_recent_apps_interaction_handler.h"
-#include "chromeos/components/phonehub/notification.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/test/button_test_api.h"
 
@@ -15,6 +15,7 @@ namespace ash {
 
 const char16_t kAppName[] = u"Test App";
 const char kPackageName[] = "com.google.testapp";
+const int64_t kUserId = 0;
 
 namespace {
 
@@ -50,8 +51,8 @@ class RecentAppButtonsViewTest : public AshTestBase {
 
   void NotifyRecentAppAddedOrUpdated() {
     fake_recent_apps_interaction_handler_.NotifyRecentAppAddedOrUpdated(
-        chromeos::phonehub::Notification::AppMetadata(kAppName, kPackageName,
-                                                      /*icon=*/gfx::Image()),
+        phonehub::Notification::AppMetadata(kAppName, kPackageName,
+                                            /*icon=*/gfx::Image(), kUserId),
         base::Time::Now());
   }
 
@@ -62,14 +63,14 @@ class RecentAppButtonsViewTest : public AshTestBase {
 
  private:
   std::unique_ptr<PhoneHubRecentAppsView> phone_hub_recent_apps_view_;
-  chromeos::phonehub::FakeRecentAppsInteractionHandler
+  phonehub::FakeRecentAppsInteractionHandler
       fake_recent_apps_interaction_handler_;
 };
 
 TEST_F(RecentAppButtonsViewTest, TaskViewVisibility) {
   // The recent app view is not visible if the NotifyRecentAppAddedOrUpdated
   // function never be called, e.g. device boot.
-  EXPECT_FALSE(recent_apps_view()->GetVisible());
+  EXPECT_FALSE(recent_apps_view()->recent_app_buttons_view_->GetVisible());
 
   NotifyRecentAppAddedOrUpdated();
   recent_apps_view()->Update();

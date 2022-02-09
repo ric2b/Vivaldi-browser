@@ -620,6 +620,23 @@ gfx::RectF PDFiumPage::GetCharBounds(int char_index) {
   return GetFloatCharRectInPixels(page, text_page, char_index);
 }
 
+gfx::RectF PDFiumPage::GetCroppedRect() {
+  FPDF_PAGE page = GetPage();
+  FS_RECTF raw_rect;
+  if (!FPDF_GetPageBoundingBox(page, &raw_rect))
+    return gfx::RectF();
+
+  if (raw_rect.right < raw_rect.left)
+    std::swap(raw_rect.right, raw_rect.left);
+  if (raw_rect.bottom > raw_rect.top)
+    std::swap(raw_rect.bottom, raw_rect.top);
+
+  gfx::RectF rect(raw_rect.left, raw_rect.bottom,
+                  raw_rect.right - raw_rect.left,
+                  raw_rect.top - raw_rect.bottom);
+  return FloatPageRectToPixelRect(page, rect);
+}
+
 std::vector<AccessibilityLinkInfo> PDFiumPage::GetLinkInfo(
     const std::vector<AccessibilityTextRunInfo>& text_runs) {
   std::vector<AccessibilityLinkInfo> link_info;
@@ -1282,9 +1299,9 @@ void PDFiumPage::PopulateHighlight(FPDF_ANNOTATION annot) {
     highlight.color = MakeARGB(255, 255, 255, 0);
   }
 
-  // Retrieve the contents of the popup note associated with highlight.
-  // See table 164 in ISO 32000-1 standard for more details around "Contents"
-  // key in a highlight annotation.
+  // Retrieve the contents of the popup note associated with highlight. See
+  // table 164 in ISO 32000-1:2008 spec for more details around "Contents" key
+  // in a highlight annotation.
   static constexpr char kContents[] = "Contents";
   highlight.note_text = base::UTF16ToUTF8(CallPDFiumWideStringBufferApi(
       base::BindRepeating(&FPDFAnnot_GetStringValue, annot, kContents),

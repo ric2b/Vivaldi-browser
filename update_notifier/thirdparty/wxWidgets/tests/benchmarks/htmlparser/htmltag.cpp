@@ -8,16 +8,12 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "htmltag.h"
 
 #include "htmlpars.h"
-#include <stdio.h> // for vsscanf
-#include <stdarg.h>
 
+#include "wx/crt.h"
 
 //-----------------------------------------------------------------------------
 // wx28HtmlTagsCache
@@ -41,7 +37,7 @@ struct wx28HtmlCacheItem
 };
 
 
-IMPLEMENT_CLASS(wx28HtmlTagsCache,wxObject)
+wxIMPLEMENT_CLASS(wx28HtmlTagsCache,wxObject);
 
 #define CACHE_INCREMENT  64
 
@@ -207,7 +203,7 @@ void wx28HtmlTagsCache::QueryTag(int at, int* end1, int* end2)
 // wx28HtmlTag
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_CLASS(wx28HtmlTag,wxObject)
+wxIMPLEMENT_CLASS(wx28HtmlTag,wxObject);
 
 wx28HtmlTag::wx28HtmlTag(wx28HtmlTag *parent,
                      const wxString& source, int pos, int end_pos,

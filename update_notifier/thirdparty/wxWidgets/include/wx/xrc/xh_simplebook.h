@@ -14,8 +14,6 @@
 
 #if wxUSE_XRC && wxUSE_BOOKCTRL
 
-#if wxABI_VERSION >= 30002
-
 class wxSimplebook;
 
 class WXDLLIMPEXP_XRC wxSimplebookXmlHandler : public wxXmlResourceHandler
@@ -23,8 +21,8 @@ class WXDLLIMPEXP_XRC wxSimplebookXmlHandler : public wxXmlResourceHandler
 public:
     wxSimplebookXmlHandler();
 
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
 private:
     bool m_isInside;
@@ -32,8 +30,6 @@ private:
 
     wxDECLARE_DYNAMIC_CLASS(wxSimplebookXmlHandler);
 };
-
-#endif // wxABI_VERSION >= 30002
 
 #endif // wxUSE_XRC && wxUSE_BOOKCTRL
 

@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
 
@@ -47,8 +48,6 @@
 #include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_store_ash.h"
 #include "chrome/browser/ash/policy/core/user_cloud_policy_manager_ash.h"
-#include "chrome/browser/ash/policy/dlp/dlp_rules_manager.h"
-#include "chrome/browser/ash/policy/dlp/mock_dlp_rules_manager.h"
 #include "chrome/browser/ash/policy/enrollment/device_cloud_policy_initializer.h"
 #include "chrome/browser/ash/policy/status_collector/device_status_collector.h"
 #include "chrome/browser/ash/policy/status_collector/status_collector.h"
@@ -56,6 +55,8 @@
 #include "chrome/browser/ash/policy/uploading/system_log_uploader.h"
 #include "chrome/browser/ash/settings/device_settings_test_helper.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
+#include "chrome/browser/chromeos/policy/dlp/mock_dlp_rules_manager.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -255,7 +256,7 @@ class TestManagementUIHandler : public ManagementUIHandler {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
  private:
-  policy::PolicyService* policy_service_ = nullptr;
+  raw_ptr<policy::PolicyService> policy_service_ = nullptr;
   bool update_required_eol_ = false;
   std::string device_domain = "devicedomain.com";
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -446,8 +447,8 @@ class ManagementUIHandlerTests : public TestingBaseClass {
             GetTestConfig().report_users, GetTestConfig().report_crash_info,
             GetTestConfig().report_app_info_and_activity);
     settings_.device_settings()->SetTrustedStatus(
-        chromeos::CrosSettingsProvider::TRUSTED);
-    settings_.device_settings()->SetBoolean(chromeos::kSystemLogUploadEnabled,
+        ash::CrosSettingsProvider::TRUSTED);
+    settings_.device_settings()->SetBoolean(ash::kSystemLogUploadEnabled,
                                             GetTestConfig().upload_enabled);
     profile_->GetPrefs()->SetBoolean(
         prefs::kPrintingSendUsernameAndFilenameEnabled,

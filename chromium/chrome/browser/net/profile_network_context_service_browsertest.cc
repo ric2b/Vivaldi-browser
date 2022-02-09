@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -115,7 +116,7 @@ class ProfileNetworkContextServiceBrowsertest : public InProcessBrowserTest {
   }
 
  private:
-  network::mojom::URLLoaderFactory* loader_factory_ = nullptr;
+  raw_ptr<network::mojom::URLLoaderFactory> loader_factory_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
@@ -576,14 +577,18 @@ class ProfileNetworkContextServiceCertVerifierBuiltinPermissionsPolicyTest
   void ExpectUseBuiltinCertVerifierCorrect(
       cert_verifier::mojom::CertVerifierCreationParams::CertVerifierImpl
           use_builtin_cert_verifier) {
-    ASSERT_EQ(1ul, test_cert_verifier_service_factory_.num_captured_params());
-    ASSERT_TRUE(test_cert_verifier_service_factory_.GetParamsAtIndex(0)
-                    ->creation_params);
-    EXPECT_EQ(use_builtin_cert_verifier,
-              test_cert_verifier_service_factory_.GetParamsAtIndex(0)
-                  ->creation_params->use_builtin_cert_verifier);
-    // Send it to the actual CertVerifierServiceFactory.
-    test_cert_verifier_service_factory_.ReleaseNextCertVerifierParams();
+    ASSERT_LE(1ul, test_cert_verifier_service_factory_.num_captured_params());
+    for (size_t i = 0;
+         i < test_cert_verifier_service_factory_.num_captured_params(); i++) {
+      ASSERT_TRUE(test_cert_verifier_service_factory_.GetParamsAtIndex(i)
+                      ->creation_params);
+      EXPECT_EQ(use_builtin_cert_verifier,
+                test_cert_verifier_service_factory_.GetParamsAtIndex(i)
+                    ->creation_params->use_builtin_cert_verifier);
+    }
+
+    // Send them to the actual CertVerifierServiceFactory.
+    test_cert_verifier_service_factory_.ReleaseAllCertVerifierParams();
   }
 
   Profile* CreateNewProfile() {
@@ -606,15 +611,9 @@ class ProfileNetworkContextServiceCertVerifierBuiltinPermissionsPolicyTest
       test_cert_verifier_service_factory_;
 };
 
-// https://crbug.com/1257679 -- This test is failing on several Mac builders.
-#if defined(OS_MAC)
-#define MAYBE_Test DISABLED_Test
-#else
-#define MAYBE_Test Test
-#endif
 IN_PROC_BROWSER_TEST_P(
     ProfileNetworkContextServiceCertVerifierBuiltinPermissionsPolicyTest,
-    MAYBE_Test) {
+    Test) {
   {
     CreateNewProfile()->GetDefaultStoragePartition()->GetNetworkContext();
 

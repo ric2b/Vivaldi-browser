@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "gn/err.h"
 #include "gn/parse_tree.h"
 
@@ -134,7 +133,8 @@ class Parser {
   FRIEND_TEST_ALL_PREFIXES(Parser, ParenExpression);
   FRIEND_TEST_ALL_PREFIXES(Parser, UnaryOp);
 
-  DISALLOW_COPY_AND_ASSIGN(Parser);
+  Parser(const Parser&) = delete;
+  Parser& operator=(const Parser&) = delete;
 };
 
 using PrefixFunc = std::unique_ptr<ParseNode> (Parser::*)(const Token& token);

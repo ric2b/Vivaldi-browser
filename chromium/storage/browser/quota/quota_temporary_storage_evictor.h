@@ -12,11 +12,11 @@
 #include <string>
 
 #include "base/component_export.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/timer/timer.h"
-#include "components/services/storage/public/cpp/buckets/bucket_info.h"
+#include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
@@ -79,14 +79,14 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaTemporaryStorageEvictor {
                               int64_t total_space,
                               int64_t current_usage,
                               bool current_usage_is_complete);
-  void OnGotEvictionBucket(const absl::optional<BucketInfo>& bucket);
+  void OnGotEvictionBucket(const absl::optional<BucketLocator>& bucket);
   void OnEvictionComplete(blink::mojom::QuotaStatusCode status);
 
   void OnEvictionRoundStarted();
   void OnEvictionRoundFinished();
 
   // Not owned; quota_eviction_handler owns us.
-  QuotaEvictionHandler* quota_eviction_handler_;
+  raw_ptr<QuotaEvictionHandler> quota_eviction_handler_;
 
   Statistics statistics_;
   Statistics previous_statistics_;

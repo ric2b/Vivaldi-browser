@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -56,8 +55,8 @@ class MessageCenterImpl : public MessageCenter,
   bool IsQuietMode() const override;
   bool IsSpokenFeedbackEnabled() const override;
   Notification* FindNotificationById(const std::string& id) override;
-  Notification* FindOldestNotificationByNotiferId(
-      const NotifierId& notifier_id) override;
+  Notification* FindParentNotificationForOriginUrl(
+      const GURL& origin_url) override;
   Notification* FindPopupNotificationById(const std::string& id) override;
   Notification* FindVisibleNotificationById(const std::string& id) override;
   NotificationList::Notifications FindNotificationsByAppId(

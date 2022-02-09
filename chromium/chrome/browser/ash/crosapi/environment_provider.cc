@@ -18,6 +18,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "crypto/nss_util_internal.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace crosapi {
@@ -73,6 +74,10 @@ mojom::DefaultPathsPtr EnvironmentProvider::GetDefaultPaths() {
   const user_manager::User* user =
       user_manager::UserManager::Get()->GetPrimaryUser();
   Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
+
+  default_paths->user_nss_database =
+      crypto::GetSoftwareNSSDBPath(profile->GetPath());
+
   if (base::SysInfo::IsRunningOnChromeOS()) {
     // Typically /home/chronos/u-<hash>/MyFiles.
     default_paths->documents =
@@ -95,6 +100,7 @@ mojom::DefaultPathsPtr EnvironmentProvider::GetDefaultPaths() {
     default_paths->downloads = home.Append("Downloads");
     default_paths->drivefs = home.Append("Drive");
   }
+
   return default_paths;
 }
 

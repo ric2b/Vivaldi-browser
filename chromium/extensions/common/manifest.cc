@@ -100,9 +100,8 @@ int GetManifestVersion(const base::DictionaryValue& manifest_value,
                        Manifest::Type type) {
   // Platform apps were launched after manifest version 2 was the preferred
   // version, so they default to that.
-  int manifest_version = type == Manifest::TYPE_PLATFORM_APP ? 2 : 1;
-  manifest_value.GetInteger(keys::kManifestVersion, &manifest_version);
-  return manifest_version;
+  return manifest_value.FindIntKey(keys::kManifestVersion)
+      .value_or(type == Manifest::TYPE_PLATFORM_APP ? 2 : 1);
 }
 
 // Helper class to filter available values from a manifest.
@@ -322,18 +321,12 @@ bool Manifest::ValidateManifest(
   return true;
 }
 
-bool Manifest::HasKey(const std::string& key) const {
-  return available_values_->HasKey(key);
+const base::Value* Manifest::FindKey(base::StringPiece key) const {
+  return available_values_->FindKey(key);
 }
 
-bool Manifest::HasPath(const std::string& path) const {
-  const base::Value* ignored = nullptr;
-  return available_values_->Get(path, &ignored);
-}
-
-bool Manifest::Get(
-    const std::string& path, const base::Value** out_value) const {
-  return available_values_->Get(path, out_value);
+const base::Value* Manifest::FindPath(base::StringPiece path) const {
+  return available_values_->FindPath(path);
 }
 
 bool Manifest::GetBoolean(
@@ -346,7 +339,10 @@ bool Manifest::GetBoolean(
 
 bool Manifest::GetInteger(
     const std::string& path, int* out_value) const {
-  return available_values_->GetInteger(path, out_value);
+  absl::optional<int> value = available_values_->FindIntPath(path);
+  if (value)
+    *out_value = *value;
+  return value.has_value();
 }
 
 bool Manifest::GetString(

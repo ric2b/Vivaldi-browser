@@ -57,6 +57,8 @@ flat_rule::ElementType GetElementType(WebRequestResourceType web_request_type) {
       return flat_rule::ElementType_MEDIA;
     case WebRequestResourceType::FONT:
       return flat_rule::ElementType_FONT;
+    case WebRequestResourceType::WEBBUNDLE:
+      return flat_rule::ElementType_WEBBUNDLE;
     case WebRequestResourceType::WEB_SOCKET:
       return flat_rule::ElementType_WEBSOCKET;
     case WebRequestResourceType::WEB_TRANSPORT:
@@ -193,13 +195,14 @@ RequestParams::RequestParams(content::RenderFrameHost* host,
     : url(&host->GetLastCommittedURL()),
       method(is_post_navigation ? flat_rule::RequestMethod_POST
                                 : flat_rule::RequestMethod_GET),
-      parent_routing_id(GetFrameRoutingId(host->GetParent())) {
-  if (host->GetParent()) {
+      parent_routing_id(GetFrameRoutingId(host->GetParentOrOuterDocument())) {
+  if (host->GetParentOrOuterDocument()) {
     // Note the discrepancy with the WebRequestInfo constructor. For a
     // navigation request, we'd use the request initiator as the
     // |first_party_origin|. But here we use the origin of the parent frame.
     // This is the same as crbug.com/996998.
-    first_party_origin = host->GetParent()->GetLastCommittedOrigin();
+    first_party_origin =
+        host->GetParentOrOuterDocument()->GetLastCommittedOrigin();
     element_type = url_pattern_index::flat::ElementType_SUBDOCUMENT;
   } else {
     first_party_origin = url::Origin();

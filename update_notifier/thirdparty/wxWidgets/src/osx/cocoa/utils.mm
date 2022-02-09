@@ -11,6 +11,7 @@
 #include "wx/wxprec.h"
 
 #include "wx/utils.h"
+#include "wx/platinfo.h"
 
 #ifndef WX_PRECOMP
     #include "wx/intl.h"
@@ -25,6 +26,7 @@
 #include "wx/apptrait.h"
 
 #include "wx/osx/private.h"
+#include "wx/osx/private/available.h"
 
 #if wxUSE_GUI
 #if wxOSX_USE_COCOA_OR_CARBON
@@ -33,8 +35,6 @@
     #include "wx/osx/private/timer.h"
 #endif
 #endif // wxUSE_GUI
-
-#if wxOSX_USE_COCOA
 
 #if wxUSE_GUI
 
@@ -60,7 +60,7 @@ void wxBell()
     
     [appleEventManager setEventHandler:self andSelector:@selector(handleOpenAppEvent:withReplyEvent:)
                          forEventClass:kCoreEventClass andEventID:kAEOpenApplication];
-    
+
     [appleEventManager setEventHandler:self andSelector:@selector(handleQuitAppEvent:withReplyEvent:)
                          forEventClass:kCoreEventClass andEventID:kAEQuitApplication];
 
@@ -69,7 +69,28 @@ void wxBell()
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+    wxUnusedVar(notification);
+    [NSApp stop:nil];
     wxTheApp->OSXOnDidFinishLaunching();
+
+    // We need to activate the application manually if it's not part of a
+    // bundle, otherwise not only it won't come to the foreground, but under
+    // recent macOS versions (10.15+), its menus simply won't work at all.
+    //
+    // Note that we have not one but two methods to opt out from this behaviour
+    // for compatibility.
+    if ( !wxApp::sm_isEmbedded && wxTheApp && wxTheApp->OSXIsGUIApplication() )
+    {
+        CFURLRef url = CFBundleCopyBundleURL(CFBundleGetMainBundle() ) ;
+        CFStringRef path = CFURLCopyFileSystemPath ( url , kCFURLPOSIXPathStyle ) ;
+        CFRelease( url ) ;
+        wxString app = wxCFStringRef(path).AsString(wxLocale::GetSystemEncoding());
+        if ( !app.EndsWith(".app") )
+        {
+            [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
+            [NSApp activateIgnoringOtherApps: YES];
+        }
+    }
 }
 
 - (void)application:(NSApplication *)sender openFiles:(NSArray *)fileNames
@@ -92,6 +113,9 @@ void wxBell()
 - (NSApplicationPrintReply)application:(NSApplication *)sender printFiles:(NSArray *)fileNames withSettings:(NSDictionary *)printSettings showPrintPanels:(BOOL)showPrintPanels
 {
     wxUnusedVar(sender);
+    wxUnusedVar(printSettings);
+    wxUnusedVar(showPrintPanels);
+
     wxArrayString fileList;
     size_t i;
     const size_t count = [fileNames count];
@@ -140,6 +164,8 @@ void wxBell()
 - (void)handleQuitAppEvent:(NSAppleEventDescriptor *)event
             withReplyEvent:(NSAppleEventDescriptor *)replyEvent
 {
+    wxUnusedVar(event);
+    wxUnusedVar(replyEvent);
     if ( wxTheApp->OSXOnShouldTerminate() )
     {
         wxTheApp->OSXOnWillTerminate();
@@ -150,6 +176,7 @@ void wxBell()
 - (void)handleOpenAppEvent:(NSAppleEventDescriptor *)event
            withReplyEvent:(NSAppleEventDescriptor *)replyEvent
 {
+    wxUnusedVar(event);
     wxUnusedVar(replyEvent);
 }
 
@@ -233,10 +260,12 @@ void wxBell()
 @implementation ModalDialogDelegate
 - (id)init
 {
-    self = [super init];
-    sheetFinished = NO;
-    resultCode = -1;
-    impl = 0;
+    if ( self = [super init] )
+    {
+        sheetFinished = NO;
+        resultCode = -1;
+        impl = 0;
+    }
     return self;
 }
 
@@ -280,7 +309,6 @@ void wxBell()
 // here we subclass NSApplication, for the purpose of being able to override sendEvent.
 @interface wxNSApplication : NSApplication
 {
-    BOOL firstPass;
 }
 
 - (id)init;
@@ -293,46 +321,21 @@ void wxBell()
 
 - (id)init
 {
-    self = [super init];
-    firstPass = YES;
+    if ( self = [super init] )
+    {
+        // further init
+    }
     return self;
 }
 
-- (void) transformToForegroundApplication {
-    ProcessSerialNumber psn = { 0, kCurrentProcess };
-    TransformProcessType(&psn, kProcessTransformToForegroundApplication);
-    
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
-    if ( UMAGetSystemVersion() >= 0x1090 )
-    {
-        [[NSRunningApplication currentApplication] activateWithOptions:
-         (NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps)];
-    }
-    else
-#endif
-    {
-        [self deactivate];
-        [self activateIgnoringOtherApps:YES];
-    }
-}
-
-
-
 /* This is needed because otherwise we don't receive any key-up events for command-key
- combinations (an AppKit bug, apparently)			*/
+ combinations (an AppKit bug, apparently) */
 - (void)sendEvent:(NSEvent *)anEvent
 {
     if ([anEvent type] == NSKeyUp && ([anEvent modifierFlags] & NSCommandKeyMask))
         [[self keyWindow] sendEvent:anEvent];
     else
-        [super sendEvent:anEvent];
-    
-    if ( firstPass )
-    {
-        [NSApp stop:nil];
-        firstPass = NO;
-        return;
-    }
+        [super sendEvent:anEvent];    
 }
 
 @end
@@ -354,32 +357,17 @@ bool wxApp::DoInitGui()
     {
         [wxNSApplication sharedApplication];
 
-        if ( OSXIsGUIApplication() )
-        {
-            CFURLRef url = CFBundleCopyBundleURL(CFBundleGetMainBundle() ) ;
-            CFStringRef path = CFURLCopyFileSystemPath ( url , kCFURLPOSIXPathStyle ) ;
-            CFRelease( url ) ;
-            wxString app = wxCFStringRef(path).AsString(wxLocale::GetSystemEncoding());
-            
-            // workaround is only needed for non-bundled apps
-            if ( !app.EndsWith(".app") )
-            {
-                [(wxNSApplication*) [wxNSApplication sharedApplication] transformToForegroundApplication];
-            }
-        }
-
         appcontroller = OSXCreateAppController();
-        [[NSApplication sharedApplication] setDelegate:(id wxOSX_10_6_AND_LATER(<NSApplicationDelegate>))appcontroller];
+        [[NSApplication sharedApplication] setDelegate:(id <NSApplicationDelegate>)appcontroller];
         [NSColor setIgnoresAlpha:NO];
-
-        // calling finishLaunching so early before running the loop seems to trigger some 'MenuManager compatibility' which leads
-        // to the duplication of menus under 10.5 and a warning under 10.6
-#if 0
-        [NSApp finishLaunching];
-#endif
     }
     gNSLayoutManager = [[NSLayoutManager alloc] init];
     
+    // This call makes it so that appplication:openFile: doesn't get bogus calls
+    // from Cocoa doing its own parsing of the argument string. And yes, we need
+    // to use a string with a boolean value in it. That's just how it works.
+    [[NSUserDefaults standardUserDefaults] setObject:@"NO" forKey:@"NSTreatUnknownArgumentsAsOpen"];
+
     return true;
 }
 
@@ -389,23 +377,26 @@ bool wxApp::CallOnInit()
     m_onInitResult = false;
     m_inited = false;
 
-    // Feed the upcoming event loop with a dummy event. Without this,
-    // [NSApp run] below wouldn't return, as we expect it to, if the
-    // application was launched without being activated and would block
-    // until the dock icon was clicked - delaying OnInit() call too.
-    NSEvent *event = [NSEvent otherEventWithType:NSApplicationDefined
+    if ( !sm_isEmbedded )
+    {
+        // Feed the upcoming event loop with a dummy event. Without this,
+        // [NSApp run] below wouldn't return, as we expect it to, if the
+        // application was launched without being activated and would block
+        // until the dock icon was clicked - delaying OnInit() call too.
+        NSEvent *event = [NSEvent otherEventWithType:NSApplicationDefined
                                     location:NSMakePoint(0.0, 0.0)
                                modifierFlags:0
                                    timestamp:0
                                 windowNumber:0
                                      context:nil
                                      subtype:0 data1:0 data2:0];
-    [NSApp postEvent:event atStart:FALSE];
-    [NSApp run];
+        [NSApp postEvent:event atStart:FALSE];
+        [NSApp run];
+    }
 
     m_onInitResult = OnInit();
     m_inited = true;
-    if ( m_onInitResult )
+    if ( !sm_isEmbedded && m_onInitResult )
     {
         if ( m_openFiles.GetCount() > 0 )
             MacOpenFiles(m_openFiles);
@@ -434,19 +425,40 @@ void wxApp::DoCleanUp()
     }
 }
 
-void wxClientDisplayRect(int *x, int *y, int *width, int *height)
+void wxApp::OSXEnableAutomaticTabbing(bool enable)
+{
+    // Automatic tabbing was first introduced in 10.12
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_12
+    if ( WX_IS_MACOS_AVAILABLE(10, 12) )
+    {
+        [NSWindow setAllowsAutomaticWindowTabbing:enable];
+    }
+#endif // macOS 10.12+
+}
+
+extern // used from src/osx/core/display.cpp
+wxRect wxOSXGetMainDisplayClientArea()
 {
     NSRect displayRect = [wxOSXGetMenuScreen() visibleFrame];
-    wxRect r = wxFromNSRect( NULL, displayRect );
-    if ( x )
-        *x = r.x;
-    if ( y )
-        *y = r.y;
-    if ( width )
-        *width = r.GetWidth();
-    if ( height )
-        *height = r.GetHeight();
+    return wxFromNSRect( NULL, displayRect );
+}
 
+static NSScreen* wxOSXGetScreenFromDisplay( CGDirectDisplayID ID)
+{
+    for (NSScreen* screen in [NSScreen screens])
+    {
+        CGDirectDisplayID displayID = [[[screen deviceDescription] objectForKey:@"NSScreenNumber"] intValue];
+        if ( displayID == ID )
+            return screen;
+    }
+    return NULL;
+}
+
+extern // used from src/osx/core/display.cpp
+wxRect wxOSXGetDisplayClientArea(CGDirectDisplayID ID)
+{
+    NSRect displayRect = [wxOSXGetScreenFromDisplay(ID) visibleFrame];
+    return wxFromNSRect( NULL, displayRect );
 }
 
 void wxGetMousePosition( int* x, int* y )
@@ -457,8 +469,6 @@ void wxGetMousePosition( int* x, int* y )
     if ( y )
         *y = pt.y;
 };
-
-#if wxOSX_USE_COCOA && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_6
 
 wxMouseState wxGetMouseState()
 {
@@ -482,9 +492,6 @@ wxMouseState wxGetMouseState()
     
     return ms;
 }
-
-
-#endif
 
 wxTimerImpl* wxGUIAppTraits::CreateTimerImpl(wxTimer *timer)
 {
@@ -550,34 +557,50 @@ wxBitmap wxWindowDCImpl::DoGetAsBitmap(const wxRect *subrect) const
     if (!m_window)
         return wxNullBitmap;
 
-    wxSize sz = m_window->GetSize();
-
-    int width = subrect != NULL ? subrect->width : sz.x;
-    int height = subrect !=  NULL ? subrect->height : sz.y ;
-
-    wxBitmap bitmap(width, height);
+    const wxSize bitmapSize(subrect ? subrect->GetSize() : m_window->GetSize());
+    wxBitmap bitmap;
+    bitmap.CreateScaled(bitmapSize.x, bitmapSize.y, -1, m_contentScaleFactor);
 
     NSView* view = (NSView*) m_window->GetHandle();
     if ( [view isHiddenOrHasHiddenAncestor] == NO )
     {
-        [view lockFocus];
-        // we use this method as other methods force a repaint, and this method can be
-        // called from OnPaint, even with the window's paint dc as source (see wxHTMLWindow)
-        NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithFocusedViewRect: [view bounds]];
-        [view unlockFocus];
-        if ( [rep respondsToSelector:@selector(CGImage)] )
+        // the old implementaiton is not working under 10.15, the new one should work for older systems as well
+        // however the new implementation does not take into account the backgroundViews, and I'm not sure about
+        // until we're
+        // sure the replacement is always better
+         
+        bool useOldImplementation = false;
+        NSBitmapImageRep *rep = nil;
+        
+        if ( useOldImplementation )
         {
-            CGImageRef cgImageRef = (CGImageRef)[rep CGImage];
+            [view lockFocus];
+            // we use this method as other methods force a repaint, and this method can be
+            // called from OnPaint, even with the window's paint dc as source (see wxHTMLWindow)
+            rep = [[NSBitmapImageRep alloc] initWithFocusedViewRect: [view bounds]];
+            [view unlockFocus];
 
-            CGRect r = CGRectMake( 0 , 0 , CGImageGetWidth(cgImageRef)  , CGImageGetHeight(cgImageRef) );
-            // since our context is upside down we dont use CGContextDrawImage
-            wxMacDrawCGImage( (CGContextRef) bitmap.GetHBITMAP() , &r, cgImageRef ) ;
         }
         else
         {
-            // TODO for 10.4 in case we can support this for osx_cocoa
+            rep = [view bitmapImageRepForCachingDisplayInRect:[view bounds]];
+            [view cacheDisplayInRect:[view bounds] toBitmapImageRep:rep];
         }
-        [rep release];
+        
+        CGImageRef cgImageRef = (CGImageRef)[rep CGImage];
+
+        CGRect r = CGRectMake( 0 , 0 , CGImageGetWidth(cgImageRef)  , CGImageGetHeight(cgImageRef) );
+
+        // The bitmap created by wxBitmap::CreateScaled() above is scaled,
+        // so we need to adjust the coordinates for it.
+        r.size.width /= m_contentScaleFactor;
+        r.size.height /= m_contentScaleFactor;
+
+        // since our context is upside down we dont use CGContextDrawImage
+        wxMacDrawCGImage( (CGContextRef) bitmap.GetHBITMAP() , &r, cgImageRef ) ;
+        
+        if ( useOldImplementation )
+            [rep release];
     }
 
     return bitmap;
@@ -585,4 +608,3 @@ wxBitmap wxWindowDCImpl::DoGetAsBitmap(const wxRect *subrect) const
 
 #endif // wxUSE_GUI
 
-#endif // wxOSX_USE_COCOA

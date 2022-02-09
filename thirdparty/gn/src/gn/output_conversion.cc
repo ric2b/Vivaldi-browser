@@ -154,7 +154,7 @@ void DoConvertValueToOutput(const Value& output,
   } else {
     // If we make it here, we didn't match any of the valid options.
     *err = Err(original_output_conversion, "Not a valid output_conversion.",
-               "Run gn help output_conversion to see your options.");
+               "Run `gn help io_conversion` to see your options.");
   }
 }
 

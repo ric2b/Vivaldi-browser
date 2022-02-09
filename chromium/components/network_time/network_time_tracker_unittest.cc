@@ -11,11 +11,13 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "components/client_update_protocol/ecdsa.h"
 #include "components/network_time/network_time_pref_names.h"
 #include "components/network_time/network_time_test_utils.h"
@@ -55,7 +57,7 @@ class NetworkTimeTrackerTest : public ::testing::Test {
         test_server_(new net::EmbeddedTestServer) {
     NetworkTimeTracker::RegisterPrefs(pref_service_.registry());
 
-    field_trial_test_->SetNetworkQueriesWithVariationsService(
+    field_trial_test_->SetFeatureParams(
         true, 0.0 /* query probability */,
         NetworkTimeTracker::FETCHES_IN_BACKGROUND_AND_ON_DEMAND);
 
@@ -160,8 +162,8 @@ class NetworkTimeTrackerTest : public ::testing::Test {
   base::TimeDelta resolution_;
   base::TimeDelta latency_;
   base::TimeDelta adjustment_;
-  base::SimpleTestClock* clock_;
-  base::SimpleTestTickClock* tick_clock_;
+  raw_ptr<base::SimpleTestClock> clock_;
+  raw_ptr<base::SimpleTestTickClock> tick_clock_;
   TestingPrefServiceSimple pref_service_;
   std::unique_ptr<NetworkTimeTracker> tracker_;
   std::unique_ptr<net::EmbeddedTestServer> test_server_;
@@ -557,7 +559,7 @@ TEST_F(NetworkTimeTrackerTest, StartTimeFetchWhileSynced) {
 // Tests that StartTimeFetch() returns false if the field trial
 // is not configured to allow on-demand time fetches.
 TEST_F(NetworkTimeTrackerTest, StartTimeFetchWithoutVariationsParam) {
-  field_trial_test_->SetNetworkQueriesWithVariationsService(
+  field_trial_test_->SetFeatureParams(
       true, 0.0, NetworkTimeTracker::FETCHES_IN_BACKGROUND_ONLY);
   test_server_->RegisterRequestHandler(
       base::BindRepeating(&GoodTimeResponseHandler));
@@ -578,7 +580,7 @@ TEST_F(NetworkTimeTrackerTest, NoNetworkQueryWhileSynced) {
   EXPECT_TRUE(test_server_->Start());
   tracker_->SetTimeServerURLForTesting(test_server_->GetURL("/"));
 
-  field_trial_test_->SetNetworkQueriesWithVariationsService(
+  field_trial_test_->SetFeatureParams(
       true, 0.0, NetworkTimeTracker::FETCHES_IN_BACKGROUND_AND_ON_DEMAND);
   base::Time in_network_time = clock_->Now();
   UpdateNetworkTime(in_network_time, resolution_, latency_,
@@ -589,7 +591,7 @@ TEST_F(NetworkTimeTrackerTest, NoNetworkQueryWhileSynced) {
   EXPECT_FALSE(tracker_->QueryTimeServiceForTesting());
   EXPECT_EQ(base::Minutes(6), tracker_->GetTimerDelayForTesting());
 
-  field_trial_test_->SetNetworkQueriesWithVariationsService(
+  field_trial_test_->SetFeatureParams(
       true, 1.0, NetworkTimeTracker::FETCHES_IN_BACKGROUND_AND_ON_DEMAND);
   EXPECT_TRUE(tracker_->QueryTimeServiceForTesting());
   tracker_->WaitForFetchForTesting(123123123);
@@ -598,14 +600,14 @@ TEST_F(NetworkTimeTrackerTest, NoNetworkQueryWhileSynced) {
 
 TEST_F(NetworkTimeTrackerTest, NoNetworkQueryWhileFeatureDisabled) {
   // Disable network time queries and check that a query is not sent.
-  field_trial_test_->SetNetworkQueriesWithVariationsService(
+  field_trial_test_->SetFeatureParams(
       false, 0.0, NetworkTimeTracker::FETCHES_IN_BACKGROUND_AND_ON_DEMAND);
   EXPECT_FALSE(tracker_->QueryTimeServiceForTesting());
   // The timer is not started when the feature is disabled.
   EXPECT_EQ(base::Minutes(0), tracker_->GetTimerDelayForTesting());
 
   // Enable time queries and check that a query is sent.
-  field_trial_test_->SetNetworkQueriesWithVariationsService(
+  field_trial_test_->SetFeatureParams(
       true, 0.0, NetworkTimeTracker::FETCHES_IN_BACKGROUND_AND_ON_DEMAND);
   EXPECT_TRUE(tracker_->QueryTimeServiceForTesting());
   tracker_->WaitForFetchForTesting(123123123);

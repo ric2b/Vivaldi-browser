@@ -11,7 +11,7 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
@@ -363,7 +363,7 @@ void DecoderStream<StreamType>::OnDecoderSelected(
     DCHECK(!reset_cb_);
   }
 
-  auto* original_stream = stream_;
+  auto* original_stream = stream_.get();
   bool is_decrypting_demuxer_stream_selected = !!decrypting_demuxer_stream;
 
   if (decrypting_demuxer_stream) {

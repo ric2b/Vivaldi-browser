@@ -67,7 +67,7 @@ bool LayoutSVGResourceGradient::RemoveClientFromCache(
 }
 
 std::unique_ptr<GradientData> LayoutSVGResourceGradient::BuildGradientData(
-    const FloatRect& object_bounding_box) {
+    const gfx::RectF& object_bounding_box) {
   NOT_DESTROYED();
   // Create gradient object
   auto gradient_data = std::make_unique<GradientData>();
@@ -89,10 +89,10 @@ std::unique_ptr<GradientData> LayoutSVGResourceGradient::BuildGradientData(
     // gradient or a filter) will be ignored.
     if (object_bounding_box.IsEmpty())
       return gradient_data;
-    gradient_data->userspace_transform.Translate(object_bounding_box.X(),
-                                                 object_bounding_box.Y());
+    gradient_data->userspace_transform.Translate(object_bounding_box.x(),
+                                                 object_bounding_box.y());
     gradient_data->userspace_transform.ScaleNonUniform(
-        object_bounding_box.Width(), object_bounding_box.Height());
+        object_bounding_box.width(), object_bounding_box.height());
   }
 
   // Create gradient object
@@ -106,8 +106,9 @@ std::unique_ptr<GradientData> LayoutSVGResourceGradient::BuildGradientData(
 
 bool LayoutSVGResourceGradient::ApplyShader(
     const SVGResourceClient& client,
-    const FloatRect& reference_box,
+    const gfx::RectF& reference_box,
     const AffineTransform* additional_transform,
+    const AutoDarkMode& auto_dark_mode,
     PaintFlags& flags) {
   NOT_DESTROYED();
   ClearInvalidationMask();
@@ -124,6 +125,8 @@ bool LayoutSVGResourceGradient::ApplyShader(
   if (additional_transform)
     transform = *additional_transform * transform;
   ImageDrawOptions draw_options;
+  draw_options.apply_dark_mode =
+      auto_dark_mode.enabled && StyleRef().ForceDark();
   gradient_data->gradient->ApplyToFlags(
       flags, AffineTransformToSkMatrix(transform), draw_options);
   return true;

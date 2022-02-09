@@ -18,13 +18,14 @@ import("//tools/grit/repack.gni")
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
 group("resources") {
-  public_deps = []
+  public_deps = [ "segmentation_internals:resources" ]
 
   if (!is_android) {
     public_deps += [
       ":component_extension_resources",
       ":dev_ui_paks",
       ":webid_resources",
+      "access_code_cast:resources",
       "app_service_internals:resources",
       "bookmarks:resources",
       "commander:resources",
@@ -59,7 +60,6 @@ group("resources") {
       "chromeos/accessibility:build",
       "chromeos/audio:resources",
       "chromeos/emoji_picker:resources",
-      "chromeos/enterprise_casting:resources",
       "chromeos/launcher_internals:resources",
       "chromeos/login:conditional_resources",
       "chromeos/login:unconditional_resources",
@@ -141,10 +141,8 @@ if (enable_js_type_check) {
         "ntp4:closure_compile",
         "omnibox:closure_compile",
         "quota_internals:closure_compile",
-        "read_later:closure_compile",
         "settings:closure_compile",
         "sync_file_system_internals:closure_compile",
-        "tab_search:closure_compile",
         "usb_internals:closure_compile",
       ]
     }
@@ -167,9 +165,6 @@ if (enable_js_type_check) {
     }
     if (enable_pdf) {
       deps += [ "pdf:closure_compile" ]
-    }
-    if (enable_webui_tab_strip) {
-      deps += [ "tab_strip:closure_compile" ]
     }
     if (is_android) {
       deps += [

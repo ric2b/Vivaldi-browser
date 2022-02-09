@@ -3,7 +3,7 @@
  *  Purpose:     Various preprocessor helpers
  *  Author:      Vadim Zeitlin
  *  Created:     2006-09-30
- *  Copyright:   (c) 2006 Vadim Zeitlin <vadim@wxwindows.org>
+ *  Copyright:   (c) 2006 Vadim Zeitlin <vadim@wxwidgets.org>
  *  Licence:     wxWindows licence
  */
 
@@ -42,23 +42,13 @@
 #define wxSTRINGIZE_T(x)            wxAPPLY_T(wxSTRINGIZE(x))
 
 /*
-    Special workarounds for compilers with broken "##" operator. For all the
-    other ones we can just use it directly.
- */
-#ifdef wxCOMPILER_BROKEN_CONCAT_OPER
-    #define wxPREPEND_L(x)      L ## x
-    #define wxAPPEND_i64(x)     x ## i64
-    #define wxAPPEND_ui64(x)    x ## ui64
-#endif /* wxCOMPILER_BROKEN_CONCAT_OPER */
-
-/*
    Helper macros for wxMAKE_UNIQUE_NAME: normally this works by appending the
    current line number to the given identifier to reduce the probability of the
    conflict (it may still happen if this is used in the headers, hence you
    should avoid doing it or provide unique prefixes then) but we have to do it
    differently for VC++
   */
-#if defined(__VISUALC__) && (__VISUALC__ >= 1300)
+#if defined(__VISUALC__)
     /*
        __LINE__ handling is completely broken in VC++ when using "Edit and
        Continue" (/ZI option) and results in preprocessor errors if we use it
@@ -83,7 +73,7 @@
 /*
     Helpers for defining macros that expand into a single statement.
 
-    The standatd solution is to use "do { ... } while (0)" statement but MSVC
+    The standard solution is to use "do { ... } while (0)" statement but MSVC
     generates a C4127 "condition expression is constant" warning for it so we
     use something which is just complicated enough to not be recognized as a
     constant but still simple enough to be optimized away.
@@ -93,29 +83,37 @@
     Notice that wxASSERT_ARG_TYPE in wx/strvargarg.h relies on these macros
     creating some kind of a loop because it uses "break".
  */
-#ifdef __WATCOMC__
-    #define wxFOR_ONCE(name) for(int name=0; name<1; name++)
-    #define wxSTATEMENT_MACRO_BEGIN wxFOR_ONCE(wxMAKE_UNIQUE_NAME(wxmacro)) {
-    #define wxSTATEMENT_MACRO_END }
-#else
-    #define wxSTATEMENT_MACRO_BEGIN  do {
-    #define wxSTATEMENT_MACRO_END } while ( (void)0, 0 )
-#endif
+#define wxSTATEMENT_MACRO_BEGIN  do {
+#define wxSTATEMENT_MACRO_END } while ( (void)0, 0 )
+
+/*
+    Helper for executing the following statement conditionally without using
+    conditional statements.
+
+    This strange macro is needed in the first place to avoid the problems due
+    to nested if/else inside macros. E.g. if some MACRO started with "if", then
+
+        if ( cond )
+            MACRO();
+        else
+            ...
+
+    would be broken because "..." would bind to the wrong "if" inside the macro
+    rather than the visible one. So we use wxDO_IF() inside the macro instead
+    to avoid this problem.
+ */
+#define wxDO_IF_HELPER(loopvar, condition)                                    \
+    for ( bool loopvar = false; !loopvar && condition; loopvar = true )
+
+#define wxDO_IF(condition) wxDO_IF_HELPER(wxMAKE_UNIQUE_NAME(wxdoif), condition)
 
 /*
     Define __WXFUNCTION__ which is like standard __FUNCTION__ but defined as
     NULL for the compilers which don't support the latter.
  */
 #ifndef __WXFUNCTION__
-    /* TODO: add more compilers supporting __FUNCTION__ */
-    #if defined(__DMC__)
-        /*
-           __FUNCTION__ happens to be not defined within class members
-           http://www.digitalmars.com/drn-bin/wwwnews?c%2B%2B.beta/485
-        */
-        #define __WXFUNCTION__ (NULL)
-    #elif defined(__GNUC__) || \
-          (defined(_MSC_VER) && _MSC_VER >= 1300) || \
+    #if defined(__GNUC__) || \
+          defined(__VISUALC__) || \
           defined(__FUNCTION__)
         #define __WXFUNCTION__ __FUNCTION__
     #else
@@ -130,19 +128,18 @@
     /* Any C99 or C++11 compiler should have them. */
     #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || \
         (defined(__cplusplus) && __cplusplus >= 201103L)
-        #define HAVE_VARIADIC_MACROS
-    #elif wxCHECK_GCC_VERSION(3,0)
-        #define HAVE_VARIADIC_MACROS
+        #define HAVE_VARIADIC_MACROS 1
+    #elif defined(__GNUC__)
+        #define HAVE_VARIADIC_MACROS 1
     #elif wxCHECK_VISUALC_VERSION(8)
-        #define HAVE_VARIADIC_MACROS
-    #elif wxCHECK_WATCOM_VERSION(1,2)
-        #define HAVE_VARIADIC_MACROS
+        #define HAVE_VARIADIC_MACROS 1
     #endif
 #endif /* !HAVE_VARIADIC_MACROS */
 
 
 
 #ifdef HAVE_VARIADIC_MACROS
+
 /*
    wxCALL_FOR_EACH(what, ...) calls the macro from its first argument, what(pos, x),
    for every remaining argument 'x', with 'pos' being its 1-based index in
@@ -157,21 +154,30 @@
    Up to eight arguments are supported.
 
    (With thanks to https://groups.google.com/d/topic/comp.std.c/d-6Mj5Lko_s/discussion
-   and http://stackoverflow.com/questions/1872220/is-it-possible-to-iterate-over-arguments-in-variadic-macros)
+   and https://stackoverflow.com/questions/1872220/is-it-possible-to-iterate-over-arguments-in-variadic-macros)
 */
 #define wxCALL_FOR_EACH_NARG(...)   wxCALL_FOR_EACH_NARG_((__VA_ARGS__, wxCALL_FOR_EACH_RSEQ_N()))
 #define wxCALL_FOR_EACH_NARG_(args) wxCALL_FOR_EACH_ARG_N args
 #define wxCALL_FOR_EACH_ARG_N(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 #define wxCALL_FOR_EACH_RSEQ_N() 8, 7, 6, 5, 4, 3, 2, 1, 0
 
+#define wxCALL_FOR_EACH_1_(args)   wxCALL_FOR_EACH_1 args
+#define wxCALL_FOR_EACH_2_(args)   wxCALL_FOR_EACH_2 args
+#define wxCALL_FOR_EACH_3_(args)   wxCALL_FOR_EACH_3 args
+#define wxCALL_FOR_EACH_4_(args)   wxCALL_FOR_EACH_4 args
+#define wxCALL_FOR_EACH_5_(args)   wxCALL_FOR_EACH_5 args
+#define wxCALL_FOR_EACH_6_(args)   wxCALL_FOR_EACH_6 args
+#define wxCALL_FOR_EACH_7_(args)   wxCALL_FOR_EACH_7 args
+#define wxCALL_FOR_EACH_8_(args)   wxCALL_FOR_EACH_8 args
+
 #define wxCALL_FOR_EACH_1(what, x)        what(1, x)
-#define wxCALL_FOR_EACH_2(what, x, ...)   what(2, x)  wxCALL_FOR_EACH_1(what,  __VA_ARGS__)
-#define wxCALL_FOR_EACH_3(what, x, ...)   what(3, x)  wxCALL_FOR_EACH_2(what,  __VA_ARGS__)
-#define wxCALL_FOR_EACH_4(what, x, ...)   what(4, x)  wxCALL_FOR_EACH_3(what,  __VA_ARGS__)
-#define wxCALL_FOR_EACH_5(what, x, ...)   what(5, x)  wxCALL_FOR_EACH_4(what,  __VA_ARGS__)
-#define wxCALL_FOR_EACH_6(what, x, ...)   what(6, x)  wxCALL_FOR_EACH_5(what,  __VA_ARGS__)
-#define wxCALL_FOR_EACH_7(what, x, ...)   what(7, x)  wxCALL_FOR_EACH_6(what,  __VA_ARGS__)
-#define wxCALL_FOR_EACH_8(what, x, ...)   what(8, x)  wxCALL_FOR_EACH_7(what,  __VA_ARGS__)
+#define wxCALL_FOR_EACH_2(what, x, ...)   what(2, x)  wxCALL_FOR_EACH_1_((what, __VA_ARGS__))
+#define wxCALL_FOR_EACH_3(what, x, ...)   what(3, x)  wxCALL_FOR_EACH_2_((what, __VA_ARGS__))
+#define wxCALL_FOR_EACH_4(what, x, ...)   what(4, x)  wxCALL_FOR_EACH_3_((what, __VA_ARGS__))
+#define wxCALL_FOR_EACH_5(what, x, ...)   what(5, x)  wxCALL_FOR_EACH_4_((what, __VA_ARGS__))
+#define wxCALL_FOR_EACH_6(what, x, ...)   what(6, x)  wxCALL_FOR_EACH_5_((what, __VA_ARGS__))
+#define wxCALL_FOR_EACH_7(what, x, ...)   what(7, x)  wxCALL_FOR_EACH_6_((what, __VA_ARGS__))
+#define wxCALL_FOR_EACH_8(what, x, ...)   what(8, x)  wxCALL_FOR_EACH_7_((what, __VA_ARGS__))
 
 #define wxCALL_FOR_EACH_(N, args) \
     wxCONCAT(wxCALL_FOR_EACH_, N) args

@@ -73,7 +73,8 @@ void ExecutionContextCSPDelegate::SetSandboxFlags(
   // Chrome-ui navigated through the backgroundpage and inherit the sandbox
   // flags from there. This was VB-83203.
   if (vivaldi::IsVivaldiRunning()) {
-    execution_context_->GetSecurityContext().SetSandboxFlags(mask);
+    execution_context_->GetSecurityContext().SetSandboxFlags(
+        execution_context_->GetSandboxFlags() | mask);
   }
 
   // Just check that all the sandbox flags that are set by CSP have

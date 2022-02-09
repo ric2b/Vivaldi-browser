@@ -50,7 +50,7 @@ void MultiColumnSetPainter::PaintColumnRules(
 
   DrawingRecorder recorder(paint_info.context, layout_multi_column_set_,
                            DisplayItem::kColumnRules,
-                           PixelSnappedIntRect(UnionRect(column_rule_bounds)));
+                           ToPixelSnappedRect(UnionRect(column_rule_bounds)));
 
   const ComputedStyle& block_style =
       layout_multi_column_set_.MultiColumnBlockFlow()->StyleRef();
@@ -64,7 +64,7 @@ void MultiColumnSetPainter::PaintColumnRules(
       block_style, GetCSSPropertyColumnRuleColor());
 
   for (auto& bound : column_rule_bounds) {
-    IntRect pixel_snapped_rule_rect = PixelSnappedIntRect(bound);
+    gfx::Rect pixel_snapped_rule_rect = ToPixelSnappedRect(bound);
     BoxBorderPainter::DrawBoxSide(
         paint_info.context, pixel_snapped_rule_rect, box_side, rule_color,
         rule_style,

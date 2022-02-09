@@ -5,10 +5,12 @@
 #include "components/security_interstitials/content/ssl_error_handler.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -29,7 +31,6 @@
 #include "components/security_interstitials/content/common_name_mismatch_handler.h"
 #include "components/security_interstitials/content/ssl_error_assistant.h"
 #include "components/security_interstitials/content/ssl_error_assistant.pb.h"
-#include "components/security_interstitials/content/ssl_error_handler.h"
 #include "components/security_interstitials/core/ssl_error_options_mask.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -50,9 +51,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-
-const char kCertDateErrorHistogram[] =
-    "interstitial.ssl_error_handler.cert_date_error_delay";
 
 const net::SHA256HashValue kCertPublicKeyHashValue = {{0x01, 0x02}};
 
@@ -166,8 +164,7 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
         blocked_interception_interstitial_shown_(false),
         redirected_to_suggested_url_(false),
         is_overridable_error_(true),
-        has_blocked_interception_(false),
-        legacy_tls_interstitial_shown_(false) {}
+        has_blocked_interception_(false) {}
 
   TestSSLErrorHandlerDelegate(const TestSSLErrorHandlerDelegate&) = delete;
   TestSSLErrorHandlerDelegate& operator=(const TestSSLErrorHandlerDelegate&) =
@@ -197,15 +194,11 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
   bool redirected_to_suggested_url() const {
     return redirected_to_suggested_url_;
   }
-  bool legacy_tls_interstitial_shown() const {
-    return legacy_tls_interstitial_shown_;
-  }
 
   void set_suggested_url_exists() { suggested_url_exists_ = true; }
   void set_non_overridable_error() { is_overridable_error_ = false; }
   void set_os_reports_captive_portal() { os_reports_captive_portal_ = true; }
   void set_has_blocked_interception() { has_blocked_interception_ = true; }
-  void set_has_legacy_tls() { has_legacy_tls_ = true; }
 
   void ClearSeenOperations() {
     captive_portal_checked_ = false;
@@ -218,8 +211,6 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
     mitm_software_interstitial_shown_ = false;
     redirected_to_suggested_url_ = false;
     has_blocked_interception_ = false;
-    legacy_tls_interstitial_shown_ = false;
-    has_legacy_tls_ = false;
   }
 
  private:
@@ -259,10 +250,6 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
     blocked_interception_interstitial_shown_ = true;
   }
 
-  void ShowLegacyTLSInterstitial() override {
-    legacy_tls_interstitial_shown_ = true;
-  }
-
   void CheckSuggestedUrl(
       const GURL& suggested_url,
       CommonNameMismatchHandler::CheckUrlCallback callback) override {
@@ -283,8 +270,6 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
     return has_blocked_interception_;
   }
 
-  bool HasLegacyTLS() const override { return has_legacy_tls_; }
-
   bool captive_portal_checked_;
   bool os_reports_captive_portal_;
   bool suggested_url_exists_;
@@ -297,8 +282,6 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
   bool redirected_to_suggested_url_;
   bool is_overridable_error_;
   bool has_blocked_interception_;
-  bool legacy_tls_interstitial_shown_;
-  bool has_legacy_tls_;
   CommonNameMismatchHandler::CheckUrlCallback suggested_url_callback_;
 };
 
@@ -368,7 +351,7 @@ class SSLErrorHandlerNameMismatchTest
   TestingPrefServiceSimple pref_service_;
   std::unique_ptr<captive_portal::CaptivePortalService> captive_portal_service_;
   std::unique_ptr<TestSSLErrorHandler> error_handler_;
-  TestSSLErrorHandlerDelegate* delegate_;
+  raw_ptr<TestSSLErrorHandlerDelegate> delegate_;
 };
 
 // A class to test name mismatch errors, where the certificate lacks a
@@ -428,22 +411,8 @@ class SSLErrorAssistantProtoTest : public content::RenderViewHostTestHarness {
   const net::SSLInfo& ssl_info() { return ssl_info_; }
 
  protected:
-  SSLErrorAssistantProtoTest() {}
-  ~SSLErrorAssistantProtoTest() override {}
-
-  void SetCaptivePortalFeatureEnabled(bool enabled) {
-    if (enabled)
-      scoped_feature_list_.InitAndEnableFeature(kCaptivePortalCertificateList);
-    else
-      scoped_feature_list_.InitAndDisableFeature(kCaptivePortalCertificateList);
-  }
-
-  void SetMITMSoftwareFeatureEnabled(bool enabled) {
-    if (enabled)
-      scoped_feature_list_.InitAndEnableFeature(kMITMSoftwareInterstitial);
-    else
-      scoped_feature_list_.InitAndDisableFeature(kMITMSoftwareInterstitial);
-  }
+  SSLErrorAssistantProtoTest() = default;
+  ~SSLErrorAssistantProtoTest() override = default;
 
   void ResetErrorHandlerFromString(const std::string& cert_data,
                                    net::CertStatus cert_status) {
@@ -628,7 +597,58 @@ class SSLErrorAssistantProtoTest : public content::RenderViewHostTestHarness {
   TestingPrefServiceSimple pref_service_;
   std::unique_ptr<captive_portal::CaptivePortalService> captive_portal_service_;
   std::unique_ptr<TestSSLErrorHandler> error_handler_;
-  TestSSLErrorHandlerDelegate* delegate_;
+  raw_ptr<TestSSLErrorHandlerDelegate> delegate_;
+};
+
+class SSLErrorAssistantProtoCaptivePortalEnabledTest
+    : public SSLErrorAssistantProtoTest {
+ public:
+  SSLErrorAssistantProtoCaptivePortalEnabledTest() {
+    scoped_feature_list_.InitAndEnableFeature(kCaptivePortalCertificateList);
+  }
+
+ private:
+  // This should only be accessed from a test's constructor, to avoid tsan data
+  // races with threads kicked off by RenderViewHostTestHarness::SetUp().
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class SSLErrorAssistantProtoCaptivePortalDisabledTest
+    : public SSLErrorAssistantProtoTest {
+ public:
+  SSLErrorAssistantProtoCaptivePortalDisabledTest() {
+    scoped_feature_list_.InitAndDisableFeature(kCaptivePortalCertificateList);
+  }
+
+ private:
+  // This should only be accessed from a test's constructor, to avoid tsan data
+  // races with threads kicked off by RenderViewHostTestHarness::SetUp().
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class SSLErrorAssistantProtoMITMSoftwareEnabledTest
+    : public SSLErrorAssistantProtoTest {
+ public:
+  SSLErrorAssistantProtoMITMSoftwareEnabledTest() {
+    scoped_feature_list_.InitAndEnableFeature(kMITMSoftwareInterstitial);
+  }
+
+ private:
+  // This should only be accessed from a test's constructor, to avoid tsan data
+  // races with threads kicked off by RenderViewHostTestHarness::SetUp().
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class SSLErrorAssistantProtoMITMSoftwareDisabledTest
+    : public SSLErrorAssistantProtoTest {
+ public:
+  SSLErrorAssistantProtoMITMSoftwareDisabledTest() {
+    scoped_feature_list_.InitAndDisableFeature(kMITMSoftwareInterstitial);
+  }
+
+ private:
+  // This should only be accessed from a test's constructor, to avoid tsan data
+  // races with threads kicked off by RenderViewHostTestHarness::SetUp().
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -644,7 +664,7 @@ class SSLErrorHandlerDateInvalidTest
         test_server_(new net::EmbeddedTestServer) {
     network_time::NetworkTimeTracker::RegisterPrefs(pref_service_.registry());
 
-    field_trial_test()->SetNetworkQueriesWithVariationsService(
+    field_trial_test()->SetFeatureParams(
         false, 0.0,
         network_time::NetworkTimeTracker::FETCHES_IN_BACKGROUND_ONLY);
   }
@@ -740,11 +760,11 @@ class SSLErrorHandlerDateInvalidTest
 
   net::SSLInfo ssl_info_;
   std::unique_ptr<TestSSLErrorHandler> error_handler_;
-  TestSSLErrorHandlerDelegate* delegate_;
+  raw_ptr<TestSSLErrorHandlerDelegate> delegate_;
 
   std::unique_ptr<network_time::FieldTrialTest> field_trial_test_;
-  base::SimpleTestClock* clock_;
-  base::SimpleTestTickClock* tick_clock_;
+  raw_ptr<base::SimpleTestClock> clock_;
+  raw_ptr<base::SimpleTestTickClock> tick_clock_;
   TestingPrefServiceSimple pref_service_;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
   std::unique_ptr<network_time::NetworkTimeTracker> tracker_;
@@ -963,13 +983,23 @@ TEST_F(SSLErrorHandlerNameMismatchTest, OSReportsCaptivePortal) {
                                SSLErrorHandler::OS_REPORTS_CAPTIVE_PORTAL, 1);
 }
 
+class SSLErrorHandlerNameMismatchCaptivePortalInterstitialDisabledTest
+    : public SSLErrorHandlerNameMismatchTest {
+ public:
+  SSLErrorHandlerNameMismatchCaptivePortalInterstitialDisabledTest() {
+    scoped_feature_list_.InitAndDisableFeature(kCaptivePortalInterstitial);
+  }
+
+ private:
+  // This should only be accessed from a test's constructor, to avoid tsan data
+  // races with threads kicked off by RenderViewHostTestHarness::SetUp().
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
 // Test that a captive portal interstitial isn't shown if the OS reports a
 // portal but CaptivePortalInterstitial feature is disabled.
-TEST_F(SSLErrorHandlerNameMismatchTest,
+TEST_F(SSLErrorHandlerNameMismatchCaptivePortalInterstitialDisabledTest,
        OSReportsCaptivePortal_FeatureDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kCaptivePortalInterstitial);
-
   base::HistogramTester histograms;
   delegate()->set_os_reports_captive_portal();
 
@@ -1127,7 +1157,7 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryStarted) {
       base::BindRepeating(&network_time::GoodTimeResponseHandler));
   EXPECT_TRUE(test_server()->Start());
   tracker()->SetTimeServerURLForTesting(test_server()->GetURL("/"));
-  field_trial_test()->SetNetworkQueriesWithVariationsService(
+  field_trial_test()->SetFeatureParams(
       true, 0.0, network_time::NetworkTimeTracker::FETCHES_ON_DEMAND_ONLY);
   error_handler()->StartHandlingError();
 
@@ -1137,8 +1167,6 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryStarted) {
 
   EXPECT_TRUE(delegate()->bad_clock_interstitial_shown());
   EXPECT_FALSE(error_handler()->IsTimerRunningForTesting());
-  // Check that the histogram for the delay was recorded.
-  histograms.ExpectTotalCount(kCertDateErrorHistogram, 1);
 }
 
 // Tests that an SSL interstitial is shown if the accuracy of the system
@@ -1164,8 +1192,6 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_NoTimeQueries) {
   EXPECT_FALSE(error_handler()->IsTimerRunningForTesting());
   EXPECT_FALSE(delegate()->bad_clock_interstitial_shown());
   EXPECT_TRUE(delegate()->ssl_interstitial_shown());
-  // Check that the histogram for the delay was recorded.
-  histograms.ExpectTotalCount(kCertDateErrorHistogram, 1);
 }
 
 // Tests that an SSL interstitial is shown if determing the accuracy of
@@ -1192,7 +1218,7 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryHangs) {
       &WaitForRequest, wait_for_time_query_loop.QuitClosure()));
   EXPECT_TRUE(test_server()->Start());
   tracker()->SetTimeServerURLForTesting(test_server()->GetURL("/"));
-  field_trial_test()->SetNetworkQueriesWithVariationsService(
+  field_trial_test()->SetFeatureParams(
       true, 0.0, network_time::NetworkTimeTracker::FETCHES_ON_DEMAND_ONLY);
   error_handler()->StartHandlingError();
   EXPECT_TRUE(error_handler()->IsTimerRunningForTesting());
@@ -1202,9 +1228,6 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryHangs) {
   EXPECT_FALSE(delegate()->bad_clock_interstitial_shown());
   EXPECT_TRUE(delegate()->ssl_interstitial_shown());
   EXPECT_FALSE(error_handler()->IsTimerRunningForTesting());
-
-  // Check that the histogram for the delay was recorded.
-  histograms.ExpectTotalCount(kCertDateErrorHistogram, 1);
 
   // Clear the error handler to test that, when the request completes,
   // it doesn't try to call a callback on a deleted SSLErrorHandler.
@@ -1216,9 +1239,8 @@ TEST_F(SSLErrorHandlerDateInvalidTest, MAYBE_TimeQueryHangs) {
 
 // Tests that a certificate marked as a known captive portal certificate causes
 // the captive portal interstitial to be shown.
-TEST_F(SSLErrorAssistantProtoTest, CaptivePortal_FeatureEnabled) {
-  SetCaptivePortalFeatureEnabled(true);
-
+TEST_F(SSLErrorAssistantProtoCaptivePortalEnabledTest,
+       CaptivePortal_FeatureEnabled) {
   base::HistogramTester histograms;
 
   RunCaptivePortalTest();
@@ -1254,9 +1276,8 @@ TEST_F(SSLErrorAssistantProtoTest, CaptivePortal_FeatureEnabled) {
 // Tests that a certificate marked as a known captive portal certificate does
 // not cause the captive portal interstitial to be shown, if the feature is
 // disabled.
-TEST_F(SSLErrorAssistantProtoTest, CaptivePortal_FeatureDisabled) {
-  SetCaptivePortalFeatureEnabled(false);
-
+TEST_F(SSLErrorAssistantProtoCaptivePortalDisabledTest,
+       CaptivePortal_FeatureDisabled) {
   // Default error for SSLErrorHandlerNameMismatchTest tests is name mismatch.
   TestNoCaptivePortalInterstitial();
 }
@@ -1264,10 +1285,8 @@ TEST_F(SSLErrorAssistantProtoTest, CaptivePortal_FeatureDisabled) {
 // Tests that an error other than name mismatch does not cause a captive portal
 // interstitial to be shown, even if the certificate is marked as a known
 // captive portal certificate.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoCaptivePortalEnabledTest,
        CaptivePortal_AuthorityInvalidError_NoInterstitial) {
-  SetCaptivePortalFeatureEnabled(true);
-
   ResetErrorHandlerFromFile(kOkayCertName, net::CERT_STATUS_AUTHORITY_INVALID);
   TestNoCaptivePortalInterstitial();
 }
@@ -1276,9 +1295,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 // not cause a captive portal interstitial to be shown, even if the certificate
 // is marked as a known captive portal certificate. The resulting error is
 // authority-invalid.
-TEST_F(SSLErrorAssistantProtoTest, CaptivePortal_TwoErrors_NoInterstitial) {
-  SetCaptivePortalFeatureEnabled(true);
-
+TEST_F(SSLErrorAssistantProtoCaptivePortalEnabledTest,
+       CaptivePortal_TwoErrors_NoInterstitial) {
   const net::CertStatus cert_status =
       net::CERT_STATUS_COMMON_NAME_INVALID | net::CERT_STATUS_AUTHORITY_INVALID;
   // Sanity check that AUTHORITY_INVALID is seen as the net error.
@@ -1292,10 +1310,8 @@ TEST_F(SSLErrorAssistantProtoTest, CaptivePortal_TwoErrors_NoInterstitial) {
 // captive portal interstitial to be shown, even if the certificate is marked as
 // a known captive portal certificate. Similar to
 // NameMismatchAndAuthorityInvalid, except the resulting error is name mismatch.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoCaptivePortalEnabledTest,
        CaptivePortal_TwoErrorsIncludingNameMismatch_NoInterstitial) {
-  SetCaptivePortalFeatureEnabled(true);
-
   const net::CertStatus cert_status =
       net::CERT_STATUS_COMMON_NAME_INVALID | net::CERT_STATUS_WEAK_KEY;
   // Sanity check that COMMON_NAME_INVALID is seen as the net error, since the
@@ -1310,10 +1326,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 // Tests that if a certificate matches the issuer common name regex of a MITM
 // software entry but not the issuer organization name a MITM software
 // interstitial will not be displayed.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_CertificateDoesNotMatchOrganizationName_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
-
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
 
@@ -1332,10 +1346,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 // Tests that if a certificate matches the issuer organization name regex of a
 // MITM software entry but not the issuer common name a MITM software
 // interstitial will not be displayed.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_CertificateDoesNotMatchCommonName_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
-
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
 
@@ -1353,10 +1365,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 
 // Tests that a certificate with no organization name or common name will not
 // trigger a MITM software interstitial.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_CertificateWithNoOrganizationOrCommonName_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
-
   ResetErrorHandlerFromString(kCertWithoutOrganizationOrCommonName,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   InitMITMSoftwareList();
@@ -1365,10 +1375,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 
 // Tests that when everything else is in order, a matching MITM software
 // certificate will trigger the MITM software interstitial.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_CertificateMatchesCommonNameAndOrganizationName) {
-  SetMITMSoftwareFeatureEnabled(true);
-
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   InitMITMSoftwareList();
@@ -1378,8 +1386,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 // Tests that a known MITM software entry in the SSL error assistant proto that
 // has a common name regex but not an organization name regex can still trigger
 // a MITM software interstitial.
-TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_CertificateMatchesCommonName) {
-  SetMITMSoftwareFeatureEnabled(true);
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
+       MITMSoftware_CertificateMatchesCommonName) {
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   // Register a MITM Software entry in the SSL error assistant proto that has a
@@ -1398,9 +1406,8 @@ TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_CertificateMatchesCommonName) {
 // Tests that a known MITM software entry in the SSL error assistant proto that
 // has an organization name regex but not a common name name regex can still
 // trigger a MITM software interstitial.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_CertificateMatchesOrganizationName) {
-  SetMITMSoftwareFeatureEnabled(true);
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   // Register a MITM Software entry in the SSL error assistant proto that has an
@@ -1420,9 +1427,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 // interstitial. For example, a common name regex "Match" should not trigger the
 // MITM software interstitial on a certificate that's common name is
 // "Full Match".
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_PartialRegexMatch_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   // Register a MITM software entry with common name and organization name
@@ -1442,10 +1448,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 
 // Tests that a MITM software interstitial is not triggered when neither the
 // common name or the organization name match.
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_NonMatchingCertificate_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
-
   ResetErrorHandlerFromFile(kOkayCertName, net::CERT_STATUS_AUTHORITY_INVALID);
   InitMITMSoftwareList();
   TestNoMITMSoftwareInterstitial();
@@ -1453,9 +1457,8 @@ TEST_F(SSLErrorAssistantProtoTest,
 
 // Tests that the MITM software interstitial is not triggered when the feature
 // is disabled by Finch.
-TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_FeatureDisabled) {
-  SetMITMSoftwareFeatureEnabled(false);
-
+TEST_F(SSLErrorAssistantProtoMITMSoftwareDisabledTest,
+       MITMSoftware_FeatureDisabled) {
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   InitMITMSoftwareList();
@@ -1464,9 +1467,8 @@ TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_FeatureDisabled) {
 
 // Tests that the MITM software interstitial is not triggered when an error
 // other than net::CERT_STATUS_AUTHORITY_INVALID is thrown.
-TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_WrongError_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
-
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
+       MITMSoftware_WrongError_NoInterstitial) {
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_COMMON_NAME_INVALID);
   InitMITMSoftwareList();
@@ -1475,9 +1477,8 @@ TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_WrongError_NoInterstitial) {
 
 // Tests that the MITM software interstitial is not triggered when more than one
 // error is thrown.
-TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_TwoErrors_NoInterstitial) {
-  SetMITMSoftwareFeatureEnabled(true);
-
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
+       MITMSoftware_TwoErrors_NoInterstitial) {
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID |
                                   net::CERT_STATUS_COMMON_NAME_INVALID);
@@ -1487,10 +1488,10 @@ TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_TwoErrors_NoInterstitial) {
 
 // Tests that the MITM software interstitial is not triggered if the error
 // thrown is overridable.
-TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_Overridable_NoInterstitial) {
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
+       MITMSoftware_Overridable_NoInterstitial) {
   base::HistogramTester histograms;
 
-  SetMITMSoftwareFeatureEnabled(true);
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
   InitMITMSoftwareList();
@@ -1515,9 +1516,8 @@ TEST_F(SSLErrorAssistantProtoTest, MITMSoftware_Overridable_NoInterstitial) {
                                0);
 }
 
-TEST_F(SSLErrorAssistantProtoTest,
+TEST_F(SSLErrorAssistantProtoMITMSoftwareEnabledTest,
        MITMSoftware_IgnoreDynamicUpdateWithSmallVersionId) {
-  SetMITMSoftwareFeatureEnabled(true);
   ResetErrorHandlerFromString(kMisconfiguredFirewallCert,
                               net::CERT_STATUS_AUTHORITY_INVALID);
 
@@ -1581,51 +1581,13 @@ TEST_F(SSLErrorHandlerTest, BlockedInterceptionInterstitial) {
       SSLErrorHandler::SHOW_BLOCKED_INTERCEPTION_INTERSTITIAL, 1);
 }
 
-// Tests that a legacy TLS interstitial is shown. This test mainly checks
-// histogram accuracy (see BlockedInterceptionInterstitial test above).
-TEST_F(SSLErrorHandlerTest, LegacyTLSInterstitial) {
-  net::SSLInfo ssl_info;
-  ssl_info.cert =
-      net::ImportCertFromFile(net::GetTestCertsDirectory(), kOkayCertName);
-  ssl_info.cert_status = net::CERT_STATUS_LEGACY_TLS;
-  ssl_info.public_key_hashes.push_back(net::HashValue(kCertPublicKeyHashValue));
-
-  std::unique_ptr<TestSSLErrorHandlerDelegate> delegate(
-      new TestSSLErrorHandlerDelegate(web_contents(), ssl_info));
-
-  TestSSLErrorHandlerDelegate* delegate_ptr = delegate.get();
-  TestSSLErrorHandler error_handler(
-      std::move(delegate), web_contents(),
-      net::MapCertStatusToNetError(ssl_info.cert_status), ssl_info,
-      /*network_time_tracker=*/nullptr, /*request_url=*/GURL(),
-      /*captive_portal_service=*/nullptr);
-
-  base::HistogramTester histograms;
-  delegate_ptr->set_has_legacy_tls();
-
-  EXPECT_FALSE(error_handler.IsTimerRunningForTesting());
-  error_handler.StartHandlingError();
-  EXPECT_FALSE(error_handler.IsTimerRunningForTesting());
-  EXPECT_FALSE(delegate_ptr->captive_portal_checked());
-  EXPECT_FALSE(delegate_ptr->ssl_interstitial_shown());
-  EXPECT_FALSE(delegate_ptr->captive_portal_interstitial_shown());
-  EXPECT_TRUE(delegate_ptr->legacy_tls_interstitial_shown());
-
-  histograms.ExpectTotalCount(SSLErrorHandler::GetHistogramNameForTesting(), 2);
-  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
-                               SSLErrorHandler::HANDLE_ALL, 1);
-  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
-                               SSLErrorHandler::SHOW_LEGACY_TLS_INTERSTITIAL,
-                               1);
-}
-
 // Tests that non-primary main frame navigations should not affect
 // SSLErrorHandler.
 TEST_F(SSLErrorHandlerTest, NonPrimaryMainframeShouldNotAffectSSLErrorHandler) {
   net::SSLInfo ssl_info;
   ssl_info.cert =
       net::ImportCertFromFile(net::GetTestCertsDirectory(), kOkayCertName);
-  ssl_info.cert_status = net::CERT_STATUS_LEGACY_TLS;
+  ssl_info.cert_status = net::CERT_STATUS_AUTHORITY_INVALID;
   ssl_info.public_key_hashes.push_back(net::HashValue(kCertPublicKeyHashValue));
 
   std::unique_ptr<TestSSLErrorHandlerDelegate> delegate(

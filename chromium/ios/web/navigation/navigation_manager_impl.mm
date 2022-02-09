@@ -24,6 +24,7 @@
 #import "ios/web/navigation/crw_navigation_item_holder.h"
 #import "ios/web/navigation/navigation_manager_delegate.h"
 #import "ios/web/navigation/wk_navigation_util.h"
+#include "ios/web/public/browser_state.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state.h"
@@ -354,13 +355,6 @@ void NavigationManagerImpl::CommitPendingItem(
   // If |currentItem| is not nil, it is the last committed item in the
   // WKWebView.
   if (proxy.backForwardList && !proxy.backForwardList.currentItem) {
-    if (!base::ios::IsRunningOnIOS13OrLater()) {
-      // Prior to iOS 13 WKWebView's URL should be about:blank for empty window
-      // open item. TODO(crbug.com/885249): Use GURL::IsAboutBlank() instead.
-      DCHECK(base::StartsWith(net::GURLWithNSURL(proxy.URL).spec(),
-                              url::kAboutBlankURL,
-                              base::CompareCase::SENSITIVE));
-    }
     // There should be no back-forward history for empty window open item.
     DCHECK_EQ(0UL, proxy.backForwardList.backList.count);
     DCHECK_EQ(0UL, proxy.backForwardList.forwardList.count);
@@ -468,7 +462,7 @@ void NavigationManagerImpl::SetWKWebViewNextPendingUrlNotSerializable(
   next_pending_url_should_skip_serialization_ = url;
 }
 
-bool NavigationManagerImpl::RestoreSessionFromCache(const GURL& url) {
+bool NavigationManagerImpl::RestoreNativeSession(const GURL& url) {
   DCHECK(is_restore_session_in_progress_);
 
   GURL targetURL;
@@ -477,8 +471,10 @@ bool NavigationManagerImpl::RestoreSessionFromCache(const GURL& url) {
     return false;
   }
 
-  if (!web::GetWebClient()->RestoreSessionFromCache(GetWebState()))
+  if (!web::GetWebClient()->RestoreSessionFromCache(GetWebState()) &&
+      !synthesized_restore_helper_.Restore(GetWebState())) {
     return false;
+  }
 
   // Native restore worked, abort unsafe restore.
   DiscardNonCommittedItems();
@@ -1131,6 +1127,11 @@ void NavigationManagerImpl::UnsafeRestore(
   // history restore so information such as scroll position is restored.
   int first_index = -1;
   GURL url;
+
+  bool off_the_record = browser_state_->IsOffTheRecord();
+  synthesized_restore_helper_.Init(last_committed_item_index, items,
+                                   off_the_record);
+
   wk_navigation_util::CreateRestoreSessionUrl(last_committed_item_index, items,
                                               &url, &first_index);
   DCHECK_GE(first_index, 0);
@@ -1282,7 +1283,8 @@ bool NavigationManagerImpl::CanTrustLastCommittedItem(
   // visible.
   GURL web_view_url = web_view_cache_.GetVisibleWebViewURL();
   GURL last_committed_url = last_committed_item->GetURL();
-  if (web_view_url.GetOrigin() == last_committed_url.GetOrigin())
+  if (web_view_url.DeprecatedGetOriginAsURL() ==
+      last_committed_url.DeprecatedGetOriginAsURL())
     return true;
 
   // Fast back-forward navigations can be performed synchronously, with the
@@ -1312,6 +1314,8 @@ bool NavigationManagerImpl::CanTrustLastCommittedItem(
 
 void NavigationManagerImpl::FinalizeSessionRestore() {
   is_restore_session_in_progress_ = false;
+  synthesized_restore_helper_.Clear();
+
   for (base::OnceClosure& callback : restore_session_completion_callbacks_) {
     std::move(callback).Run();
   }

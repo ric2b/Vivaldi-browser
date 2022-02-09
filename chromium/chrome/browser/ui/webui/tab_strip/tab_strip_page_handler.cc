@@ -9,6 +9,7 @@
 
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/span.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
@@ -56,6 +57,11 @@
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 
+// This should be after all other #includes.
+#if defined(_WINDOWS_)  // Detect whether windows.h was included.
+#include "base/win/windows_h_disallowed.h"
+#endif  // defined(_WINDOWS_)
+
 namespace {
 
 // Delay in milliseconds of when the dragging UI should be shown for touch drag.
@@ -96,8 +102,8 @@ class WebUIBackgroundContextMenu : public ui::SimpleMenuModel::Delegate,
   }
 
  private:
-  Browser* const browser_;
-  const ui::AcceleratorProvider* const accelerator_provider_;
+  const raw_ptr<Browser> browser_;
+  const raw_ptr<const ui::AcceleratorProvider> accelerator_provider_;
 };
 
 class WebUITabContextMenu : public ui::SimpleMenuModel::Delegate,
@@ -136,8 +142,8 @@ class WebUITabContextMenu : public ui::SimpleMenuModel::Delegate,
   }
 
  private:
-  Browser* const browser_;
-  const ui::AcceleratorProvider* const accelerator_provider_;
+  const raw_ptr<Browser> browser_;
+  const raw_ptr<const ui::AcceleratorProvider> accelerator_provider_;
   const int tab_index_;
 };
 
@@ -509,7 +515,6 @@ tab_strip::mojom::TabPtr TabStripPageHandler::GetTabData(
        chrome::GetTabAlertStatesForContents(contents)) {
     tab_data->alert_states.push_back(alert_state);
   }
-
   return tab_data;
 }
 
@@ -631,7 +636,7 @@ void TabStripPageHandler::MoveGroup(const std::string& group_id_string,
     to_index = browser_->tab_strip_model()->count();
   }
 
-  auto* target_browser = browser_;
+  auto* target_browser = browser_.get();
   Browser* source_browser =
       tab_strip_ui::GetBrowserWithGroupId(browser_->profile(), group_id_string);
   if (!source_browser) {

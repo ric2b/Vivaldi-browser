@@ -52,27 +52,27 @@ const char kPermissionBlockedKillSwitchMessage[] =
 const char kPermissionBlockedRepeatedDismissalsMessage[] =
     "%s permission has been blocked as the user has dismissed the permission "
     "prompt several times. This can be reset in Site Settings. See "
-    "https://www.chromestatus.com/features/6443143280984064 for more "
+    "https://www.chromestatus.com/feature/6443143280984064 for more "
     "information.";
 
 const char kPermissionBlockedRepeatedIgnoresMessage[] =
     "%s permission has been blocked as the user has ignored the permission "
     "prompt several times. This can be reset in Site Settings. See "
-    "https://www.chromestatus.com/features/6443143280984064 for more "
+    "https://www.chromestatus.com/feature/6443143280984064 for more "
     "information.";
 #else
 const char kPermissionBlockedRepeatedDismissalsMessage[] =
     "%s permission has been blocked as the user has dismissed the permission "
     "prompt several times. This can be reset in Page Info which can be "
     "accessed by clicking the lock icon next to the URL. See "
-    "https://www.chromestatus.com/features/6443143280984064 for more "
+    "https://www.chromestatus.com/feature/6443143280984064 for more "
     "information.";
 
 const char kPermissionBlockedRepeatedIgnoresMessage[] =
     "%s permission has been blocked as the user has ignored the permission "
     "prompt several times. This can be reset in Page Info which can be "
     "accessed by clicking the lock icon next to the URL. See "
-    "https://www.chromestatus.com/features/6443143280984064 for more "
+    "https://www.chromestatus.com/feature/6443143280984064 for more "
     "information.";
 #endif
 
@@ -83,6 +83,10 @@ const char kPermissionBlockedPermissionsPolicyMessage[] =
 const char kPermissionBlockedPortalsMessage[] =
     "%s permission has been blocked because it was requested inside a portal. "
     "Portals don't currently support permission requests.";
+
+const char kPermissionBlockedFencedFrameMessage[] =
+    "%s permission has been blocked because it was requested inside a fenced "
+    "frame. Fenced frames don't currently support permission requests.";
 
 void LogPermissionBlockedMessage(content::WebContents* web_contents,
                                  const char* message,
@@ -125,7 +129,7 @@ void PermissionContextBase::RequestPermission(
     BrowserPermissionCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  GURL requesting_origin = requesting_frame.GetOrigin();
+  GURL requesting_origin = requesting_frame.DeprecatedGetOriginAsURL();
   GURL embedding_origin =
       PermissionUtil::GetLastCommittedOriginAsURL(web_contents);
 
@@ -178,6 +182,11 @@ void PermissionContextBase::RequestPermission(
       case PermissionStatusSource::PORTAL:
         LogPermissionBlockedMessage(web_contents,
                                     kPermissionBlockedPortalsMessage,
+                                    content_settings_type_);
+        break;
+      case PermissionStatusSource::FENCED_FRAME:
+        LogPermissionBlockedMessage(web_contents,
+                                    kPermissionBlockedFencedFrameMessage,
                                     content_settings_type_);
         break;
       case PermissionStatusSource::INSECURE_ORIGIN:
@@ -294,6 +303,12 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
     if (web_contents && web_contents->IsPortal()) {
       return PermissionResult(CONTENT_SETTING_BLOCK,
                               PermissionStatusSource::PORTAL);
+    }
+
+    // Permissions are denied for fenced frames.
+    if (render_frame_host->IsNestedWithinFencedFrame()) {
+      return PermissionResult(CONTENT_SETTING_BLOCK,
+                              PermissionStatusSource::FENCED_FRAME);
     }
 
     // Automatically deny all HTTP or HTTPS requests where the virtual URL and
@@ -470,12 +485,14 @@ content::BrowserContext* PermissionContextBase::browser_context() const {
 void PermissionContextBase::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type) {
-  if (content_type != content_settings_type_)
+    ContentSettingsTypeSet content_type_set) {
+  if (!content_type_set.Contains(content_settings_type_))
     return;
 
-  for (permissions::Observer& obs : permission_observers_)
-    obs.OnPermissionChanged(primary_pattern, secondary_pattern, content_type);
+  for (permissions::Observer& obs : permission_observers_) {
+    obs.OnPermissionChanged(primary_pattern, secondary_pattern,
+                            content_type_set);
+  }
 }
 
 void PermissionContextBase::AddObserver(
@@ -533,8 +550,8 @@ void PermissionContextBase::UpdateContentSetting(const GURL& requesting_origin,
                                                  const GURL& embedding_origin,
                                                  ContentSetting content_setting,
                                                  bool is_one_time) {
-  DCHECK_EQ(requesting_origin, requesting_origin.GetOrigin());
-  DCHECK_EQ(embedding_origin, embedding_origin.GetOrigin());
+  DCHECK_EQ(requesting_origin, requesting_origin.DeprecatedGetOriginAsURL());
+  DCHECK_EQ(embedding_origin, embedding_origin.DeprecatedGetOriginAsURL());
   DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
          content_setting == CONTENT_SETTING_BLOCK);
 

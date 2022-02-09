@@ -15,12 +15,11 @@
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/discardable_memory.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/test_switches.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -155,6 +154,10 @@ class RenderThreadImplBrowserTest : public testing::Test,
  public:
   RenderThreadImplBrowserTest() {}
 
+  RenderThreadImplBrowserTest(const RenderThreadImplBrowserTest&) = delete;
+  RenderThreadImplBrowserTest& operator=(const RenderThreadImplBrowserTest&) =
+      delete;
+
   void SetUp() override {
     content_renderer_client_ = std::make_unique<ContentRendererClient>();
     SetRendererClientForTesting(content_renderer_client_.get());
@@ -192,8 +195,7 @@ class RenderThreadImplBrowserTest : public testing::Test,
     scoped_refptr<base::SingleThreadTaskRunner> test_task_counter(
         test_task_counter_.get());
 
-    base::FieldTrialList::CreateTrialsFromCommandLine(
-        *cmd, switches::kFieldTrialHandle, -1);
+    base::FieldTrialList::CreateTrialsFromCommandLine(*cmd, -1);
     thread_ = new RenderThreadImpl(
         InProcessChildThreadParams(io_task_runner,
                                    &process_host_->GetMojoInvitation().value()),
@@ -288,9 +290,6 @@ class RenderThreadImplBrowserTest : public testing::Test,
   RenderThreadImpl* thread_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RenderThreadImplBrowserTest);
 };
 
 // Disabled under LeakSanitizer due to memory leaks.

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/box_painter.h"
 
+#include "base/unguessable_token.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/layout/background_bleed_avoidance.h"
@@ -67,7 +68,7 @@ void BoxPainter::PaintBoxDecorationBackground(
   bool painting_background_in_contents_space =
       BoxDecorationData::IsPaintingBackgroundInContentsSpace(paint_info,
                                                              layout_box_);
-  IntRect visual_rect;
+  gfx::Rect visual_rect;
   if (painting_background_in_contents_space) {
     // For the case where we are painting the background in the contents space,
     // we need to include the entire overflow rect.
@@ -104,6 +105,7 @@ void BoxPainter::PaintBoxDecorationBackground(
   }
 
   RecordHitTestData(paint_info, paint_rect, *background_client);
+  RecordRegionCaptureData(paint_info, paint_rect, *background_client);
 
   bool needs_scroll_hit_test = true;
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
@@ -131,7 +133,7 @@ void BoxPainter::PaintBoxDecorationBackground(
 
 void BoxPainter::PaintBoxDecorationBackgroundWithRect(
     const PaintInfo& paint_info,
-    const IntRect& visual_rect,
+    const gfx::Rect& visual_rect,
     const PhysicalRect& paint_rect,
     const DisplayItemClient& background_client) {
   const ComputedStyle& style = layout_box_.StyleRef();
@@ -181,7 +183,7 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
   // If we have a native theme appearance, paint that before painting our
   // background.  The theme will tell us whether or not we should also paint the
   // CSS background.
-  IntRect snapped_paint_rect(PixelSnappedIntRect(paint_rect));
+  gfx::Rect snapped_paint_rect = ToPixelSnappedRect(paint_rect);
   ThemePainter& theme_painter = LayoutTheme::GetTheme().Painter();
   bool theme_painted =
       box_decoration_data.HasAppearance() &&
@@ -292,9 +294,23 @@ void BoxPainter::RecordHitTestData(const PaintInfo& paint_info,
     return;
 
   paint_info.context.GetPaintController().RecordHitTestData(
-      background_client, PixelSnappedIntRect(paint_rect),
+      background_client, ToPixelSnappedRect(paint_rect),
       layout_box_.EffectiveAllowedTouchAction(),
       layout_box_.InsideBlockingWheelEventHandler());
+}
+
+void BoxPainter::RecordRegionCaptureData(
+    const PaintInfo& paint_info,
+    const PhysicalRect& paint_rect,
+    const DisplayItemClient& background_client) {
+  const Element* element = DynamicTo<Element>(layout_box_.GetNode());
+  if (element) {
+    const RegionCaptureCropId* crop_id = element->GetRegionCaptureCropId();
+    if (crop_id) {
+      paint_info.context.GetPaintController().RecordRegionCaptureData(
+          background_client, *crop_id, ToPixelSnappedRect(paint_rect));
+    }
+  }
 }
 
 void BoxPainter::RecordScrollHitTestData(
@@ -336,12 +352,12 @@ void BoxPainter::RecordScrollHitTestData(
                                       fragment->PaintOffset());
 }
 
-IntRect BoxPainter::VisualRect(const PhysicalOffset& paint_offset) {
+gfx::Rect BoxPainter::VisualRect(const PhysicalOffset& paint_offset) {
   DCHECK(!layout_box_.VisualRectRespectsVisibility() ||
          layout_box_.StyleRef().Visibility() == EVisibility::kVisible);
   PhysicalRect rect = layout_box_.PhysicalSelfVisualOverflowRect();
   rect.Move(paint_offset);
-  return EnclosingIntRect(rect);
+  return ToEnclosingRect(rect);
 }
 
 }  // namespace blink

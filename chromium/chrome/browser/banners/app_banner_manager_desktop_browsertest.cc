@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -40,6 +39,10 @@
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/extension.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
+#endif
+
 namespace webapps {
 
 using State = AppBannerManager::State;
@@ -50,7 +53,8 @@ class AppBannerManagerDesktopBrowserTest
   AppBannerManagerDesktopBrowserTest() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     // With Lacros, web apps are not installed using the Ash browser.
-    scoped_feature_list_.InitAndDisableFeature(features::kWebAppsCrosapi);
+    scoped_feature_list_.InitWithFeatures(
+        {}, {features::kWebAppsCrosapi, chromeos::features::kLacrosPrimary});
 #endif
   }
 

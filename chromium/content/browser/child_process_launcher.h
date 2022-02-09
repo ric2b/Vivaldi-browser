@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/kill.h"
@@ -187,6 +187,10 @@ class CONTENT_EXPORT ChildProcessLauncher {
       const mojo::ProcessErrorCallback& process_error_callback,
       std::map<std::string, base::FilePath> files_to_preload,
       bool terminate_on_shutdown = true);
+
+  ChildProcessLauncher(const ChildProcessLauncher&) = delete;
+  ChildProcessLauncher& operator=(const ChildProcessLauncher&) = delete;
+
   ~ChildProcessLauncher();
 
   // True if the process is being launched and so the handle isn't available.
@@ -239,7 +243,7 @@ class CONTENT_EXPORT ChildProcessLauncher {
   void Notify(internal::ChildProcessLauncherHelper::Process process,
               int error_code);
 
-  Client* client_;
+  raw_ptr<Client> client_;
 
   // The process associated with this ChildProcessLauncher. Set in Notify by
   // ChildProcessLauncherHelper once the process was started.
@@ -258,8 +262,6 @@ class CONTENT_EXPORT ChildProcessLauncher {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<ChildProcessLauncher> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ChildProcessLauncher);
 };
 
 }  // namespace content

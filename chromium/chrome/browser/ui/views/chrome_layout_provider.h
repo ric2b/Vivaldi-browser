@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "chrome/browser/ui/views/chrome_typography_provider.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
@@ -77,6 +76,8 @@ enum ChromeDistanceMetric {
   // Vertical padding at the top and bottom of the an omnibox match row for two
   // line layout.
   DISTANCE_OMNIBOX_TWO_LINE_CELL_VERTICAL_PADDING,
+  // Width and Height of a vector icon in the side panel header.
+  DISTANCE_SIDE_PANEL_HEADER_VECTOR_ICON_SIZE
 };
 
 class ChromeLayoutProvider : public views::LayoutProvider {
@@ -96,15 +97,6 @@ class ChromeLayoutProvider : public views::LayoutProvider {
   int GetDistanceMetric(int metric) const override;
   int GetSnappedDialogWidth(int min_width) const override;
   const views::TypographyProvider& GetTypographyProvider() const override;
-
-  // Returns the alignment used for control labels in a GridLayout; for example,
-  // in this GridLayout:
-  //   ---------------------------
-  //   | Label 1      Checkbox 1 |
-  //   | Label 2      Checkbox 2 |
-  //   ---------------------------
-  // This value controls the alignment used for "Label 1" and "Label 2".
-  virtual views::GridLayout::Alignment GetControlLabelGridAlignment() const;
 
   // Returns whether to show the icon next to the title text on a dialog.
   virtual bool ShouldShowWindowIcon() const;

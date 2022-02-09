@@ -10,9 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/version.h"
@@ -31,6 +30,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class ExtensionServiceTest;
+class ScopedProfileKeepAlive;
 class SkBitmap;
 
 namespace base {
@@ -367,7 +367,10 @@ class CrxInstaller : public SandboxedUnpackerClient {
   base::SequencedTaskRunner* GetUnpackerTaskRunner();
 
   // The Profile the extension is being installed in.
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
+
+  // Prevent Profile destruction until the CrxInstaller is done.
+  std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive_;
 
   // The extension being installed.
   scoped_refptr<const Extension> extension_;

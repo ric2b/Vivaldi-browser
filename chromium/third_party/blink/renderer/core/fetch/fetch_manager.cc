@@ -9,8 +9,8 @@
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/features.h"
@@ -54,7 +54,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
@@ -323,7 +323,7 @@ FetchManager::Loader::Loader(ExecutionContext* execution_context,
   // to the fetch() call.
   v8::Local<v8::Value> exception =
       V8ThrowException::CreateTypeError(isolate, "Failed to fetch");
-  exception_.Set(isolate, exception);
+  exception_.Reset(isolate, exception);
 }
 
 FetchManager::Loader::~Loader() {
@@ -755,6 +755,8 @@ void FetchManager::Loader::PerformHTTPFetch() {
   // FIXME: Support body.
   ResourceRequest request(fetch_request_data_->Url());
   request.SetRequestorOrigin(fetch_request_data_->Origin());
+  request.SetNavigationRedirectChain(
+      fetch_request_data_->NavigationRedirectChain());
   request.SetIsolatedWorldOrigin(fetch_request_data_->IsolatedWorldOrigin());
   request.SetRequestContext(mojom::blink::RequestContextType::FETCH);
   request.SetRequestDestination(fetch_request_data_->Destination());
@@ -762,22 +764,7 @@ void FetchManager::Loader::PerformHTTPFetch() {
   request.SetHttpMethod(fetch_request_data_->Method());
   request.SetFetchWindowId(fetch_request_data_->WindowId());
   request.SetTrustTokenParams(fetch_request_data_->TrustTokenParams());
-
-  switch (fetch_request_data_->Mode()) {
-    case RequestMode::kSameOrigin:
-    case RequestMode::kNoCors:
-    case RequestMode::kCors:
-    case RequestMode::kCorsWithForcedPreflight:
-      request.SetMode(fetch_request_data_->Mode());
-      break;
-    case RequestMode::kNavigate:
-      // NetworkService (i.e. CorsURLLoaderFactory::IsSane) rejects kNavigate
-      // requests coming from renderers, so using kSameOrigin here.
-      // TODO(lukasza): Tweak CorsURLLoaderFactory::IsSane to accept kNavigate
-      // if request_initiator and the target are same-origin.
-      request.SetMode(RequestMode::kSameOrigin);
-      break;
-  }
+  request.SetMode(fetch_request_data_->Mode());
 
   request.SetCredentialsMode(fetch_request_data_->Credentials());
   for (const auto& header : fetch_request_data_->HeaderList()->List()) {
@@ -824,6 +811,8 @@ void FetchManager::Loader::PerformHTTPFetch() {
     request.SetKeepalive(true);
     UseCounter::Count(execution_context_, mojom::WebFeature::kFetchKeepalive);
   }
+
+  request.SetOriginalDestination(fetch_request_data_->OriginalDestination());
 
   // "3. Append `Host`, ..."
   // FIXME: Implement this when the spec is fixed.
@@ -916,8 +905,8 @@ void FetchManager::Loader::Failed(
     if (dom_exception) {
       resolver_->Reject(dom_exception);
     } else {
-      v8::Local<v8::Value> value = exception_.NewLocal(state->GetIsolate());
-      exception_.Clear();
+      v8::Local<v8::Value> value = exception_.Get(state->GetIsolate());
+      exception_.Reset();
       if (RuntimeEnabledFeatures::ExceptionMetaDataForDevToolsEnabled()) {
         ThreadDebugger* debugger = ThreadDebugger::From(state->GetIsolate());
         if (devtools_request_id) {

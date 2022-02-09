@@ -10,7 +10,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -223,13 +223,6 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
       "window.domAutomationController.send(!!indexedDB.open('testdb', 2));",
       &is_object_created));
   EXPECT_TRUE(is_object_created);
-  is_object_created = false;
-  EXPECT_TRUE(ExecuteScriptAndExtractBool(
-      frame_host,
-      "window.domAutomationController.send(!!openDatabase("
-      "'foodb', '1.0', 'Test DB', 1024));",
-      &is_object_created));
-  EXPECT_TRUE(is_object_created);
   EXPECT_TRUE(ExecuteScript(frame_host,
                             "window.webkitRequestFileSystem("
                             "window.TEMPORARY, 1024, function() {});"));
@@ -395,7 +388,7 @@ class ChromeSitePerProcessPDFTest : public ChromeSitePerProcessTest {
   }
 
   guest_view::TestGuestViewManagerFactory factory_;
-  guest_view::TestGuestViewManager* test_guest_view_manager_;
+  raw_ptr<guest_view::TestGuestViewManager> test_guest_view_manager_;
 };
 
 // This test verifies that when navigating an OOPIF to a page with <embed>-ed
@@ -486,7 +479,7 @@ class MailtoExternalProtocolHandlerDelegate
  private:
   bool has_triggered_external_protocol_ = false;
   GURL external_protocol_url_;
-  content::WebContents* web_contents_ = nullptr;
+  raw_ptr<content::WebContents> web_contents_ = nullptr;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 };
 

@@ -76,9 +76,8 @@ const char* GetPCHLangForToolType(const char* name) {
 
 const SourceFile* GetModuleMapFromTargetSources(const Target* target) {
   for (const SourceFile& sf : target->sources()) {
-    if (sf.type() == SourceFile::SOURCE_MODULEMAP) {
+    if (sf.IsModuleMapType())
       return &sf;
-    }
   }
   return nullptr;
 }
@@ -228,7 +227,8 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars(
   // Defines.
   if (subst.used.count(&CSubstitutionDefines)) {
     out_ << CSubstitutionDefines.ninja_name << " =";
-    RecursiveTargetConfigToStream<std::string>(target_, &ConfigValues::defines,
+    RecursiveTargetConfigToStream<std::string>(kRecursiveWriterSkipDuplicates,
+                                               target_, &ConfigValues::defines,
                                                DefineWriter(), out_);
     out_ << std::endl;
   }
@@ -242,7 +242,7 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars(
         path_output_.current_dir(),
         settings_->build_settings()->root_path_utf8(), ESCAPE_NINJA_COMMAND);
     RecursiveTargetConfigToStream<SourceDir>(
-        target_, &ConfigValues::framework_dirs,
+        kRecursiveWriterSkipDuplicates, target_, &ConfigValues::framework_dirs,
         FrameworkDirsWriter(framework_dirs_output,
                             tool->framework_dir_switch()),
         out_);
@@ -256,7 +256,7 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars(
         path_output_.current_dir(),
         settings_->build_settings()->root_path_utf8(), ESCAPE_NINJA_COMMAND);
     RecursiveTargetConfigToStream<SourceDir>(
-        target_, &ConfigValues::include_dirs,
+        kRecursiveWriterSkipDuplicates, target_, &ConfigValues::include_dirs,
         IncludeWriter(include_path_output), out_);
     out_ << std::endl;
   }
@@ -278,7 +278,8 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars(
   EscapeOptions opts = GetFlagOptions();
   if (target_->source_types_used().Get(SourceFile::SOURCE_S) ||
       target_->source_types_used().Get(SourceFile::SOURCE_ASM)) {
-    WriteOneFlag(target_, &CSubstitutionAsmFlags, false, Tool::kToolNone,
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionAsmFlags, false, Tool::kToolNone,
                  &ConfigValues::asmflags, opts, path_output_, out_);
   }
   if (target_->source_types_used().Get(SourceFile::SOURCE_C) ||
@@ -286,27 +287,31 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars(
       target_->source_types_used().Get(SourceFile::SOURCE_M) ||
       target_->source_types_used().Get(SourceFile::SOURCE_MM) ||
       target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
-    WriteOneFlag(target_, &CSubstitutionCFlags, false, Tool::kToolNone,
-                 &ConfigValues::cflags, opts, path_output_, out_);
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_, &CSubstitutionCFlags,
+                 false, Tool::kToolNone, &ConfigValues::cflags, opts,
+                 path_output_, out_);
   }
   if (target_->source_types_used().Get(SourceFile::SOURCE_C)) {
-    WriteOneFlag(target_, &CSubstitutionCFlagsC, has_precompiled_headers,
-                 CTool::kCToolCc, &ConfigValues::cflags_c, opts, path_output_,
-                 out_);
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_, &CSubstitutionCFlagsC,
+                 has_precompiled_headers, CTool::kCToolCc,
+                 &ConfigValues::cflags_c, opts, path_output_, out_);
   }
   if (target_->source_types_used().Get(SourceFile::SOURCE_CPP) ||
       target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
-    WriteOneFlag(target_, &CSubstitutionCFlagsCc, has_precompiled_headers,
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionCFlagsCc, has_precompiled_headers,
                  CTool::kCToolCxx, &ConfigValues::cflags_cc, opts, path_output_,
                  out_);
   }
   if (target_->source_types_used().Get(SourceFile::SOURCE_M)) {
-    WriteOneFlag(target_, &CSubstitutionCFlagsObjC, has_precompiled_headers,
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionCFlagsObjC, has_precompiled_headers,
                  CTool::kCToolObjC, &ConfigValues::cflags_objc, opts,
                  path_output_, out_);
   }
   if (target_->source_types_used().Get(SourceFile::SOURCE_MM)) {
-    WriteOneFlag(target_, &CSubstitutionCFlagsObjCc, has_precompiled_headers,
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionCFlagsObjCc, has_precompiled_headers,
                  CTool::kCToolObjCxx, &ConfigValues::cflags_objcc, opts,
                  path_output_, out_);
   }
@@ -345,7 +350,8 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars(
       out_ << std::endl;
     }
 
-    WriteOneFlag(target_, &CSubstitutionSwiftFlags, false, CTool::kCToolSwift,
+    WriteOneFlag(kRecursiveWriterKeepDuplicates, target_,
+                 &CSubstitutionSwiftFlags, false, CTool::kCToolSwift,
                  &ConfigValues::swiftflags, opts, path_output_, out_);
   }
 
@@ -471,16 +477,20 @@ void NinjaCBinaryTargetWriter::WriteGCCPCHCommand(
   // for .gch targets.
   EscapeOptions opts = GetFlagOptions();
   if (tool_name == CTool::kCToolCc) {
-    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::cflags_c, opts,
+    RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
+                                         target_, &ConfigValues::cflags_c, opts,
                                          out_);
   } else if (tool_name == CTool::kCToolCxx) {
-    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::cflags_cc,
+    RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
+                                         target_, &ConfigValues::cflags_cc,
                                          opts, out_);
   } else if (tool_name == CTool::kCToolObjC) {
-    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::cflags_objc,
+    RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
+                                         target_, &ConfigValues::cflags_objc,
                                          opts, out_);
   } else if (tool_name == CTool::kCToolObjCxx) {
-    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::cflags_objcc,
+    RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
+                                         target_, &ConfigValues::cflags_objcc,
                                          opts, out_);
   }
 
@@ -541,13 +551,13 @@ void NinjaCBinaryTargetWriter::WriteSources(
   std::vector<OutputFile> tool_outputs;  // Prevent reallocation in loop.
   std::vector<OutputFile> deps;
   for (const auto& source : target_->sources()) {
-    DCHECK_NE(source.type(), SourceFile::SOURCE_SWIFT);
+    DCHECK_NE(source.GetType(), SourceFile::SOURCE_SWIFT);
 
     // Clear the vector but maintain the max capacity to prevent reallocations.
     deps.resize(0);
     const char* tool_name = Tool::kToolNone;
     if (!target_->GetOutputFilesForSource(source, &tool_name, &tool_outputs)) {
-      if (source.type() == SourceFile::SOURCE_DEF)
+      if (source.IsDefType())
         other_files->push_back(source);
       continue;  // No output for this source.
     }
@@ -595,7 +605,7 @@ void NinjaCBinaryTargetWriter::WriteSources(
 
     // It's theoretically possible for a compiler to produce more than one
     // output, but we'll only link to the first output.
-    if (source.type() != SourceFile::SOURCE_MODULEMAP) {
+    if (!source.IsModuleMapType()) {
       object_files->push_back(tool_outputs[0]);
     }
   }
@@ -633,7 +643,7 @@ void NinjaCBinaryTargetWriter::WriteSwiftSources(
       const SourceFile output_as_source =
           output.AsSourceFile(target_->settings()->build_settings());
 
-      if (output_as_source.type() == SourceFile::SOURCE_O) {
+      if (output_as_source.IsObjectType()) {
         object_files->push_back(output);
       }
     }
@@ -643,7 +653,7 @@ void NinjaCBinaryTargetWriter::WriteSwiftSources(
       // Avoid re-allocation during loop.
       std::vector<OutputFile> partial_outputs;
       for (const auto& source : target_->sources()) {
-        if (source.type() != SourceFile::SOURCE_SWIFT)
+        if (!source.IsSwiftType())
           continue;
 
         partial_outputs.resize(0);
@@ -654,7 +664,7 @@ void NinjaCBinaryTargetWriter::WriteSwiftSources(
           additional_outputs.push_back(output);
           SourceFile output_as_source =
               output.AsSourceFile(target_->settings()->build_settings());
-          if (output_as_source.type() == SourceFile::SOURCE_O) {
+          if (output_as_source.IsObjectType()) {
             object_files->push_back(output);
           }
         }
@@ -734,7 +744,7 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   const SourceFile* optional_def_file = nullptr;
   if (!other_files.empty()) {
     for (const SourceFile& src_file : other_files) {
-      if (src_file.type() == SourceFile::SOURCE_DEF) {
+      if (src_file.IsDefType()) {
         optional_def_file = &src_file;
         implicit_deps.push_back(
             OutputFile(settings_->build_settings(), src_file));
@@ -744,7 +754,7 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   }
 
   // Libraries specified by paths.
-  const OrderedSet<LibFile>& libs = target_->all_libs();
+  const UniqueVector<LibFile>& libs = target_->all_libs();
   for (size_t i = 0; i < libs.size(); i++) {
     if (libs[i].is_source_file()) {
       implicit_deps.push_back(
@@ -770,8 +780,7 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   // entire tree of transitive rlibs.
   std::vector<OutputFile> transitive_rustlibs;
   if (target_->IsFinal()) {
-    for (const auto* dep :
-         target_->rust_values().transitive_libs().GetOrdered()) {
+    for (const auto* dep : target_->rust_transitive_libs().GetOrdered()) {
       if (dep->output_type() == Target::RUST_LIBRARY) {
         transitive_rustlibs.push_back(dep->dependency_output_file());
         implicit_deps.push_back(dep->dependency_output_file());
@@ -834,7 +843,8 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
     out_ << std::endl;
   } else if (target_->output_type() == Target::STATIC_LIBRARY) {
     out_ << "  arflags =";
-    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::arflags,
+    RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
+                                         target_, &ConfigValues::arflags,
                                          GetFlagOptions(), out_);
     out_ << std::endl;
   }

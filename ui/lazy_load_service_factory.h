@@ -3,7 +3,6 @@
 #ifndef UI_LAZY_LOAD_SERVICE_FACTORY_H_
 #define UI_LAZY_LOAD_SERVICE_FACTORY_H_
 
-#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 

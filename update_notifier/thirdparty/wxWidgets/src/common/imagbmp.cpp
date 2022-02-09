@@ -9,9 +9,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_IMAGE
 
@@ -34,7 +31,9 @@
 #include "wx/quantize.h"
 #include "wx/scopeguard.h"
 #include "wx/scopedarray.h"
+#include "wx/scopedptr.h"
 #include "wx/anidecod.h"
+#include "wx/private/icondir.h"
 
 // For memcpy
 #include <string.h>
@@ -53,7 +52,7 @@ static bool CanReadICOOrCUR(wxInputStream *stream, wxUint16 resourceType);
 // wxBMPHandler
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxBMPHandler,wxImageHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxBMPHandler,wxImageHandler);
 
 #if wxUSE_STREAMS
 
@@ -100,9 +99,13 @@ bool wxBMPHandler::SaveDib(wxImage *image,
         return false;
     }
 
-    // get the format of the BMP file to save, else use 24bpp
+    // For icons, save alpha channel if available.
+    const bool saveAlpha = !IsBmp && image->HasAlpha();
+
+    // get the format of the BMP file to save,
+    // else (and always if alpha channel is present) use 24bpp
     unsigned format = wxBMP_24BPP;
-    if ( image->HasOption(wxIMAGE_OPTION_BMP_FORMAT) )
+    if ( image->HasOption(wxIMAGE_OPTION_BMP_FORMAT) && !saveAlpha )
         format = image->GetOptionInt(wxIMAGE_OPTION_BMP_FORMAT);
 
     wxUint16 bpp;     // # of bits per pixel
@@ -123,7 +126,7 @@ bool wxBMPHandler::SaveDib(wxImage *image,
               (format == wxBMP_8BPP_RED) || (format == wxBMP_8BPP_PALETTE) )
     {
         // need to set a wxPalette to use this, HOW TO CHECK IF VALID, SIZE?
-        if ((format == wxBMP_8BPP_PALETTE)
+        if (format == wxBMP_8BPP_PALETTE
 #if wxUSE_PALETTE
                 && !image->HasPalette()
 #endif // wxUSE_PALETTE
@@ -138,10 +141,10 @@ bool wxBMPHandler::SaveDib(wxImage *image,
         bpp = 8;
         palette_size = 256;
     }
-    else  // you get 24bpp
+    else  // you get 24bpp or 32bpp with alpha
     {
         format = wxBMP_24BPP;
-        bpp = 24;
+        bpp = saveAlpha ? 32 : 24;
         palette_size = 0;
     }
 
@@ -199,18 +202,18 @@ bool wxBMPHandler::SaveDib(wxImage *image,
     {
         default:
             wxFAIL_MSG( wxT("unexpected image resolution units") );
-            // fall through
+            wxFALLTHROUGH;
 
         case wxIMAGE_RESOLUTION_NONE:
             hres =
             vres = 72;
-            // fall through to convert it to correct units
+            wxFALLTHROUGH;// fall through to convert it to correct units
 
         case wxIMAGE_RESOLUTION_INCHES:
             // convert resolution in inches to resolution in centimeters
             hres = (int)(10*mm2inches*hres);
             vres = (int)(10*mm2inches*vres);
-            // fall through to convert it to resolution in meters
+            wxFALLTHROUGH;// fall through to convert it to resolution in meters
 
         case wxIMAGE_RESOLUTION_CM:
             // convert resolution in centimeters to resolution in meters
@@ -266,9 +269,11 @@ bool wxBMPHandler::SaveDib(wxImage *image,
         }
     }
 
-    wxPalette *palette = NULL; // entries for quantized images
-    wxUint8 *rgbquad = NULL;   // for the RGBQUAD bytes for the colormap
-    wxImage *q_image = NULL;   // destination for quantized image
+#if wxUSE_PALETTE
+    wxScopedPtr<wxPalette> palette; // entries for quantized images
+#endif // wxUSE_PALETTE
+    wxScopedArray<wxUint8> rgbquad; // for the RGBQUAD bytes for the colormap
+    wxScopedPtr<wxImage> q_image;   // destination for quantized image
 
     // if <24bpp use quantization to reduce colors for *some* of the formats
     if ( (format == wxBMP_1BPP) || (format == wxBMP_4BPP) ||
@@ -277,24 +282,32 @@ bool wxBMPHandler::SaveDib(wxImage *image,
         // make a new palette and quantize the image
         if (format != wxBMP_8BPP_PALETTE)
         {
-            q_image = new wxImage();
+            q_image.reset(new wxImage());
 
             // I get a delete error using Quantize when desired colors > 236
             int quantize = ((palette_size > 236) ? 236 : palette_size);
             // fill the destination too, it gives much nicer 4bpp images
-            wxQuantize::Quantize( *image, *q_image, &palette, quantize, 0,
+#if wxUSE_PALETTE
+            wxPalette* paletteTmp;
+            wxQuantize::Quantize( *image, *q_image, &paletteTmp, quantize, 0,
                                   wxQUANTIZE_FILL_DESTINATION_IMAGE );
+            palette.reset(paletteTmp);
+#else // !wxUSE_PALETTE
+            wxQuantize::Quantize( *image, *q_image, NULL, quantize, 0,
+                                  wxQUANTIZE_FILL_DESTINATION_IMAGE );
+#endif // wxUSE_PALETTE/!wxUSE_PALETTE
         }
         else
         {
 #if wxUSE_PALETTE
-            palette = new wxPalette(image->GetPalette());
+            palette.reset(new wxPalette(image->GetPalette()));
 #endif // wxUSE_PALETTE
         }
 
         int i;
         unsigned char r, g, b;
-        rgbquad = new wxUint8 [palette_size*4];
+        wxScopedArray<wxUint8> rgbquadTmp(palette_size*4);
+        rgbquad.swap(rgbquadTmp);
 
         for (i = 0; i < palette_size; i++)
         {
@@ -313,7 +326,8 @@ bool wxBMPHandler::SaveDib(wxImage *image,
     else if ( (format == wxBMP_8BPP_GREY) || (format == wxBMP_8BPP_RED) ||
               (format == wxBMP_1BPP_BW) )
     {
-        rgbquad = new wxUint8 [palette_size*4];
+        wxScopedArray<wxUint8> rgbquadTmp(palette_size*4);
+        rgbquad.swap(rgbquadTmp);
 
         for ( int i = 0; i < palette_size; i++ )
         {
@@ -332,31 +346,28 @@ bool wxBMPHandler::SaveDib(wxImage *image,
     {
         if ( !IsMask )
         {
-            if ( !stream.WriteAll(rgbquad, palette_size*4) )
+            if ( !stream.WriteAll(rgbquad.get(), palette_size*4) )
             {
                 if (verbose)
                 {
                     wxLogError(_("BMP: Couldn't write RGB color map."));
                 }
-                delete[] rgbquad;
-#if wxUSE_PALETTE
-                delete palette;
-#endif // wxUSE_PALETTE
-                delete q_image;
                 return false;
             }
-            }
-        delete []rgbquad;
+        }
     }
 
     // pointer to the image data, use quantized if available
-    wxUint8 *data = (wxUint8*) image->GetData();
-    if (q_image) if (q_image->IsOk()) data = (wxUint8*) q_image->GetData();
+    const unsigned char* const data = q_image && q_image->IsOk()
+                                        ? q_image->GetData()
+                                        : image->GetData();
+    const unsigned char* const alpha = saveAlpha ? image->GetAlpha() : NULL;
 
-    wxUint8 *buffer = new wxUint8[row_width];
-    memset(buffer, 0, row_width);
+    wxScopedArray<wxUint8> buffer(row_width);
+    memset(buffer.get(), 0, row_width);
     int y; unsigned x;
     long int pixel;
+    const int dstPixLen = saveAlpha ? 4 : 3;
 
     for (y = image->GetHeight() -1; y >= 0; y--)
     {
@@ -366,9 +377,11 @@ bool wxBMPHandler::SaveDib(wxImage *image,
             {
                 pixel = 3*(y*width + x);
 
-                buffer[3*x    ] = data[pixel+2];
-                buffer[3*x + 1] = data[pixel+1];
-                buffer[3*x + 2] = data[pixel];
+                buffer[dstPixLen*x    ] = data[pixel+2];
+                buffer[dstPixLen*x + 1] = data[pixel+1];
+                buffer[dstPixLen*x + 2] = data[pixel];
+                if ( saveAlpha )
+                    buffer[dstPixLen*x + 3] = alpha[y*width + x];
             }
         }
         else if ((format == wxBMP_8BPP) ||       // 1 byte per pixel in color
@@ -416,7 +429,7 @@ bool wxBMPHandler::SaveDib(wxImage *image,
                     ((wxUint8)palette->GetPixel(data[pixel],
                                                 data[pixel+1],
                                                 data[pixel+2]) << 4) |
-                    (((x+1) > width)
+                    (((x+1) >= width)
                      ? 0
                      : ((wxUint8)palette->GetPixel(data[pixel+3],
                                                    data[pixel+4],
@@ -436,13 +449,13 @@ bool wxBMPHandler::SaveDib(wxImage *image,
 #if wxUSE_PALETTE
                 buffer[x/8] = (wxUint8)(
                                            ((wxUint8)palette->GetPixel(data[pixel], data[pixel+1], data[pixel+2]) << 7) |
-                    (((x+1) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+3], data[pixel+4], data[pixel+5]) << 6)) |
-                    (((x+2) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+6], data[pixel+7], data[pixel+8]) << 5)) |
-                    (((x+3) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+9], data[pixel+10], data[pixel+11]) << 4)) |
-                    (((x+4) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+12], data[pixel+13], data[pixel+14]) << 3)) |
-                    (((x+5) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+15], data[pixel+16], data[pixel+17]) << 2)) |
-                    (((x+6) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+18], data[pixel+19], data[pixel+20]) << 1)) |
-                    (((x+7) > width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+21], data[pixel+22], data[pixel+23])     ))    );
+                    (((x+1) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+3], data[pixel+4], data[pixel+5]) << 6)) |
+                    (((x+2) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+6], data[pixel+7], data[pixel+8]) << 5)) |
+                    (((x+3) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+9], data[pixel+10], data[pixel+11]) << 4)) |
+                    (((x+4) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+12], data[pixel+13], data[pixel+14]) << 3)) |
+                    (((x+5) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+15], data[pixel+16], data[pixel+17]) << 2)) |
+                    (((x+6) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+18], data[pixel+19], data[pixel+20]) << 1)) |
+                    (((x+7) >= width) ? 0 : ((wxUint8)palette->GetPixel(data[pixel+21], data[pixel+22], data[pixel+23])     ))    );
 #else
                 // FIXME: what should this be? use some std palette maybe?
                 buffer[x/8] = 0;
@@ -457,35 +470,25 @@ bool wxBMPHandler::SaveDib(wxImage *image,
 
                 buffer[x/8] = (wxUint8)(
                                           (((wxUint8)(data[pixel]   /128.)) << 7) |
-                   (((x+1) > width) ? 0 : (((wxUint8)(data[pixel+3] /128.)) << 6)) |
-                   (((x+2) > width) ? 0 : (((wxUint8)(data[pixel+6] /128.)) << 5)) |
-                   (((x+3) > width) ? 0 : (((wxUint8)(data[pixel+9] /128.)) << 4)) |
-                   (((x+4) > width) ? 0 : (((wxUint8)(data[pixel+12]/128.)) << 3)) |
-                   (((x+5) > width) ? 0 : (((wxUint8)(data[pixel+15]/128.)) << 2)) |
-                   (((x+6) > width) ? 0 : (((wxUint8)(data[pixel+18]/128.)) << 1)) |
-                   (((x+7) > width) ? 0 : (((wxUint8)(data[pixel+21]/128.))     ))    );
+                   (((x+1) >= width) ? 0 : (((wxUint8)(data[pixel+3] /128.)) << 6)) |
+                   (((x+2) >= width) ? 0 : (((wxUint8)(data[pixel+6] /128.)) << 5)) |
+                   (((x+3) >= width) ? 0 : (((wxUint8)(data[pixel+9] /128.)) << 4)) |
+                   (((x+4) >= width) ? 0 : (((wxUint8)(data[pixel+12]/128.)) << 3)) |
+                   (((x+5) >= width) ? 0 : (((wxUint8)(data[pixel+15]/128.)) << 2)) |
+                   (((x+6) >= width) ? 0 : (((wxUint8)(data[pixel+18]/128.)) << 1)) |
+                   (((x+7) >= width) ? 0 : (((wxUint8)(data[pixel+21]/128.))     ))    );
             }
         }
 
-        if ( !stream.WriteAll(buffer, row_width) )
+        if ( !stream.WriteAll(buffer.get(), row_width) )
         {
             if (verbose)
             {
                 wxLogError(_("BMP: Couldn't write data."));
             }
-            delete[] buffer;
-#if wxUSE_PALETTE
-            delete palette;
-#endif // wxUSE_PALETTE
-            delete q_image;
             return false;
         }
     }
-    delete[] buffer;
-#if wxUSE_PALETTE
-    delete palette;
-#endif // wxUSE_PALETTE
-    delete q_image;
 
     return true;
 }
@@ -501,7 +504,8 @@ struct BMPPalette
 bool wxBMPHandler::DoLoadDib(wxImage * image, int width, int height,
                              int bpp, int ncolors, int comp,
                              wxFileOffset bmpOffset, wxInputStream& stream,
-                             bool verbose, bool IsBmp, bool hasPalette)
+                             bool verbose, bool IsBmp, bool hasPalette,
+                             int colEntrySize)
 {
     wxInt32         aDword, rmask = 0, gmask = 0, bmask = 0, amask = 0;
     int             rshift = 0, gshift = 0, bshift = 0, ashift = 0;
@@ -579,45 +583,41 @@ bool wxBMPHandler::DoLoadDib(wxImage * image, int width, int height,
     // Reading the palette, if it exists:
     if ( bpp < 16 && ncolors != 0 )
     {
-        unsigned char* r = new unsigned char[ncolors];
-        unsigned char* g = new unsigned char[ncolors];
-        unsigned char* b = new unsigned char[ncolors];
+#if wxUSE_PALETTE
+        wxScopedArray<unsigned char>
+             r(ncolors),
+             g(ncolors),
+             b(ncolors);
+#endif // wxUSE_PALETTE
         for (int j = 0; j < ncolors; j++)
         {
             if (hasPalette)
             {
-                if ( !stream.ReadAll(bbuf, 4) )
-                {
-                    delete [] r;
-                    delete [] g;
-                    delete [] b;
+                if ( !stream.ReadAll(bbuf, colEntrySize) )
                     return false;
-                }
+
                 cmap[j].b = bbuf[0];
                 cmap[j].g = bbuf[1];
                 cmap[j].r = bbuf[2];
-
-                r[j] = cmap[j].r;
-                g[j] = cmap[j].g;
-                b[j] = cmap[j].b;
             }
             else
             {
                 //used in reading .ico file mask
-                r[j] = cmap[j].r =
-                g[j] = cmap[j].g =
-                b[j] = cmap[j].b = ( j ? 255 : 0 );
+                cmap[j].r =
+                cmap[j].g =
+                cmap[j].b = ( j ? 255 : 0 );
             }
+#if wxUSE_PALETTE
+            r[j] = cmap[j].r;
+            g[j] = cmap[j].g;
+            b[j] = cmap[j].b;
+#endif // wxUSE_PALETTE
         }
 
 #if wxUSE_PALETTE
         // Set the palette for the wxImage
-        image->SetPalette(wxPalette(ncolors, r, g, b));
+        image->SetPalette(wxPalette(ncolors, r.get(), g.get(), b.get()));
 #endif // wxUSE_PALETTE
-
-        delete[] r;
-        delete[] g;
-        delete[] b;
     }
     else if ( bpp == 16 || bpp == 32 )
     {
@@ -939,7 +939,7 @@ bool wxBMPHandler::DoLoadDib(wxImage * image, int width, int height,
                 unsigned char temp;
                 if ( !stream.ReadAll(&aWord, 2) )
                     return false;
-                aWord = wxUINT16_SWAP_ON_BE(aWord);
+                wxUINT16_SWAP_ON_BE_IN_PLACE(aWord);
                 linepos += 2;
                 /* Use the masks and calculated amount of shift
                    to retrieve the color data out of the word.  Then
@@ -959,7 +959,7 @@ bool wxBMPHandler::DoLoadDib(wxImage * image, int width, int height,
                 if ( !stream.ReadAll(&aDword, 4) )
                     return false;
 
-                aDword = wxINT32_SWAP_ON_BE(aDword);
+                wxINT32_SWAP_ON_BE_IN_PLACE(aDword);
                 linepos += 4;
                 temp = (unsigned char)((aDword & rmask) >> rshift);
                 ptr[poffset] = temp;
@@ -1004,31 +1004,60 @@ bool wxBMPHandler::LoadDib(wxImage *image, wxInputStream& stream,
 {
     wxUint16        aWord;
     wxInt32         dbuf[4];
-    wxInt8          bbuf[4];
 
+    // offset to bitmap data
+    wxFileOffset offset;
+    // DIB header size (used to distinguish different versions of DIB header)
+    wxInt32 hdrSize;
     if ( IsBmp )
     {
+        wxInt8 bbuf[4];
         // read the header off the .BMP format file
         if ( !stream.ReadAll(bbuf, 2) ||
              !stream.ReadAll(dbuf, 16) )
             return false;
+
+        #if 0 // unused
+            wxInt32 size = wxINT32_SWAP_ON_BE(dbuf[0]);
+        #endif
+        offset = wxINT32_SWAP_ON_BE(dbuf[2]);
+        hdrSize = wxINT32_SWAP_ON_BE(dbuf[3]);
     }
     else
     {
         if ( !stream.ReadAll(dbuf, 4) )
             return false;
+
+        offset = wxInvalidOffset; // not used in loading ICO/CUR DIBs
+        hdrSize = wxINT32_SWAP_ON_BE(dbuf[0]);
     }
-    #if 0 // unused
-        wxInt32 size = wxINT32_SWAP_ON_BE(dbuf[0]);
-    #endif
-    wxFileOffset offset = wxINT32_SWAP_ON_BE(dbuf[2]);
 
-    if ( !stream.ReadAll(dbuf, 4 * 2) )
-        return false;
+    // Bitmap files come in old v1 format using BITMAPCOREHEADER or a newer
+    // format (typically BITMAPV5HEADER, but we don't
+    // really support any features specific to later formats such as gamma
+    // correction or ICC profiles, so it doesn't matter much to us).
+    const bool usesV1 = hdrSize == 12;
 
-    int width = wxINT32_SWAP_ON_BE((int)dbuf[0]);
-    int height = wxINT32_SWAP_ON_BE((int)dbuf[1]);
-    if ( !IsBmp)height = height  / 2; // for icons divide by 2
+    int width;
+    int height;
+    if ( usesV1 )
+    {
+        wxInt16 buf[2];
+        if ( !stream.ReadAll(buf, sizeof(buf)) )
+            return false;
+
+        width = wxINT16_SWAP_ON_BE((short)buf[0]);
+        height = wxINT16_SWAP_ON_BE((short)buf[1]);
+    }
+    else // We have at least BITMAPINFOHEADER
+    {
+        if ( !stream.ReadAll(dbuf, 4 * 2) )
+            return false;
+
+        width = wxINT32_SWAP_ON_BE((int)dbuf[0]);
+        height = wxINT32_SWAP_ON_BE((int)dbuf[1]);
+    }
+    if ( !IsBmp) height /= 2; // for icons divide by 2
 
     if ( width > 32767 )
     {
@@ -1067,24 +1096,79 @@ bool wxBMPHandler::LoadDib(wxImage *image, wxInputStream& stream,
         return false;
     }
 
-    if ( !stream.ReadAll(dbuf, 4 * 4) )
-        return false;
-
-    int comp = wxINT32_SWAP_ON_BE((int)dbuf[0]);
-    if ( comp != BI_RGB && comp != BI_RLE4 && comp != BI_RLE8 &&
-         comp != BI_BITFIELDS )
+    class Resolution
     {
-        if (verbose)
+    public:
+        Resolution()
         {
-            wxLogError( _("DIB Header: Unknown encoding in file.") );
+            m_valid = false;
+
+            // Still initialize them as some compilers are smart enough to
+            // give "use of possibly uninitialized variable" for them (but not
+            // smart enough to see that this is not really the case).
+            m_x =
+            m_y = 0;
         }
-        return false;
+
+        void Init(int x, int y)
+        {
+            m_x = x;
+            m_y = y;
+            m_valid = true;
+        }
+
+        bool IsValid() const { return m_valid; }
+
+        int GetX() const { return m_x; }
+        int GetY() const { return m_y; }
+
+    private:
+        int m_x, m_y;
+        bool m_valid;
+    } res;
+    int comp;
+    int ncolors;
+
+    if ( usesV1 )
+    {
+        // The only possible format is BI_RGB and colours count is not used.
+        comp = BI_RGB;
+        ncolors = 0;
     }
+    else // We have at least BITMAPINFOHEADER
+    {
+        if ( !stream.ReadAll(dbuf, 4 * 4) )
+            return false;
 
-    if ( !stream.ReadAll(dbuf, 4 * 2) )
-        return false;
+        comp = wxINT32_SWAP_ON_BE((int)dbuf[0]);
+        if ( comp != BI_RGB && comp != BI_RLE4 && comp != BI_RLE8 &&
+             comp != BI_BITFIELDS )
+        {
+            if (verbose)
+            {
+                wxLogError( _("DIB Header: Unknown encoding in file.") );
+            }
+            return false;
+        }
 
-    int ncolors = wxINT32_SWAP_ON_BE( (int)dbuf[0] );
+        if ( !stream.ReadAll(dbuf, 4 * 2) )
+            return false;
+
+        ncolors = wxINT32_SWAP_ON_BE( (int)dbuf[0] );
+        res.Init(dbuf[2]/100, dbuf[3]/100);
+
+        // We've read BITMAPINFOHEADER data but for BITMAPV4HEADER or BITMAPV5HEADER
+        // we have to forward stream position to after the actual bitmap header.
+        //
+        // Note: hardcode its size as struct BITMAPINFOHEADER is not defined on
+        // non-MSW platforms.
+        const wxInt32 sizeBITMAPINFOHEADER = 40;
+        if ( hdrSize > sizeBITMAPINFOHEADER )
+        {
+            if ( stream.SeekI(hdrSize - sizeBITMAPINFOHEADER, wxFromCurrent) == wxInvalidOffset )
+                return false;
+        }
+    }
     if (ncolors == 0)
         ncolors = 1 << bpp;
     /* some more sanity checks */
@@ -1101,7 +1185,8 @@ bool wxBMPHandler::LoadDib(wxImage *image, wxInputStream& stream,
 
     //read DIB; this is the BMP image or the XOR part of an icon image
     if ( !DoLoadDib(image, width, height, bpp, ncolors, comp, offset, stream,
-                    verbose, IsBmp, true) )
+                    verbose, IsBmp, true,
+                    usesV1 ? 3 : 4) )
     {
         if (verbose)
         {
@@ -1129,9 +1214,12 @@ bool wxBMPHandler::LoadDib(wxImage *image, wxInputStream& stream,
     }
 
     // the resolution in the bitmap header is in meters, convert to centimeters
-    image->SetOption(wxIMAGE_OPTION_RESOLUTIONUNIT, wxIMAGE_RESOLUTION_CM);
-    image->SetOption(wxIMAGE_OPTION_RESOLUTIONX, dbuf[2]/100);
-    image->SetOption(wxIMAGE_OPTION_RESOLUTIONY, dbuf[3]/100);
+    if ( res.IsValid() )
+    {
+        image->SetOption(wxIMAGE_OPTION_RESOLUTIONUNIT, wxIMAGE_RESOLUTION_CM);
+        image->SetOption(wxIMAGE_OPTION_RESOLUTIONX, res.GetX());
+        image->SetOption(wxIMAGE_OPTION_RESOLUTIONY, res.GetY());
+    }
 
     return true;
 }
@@ -1162,41 +1250,17 @@ bool wxBMPHandler::DoCanRead(wxInputStream& stream)
 // wxICOHandler
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxICOHandler, wxBMPHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxICOHandler, wxBMPHandler);
 
 #if wxUSE_STREAMS
-
-struct ICONDIRENTRY
-{
-    wxUint8         bWidth;               // Width of the image
-    wxUint8         bHeight;              // Height of the image (times 2)
-    wxUint8         bColorCount;          // Number of colors in image (0 if >=8bpp)
-    wxUint8         bReserved;            // Reserved
-
-    // these two are different in icons and cursors:
-                                          // icon           or  cursor
-    wxUint16        wPlanes;              // Color Planes   or  XHotSpot
-    wxUint16        wBitCount;            // Bits per pixel or  YHotSpot
-
-    wxUint32        dwBytesInRes;         // how many bytes in this resource?
-    wxUint32        dwImageOffset;        // where in the file is this image
-};
-
-struct ICONDIR
-{
-    wxUint16     idReserved;   // Reserved
-    wxUint16     idType;       // resource type (1 for icons, 2 for cursors)
-    wxUint16     idCount;      // how many images?
-};
-
 
 bool wxICOHandler::SaveFile(wxImage *image,
                             wxOutputStream& stream,
                             bool verbose)
 
 {
-    //sanity check; icon must be less than 127 pixels high and 255 wide
-    if ( image->GetHeight () > 127 )
+    // sanity check; icon must be no larger than 256x256
+    if ( image->GetHeight () > 256 )
     {
         if ( verbose )
         {
@@ -1204,7 +1268,7 @@ bool wxICOHandler::SaveFile(wxImage *image,
         }
         return false;
     }
-    if ( image->GetWidth () > 255 )
+    if ( image->GetWidth () > 256 )
     {
         if ( verbose )
         {
@@ -1281,8 +1345,40 @@ bool wxICOHandler::SaveFile(wxImage *image,
                     mask.SetRGB(i, j, 0, 0, 0 );
         }
         // Set the formats for image and mask
-        // (Windows never saves with more than 8 colors):
-        image->SetOption(wxIMAGE_OPTION_BMP_FORMAT, wxBMP_8BPP);
+
+        // The format depends on the number of the colours used, so count them,
+        // but stop at 257 because we have to use 24 bpp anyhow if we have that
+        // many of them.
+        const int colours = image->CountColours(257);
+        int bppFormat;
+        int bpp;
+        if ( image->HasAlpha() )
+        {
+            // Icons with alpha channel are always stored in ARGB format.
+            bppFormat = wxBMP_24BPP;
+            bpp = 32;
+        }
+        else if ( colours > 256 )
+        {
+            bppFormat = wxBMP_24BPP;
+            bpp = 24;
+        }
+        else if ( colours > 16 )
+        {
+            bppFormat = wxBMP_8BPP;
+            bpp = 8;
+        }
+        else if ( colours > 2 )
+        {
+            bppFormat = wxBMP_4BPP;
+            bpp = 4;
+        }
+        else
+        {
+            bppFormat = wxBMP_1BPP;
+            bpp = 1;
+        }
+        image->SetOption(wxIMAGE_OPTION_BMP_FORMAT, bppFormat);
 
         // monochome bitmap:
         mask.SetOption(wxIMAGE_OPTION_BMP_FORMAT, wxBMP_1BPP_BW);
@@ -1291,25 +1387,48 @@ bool wxICOHandler::SaveFile(wxImage *image,
 
         //calculate size and offset of image and mask
         wxCountingOutputStream cStream;
-        bool bResult = SaveDib(image, cStream, verbose, IsBmp, IsMask);
-        if ( !bResult )
+        bool bResult;
+#if wxUSE_LIBPNG
+        // Typically, icons larger then 128x128 are saved as PNG images.
+        bool saveAsPNG = false;
+        if ( image->GetHeight() > 128 || image->GetWidth() > 128 )
         {
-            if ( verbose )
+            wxPNGHandler handlerPNG;
+            bResult = handlerPNG.SaveFile(image, cStream, verbose);
+            if ( !bResult )
             {
-                wxLogError(_("ICO: Error writing the image file!"));
+                if ( verbose )
+                {
+                    wxLogError(_("ICO: Error writing the image file!"));
+                }
+                return false;
             }
-            return false;
-        }
-        IsMask = true;
 
-        bResult = SaveDib(&mask, cStream, verbose, IsBmp, IsMask);
-        if ( !bResult )
+            saveAsPNG = true;
+        }
+        if ( !saveAsPNG )
+#endif // wxUSE_LIBPNG
         {
-            if ( verbose )
+            bResult = SaveDib(image, cStream, verbose, IsBmp, IsMask);
+            if ( !bResult )
             {
-                wxLogError(_("ICO: Error writing the image file!"));
+                if ( verbose )
+                {
+                    wxLogError(_("ICO: Error writing the image file!"));
+                }
+                return false;
             }
-            return false;
+            IsMask = true;
+
+            bResult = SaveDib(&mask, cStream, verbose, IsBmp, IsMask);
+            if ( !bResult )
+            {
+                if ( verbose )
+                {
+                    wxLogError(_("ICO: Error writing the image file!"));
+                }
+                return false;
+            }
         }
         wxUint32 Size = cStream.GetSize();
 
@@ -1328,12 +1447,15 @@ bool wxICOHandler::SaveFile(wxImage *image,
 
         offset = offset + sizeof(ICONDIRENTRY);
 
+        // Notice that the casts work correctly for width/height of 256 as it's
+        // represented by 0 in ICO file format -- and larger values are not
+        // allowed at all.
         icondirentry.bWidth = (wxUint8)image->GetWidth();
-        icondirentry.bHeight = (wxUint8)(2 * image->GetHeight());
+        icondirentry.bHeight = (wxUint8)image->GetHeight();
         icondirentry.bColorCount = 0;
         icondirentry.bReserved = 0;
         icondirentry.wPlanes = wxUINT16_SWAP_ON_BE(1);
-        icondirentry.wBitCount = wxUINT16_SWAP_ON_BE(wxBMP_8BPP);
+        icondirentry.wBitCount = wxUINT16_SWAP_ON_BE(bpp);
         if ( type == 2 /*CUR*/)
         {
             int hx = image->HasOption(wxIMAGE_OPTION_CUR_HOTSPOT_X) ?
@@ -1371,26 +1493,44 @@ bool wxICOHandler::SaveFile(wxImage *image,
         }
 
         // actually save it:
-        IsMask = false;
-        bResult = SaveDib(image, stream, verbose, IsBmp, IsMask);
-        if ( !bResult )
+#if wxUSE_LIBPNG
+        if ( saveAsPNG )
         {
-            if ( verbose )
+            wxPNGHandler handlerPNG;
+            bResult = handlerPNG.SaveFile(image, stream, verbose);
+            if ( !bResult )
             {
-                wxLogError(_("ICO: Error writing the image file!"));
+                if ( verbose )
+                {
+                    wxLogError(_("ICO: Error writing the image file!"));
+                }
+                return false;
             }
-            return false;
         }
-        IsMask = true;
-
-        bResult = SaveDib(&mask, stream, verbose, IsBmp, IsMask);
-        if ( !bResult )
+        else
+#endif // wxUSE_LIBPNG
         {
-            if ( verbose )
+            IsMask = false;
+            bResult = SaveDib(image, stream, verbose, IsBmp, IsMask);
+            if ( !bResult )
             {
-                wxLogError(_("ICO: Error writing the image file!"));
+                if ( verbose )
+                {
+                    wxLogError(_("ICO: Error writing the image file!"));
+                }
+                return false;
             }
-            return false;
+            IsMask = true;
+
+            bResult = SaveDib(&mask, stream, verbose, IsBmp, IsMask);
+            if ( !bResult )
+            {
+                if ( verbose )
+                {
+                    wxLogError(_("ICO: Error writing the image file!"));
+                }
+                return false;
+            }
         }
 
     } // end of for loop
@@ -1425,7 +1565,7 @@ bool wxICOHandler::DoLoadFile(wxImage *image, wxInputStream& stream,
     wxUint16 nType = wxUINT16_SWAP_ON_BE(IconDir.idType);
 
     // loop round the icons and choose the best one:
-    wxScopedArray<ICONDIRENTRY> pIconDirEntry(new ICONDIRENTRY[nIcons]);
+    wxScopedArray<ICONDIRENTRY> pIconDirEntry(nIcons);
     ICONDIRENTRY *pCurrentEntry = pIconDirEntry.get();
     int wMax = 0;
     int colmax = 0;
@@ -1574,7 +1714,7 @@ bool wxICOHandler::DoCanRead(wxInputStream& stream)
 // wxCURHandler
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxCURHandler, wxICOHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxCURHandler, wxICOHandler);
 
 #if wxUSE_STREAMS
 
@@ -1589,7 +1729,7 @@ bool wxCURHandler::DoCanRead(wxInputStream& stream)
 // wxANIHandler
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxANIHandler, wxCURHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxANIHandler, wxCURHandler);
 
 #if wxUSE_STREAMS
 

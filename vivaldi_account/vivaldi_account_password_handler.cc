@@ -105,7 +105,7 @@ void VivaldiAccountPasswordHandler::UpdatePassword() {
       password_manager::PasswordForm::Scheme::kOther, kSyncSignonRealm,
       GURL(kSyncOrigin));
 
-  password_store_->GetLogins(form_digest, this);
+  password_store_->GetLogins(form_digest, weak_ptr_factory_.GetWeakPtr());
 }
 
 void VivaldiAccountPasswordHandler::PasswordReceived(

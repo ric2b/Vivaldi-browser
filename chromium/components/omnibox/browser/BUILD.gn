@@ -48,10 +48,6 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "drive_video.icon",
     "extension_app.icon",
     "find_in_page.icon",
-    "google_calendar.icon",
-    "google_keep_note.icon",
-    "google_sites.icon",
-    "google_super_g.icon",
     "http.icon",
     "https_valid_in_chip.icon",
     "incognito.icon",
@@ -98,8 +94,6 @@ static_library("browser") {
     "actions/omnibox_pedal.cc",
     "actions/omnibox_pedal.h",
     "actions/omnibox_pedal_concepts.h",
-    "actions/omnibox_pedal_implementations.cc",
-    "actions/omnibox_pedal_implementations.h",
     "actions/omnibox_pedal_provider.cc",
     "actions/omnibox_pedal_provider.h",
     "answers_cache.cc",
@@ -189,6 +183,8 @@ static_library("browser") {
     "omnibox_triggered_feature_service.h",
     "omnibox_view.cc",
     "omnibox_view.h",
+    "omnibox_watcher.cc",
+    "omnibox_watcher.h",
     "on_device_head_model.cc",
     "on_device_head_model.h",
     "on_device_head_provider.cc",
@@ -215,6 +211,8 @@ static_library("browser") {
     "shortcuts_provider.h",
     "suggestion_answer.cc",
     "suggestion_answer.h",
+    "tab_matcher.cc",
+    "tab_matcher.h",
     "tailored_word_break_iterator.cc",
     "tailored_word_break_iterator.h",
     "titled_url_match_utils.cc",
@@ -331,6 +329,7 @@ static_library("location_bar") {
   ]
   deps = [
     ":buildflags",
+    "//build:chromeos_buildflags",
     "//components/dom_distiller/core:core",
     "//components/search_engines",
     "//components/strings",
@@ -341,6 +340,10 @@ static_library("location_bar") {
     "//ui/base",
     "//ui/gfx",
   ]
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/crosapi/cpp:cpp" ]
+  }
 
   if ((!is_android || enable_vr) && !is_ios) {
     deps += [ ":vector_icons" ]
@@ -519,7 +522,6 @@ bundle_data("unit_tests_bundle_data") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "actions/omnibox_pedal_implementations_unittest.cc",
     "actions/omnibox_pedal_provider_unittest.cc",
     "actions/omnibox_pedal_unittest.cc",
     "answers_cache_unittest.cc",

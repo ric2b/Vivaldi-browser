@@ -4,7 +4,6 @@
 
 #include "components/autofill_assistant/browser/trigger_scripts/trigger_script_coordinator.h"
 
-#include <map>
 #include <string>
 
 #include "base/numerics/clamped_math.h"
@@ -405,6 +404,15 @@ void TriggerScriptCoordinator::OnEffectiveVisibilityChanged() {
           Metrics::TriggerScriptFinishedState::DISABLED_PROACTIVE_HELP_SETTING);
       return;
     }
+    // Should never happen, this is just a failsafe and to prevent regression.
+    if (!trigger_context_) {
+      NOTREACHED() << "No trigger context";
+      if (callback_) {
+        std::move(callback_).Run(Metrics::TriggerScriptFinishedState::CANCELED,
+                                 nullptr, absl::nullopt);
+      }
+      return;
+    }
     VLOG(2) << "Restarting after tab became visible again";
     Start(deeplink_url_, std::move(trigger_context_), std::move(callback_));
   } else {
@@ -426,6 +434,7 @@ void TriggerScriptCoordinator::WebContentsDestroyed() {
                   WEB_CONTENTS_DESTROYED_WHILE_VISIBLE);
     finished_state_recorded_ = true;
   }
+  ui_delegate_->Detach();
 }
 
 void TriggerScriptCoordinator::StartCheckingTriggerConditions() {
@@ -596,6 +605,12 @@ void TriggerScriptCoordinator::RunCallback(
                                          trigger_ui_type, state);
   }
   trigger_context_->SetTriggerUIType(trigger_ui_type);
+
+  // Prevent notifications after the callback was run, i.e., after
+  // trigger_context_ was moved out of this object.
+  Observe(nullptr);
+  ui_delegate_->Detach();
+
   std::move(callback_).Run(state, std::move(trigger_context_), trigger_script);
 }
 

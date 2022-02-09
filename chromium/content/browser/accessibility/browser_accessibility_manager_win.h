@@ -12,8 +12,8 @@
 #include <set>
 #include <vector>
 
-#include "base/macros.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "content/common/content_export.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 
 namespace content {
@@ -47,7 +47,6 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
   BrowserAccessibility* GetFocus() const override;
   bool IsIgnoredChangedNode(const BrowserAccessibility* node) const;
   bool CanFireEvents() const override;
-  gfx::Rect GetViewBoundsInScreenCoordinates() const override;
 
   void FireFocusEvent(BrowserAccessibility* node) override;
   void FireBlinkEvent(ax::mojom::Event event_type,

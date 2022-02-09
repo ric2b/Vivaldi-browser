@@ -16,6 +16,7 @@ static const wchar_t* kOperaRegPath = L"Software\\Opera Software";
 static const wchar_t* kOpera = L"Opera";
 static const wchar_t* kOpera64bitFolder = L"Opera x64";
 static const wchar_t* kMailFolder = L"mail";
+static const wchar_t* kThunderbird = L"Thunderbird";
 
 base::FilePath GetOperaInstallPathFromRegistry() {
   // Detects the path that Opera is installed in.
@@ -34,7 +35,7 @@ base::FilePath GetProfileDir() {
   base::FilePath profile_dir;
   // The default location of the profile folder containing user data is
   // under the "Application Data" folder in Windows XP, Vista, and 7.
-  if (!PathService::Get(base::DIR_APP_DATA, &profile_dir))
+  if (!PathService::Get(base::DIR_ROAMING_APP_DATA, &profile_dir))
     return base::FilePath();
 
   // Tree is Opera/Opera (for 32 bit) and Opera/Opera x64 (64 bit).
@@ -60,6 +61,17 @@ base::FilePath GetMailDirectory() {
     return profile_dir.Append(kOpera64bitFolder).Append(kMailFolder);
   else if (base::PathExists(profile_dir.Append(kOpera).Append(kMailFolder)))
     return profile_dir.Append(kOpera).Append(kMailFolder);
+  else
+    return base::FilePath();
+}
+
+base::FilePath GetThunderbirdMailDirectory() {
+  base::FilePath profile_dir;
+  if (!PathService::Get(base::DIR_ROAMING_APP_DATA, &profile_dir))
+    return base::FilePath();
+
+  if (base::PathExists(profile_dir.Append(kThunderbird)))
+    return profile_dir.Append(kThunderbird);
   else
     return base::FilePath();
 }

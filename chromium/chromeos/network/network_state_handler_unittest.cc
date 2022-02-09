@@ -16,7 +16,6 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
@@ -1102,13 +1101,40 @@ TEST_F(NetworkStateHandlerTest, TetherNetworkState) {
   EXPECT_EQ(kTetherSignalStrength1, tether_network->signal_strength());
   EXPECT_FALSE(tether_network->tether_has_connected_to_host());
 
+  // Property changes to a connecting or connected Tether network should notify
+  // observers that the active network states have changed.
+  network_state_handler_->SetTetherNetworkStateConnecting(
+      kTetherGuid1 /* guid */);
+
+  EXPECT_EQ(1u, test_observer_->active_network_change_count());
+  EXPECT_EQ(1u, test_observer_->network_list_changed_count());
+  EXPECT_EQ(1, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+
+  // Update the Tether battery percentage property and verify the observers are
+  // correctly notified.
+  EXPECT_TRUE(network_state_handler_->UpdateTetherNetworkProperties(
+      kTetherGuid1, kTetherCarrier1, kTetherBatteryPercentage1,
+      0 /* signal_strength */));
+
+  EXPECT_EQ(2u, test_observer_->active_network_change_count());
+  EXPECT_EQ(1u, test_observer_->network_list_changed_count());
+  EXPECT_EQ(2, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+
+  network_state_handler_->SetTetherNetworkStateDisconnected(
+      kTetherGuid1 /* guid */);
+
+  EXPECT_EQ(3u, test_observer_->active_network_change_count());
+  EXPECT_EQ(1u, test_observer_->network_list_changed_count());
+  EXPECT_EQ(3, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+
   // Update the Tether properties and verify the changes.
   EXPECT_TRUE(network_state_handler_->UpdateTetherNetworkProperties(
       kTetherGuid1, "NewCarrier", 5 /* battery_percentage */,
       10 /* signal_strength */));
 
+  EXPECT_EQ(3u, test_observer_->active_network_change_count());
   EXPECT_EQ(1u, test_observer_->network_list_changed_count());
-  EXPECT_EQ(1, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+  EXPECT_EQ(4, test_observer_->PropertyUpdatesForService(kTetherGuid1));
 
   tether_network =
       network_state_handler_->GetNetworkStateFromGuid(kTetherGuid1);
@@ -1125,7 +1151,7 @@ TEST_F(NetworkStateHandlerTest, TetherNetworkState) {
       network_state_handler_->SetTetherNetworkHasConnectedToHost(kTetherGuid1));
 
   EXPECT_EQ(1u, test_observer_->network_list_changed_count());
-  EXPECT_EQ(2, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+  EXPECT_EQ(5, test_observer_->PropertyUpdatesForService(kTetherGuid1));
 
   // Try calling that function again. It should return false and should not
   // trigger a NetworkListChanged() callback for observers.
@@ -1133,12 +1159,12 @@ TEST_F(NetworkStateHandlerTest, TetherNetworkState) {
       network_state_handler_->SetTetherNetworkHasConnectedToHost(kTetherGuid1));
 
   EXPECT_EQ(1u, test_observer_->network_list_changed_count());
-  EXPECT_EQ(2, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+  EXPECT_EQ(5, test_observer_->PropertyUpdatesForService(kTetherGuid1));
 
   network_state_handler_->RemoveTetherNetworkState(kTetherGuid1);
 
   EXPECT_EQ(2u, test_observer_->network_list_changed_count());
-  EXPECT_EQ(2, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+  EXPECT_EQ(5, test_observer_->PropertyUpdatesForService(kTetherGuid1));
 
   ASSERT_FALSE(network_state_handler_->GetNetworkStateFromGuid(kTetherGuid1));
 

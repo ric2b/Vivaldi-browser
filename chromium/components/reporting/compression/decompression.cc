@@ -11,7 +11,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_piece.h"
 #include "base/task/thread_pool.h"
-#include "components/reporting/proto/record.pb.h"
+#include "components/reporting/proto/synced/record.pb.h"
 #include "third_party/snappy/src/snappy.h"
 
 namespace reporting {
@@ -38,7 +38,6 @@ std::string Decompression::DecompressRecord(
   switch (compression_information.compression_algorithm()) {
     case CompressionInformation::COMPRESSION_NONE: {
       // Don't decompress, simply return serialized record
-      LOG(ERROR) << "RETURN RAW RECORD";
       return record;
     }
     case CompressionInformation::COMPRESSION_SNAPPY: {

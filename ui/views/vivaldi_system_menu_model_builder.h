@@ -9,7 +9,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "chrome/browser/ui/views/frame/system_menu_model_delegate.h"
 
 class Browser;

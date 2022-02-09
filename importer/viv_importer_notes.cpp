@@ -33,27 +33,27 @@ class OperaNotesReader : public OperaAdrFileReader {
                bool is_folder,
                std::u16string* item_name = NULL);
 
-  const std::vector<ImportedNotesEntry>& Notes() const { return notes; }
+  const std::vector<ImportedNotesEntry>& Notes() const { return notes_; }
 
  protected:
   void HandleEntry(const std::string& category,
                    const base::DictionaryValue& entries) override;
 
  private:
-  std::vector<std::u16string> current_folder;
-  std::vector<ImportedNotesEntry> notes;
+  std::vector<std::u16string> current_folder_;
+  std::vector<ImportedNotesEntry> notes_;
 };
 
 void OperaNotesReader::HandleEntry(const std::string& category,
                                    const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
     std::u16string foldername;
-    AddNote(current_folder, entries, true, &foldername);
-    current_folder.push_back(foldername);
+    AddNote(current_folder_, entries, true, &foldername);
+    current_folder_.push_back(foldername);
   } else if (base::LowerCaseEqualsASCII(category, "note")) {
-    AddNote(current_folder, entries, false);
+    AddNote(current_folder_, entries, false);
   } else if (category == "-") {
-    current_folder.pop_back();
+    current_folder_.pop_back();
   }
 }
 
@@ -111,7 +111,7 @@ void OperaNotesReader::AddNote(
   entry.url = GURL(url);
   entry.creation_time = base::Time::FromTimeT(created_time);
 
-  notes.push_back(entry);
+  notes_.push_back(entry);
 }
 
 bool OperaImporter::ImportNotes(std::string* error) {

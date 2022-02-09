@@ -16,7 +16,6 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_byteorder.h"
 #include "base/trace_event/trace_event.h"
@@ -405,7 +404,7 @@ bool VpxVideoDecoder::VpxDecode(const DecoderBuffer* buffer,
     case VPX_CS_SRGB:
       primaries = gfx::ColorSpace::PrimaryID::BT709;
       transfer = gfx::ColorSpace::TransferID::IEC61966_2_1;
-      matrix = gfx::ColorSpace::MatrixID::RGB;
+      matrix = gfx::ColorSpace::MatrixID::GBR;
       break;
     default:
       break;

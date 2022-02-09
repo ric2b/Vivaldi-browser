@@ -6,8 +6,11 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
+#include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
 #include "components/safe_browsing/core/common/features.h"
@@ -181,7 +184,7 @@ class SBNavigationObserverTest : public content::RenderViewHostTestHarness {
   scoped_refptr<HostContentSettingsMap> settings_map_;
   std::unique_ptr<SafeBrowsingNavigationObserverManager>
       navigation_observer_manager_;
-  SafeBrowsingNavigationObserver* navigation_observer_;
+  raw_ptr<SafeBrowsingNavigationObserver> navigation_observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -446,7 +449,13 @@ TEST_F(SBNavigationObserverTest, TestCleanUpStaleUserGestures) {
   EXPECT_EQ(now, (*user_gesture_map())[content0]);
 }
 
-TEST_F(SBNavigationObserverTest, TestCleanUpStaleIPAddresses) {
+// TODO(crbug.com/1278500): Flaky on Linux TSAN
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_TestCleanUpStaleIPAddresses DISABLED_TestCleanUpStaleIPAddresses
+#else
+#define MAYBE_TestCleanUpStaleIPAddresses TestCleanUpStaleIPAddresses
+#endif
+TEST_F(SBNavigationObserverTest, MAYBE_TestCleanUpStaleIPAddresses) {
   // Sets up host_to_ip_map() such that it includes fresh, stale and invalid
   // user gestures.
   base::Time now = base::Time::Now();  // Fresh
@@ -477,7 +486,13 @@ TEST_F(SBNavigationObserverTest, TestCleanUpStaleIPAddresses) {
   EXPECT_EQ(now, (*host_to_ip_map())[host_0].front().timestamp);
 }
 
-TEST_F(SBNavigationObserverTest, TestRecordHostToIpMapping) {
+// TODO(crbug.com/1278500): Flaky on Linux TSAN
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_TestRecordHostToIpMapping DISABLED_TestRecordHostToIpMapping
+#else
+#define MAYBE_TestRecordHostToIpMapping TestRecordHostToIpMapping
+#endif
+TEST_F(SBNavigationObserverTest, MAYBE_TestRecordHostToIpMapping) {
   // Setup host_to_ip_map().
   base::Time now = base::Time::Now();  // Fresh
   base::Time one_hour_ago =
@@ -522,7 +537,8 @@ TEST_F(SBNavigationObserverTest, TestContentSettingChange) {
   // Simulate content setting change via page info UI.
   navigation_observer_->OnContentSettingChanged(
       ContentSettingsPattern::FromURL(web_content->GetLastCommittedURL()),
-      ContentSettingsPattern::Wildcard(), ContentSettingsType::NOTIFICATIONS);
+      ContentSettingsPattern::Wildcard(),
+      ContentSettingsTypeSet(ContentSettingsType::NOTIFICATIONS));
 
   // A user gesture should be recorded.
   ASSERT_EQ(1U, user_gesture_map()->size());
@@ -534,7 +550,8 @@ TEST_F(SBNavigationObserverTest, TestContentSettingChange) {
   // Simulate content setting change that cannot be changed via page info UI.
   navigation_observer_->OnContentSettingChanged(
       ContentSettingsPattern::FromURL(web_content->GetLastCommittedURL()),
-      ContentSettingsPattern::Wildcard(), ContentSettingsType::SITE_ENGAGEMENT);
+      ContentSettingsPattern::Wildcard(),
+      ContentSettingsTypeSet(ContentSettingsType::SITE_ENGAGEMENT));
   // No user gesture should be recorded.
   EXPECT_EQ(0U, user_gesture_map()->size());
 }
@@ -625,8 +642,16 @@ TEST_F(SBNavigationObserverTest,
   EXPECT_EQ(GURL("http://A.com"), referrer_chain[11].referrer_url());
 }
 
+// TODO(crbug.com/1278500): Flaky on Linux TSAN
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_RemoveNonUserGestureEntriesWithExcessiveUserGestureEvents \
+  DISABLED_RemoveNonUserGestureEntriesWithExcessiveUserGestureEvents
+#else
+#define MAYBE_RemoveNonUserGestureEntriesWithExcessiveUserGestureEvents \
+  RemoveNonUserGestureEntriesWithExcessiveUserGestureEvents
+#endif
 TEST_F(SBNavigationObserverTest,
-       RemoveNonUserGestureEntriesWithExcessiveUserGestureEvents) {
+       MAYBE_RemoveNonUserGestureEntriesWithExcessiveUserGestureEvents) {
   GURL url = GURL("http://A.com");
   base::Time half_hour_ago =
       base::Time::FromDoubleT(base::Time::Now().ToDoubleT() - 30.0 * 60.0);
@@ -683,7 +708,13 @@ TEST_F(SBNavigationObserverTest, RemoveMiddleReferrerChains) {
   EXPECT_EQ(GURL("http://A.com"), referrer_chain[11].referrer_url());
 }
 
-TEST_F(SBNavigationObserverTest, ChainWorksThroughNewTab) {
+// TODO(crbug.com/1278500): Flaky on Linux TSAN
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_ChainWorksThroughNewTab DISABLED_ChainWorksThroughNewTab
+#else
+#define MAYBE_ChainWorksThroughNewTab ChainWorksThroughNewTab
+#endif
+TEST_F(SBNavigationObserverTest, MAYBE_ChainWorksThroughNewTab) {
   base::Time now = base::Time::Now();
   base::Time one_hour_ago =
       base::Time::FromDoubleT(now.ToDoubleT() - 60.0 * 60.0);
@@ -800,7 +831,15 @@ TEST_F(SBNavigationObserverTest,
   EXPECT_TRUE(referrer_chain[0].is_retargeting());
 }
 
-TEST_F(SBNavigationObserverTest, TestGetLatestPendingNavigationEvent) {
+// TODO(crbug.com/1278500): Flaky on Linux TSAN
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_TestGetLatestPendingNavigationEvent \
+  DISABLED_TestGetLatestPendingNavigationEvent
+#else
+#define MAYBE_TestGetLatestPendingNavigationEvent \
+  TestGetLatestPendingNavigationEvent
+#endif
+TEST_F(SBNavigationObserverTest, MAYBE_TestGetLatestPendingNavigationEvent) {
   base::Time now = base::Time::Now();
   base::Time one_minute_ago = base::Time::FromDoubleT(now.ToDoubleT() - 60.0);
   base::Time two_minute_ago = base::Time::FromDoubleT(now.ToDoubleT() - 120.0);

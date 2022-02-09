@@ -197,7 +197,8 @@ class TabActivityWatcher::WebContentsData
   };
 
   explicit WebContentsData(content::WebContents* web_contents)
-      : WebContentsObserver(web_contents) {
+      : WebContentsObserver(web_contents),
+        content::WebContentsUserData<WebContentsData>(*web_contents) {
     DCHECK(!web_contents->GetBrowserContext()->IsOffTheRecord());
     web_contents->GetMainFrame()
         ->GetRenderViewHost()
@@ -268,9 +269,6 @@ class TabActivityWatcher::WebContentsData
 
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override {
-    // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-    // frames. This caller was converted automatically to the primary main frame
-    // to preserve its semantics. Follow up to confirm correctness.
     if (!navigation_handle->HasCommitted() ||
         !navigation_handle->IsInPrimaryMainFrame() ||
         navigation_handle->IsSameDocument()) {

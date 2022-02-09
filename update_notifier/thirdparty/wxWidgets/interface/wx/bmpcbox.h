@@ -46,7 +46,7 @@
            the combobox.
     @endEventTable
 
-    @library{wxadv}
+    @library{wxcore}
     @category{ctrl}
     @appearance{bitmapcombobox}
 
@@ -110,7 +110,7 @@ public:
         @param size
             Initial size.
         @param choices
-            An wxArrayString with which to initialise the control.
+            A wxArrayString with which to initialise the control.
         @param style
             The window style, see wxCB_* flags.
         @param validator

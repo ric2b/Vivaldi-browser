@@ -7,8 +7,6 @@
 
 #include "extensions/browser/guest_view/extension_options/extension_options_guest_delegate.h"
 
-#include "base/macros.h"
-
 namespace extensions {
 
 class ExtensionOptionsGuest;
@@ -25,7 +23,8 @@ class ChromeExtensionOptionsGuestDelegate
 
   ~ChromeExtensionOptionsGuestDelegate() override;
 
-  bool HandleContextMenu(const content::ContextMenuParams& params) override;
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
+                         const content::ContextMenuParams& params) override;
 
   content::WebContents* OpenURLInNewTab(
       const content::OpenURLParams& params) override;

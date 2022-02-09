@@ -5,7 +5,6 @@
 #include "components/password_manager/core/browser/store_metrics_reporter.h"
 
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -172,14 +171,14 @@ TEST_P(StoreMetricsReporterTestWithParams, StoreIndependentMetrics) {
       /*is_under_advanced_protection=*/false,
       /*done_callback*/ base::DoNothing());
 
-  histogram_tester.ExpectUniqueSample("PasswordManager.Enabled",
+  histogram_tester.ExpectUniqueSample("PasswordManager.Enabled2",
                                       password_manager_enabled, 1);
 }
 
 TEST_F(StoreMetricsReporterTest, ReportAccountsPerSiteHiResMetricsTest) {
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(profile_store.get());
   // Note: We also create and populate an account store here and instruct it to
   // report metrics, even though all the checks below only test the profile DB.
@@ -187,7 +186,7 @@ TEST_F(StoreMetricsReporterTest, ReportAccountsPerSiteHiResMetricsTest) {
   // histograms.
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  account_store->Init(&prefs_);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(account_store.get());
 
   base::HistogramTester histogram_tester;
@@ -231,7 +230,7 @@ TEST_F(StoreMetricsReporterTest, ReportAccountsPerSiteHiResMetricsTest) {
 TEST_F(StoreMetricsReporterTest, ReportTotalAccountsHiResMetricsTest) {
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(profile_store.get());
   // Note: We also create and populate an account store here and instruct it to
   // report metrics, even though all the checks below only test the profile DB.
@@ -239,7 +238,7 @@ TEST_F(StoreMetricsReporterTest, ReportTotalAccountsHiResMetricsTest) {
   // histograms.
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  account_store->Init(&prefs_);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(account_store.get());
 
   base::HistogramTester histogram_tester;
@@ -289,7 +288,7 @@ TEST_F(StoreMetricsReporterTest, ReportTotalAccountsHiResMetricsTest) {
 TEST_F(StoreMetricsReporterTest, ReportTimesPasswordUsedMetricsTest) {
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(profile_store.get());
   // Note: We also create and populate an account store here and instruct it to
   // report metrics, even though all the checks below only test the profile DB.
@@ -297,7 +296,7 @@ TEST_F(StoreMetricsReporterTest, ReportTimesPasswordUsedMetricsTest) {
   // histograms.
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  account_store->Init(&prefs_);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(account_store.get());
 
   base::HistogramTester histogram_tester;
@@ -362,7 +361,7 @@ TEST_F(StoreMetricsReporterTest,
 
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(profile_store.get());
   // Note: We also create and populate an account store here and instruct it to
   // report metrics, even though all the checks below only test the profile DB.
@@ -370,7 +369,7 @@ TEST_F(StoreMetricsReporterTest,
   // histograms.
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  account_store->Init(&prefs_);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(account_store.get());
 
   base::HistogramTester histogram_tester;
@@ -423,7 +422,7 @@ TEST_F(StoreMetricsReporterTest,
 
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(profile_store.get());
   // Note: We also create and populate an account store here and instruct it to
   // report metrics, even though all the checks below only test the profile DB.
@@ -431,7 +430,7 @@ TEST_F(StoreMetricsReporterTest,
   // histograms.
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  account_store->Init(&prefs_);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(account_store.get());
 
   base::HistogramTester histogram_tester;
@@ -488,7 +487,7 @@ TEST_F(StoreMetricsReporterTest,
 
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(profile_store.get());
   // Note: We also create and populate an account store here and instruct it to
   // report metrics, even though all the checks below only test the profile DB.
@@ -496,7 +495,7 @@ TEST_F(StoreMetricsReporterTest,
   // histograms.
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  account_store->Init(&prefs_);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
   AddMetricsTestData(account_store.get());
 
   base::HistogramTester histogram_tester;
@@ -560,7 +559,7 @@ TEST_F(StoreMetricsReporterTest,
 TEST_F(StoreMetricsReporterTest, DuplicatesMetrics_NoDuplicates) {
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
 
   // No duplicate.
   PasswordForm password_form;
@@ -618,7 +617,7 @@ TEST_F(StoreMetricsReporterTest, DuplicatesMetrics_NoDuplicates) {
 TEST_F(StoreMetricsReporterTest, DuplicatesMetrics_ExactDuplicates) {
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
 
   // Add some PasswordForms that are "exact" duplicates (only the
   // username_element is different, which doesn't matter).
@@ -670,7 +669,7 @@ TEST_F(StoreMetricsReporterTest, DuplicatesMetrics_ExactDuplicates) {
 TEST_F(StoreMetricsReporterTest, DuplicatesMetrics_MismatchedDuplicates) {
   auto profile_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
-  profile_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
 
   // Mismatched duplicates: Identical except for the password.
   PasswordForm password_form;
@@ -729,15 +728,15 @@ TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
   auto account_store =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
 
-  profile_store->Init(&prefs_);
-  account_store->Init(&prefs_);
+  profile_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
+  account_store->Init(&prefs_, /*affiliated_match_helper=*/nullptr);
 
   // Simulate account store active.
   AccountInfo account_info;
   account_info.email = "account@gmail.com";
   account_info.gaia = "account";
-  test_sync_service()->SetAuthenticatedAccountInfo(account_info);
-  test_sync_service()->SetIsAuthenticatedAccountPrimary(false);
+  test_sync_service()->SetAccountInfo(account_info);
+  test_sync_service()->SetHasSyncConsent(false);
 
   const std::string kRealm1 = "https://example.com";
   const std::string kRealm2 = "https://example2.com";

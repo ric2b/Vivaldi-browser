@@ -490,6 +490,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LibsAndLibDirs) {
   Target target(setup.settings(), Label(SourceDir("//foo/"), "shlib"));
   target.set_output_type(Target::SHARED_LIBRARY);
   target.config_values().libs().push_back(LibFile(SourceFile("//foo/lib1.a")));
+  target.config_values().libs().push_back(LibFile(SourceFile("//sysroot/DIA SDK/diaguids.lib")));
   target.config_values().libs().push_back(LibFile("foo"));
   target.config_values().lib_dirs().push_back(SourceDir("//foo/bar/"));
   target.SetToolchain(setup.toolchain());
@@ -507,9 +508,13 @@ TEST_F(NinjaCBinaryTargetWriterTest, LibsAndLibDirs) {
       "target_output_name = libshlib\n"
       "\n"
       "\n"
-      "build ./libshlib.so: solink | ../../foo/lib1.a\n"
+      "build ./libshlib.so: solink | ../../foo/lib1.a ../../sysroot/DIA$ SDK/diaguids.lib\n"
       "  ldflags = -L../../foo/bar\n"
-      "  libs = ../../foo/lib1.a -lfoo\n"
+#ifdef _WIN32
+      "  libs = ../../foo/lib1.a \"../../sysroot/DIA$ SDK/diaguids.lib\" -lfoo\n"
+#else
+      "  libs = ../../foo/lib1.a ../../sysroot/DIA\\$ SDK/diaguids.lib -lfoo\n"
+#endif
       "  frameworks =\n"
       "  swiftmodules =\n"
       "  output_extension = .so\n"

@@ -11,10 +11,11 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/style_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
@@ -132,7 +133,9 @@ gfx::Transform GetScaleTransform(const gfx::Rect& bounds, float scale) {
 
 }  // namespace
 
-CaptureLabelView::CaptureLabelView(CaptureModeSession* capture_mode_session)
+CaptureLabelView::CaptureLabelView(
+    CaptureModeSession* capture_mode_session,
+    base::RepeatingClosure on_capture_button_pressed)
     : timeout_count_down_(kCountDownStartSeconds),
       capture_mode_session_(capture_mode_session) {
   SetPaintToLayer();
@@ -149,9 +152,7 @@ CaptureLabelView::CaptureLabelView(CaptureModeSession* capture_mode_session)
   SkColor text_color = color_provider->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kTextColorPrimary);
   label_button_ = AddChildView(std::make_unique<views::LabelButton>(
-      base::BindRepeating(&CaptureLabelView::OnButtonPressed,
-                          base::Unretained(this)),
-      std::u16string()));
+      std::move(on_capture_button_pressed), std::u16string()));
   label_button_->SetPaintToLayer();
   label_button_->layer()->SetFillsBoundsOpaquely(false);
   label_button_->SetEnabledTextColors(text_color);
@@ -160,12 +161,8 @@ CaptureLabelView::CaptureLabelView(CaptureModeSession* capture_mode_session)
 
   views::InkDrop::Get(label_button_)
       ->SetMode(views::InkDropHost::InkDropMode::ON);
-  const auto ripple_attributes =
-      color_provider->GetRippleAttributes(background_color);
-  views::InkDrop::Get(label_button_)
-      ->SetVisibleOpacity(ripple_attributes.inkdrop_opacity);
-  views::InkDrop::Get(label_button_)
-      ->SetBaseColor(ripple_attributes.base_color);
+  StyleUtil::ConfigureInkDropAttributes(
+      label_button_, StyleUtil::kBaseColor | StyleUtil::kInkDropOpacity);
   label_button_->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 
   label_ = AddChildView(std::make_unique<views::Label>(std::u16string()));
@@ -466,10 +463,6 @@ void CaptureLabelView::StartWidgetLayerAnimationSequences() {
   widget_transform_sequence->AddObserver(animation_observer_.get());
   GetWidget()->GetLayer()->GetAnimator()->StartTogether(
       {widget_opacity_sequence.release(), widget_transform_sequence.release()});
-}
-
-void CaptureLabelView::OnButtonPressed() {
-  CaptureModeController::Get()->PerformCapture();
 }
 
 BEGIN_METADATA(CaptureLabelView, views::View)

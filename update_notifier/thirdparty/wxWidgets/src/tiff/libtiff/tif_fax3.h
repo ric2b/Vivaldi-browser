@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1990-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -38,7 +37,7 @@
 
 /*
  * To override the default routine used to image decoded
- * spans one can use the pseduo tag TIFFTAG_FAXFILLFUNC.
+ * spans one can use the pseudo tag TIFFTAG_FAXFILLFUNC.
  * The routine must have the type signature given below;
  * for example:
  *
@@ -80,10 +79,12 @@ extern void _TIFFFax3fillruns(unsigned char*, uint32*, uint32*, uint32);
 #define S_MakeUp   11
 #define S_EOL      12
 
+/* WARNING: do not change the layout of this structure as the HylaFAX software */
+/* really depends on it. See http://bugzilla.maptools.org/show_bug.cgi?id=2636 */
 typedef struct {                /* state table entry */
 	unsigned char State;    /* see above */
 	unsigned char Width;    /* width of code in bits */
-	uint32 Param;           /* unsigned 32-bit run length in bits */
+	uint32 Param;           /* unsigned 32-bit run length in bits (holds on 16 bit actually, but cannot be changed. See above warning) */
 } TIFFFaxTabEnt;
 
 extern const TIFFFaxTabEnt TIFFFaxMainTable[];
@@ -239,6 +240,11 @@ static const char* StateNames[] = {
  * current row and reset decoding state.
  */
 #define SETVALUE(x) do {							\
+    if (pa >= thisrun + sp->nruns) {					\
+        TIFFErrorExt(tif->tif_clientdata, module, "Buffer overflow at line %u of %s %u",	\
+                    sp->line, isTiled(tif) ? "tile" : "strip", isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip);	\
+        return (-1);							\
+    }									\
     *pa++ = RunLength + (x);						\
     a0 += (x);								\
     RunLength = 0;							\
@@ -376,6 +382,11 @@ done1d:									\
  */
 #define CHECK_b1 do {							\
     if (pa != thisrun) while (b1 <= a0 && b1 < lastx) {			\
+	if( pb + 1 >= sp->refruns + sp->nruns) { 			\
+	    TIFFErrorExt(tif->tif_clientdata, module, "Buffer overflow at line %u of %s %u",	\
+	                sp->line, isTiled(tif) ? "tile" : "strip", isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip);	\
+	    return (-1);						\
+	}								\
 	b1 += pb[0] + pb[1];						\
 	pb += 2;							\
     }									\
@@ -386,10 +397,20 @@ done1d:									\
  */
 #define EXPAND2D(eoflab) do {						\
     while (a0 < lastx) {						\
+	if (pa >= thisrun + sp->nruns) {				\
+		TIFFErrorExt(tif->tif_clientdata, module, "Buffer overflow at line %u of %s %u",	\
+		             sp->line, isTiled(tif) ? "tile" : "strip", isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip);	\
+		return (-1);						\
+	}								\
 	LOOKUP8(7, TIFFFaxMainTable, eof2d);				\
 	switch (TabEnt->State) {					\
 	case S_Pass:							\
 	    CHECK_b1;							\
+	    if( pb + 1 >= sp->refruns + sp->nruns) { 			\
+	        TIFFErrorExt(tif->tif_clientdata, module, "Buffer overflow at line %u of %s %u",	\
+	                sp->line, isTiled(tif) ? "tile" : "strip", isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip);	\
+	        return (-1);						\
+	    }								\
 	    b1 += *pb++;						\
 	    RunLength += b1 - a0;					\
 	    a0 = b1;							\
@@ -468,20 +489,28 @@ done1d:									\
 	case S_V0:							\
 	    CHECK_b1;							\
 	    SETVALUE(b1 - a0);						\
+	    if( pb >= sp->refruns + sp->nruns) { 			\
+	        TIFFErrorExt(tif->tif_clientdata, module, "Buffer overflow at line %u of %s %u",	\
+	                sp->line, isTiled(tif) ? "tile" : "strip", isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip);	\
+	        return (-1);						\
+	    }								\
 	    b1 += *pb++;						\
 	    break;							\
 	case S_VR:							\
 	    CHECK_b1;							\
 	    SETVALUE(b1 - a0 + TabEnt->Param);				\
+	    if( pb >= sp->refruns + sp->nruns) { 			\
+	        TIFFErrorExt(tif->tif_clientdata, module, "Buffer overflow at line %u of %s %u",	\
+	                sp->line, isTiled(tif) ? "tile" : "strip", isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip);	\
+	        return (-1);						\
+	    }								\
 	    b1 += *pb++;						\
 	    break;							\
 	case S_VL:							\
 	    CHECK_b1;							\
-	    if (b1 <= (int) (a0 + TabEnt->Param)) {			\
-		if (b1 < (int) (a0 + TabEnt->Param) || pa != thisrun) {	\
-		    unexpected("VL", a0);				\
-		    goto eol2d;						\
-		}							\
+	    if (b1 < (int) (a0 + TabEnt->Param)) {			\
+		unexpected("VL", a0);				\
+		goto eol2d;						\
 	    }								\
 	    SETVALUE(b1 - a0 - TabEnt->Param);				\
 	    b1 -= *--pb;						\
@@ -528,6 +557,7 @@ eol2d:									\
     CLEANUP_RUNS();							\
 } while (0)
 #endif /* _FAX3_ */
+/* vim: set ts=8 sts=4 sw=4 noet: */
 /*
  * Local Variables:
  * mode: c

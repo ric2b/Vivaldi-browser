@@ -20,10 +20,10 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_command_line.h"
+#include "build/chromeos_buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
-#include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/display.h"
@@ -35,6 +35,8 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/overlay_priority_hint.h"
 #include "ui/gfx/overlay_transform.h"
+#include "ui/ozone/common/bitmap_cursor.h"
+#include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection_test_api.h"
@@ -144,6 +146,9 @@ class WaylandWindowTest : public WaylandTest {
   WaylandWindowTest& operator=(const WaylandWindowTest&) = delete;
 
   void SetUp() override {
+    disabled_features_.push_back(
+        ui::kWaylandSurfaceSubmissionInPixelCoordinates);
+
     WaylandTest::SetUp();
 
     xdg_surface_ = surface_->xdg_surface();
@@ -319,7 +324,7 @@ TEST_P(WaylandWindowTest, UpdateVisualSizeConfiguresWaylandWindow) {
   EXPECT_CALL(*xdg_surface_, AckConfigure(1));
   EXPECT_CALL(*mock_surface, SetOpaqueRegion(_));
   EXPECT_CALL(*mock_surface, SetInputRegion(_));
-  window_->UpdateVisualSize(kNormalBounds.size());
+  window_->UpdateVisualSize(kNormalBounds.size(), 1.0f);
 }
 
 // WaylandSurface state changes are sent to wayland compositor when
@@ -338,7 +343,7 @@ TEST_P(WaylandWindowTest, ApplyPendingStatesAndCommit) {
 
   std::vector<gfx::Rect> region_px = {gfx::Rect{0, 0, 500, 300}};
   window_->root_surface()->SetOpaqueRegion(&region_px);
-  window_->root_surface()->SetInputRegion(&region_px.back());
+  window_->root_surface()->SetInputRegion(region_px.data());
   window_->root_surface()->SetSurfaceBufferScale(2);
 
   Sync();
@@ -393,7 +398,7 @@ TEST_P(WaylandWindowTest, SetDecorationInsets) {
   // Setting the decoration insets does not trigger the immediate update of the
   // window geometry.  Emulate updating the visual size (sending the frame
   // update) for that.
-  window_->UpdateVisualSize(kNormalBounds.size());
+  window_->UpdateVisualSize(kNormalBounds.size(), 1.0f);
 
   Sync();
 
@@ -414,6 +419,9 @@ TEST_P(WaylandWindowTest, SetDecorationInsets) {
 
   Sync();
 
+  // Pretend we are already rendering using new scale.
+  window_->root_surface()->SetSurfaceBufferScale(kHiDpiScale);
+
   // Set new insets so that rounding does not result in integer.
   const gfx::Insets kDecorationInsets_2x = {48, 55, 63, 55};
   EXPECT_CALL(*xdg_surface_,
@@ -424,7 +432,7 @@ TEST_P(WaylandWindowTest, SetDecorationInsets) {
   // Setting the decoration insets does not trigger the immediate update of the
   // window geometry.  Emulate updating the visual size (sending the frame
   // update) for that.
-  window_->UpdateVisualSize(kHiDpiBounds.size());
+  window_->UpdateVisualSize(kHiDpiBounds.size(), kHiDpiScale);
 
   Sync();
 
@@ -474,9 +482,9 @@ TEST_P(WaylandWindowTest, ShuffledUpdateVisualSizeOrder) {
                      kNormalBounds3.height(), ++serial, state.get());
   Sync();
 
-  window_->UpdateVisualSize(kNormalBounds2.size());
-  window_->UpdateVisualSize(kNormalBounds1.size());
-  window_->UpdateVisualSize(kNormalBounds3.size());
+  window_->UpdateVisualSize(kNormalBounds2.size(), 1.0f);
+  window_->UpdateVisualSize(kNormalBounds1.size(), 1.0f);
+  window_->UpdateVisualSize(kNormalBounds3.size(), 1.0f);
 }
 
 TEST_P(WaylandWindowTest, MismatchUpdateVisualSize) {
@@ -507,7 +515,7 @@ TEST_P(WaylandWindowTest, MismatchUpdateVisualSize) {
                      kNormalBounds3.height(), ++serial, state.get());
   Sync();
 
-  window_->UpdateVisualSize({100, 100});
+  window_->UpdateVisualSize({100, 100}, 1.0f);
 }
 
 TEST_P(WaylandWindowTest, UpdateVisualSizeClearsPreviousUnackedConfigures) {
@@ -545,9 +553,9 @@ TEST_P(WaylandWindowTest, UpdateVisualSizeClearsPreviousUnackedConfigures) {
                      kNormalBounds3.height(), ++serial, state.get());
   Sync();
 
-  window_->UpdateVisualSize(kNormalBounds2.size());
-  window_->UpdateVisualSize(kNormalBounds1.size());
-  window_->UpdateVisualSize(kNormalBounds3.size());
+  window_->UpdateVisualSize(kNormalBounds2.size(), 1.0f);
+  window_->UpdateVisualSize(kNormalBounds1.size(), 1.0f);
+  window_->UpdateVisualSize(kNormalBounds3.size(), 1.0f);
 }
 
 TEST_P(WaylandWindowTest, MaximizeAndRestore) {
@@ -797,8 +805,16 @@ TEST_P(WaylandWindowTest, StartMaximized) {
 }
 
 TEST_P(WaylandWindowTest, CompositorSideStateChanges) {
+  // Real insets used by default on HiDPI.
+  const auto kInsets = gfx::Insets{38, 44, 55, 44};
+  const auto kNormalBounds = window_->GetBounds();
+
   EXPECT_EQ(window_->GetPlatformWindowState(), PlatformWindowState::kNormal);
-  auto normal_bounds = window_->GetBounds();
+
+  // Set nonzero insets and ensure that they are only used when the window has
+  // normal state.
+  // See https://crbug.com/1274629
+  window_->SetDecorationInsets(&kInsets);
 
   ScopedWlArray states = InitializeWlArrayWithActivatedState();
   AddStateToWlArray(XDG_TOPLEVEL_STATE_MAXIMIZED, states.get());
@@ -820,8 +836,11 @@ TEST_P(WaylandWindowTest, CompositorSideStateChanges) {
   EXPECT_CALL(delegate_,
               OnWindowStateChanged(_, Eq(PlatformWindowState::kNormal)))
       .Times(1);
-  EXPECT_CALL(*xdg_surface_, SetWindowGeometry(0, 0, normal_bounds.width(),
-                                               normal_bounds.height()));
+  EXPECT_CALL(*xdg_surface_,
+              SetWindowGeometry(
+                  kInsets.left(), kInsets.top(),
+                  kNormalBounds.width() - (kInsets.left() + kInsets.right()),
+                  kNormalBounds.height() - (kInsets.top() + kInsets.bottom())));
 
   Sync();
 
@@ -842,8 +861,11 @@ TEST_P(WaylandWindowTest, CompositorSideStateChanges) {
   EXPECT_CALL(delegate_,
               OnWindowStateChanged(_, Eq(PlatformWindowState::kNormal)))
       .Times(1);
-  EXPECT_CALL(*xdg_surface_, SetWindowGeometry(0, 0, normal_bounds.width(),
-                                               normal_bounds.height()));
+  EXPECT_CALL(*xdg_surface_,
+              SetWindowGeometry(
+                  kInsets.left(), kInsets.top(),
+                  kNormalBounds.width() - (kInsets.left() + kInsets.right()),
+                  kNormalBounds.height() - (kInsets.top() + kInsets.bottom())));
 
   Sync();
 
@@ -874,8 +896,11 @@ TEST_P(WaylandWindowTest, CompositorSideStateChanges) {
   EXPECT_CALL(delegate_,
               OnWindowStateChanged(_, Eq(PlatformWindowState::kNormal)))
       .Times(1);
-  EXPECT_CALL(*xdg_surface_, SetWindowGeometry(0, 0, normal_bounds.width(),
-                                               normal_bounds.height()));
+  EXPECT_CALL(*xdg_surface_,
+              SetWindowGeometry(
+                  kInsets.left(), kInsets.top(),
+                  kNormalBounds.width() - (kInsets.left() + kInsets.right()),
+                  kNormalBounds.height() - (kInsets.top() + kInsets.bottom())));
 
   Sync();
 }
@@ -1183,26 +1208,26 @@ TEST_P(WaylandWindowTest, SetCursorUsesZcrCursorShapesForCommonTypes) {
   // Verify some commonly-used cursors.
   EXPECT_CALL(*mock_cursor_shapes,
               SetCursorShape(ZCR_CURSOR_SHAPES_V1_CURSOR_SHAPE_TYPE_POINTER));
-  auto pointer_cursor = base::MakeRefCounted<BitmapCursorOzone>(
+  auto pointer_cursor = base::MakeRefCounted<BitmapCursor>(
       mojom::CursorType::kPointer, kDefaultCursorScale);
   window_->SetCursor(pointer_cursor.get());
 
   EXPECT_CALL(*mock_cursor_shapes,
               SetCursorShape(ZCR_CURSOR_SHAPES_V1_CURSOR_SHAPE_TYPE_HAND));
-  auto hand_cursor = base::MakeRefCounted<BitmapCursorOzone>(
+  auto hand_cursor = base::MakeRefCounted<BitmapCursor>(
       mojom::CursorType::kHand, kDefaultCursorScale);
   window_->SetCursor(hand_cursor.get());
 
   EXPECT_CALL(*mock_cursor_shapes,
               SetCursorShape(ZCR_CURSOR_SHAPES_V1_CURSOR_SHAPE_TYPE_IBEAM));
-  auto ibeam_cursor = base::MakeRefCounted<BitmapCursorOzone>(
+  auto ibeam_cursor = base::MakeRefCounted<BitmapCursor>(
       mojom::CursorType::kIBeam, kDefaultCursorScale);
   window_->SetCursor(ibeam_cursor.get());
 }
 
 TEST_P(WaylandWindowTest, SetCursorCallsZcrCursorShapesOncePerCursor) {
   MockZcrCursorShapes* mock_cursor_shapes = InstallMockZcrCursorShapes();
-  auto hand_cursor = base::MakeRefCounted<BitmapCursorOzone>(
+  auto hand_cursor = base::MakeRefCounted<BitmapCursor>(
       mojom::CursorType::kHand, kDefaultCursorScale);
   // Setting the same cursor twice on the client only calls the server once.
   EXPECT_CALL(*mock_cursor_shapes, SetCursorShape(_)).Times(1);
@@ -1213,7 +1238,7 @@ TEST_P(WaylandWindowTest, SetCursorCallsZcrCursorShapesOncePerCursor) {
 TEST_P(WaylandWindowTest, SetCursorDoesNotUseZcrCursorShapesForNoneCursor) {
   MockZcrCursorShapes* mock_cursor_shapes = InstallMockZcrCursorShapes();
   EXPECT_CALL(*mock_cursor_shapes, SetCursorShape(_)).Times(0);
-  auto none_cursor = base::MakeRefCounted<BitmapCursorOzone>(
+  auto none_cursor = base::MakeRefCounted<BitmapCursor>(
       mojom::CursorType::kNone, kDefaultCursorScale);
   window_->SetCursor(none_cursor.get());
 }
@@ -1223,9 +1248,9 @@ TEST_P(WaylandWindowTest, SetCursorDoesNotUseZcrCursorShapesForCustomCursors) {
 
   // Custom cursors require bitmaps, so they do not use server-side cursors.
   EXPECT_CALL(*mock_cursor_shapes, SetCursorShape(_)).Times(0);
-  auto custom_cursor = base::MakeRefCounted<BitmapCursorOzone>(
-      mojom::CursorType::kCustom, SkBitmap(), gfx::Point(),
-      kDefaultCursorScale);
+  auto custom_cursor =
+      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kCustom, SkBitmap(),
+                                         gfx::Point(), kDefaultCursorScale);
   window_->SetCursor(custom_cursor.get());
 }
 
@@ -2587,12 +2612,13 @@ TEST_P(WaylandWindowTest, DestroysCreatesPopupsOnHideShow) {
   EXPECT_TRUE(mock_surface->xdg_surface()->xdg_popup());
 }
 
-TEST_P(WaylandWindowTest, RemovesReattachesBackgroundOnHideShow) {
+TEST_P(WaylandWindowTest, ReattachesBackgroundOnShow) {
   EXPECT_TRUE(connection_->buffer_manager_host());
 
   auto interface_ptr = connection_->buffer_manager_host()->BindInterface();
-  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                  false);
+  buffer_manager_gpu_->Initialize(
+      std::move(interface_ptr), {}, false, true, false,
+      /*supports_non_backed_solid_color_buffers*/ false);
 
   // Setup wl_buffers.
   constexpr uint32_t buffer_id1 = 1;
@@ -2631,6 +2657,7 @@ TEST_P(WaylandWindowTest, RemovesReattachesBackgroundOnHideShow) {
   background->transform = gfx::OVERLAY_TRANSFORM_NONE;
   background->buffer_id = buffer_id1;
   background->surface_scale_factor = 1;
+  background->opacity = 1.f;
   overlays.push_back(std::move(background));
   buffer_manager_gpu_->CommitOverlays(window->GetWidget(), std::move(overlays));
   mock_surface->SendFrameCallback();
@@ -2639,20 +2666,20 @@ TEST_P(WaylandWindowTest, RemovesReattachesBackgroundOnHideShow) {
 
   EXPECT_NE(mock_surface->attached_buffer(), nullptr);
 
-  // Hiding window attaches a nil wl_buffer as background.
   window->Hide();
   mock_surface->SendFrameCallback();
 
   Sync();
 
-  EXPECT_EQ(mock_surface->attached_buffer(), nullptr);
-
-  mock_surface->ReleaseBuffer(mock_surface->prev_attached_buffer());
+  mock_surface->ReleaseBuffer(mock_surface->attached_buffer());
   window->Show(false);
 
   Sync();
 
   SendConfigureEvent(mock_surface->xdg_surface(), 100, 100, 2, states.get());
+
+  // Expects to receive an attach request on next frame.
+  EXPECT_CALL(*mock_surface, Attach(_, _, _)).Times(1);
 
   // Commit a frame with only the primary_plane.
   overlays.clear();
@@ -2662,6 +2689,7 @@ TEST_P(WaylandWindowTest, RemovesReattachesBackgroundOnHideShow) {
   primary->transform = gfx::OVERLAY_TRANSFORM_NONE;
   primary->buffer_id = buffer_id2;
   primary->surface_scale_factor = 1;
+  primary->opacity = 1.f;
   overlays.push_back(std::move(primary));
   buffer_manager_gpu_->CommitOverlays(window->GetWidget(), std::move(overlays));
 
@@ -3027,7 +3055,7 @@ TEST_P(WaylandWindowTest, OneWaylandSubsurface) {
   EXPECT_TRUE(mock_surface_subsurface);
   wayland_subsurface->ConfigureAndShowSurface(
       subsurface_bounds, gfx::Rect(0, 0, 640, 480) /*parent_bounds_px*/,
-      1 /*buffer_scale*/, nullptr, nullptr);
+      1.f /*buffer_scale*/, nullptr, nullptr);
   connection_->ScheduleFlush();
 
   Sync();
@@ -3105,6 +3133,40 @@ TEST_P(WaylandWindowTest, DoesNotCreateSurfaceSyncOnCommitWithoutBuffers) {
   EXPECT_THAT(window_->root_surface()->surface_sync_, nullptr);
   window_->root_surface()->Commit();
   EXPECT_THAT(window_->root_surface()->surface_sync_, nullptr);
+}
+
+TEST_P(WaylandWindowTest, StartWithMinimized) {
+  // Make sure the window is initialized to normal state from the beginning.
+  EXPECT_EQ(PlatformWindowState::kNormal, window_->GetPlatformWindowState());
+
+  ScopedWlArray states = InitializeWlArrayWithActivatedState();
+  SendConfigureEvent(xdg_surface_, 0, 0, 1, states.get());
+  Sync();
+
+  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(1);
+  window_->Minimize();
+  // The state of the window has to be already minimized.
+  EXPECT_EQ(window_->GetPlatformWindowState(), PlatformWindowState::kMinimized);
+
+  // We don't receive any state change if that does not differ from the last
+  // state.
+  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(0);
+  // It must be still the same minimized state.
+  EXPECT_EQ(window_->GetPlatformWindowState(), PlatformWindowState::kMinimized);
+  ui::PlatformWindowState state;
+  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _))
+      .WillRepeatedly(DoAll(SaveArg<0>(&state), InvokeWithoutArgs([&]() {
+                              EXPECT_EQ(state, PlatformWindowState::kMinimized);
+                            })));
+  // The window geometry has to be set to the current bounds of the window for
+  // minimized state.
+  gfx::Rect bounds = window_->GetBounds();
+  EXPECT_CALL(*xdg_surface_, SetWindowGeometry(0, 0, bounds.width(), bounds.height()));
+  // Send one additional empty configuration event for minimized state.
+  // (which means the surface is not maximized, fullscreen or activated)
+  states = ScopedWlArray();
+  SendConfigureEvent(xdg_surface_, 0, 0, 2, states.get());
+  Sync();
 }
 
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,

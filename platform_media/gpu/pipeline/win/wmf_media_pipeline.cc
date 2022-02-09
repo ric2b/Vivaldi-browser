@@ -11,9 +11,9 @@
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -361,15 +361,14 @@ base::TimeDelta WMFMediaPipeline::AudioTimestampCalculator::GetTimestamp(
         timestamp_hns * samples_per_second_ / kHundredsOfNanosecondsPerSecond;
     must_recapture_position_ = false;
   }
-  return base::TimeDelta::FromMicroseconds((frame_offset_ + frame_sum_) *
-                                           kMicrosecondsPerSecond /
-                                           samples_per_second_);
+  return base::Microseconds((frame_offset_ + frame_sum_) *
+                            kMicrosecondsPerSecond / samples_per_second_);
 }
 
 base::TimeDelta WMFMediaPipeline::AudioTimestampCalculator::GetDuration(
     int64_t frames_count) {
-  return base::TimeDelta::FromMicroseconds(
-      frames_count * kMicrosecondsPerSecond / samples_per_second_);
+  return base::Microseconds(frames_count * kMicrosecondsPerSecond /
+                            samples_per_second_);
 }
 
 void WMFMediaPipeline::AudioTimestampCalculator::UpdateFrameCounter(
@@ -396,9 +395,16 @@ void WMFMediaPipeline::Initialize(ipc_data_source::Info source_info,
                                   InitializeCB initialize_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // NOTE(pettern): All tasks must run on the same thread or there will be
-  // hangs. See VB-74757 for the consequences.
-  media_pipeline_task_runner_ = base::ThreadPool::CreateSingleThreadTaskRunner(
+  if (!platform_media_init::HasMFDemuxerSupport()) {
+    auto result = platform_media::mojom::PipelineInitResult::New();
+    result->not_available = true;
+    std::move(initialize_cb).Run(std::move(result));
+    return;
+  }
+
+  // NOTE(pettern): All tasks must run on the same thread with COM support or
+  // there will be hangs. See VB-74757 for the consequences.
+  media_pipeline_task_runner_ = base::ThreadPool::CreateCOMSTATaskRunner(
       {base::WithBaseSyncPrimitives(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::SingleThreadTaskRunnerThreadMode::DEDICATED);
@@ -467,11 +473,6 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
 
   auto result = platform_media::mojom::PipelineInitResult::New();
   do {
-    if (!platform_media_init::HasMFDemuxerSupport()) {
-      result->not_available = true;
-      break;
-    }
-
     Microsoft::WRL::ComPtr<IMFAttributes> source_reader_attributes;
     if (!CreateSourceReaderCallbackAndAttributes(ipc_source_info.mime_type,
                                                  &source_reader_attributes)) {
@@ -726,10 +727,8 @@ bool WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
       break;
     }
     case PlatformStreamType::kVideo: {
-      decoding_buffer->set_timestamp(
-          base::TimeDelta::FromMicroseconds(timestamp_hns / 10));
-      decoding_buffer->set_duration(
-          base::TimeDelta::FromMicroseconds(duration_hns / 10));
+      decoding_buffer->set_timestamp(base::Microseconds(timestamp_hns / 10));
+      decoding_buffer->set_duration(base::Microseconds(duration_hns / 10));
       break;
     }
   }
@@ -1216,7 +1215,7 @@ base::TimeDelta WMFMediaPipeline::ThreadedImpl::GetDuration() {
 
   // Have to divide duration64 by ten to convert from
   // hundreds of nanoseconds (WMF style) to microseconds.
-  return base::TimeDelta::FromMicroseconds(duration_int64 / 10);
+  return base::Microseconds(duration_int64 / 10);
 }
 
 int WMFMediaPipeline::ThreadedImpl::GetBitrate(base::TimeDelta duration) {

@@ -18,9 +18,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_PREFERENCES_EDITOR
 
@@ -33,14 +30,17 @@
 
 wxString wxStockPreferencesPage::GetName() const
 {
+    wxString name;
     switch ( m_kind )
     {
         case Kind_General:
-            return _("General");
+            name = _("General");
+            break;
         case Kind_Advanced:
-            return _("Advanced");
+            name = _("Advanced");
+            break;
     }
-    return wxString(); // silence compiler warning
+    return name;
 }
 
 wxPreferencesEditor::wxPreferencesEditor(const wxString& title)

@@ -177,12 +177,13 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // A context menu should be shown, to be built using the context information
   // provided in the supplied params.
   virtual void ShowContextMenu(
-      RenderFrameHost* render_frame_host,
+      RenderFrameHost& render_frame_host,
       mojo::PendingAssociatedRemote<blink::mojom::ContextMenuClient>
           context_menu_client,
       const ContextMenuParams& params) {}
 
   // A JavaScript alert, confirmation or prompt dialog should be shown.
+  // Will only be called for active frames belonging to a primary page.
   virtual void RunJavaScriptDialog(RenderFrameHostImpl* render_frame_host,
                                    const std::u16string& message,
                                    const std::u16string& default_prompt,
@@ -190,6 +191,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                                    bool disable_third_party_subframe_suppresion,
                                    JavaScriptDialogCallback callback) {}
 
+  // Will only be called for active frames belonging to a primary page.
   virtual void RunBeforeUnloadConfirm(RenderFrameHostImpl* render_frame_host,
                                       bool is_reload,
                                       JavaScriptDialogCallback callback) {}
@@ -298,10 +300,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 #endif
 
   // Returns whether entering fullscreen with EnterFullscreenMode() is allowed.
-  virtual bool CanEnterFullscreenMode();
-
-  // Returns whether this frame is already fullscreen.
-  virtual bool HasEnteredFullscreenMode();
+  virtual bool CanEnterFullscreenMode(
+      RenderFrameHostImpl* requesting_frame,
+      const blink::mojom::FullscreenOptions& options);
 
   // Notification that the frame with the given host wants to enter fullscreen
   // mode. Must only be called if CanEnterFullscreenMode returns true.
@@ -446,9 +447,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   GetJavaRenderFrameHostDelegate();
 #endif
 
-  // Notified that the render frame started loading a subresource.
-  virtual void SubresourceResponseStarted() {}
-
   // Notified that the render finished loading a subresource for the frame
   // associated with |render_frame_host|.
   virtual void ResourceLoadComplete(
@@ -545,9 +543,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       const std::string& data,
       IsClipboardPasteContentAllowedCallback callback);
 
-  // Notified when the main frame adjusts the page scale.
-  virtual void OnPageScaleFactorChanged(RenderFrameHostImpl* source,
-                                        float page_scale_factor) {}
+  // Notified when the main frame of `source` adjusts the page scale.
+  virtual void OnPageScaleFactorChanged(PageImpl& source) {}
 
   // Binds a ScreenOrientation object associated to |render_frame_host|.
   virtual void BindScreenOrientation(

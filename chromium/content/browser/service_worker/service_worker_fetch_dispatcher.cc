@@ -12,6 +12,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -235,6 +236,8 @@ EventType RequestDestinationToEventType(
       return EventType::FETCH_MAIN_FRAME;
     case network::mojom::RequestDestination::kIframe:
       return EventType::FETCH_SUB_FRAME;
+    case network::mojom::RequestDestination::kFencedframe:
+      return EventType::FETCH_FENCED_FRAME;
     case network::mojom::RequestDestination::kSharedWorker:
       return EventType::FETCH_SHARED_WORKER;
     case network::mojom::RequestDestination::kServiceWorker:
@@ -433,7 +436,7 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
   mojo::Receiver<blink::mojom::ServiceWorkerFetchResponseCallback> receiver_;
   base::WeakPtr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
   // Owns |this| via pending_requests_.
-  ServiceWorkerVersion* version_;
+  raw_ptr<ServiceWorkerVersion> version_;
   // Must be set to a non-nullopt value before the corresponding mojo
   // handle is passed to the other end (i.e. before any of OnResponse*
   // is called).
@@ -460,6 +463,9 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
         url_loader_(std::move(url_loader)),
         url_loader_client_(std::move(url_loader_client)) {}
 
+  URLLoaderAssets(const URLLoaderAssets&) = delete;
+  URLLoaderAssets& operator=(const URLLoaderAssets&) = delete;
+
   void MaybeReportToDevTools(std::pair<int, int> worker_id,
                              int fetch_event_id) {
     url_loader_client_->MaybeReportToDevTools(worker_id, fetch_event_id);
@@ -478,8 +484,6 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
 
   // Both:
   std::unique_ptr<DelegatingURLLoaderClient> url_loader_client_;
-
-  DISALLOW_COPY_AND_ASSIGN(URLLoaderAssets);
 };
 
 ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
@@ -718,7 +722,8 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
     int frame_tree_node_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (destination_ != network::mojom::RequestDestination::kDocument &&
-      destination_ != network::mojom::RequestDestination::kIframe) {
+      destination_ != network::mojom::RequestDestination::kIframe &&
+      destination_ != network::mojom::RequestDestination::kFencedframe) {
     return false;
   }
   if (!version_->navigation_preload_state().enabled)
@@ -745,7 +750,8 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
     resource_request.resource_type = static_cast<int>(
         blink::mojom::ResourceType::kNavigationPreloadMainFrame);
   } else {
-    DCHECK_EQ(network::mojom::RequestDestination::kIframe, destination_);
+    DCHECK(destination_ == network::mojom::RequestDestination::kIframe ||
+           destination_ == network::mojom::RequestDestination::kFencedframe);
     resource_request.resource_type = static_cast<int>(
         blink::mojom::ResourceType::kNavigationPreloadSubFrame);
   }

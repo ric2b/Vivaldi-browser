@@ -7,62 +7,69 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/no_destructor.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/test/gmock_callback_support.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/reporting/client/mock_report_queue.h"
 #include "components/reporting/client/report_queue.h"
 #include "components/reporting/client/report_queue_configuration.h"
 #include "components/reporting/client/report_queue_provider.h"
+#include "components/reporting/storage/test_storage_module.h"
+#include "report_queue_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-using testing::_;
-using testing::Return;
+using ::base::test::RunOnceCallback;
+using ::testing::_;
+using ::testing::NiceMock;
+using ::testing::Return;
 
 namespace reporting {
 
-MockReportQueueProvider::MockReportQueueProvider() = default;
+MockReportQueueProvider::MockReportQueueProvider()
+    : ReportQueueProvider(base::BindRepeating(
+          [](OnStorageModuleCreatedCallback storage_created_cb) {
+            std::move(storage_created_cb)
+                .Run(base::MakeRefCounted<test::TestStorageModule>());
+          })) {}
 MockReportQueueProvider::~MockReportQueueProvider() = default;
 
-ReportQueueProvider::InitializingContext*
-MockReportQueueProvider::InstantiateInitializingContext(
-    InitCompleteCallback init_complete_cb,
-    scoped_refptr<InitializationStateTracker> init_state_tracker) {
-  return new MockInitializingContext(std::move(init_complete_cb),
-                                     init_state_tracker, this);
-}
-
 void MockReportQueueProvider::ExpectCreateNewQueueAndReturnNewMockQueue(
-    int times) {
-  EXPECT_CALL(*this, CreateNewQueue(_))
+    size_t times) {
+  EXPECT_CALL(*this, CreateNewQueue(_, _))
       .Times(times)
-      .WillRepeatedly([](std::unique_ptr<ReportQueueConfiguration> config) {
-        return StatusOr<std::unique_ptr<ReportQueue>>(
-            std::make_unique<MockReportQueue>());
+      .WillRepeatedly([](std::unique_ptr<ReportQueueConfiguration> config,
+                         CreateReportQueueCallback cb) {
+        std::move(cb).Run(std::make_unique<MockReportQueue>());
       });
 }
 
-MockReportQueueProvider::MockInitializingContext::MockInitializingContext(
-    InitCompleteCallback init_complete_cb,
-    scoped_refptr<InitializationStateTracker> init_state_tracker,
-    MockReportQueueProvider* provider)
-    : ReportQueueProvider::InitializingContext(std::move(init_complete_cb),
-                                               init_state_tracker),
-      provider_(provider) {
-  DCHECK(provider_);
-}
+void MockReportQueueProvider::
+    ExpectCreateNewSpeculativeQueueAndReturnNewMockQueue(size_t times) {
+  // Mock internals so we do not unnecessarily create a new report queue.
+  EXPECT_CALL(*this, CreateNewQueue(_, _))
+      .Times(times)
+      .WillRepeatedly(
+          RunOnceCallback<1>(std::unique_ptr<ReportQueue>(nullptr)));
 
-MockReportQueueProvider::MockInitializingContext::~MockInitializingContext() =
-    default;
+  EXPECT_CALL(*this, CreateNewSpeculativeQueue())
+      .Times(times)
+      .WillRepeatedly([]() {
+        auto report_queue =
+            std::unique_ptr<MockReportQueue, base::OnTaskRunnerDeleter>(
+                new NiceMock<MockReportQueue>(),
+                base::OnTaskRunnerDeleter(
+                    base::ThreadPool::CreateSequencedTaskRunner({})));
 
-void MockReportQueueProvider::MockInitializingContext::OnStart() {
-  // Hand it over to the completion.
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(&InitializingContext::Complete, base::Unretained(this),
-                     Status::StatusOK()));
-}
+        // Mock PrepareToAttachActualQueue so we do not attempt to replace
+        // the mocked report queue
+        EXPECT_CALL(*report_queue, PrepareToAttachActualQueue()).WillOnce([]() {
+          return base::DoNothing();
+        });
 
-void MockReportQueueProvider::MockInitializingContext::OnCompleted() {
-  provider_->InitOnCompletedCalled();
+        return report_queue;
+      });
 }
 
 }  // namespace reporting

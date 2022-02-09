@@ -6,7 +6,6 @@
 #include <objidl.h>
 #include <wrl/implements.h>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "ui/base/dragdrop/drag_source_win.h"
 

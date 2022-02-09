@@ -44,6 +44,7 @@
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -696,7 +697,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
   EXPECT_EQ(1u, GetPermissionRequestManager()->Requests().size());
 
   // Cleanup remaining request. And check that this was the last request.
-  GetPermissionRequestManager()->Closing();
+  GetPermissionRequestManager()->Dismiss();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, GetPermissionRequestManager()->Requests().size());
 }
@@ -720,7 +721,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
   auto disposition_from_prompt_bubble =
       manager->view_for_testing()->GetPromptDisposition();
 
-  manager->Closing();
+  manager->Dismiss();
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(disposition.has_value());
@@ -755,7 +756,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
 
   //  DCHECK failure if Closing executed on HIDDEN PermissionRequestManager.
   manager->OnVisibilityChanged(content::Visibility::VISIBLE);
-  manager->Closing();
+  manager->Dismiss();
   base::RunLoop().RunUntilIdle();
 }
 
@@ -799,7 +800,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
                                               &request_quiet);
 
     bubble_factory()->WaitForPermissionBubble();
-    GetPermissionRequestManager()->Closing();
+    GetPermissionRequestManager()->Dismiss();
     base::RunLoop().RunUntilIdle();
 
     if (!test.expected_message) {
@@ -841,7 +842,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
   EXPECT_EQ(1u, GetPermissionRequestManager()->Requests().size());
 
   // Close first request.
-  GetPermissionRequestManager()->Closing();
+  GetPermissionRequestManager()->Dismiss();
   base::RunLoop().RunUntilIdle();
 
   if (base::FeatureList::IsEnabled(permissions::features::kPermissionChip)) {
@@ -854,7 +855,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
   EXPECT_EQ(1u, GetPermissionRequestManager()->Requests().size());
 
   // Close second request. No more requests pending
-  GetPermissionRequestManager()->Closing();
+  GetPermissionRequestManager()->Dismiss();
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(request1.finished());
@@ -884,7 +885,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithBackForwardCacheBrowserTest,
   EXPECT_EQ(0, bubble_factory()->show_count());
   EXPECT_EQ(0, bubble_factory()->TotalRequestCount());
   // Page gets evicted if bubble would have been shown.
-  rfh_a.WaitUntilRenderFrameDeleted();
+  ASSERT_TRUE(rfh_a.WaitUntilRenderFrameDeleted());
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithBackForwardCacheBrowserTest,
@@ -928,10 +929,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithBackForwardCacheBrowserTest,
   EXPECT_TRUE(req_a_1.cancelled());
 
   // Page gets evicted if bubble would have been shown.
-  rfh_a.WaitUntilRenderFrameDeleted();
+  ASSERT_TRUE(rfh_a.WaitUntilRenderFrameDeleted());
 
   // Cleanup before we delete the requests.
-  GetPermissionRequestManager()->Closing();
+  GetPermissionRequestManager()->Dismiss();
 }
 
 class PermissionRequestManagerOneTimeGeolocationPermissionBrowserTest
@@ -1127,6 +1128,73 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithPrerenderingTest,
   // Primary main frame navigation should cancel pending permission requests.
   EXPECT_TRUE(request_1.cancelled());
   EXPECT_TRUE(request_2.cancelled());
+}
+
+class PermissionRequestManagerWithFencedFrameTest
+    : public PermissionRequestManagerBrowserTest {
+ public:
+  PermissionRequestManagerWithFencedFrameTest() = default;
+  ~PermissionRequestManagerWithFencedFrameTest() override = default;
+
+  PermissionRequestManagerWithFencedFrameTest(
+      const PermissionRequestManagerWithFencedFrameTest&) = delete;
+  PermissionRequestManagerWithFencedFrameTest& operator=(
+      const PermissionRequestManagerWithFencedFrameTest&) = delete;
+
+ protected:
+  content::test::FencedFrameTestHelper& fenced_frame_test_helper() {
+    return fenced_frame_helper_;
+  }
+
+ private:
+  content::test::FencedFrameTestHelper fenced_frame_helper_;
+};
+
+IN_PROC_BROWSER_TEST_F(PermissionRequestManagerWithFencedFrameTest,
+                       GetCurrentPosition) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Load a fenced frame.
+  GURL fenced_frame_url =
+      embedded_test_server()->GetURL("/fenced_frames/title1.html");
+  content::RenderFrameHost* fenced_frame_host =
+      fenced_frame_test_helper().CreateFencedFrame(web_contents->GetMainFrame(),
+                                                   fenced_frame_url);
+  ASSERT_TRUE(fenced_frame_host);
+
+  const char kQueryPermission[] = R"(
+      (async () => {
+        const status = await navigator.permissions.query({name: 'geolocation'});
+        return status.state;
+      })();
+    )";
+
+  // The result of query 'geolocation' permission in the fenced frame should be
+  // 'denied'.
+  EXPECT_EQ("denied", content::EvalJs(fenced_frame_host, kQueryPermission));
+
+  const char kQueryCurrentPosition[] = R"(
+      (async () => {
+        return await new Promise(resolve => {
+          navigator.geolocation.getCurrentPosition(
+              () => resolve('granted'), () => resolve('denied'));
+        });
+      })();
+    )";
+
+  bubble_factory()->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ONCE);
+
+  // The getCurrentPosition() call in the fenced frame should be denied.
+  EXPECT_EQ("denied",
+            content::EvalJs(fenced_frame_host, kQueryCurrentPosition));
+  // The permission prompt should not be shown.
+  EXPECT_EQ(0, bubble_factory()->TotalRequestCount());
 }
 
 }  // anonymous namespace

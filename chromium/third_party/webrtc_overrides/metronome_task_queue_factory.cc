@@ -20,6 +20,23 @@
 
 namespace blink {
 
+const base::Feature kWebRtcMetronomeTaskQueue{
+    "WebRtcMetronomeTaskQueue", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<base::TimeDelta> kWebRtcMetronomeTaskQueueTick{
+    &kWebRtcMetronomeTaskQueue, "tick",
+    // 64 Hz default value for the WebRtcMetronomeTaskQueue experiment.
+    base::Hertz(64)};
+
+const base::FeatureParam<bool> kWebRtcMetronomeTaskQueueExcludePacer{
+    &kWebRtcMetronomeTaskQueue, "exclude_pacer", /*default_value=*/true};
+
+const base::FeatureParam<bool> kWebRtcMetronomeTaskQueueExcludeDecoders{
+    &kWebRtcMetronomeTaskQueue, "exclude_decoders", /*default_value=*/true};
+
+const base::FeatureParam<bool> kWebRtcMetronomeTaskQueueExcludeMisc{
+    &kWebRtcMetronomeTaskQueue, "exclude_misc", /*default_value=*/false};
+
 namespace {
 
 class WebRtcMetronomeTaskQueue : public webrtc::TaskQueueBase {
@@ -35,13 +52,13 @@ class WebRtcMetronomeTaskQueue : public webrtc::TaskQueueBase {
 
  private:
   struct DelayedTaskInfo {
-    DelayedTaskInfo(base::TimeTicks ready_time, size_t task_id);
+    DelayedTaskInfo(base::TimeTicks ready_time, uint64_t task_id);
 
     // Used for std::map<> ordering.
     bool operator<(const DelayedTaskInfo& other) const;
 
     base::TimeTicks ready_time;
-    size_t task_id;
+    uint64_t task_id;
   };
 
   // Runs a single PostTask-task.
@@ -57,7 +74,7 @@ class WebRtcMetronomeTaskQueue : public webrtc::TaskQueueBase {
   base::Lock lock_;
   // The next delayed task gets assigned this ID which then increments. Used for
   // task execution ordering, see |delayed_tasks_| comment.
-  size_t next_task_id_ GUARDED_BY(lock_) = 0u;
+  uint64_t next_task_id_ GUARDED_BY(lock_) = 0;
   // The map's order ensures tasks are ordered by desired execution time. If two
   // tasks have the same |ready_time| then they are ordered by the ID, i.e. the
   // order they were posted.
@@ -67,7 +84,7 @@ class WebRtcMetronomeTaskQueue : public webrtc::TaskQueueBase {
 
 WebRtcMetronomeTaskQueue::DelayedTaskInfo::DelayedTaskInfo(
     base::TimeTicks ready_time,
-    size_t task_id)
+    uint64_t task_id)
     : ready_time(std::move(ready_time)), task_id(task_id) {}
 
 bool WebRtcMetronomeTaskQueue::DelayedTaskInfo::operator<(
@@ -172,13 +189,25 @@ class WebrtcMetronomeTaskQueueFactory final : public webrtc::TaskQueueFactory {
   explicit WebrtcMetronomeTaskQueueFactory(
       scoped_refptr<MetronomeSource> metronome_source)
       : metronome_source_(std::move(metronome_source)),
-        high_priority_task_queue_factory_(CreateWebRtcTaskQueueFactory()) {}
+        high_priority_task_queue_factory_(CreateWebRtcTaskQueueFactory()),
+        exclude_pacer_(kWebRtcMetronomeTaskQueueExcludePacer.Get()),
+        exclude_decoders_(kWebRtcMetronomeTaskQueueExcludeDecoders.Get()),
+        exclude_misc_(kWebRtcMetronomeTaskQueueExcludeMisc.Get()) {}
 
   std::unique_ptr<webrtc::TaskQueueBase, webrtc::TaskQueueDeleter>
   CreateTaskQueue(absl::string_view name, Priority priority) const override {
-    if (priority == webrtc::TaskQueueFactory::Priority::HIGH) {
-      return high_priority_task_queue_factory_->CreateTaskQueue(
-          name, webrtc::TaskQueueFactory::Priority::HIGH);
+    bool use_metronome;
+    if (name.compare("TaskQueuePacedSender") == 0) {
+      use_metronome = !exclude_pacer_;
+    } else if (name.compare("DecodingQueue") == 0) {
+      use_metronome = !exclude_decoders_;
+    } else if (priority == webrtc::TaskQueueFactory::Priority::HIGH) {
+      use_metronome = false;
+    } else {
+      use_metronome = !exclude_misc_;
+    }
+    if (!use_metronome) {
+      return high_priority_task_queue_factory_->CreateTaskQueue(name, priority);
     }
     return std::unique_ptr<webrtc::TaskQueueBase, webrtc::TaskQueueDeleter>(
         new WebRtcMetronomeTaskQueue(metronome_source_));
@@ -190,6 +219,9 @@ class WebrtcMetronomeTaskQueueFactory final : public webrtc::TaskQueueFactory {
   // the metronome, i.e. at higher timer precision.
   const std::unique_ptr<webrtc::TaskQueueFactory>
       high_priority_task_queue_factory_;
+  const bool exclude_pacer_;
+  const bool exclude_decoders_;
+  const bool exclude_misc_;
 };
 
 }  // namespace

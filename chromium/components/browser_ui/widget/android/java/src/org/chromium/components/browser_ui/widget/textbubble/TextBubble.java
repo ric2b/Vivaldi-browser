@@ -27,6 +27,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.R;
 import org.chromium.ui.widget.AnchoredPopupWindow;
 import org.chromium.ui.widget.RectProvider;
@@ -327,11 +328,10 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
         mBubbleDrawable.setShowArrow(showArrow);
         // Set predefined styles for the TextBubble.
         if (mInverseColor) {
-            mBubbleDrawable.setBubbleColor(ApiCompatibilityUtils.getColor(
-                    mContext.getResources(), R.color.default_bg_color));
+            mBubbleDrawable.setBubbleColor(SemanticColorUtils.getDefaultBgColor(mContext));
         } else {
-            mBubbleDrawable.setBubbleColor(ApiCompatibilityUtils.getColor(
-                    mContext.getResources(), R.color.default_control_color_active));
+            mBubbleDrawable.setBubbleColor(
+                    SemanticColorUtils.getDefaultControlColorActive(mContext));
         }
         return mBubbleDrawable;
     }
@@ -485,7 +485,11 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
             if (mSnoozeRunnable != null || mSnoozeDismissRunnable != null) {
                 int paddingStart = mContext.getResources().getDimensionPixelSize(
                         R.dimen.text_bubble_with_snooze_padding_horizontal);
-                view.setPadding(paddingStart, view.getPaddingTop(), 0, view.getPaddingBottom());
+                int paddingEnd = mContext.getResources().getDimensionPixelSize(
+                        R.dimen.text_bubble_with_snooze_padding_end);
+                TextView text = view.findViewById(R.id.message);
+                text.setPadding(
+                        paddingStart, text.getPaddingTop(), paddingEnd, text.getPaddingBottom());
             }
 
             if (mSnoozeRunnable != null) {
@@ -510,8 +514,7 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
         ImageView imageView = view.findViewById(R.id.image);
         imageView.setImageDrawable(mImageDrawable);
         if (mInverseColor) {
-            imageView.setColorFilter(ApiCompatibilityUtils.getColor(
-                    mContext.getResources(), R.color.default_control_color_active));
+            imageView.setColorFilter(SemanticColorUtils.getDefaultControlColorActive(mContext));
         }
         setText(view.findViewById(R.id.message));
         return view;
@@ -526,5 +529,15 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
             ApiCompatibilityUtils.setTextAppearance(
                     view, R.style.TextAppearance_TextMediumThick_Blue);
         }
+    }
+
+    /** For testing only, get the list of active text bubbles. */
+    public static Set<TextBubble> getTextBubbleSetForTesting() {
+        return sBubbles;
+    }
+
+    /** For testing only, get the content view of a TextBubble. */
+    public View getTextBubbleContentViewForTesting() {
+        return mContentView;
     }
 }

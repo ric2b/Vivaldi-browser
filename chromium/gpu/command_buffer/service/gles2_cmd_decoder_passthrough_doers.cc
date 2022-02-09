@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
 #include <memory>
@@ -292,7 +293,7 @@ class ScopedUnpackStateButAlignmentReset {
   }
 
  private:
-  gl::GLApi* api_;
+  raw_ptr<gl::GLApi> api_;
   GLint skip_pixels_ = 0;
   GLint skip_rows_ = 0;
   GLint skip_images_ = 0;
@@ -318,7 +319,7 @@ class ScopedPackStateRowLengthReset {
   }
 
  private:
-  gl::GLApi* api_;
+  raw_ptr<gl::GLApi> api_;
   GLint row_length_ = 0;
 };
 
@@ -4867,7 +4868,9 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleOverlayPlaneCHROMIUM(
               gfx::Rect(bounds_x, bounds_y, bounds_width, bounds_height),
               gfx::RectF(uv_x, uv_y, uv_width, uv_height), enable_blend,
               /*damage_rect=*/gfx::Rect(), /*opacity=*/1.0f,
-              gfx::OverlayPriorityHint::kNone))) {
+              gfx::OverlayPriorityHint::kNone,
+              /*rounded_corners*/ gfx::RRectF(), image->color_space(),
+              /*hdr_metadata=*/absl::nullopt))) {
     InsertError(GL_INVALID_OPERATION, "failed to schedule overlay");
     return error::kNoError;
   }
@@ -5261,17 +5264,6 @@ error::Error GLES2DecoderPassthroughImpl::DoDestroyGpuFenceCHROMIUM(
     return error::kUnknownCommand;
   if (!GetGpuFenceManager()->RemoveGpuFence(gpu_fence_id))
     return error::kInvalidArguments;
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderPassthroughImpl::DoUnpremultiplyAndDitherCopyCHROMIUM(
-    GLuint src_texture,
-    GLuint dst_texture,
-    GLint x,
-    GLint y,
-    GLsizei width,
-    GLsizei height) {
-  NOTIMPLEMENTED();
   return error::kNoError;
 }
 

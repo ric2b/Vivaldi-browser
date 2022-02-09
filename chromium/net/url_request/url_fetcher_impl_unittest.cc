@@ -18,15 +18,15 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
@@ -212,7 +212,7 @@ class FetcherTestURLRequestContext : public TestURLRequestContext {
   MockHostResolver* mock_resolver() { return mock_resolver_; }
 
  private:
-  MockHostResolver* mock_resolver_;
+  raw_ptr<MockHostResolver> mock_resolver_;
 };
 
 class FetcherTestURLRequestContextGetter : public URLRequestContextGetter {

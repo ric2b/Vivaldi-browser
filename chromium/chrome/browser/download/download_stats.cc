@@ -87,7 +87,7 @@ void RecordDownloadStartPerProfileType(Profile* profile) {
       profile_metrics::GetBrowserProfileType(profile));
 }
 
-#ifdef OS_ANDROID
+#if defined(OS_ANDROID)
 // Records whether the download dialog is shown to the user.
 void RecordDownloadPromptStatus(DownloadPromptStatus status) {
   base::UmaHistogramEnumeration("MobileDownload.DownloadPromptStatus", status,
@@ -99,13 +99,13 @@ void RecordDownloadLaterPromptStatus(DownloadLaterPromptStatus status) {
                                 status);
 }
 
-#endif  // OS_ANDROID
+#endif  // defined(OS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 void RecordDownloadNotificationSuppressed() {
   base::UmaHistogramBoolean("Download.Notification.Suppressed", true);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // defined(OS_CHROMEOS)
 
 DownloadShelfContextMenuAction DownloadCommandToShelfAction(
     DownloadCommands::Command download_command,

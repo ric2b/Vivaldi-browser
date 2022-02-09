@@ -8,7 +8,6 @@
 #include <set>
 #include <string>
 
-#include "base/macros.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/note_taking_helper.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
@@ -39,7 +38,7 @@ class StylusHandler : public ::settings::SettingsPageUIHandler,
   void OnJavascriptAllowed() override;
   void OnJavascriptDisallowed() override;
 
-  // chromeos::NoteTakingHelper::Observer implementation.
+  // NoteTakingHelper::Observer implementation.
   void OnAvailableNoteTakingAppsUpdated() override;
   void OnPreferredNoteTakingAppUpdated(Profile* profile) override;
 

@@ -1446,6 +1446,7 @@ class raw_hash_set {
   void prefetch(const key_arg<K>& key) const {
     (void)key;
 #if defined(__GNUC__)
+    prefetch_heap_block();
     auto seq = probe(ctrl_, hash_ref()(key), capacity_);
     __builtin_prefetch(static_cast<const void*>(ctrl_ + seq.offset()));
     __builtin_prefetch(static_cast<const void*>(slots_ + seq.offset()));
@@ -1477,6 +1478,7 @@ class raw_hash_set {
   }
   template <class K = key_type>
   iterator find(const key_arg<K>& key) {
+    prefetch_heap_block();
     return find(key, hash_ref()(key));
   }
 
@@ -1486,6 +1488,7 @@ class raw_hash_set {
   }
   template <class K = key_type>
   const_iterator find(const key_arg<K>& key) const {
+    prefetch_heap_block();
     return find(key, hash_ref()(key));
   }
 
@@ -1640,7 +1643,7 @@ class raw_hash_set {
     // bound more carefully.
     if (std::is_same<SlotAlloc, std::allocator<slot_type>>::value &&
         slots_ == nullptr) {
-      infoz() = Sample();
+      infoz() = Sample(sizeof(slot_type));
     }
 
     char* mem = static_cast<char*>(Allocate<alignof(slot_type)>(
@@ -1856,6 +1859,7 @@ class raw_hash_set {
  protected:
   template <class K>
   std::pair<size_t, bool> find_or_prepare_insert(const K& key) {
+    prefetch_heap_block();
     auto hash = hash_ref()(key);
     auto seq = probe(ctrl_, hash, capacity_);
     while (true) {
@@ -1918,6 +1922,15 @@ class raw_hash_set {
 
   size_t& growth_left() { return settings_.template get<0>(); }
 
+  void prefetch_heap_block() const {
+    // Prefetch the heap-allocated memory region to resolve potential TLB
+    // misses.  This is intended to overlap with execution of calculating the
+    // hash for a key.
+#if defined(__GNUC__)
+    __builtin_prefetch(static_cast<const void*>(ctrl_), 0, 1);
+#endif  // __GNUC__
+  }
+
   HashtablezInfoHandle& infoz() { return settings_.template get<1>(); }
 
   hasher& hash_ref() { return settings_.template get<2>(); }
@@ -1945,7 +1958,9 @@ class raw_hash_set {
 
 // Erases all elements that satisfy the predicate `pred` from the container `c`.
 template <typename P, typename H, typename E, typename A, typename Predicate>
-void EraseIf(Predicate& pred, raw_hash_set<P, H, E, A>* c) {
+typename raw_hash_set<P, H, E, A>::size_type EraseIf(
+    Predicate& pred, raw_hash_set<P, H, E, A>* c) {
+  const auto initial_size = c->size();
   for (auto it = c->begin(), last = c->end(); it != last;) {
     if (pred(*it)) {
       c->erase(it++);
@@ -1953,6 +1968,7 @@ void EraseIf(Predicate& pred, raw_hash_set<P, H, E, A>* c) {
       ++it;
     }
   }
+  return initial_size - c->size();
 }
 
 namespace hashtable_debug_internal {

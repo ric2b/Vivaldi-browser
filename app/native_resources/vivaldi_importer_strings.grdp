@@ -49,4 +49,7 @@
   <message name="IDS_OPIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
     Sadly, your Opera 15+ settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera 15+ windows. Then click Continue.
   </message>
+  <message name="IDS_IMPORT_FROM_THUNDERBIRD" desc="browser combo box: Thunderbird email">
+    Thunderbird
+  </message>
 </grit-part>

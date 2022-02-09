@@ -14,8 +14,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/component_updater/autofill_regex_component_installer.h"
+#include "chrome/browser/component_updater/chrome_client_side_phishing_component_installer.h"
 #include "chrome/browser/component_updater/chrome_origin_trials_component_installer.h"
-#include "chrome/browser/component_updater/client_side_phishing_component_installer.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/crowd_deny_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
@@ -30,7 +30,6 @@
 #include "chrome/browser/component_updater/trust_token_key_commitments_component_installer.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/pref_names.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/crl_set_remover.h"
 #include "components/component_updater/installer_policies/autofill_states_component_installer.h"
@@ -75,10 +74,6 @@
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
 #endif  // BUILDFLAG(ENABLE_NACL)
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-#include "chrome/browser/component_updater/pepper_flash_component_installer.h"
-#endif
-
 #if BUILDFLAG(ENABLE_VR)
 #include "chrome/browser/component_updater/vr_assets_component_installer.h"
 #endif
@@ -99,9 +94,7 @@
 
 namespace component_updater {
 
-void RegisterComponentsForUpdate(bool is_off_the_record_profile,
-                                 PrefService* profile_prefs,
-                                 const base::FilePath& profile_path) {
+void RegisterComponentsForUpdate() {
   auto* const cus = g_browser_process->component_updater();
 
 #if defined(OS_WIN)
@@ -110,11 +103,6 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
   // TODO(crbug.com/687231): Implement the Improved component on Mac, etc.
   RegisterRecoveryComponent(cus, g_browser_process->local_state());
 #endif  // defined(OS_WIN)
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // TODO(crbug.com/1069814): Remove after 2021-10-01.
-  CleanUpPepperFlashComponent(profile_path);
-#endif
 
 #if BUILDFLAG(ENABLE_MEDIA_FOUNDATION_WIDEVINE_CDM)
   RegisterMediaFoundationWidevineCdmComponent(cus);

@@ -8,7 +8,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {setScanServiceForTesting} from 'chrome://scanning/mojo_interface_provider.js';
 import {MAX_NUM_SAVED_SCANNERS, ScannerArr, ScannerSetting, ScanSettings, StartMultiPageScanResponse} from 'chrome://scanning/scanning_app_types.js';
-import {tokenToString} from 'chrome://scanning/scanning_app_util.js';
+import {getColorModeString, getPageSizeString, tokenToString} from 'chrome://scanning/scanning_app_util.js';
 import {ScanningBrowserProxyImpl} from 'chrome://scanning/scanning_browser_proxy.js';
 
 import {assertArrayEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
@@ -52,8 +52,16 @@ const SourceType = {
 };
 
 const firstPageSizes = [PageSize.A4, PageSize.Letter, PageSize.Max];
+const firstColorModes = [ColorMode.BLACK_AND_WHITE, ColorMode.COLOR];
+const firstResolutions = [75, 100, 300];
 
 const secondPageSizes = [PageSize.A4, PageSize.Max];
+const secondColorModes = [ColorMode.BLACK_AND_WHITE, ColorMode.GRAYSCALE];
+const secondResolutions = [150, 600];
+
+const thirdPageSizes = [PageSize.Max];
+const thirdColorModes = [ColorMode.BLACK_AND_WHITE];
+const thirdResolutions = [75, 200];
 
 const firstScannerId =
     /** @type {!mojoBase.mojom.UnguessableToken} */ ({high: 0, low: 1});
@@ -65,20 +73,24 @@ const secondScannerName = 'Scanner 2';
 
 const firstCapabilities = {
   sources: [
-    createScannerSource(SourceType.ADF_DUPLEX, ADF_DUPLEX, firstPageSizes),
-    createScannerSource(SourceType.FLATBED, PLATEN, firstPageSizes),
-  ],
-  colorModes: [ColorMode.BLACK_AND_WHITE, ColorMode.COLOR],
-  resolutions: [75, 100, 300]
+    createScannerSource(
+        SourceType.ADF_DUPLEX, ADF_DUPLEX, firstPageSizes, firstColorModes,
+        firstResolutions),
+    createScannerSource(
+        SourceType.FLATBED, PLATEN, secondPageSizes, firstColorModes,
+        firstResolutions),
+  ]
 };
 
 const secondCapabilities = {
   sources: [
-    createScannerSource(SourceType.ADF_DUPLEX, ADF_DUPLEX, secondPageSizes),
-    createScannerSource(SourceType.ADF_SIMPLEX, ADF_SIMPLEX, secondPageSizes),
-  ],
-  colorModes: [ColorMode.BLACK_AND_WHITE, ColorMode.GRAYSCALE],
-  resolutions: [150, 600]
+    createScannerSource(
+        SourceType.ADF_DUPLEX, ADF_DUPLEX, thirdPageSizes, thirdColorModes,
+        thirdResolutions),
+    createScannerSource(
+        SourceType.ADF_SIMPLEX, ADF_SIMPLEX, secondPageSizes, secondColorModes,
+        secondResolutions),
+  ]
 };
 
 /** @implements {ash.scanning.mojom.ScanServiceInterface} */
@@ -570,9 +582,15 @@ export function scanningAppTest() {
    * @return {!Promise}
    */
   function getScannerCapabilities() {
-    return fakeScanService_.whenCalled('getScannerCapabilities').then(() => {
-      return waitAfterNextRender(/** @type {!HTMLElement} */ (scanningApp));
-    });
+    return fakeScanService_.whenCalled('getScannerCapabilities')
+        .then(() => {
+          return waitAfterNextRender(/** @type {!HTMLElement} */ (scanningApp));
+        })
+        .then(() => {
+          // Need to wait for the app to render again when the Source type is
+          // selected from saved scan settings.
+          return waitAfterNextRender(/** @type {!HTMLElement} */ (scanningApp));
+        });
   }
 
   /**
@@ -639,10 +657,10 @@ export function scanningAppTest() {
           assertEquals(
               ColorMode.COLOR.toString(), scanningApp.selectedColorMode);
           assertEquals(
-              firstCapabilities.sources[0].pageSizes[1].toString(),
+              firstCapabilities.sources[1].pageSizes[0].toString(),
               scanningApp.selectedPageSize);
           assertEquals(
-              firstCapabilities.resolutions[0].toString(),
+              firstCapabilities.sources[1].resolutions[0].toString(),
               scanningApp.selectedResolution);
 
           // Before the scan button is clicked, the settings and scan button
@@ -1474,6 +1492,69 @@ export function scanningAppTest() {
         });
   });
 
+  // Verify the page size, color, and resolution dropdowns contain the correct
+  // elements when each source is selected.
+  test('SourceChangeUpdatesDropdowns', () => {
+    return initializeScanningApp(expectedScanners.slice(1), capabilities)
+        .then(() => {
+          sourceSelect = scanningApp.$$('#sourceSelect').$$('select');
+          return getScannerCapabilities();
+        })
+        .then(() => {
+          assertEquals(2, sourceSelect.length);
+          return changeSelect(
+              /** @type {!HTMLSelectElement} */ (sourceSelect),
+              /* value=*/ null, /* selectedIndex=*/ 0);
+        })
+        .then(() => {
+          colorModeSelect = scanningApp.$$('#colorModeSelect').$$('select');
+          pageSizeSelect = scanningApp.$$('#pageSizeSelect').$$('select');
+          resolutionSelect = scanningApp.$$('#resolutionSelect').$$('select');
+
+          assertEquals(2, colorModeSelect.length);
+          assertEquals(
+              getColorModeString(secondColorModes[0]),
+              colorModeSelect.options[0].textContent.trim());
+          assertEquals(
+              getColorModeString(secondColorModes[1]),
+              colorModeSelect.options[1].textContent.trim());
+          assertEquals(2, pageSizeSelect.length);
+          assertEquals(
+              getPageSizeString(secondPageSizes[0]),
+              pageSizeSelect.options[0].textContent.trim());
+          assertEquals(
+              getPageSizeString(secondPageSizes[1]),
+              pageSizeSelect.options[1].textContent.trim());
+          assertEquals(2, resolutionSelect.length);
+          assertEquals(
+              secondResolutions[0].toString() + ' dpi',
+              resolutionSelect.options[0].textContent.trim());
+          assertEquals(
+              secondResolutions[1].toString() + ' dpi',
+              resolutionSelect.options[1].textContent.trim());
+          return changeSelect(
+              /** @type {!HTMLSelectElement} */ (sourceSelect),
+              /* value=*/ null, /* selectedIndex=*/ 1);
+        })
+        .then(() => {
+          assertEquals(1, colorModeSelect.length);
+          assertEquals(
+              getColorModeString(thirdColorModes[0]),
+              colorModeSelect.options[0].textContent.trim());
+          assertEquals(1, pageSizeSelect.length);
+          assertEquals(
+              getPageSizeString(thirdPageSizes[0]),
+              pageSizeSelect.options[0].textContent.trim());
+          assertEquals(2, resolutionSelect.length);
+          assertEquals(
+              thirdResolutions[0].toString() + ' dpi',
+              resolutionSelect.options[0].textContent.trim());
+          assertEquals(
+              thirdResolutions[1].toString() + ' dpi',
+              resolutionSelect.options[1].textContent.trim());
+        });
+  });
+
   // Verify the correct message is shown in the scan failed dialog based on the
   // error type.
   test('ScanResults', () => {
@@ -1881,7 +1962,7 @@ export function scanningAppTest() {
               ash.scanning.mojom.ColorMode.kColor.toString(),
               scanningApp.$$('#colorModeSelect').$$('select').value);
           assertEquals(
-              ash.scanning.mojom.PageSize.kNaLetter.toString(),
+              ash.scanning.mojom.PageSize.kIsoA4.toString(),
               scanningApp.$$('#pageSizeSelect').$$('select').value);
           assertEquals(
               '300', scanningApp.$$('#resolutionSelect').$$('select').value);
@@ -1957,7 +2038,7 @@ export function scanningAppTest() {
               ash.scanning.mojom.ColorMode.kColor.toString(),
               scanningApp.$$('#colorModeSelect').$$('select').value);
           assertEquals(
-              ash.scanning.mojom.PageSize.kNaLetter.toString(),
+              ash.scanning.mojom.PageSize.kIsoA4.toString(),
               scanningApp.$$('#pageSizeSelect').$$('select').value);
           assertEquals(
               '300', scanningApp.$$('#resolutionSelect').$$('select').value);
@@ -1967,10 +2048,6 @@ export function scanningAppTest() {
 
   // Verify saved settings are applied when available for the selected scanner.
   test('ApplySavedSettings', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const selectedPath = {baseName: 'path', filePath: 'valid/scan/to/path'};
     testBrowserProxy.setSavedSettingsSelectedPath(selectedPath);
 
@@ -2021,10 +2098,6 @@ export function scanningAppTest() {
   // Verify if the setting value stored in saved settings is no longer
   // available on the selected scanner, the default setting is chosen.
   test('SettingNotFoundInCapabilities', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const selectedPath = {baseName: 'path', filePath: 'valid/scan/to/path'};
     testBrowserProxy.setSavedSettingsSelectedPath(selectedPath);
 
@@ -2064,7 +2137,7 @@ export function scanningAppTest() {
               ash.scanning.mojom.ColorMode.kColor.toString(),
               scanningApp.$$('#colorModeSelect').$$('select').value);
           assertEquals(
-              ash.scanning.mojom.PageSize.kNaLetter.toString(),
+              ash.scanning.mojom.PageSize.kIsoA4.toString(),
               scanningApp.$$('#pageSizeSelect').$$('select').value);
           assertEquals(
               '300', scanningApp.$$('#resolutionSelect').$$('select').value);
@@ -2076,10 +2149,6 @@ export function scanningAppTest() {
   // scanner's capabilities doesn't support it, the multi-page scan checkbox
   // will not be set.
   test('MultiPageNotAvailableFromCapabilities', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const savedScanSettings = {
       lastUsedScannerName: secondScannerName,
       scanToPath: '',
@@ -2111,10 +2180,6 @@ export function scanningAppTest() {
   // JSON (i.e. the first time the feature is enabled), the multi-page scan
   // checkbox will not be set.
   test('MultiPageNotInSavedSettings', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const savedScanSettings = {
       lastUsedScannerName: firstScannerName,
       scanToPath: '',
@@ -2143,10 +2208,6 @@ export function scanningAppTest() {
 
   // Verify the last used scanner is selected from saved settings.
   test('selectLastUsedScanner', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const savedScanSettings = {
       lastUsedScannerName: secondScannerName,
       scanToPath: 'scan/to/path',
@@ -2176,10 +2237,6 @@ export function scanningAppTest() {
 
   // Verify the scan settings are sent to the Pref service to be saved.
   test('saveScanSettings', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const scannerSetting = {
       name: secondScannerName,
       lastScanDate: LAST_SCAN_DATE,
@@ -2222,10 +2279,6 @@ export function scanningAppTest() {
   // Verify that the correct scanner setting is replaced when saving scan
   // settings to the Pref service.
   test('replaceExistingScannerInScanSettings', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const firstScannerSetting = {
       name: firstScannerName,
       lastScanDate: LAST_SCAN_DATE,
@@ -2301,10 +2354,6 @@ export function scanningAppTest() {
   // Verify that the correct scanner gets evicted when there are too many
   // scanners in saved scan settings.
   test('evictScannersOverTheMaxLimit', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     const scannerToEvict = {
       name: secondScannerName,
       lastScanDate: '1/1/2021',
@@ -2356,10 +2405,6 @@ export function scanningAppTest() {
   // Verify that no scanners get evicted when the number of scanners in saved
   // scan settings is equal to |MAX_NUM_SAVED_SCANNERS|.
   test('doNotEvictScannersAtMax', () => {
-    if (!loadTimeData.getBoolean('scanAppStickySettingsEnabled')) {
-      return;
-    }
-
     /** @type {!Array<!ScannerSetting>} */
     const scanners = new Array(MAX_NUM_SAVED_SCANNERS);
     for (let i = 0; i < MAX_NUM_SAVED_SCANNERS; i++) {
@@ -2511,6 +2556,62 @@ export function scanningAppTest() {
           // When scan button is clicked expect a normal scan to start.
           scanButton.click();
           return fakeScanService_.whenCalled('startScan');
+        });
+  });
+
+  // Verify the scan settings update according to the source selected.
+  test('UpdateSettingsBySource', () => {
+    return initializeScanningApp(expectedScanners, capabilities)
+        .then(() => {
+          return getScannerCapabilities();
+        })
+        .then(() => {
+          scanningApp.selectedSource = PLATEN;
+          return waitAfterNextRender(
+              /** @type {!HTMLElement} */ (scanningApp));
+        })
+        .then(() => {
+          const pageSizeSelector =
+              scanningApp.$$('#pageSizeSelect').$$('select');
+          changeSelect(
+              pageSizeSelector, PageSize.A4.toString(),
+              /* selectedIndex */ null);
+          assertEquals(
+              ash.scanning.mojom.PageSize.kIsoA4.toString(),
+              scanningApp.$$('#pageSizeSelect').$$('select').value);
+          changeSelect(
+              pageSizeSelector, PageSize.Max.toString(),
+              /* selectedIndex */ null);
+          assertEquals(
+              ash.scanning.mojom.PageSize.kMax.toString(),
+              scanningApp.$$('#pageSizeSelect').$$('select').value);
+        })
+        .then(() => {
+          scanningApp.selectedSource = ADF_DUPLEX;
+          return waitAfterNextRender(
+              /** @type {!HTMLElement} */ (scanningApp));
+        })
+        .then(() => {
+          const pageSizeSelector =
+              scanningApp.$$('#pageSizeSelect').$$('select');
+          changeSelect(
+              pageSizeSelector, PageSize.A4.toString(),
+              /* selectedIndex */ null);
+          assertEquals(
+              ash.scanning.mojom.PageSize.kIsoA4.toString(),
+              scanningApp.$$('#pageSizeSelect').$$('select').value);
+          changeSelect(
+              pageSizeSelector, PageSize.Letter.toString(),
+              /* selectedIndex */ null);
+          assertEquals(
+              ash.scanning.mojom.PageSize.kNaLetter.toString(),
+              scanningApp.$$('#pageSizeSelect').$$('select').value);
+          changeSelect(
+              pageSizeSelector, PageSize.Max.toString(),
+              /* selectedIndex */ null);
+          assertEquals(
+              ash.scanning.mojom.PageSize.kMax.toString(),
+              scanningApp.$$('#pageSizeSelect').$$('select').value);
         });
   });
 }

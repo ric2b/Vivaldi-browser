@@ -14,8 +14,8 @@
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/task/post_task.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -58,6 +58,7 @@
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
@@ -77,14 +78,18 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "components/arc/video_accelerator/gpu_arc_video_decode_accelerator.h"
-#include "components/arc/video_accelerator/gpu_arc_video_encode_accelerator.h"
-#include "components/arc/video_accelerator/gpu_arc_video_protected_buffer_allocator.h"
-#include "components/arc/video_accelerator/protected_buffer_manager.h"
-#include "components/arc/video_accelerator/protected_buffer_manager_proxy.h"
 #include "components/chromeos_camera/gpu_mjpeg_decode_accelerator_factory.h"
 #include "components/chromeos_camera/mojo_jpeg_encode_accelerator_service.h"
 #include "components/chromeos_camera/mojo_mjpeg_decode_accelerator_service.h"
+
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#include "ash/components/arc/video_accelerator/gpu_arc_video_decode_accelerator.h"
+#include "ash/components/arc/video_accelerator/gpu_arc_video_encode_accelerator.h"
+#include "ash/components/arc/video_accelerator/gpu_arc_video_protected_buffer_allocator.h"
+#include "ash/components/arc/video_accelerator/protected_buffer_manager.h"
+#include "ash/components/arc/video_accelerator/protected_buffer_manager_proxy.h"
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_WIN)
@@ -312,7 +317,8 @@ void GetVideoCapabilities(const gpu::GpuPreferences& gpu_preferences,
   gpu_info->video_encode_accelerator_supported_profiles =
       media::GpuVideoAcceleratorUtil::ConvertMediaToGpuEncodeProfiles(
           media::GpuVideoEncodeAcceleratorFactory::GetSupportedProfiles(
-              gpu_preferences, gpu_workarounds));
+              gpu_preferences, gpu_workarounds,
+              /*populate_extended_info=*/false));
 #endif
 }
 
@@ -364,9 +370,10 @@ GpuServiceImpl::GpuServiceImpl(
   DCHECK(!io_runner_->BelongsToCurrentThread());
   DCHECK(exit_callback_);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
   protected_buffer_manager_ = new arc::ProtectedBufferManager();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH) &&
+        // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
   GrContextOptions context_options =
       GetDefaultGrContextOptions(gpu_preferences_.gr_context_type);
@@ -622,7 +629,15 @@ void GpuServiceImpl::InitializeWithHost(
 
   // Create and Initialize compositor gpu thread.
   compositor_gpu_thread_ = CompositorGpuThread::Create(
-      gpu_channel_manager_.get(), !!watchdog_thread_);
+      gpu_channel_manager_.get(),
+#if BUILDFLAG(ENABLE_VULKAN)
+      vulkan_implementation_,
+      vulkan_context_provider_ ? vulkan_context_provider_->GetDeviceQueue()
+                               : nullptr,
+#else
+      nullptr, nullptr,
+#endif
+      !!watchdog_thread_);
 }
 
 void GpuServiceImpl::Bind(
@@ -679,6 +694,7 @@ void GpuServiceImpl::RecordLogMessage(int severity,
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 void GpuServiceImpl::CreateArcVideoDecodeAccelerator(
     mojo::PendingReceiver<arc::mojom::VideoDecodeAccelerator> vda_receiver) {
   DCHECK(io_runner_->BelongsToCurrentThread());
@@ -722,7 +738,7 @@ void GpuServiceImpl::CreateArcProtectedBufferManager(
 
 void GpuServiceImpl::CreateArcVideoDecodeAcceleratorOnMainThread(
     mojo::PendingReceiver<arc::mojom::VideoDecodeAccelerator> vda_receiver) {
-  DCHECK(main_runner_->BelongsToCurrentThread());
+  CHECK(main_runner_->BelongsToCurrentThread());
   mojo::MakeSelfOwnedReceiver(
       std::make_unique<arc::GpuArcVideoDecodeAccelerator>(
           gpu_preferences_, gpu_channel_manager_->gpu_driver_bug_workarounds(),
@@ -761,6 +777,7 @@ void GpuServiceImpl::CreateArcProtectedBufferManagerOnMainThread(
           protected_buffer_manager_),
       std::move(pbm_receiver));
 }
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 void GpuServiceImpl::CreateJpegDecodeAccelerator(
     mojo::PendingReceiver<chromeos_camera::mojom::MjpegDecodeAccelerator>
@@ -1326,5 +1343,11 @@ void GpuServiceImpl::GetDawnInfoOnMain(GetDawnInfoCallback callback) {
   io_runner_->PostTask(FROM_HERE,
                        base::BindOnce(std::move(callback), dawn_info_list));
 }
+
+#if defined(OS_ANDROID)
+void GpuServiceImpl::SetHostProcessId(base::ProcessId pid) {
+  host_process_id_ = pid;
+}
+#endif
 
 }  // namespace viz

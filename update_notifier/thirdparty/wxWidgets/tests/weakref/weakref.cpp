@@ -12,9 +12,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
@@ -66,7 +63,7 @@ private:
     void DynamicRefTest();
 #endif
 
-    DECLARE_NO_COPY_CLASS(WeakRefTestCase)
+    wxDECLARE_NO_COPY_CLASS(WeakRefTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -83,16 +80,15 @@ wxWeakRef<ForwardDeclaredClass> g_incompleteWeakRef;
 
 struct ForwardDeclaredClass : wxEvtHandler { };
 
+// A incomplete class that would be defined in other compilation units
+struct IncompleteClass;
+
 void WeakRefTestCase::DeclareTest()
 {
     {
         // Not initializing or initializing with NULL should work too
-        //
-        // FIXME-VC6: but it doesn't with VC6, see comment in wx/weakref.h
-#ifndef __VISUALC6__
         wxWeakRef<wxEvtHandler> wroDef;
         wxWeakRef<wxEvtHandler> wro0(NULL);
-#endif // __VISUALC6__
 
         wxObject o; // Should not work
         wxEvtHandler eh;
@@ -128,6 +124,23 @@ void WeakRefTestCase::DeclareTest()
 
     CPPUNIT_ASSERT( !g_incompleteWeakRef );
 #endif // RTTI enabled
+
+    {
+        // Construction of a wxWeakRef to an incomplete class should be fine
+        wxWeakRef<IncompleteClass> p;
+
+        // Copying should be also OK
+        wxCLANG_WARNING_SUPPRESS(self-assign-overloaded)
+        p = p;
+        wxCLANG_WARNING_RESTORE(self-assign-overloaded)
+
+        // Assigning a raw pointer should cause compile error
+#ifdef TEST_INVALID_INCOMPLETE_WEAKREF
+        p = static_cast<IncompleteClass*>(0);
+#endif
+
+        // Releasing should be OK
+    }
 }
 
 void WeakRefTestCase::AssignTest()
@@ -151,9 +164,6 @@ void WeakRefTestCase::AssignTest()
     CPPUNIT_ASSERT( !wro2 );
 
     // Explicitly resetting should work too
-    //
-    // FIXME-VC6: as above, it doesn't work with VC6, see wx/weakref.h
-#ifndef __VISUALC6__
     wxEvtHandler eh;
     wxObjectTrackable ot;
 
@@ -165,7 +175,6 @@ void WeakRefTestCase::AssignTest()
 
     CPPUNIT_ASSERT( !wro1 );
     CPPUNIT_ASSERT( !wro2 );
-#endif // __VISUALC6__
 }
 
 void WeakRefTestCase::AssignWeakRefTest()

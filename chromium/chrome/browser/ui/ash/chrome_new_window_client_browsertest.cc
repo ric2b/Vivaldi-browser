@@ -396,7 +396,7 @@ void TestAllOSSettingPages(const GURL& base_url) {
   TestOpenOSSettingsChromePage(
       ChromePage::ACCOUNTS,
       base_url.Resolve(
-          chromeos::settings::mojom::kManageOtherPeopleSubpagePath));
+          chromeos::settings::mojom::kManageOtherPeopleSubpagePathV2));
   TestOpenOSSettingsChromePage(
       ChromePage::BLUETOOTHDEVICES,
       base_url.Resolve(
@@ -419,7 +419,7 @@ void TestAllOSSettingPages(const GURL& base_url) {
   TestOpenOSSettingsChromePage(
       ChromePage::LOCKSCREEN,
       base_url.Resolve(
-          chromeos::settings::mojom::kSecurityAndSignInSubpagePath));
+          chromeos::settings::mojom::kSecurityAndSignInSubpagePathV2));
   TestOpenOSSettingsChromePage(
       ChromePage::MANAGEACCESSIBILITY,
       base_url.Resolve(
@@ -430,6 +430,9 @@ void TestAllOSSettingPages(const GURL& base_url) {
   TestOpenOSSettingsChromePage(
       ChromePage::POINTEROVERLAY,
       base_url.Resolve(chromeos::settings::mojom::kPointersSubpagePath));
+  TestOpenOSSettingsChromePage(
+      ChromePage::SMARTPRIVACY,
+      base_url.Resolve(chromeos::settings::mojom::kSmartPrivacySubpagePath));
   TestOpenOSSettingsChromePage(
       ChromePage::STORAGE,
       base_url.Resolve(chromeos::settings::mojom::kStorageSubpagePath));

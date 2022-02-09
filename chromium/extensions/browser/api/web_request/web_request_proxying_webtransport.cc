@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/web_request/web_request_proxying_webtransport.h"
 
+#include "base/memory/raw_ptr.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -235,7 +236,7 @@ class WebTransportHandshakeProxy : public WebRequestAPI::Proxy,
   // Weak reference to the ProxySet. This is safe as `proxies_` owns this
   // object.
   WebRequestAPI::ProxySet& proxies_;
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
   WebRequestInfo info_;
   net::HttpRequestHeaders request_headers_;
   GURL redirect_url_;
@@ -252,29 +253,34 @@ class WebTransportHandshakeProxy : public WebRequestAPI::Proxy,
 }  // namespace
 
 void StartWebRequestProxyingWebTransport(
-    content::RenderFrameHost& frame,
+    content::RenderProcessHost& render_process_host,
+    int frame_routing_id,
     const GURL& url,
+    const url::Origin& initiator_origin,
     mojo::PendingRemote<WebTransportHandshakeClient> handshake_client,
     int64_t request_id,
     WebRequestAPI::ProxySet& proxies,
     content::ContentBrowserClient::WillCreateWebTransportCallback callback) {
   content::BrowserContext* browser_context =
-      frame.GetProcess()->GetBrowserContext();
+      render_process_host.GetBrowserContext();
 
   // Filling ResourceRequest fields required to create WebRequestInfoInitParams.
   network::ResourceRequest request;
   request.method = net::HttpRequestHeaders::kConnectMethod;
   request.url = url;
-  request.request_initiator = frame.GetLastCommittedOrigin();
+  request.request_initiator = initiator_origin;
 
-  const auto* web_contents = content::WebContents::FromRenderFrameHost(&frame);
+  const int process_id = render_process_host.GetID();
+  content::RenderFrameHost* frame =
+      content::RenderFrameHost::FromID(process_id, frame_routing_id);
+  const auto* web_contents = content::WebContents::FromRenderFrameHost(frame);
   const ukm::SourceIdObj& ukm_source_id =
       web_contents ? ukm::SourceIdObj::FromInt64(
                          ukm::GetSourceIdForWebContentsDocument(web_contents))
                    : ukm::kInvalidSourceIdObj;
 
   WebRequestInfoInitParams params = WebRequestInfoInitParams(
-      request_id, frame.GetProcess()->GetID(), frame.GetRoutingID(),
+      request_id, process_id, frame_routing_id,
       // TODO(crbug.com/1243521): Set appropriate view_routing_id.
       /*navigation_ui_data=*/nullptr, /*view_routing_id=*/MSG_ROUTING_NONE,
       request,

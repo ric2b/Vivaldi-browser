@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -37,6 +36,10 @@ namespace cast {
 
 class VideoEncoderTest
     : public ::testing::TestWithParam<std::pair<Codec, bool>> {
+ public:
+  VideoEncoderTest(const VideoEncoderTest&) = delete;
+  VideoEncoderTest& operator=(const VideoEncoderTest&) = delete;
+
  protected:
   VideoEncoderTest()
       : task_runner_(new FakeSingleThreadTaskRunner(&testing_clock_)),
@@ -197,8 +200,6 @@ class VideoEncoderTest
   OperationalStatus operational_status_;
   std::unique_ptr<VideoEncoder> video_encoder_;
   std::unique_ptr<VideoFrameFactory> video_frame_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VideoEncoderTest);
 };
 
 // Tests that the encoder outputs encoded frames, and also responds to frame

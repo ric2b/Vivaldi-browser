@@ -59,7 +59,11 @@ enum class BiometricAuthRequester {
   // starting automated password change.
   kPasswordCheckAutoPwdChange = 5,
 
-  kMaxValue = kPasswordCheckAutoPwdChange,
+  // The dialog displayed to access existing Incognito tabs if the Incognito
+  // lock setting in on and Chrome came to foreground.
+  kIncognitoReauthPage = 6,
+
+  kMaxValue = kIncognitoReauthPage,
 };
 
 // The result of the biometric authentication.
@@ -75,17 +79,22 @@ enum class BiometricAuthFinalResult {
   kCanceledByUser = 3,
   kFailed = 4,
 
-  // Recorded when the auth succeeds after Chrome cancelled it.
-  kSuccessButCanceled = 5,
+  // Deprecated in favour of kCanceledByChrome. Recorded when the auth succeeds
+  // after Chrome cancelled it.
+  // kSuccessButCanceled = 5,
 
-  // Recorded when the auth fails after Chrome cancelled it.
-  kFailedAndCanceled = 6,
+  // Deprecated in favour of kCanceledByChrome. Recorded when the auth fails
+  // after Chrome cancelled it.
+  // kFailedAndCanceled = 6,
 
   // Recorded if an authentication was requested within 60s of the previous
   // successful authentication.
   kAuthStillValid = 7,
 
-  kMaxValue = kAuthStillValid,
+  // Recorded when the authentication flow is cancelled by Chrome.
+  kCanceledByChrome = 8,
+
+  kMaxValue = kCanceledByChrome,
 };
 
 // This interface encapsulates operations related to biometric authentication.
@@ -101,7 +110,8 @@ class BiometricAuthenticator : public base::RefCounted<BiometricAuthenticator> {
 
   // Returns whether biometrics are available for a given device. Only if this
   // returns kAvailable, callers can expect Authenticate() to succeed.
-  virtual BiometricsAvailability CanAuthenticate() = 0;
+  virtual BiometricsAvailability CanAuthenticate(
+      BiometricAuthRequester requester) = 0;
 
   // Asks the user to authenticate. Invokes |callback| asynchronously when
   // the auth flow returns with the result.

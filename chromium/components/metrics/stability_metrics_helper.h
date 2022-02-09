@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/process/kill.h"
 
 class PrefRegistrySimple;
@@ -27,7 +27,7 @@ enum class StabilityEventType {
   kChildProcessCrash = 6,
   kLaunch = 15,
   kBrowserCrash = 16,
-  kIncompleteShutdown = 17,
+  // kIncompleteShutdown = 17,  // Removed due to disuse and correctness issues.
   kRendererFailedLaunch = 24,
   kExtensionRendererFailedLaunch = 25,
   kRendererLaunch = 26,
@@ -38,8 +38,8 @@ enum class StabilityEventType {
 
 class SystemProfileProto;
 
-// StabilityMetricsHelper is a class that providers functionality common to
-// different embedders' stability metrics providers.
+// Responsible for providing functionality common to different embedders'
+// stability metrics providers.
 class StabilityMetricsHelper {
  public:
   explicit StabilityMetricsHelper(PrefService* local_state);
@@ -101,7 +101,7 @@ class StabilityMetricsHelper {
   // Records that a renderer launch failed.
   void LogRendererLaunchFailed(bool was_extension_process);
 
-  PrefService* local_state_;
+  raw_ptr<PrefService> local_state_;
 };
 
 }  // namespace metrics

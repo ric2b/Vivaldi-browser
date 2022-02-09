@@ -25,10 +25,10 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/singleton.h"
 #include "base/notreached.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -672,17 +672,6 @@ bool GetWindowDesktop(x11::Window window, int32_t* desktop) {
   return GetProperty(window, x11::GetAtom("_NET_WM_DESKTOP"), desktop);
 }
 
-bool GetXWindowStack(x11::Window window, std::vector<x11::Window>* windows) {
-  if (!GetArrayProperty(window, x11::GetAtom("_NET_CLIENT_LIST_STACKING"),
-                        windows)) {
-    return false;
-  }
-  // It's more common to iterate from lowest window to highest,
-  // so reverse the vector.
-  std::reverse(windows->begin(), windows->end());
-  return true;
-}
-
 WindowManagerName GuessWindowManager() {
   std::string name;
   if (!GetWindowManagerName(&name))
@@ -834,12 +823,13 @@ bool IsX11WindowFullScreen(x11::Window window) {
   return window_rect.size() == gfx::Size(width, height);
 }
 
-void SuspendX11ScreenSaver(bool suspend) {
+bool SuspendX11ScreenSaver(bool suspend) {
   static const bool kScreenSaverAvailable = IsX11ScreenSaverAvailable();
   if (!kScreenSaverAvailable)
-    return;
+    return false;
 
   x11::Connection::Get()->screensaver().Suspend({suspend});
+  return true;
 }
 
 void StoreGpuExtraInfoIntoListValue(x11::VisualId system_visual,
@@ -1146,20 +1136,6 @@ x11::ColorMap XVisualManager::XVisualData::GetColormap() {
     connection->Flush();
   }
   return colormap_;
-}
-
-ScopedUnsetDisplay::ScopedUnsetDisplay() {
-  const char* display = getenv("DISPLAY");
-  if (display) {
-    display_.emplace(display);
-    unsetenv("DISPLAY");
-  }
-}
-
-ScopedUnsetDisplay::~ScopedUnsetDisplay() {
-  if (display_) {
-    setenv("DISPLAY", display_->c_str(), 1);
-  }
 }
 
 }  // namespace ui

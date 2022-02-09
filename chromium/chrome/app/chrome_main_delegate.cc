@@ -22,6 +22,7 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/task/sequence_manager/thread_controller_power_monitor.h"
 #include "base/threading/hang_watcher.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -63,6 +64,7 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/main_function_params.h"
 #include "content/public/common/profiling.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
@@ -130,6 +132,7 @@
 #include "chromeos/memory/kstaled.h"
 #include "chromeos/memory/memory.h"
 #include "chromeos/memory/swap_configuration.h"
+#include "ui/lottie/resource.h"  // nogncheck
 #endif
 
 #if defined(OS_ANDROID)
@@ -189,7 +192,7 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/common/chrome_paths_lacros.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"  // nogncheck
-#include "chromeos/lacros/lacros_dbus_helper.h"
+#include "chromeos/lacros/dbus/lacros_dbus_helper.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "media/base/media_switches.h"
 #endif
@@ -201,10 +204,10 @@ base::LazyInstance<ChromeContentRendererClient>::DestructorAtExit
 base::LazyInstance<ChromeContentUtilityClient>::DestructorAtExit
     g_chrome_content_utility_client = LAZY_INSTANCE_INITIALIZER;
 
-extern int NaClMain(const content::MainFunctionParams&);
+extern int NaClMain(content::MainFunctionParams);
 
 #if !defined(OS_CHROMEOS)
-extern int CloudPrintServiceProcessMain(const content::MainFunctionParams&);
+extern int CloudPrintServiceProcessMain(content::MainFunctionParams);
 #endif
 
 const char* const ChromeMainDelegate::kNonWildcardDomainNonPortSchemes[] = {
@@ -395,7 +398,7 @@ void SetUpProfilingShutdownHandler() {
 
 struct MainFunction {
   const char* name;
-  int (*function)(const content::MainFunctionParams&);
+  int (*function)(content::MainFunctionParams);
 };
 
 // Initializes the user data dir. Must be called before InitializeLocalState().
@@ -639,6 +642,11 @@ void ChromeMainDelegate::PostEarlyInitialization(bool is_running_tests) {
   ash::InitializeFeatureListDependentDBus();
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Initialize D-Bus clients that depend on feature list.
+  chromeos::LacrosInitializeFeatureListDependentDBus();
+#endif
+
 #if defined(OS_ANDROID)
   chrome_content_browser_client_->startup_data()->CreateProfilePrefService();
   net::NetworkChangeNotifier::SetFactory(
@@ -720,13 +728,13 @@ void ChromeMainDelegate::PostFieldTrialInitialization() {
 #endif
   }
 
-  ALLOW_UNUSED_LOCAL(channel);
   ALLOW_UNUSED_LOCAL(is_canary_dev);
 
   // Start heap profiling as early as possible so it can start recording
   // memory allocations.
   if (is_browser_process) {
-    heap_profiler_controller_ = std::make_unique<HeapProfilerController>();
+    heap_profiler_controller_ =
+        std::make_unique<HeapProfilerController>(channel);
     heap_profiler_controller_->Start();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -746,6 +754,9 @@ void ChromeMainDelegate::PostFieldTrialInitialization() {
 #endif
 
   base::HangWatcher::InitializeOnMainThread();
+
+  base::sequence_manager::internal::SequenceManagerImpl::
+      MaybeSetNoWakeUpsForCanceledTasks();
 }
 
 #if defined(OS_WIN)
@@ -758,7 +769,7 @@ bool ChromeMainDelegate::ShouldHandleConsoleControlEvents() {
 
 bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::BootTimesRecorder::Get()->SaveChromeMainStats();
+  ash::BootTimesRecorder::Get()->SaveChromeMainStats();
 #endif
 
   const base::CommandLine& command_line =
@@ -1113,8 +1124,11 @@ void ChromeMainDelegate::PreSandboxStartup() {
     if (process_type == switches::kZygoteProcess) {
       DCHECK(locale.empty());
       // See comment at ReadAppLocale() for why we do this.
-      locale = chromeos::startup_settings_cache::ReadAppLocale();
+      locale = ash::startup_settings_cache::ReadAppLocale();
     }
+
+    ui::ResourceBundle::SetParseLottieAsStillImage(
+        &lottie::ParseLottieAsStillImage);
 #endif
 #if defined(OS_ANDROID)
     // The renderer sandbox prevents us from accessing our .pak files directly.
@@ -1231,9 +1245,9 @@ void ChromeMainDelegate::SandboxInitialized(const std::string& process_type) {
 #endif
 }
 
-int ChromeMainDelegate::RunProcess(
+absl::variant<int, content::MainFunctionParams> ChromeMainDelegate::RunProcess(
     const std::string& process_type,
-    const content::MainFunctionParams& main_function_params) {
+    content::MainFunctionParams main_function_params) {
 // ANDROID doesn't support "service", so no CloudPrintServiceProcessMain, and
 // arraysize doesn't support empty array. So we comment out the block for
 // Android.
@@ -1261,11 +1275,11 @@ int ChromeMainDelegate::RunProcess(
 
   for (size_t i = 0; i < base::size(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name)
-      return kMainFunctions[i].function(main_function_params);
+      return kMainFunctions[i].function(std::move(main_function_params));
   }
 #endif  // !defined(OS_ANDROID)
 
-  return -1;
+  return std::move(main_function_params);
 }
 
 void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {

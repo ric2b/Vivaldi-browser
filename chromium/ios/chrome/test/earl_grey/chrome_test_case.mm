@@ -12,12 +12,14 @@
 #include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#include "ios/chrome/browser/web/features.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case_app_interface.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
+#import "ios/web/common/features.h"
 #include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
@@ -35,6 +37,19 @@ bool gIsMockAuthenticationDisabled = false;
 
 // YES the test is for startup.
 bool gStartupTest = false;
+
+// Suffix used to disable kRestoreSessionFromCache. Tests with this suffix will
+// still use native restore via kSynthesizedRestoreSession.
+NSString* const kDisableCacheRestoreSuffix = @"WithCacheRestoreDisabled";
+
+// Suffix used to disable kRestoreSessionFromCache and
+// kSynthesizedRestoreSession. Tests with this suffix will fall back to using
+// legacy restore.
+NSString* const kDisableSynthesizedRestoreSuffix =
+    @"WithSynthesizedRestoreDisabled";
+
+NSArray<NSString*>* const kRestoreFallbackTests =
+    @[ @"VisibleURLTestCase", @"RestoreTestCase" ];
 
 NSString* const kFlakyEarlGreyTestTargetSuffix =
     @"_flaky_eg2tests_module-Runner";
@@ -115,8 +130,6 @@ void ResetAuthentication() {
 
 }  // namespace
 
-GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
-
 @interface ChromeTestCase () <AppLaunchManagerObserver> {
   // Block to be executed during object tearDown.
   ProceduralBlock _tearDownHandler;
@@ -143,6 +156,14 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 
 // Returns a NSArray of test names in this class for multitasking test suite.
 + (NSArray*)multitaskingTestNames;
+
+// kRestoreFallbackTests test a lot of ios/web session restore logic. iOS 15
+// supports a more efficient session restore flow, but there are plenty of
+// edge case reasons for a session restore to fall back to legacy restore.
+// To ensure each test below ios/web restore path, duplicate each test with a
+// version that runs with variations of kRestoreSessionFromCacheenabled and
+// kSynthesizedRestoreSession enabled and disabled.
++ (NSArray*)restoreFallbackTestNames;
 @end
 
 @implementation ChromeTestCase
@@ -150,7 +171,6 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 // Overrides testInvocations so the set of tests run can be modified, as
 // necessary.
 + (NSArray*)testInvocations {
-
   // Return specific list of tests based on the target.
   NSString* targetName = [NSBundle mainBundle].infoDictionary[@"CFBundleName"];
   if ([targetName hasSuffix:kFlakyEarlGreyTestTargetSuffix]) {
@@ -159,9 +179,31 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   } else if ([targetName isEqualToString:kMultitaskingEarlGreyTestTargetName]) {
     // Only run white listed tests for the multitasking test suite.
     return [self multitaskingTestNames];
+  } else if ([kRestoreFallbackTests containsObject:NSStringFromClass(self)]) {
+    return [self restoreFallbackTestNames];
   } else {
     return [super testInvocations];
   }
+}
+
+- (AppLaunchConfiguration)appConfigurationForTestCase {
+  AppLaunchConfiguration config = [super appConfigurationForTestCase];
+  if ([kRestoreFallbackTests containsObject:NSStringFromClass(self.class)]) {
+    if ([self.name containsString:kDisableCacheRestoreSuffix]) {
+      config.features_disabled.push_back(web::kRestoreSessionFromCache);
+      config.features_enabled.push_back(
+          web::features::kSynthesizedRestoreSession);
+    } else if ([self.name containsString:kDisableSynthesizedRestoreSuffix]) {
+      config.features_disabled.push_back(
+          web::features::kSynthesizedRestoreSession);
+      config.features_disabled.push_back(web::kRestoreSessionFromCache);
+    } else {
+      config.features_enabled.push_back(
+          web::features::kSynthesizedRestoreSession);
+      config.features_enabled.push_back(web::kRestoreSessionFromCache);
+    }
+  }
+  return config;
 }
 
 + (void)setUpForTestCase {
@@ -314,8 +356,6 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   [ChromeEarlGrey tearDownFakeSyncServer];
   // Switch from FakeChromeIdentityService to ChromeIdentityServiceImpl.
   TearDownMockAuthentication();
-  // Remove all identities in ChromeIdentityServiceImpl.
-  [ChromeEarlGrey signOutAndClearIdentities];
 }
 
 + (void)enableMockAuthentication {
@@ -346,6 +386,40 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   }
   free(methods);
   return flakyTestNames;
+}
+
++ (NSArray*)restoreFallbackTestNames {
+  NSMutableArray* testInvocations = [[super testInvocations] mutableCopy];
+  if (@available(iOS 15, *)) {
+    unsigned int count = 0;
+    Method* methods = class_copyMethodList(self, &count);
+    for (unsigned i = 0; i < count; i++) {
+      SEL selector = method_getName(methods[i]);
+      NSString* name = NSStringFromSelector(selector);
+      if ([name hasPrefix:@"test"]) {
+        // Add variant selector to test invocations.
+        for (NSString* suffix in @[
+               kDisableCacheRestoreSuffix, kDisableSynthesizedRestoreSuffix
+             ]) {
+          SEL variant_selector =
+              NSSelectorFromString([name stringByAppendingString:suffix]);
+          NSInvocation* invocation = [NSInvocation
+              invocationWithMethodSignature:
+                  [self instanceMethodSignatureForSelector:selector]];
+          [invocation setSelector:variant_selector];
+          [testInvocations addObject:invocation];
+
+          // Link method to disabled selector.
+          Method instanceMethod = class_getInstanceMethod(self, selector);
+          const char* typeEncoding = method_getTypeEncoding(instanceMethod);
+          class_addMethod(self, variant_selector,
+                          method_getImplementation(instanceMethod),
+                          typeEncoding);
+        }
+      }
+    }
+  }
+  return [testInvocations copy];
 }
 
 + (NSArray*)multitaskingTestNames {

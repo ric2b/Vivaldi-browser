@@ -25,7 +25,7 @@
 <translation id="19598411548897379">Основен</translation>
 <translation id="1985669426322966465">Обновяване на софтуера</translation>
 <translation id="2079036669923635404">Щракнете за обновяване на Vivaldi до <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Възникна грешка при изтегляне на файловете с обновяване. Моля, проверете свързването с интернет и по-късно опитайте отново.</translation>
+<translation id="2141974047387702305">Възникна грешка при изтегляне на файловете с обновяване. Моля, проверете съединението с интернет и по-късно опитайте отново.</translation>
 <translation id="2339641773402824483">Проверка за обновяване…</translation>
 <translation id="2441056087170876076">Чудовище 2</translation>
 <translation id="2444387452209867610">Вмъкни записка</translation>
@@ -166,6 +166,7 @@
 <translation id="9017566390391482291">Изберете папка с профил на Vivaldi за внасяне.</translation>
 <translation id="9048058608784130603">Изчакващо обновяване <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Редактирай</translation>
+<translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Отвори картината като <ph name="USER" /></translation>
 <translation id="9157539936604258187">Отвори препратката</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>

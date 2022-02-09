@@ -108,6 +108,7 @@ NetErrorAutoReloader::ErrorPageInfo::~ErrorPageInfo() = default;
 
 NetErrorAutoReloader::NetErrorAutoReloader(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<NetErrorAutoReloader>(*web_contents),
       connection_tracker_(content::GetNetworkConnectionTracker()) {
   connection_tracker_->AddNetworkConnectionObserver(this);
 
@@ -131,6 +132,9 @@ NetErrorAutoReloader::~NetErrorAutoReloader() {
 std::unique_ptr<content::NavigationThrottle>
 NetErrorAutoReloader::MaybeCreateThrottleFor(
     content::NavigationHandle* handle) {
+  if (!handle->IsInPrimaryMainFrame())
+    return nullptr;
+
   // Note that `CreateForWebContents` is a no-op if `contents` already has a
   // NetErrorAutoReloader. See WebContentsUserData.
   content::WebContents* contents = handle->GetWebContents();
@@ -140,7 +144,7 @@ NetErrorAutoReloader::MaybeCreateThrottleFor(
 
 void NetErrorAutoReloader::DidStartNavigation(
     content::NavigationHandle* handle) {
-  if (!handle->IsInMainFrame())
+  if (!handle->IsInPrimaryMainFrame())
     return;
 
   // Suppress automatic reload as long as any navigations are pending.
@@ -150,7 +154,7 @@ void NetErrorAutoReloader::DidStartNavigation(
 
 void NetErrorAutoReloader::DidFinishNavigation(
     content::NavigationHandle* handle) {
-  if (!handle->IsInMainFrame())
+  if (!handle->IsInPrimaryMainFrame())
     return;
 
   pending_navigations_.erase(handle);
@@ -292,7 +296,7 @@ void NetErrorAutoReloader::ReloadMainFrame() {
 
 std::unique_ptr<content::NavigationThrottle>
 NetErrorAutoReloader::MaybeCreateThrottle(content::NavigationHandle* handle) {
-  DCHECK(handle->IsInMainFrame());
+  DCHECK(handle->IsInPrimaryMainFrame());
   if (!current_reloadable_error_page_info_ ||
       current_reloadable_error_page_info_->url != handle->GetURL() ||
       !is_auto_reload_in_progress_) {

@@ -151,7 +151,6 @@ component("policy") {
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.logger",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mediacodec",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.memorypressure",
-      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net.interfaces",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sysmem",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.scenic",
@@ -180,7 +179,9 @@ source_set("tests") {
     ":policy",
     "//base",
     "//base/test:test_support",
+    "//ppapi/buildflags:buildflags",
     "//printing/buildflags",
+    "//sandbox/policy/mojom",
     "//testing/gtest",
   ]
 
@@ -189,11 +190,34 @@ source_set("tests") {
       "win/mf_cdm_sandbox_type_unittest.cc",
       "win/sandbox_win_unittest.cc",
     ]
-    deps += [ "//sandbox/win:sandbox" ]
+    deps += [
+      ":sandbox_test_utils",
+      "//sandbox/win:sandbox",
+    ]
     data = [
       "//base/test/data/pe_image/pe_image_test_32.dll",
       "//base/test/data/pe_image/pe_image_test_64.dll",
       "//base/test/data/pe_image/pe_image_test_arm64.dll",
+    ]
+  }
+}
+
+source_set("sandbox_test_utils") {
+  testonly = true
+
+  if (is_win) {
+    sources = [
+      "win/sandbox_policy_feature_test.cc",
+      "win/sandbox_policy_feature_test.h",
+      "win/sandbox_test_utils.cc",
+      "win/sandbox_test_utils.h",
+    ]
+
+    deps = [
+      ":policy",
+      "//base/test:test_support",
+      "//sandbox/win:sandbox",
+      "//testing/gtest",
     ]
   }
 }

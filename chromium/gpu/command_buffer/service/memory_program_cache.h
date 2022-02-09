@@ -11,8 +11,8 @@
 #include <memory>
 #include <string>
 
-#include "base/containers/mru_cache.h"
-#include "base/macros.h"
+#include "base/containers/lru_cache.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/service/decoder_client.h"
 #include "gpu/command_buffer/service/program_cache.h"
@@ -165,20 +165,20 @@ class GPU_GLES2_EXPORT MemoryProgramCache : public ProgramCache {
     const VaryingMap varying_map_1_;
     const OutputVariableList output_variable_list_1_;
     const InterfaceBlockMap interface_block_map_1_;
-    MemoryProgramCache* const program_cache_;
+    const raw_ptr<MemoryProgramCache> program_cache_;
   };
 
   friend class ProgramCacheValue;
 
-  typedef base::MRUCache<std::string,
-                         scoped_refptr<ProgramCacheValue> > ProgramMRUCache;
+  typedef base::LRUCache<std::string, scoped_refptr<ProgramCacheValue>>
+      ProgramLRUCache;
 
   const bool disable_gpu_shader_disk_cache_;
   const bool disable_program_caching_for_transform_feedback_;
   const bool compress_program_binaries_;
   size_t curr_size_bytes_;
-  ProgramMRUCache store_;
-  GpuProcessActivityFlags* activity_flags_;
+  ProgramLRUCache store_;
+  raw_ptr<GpuProcessActivityFlags> activity_flags_;
 };
 
 }  // namespace gles2

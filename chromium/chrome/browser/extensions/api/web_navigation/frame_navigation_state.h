@@ -5,9 +5,7 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_WEB_NAVIGATION_FRAME_NAVIGATION_STATE_H_
 #define CHROME_BROWSER_EXTENSIONS_API_WEB_NAVIGATION_FRAME_NAVIGATION_STATE_H_
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
-#include "content/public/browser/render_document_host_user_data.h"
+#include "content/public/browser/document_user_data.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -22,7 +20,7 @@ namespace extensions {
 // TODO(carlscab): DocumentState seems like a better name as this track per
 // document state.
 class FrameNavigationState
-    : public content::RenderDocumentHostUserData<FrameNavigationState> {
+    : public content::DocumentUserData<FrameNavigationState> {
  public:
   FrameNavigationState(const FrameNavigationState&) = delete;
   FrameNavigationState& operator=(const FrameNavigationState&) = delete;
@@ -73,8 +71,8 @@ class FrameNavigationState
 #endif
 
  private:
-  friend class content::RenderDocumentHostUserData<FrameNavigationState>;
-  RENDER_DOCUMENT_HOST_USER_DATA_KEY_DECL();
+  friend class content::DocumentUserData<FrameNavigationState>;
+  DOCUMENT_USER_DATA_KEY_DECL();
 
   explicit FrameNavigationState(content::RenderFrameHost*);
 

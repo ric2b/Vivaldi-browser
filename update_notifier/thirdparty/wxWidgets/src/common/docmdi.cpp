@@ -11,16 +11,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-  #pragma hdrstop
-#endif
 
 #if wxUSE_MDI_ARCHITECTURE
 
 #include "wx/docmdi.h"
 
-IMPLEMENT_CLASS(wxDocMDIParentFrame, wxMDIParentFrame)
-IMPLEMENT_CLASS(wxDocMDIChildFrame, wxMDIChildFrame)
+wxIMPLEMENT_CLASS(wxDocMDIParentFrame, wxMDIParentFrame);
+wxIMPLEMENT_CLASS(wxDocMDIChildFrame, wxMDIChildFrame);
 
 #endif // wxUSE_DOC_VIEW_ARCHITECTURE
 

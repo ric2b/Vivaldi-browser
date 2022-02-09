@@ -12,8 +12,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_clock.h"
@@ -106,7 +106,6 @@ void FullCardRequest::GetFullCardImpl(
   result_delegate_ = result_delegate;
   request_ = std::make_unique<payments::PaymentsClient::UnmaskRequestDetails>();
   request_->card = card;
-  request_->reason = reason;
   request_->last_committed_url_origin = last_committed_url_origin;
   if (context_token.has_value())
     request_->context_token = context_token.value();

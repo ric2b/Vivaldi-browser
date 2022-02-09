@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_HOST_UTILS_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_HOST_UTILS_H_
 
+#include "base/compiler_specific.h"
 #include "content/browser/attribution_reporting/storable_source.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -17,7 +18,7 @@ class Origin;
 namespace content {
 
 class BrowserContext;
-class ConversionManager;
+class AttributionManager;
 
 namespace attribution_host_utils {
 
@@ -37,7 +38,8 @@ VerifyResult VerifyAndStoreImpression(StorableSource::SourceType source_type,
                                       const url::Origin& impression_origin,
                                       const blink::Impression& impression,
                                       BrowserContext* browser_context,
-                                      ConversionManager& conversion_manager);
+                                      AttributionManager& attribution_manager,
+                                      base::Time impression_time);
 
 CONTENT_EXPORT absl::optional<blink::Impression> ParseImpressionFromApp(
     const std::string& attribution_source_event_id,

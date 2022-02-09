@@ -18,6 +18,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -31,7 +32,7 @@
 #include "sql/transaction.h"
 
 #if defined(OS_MAC)
-#include "base/mac/mac_util.h"
+#include "base/mac/backup_util.h"
 #endif
 
 namespace calendar {
@@ -41,8 +42,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 9;
-const int kCompatibleVersionNumber = 9;
+const int kCurrentVersionNumber = 11;
+const int kCompatibleVersionNumber = 11;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -108,15 +109,13 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
 
 #if defined(OS_MAC)
   // Exclude the calendar file from backups.
-  base::mac::SetFileBackupExclusion(calendar_name);
+  base::mac::SetBackupExclusion(calendar_name);
 #endif
 
   // Prime the cache.
   db_.Preload();
 
   // Create the tables and indices.
-  // NOTE: If you add something here, also add it to
-  //       RecreateAllButStarAndURLTables.
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;
 
@@ -308,6 +307,17 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
   if (cur_version == 9) {
     // Version prior to adding supported_component_set
     if (!MigrateCalendarToVersion10()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 10) {
+    // Version prior to adding pending_delete and sync_pending
+    if (!MigrateCalendarToVersion11()) {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;

@@ -10,7 +10,6 @@
 #include <string>
 
 #include "ash/public/cpp/new_window_delegate.h"
-#include "base/macros.h"
 #include "components/arc/intent_helper/control_camera_app_delegate.h"
 #include "components/arc/intent_helper/open_url_delegate.h"
 #include "url/gurl.h"
@@ -43,10 +42,10 @@ class ChromeNewWindowClient : public ash::NewWindowDelegate,
   // Overridden from ash::NewWindowDelegate:
   void NewTab() override;
   void NewWindow(bool incognito, bool should_trigger_session_restore) override;
-  void NewWindowForWebUITabDrop(
+  void NewWindowForDetachingTab(
       aura::Window* source_window,
       const ui::OSExchangeData& drop_data,
-      NewWindowForWebUITabDropCallback closure) override;
+      NewWindowForDetachingTabCallback closure) override;
   void OpenUrl(const GURL& url, bool from_user_interaction) override;
   void OpenCalculator() override;
   void OpenFileManager() override;

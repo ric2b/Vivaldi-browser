@@ -9,6 +9,7 @@
 
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
@@ -30,6 +31,7 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -37,6 +39,7 @@
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/scheme_host_port.h"
 #include "url/url_constants.h"
 
 namespace content {
@@ -73,7 +76,8 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 // an in-browser interest group based ad auction to an auction participant.
 void FetchReport(network::mojom::URLLoaderFactory* url_loader_factory,
                  const GURL& url,
-                 const url::Origin& frame_origin) {
+                 const url::Origin& frame_origin,
+                 network::mojom::ClientSecurityStatePtr client_security_state) {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
   resource_request->redirect_mode = network::mojom::RedirectMode::kError;
@@ -82,6 +86,8 @@ void FetchReport(network::mojom::URLLoaderFactory* url_loader_factory,
   resource_request->trusted_params = network::ResourceRequest::TrustedParams();
   resource_request->trusted_params->isolation_info =
       net::IsolationInfo::CreateTransient();
+  resource_request->trusted_params->client_security_state =
+      std::move(client_security_state);
   auto simple_url_loader = network::SimpleURLLoader::Create(
       std::move(resource_request), kTrafficAnnotation);
   network::SimpleURLLoader* simple_url_loader_ptr = simple_url_loader.get();
@@ -95,12 +101,41 @@ void FetchReport(network::mojom::URLLoaderFactory* url_loader_factory,
                      std::move(simple_url_loader)));
 }
 
+bool IsAdRequestValid(const blink::mojom::AdRequestConfig& config) {
+  // The ad_request_url origin has to be HTTPS.
+  if (config.ad_request_url.scheme() != url::kHttpsScheme) {
+    return false;
+  }
+
+  // At least one adProperties is required to request potential ads.
+  if (config.ad_properties.size() <= 0) {
+    return false;
+  }
+
+  // If a fallback source is specified it must be HTTPS.
+  if (config.fallback_source &&
+      (config.fallback_source->scheme() != url::kHttpsScheme)) {
+    return false;
+  }
+
+  return true;
+}
+
 bool IsAuctionValid(const blink::mojom::AuctionAdConfig& config) {
-  // The seller origin has to be HTTPS and match the `decision_logic_url`
-  // origin.
-  if (config.seller.scheme() != url::kHttpsScheme ||
-      !config.decision_logic_url.SchemeIs(url::kHttpsScheme) ||
-      config.seller != url::Origin::Create(config.decision_logic_url)) {
+  // The seller origin has to be HTTPS.
+  if (config.seller.scheme() != url::kHttpsScheme)
+    return false;
+
+  // Opaque Origins have empty schemes.
+  DCHECK(!config.seller.opaque());
+
+  // `decision_logic_url` and, if present, `trusted_scoring_signals_url` must
+  // share the seller's origin.
+  if (url::SchemeHostPort(config.decision_logic_url) !=
+          config.seller.GetTupleOrPrecursorTupleIfOpaque() ||
+      (config.trusted_scoring_signals_url &&
+       url::SchemeHostPort(*config.trusted_scoring_signals_url) !=
+           config.seller.GetTupleOrPrecursorTupleIfOpaque())) {
     return false;
   }
 
@@ -163,6 +198,13 @@ void AdAuctionServiceImpl::CreateMojoService(
 
 void AdAuctionServiceImpl::JoinInterestGroup(
     const blink::InterestGroup& group) {
+  // If the interest group API is not allowed for this context by Permissions
+  // Policy, do nothing
+  if (!render_frame_host()->IsFeatureEnabled(
+          blink::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup)) {
+    mojo::ReportBadMessage("Unexpected request");
+    return;
+  }
   // If the interest group API is not allowed for this origin do nothing.
   if (!GetContentClient()->browser()->IsInterestGroupAPIAllowed(
           render_frame_host()->GetBrowserContext(), main_frame_origin_,
@@ -186,6 +228,13 @@ void AdAuctionServiceImpl::JoinInterestGroup(
 
 void AdAuctionServiceImpl::LeaveInterestGroup(const url::Origin& owner,
                                               const std::string& name) {
+  // If the interest group API is not allowed for this context by Permissions
+  // Policy, do nothing
+  if (!render_frame_host()->IsFeatureEnabled(
+          blink::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup)) {
+    mojo::ReportBadMessage("Unexpected request");
+    return;
+  }
   // If the interest group API is not allowed for this origin do nothing.
   if (!GetContentClient()->browser()->IsInterestGroupAPIAllowed(
           render_frame_host()->GetBrowserContext(), main_frame_origin_,
@@ -203,17 +252,32 @@ void AdAuctionServiceImpl::LeaveInterestGroup(const url::Origin& owner,
 }
 
 void AdAuctionServiceImpl::UpdateAdInterestGroups() {
+  // If the interest group API is not allowed for this context by Permissions
+  // Policy, do nothing
+  if (!render_frame_host()->IsFeatureEnabled(
+          blink::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup)) {
+    mojo::ReportBadMessage("Unexpected request");
+    return;
+  }
   // If the interest group API is not allowed for this origin do nothing.
   if (!GetContentClient()->browser()->IsInterestGroupAPIAllowed(
           render_frame_host()->GetBrowserContext(), main_frame_origin_,
           origin().GetURL())) {
     return;
   }
-  GetInterestGroupManager().UpdateInterestGroupsOfOwner(origin());
+  GetInterestGroupManager().UpdateInterestGroupsOfOwner(
+      origin(), GetFrame()->BuildClientSecurityState());
 }
 
 void AdAuctionServiceImpl::RunAdAuction(blink::mojom::AuctionAdConfigPtr config,
                                         RunAdAuctionCallback callback) {
+  // If the run ad auction API is not allowed for this context by Permissions
+  // Policy, do nothing
+  if (!render_frame_host()->IsFeatureEnabled(
+          blink::mojom::PermissionsPolicyFeature::kRunAdAuction)) {
+    mojo::ReportBadMessage("Unexpected request");
+    return;
+  }
   if (!IsAuctionValid(*config)) {
     std::move(callback).Run(absl::nullopt);
     return;
@@ -264,6 +328,37 @@ void AdAuctionServiceImpl::RunAdAuction(blink::mojom::AuctionAdConfigPtr config,
   auctions_.insert(std::move(auction));
 }
 
+void AdAuctionServiceImpl::CreateAdRequest(
+    blink::mojom::AdRequestConfigPtr config,
+    CreateAdRequestCallback callback) {
+  if (!IsAdRequestValid(*config)) {
+    std::move(callback).Run(absl::nullopt);
+    return;
+  }
+
+  // TODO(https://crbug.com/1249186): Actually request Ads and return a guid.
+  // For now just act like it failed.
+  std::move(callback).Run(absl::nullopt);
+}
+
+void AdAuctionServiceImpl::FinalizeAd(const std::string& ads_guid,
+                                      ::blink::mojom::AuctionAdConfigPtr config,
+                                      FinalizeAdCallback callback) {
+  if (!config->decision_logic_url.SchemeIs(url::kHttpsScheme)) {
+    std::move(callback).Run(absl::nullopt);
+    return;
+  }
+
+  if (ads_guid.empty()) {
+    std::move(callback).Run(absl::nullopt);
+    return;
+  }
+
+  // TODO(https://crbug.com/1249186): Actually finalize Ad and return an URL.
+  // For now just act like it failed.
+  std::move(callback).Run(absl::nullopt);
+}
+
 network::mojom::URLLoaderFactory*
 AdAuctionServiceImpl::GetFrameURLLoaderFactory() {
   if (!frame_url_loader_factory_ || !frame_url_loader_factory_.is_connected()) {
@@ -308,6 +403,11 @@ RenderFrameHostImpl* AdAuctionServiceImpl::GetFrame() {
   return static_cast<RenderFrameHostImpl*>(render_frame_host());
 }
 
+network::mojom::ClientSecurityStatePtr
+AdAuctionServiceImpl::GetClientSecurityState() {
+  return GetFrame()->BuildClientSecurityState();
+}
+
 void AdAuctionServiceImpl::OnAuctionComplete(
     RunAdAuctionCallback callback,
     AuctionRunner* auction,
@@ -324,8 +424,9 @@ void AdAuctionServiceImpl::OnAuctionComplete(
 
   // Forward debug information to devtools.
   for (const std::string& error : errors) {
-    devtools_instrumentation::LogWorkletError(
-        static_cast<RenderFrameHostImpl*>(render_frame_host()), error);
+    devtools_instrumentation::LogWorkletMessage(
+        *GetFrame(), blink::mojom::ConsoleMessageLevel::kError,
+        base::StrCat({"Worklet error: ", error}));
   }
 
   if (!render_url) {
@@ -335,25 +436,32 @@ void AdAuctionServiceImpl::OnAuctionComplete(
     return;
   }
 
-  // If fenced frames are enabled, create and return a URN URL instead of the
-  // real URL.
-  //
-  // TODO(https://crbug.com/1253118): Consider removing the non-fenced frame
-  // path, and just disabling FLEDGE when fenced frames are disabled.
-  if (blink::features::IsFencedFramesEnabled()) {
-    render_url =
-        GetFrame()->GetPage().fenced_frame_urls_map().AddFencedFrameURL(
-            *render_url);
-    DCHECK(render_url->is_valid());
-  }
+  render_url =
+      GetFrame()
+          ->GetPage()
+          .fenced_frame_urls_map()
+          .AddFencedFrameURLWithInterestGroupAdComponentUrls(
+              *render_url,
+              // Always pass in non-empty component URL vector, to avoid
+              // leaking any data to fenced frame.
+              //
+              // TODO(mmenke):  Make `ad_component_urls` non-optional
+              // everywhere instead of preserving the empty vs null
+              // distinction, only to discard it here.
+              std::move(ad_component_urls).value_or(std::vector<GURL>()));
+  DCHECK(render_url->is_valid());
 
   std::move(callback).Run(render_url);
 
   network::mojom::URLLoaderFactory* factory = GetTrustedURLLoaderFactory();
-  if (bidder_report_url)
-    FetchReport(factory, *bidder_report_url, origin());
-  if (seller_report_url)
-    FetchReport(factory, *seller_report_url, origin());
+  if (bidder_report_url) {
+    FetchReport(factory, *bidder_report_url, origin(),
+                GetFrame()->BuildClientSecurityState());
+  }
+  if (seller_report_url) {
+    FetchReport(factory, *seller_report_url, origin(),
+                GetFrame()->BuildClientSecurityState());
+  }
 }
 
 InterestGroupManager& AdAuctionServiceImpl::GetInterestGroupManager() const {

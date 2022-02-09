@@ -15,12 +15,12 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -857,6 +857,13 @@ HttpHandler::HttpHandler(
                             &ExecuteWebAuthnCommand,
                             base::BindRepeating(&ExecuteSetUserVerified)))),
 
+      // Extensions for Secure Payment Confirmation API:
+      // https://w3c.github.io/secure-payment-confirmation/#sctn-automation
+      CommandMapping(
+          kPost, "session/:sessionId/secure-payment-confirmation/set-mode",
+          WrapToCommand("SetSPCTransactionMode",
+                        base::BindRepeating(&ExecuteSetSPCTransactionMode))),
+
       // Extension for Permissions Standard Automation "set permission" command:
       // https://w3c.github.io/permissions/#set-permission-command
       CommandMapping(kPost, "session/:sessionId/permissions",
@@ -947,6 +954,10 @@ HttpHandler::HttpHandler(
           kPost, "session/:sessionId/%s/cast/set_sink_to_use",
           WrapToCommand("SetSinkToUse",
                         base::BindRepeating(&ExecuteSetSinkToUse))),
+      VendorPrefixedCommandMapping(
+          kPost, "session/:sessionId/%s/cast/start_desktop_mirroring",
+          WrapToCommand("StartDesktopMirroring",
+                        base::BindRepeating(&ExecuteStartDesktopMirroring))),
       VendorPrefixedCommandMapping(
           kPost, "session/:sessionId/%s/cast/start_tab_mirroring",
           WrapToCommand("StartTabMirroring",

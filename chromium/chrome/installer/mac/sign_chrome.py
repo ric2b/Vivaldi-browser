@@ -49,6 +49,10 @@ def create_config(config_args, development):
                 return False
 
             @property
+            def inject_get_task_allow_entitlement(self):
+                return True
+
+            @property
             def is_development_version(self):
                 return True
         config_class = DevelopmentCodeSignConfig

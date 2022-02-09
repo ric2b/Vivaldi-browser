@@ -23,13 +23,13 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/i18n/rtl.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/kill.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/supports_user_data.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -43,6 +43,7 @@
 #include "content/browser/net/cross_origin_opener_policy_reporter.h"
 #include "content/browser/prerender/prerender_host.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
+#include "content/browser/renderer_host/browsing_context_state.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
 #include "content/browser/renderer_host/cross_origin_opener_policy_access_report_manager.h"
 #include "content/browser/renderer_host/keep_alive_handle_factory.h"
@@ -52,6 +53,7 @@
 #include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/common/buildflags.h"
 #include "content/common/content_export.h"
 #include "content/common/dom_automation_controller.mojom.h"
@@ -98,8 +100,8 @@
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom-forward.h"
+#include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
 #include "third_party/blink/public/mojom/compute_pressure/compute_pressure.mojom-forward.h"
-#include "third_party/blink/public/mojom/contacts/contacts_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/feature_observer/feature_observer.mojom-forward.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/font_access/font_access.mojom-forward.h"
@@ -196,7 +198,7 @@ class DocumentServiceBase;
 }  // namespace internal
 
 class AgentSchedulingGroupHost;
-class AppCacheNavigationHandle;
+class BrowsingContextState;
 class CodeCacheHostImpl;
 class CrossOriginEmbedderPolicyReporter;
 class CrossOriginOpenerPolicyAccessReportManager;
@@ -226,6 +228,7 @@ class RenderWidgetHostView;
 class RenderWidgetHostViewBase;
 class SensorProviderProxyImpl;
 class ServiceWorkerContainerHost;
+class SiteInfo;
 class SpeechSynthesisImpl;
 class SubresourceWebBundleNavigationInfo;
 class TimeoutMonitor;
@@ -331,11 +334,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
   RenderFrameHostImpl* GetMainFrame() override;
   PageImpl& GetPage() override;
   bool IsInPrimaryMainFrame() override;
+  RenderFrameHostImpl* GetOutermostMainFrame() override;
   bool IsFencedFrameRoot() override;
+  bool IsNestedWithinFencedFrame() override;
   void ForEachRenderFrameHost(FrameIterationCallback on_frame) override;
   void ForEachRenderFrameHost(
       FrameIterationAlwaysContinueCallback on_frame) override;
-  int GetFrameTreeNodeId() override;
+  // TODO (crbug.com/1251545) : Frame tree node id should only be known for
+  // subframes. As such, update this method.
+  int GetFrameTreeNodeId() const override;
   const base::UnguessableToken& GetDevToolsFrameToken() override;
   absl::optional<base::UnguessableToken> GetEmbeddingToken() override;
   const std::string& GetFrameName() override;
@@ -416,16 +423,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool IsSandboxed(network::mojom::WebSandboxFlags flags) override;
   void FlushNetworkAndNavigationInterfacesForTesting(
       bool do_nothing_if_no_network_service_connection = false) override;
-  std::string GetBackForwardCanStoreNowDebugStringForTesting() override;
   void PrepareForInnerWebContentsAttach(
       PrepareForInnerWebContentsAttachCallback callback) override;
   blink::FrameOwnerElementType GetFrameOwnerElementType() override;
   bool HasTransientUserActivation() override;
   void NotifyUserActivation(
       blink::mojom::UserActivationNotificationType notification_type) override;
-  void UpdateBrowserControlsState(cc::BrowserControlsState constraints,
-                                  cc::BrowserControlsState current,
-                                  bool animate) override;
   bool Reload() override;
   bool IsDOMContentLoaded() override;
   void UpdateIsAdSubframe(bool is_ad_subframe) override;
@@ -440,7 +443,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       bool is_payment_credential_creation) override;
   void SetIsXrOverlaySetup() override;
   ukm::SourceId GetPageUkmSourceId() override;
-  StoragePartition* GetStoragePartition() override;
+  StoragePartitionImpl* GetStoragePartition() override;
   BrowserContext* GetBrowserContext() override;
   void ReportInspectorIssue(blink::mojom::InspectorIssueInfoPtr info) override;
   void WriteIntoTrace(perfetto::TracedValue context) override;
@@ -452,7 +455,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   const RenderFrameHostImpl* GetMainFrame() const;
 
   // Additional non-override const version of GetParent.
-  RenderFrameHostImpl* GetParent() const;
+  const RenderFrameHostImpl* GetParent() const;
+
+  // Write a representation of this object into a trace.
+  void WriteIntoTrace(
+      perfetto::TracedProto<perfetto::protos::pbzero::RenderFrameHost> proto);
 
   // Determines if a clipboard paste using |data| of type |data_type| is allowed
   // in this renderer frame.  The implementation delegates to
@@ -466,13 +473,21 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void SendAccessibilityEventsToManager(
       const AXEventNotificationDetails& details);
 
+  // This is called when accessibility events arrive from renderer to browser.
+  // This could cause eviction if the page is in back/forward cache. Returns
+  // true if the eviction happens, and otherwise calls
+  // |RenderFrameHost::IsInactiveAndDisallowActivation()| and returns the value
+  // from there.
+  bool IsInactiveAndDisallowActivationForAXEvents(
+      const std::vector<ui::AXEvent>& events);
+
   void EvictFromBackForwardCacheWithReason(
       BackForwardCacheMetrics::NotRestoredReason reason);
   void EvictFromBackForwardCacheWithReasons(
       const BackForwardCacheCanStoreDocumentResult& can_store);
 
-  // Only for testing sticky WebSchedulerTrackedFeature.
-  void UseDummyStickySchedulerTrackedFeatureForTesting();
+  // Only for testing sticky WebBackForwardCacheDisablingFeature.
+  void UseDummyStickyBackForwardCacheDisablingFeatureForTesting();
 
   // Returns the current WebPreferences for the WebContents associated with this
   // RenderFrameHost. Will create one if it does not exist (and update all the
@@ -487,6 +502,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnAssociatedInterfaceRequest(
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle handle) override;
+  std::string ToDebugString() override;
 
   // BrowserAccessibilityDelegate
   void AccessibilityPerformAction(const ui::AXActionData& data) override;
@@ -611,7 +627,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FrameTreeNode* child_at(size_t index) const { return children_[index].get(); }
   FrameTreeNode* AddChild(
       std::unique_ptr<FrameTreeNode> child,
-      int process_id,
       int frame_routing_id,
       mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
       const blink::LocalFrameToken& frame_token);
@@ -641,16 +656,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
     return renderer_url_info_.last_document_url;
   }
 
-  // Returns the "loading" URL in the renderer. This tries to replicate
-  // RenderFrameImpl::GetLoadingUrl(). This might return a different URL from
-  // GetLastCommittedURL() in case the document had changed its URL through
-  // document.open() before, and last_document_url_in_renderer() in case of
-  // error pages and loadDataWithBaseURL documents. See comments in the
-  // implementation for details.
-  // This function should only be used to preserve calculations that were
-  // previously done in the renderer but got moved to the browser (e.g. URL
-  // comparisons to determine if a navigation should do a replacement or not).
-  const GURL& GetLastLoadingURLInRenderer() const;
+  // Whether the last committed document was loaded from loadDataWithBaseURL or
+  // not.
+  bool was_loaded_from_load_data_with_base_url() const {
+    return renderer_url_info_.was_loaded_from_load_data_with_base_url;
+  }
 
   // Saves the URLs and other URL-related information used in the renderer.
   // These values can be used to know the current state of URLs in the renderer.
@@ -678,7 +688,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
     // Whether the currently committed document is a result of webview's
     // loadDataWithBaseURL API or not.
-    bool is_loaded_from_load_data_with_base_url = false;
+    bool was_loaded_from_load_data_with_base_url = false;
   };
 
   // Returns the storage key for the last committed document in this
@@ -694,6 +704,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Returns the POST ID of the last committed navigation.
   int64_t last_post_id() { return last_post_id_; }
+
+  // Returns true if last committed navigation's CommonNavigationParam's
+  // `has_user_gesture` is true. Should only be used to get the state of the
+  // lat navigation, and not the current state of user activation of this
+  // RenderFrameHost. See comment on the variable declaration for more details.
+  bool last_navigation_started_with_transient_activation() {
+    return last_navigation_started_with_transient_activation_;
+  }
 
   // Returns true if `dest_url_info` should be considered the same site as the
   // current contents of this frame. This is the primary entry point for
@@ -894,6 +912,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Defines different states the RenderFrameHost can be in during its lifetime
   // i.e., from point of creation to deletion. See |SetLifecycleState|.
+  // NOTE: this must be kept consistent with the
+  // RenderFrameHostImpl.LifecycleState enum in chrome_track_event.proto for
+  // tracing.
   enum class LifecycleStateImpl {
     // This state corresponds to when a speculative RenderFrameHost is created
     // for an ongoing navigation (to new URL) but the navigation hasn't reached
@@ -1170,7 +1191,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // handled by this RenderFrame.
   // |subresource_loader_params| is used in network service land to pass
   // the parameters to create a custom subresource loader in the renderer
-  // process, e.g. by AppCache etc.
+  // process.
   void CommitNavigation(
       NavigationRequest* navigation_request,
       blink::mojom::CommonNavigationParamsPtr common_params,
@@ -1200,12 +1221,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void HandleRendererDebugURL(const GURL& url);
 
   // Sets up the Mojo connection between this instance and its associated render
-  // frame if it has not yet been set up.
-  void SetUpMojoIfNeeded();
+  // frame.
+  void SetUpMojoConnection();
 
   // Tears down the browser-side state relating to the Mojo connection between
   // this instance and its associated render frame.
-  void InvalidateMojoConnection();
+  void TearDownMojoConnection();
 
   // Returns whether the frame is focused. A frame is considered focused when it
   // is the parent chain of the focused frame within the frame tree. In
@@ -1494,8 +1515,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns true if the frame is embedded in a Portal.
   bool InsidePortal();
 
-  bool ShouldVirtualKeyboardOverlayContent() const;
   void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect);
+
+  // Returns the keyboard layout mapping.
+  base::flat_map<std::string, std::string> GetKeyboardLayoutMap();
 
   blink::mojom::FrameVisibility visibility() const { return visibility_; }
 
@@ -1547,13 +1570,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Manual RTTI to ensure safe downcasts in tests.
   virtual bool IsTestRenderFrameHost() const;
 
-  // Scheduler-relevant features this frame is using, for use in metrics.
-  // See comments at |scheduler_tracked_features_|.
-  blink::scheduler::WebSchedulerTrackedFeatures scheduler_tracked_features()
-      const {
-    return Union(renderer_reported_scheduler_tracked_features_,
-                 browser_reported_scheduler_tracked_features_);
-  }
+  using BackForwardCacheDisablingFeatures =
+      blink::scheduler::WebSchedulerTrackedFeatures;
+  using BackForwardCacheDisablingFeature =
+      blink::scheduler::WebSchedulerTrackedFeature;
+
+  // BackForwardCache disabling feature for |this|, used in determing |this|
+  // frame's BackForwardCache eligibility.
+  // See comments at |renderer_reported_bfcache_disabling_features_| and
+  // |browser_reported_bfcache_disabling_features_|.
+  BackForwardCacheDisablingFeatures GetBackForwardCacheDisablingFeatures()
+      const;
 
   // Returns a PrefetchedSignedExchangeCache which is attached to |this|.
   scoped_refptr<PrefetchedSignedExchangeCache>
@@ -1566,11 +1593,53 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |this| or the parent frame or the opener frame.
   std::unique_ptr<WebBundleHandleTracker> MaybeCreateWebBundleHandleTracker();
 
-  // Notify the scheduler that this frame used a feature which impacts the
-  // scheduling policy (e.g. whether the frame can be frozen or put into the
-  // back-forward cache).
-  void OnSchedulerTrackedFeatureUsed(
-      blink::scheduler::WebSchedulerTrackedFeature feature);
+  void set_did_stop_loading_callback_for_testing(base::OnceClosure callback) {
+    did_stop_loading_callback_ = std::move(callback);
+  }
+
+  class BackForwardCacheDisablingFeatureHandle {
+   public:
+    BackForwardCacheDisablingFeatureHandle();
+    BackForwardCacheDisablingFeatureHandle(
+        BackForwardCacheDisablingFeatureHandle&&);
+    BackForwardCacheDisablingFeatureHandle& operator=(
+        BackForwardCacheDisablingFeatureHandle&& other) {
+      feature_ = other.feature_;
+      render_frame_host_ = other.render_frame_host_;
+      other.render_frame_host_ = nullptr;
+      return *this;
+    }
+
+    inline ~BackForwardCacheDisablingFeatureHandle() { reset(); }
+
+    // This will reduce the feature count for |feature_| for the first time, and
+    // do nothing for further calls.
+    inline void reset() {
+      if (render_frame_host_)
+        render_frame_host_->OnBackForwardCacheDisablingFeatureRemoved(feature_);
+      render_frame_host_ = nullptr;
+    }
+
+   private:
+    friend class RenderFrameHostImpl;
+    BackForwardCacheDisablingFeatureHandle(
+        RenderFrameHostImpl* render_frame_host,
+        BackForwardCacheDisablingFeature feature);
+
+    base::WeakPtr<RenderFrameHostImpl> render_frame_host_ = nullptr;
+    BackForwardCacheDisablingFeature feature_;
+  };
+
+  // A feature that blocks back/forward cache is used. This function is used for
+  // non sticky blocking features.
+  BackForwardCacheDisablingFeatureHandle
+  RegisterBackForwardCacheDisablingNonStickyFeature(
+      BackForwardCacheDisablingFeature feature);
+
+  // A feature that blocks back/forward cache is used. This function is used for
+  // sticky blocking features.
+  void OnBackForwardCacheDisablingStickyFeatureUsed(
+      BackForwardCacheDisablingFeature feature);
 
   // Returns true if the frame is frozen.
   bool IsFrozen();
@@ -1578,14 +1647,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Set the `frame_` for sending messages to the renderer process.
   void SetMojomFrameRemote(mojo::PendingAssociatedRemote<mojom::Frame>);
 
-  void CreateAppCacheBackend(
-      mojo::PendingReceiver<blink::mojom::AppCacheBackend> receiver);
-
   void GetAudioContextManager(
       mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver);
-
-  void GetContactsManager(
-      mojo::PendingReceiver<blink::mojom::ContactsManager> receiver);
 
   void GetFileSystemManager(
       mojo::PendingReceiver<blink::mojom::FileSystemManager> receiver);
@@ -1857,10 +1920,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
   CreateCrossOriginPrefetchLoaderFactoryBundle();
 
-  const AppCacheNavigationHandle* GetAppCacheNavigationHandle() const {
-    return appcache_handle_.get();
-  }
-
   // Returns the BackForwardCacheMetrics associated with the last
   // NavigationEntry this RenderFrameHostImpl committed.
   BackForwardCacheMetrics* GetBackForwardCacheMetrics();
@@ -1877,8 +1936,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
     return media_device_id_salt_base_;
   }
 
-  // Returns the global root RenderFrameHostImpl in the outermost WebContents.
-  RenderFrameHostImpl* GetOutermostMainFrame();
+  // Returns the topmost ancestor RenderFrameHost. This includes any parents (in
+  // the case of subframes), any outer documents (e.g. fenced frame owners), and
+  // any GuestViews. See also GetOutermostMainFrame which does not escape
+  // GuestViews and GetParentOrOuterDocumentOrEmbedder for more details.
+  // Note that this may be different from getting the WebContents' primary main
+  // frame. For example, if `this` is in a bfcached or prerendered page, this
+  // will return the cached/prerendered page's main RenderFrameHost.
+  RenderFrameHostImpl* GetOutermostMainFrameOrEmbedder();
 
   void set_inner_tree_main_frame_tree_node_id(int id) {
     inner_tree_main_frame_tree_node_id_ = id;
@@ -1953,7 +2018,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void DocumentAvailableInMainFrame(bool uses_temporary_zoom_level) override;
   void SetNeedsOcclusionTracking(bool needs_tracking) override;
   void SetVirtualKeyboardOverlayPolicy(bool vk_overlays_content) override;
-  void EvictFromBackForwardCache(blink::mojom::RendererEvictionReason) override;
   void VisibilityChanged(blink::mojom::FrameVisibility) override;
   void DidChangeThemeColor(absl::optional<SkColor> theme_color) override;
   void DidChangeBackgroundColor(SkColor background_color,
@@ -1964,7 +2028,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void EnforceInsecureRequestPolicy(
       blink::mojom::InsecureRequestPolicy policy) override;
   void EnforceInsecureNavigationsSet(const std::vector<uint32_t>& set) override;
-  void DidChangeActiveSchedulerTrackedFeatures(uint64_t features_mask) override;
   void SuddenTerminationDisablerChanged(
       bool present,
       blink::mojom::SuddenTerminationDisablerType disabler_type) override;
@@ -1975,7 +2038,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void BubbleLogicalScrollInParentFrame(
       blink::mojom::ScrollDirection direction,
       ui::ScrollGranularity granularity) override;
-  void DidAccessInitialDocument() override;
   void DidBlockNavigation(
       const GURL& blocked_url,
       const GURL& initiator_url,
@@ -2070,6 +2132,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const absl::optional<std::u16string>& untrusted_stack_trace) override;
   void FrameSizeChanged(const gfx::Size& frame_size) override;
 
+  // blink::mojom::BackForwardCacheControllerHost:
+  void EvictFromBackForwardCache(blink::mojom::RendererEvictionReason) override;
+  void DidChangeBackForwardCacheDisablingFeatures(
+      uint64_t features_mask) override;
+
   // blink::LocalMainFrameHost overrides:
   void ScaleFactorChanged(float scale) override;
   void ContentsPreferredSizeChanged(const gfx::Size& pref_size) override;
@@ -2089,6 +2156,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void SetWindowRect(const gfx::Rect& bounds,
                      SetWindowRectCallback callback) override;
   void DidFirstVisuallyNonEmptyPaint() override;
+  void DidAccessInitialMainDocument() override;
 
   void ReportNoBinderForInterface(const std::string& error);
 
@@ -2124,19 +2192,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Document-associated data. This is cleared whenever a new document is hosted
   // by this RenderFrameHost. Please refer to the description at
-  // content/public/browser/render_document_host_user_data.h for more details.
-  base::SupportsUserData::Data* GetRenderDocumentHostUserData(
-      const void* key) const {
+  // content/public/browser/document_user_data.h for more details.
+  base::SupportsUserData::Data* GetDocumentUserData(const void* key) const {
     return document_associated_data_->GetUserData(key);
   }
 
-  void SetRenderDocumentHostUserData(
-      const void* key,
-      std::unique_ptr<base::SupportsUserData::Data> data) {
+  void SetDocumentUserData(const void* key,
+                           std::unique_ptr<base::SupportsUserData::Data> data) {
     document_associated_data_->SetUserData(key, std::move(data));
   }
 
-  void RemoveRenderDocumentHostUserData(const void* key) {
+  void RemoveDocumentUserData(const void* key) {
     document_associated_data_->RemoveUserData(key);
   }
 
@@ -2330,6 +2396,26 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Computes the nonce to be used for isolation info and storage key.
   absl::optional<base::UnguessableToken> ComputeNonce(bool anonymous);
 
+  // Return the frame immediately preceding this RenderFrameHost in its parent's
+  // children, or nullptr if there is no such node.
+  FrameTreeNode* PreviousSibling() const;
+
+  // Return the frame immediately following this RenderFrameHost in its parent's
+  // children, or nullptr if there is no such node.
+  FrameTreeNode* NextSibling() const;
+
+  // Set the |last_committed_origin_|, |isolation_info_|, and
+  // |permissions_policy_| of |this| frame, inheriting the origin from
+  // |new_frame_creator| as appropriate (e.g. depending on whether |this| frame
+  // should be sandboxed / should have an opaque origin instead).
+  void SetOriginDependentStateOfNewFrame(const url::Origin& new_frame_creator);
+
+  // Returns the BrowsingContextState associated with this RenderFrameHostImpl.
+  // See class comments in BrowsingContextState for a more detailed description.
+  scoped_refptr<BrowsingContextState>& browsing_context_state() {
+    return browsing_context_state_;
+  }
+
  protected:
   friend class RenderFrameHostFactory;
 
@@ -2339,16 +2425,18 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // into WebContentsObserver::FrameDetached for now.
   // |lifecycle_state_| can either be kSpeculative, kPrerendering, or kActive
   // during RenderFrameHostImpl creation.
-  RenderFrameHostImpl(SiteInstance* site_instance,
-                      scoped_refptr<RenderViewHostImpl> render_view_host,
-                      RenderFrameHostDelegate* delegate,
-                      FrameTree* frame_tree,
-                      FrameTreeNode* frame_tree_node,
-                      int32_t routing_id,
-                      mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
-                      const blink::LocalFrameToken& frame_token,
-                      bool renderer_initiated_creation_of_main_frame,
-                      LifecycleStateImpl lifecycle_state);
+  RenderFrameHostImpl(
+      SiteInstance* site_instance,
+      scoped_refptr<RenderViewHostImpl> render_view_host,
+      RenderFrameHostDelegate* delegate,
+      FrameTree* frame_tree,
+      FrameTreeNode* frame_tree_node,
+      int32_t routing_id,
+      mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
+      const blink::LocalFrameToken& frame_token,
+      bool renderer_initiated_creation_of_main_frame,
+      LifecycleStateImpl lifecycle_state,
+      scoped_refptr<BrowsingContextState> browsing_context_state);
 
   // The SendCommit* functions below are wrappers for commit calls
   // made to mojom::NavigationClient.
@@ -2394,8 +2482,16 @@ class CONTENT_EXPORT RenderFrameHostImpl
   BuildCommitFailedNavigationCallback(NavigationRequest* navigation_request);
 
   // Protected / virtual so it can be overridden by tests.
+  // If `for_legacy` is true, the beforeunload handler is not actually present,
+  // nor required to run. In this case the renderer is not notified, but
+  // PostTask() is used. PostTask() is used because synchronously proceeding
+  // with navigation could lead to reentrancy problems. In particular, there
+  // are tests and android WebView using NavigationThrottles to navigate from
+  // WillStartRequest(). If PostTask() is not used, then CHECKs would trigger
+  // in a NavigationController. See https://crbug.com/365039 for more details.
   virtual void SendBeforeUnload(bool is_reload,
-                                base::WeakPtr<RenderFrameHostImpl> impl);
+                                base::WeakPtr<RenderFrameHostImpl> impl,
+                                bool for_legacy);
 
  private:
   friend class RenderFrameHostPermissionsPolicyTest;
@@ -2485,12 +2581,19 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessSSLBrowserTest,
                            UnloadHandlersArePowerfulGrandChild);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplTest, ExpectedMainWorldOrigin);
-  FRIEND_TEST_ALL_PREFIXES(RenderDocumentHostUserDataTest,
-                           CheckInPendingDeletionState);
+  FRIEND_TEST_ALL_PREFIXES(DocumentUserDataTest, CheckInPendingDeletionState);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest, FrozenAndUnfrozenIPC);
 
   class DroppedInterfaceRequestLogger;
   class SubresourceLoaderFactoriesConfig;
+
+  enum class FencedFrameStatus {
+    kNotNestedInFencedFrame,
+    kFencedFrameRoot,
+    kIframeNestedWithinFencedFrame
+  };
+
+  FrameTreeNode* GetSibling(int relative_offset) const;
 
   FrameTreeNode* FindAndVerifyChildInternal(
       RenderFrameHostOrProxy child_frame_or_proxy,
@@ -2512,10 +2615,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const url::Origin& frame_origin,
       net::IsolationInfo::RequestType request_type,
       bool anonymous);
-
-  // Helper for GetParentOrOuterDocument/GetParentOrOuterDocumentOrEmbedder.
-  // Do not use directly.
-  RenderFrameHostImpl* GetParentOrOuterDocumentHelper(bool escape_guest_view);
 
   // Returns whether or not this RenderFrameHost is a descendant of |ancestor|.
   // This is equivalent to check that |ancestor| is reached by iterating on
@@ -2584,6 +2683,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void CancelInitialHistoryLoad() override;
   void DidUpdatePreferredColorScheme(
       blink::mojom::PreferredColorScheme preferred_color_scheme) override;
+  void DidInferColorScheme(
+      blink::mojom::PreferredColorScheme color_scheme) override;
   void UpdateEncoding(const std::string& encoding) override;
   void UpdateState(const blink::PageState& state) override;
   void OpenURL(blink::mojom::OpenURLParamsPtr params) override;
@@ -2619,7 +2720,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
       int32_t plugin_child_id,
       const base::FilePath& path) override;
   void GetPluginInfo(const GURL& url,
-                     const url::Origin& main_frame_origin,
                      const std::string& mime_type,
                      GetPluginInfoCallback callback) override;
   void DidCreateInProcessInstance(int32_t instance,
@@ -2788,13 +2888,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // frames, it will return the current frame's view.
   RenderWidgetHostViewBase* GetViewForAccessibility();
 
-  // Returns a raw pointer to the Web Bluetooth Service owned by the frame. Used
-  // for testing purposes only (see |TestRenderFrameHost|).
+  // Returns a raw pointer to the last Web Bluetooth Service associated with the
+  // frame, or nullptr otherwise. Used for testing purposes only (see
+  // |TestRenderFrameHost|).
   WebBluetoothServiceImpl* GetWebBluetoothServiceForTesting();
-
-  // Deletes the Web Bluetooth Service owned by the frame.
-  void DeleteWebBluetoothService(
-      WebBluetoothServiceImpl* web_bluetooth_service);
 
   // Allows tests to disable the unload event timer to simulate bugs that
   // happen before it fires (to avoid flakiness).
@@ -2814,7 +2911,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       blink::mojom::ReferrerPtr referrer,
       const ui::PageTransition& transition,
       bool should_replace_current_entry,
-      const NavigationGesture& gesture,
+      bool has_user_gesture,
       const std::vector<GURL>& redirects,
       const GURL& original_request_url,
       bool is_same_document,
@@ -2825,12 +2922,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |treat_as_final_completion_callback| is true, the frame should stop waiting
   // for any further completion callbacks from subframes. Completion callbacks
   // invoked from the renderer set |treat_as_final_completion_callback| to
-  // false, whereas a beforeunload timeout sets it to true.
+  // false, whereas a beforeunload timeout sets it to true. See
+  // SendBeforeUnload() for details on `for_legacy`.
   void ProcessBeforeUnloadCompleted(
       bool proceed,
       bool treat_as_final_completion_callback,
       const base::TimeTicks& renderer_before_unload_start_time,
-      const base::TimeTicks& renderer_before_unload_end_time);
+      const base::TimeTicks& renderer_before_unload_end_time,
+      bool for_legacy);
 
   // Find the frame that triggered the beforeunload handler to run in this
   // frame, which might be the frame itself or its ancestor.  This will
@@ -2846,14 +2945,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // been invoked on. If a beforeunload timeout occurred,
   // |treat_as_final_completion_callback| is set to true.
   // |is_frame_being_destroyed| is set to true if this was called as part of
-  // destroying |frame|.
+  // destroying |frame|. See SendBeforeUnload() for details on `for_legacy`.
   void ProcessBeforeUnloadCompletedFromFrame(
       bool proceed,
       bool treat_as_final_completion_callback,
       RenderFrameHostImpl* frame,
       bool is_frame_being_destroyed,
       const base::TimeTicks& renderer_before_unload_start_time,
-      const base::TimeTicks& renderer_before_unload_end_time);
+      const base::TimeTicks& renderer_before_unload_end_time,
+      bool for_legacy);
 
   // Helper function to check whether the current frame and its subframes need
   // to run beforeunload and, if |send_ipc| is true, send all the necessary
@@ -2870,12 +2970,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Update this frame's last committed origin.
   void SetLastCommittedOrigin(const url::Origin& origin);
-
-  // Set the |last_committed_origin_|, |isolation_info_|, and
-  // |permissions_policy_| of |this| frame, inheriting the origin from
-  // |new_frame_creator| as appropriate (e.g. depending on whether |this| frame
-  // should be sandboxed / should have an opaque origin instead).
-  void SetOriginDependentStateOfNewFrame(const url::Origin& new_frame_creator);
 
   // Called when a navigation commits successfully to |url|. This will update
   // |last_committed_site_info_| with the SiteInfo corresponding to |url|.
@@ -3159,6 +3253,26 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // JavaScriptExecuteRequestInIsolatedWorld.
   void AssertNonSpeculativeFrame() const;
 
+  // A feature that blocks back/forward cache is used. Count the usage and evict
+  // the entry if necessary.
+  void OnBackForwardCacheDisablingFeatureUsed(
+      BackForwardCacheDisablingFeature feature);
+
+  // A feature that blocks back/forward cache is removed. Update the count of
+  // feature usage. This should only be called from
+  // |BackForwardCacheDisablingFeatureHandle|.
+  void OnBackForwardCacheDisablingFeatureRemoved(
+      BackForwardCacheDisablingFeature feature);
+
+  // Create a self-owned receiver that handles incoming BroadcastChannel
+  // ConnectToChannel messages from the renderer.
+  void CreateBroadcastChannelProvider(
+      mojo::PendingAssociatedReceiver<blink::mojom::BroadcastChannelProvider>
+          receiver);
+
+  perfetto::protos::pbzero::RenderFrameHost::LifecycleState
+  LifecycleStateToProto();
+
   // The RenderViewHost that this RenderFrameHost is associated with.
   //
   // It is kept alive as long as any RenderFrameHosts or RenderFrameProxyHosts
@@ -3172,7 +3286,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // some form of page context.
   scoped_refptr<RenderViewHostImpl> render_view_host_;
 
-  RenderFrameHostDelegate* const delegate_;
+  const raw_ptr<RenderFrameHostDelegate> delegate_;
 
   // The SiteInstance associated with this RenderFrameHost. All content drawn
   // in this RenderFrameHost is part of this SiteInstance. Cannot change over
@@ -3190,10 +3304,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Reference to the whole frame tree that this RenderFrameHost belongs to.
   // Allows this RenderFrameHost to add and remove nodes in response to
   // messages from the renderer requesting DOM manipulation.
-  FrameTree* frame_tree_ = nullptr;
+  raw_ptr<FrameTree> frame_tree_ = nullptr;
 
   // The FrameTreeNode which this RenderFrameHostImpl is hosted in.
-  FrameTreeNode* frame_tree_node_ = nullptr;
+  raw_ptr<FrameTreeNode> frame_tree_node_ = nullptr;
+
+  // Stores all of the state related to each browsing context +
+  // BrowsingInstance. This includes proxy hosts, and replication state, and
+  // will help facilitate the full removal of references to frame_tree_ and
+  // frame_tree_node_ (per crbug.com/1179502).
+  // TODO(crbug.com/1270671): make this field const when legacy mode is removed.
+  scoped_refptr<BrowsingContextState> browsing_context_state_;
 
   // The immediate children of this specific frame.
   std::vector<std::unique_ptr<FrameTreeNode>> children_;
@@ -3204,7 +3325,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // deletion, and GetParent() should never return a different value, even if
   // this RenderFrameHost is on the pending deletion list and the parent
   // FrameTreeNode has changed its current RenderFrameHost.
-  RenderFrameHostImpl* const parent_;
+  const raw_ptr<RenderFrameHostImpl> parent_;
 
   // Number of times we need to iterate from a RenderFrameHost to its parent
   // until we reach main RenderFrameHost (i.e. one which doesn't have a parent).
@@ -3271,6 +3392,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // The POST ID of the last committed navigation.
   int64_t last_post_id_ = 0;
+
+  // Whether the last committed navigation's CommonNavigationParams'
+  // `has_user_gesture` is true or not. Note that this is just the cached value
+  // of what happened during the last navigation, and does not reflect the
+  // user activation state of this RenderFrameHost. To get the current/live user
+  // activation state, get the value from FrameTreeNode's
+  // HasStickyUserActivation() or HasTransientUserActivation() instead.
+  bool last_navigation_started_with_transient_activation_ = false;
 
   // Whether the last committed navigation is to an error page.
   bool is_error_page_ = false;
@@ -3394,8 +3523,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
 
-  std::list<std::unique_ptr<WebBluetoothServiceImpl>> web_bluetooth_services_;
-
   // The object managing the accessibility tree for this frame.
   std::unique_ptr<BrowserAccessibilityManager> browser_accessibility_manager_;
 
@@ -3424,6 +3551,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // already exists it will still be used.
   bool no_create_browser_accessibility_manager_for_testing_ = false;
 
+  // Remotes must be reset in TearDownMojoConnection().
   // Holder of Mojo connection with ImageDownloader service in Blink.
   mojo::Remote<blink::mojom::ImageDownloader> mojo_image_downloader_;
 
@@ -3439,11 +3567,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Holder of Mojo connection with the HighPriorityLocalFrame in blink.
   mojo::Remote<blink::mojom::HighPriorityLocalFrame> high_priority_local_frame_;
-
-  // Holds AppCacheNavigationHandle after navigation request has been committed,
-  // which keeps corresponding AppCacheHost alive while renderer asks for it.
-  // See AppCacheNavigationHandle comment for more details.
-  std::unique_ptr<AppCacheNavigationHandle> appcache_handle_;
 
   // Holds the cross-document NavigationRequests that are waiting to commit.
   // These are navigations that have passed ReadyToCommit stage and are waiting
@@ -3472,12 +3595,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // signal. If false, all audio streams are currently silent (or there are no
   // audio streams).
   bool is_audible_ = false;
-
-  // If true, then the Virtual keyboard rectangle that occludes the content is
-  // sent to the VirtualKeyboard API where it fires overlaygeometrychange JS
-  // event notifying the web authors that Virtual keyboard has occluded the
-  // content.
-  bool should_virtual_keyboard_overlay_content_ = false;
 
   // If true, then this RenderFrameHost is waiting to update its
   // LifecycleStateImpl. Happens when the old RenderFrameHost is waiting to
@@ -3513,7 +3630,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // collected.
   int renderer_exit_count_ = 0;
 
-  // Receivers must be reset in InvalidateMojoConnection().
+  // Receivers must be reset in TearDownMojoConnection().
   mojo::AssociatedReceiver<mojom::FrameHost> frame_host_associated_receiver_{
       this};
   mojo::AssociatedReceiver<blink::mojom::BackForwardCacheControllerHost>
@@ -3607,6 +3724,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
       &broker_};
 
+  // Performs Mojo capability control on this RenderFrameHost when
+  // `mojo_binder_policy_applier_` is not null. Mojo binder polices will be
+  // applied to interfaces that are registered with BrowserInterfaceBrokerImpl
+  // and AssociatedInterfaceRegistry before invoking their binders.
+  // Currently, it is non-null pointer only if this RenderFrameHost is being
+  // prerendered.
+  std::unique_ptr<MojoBinderPolicyApplier> mojo_binder_policy_applier_;
+
   // Logs interface requests that arrive after the frame has already committed a
   // non-same-document navigation, and has already unbound
   // |broker_receiver_| from the interface connection that had been used to
@@ -3650,9 +3775,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       network_service_disconnect_handler_holder_;
 
   // Whether UpdateSubresourceLoaderFactories should recreate the default
-  // URLLoaderFactory when handling a NetworkService crash.  In case the frame
-  // is covered by AppCache, only isolated-world-specific factories need to be
-  // refreshed, but the main, AppCache-specific factory shouldn't be refreshed.
+  // URLLoaderFactory when handling a NetworkService crash.
   bool recreate_default_url_loader_factory_after_network_service_crash_ = false;
 
   // Set of isolated world origins that require a separate URLLoaderFactory
@@ -3728,7 +3851,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::string canonical_encoding_;
 
   // Used to intercept DidCommit* calls in tests.
-  CommitCallbackInterceptor* commit_callback_interceptor_ = nullptr;
+  raw_ptr<CommitCallbackInterceptor> commit_callback_interceptor_ = nullptr;
 
   // Used to hear about CreateNewPopupWidget calls in tests.
   CreateNewPopupWidgetCallbackForTesting create_new_popup_widget_callback_;
@@ -3740,14 +3863,22 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // This is used only for metrics.
   // See blink::SchedulingPolicy::Feature for the meaning.
   // These values should be cleared on document commit.
-  // Both are needed as some features are tracked in the renderer process and
-  // some in the browser process, depending on the design of each individual
-  // feature. They are tracked separately, because when the renderer updates the
-  // set of features, the browser ones should persist.
-  blink::scheduler::WebSchedulerTrackedFeatures
-      renderer_reported_scheduler_tracked_features_;
-  blink::scheduler::WebSchedulerTrackedFeatures
-      browser_reported_scheduler_tracked_features_;
+  //
+  // Some features are tracked in these places:
+  //   * `renderer_reported_bfcache_disabling_features_` for features in the
+  //      document in the renderer.
+  //   * `browser_reported_bfcache_disabling_features_counts_` for the browser
+  //      features.
+  //   * `DedicatedWorkerHost` for features used in dedicated workers.
+  // They are tracked separately, because when the renderer updates the set of
+  // features, the browser ones should persist. Also, dedicated workers might be
+  // destroyed while their renderers persist.
+  BackForwardCacheDisablingFeatures
+      renderer_reported_bfcache_disabling_features_;
+
+  // Count the usage of BackForwardCacheDisablingFeature.
+  base::flat_map<BackForwardCacheDisablingFeature, int>
+      browser_reported_bfcache_disabling_features_counts_;
 
   // Holds prefetched signed exchanges for SignedExchangeSubresourcePrefetch.
   // They will be passed to the next navigation.
@@ -3822,10 +3953,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // be reset when committing a cross-document navigation in this
   // RenderFrameHost. RenderFrameHostImpl stores internal members here
   // directly while consumers of RenderFrameHostImpl should store data via
-  // GetRenderDocumentHostUserData(). Please refer to the description at
-  // content/public/browser/render_document_host_user_data.h for more details.
+  // GetDocumentUserData(). Please refer to the description at
+  // content/public/browser/document_user_data.h for more details.
   struct DocumentAssociatedData : public base::SupportsUserData {
-    DocumentAssociatedData(RenderFrameHostImpl& document);
+    explicit DocumentAssociatedData(RenderFrameHostImpl& document);
     ~DocumentAssociatedData() override;
     DocumentAssociatedData(const DocumentAssociatedData&) = delete;
     DocumentAssociatedData& operator=(const DocumentAssociatedData&) = delete;
@@ -3836,7 +3967,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
     // Indicates whether `blink::mojom::DidDispatchDOMContentLoadedEvent` was
     // called for this document or not.
-    bool dom_content_loaded_ = false;
+    bool dom_content_loaded = false;
 
     // Prerender2:
     //
@@ -3986,6 +4117,20 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // commits.
   base::flat_map<std::string, std::string> reporting_endpoints_;
 
+  // This indicates whether `this` is not nested in a fenced frame, or `this` is
+  // associated with a fenced frame root, or `this` is associated with an iframe
+  // nested within a fenced frame.
+  const FencedFrameStatus fenced_frame_status_;
+
+  // Testing callback run in DidStopLoading() regardless of loading state. This
+  // is useful for tests that need to detect when newly created frames finish
+  // loading about:blank.
+  base::OnceClosure did_stop_loading_callback_;
+
+  // Used when testing to retrieve that last created Web Bluetooth service.
+  raw_ptr<WebBluetoothServiceImpl> last_web_bluetooth_service_for_testing_ =
+      nullptr;
+
   // Vivaldi additions. To minimize the amount of patch blocks here we list both
   // methods and fields.
  public:
@@ -3997,8 +4142,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
       vivaldi_frame_service_;
   // End Vivaldi
 
-  // NOTE: This must be the last member.
+  // WeakPtrFactories are the last members, to ensure they are destroyed before
+  // all other fields of `this`.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_{this};
+
+  // Unlike `weak_ptr_factory` which only invalidates when `this` is about to be
+  // deleted, `render_frame_scoped_weak_ptr_factory_` is invalidated every time
+  // the RenderFrame is deleted (for example, if the renderer crashes).
+  base::WeakPtrFactory<RenderFrameHostImpl>
+      render_frame_scoped_weak_ptr_factory_{this};
 };
 
 // Used when DCHECK_STATE_TRANSITION triggers.

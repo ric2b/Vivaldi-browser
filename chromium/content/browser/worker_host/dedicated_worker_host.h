@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "content/browser/browser_interface_broker_impl.h"
@@ -21,10 +22,14 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/base/isolation_info.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
+#include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
 #include "third_party/blink/public/mojom/loader/content_security_notifier.mojom.h"
@@ -56,8 +61,10 @@ class CrossOriginEmbedderPolicyReporter;
 // of the worker is destroyed. This lives on the UI thread.
 // TODO(crbug.com/1177652): Align this class's lifetime with the associated
 // frame.
-class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
-                                  public RenderProcessHostObserver {
+class DedicatedWorkerHost final
+    : public blink::mojom::DedicatedWorkerHost,
+      public blink::mojom::BackForwardCacheControllerHost,
+      public RenderProcessHostObserver {
  public:
   DedicatedWorkerHost(
       DedicatedWorkerServiceImpl* service,
@@ -109,6 +116,8 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver);
   void CreateCodeCacheHost(
       mojo::PendingReceiver<blink::mojom::CodeCacheHost> receiver);
+  void CreateBroadcastChannelProvider(
+      mojo::PendingReceiver<blink::mojom::BroadcastChannelProvider> receiver);
 
 #if !defined(OS_ANDROID)
   void BindSerialService(
@@ -156,6 +165,20 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
     return service_worker_handle_.get();
   }
 
+  // blink::mojom::BackForwardCacheControllerHost:
+  void EvictFromBackForwardCache(
+      blink::mojom::RendererEvictionReason reason) override;
+  void DidChangeBackForwardCacheDisablingFeatures(
+      uint64_t features_mask) override;
+
+  // Returns the features set that disable back-forward cache.
+  blink::scheduler::WebSchedulerTrackedFeatures
+  GetBackForwardCacheDisablingFeatures() const;
+
+  base::WeakPtr<DedicatedWorkerHost> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
  private:
   // RenderProcessHostObserver:
   void RenderProcessExited(RenderProcessHost* render_process_host,
@@ -193,6 +216,8 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
       base::WeakPtr<ServiceWorkerObjectHost>
           controller_service_worker_object_host,
       const GURL& final_response_url);
+  void ScriptLoadStartFailed(const GURL& url,
+                             const network::URLLoaderCompletionStatus& status);
 
   // Sets up the observer of network service crash.
   void ObserveNetworkServiceCrash(StoragePartitionImpl* storage_partition_impl);
@@ -223,13 +248,13 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
   //  - RenderProcessHostImpl outlives DedicatedWorkerHost.
   // As the conclusion of the above, DedicatedWorkerServiceImpl outlives
   // DedicatedWorkerHost.
-  DedicatedWorkerServiceImpl* const service_;
+  const raw_ptr<DedicatedWorkerServiceImpl> service_;
 
   // The renderer generated ID of this worker, unique across all processes.
   const blink::DedicatedWorkerToken token_;
 
   // The RenderProcessHost that hosts this worker. This outlives `this`.
-  RenderProcessHost* const worker_process_host_;
+  const raw_ptr<RenderProcessHost> worker_process_host_;
 
   base::ScopedObservation<RenderProcessHost, RenderProcessHostObserver>
       scoped_process_host_observation_{this};
@@ -290,6 +315,8 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
       &broker_};
   mojo::Receiver<blink::mojom::DedicatedWorkerHost> host_receiver_;
+  mojo::Receiver<blink::mojom::BackForwardCacheControllerHost>
+      back_forward_cache_controller_host_receiver_{this};
 
   // Indicates if subresource loaders of this worker support file URLs.
   bool file_url_support_ = false;
@@ -320,6 +347,8 @@ class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost,
   // CodeCacheHost processes requests to fetch / write generated code for
   // JavaScript / WebAssembly resources.
   CodeCacheHostImpl::ReceiverSet code_cache_host_receivers_;
+
+  blink::scheduler::WebSchedulerTrackedFeatures bfcache_disabling_features_;
 
   base::WeakPtrFactory<DedicatedWorkerHost> weak_factory_{this};
 };

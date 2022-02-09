@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/browser_interface_broker_impl.h"
@@ -27,6 +27,7 @@
 #include "net/base/network_isolation_key.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
@@ -82,8 +83,13 @@ class CONTENT_EXPORT ServiceWorkerHost {
   net::NetworkIsolationKey GetNetworkIsolationKey() const;
   const base::UnguessableToken& GetReportingSource() const;
 
+  StoragePartition* GetStoragePartition() const;
+
   void CreateCodeCacheHost(
       mojo::PendingReceiver<blink::mojom::CodeCacheHost> receiver);
+
+  void CreateBroadcastChannelProvider(
+      mojo::PendingReceiver<blink::mojom::BroadcastChannelProvider> receiver);
 
   base::WeakPtr<ServiceWorkerHost> GetWeakPtr();
 
@@ -94,7 +100,7 @@ class CONTENT_EXPORT ServiceWorkerHost {
 
   // The service worker being hosted. Raw pointer is safe because the version
   // owns |this|.
-  ServiceWorkerVersion* const version_;
+  const raw_ptr<ServiceWorkerVersion> version_;
 
   // BrowserInterfaceBroker implementation through which this
   // ServiceWorkerHost exposes worker-scoped Mojo services to the corresponding

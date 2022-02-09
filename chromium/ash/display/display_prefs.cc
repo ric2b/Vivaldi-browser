@@ -12,6 +12,7 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/strings/string_number_conversions.h"
@@ -72,15 +73,13 @@ constexpr char kDisplayPowerInternalOnExternalOff[] =
 // TODO(mukai): fix base::JSONValueConverter and use it here.
 bool ValueToInsets(const base::DictionaryValue& value, gfx::Insets* insets) {
   DCHECK(insets);
-  int top = 0;
-  int left = 0;
-  int bottom = 0;
-  int right = 0;
-  if (value.GetInteger(kInsetsTopKey, &top) &&
-      value.GetInteger(kInsetsLeftKey, &left) &&
-      value.GetInteger(kInsetsBottomKey, &bottom) &&
-      value.GetInteger(kInsetsRightKey, &right)) {
-    insets->Set(top, left, bottom, right);
+
+  absl::optional<int> top = value.FindIntKey(kInsetsTopKey);
+  absl::optional<int> left = value.FindIntKey(kInsetsLeftKey);
+  absl::optional<int> bottom = value.FindIntKey(kInsetsBottomKey);
+  absl::optional<int> right = value.FindIntKey(kInsetsRightKey);
+  if (top && left && bottom && right) {
+    insets->Set(*top, *left, *bottom, *right);
     return true;
   }
   return false;
@@ -137,12 +136,12 @@ bool ValueToTouchData(const base::DictionaryValue& value,
   if (!ParseTouchCalibrationStringValue(str, point_pair_quad))
     return false;
 
-  int width, height;
-  if (!value.GetInteger(kTouchCalibrationWidth, &width) ||
-      !value.GetInteger(kTouchCalibrationHeight, &height)) {
+  absl::optional<int> width = value.FindIntKey(kTouchCalibrationWidth);
+  absl::optional<int> height = value.FindIntKey(kTouchCalibrationHeight);
+  if (!width || !height) {
     return false;
   }
-  touch_calibration_data->bounds = gfx::Size(width, height);
+  touch_calibration_data->bounds = gfx::Size(*width, *height);
   return true;
 }
 
@@ -235,23 +234,23 @@ void LoadDisplayProperties(PrefService* local_state) {
         id == display::kInvalidDisplayId) {
       continue;
     }
-    display::Display::Rotation rotation = display::Display::ROTATE_0;
     const gfx::Insets* insets_to_set = nullptr;
 
-    int rotation_value = 0;
-    if (dict_value->GetInteger("rotation", &rotation_value)) {
-      rotation = static_cast<display::Display::Rotation>(rotation_value);
+    display::Display::Rotation rotation = display::Display::ROTATE_0;
+    if (absl::optional<int> rotation_value =
+            dict_value->FindIntKey("rotation")) {
+      rotation = static_cast<display::Display::Rotation>(*rotation_value);
     }
 
-    int width = 0, height = 0;
-    dict_value->GetInteger("width", &width);
-    dict_value->GetInteger("height", &height);
+    int width = dict_value->FindIntKey("width").value_or(0);
+    int height = dict_value->FindIntKey("height").value_or(0);
     gfx::Size resolution_in_pixels(width, height);
 
     float device_scale_factor = 1.0;
-    int dsf_value = 0;
-    if (dict_value->GetInteger("device-scale-factor", &dsf_value))
-      device_scale_factor = static_cast<float>(dsf_value) / 1000.0f;
+    if (absl::optional<int> dsf_value =
+            dict_value->FindIntKey("device-scale-factor")) {
+      device_scale_factor = static_cast<float>(*dsf_value) / 1000.0f;
+    }
 
     // Default refresh rate is 60 Hz, until
     // DisplayManager::OnNativeDisplaysChanged() updates us with the actual
@@ -261,7 +260,9 @@ void LoadDisplayProperties(PrefService* local_state) {
     if (display::features::IsListAllDisplayModesEnabled()) {
       refresh_rate =
           dict_value->FindDoubleKey("refresh-rate").value_or(refresh_rate);
-      dict_value->GetBoolean("interlaced", &is_interlaced);
+      absl::optional<bool> is_interlaced_opt =
+          dict_value->FindBoolKey("interlaced");
+      is_interlaced = is_interlaced_opt.value_or(false);
     }
 
     gfx::Insets insets;
@@ -534,9 +535,26 @@ void StoreCurrentDisplayProperties(PrefService* pref_service) {
     // size and modes can change depending on the combination of displays.
     if (display_manager->IsInUnifiedMode())
       continue;
-    property_value.SetInteger("rotation",
-                              static_cast<int>(info.GetRotation(
-                                  display::Display::RotationSource::USER)));
+    // Don't save rotation when in tablet mode, so that if the device is
+    // rebooted into clamshell mode, it won't have an unexpected rotation.
+    // https://crbug.com/733092.
+    // But we should keep any original value so that it can be restored when
+    // exiting tablet mode.
+    if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+      const base::Value* original_property =
+          pref_data->FindDictKey(base::NumberToString(id));
+      if (original_property) {
+        absl::optional<int> original_rotation =
+            original_property->FindIntKey("rotation");
+        if (original_rotation) {
+          property_value.SetInteger("rotation", *original_rotation);
+        }
+      }
+    } else {
+      property_value.SetInteger("rotation",
+                                static_cast<int>(info.GetRotation(
+                                    display::Display::RotationSource::USER)));
+    }
 
     display::ManagedDisplayMode mode;
     if (!display.IsInternal() &&
@@ -639,7 +657,7 @@ void StoreDisplayTouchAssociations(PrefService* pref_service) {
 
   DictionaryPrefUpdate update(pref_service, prefs::kDisplayTouchAssociations);
   base::DictionaryValue* pref_data = update.Get();
-  pref_data->Clear();
+  pref_data->DictClear();
 
   const display::TouchDeviceManager::TouchAssociationMap& touch_associations =
       touch_device_manager->touch_associations();
@@ -690,7 +708,7 @@ void StoreDisplayTouchAssociations(PrefService* pref_service) {
   DictionaryPrefUpdate update_port(pref_service,
                                    prefs::kDisplayTouchPortAssociations);
   pref_data = update_port.Get();
-  update_port->Clear();
+  update_port->DictClear();
 
   const display::TouchDeviceManager::PortAssociationMap& port_associations =
       touch_device_manager->port_associations();
@@ -730,7 +748,7 @@ void StoreDisplayMixedMirrorModeParams(
   DictionaryPrefUpdate update(pref_service,
                               prefs::kDisplayMixedMirrorModeParams);
   base::DictionaryValue* pref_data = update.Get();
-  pref_data->Clear();
+  pref_data->DictClear();
 
   if (!mixed_params)
     return;
@@ -812,12 +830,16 @@ void DisplayPrefs::MaybeStoreDisplayPrefs() {
   }
 
   store_requested_ = false;
-  StoreCurrentDisplayLayoutPrefs(local_state_);
+  // Don't save certain display properties when in tablet mode, so if
+  // the device is rebooted in clamshell mode, it won't have an unexpected
+  // mirroring layout. https://crbug.com/733092.
+  if (!Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+    StoreCurrentDisplayLayoutPrefs(local_state_);
+    StoreExternalDisplayMirrorInfo(local_state_);
+    StoreCurrentDisplayMixedMirrorModeParams(local_state_);
+  }
   StoreCurrentDisplayProperties(local_state_);
   StoreDisplayTouchAssociations(local_state_);
-  StoreExternalDisplayMirrorInfo(local_state_);
-  StoreCurrentDisplayMixedMirrorModeParams(local_state_);
-
   // The display prefs need to be committed immediately to guarantee they're not
   // lost, and are restored properly on reboot. https://crbug.com/936884.
   // This sends a request via mojo to commit the prefs to disk.

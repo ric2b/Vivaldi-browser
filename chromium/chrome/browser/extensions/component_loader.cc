@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -378,16 +379,23 @@ void ComponentLoader::AddChromeApp() {
 }
 
 void ComponentLoader::AddFileManagerExtension() {
-  AddWithNameAndDescription(
-      IDR_FILEMANAGER_MANIFEST,
-      base::FilePath(FILE_PATH_LITERAL("file_manager")),
-      l10n_util::GetStringUTF8(IDS_FILEMANAGER_APP_NAME),
-      l10n_util::GetStringUTF8(IDS_FILEMANAGER_APP_DESCRIPTION));
+  if (!ash::features::IsFileManagerSwaEnabled()) {
+    AddWithNameAndDescription(
+        IDR_FILEMANAGER_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("file_manager")),
+        l10n_util::GetStringUTF8(IDS_FILEMANAGER_APP_NAME),
+        l10n_util::GetStringUTF8(IDS_FILEMANAGER_APP_DESCRIPTION));
+  }
 }
 
 void ComponentLoader::AddAudioPlayerExtension() {
-  Add(IDR_AUDIO_PLAYER_MANIFEST,
-      base::FilePath(FILE_PATH_LITERAL("audio_player")));
+  // TODO(b/189172062): Guard this with ShouldInstallObsoleteComponentExtension
+  // when the feature is on and stable.
+  if (!base::FeatureList::IsEnabled(
+          chromeos::features::kMediaAppHandlesAudio)) {
+    Add(IDR_AUDIO_PLAYER_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("audio_player")));
+  }
 }
 
 void ComponentLoader::AddImageLoaderExtension() {
@@ -429,19 +437,15 @@ void ComponentLoader::AddDefaultComponentExtensions(
     bool skip_session_components) {
   bool is_vivaldi =
       vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
-
-  if (is_vivaldi && !Exists(vivaldi::kVivaldiAppId)) {
-    // If it's not added already, add it now as this might be for a guest
-    // window or a new profile from the user profile management window.
+  if (is_vivaldi) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             apps::kLoadAndLaunchApp)) {
-      base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-      base::CommandLine::StringType path =
-        command_line.GetSwitchValueNative(apps::kLoadAndLaunchApp);
-      base::FilePath filepath(path);
-
-      AddVivaldiApp(&filepath);
+      // Load and launch will be executed in
+      // StartupBrowserCreator::ProcessCmdLineImpl. Do nothing here. Assuming we
+      // load and launch Vivaldi.
     } else {
+    // If it's not added already, add it now as this might be for a guest
+    // window or a new profile from the user profile management window.
       AddVivaldiApp(nullptr);
     }
   }
@@ -451,8 +455,6 @@ void ComponentLoader::AddDefaultComponentExtensions(
   // Do not add component extensions that have background pages here -- add them
   // to AddDefaultComponentExtensionsWithBackgroundPages.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  Add(IDR_MOBILE_MANIFEST,
-      base::FilePath(FILE_PATH_LITERAL("/usr/share/chromeos-assets/mobile")));
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (browser_defaults::enable_help_app) {

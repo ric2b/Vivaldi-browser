@@ -12,8 +12,9 @@
 #include <unordered_set>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/safe_browsing/core/browser/db/hit_report.h"
 #include "components/safe_browsing/core/browser/db/v4_database.h"
@@ -79,7 +80,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
                                                 Client* client) override;
   bool CheckUrlForAccuracyTips(const GURL& url, Client* client) override;
   bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override;
-  bool MatchDownloadAllowlistString(const std::string& str) override;
   bool MatchDownloadAllowlistUrl(const GURL& url) override;
   bool MatchMalwareIP(const std::string& ip_address) override;
   safe_browsing::ThreatSource GetThreatSource() const override;
@@ -168,7 +168,7 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
     ~PendingCheck();
 
     // The SafeBrowsing client that's waiting for the safe/unsafe verdict.
-    Client* client;
+    raw_ptr<Client> client;
 
     // Determines which funtion from the |client| needs to be called once we
     // know whether the URL in |url| is safe or unsafe.

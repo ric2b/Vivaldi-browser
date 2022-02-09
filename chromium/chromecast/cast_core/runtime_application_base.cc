@@ -7,6 +7,7 @@
 #include "chromecast/browser/cast_web_service.h"
 #include "chromecast/browser/cast_web_view_factory.h"
 #include "chromecast/cast_core/grpc_method.h"
+#include "chromecast/cast_core/url_rewrite/url_request_rewrite_type_converters.h"
 #include "third_party/cast_core/public/src/proto/runtime/runtime_service.grpc.pb.h"
 #include "third_party/grpc/src/include/grpcpp/channel.h"
 #include "third_party/grpc/src/include/grpcpp/create_channel.h"
@@ -37,6 +38,11 @@ bool RuntimeApplicationBase::Load(
     return false;
   }
 
+  set_application_config(request.application_config());
+  set_cast_session_id(request.cast_session_id());
+
+  LOG(INFO) << "Loading application: " << *this;
+
   const std::string& grpc_address =
       request.runtime_application_service_info().grpc_endpoint();
   grpc::ServerBuilder builder;
@@ -46,7 +52,8 @@ bool RuntimeApplicationBase::Load(
   SetCompletionQueue(builder.AddCompletionQueue());
   SetServer(builder.BuildAndStart());
   if (!grpc_server_) {
-    LOG(ERROR) << "Failed to start server on path: " << grpc_address;
+    LOG(ERROR) << "Failed to start server on path: " << *this
+               << ", endpoint=" << grpc_address;
     return false;
   }
   StartRuntimeApplicationServiceMethods(
@@ -55,19 +62,32 @@ bool RuntimeApplicationBase::Load(
                                                    weak_factory_.GetWeakPtr(),
                                                    grpc_cq_, &is_shutdown_);
   GrpcServer::Start();
+  LOG(INFO) << "Runtime application server started: " << *this
+            << ", endpoint=" << grpc_address;
 
-  set_cast_session_id(request.cast_session_id());
-  set_app_id(request.application_config().app_id());
-  set_display_name(request.application_config().display_name());
+  CreateCastWebView();
+  url_rewrite_rules_manager_ =
+      std::make_unique<url_rewrite::UrlRequestRewriteRulesManager>();
+  if (!url_rewrite_rules_manager_->AddWebContents(
+          cast_web_view_->cast_web_contents()->web_contents())) {
+    LOG(ERROR) << "Failed to attach WebContets to URL rewrite rules";
+    return false;
+  }
 
-  LOG(INFO) << *this << " successfully loaded!";
+  url_rewrite::mojom::UrlRequestRewriteRulesPtr mojom_rules =
+      mojo::ConvertTo<url_rewrite::mojom::UrlRequestRewriteRulesPtr>(
+          request.url_rewrite_rules());
+  if (!url_rewrite_rules_manager_->OnRulesUpdated(std::move(mojom_rules))) {
+    LOG(ERROR) << "Failed to update URL rewrite rules";
+  }
 
+  LOG(INFO) << "Successfully loaded: " << *this;
   return true;
 }
 
 bool RuntimeApplicationBase::Launch(
     const cast::runtime::LaunchApplicationRequest& request) {
-  LOG(INFO) << "Beginning launch of " << *this;
+  LOG(INFO) << "Launching application: " << *this;
 
   if (!request.has_cast_media_service_info()) {
     return false;
@@ -93,20 +113,26 @@ void RuntimeApplicationBase::FinishLaunch(
   core_app_stub_ =
       cast::v2::CoreApplicationService::NewStub(std::move(core_channel));
 
-  DLOG(INFO) << *this << "creating web view...";
-  cast_web_view_ = CreateWebView(core_app_stub_.get());
+  InitializeApplication(core_app_stub_.get(),
+                        cast_web_view_->cast_web_contents());
+  DCHECK(!app_url().is_empty());
 
-  DLOG(INFO) << *this << "processing web view...";
-  GURL cast_application_url =
-      ProcessWebView(core_app_stub_.get(), cast_web_view_->cast_web_contents());
+  LOG(INFO) << "Application is initialized: " << *this;
 
-  cast_web_view_->cast_web_contents()->LoadUrl(cast_application_url);
+  const std::vector<int32_t> feature_permissions;
+  const std::vector<std::string> additional_feature_permission_origins;
+  // TODO(b/203580094): Currently we assume the app is not audio only.
+  cast_web_view_->cast_web_contents()->SetAppProperties(
+      app_config().app_id(), cast_session_id(), false /*is_audio_app*/,
+      app_url(), false /*enforce_feature_permissions*/, feature_permissions,
+      additional_feature_permission_origins);
+  cast_web_view_->cast_web_contents()->LoadUrl(app_url());
   cast_web_view_->window()->GrantScreenAccess();
   cast_web_view_->window()->CreateWindow(
       ::chromecast::mojom::ZOrder::APP,
       chromecast::VisibilityPriority::STICKY_ACTIVITY);
 
-  LOG(INFO) << *this << " successfully launched!";
+  LOG(INFO) << "Launch finished: " << *this;
 }
 
 void RuntimeApplicationBase::PostMessage(const cast::web::Message& request,
@@ -121,10 +147,29 @@ void RuntimeApplicationBase::PostMessage(const cast::web::Message& request,
   callback->StepGRPC(grpc::Status::OK);
 }
 
+url_rewrite::UrlRequestRewriteRulesManager*
+RuntimeApplicationBase::GetUrlRewriteRulesManager() {
+  return url_rewrite_rules_manager_.get();
+}
+
 void RuntimeApplicationBase::SetUrlRewriteRules(
     const cast::v2::SetUrlRewriteRulesRequest& request,
     cast::v2::SetUrlRewriteRulesResponse* response,
     GrpcMethod* callback) {
+  if (cast_session_id().empty()) {
+    callback->StepGRPC(
+        grpc::Status(grpc::StatusCode::NOT_FOUND,
+                     "No active cast session for SetUrlRewriteRules"));
+    return;
+  }
+  if (request.has_rules()) {
+    url_rewrite::mojom::UrlRequestRewriteRulesPtr mojom_rules =
+        mojo::ConvertTo<url_rewrite::mojom::UrlRequestRewriteRulesPtr>(
+            request.rules());
+    if (!url_rewrite_rules_manager_->OnRulesUpdated(std::move(mojom_rules))) {
+      LOG(ERROR) << "Failed to update URL rewrite rules";
+    }
+  }
   callback->StepGRPC(grpc::Status::OK);
 }
 
@@ -138,33 +183,29 @@ void RuntimeApplicationBase::SetApplicationStarted() {
       core_app_stub_->SetApplicationStatus(&context, app_status, &unused);
 
   if (!status.ok()) {
-    LOG(ERROR) << "Failed to call SetApplicationStatus() when starting "
-               << *this;
+    LOG(ERROR) << "Failed to call SetApplicationStatus() when starting: "
+               << *this << ", status=" << status.error_message();
+  } else {
+    LOG(INFO) << "Application is started: " << *this;
   }
 }
 
-CastWebView::Scoped RuntimeApplicationBase::CreateWebView(
-    CoreApplicationServiceGrpc* grpc_stub) {
-  CastWebView::CreateParams create_params;
-  create_params.delegate = weak_factory_.GetWeakPtr();
-  create_params.window_delegate = weak_factory_.GetWeakPtr();
-
+void RuntimeApplicationBase::CreateCastWebView() {
   mojom::CastWebViewParamsPtr params = mojom::CastWebViewParams::New();
+  params->renderer_type = renderer_type_;
+  params->handle_inner_contents = true;
+  params->session_id = cast_session_id();
 #if DCHECK_IS_ON()
   params->enabled_for_dev = true;
 #endif
-  params->renderer_type = renderer_type_;
 
-  return web_service_->CreateWebViewInternal(create_params, std::move(params));
-}
-
-bool RuntimeApplicationBase::CanHandleGesture(GestureType gesture_type) {
-  return false;
+  cast_web_view_ = web_service_->CreateWebViewInternal(std::move(params));
 }
 
 void RuntimeApplicationBase::StopApplication() {
-  is_application_stopped_ = true;
+  LOG(INFO) << "Stopping application: " << *this;
 
+  is_application_stopped_ = true;
   if (cast_session_id().empty()) {
     return;
   }
@@ -181,7 +222,7 @@ void RuntimeApplicationBase::StopApplication() {
         core_app_stub_->SetApplicationStatus(&context, app_status, &unused);
 
     if (!status.ok()) {
-      LOG(ERROR) << "Failed to call SetApplicationStatus() when starting "
+      LOG(ERROR) << "Failed to call SetApplicationStatus() when stopping: "
                  << *this;
     }
   }
@@ -190,14 +231,14 @@ void RuntimeApplicationBase::StopApplication() {
     cast_web_view_->cast_web_contents()->ClosePage();
   }
 
-  GrpcServer::Stop();
-  set_cast_session_id(std::string());
-}
+  if (web_service_) {
+    web_service_->OnSessionDestroyed(cast_session_id());
+  }
 
-void RuntimeApplicationBase::ConsumeGesture(
-    GestureType gesture_type,
-    GestureHandledCallback handled_callback) {
-  std::move(handled_callback).Run(false);
+  GrpcServer::Stop();
+  LOG(INFO) << "Application is stopped: " << *this;
+
+  set_cast_session_id(std::string());
 }
 
 }  // namespace chromecast

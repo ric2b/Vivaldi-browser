@@ -14,8 +14,10 @@
 #include "base/files/file_path.h"
 #include "base/values.h"
 #include "chrome/browser/ash/crostini/crostini_simple_types.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace aura {
 class Window;
@@ -34,10 +36,6 @@ class Profile;
 
 namespace crostini {
 
-// TODO(crbug.com/1092657): kCrostiniDeletedTerminalId can be removed after M86.
-// We use an arbitrary well-formed extension id for the Terminal app, this
-// is equal to GenerateId("Terminal").
-extern const char kCrostiniDeletedTerminalId[];
 // web_app::GenerateAppId(/*manifest_id=*/absl::nullopt,
 //     GURL("chrome-untrusted://terminal/html/terminal.html"))
 extern const char kCrostiniTerminalSystemAppId[];
@@ -74,6 +72,10 @@ struct LinuxPackageInfo;
 // A unique identifier for our containers.
 struct ContainerId {
   ContainerId(std::string vm_name, std::string container_name) noexcept;
+  explicit ContainerId(const base::Value&) noexcept;
+
+  base::flat_map<std::string, std::string> ToMap() const;
+  base::Value ToDictValue() const;
 
   static ContainerId GetDefault();
 
@@ -118,6 +120,14 @@ void LaunchCrostiniApp(Profile* profile,
                        int64_t display_id,
                        const std::vector<LaunchArg>& args = {},
                        CrostiniSuccessCallback callback = base::DoNothing());
+
+void LaunchCrostiniAppWithIntent(
+    Profile* profile,
+    const std::string& app_id,
+    int64_t display_id,
+    apps::mojom::IntentPtr intent,
+    const std::vector<LaunchArg>& args = {},
+    CrostiniSuccessCallback callback = base::DoNothing());
 
 // Retrieves cryptohome_id from profile.
 std::string CryptohomeIdForProfile(Profile* profile);
@@ -211,6 +221,13 @@ void UpdateContainerPref(Profile* profile,
                          const ContainerId& container_id,
                          const std::string& key,
                          base::Value value);
+
+SkColor GetContainerBadgeColor(Profile* profile,
+                               const ContainerId& container_id);
+
+void SetContainerBadgeColor(Profile* profile,
+                            const ContainerId& container_id,
+                            SkColor badge_color);
 
 bool IsContainerVersionExpired(Profile* profile,
                                const ContainerId& container_id);

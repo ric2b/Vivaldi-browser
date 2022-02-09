@@ -11,12 +11,12 @@
 #include <vector>
 
 #include "base/location.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -92,13 +92,14 @@ class SyncServiceImpl : public SyncService,
     std::unique_ptr<SyncClient> sync_client;
     // TODO(treib): Remove this and instead retrieve it via
     // SyncClient::GetIdentityManager (but mind LocalSync).
-    signin::IdentityManager* identity_manager = nullptr;
+    raw_ptr<signin::IdentityManager> identity_manager = nullptr;
     StartBehavior start_behavior = MANUAL_START;
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
-    network::NetworkConnectionTracker* network_connection_tracker = nullptr;
+    raw_ptr<network::NetworkConnectionTracker> network_connection_tracker =
+        nullptr;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
     std::string debug_identifier;
-    policy::PolicyService* policy_service = nullptr;
+    raw_ptr<policy::PolicyService> policy_service = nullptr;
 
     GURL sync_server_url;
   };
@@ -121,8 +122,8 @@ class SyncServiceImpl : public SyncService,
   DisableReasonSet GetDisableReasons() const override;
   TransportState GetTransportState() const override;
   bool IsLocalSyncEnabled() const override;
-  CoreAccountInfo GetAuthenticatedAccountInfo() const override;
-  bool IsAuthenticatedAccountPrimary() const override;
+  CoreAccountInfo GetAccountInfo() const override;
+  bool HasSyncConsent() const override;
   GoogleServiceAuthError GetAuthError() const override;
   base::Time GetAuthErrorTime() const override;
   bool RequiresClientUpgrade() const override;
@@ -192,6 +193,9 @@ class SyncServiceImpl : public SyncService,
   // IdentityManager::Observer implementation.
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
+      const GoogleServiceAuthError& error) override;
+  void OnErrorStateOfRefreshTokenUpdatedForAccount(
+      const CoreAccountInfo& account_info,
       const GoogleServiceAuthError& error) override;
 
   // Similar to above but with a callback that will be invoked on completion.
@@ -270,6 +274,21 @@ class SyncServiceImpl : public SyncService,
     ERROR_REASON_ACTIONABLE_ERROR,
   };
 
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class ResetEngineReason {
+    kShutdown = 0,
+    kUnrecoverableError = 1,
+    kDisabledAccount = 2,
+    kRequestedPrefChange = 3,
+    kStopAndClear = 4,
+    kSetSyncAllowedByPlatform = 5,
+    kCredentialsChanged = 6,
+    kResetLocalData = 7,
+
+    kMaxValue = kResetLocalData
+  };
+
   // Callbacks for SyncAuthManager.
   void AccountStateChanged();
   void CredentialsChanged();
@@ -313,7 +332,8 @@ class SyncServiceImpl : public SyncService,
   // should be kept or not.
   // If the engine is still allowed to run (per IsEngineAllowedToRun()), it will
   // soon start up again (possibly in transport-only mode).
-  virtual void ResetEngine(ShutdownReason reason);
+  virtual void ResetEngine(ShutdownReason shutdown_reason,
+                   ResetEngineReason reset_reason);
 
  private:
   // Helper for OnUnrecoverableError.
@@ -364,7 +384,7 @@ class SyncServiceImpl : public SyncService,
   // Encapsulates user signin - used to set/get the user's authenticated
   // email address and sign-out upon error.
   // May be null (if local Sync is enabled).
-  signin::IdentityManager* const identity_manager_;
+  const raw_ptr<signin::IdentityManager> identity_manager_;
 
   // The user-configurable knobs. Non-null between Initialize() and Shutdown().
   std::unique_ptr<SyncUserSettingsImpl> user_settings_;
@@ -401,7 +421,7 @@ class SyncServiceImpl : public SyncService,
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // The global NetworkConnectionTracker instance.
-  network::NetworkConnectionTracker* network_connection_tracker_;
+  raw_ptr<network::NetworkConnectionTracker> network_connection_tracker_;
 
   // Indicates if this is the first time sync is being configured.
   // This is set to true if last synced time is not set at the time of
@@ -480,6 +500,8 @@ class SyncServiceImpl : public SyncService,
   // is typically false on Android (to save network traffic), but true on all
   // other platforms.
   bool sessions_invalidations_enabled_;
+
+  GoogleServiceAuthError last_error_state_of_refresh_token_;
 
   // This weak factory invalidates its issued pointers when Sync is disabled.
   base::WeakPtrFactory<SyncServiceImpl> sync_enabled_weak_factory_{this};

@@ -130,7 +130,7 @@ WX_DEFINE_OBJARRAY(wxSourceLineArray);
 //  wxTextCtrl
 //-----------------------------------------------------------------------------
 
-BEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
+wxBEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
     EVT_PAINT(wxTextCtrl::OnPaint)
     EVT_ERASE_BACKGROUND(wxTextCtrl::OnEraseBackground)
     EVT_CHAR(wxTextCtrl::OnChar)
@@ -149,7 +149,7 @@ BEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
     EVT_UPDATE_UI(wxID_PASTE, wxTextCtrl::OnUpdatePaste)
     EVT_UPDATE_UI(wxID_UNDO, wxTextCtrl::OnUpdateUndo)
     EVT_UPDATE_UI(wxID_REDO, wxTextCtrl::OnUpdateRedo)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 void wxTextCtrl::Init()
 {
@@ -229,7 +229,7 @@ bool wxTextCtrl::Create( wxWindow *parent,
     m_editable = ((m_windowStyle & wxTE_READONLY) == 0);
 
     if (HasFlag(wxTE_PASSWORD))
-        m_sourceFont = wxFont( 12, wxMODERN, wxNORMAL, wxNORMAL );
+        m_sourceFont = wxFont( 12, wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL );
     else
         m_sourceFont = GetFont();
 
@@ -347,8 +347,8 @@ void wxTextCtrl::DoSetValue(const wxString& value, int flags)
 
 int wxTextCtrl::GetLineLength(long lineNo) const
 {
-    if (lineNo >= (long)m_lines.GetCount())
-        return 0;
+    if (lineNo < 0 || lineNo >= (long)m_lines.GetCount())
+        return -1;
 
     return m_lines[lineNo].m_text.Len();
 }
@@ -1711,7 +1711,7 @@ void wxTextCtrl::OnPaint( wxPaintEvent &event )
     GetClientSize( &size_x, &size_y );
 
     dc.SetPen( *wxTRANSPARENT_PEN );
-    dc.SetBrush( wxBrush( wxTHEME_COLOUR(HIGHLIGHT), wxSOLID ) );
+    dc.SetBrush( wxBrush( wxTHEME_COLOUR(HIGHLIGHT), wxBRUSHSTYLE_SOLID ) );
     int upper = wxMin( (int)m_lines.GetCount(), scroll_y+(size_y/m_lineHeight)+2 );
     for (int i = scroll_y; i < upper; i++)
     {
@@ -1790,7 +1790,6 @@ void wxTextCtrl::OnChar( wxKeyEvent &event )
     int size_x = 0;
     int size_y = 0;
     GetClientSize( &size_x, &size_y );
-    size_x /= m_charWidth;
     size_y /= m_lineHeight;
     size_y--;
 

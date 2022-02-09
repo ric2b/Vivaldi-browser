@@ -69,10 +69,10 @@ public:
     /**
         Implement to customize matching of value string to an item container
         entry.
-        
+
         @param item
             String entered, usually by user or from SetValue() call.
-            
+
         @param trueItem
             When item matches an entry, but the entry's string representation
             is not exactly the same (case mismatch, for example), then the
@@ -130,7 +130,7 @@ public:
         Useful in conjunction with LazyCreate().
     */
     bool IsCreated() const;
-    
+
     /**
         The derived class may implement this to return @true if it wants to
         delay call to Create() until the popup is shown for the first time. It
@@ -386,7 +386,7 @@ public:
             Window position.
             If ::wxDefaultPosition is specified then a default position is chosen.
         @param size
-            Window size. 
+            Window size.
             If ::wxDefaultSize is specified then the window is sized appropriately.
         @param style
             Window style. See wxComboCtrl.
@@ -450,7 +450,7 @@ public:
     */
     void EnablePopupAnimation(bool enable = true);
 
-    
+
     /**
        Returns true if given key combination should toggle the popup.
     */
@@ -730,7 +730,7 @@ public:
         Sets a hint shown in an empty unfocused combo control.
 
         Notice that hints are known as <em>cue banners</em> under MSW or
-        <em>placeholder strings</em> under OS X.
+        <em>placeholder strings</em> under macOS.
 
         @see wxTextEntry::SetHint()
 
@@ -919,6 +919,16 @@ protected:
     virtual void DoSetPopupControl(wxComboPopup* popup);
 
     /**
+        Flags for DoShowPopup() and AnimateShow().
+    */
+    enum
+    {
+        ShowBelow       = 0x0000, //!< Show popup below the control.
+        ShowAbove       = 0x0001, //!< Show popup above the control.
+        CanDeferShow    = 0x0002  //!< Can only return true from AnimateShow() if this is set.
+    };
+
+    /**
         This member function is not normally called in application code.
         Instead, it must be called in a derived class to make sure popup is
         properly shown after a popup animation has finished (but only if
@@ -927,15 +937,8 @@ protected:
         @param rect
             Position to show the popup window at, in screen coordinates.
         @param flags
-            Combination of any of the following:
-            @beginTable
-            @row2col{wxComboCtrl::ShowAbove,
-                     Popup is shown above the control instead of below.}
-            @row2col{wxComboCtrl::CanDeferShow,
-                     Showing the popup can be deferred to happen sometime after
-                     ShowPopup() has finished. In this case, AnimateShow() must
-                     return false.}
-            @endTable
+            Combination of any of the following: wxComboCtrl::ShowAbove,
+            and wxComboCtrl::CanDeferShow.
     */
     virtual void DoShowPopup(const wxRect& rect, int flags);
 };

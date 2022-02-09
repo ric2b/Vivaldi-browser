@@ -10,10 +10,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
@@ -164,7 +164,9 @@ class SafeMoveHelperTest : public testing::Test {
         FileSystemAccessManagerImpl::BindingContext(kTestStorageKey, kTestURL,
                                                     kFrameId),
         test_source_url_, test_dest_url_,
-        storage::FileSystemOperation::OPTION_PRESERVE_DESTINATION_PERMISSIONS,
+        storage::FileSystemOperation::CopyOrMoveOptionSet(
+            storage::FileSystemOperation::CopyOrMoveOption::
+                kPreserveDestinationPermissions),
         quarantine_callback_,
         /*has_transient_user_activation=*/false);
   }
@@ -187,9 +189,9 @@ class SafeMoveHelperTest : public testing::Test {
 
   base::ScopedTempDir dir_;
   scoped_refptr<storage::FileSystemContext> file_system_context_;
-  TestFileSystemBackend* test_file_system_backend_;
+  raw_ptr<TestFileSystemBackend> test_file_system_backend_;
   scoped_refptr<ChromeBlobStorageContext> chrome_blob_context_;
-  storage::BlobStorageContext* blob_context_;
+  raw_ptr<storage::BlobStorageContext> blob_context_;
   scoped_refptr<FileSystemAccessManagerImpl> manager_;
 
   FileSystemURL test_dest_url_;

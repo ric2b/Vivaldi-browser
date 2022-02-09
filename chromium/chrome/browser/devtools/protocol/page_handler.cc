@@ -6,6 +6,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "components/payments/content/payment_request_web_contents_manager.h"
 #include "components/subresource_filter/content/browser/devtools_interaction_tracker.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
@@ -30,7 +31,7 @@ PageHandler::PageHandler(scoped_refptr<content::DevToolsAgentHost> agent_host,
 }
 
 PageHandler::~PageHandler() {
-  ToggleAdBlocking(/* enabled= */ false);
+  Disable();
 }
 
 void PageHandler::ToggleAdBlocking(bool enabled) {
@@ -57,6 +58,7 @@ protocol::Response PageHandler::Enable() {
 protocol::Response PageHandler::Disable() {
   enabled_ = false;
   ToggleAdBlocking(false /* enable */);
+  SetSPCTransactionMode(protocol::Page::SetSPCTransactionMode::ModeEnum::None);
   // Do not mark the command as handled. Let it fall through instead, so that
   // the handler in content gets a chance to process the command.
   return protocol::Response::FallThrough();
@@ -66,6 +68,28 @@ protocol::Response PageHandler::SetAdBlockingEnabled(bool enabled) {
   if (!enabled_)
     return protocol::Response::ServerError("Page domain is disabled.");
   ToggleAdBlocking(enabled);
+  return protocol::Response::Success();
+}
+
+protocol::Response PageHandler::SetSPCTransactionMode(
+    const protocol::String& mode) {
+  if (!web_contents_)
+    return protocol::Response::ServerError("No web contents to host a dialog.");
+
+  payments::SPCTransactionMode spc_mode = payments::SPCTransactionMode::NONE;
+  if (mode == protocol::Page::SetSPCTransactionMode::ModeEnum::Autoaccept) {
+    spc_mode = payments::SPCTransactionMode::AUTOACCEPT;
+  } else if (mode ==
+             protocol::Page::SetSPCTransactionMode::ModeEnum::Autoreject) {
+    spc_mode = payments::SPCTransactionMode::AUTOREJECT;
+  } else if (mode != protocol::Page::SetSPCTransactionMode::ModeEnum::None) {
+    return protocol::Response::ServerError("Unrecognized mode value");
+  }
+
+  auto* payment_request_manager =
+      payments::PaymentRequestWebContentsManager::GetOrCreateForWebContents(
+          *web_contents_);
+  payment_request_manager->SetSPCTransactionMode(spc_mode);
   return protocol::Response::Success();
 }
 

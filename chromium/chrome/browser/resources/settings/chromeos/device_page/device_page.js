@@ -24,8 +24,9 @@ import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {routes} from '../os_route.m.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 import {BatteryStatus, DevicePageBrowserProxy, DevicePageBrowserProxyImpl, ExternalStorage, getDisplayApi, IdleBehavior, LidClosedBehavior, NoteAppInfo, NoteAppLockScreenSupport, PowerManagementSettings, PowerSource, StorageSpaceState} from './device_page_browser_proxy.js';
 
@@ -62,6 +63,13 @@ Polymer({
 
     /** @private */
     hasTouchpad_: Boolean,
+
+    /**
+     * Whether the device has a haptic touchpad. If this is true, |hasTouchpad_|
+     * will also be true.
+     * @private
+     */
+    hasHapticTouchpad_: Boolean,
 
     /**
      * |hasStylus_| is initialized to false so that dom-if behaves correctly.
@@ -139,6 +147,9 @@ Polymer({
         'has-pointing-stick-changed', this.set.bind(this, 'hasPointingStick_'));
     this.addWebUIListener(
         'has-touchpad-changed', this.set.bind(this, 'hasTouchpad_'));
+    this.addWebUIListener(
+        'has-haptic-touchpad-changed',
+        this.set.bind(this, 'hasHapticTouchpad_'));
     DevicePageBrowserProxyImpl.getInstance().initializePointers();
 
     this.addWebUIListener(

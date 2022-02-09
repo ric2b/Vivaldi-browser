@@ -332,7 +332,7 @@ int RunNotifierSubaction(const base::CommandLine& cmdline) {
 
   // Typically an update notifier action finishes within milliseconds. So if it
   // takes 10 seconds, this is definitely a bug. Kill then the process.
-  base::TimeDelta max_wait = base::TimeDelta::FromSeconds(10);
+  base::TimeDelta max_wait = base::Seconds(10);
   int exit_code = 0;
   if (!process.WaitForExitWithTimeout(max_wait, &exit_code)) {
     LOG(ERROR)

@@ -22,6 +22,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -57,7 +58,6 @@
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
@@ -196,12 +196,26 @@ const AllowedListForLazyLoading& AllowedWebsitesForLazyLoading() {
   return allowed_websites;
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class AutomaticLazyLoadFrame {
+  kFeatureNotEnabled = 0,
+  kTargetFramesNotFound = 1,
+  kTargetFramesFound = 2,
+  kMaxValue = kTargetFramesFound,
+};
+
 // Checks if the passed `url` is in the allowlist for automatic lazy-loading.
 // Returns true if the feature flag is enabled and the url is in the list.
 bool IsLazyLoadableUrl(KURL url) {
+  constexpr const char kAutomaticLazyLoadFrameHistogram[] =
+      "Blink.AutomaticLazyLoadFrame";
   if (!base::FeatureList::IsEnabled(
-          features::kAutomaticLazyFrameLoadingToEmbeds))
+          features::kAutomaticLazyFrameLoadingToEmbeds)) {
+    base::UmaHistogramEnumeration(kAutomaticLazyLoadFrameHistogram,
+                                  AutomaticLazyLoadFrame::kFeatureNotEnabled);
     return false;
+  }
 
   scoped_refptr<const SecurityOrigin> origin = SecurityOrigin::Create(url);
   for (const auto& it : AllowedWebsitesForLazyLoading()) {
@@ -214,9 +228,16 @@ bool IsLazyLoadableUrl(KURL url) {
     // test. That will affect the test reliability.
     if ((origin.get()->Protocol() == it.first->Protocol() &&
          origin.get()->Host() == it.first->Host()) &&
-        (url.GetPath().Contains(it.second) || url.Query().Contains(it.second)))
+        (url.GetPath().Contains(it.second) ||
+         url.Query().Contains(it.second))) {
+      base::UmaHistogramEnumeration(kAutomaticLazyLoadFrameHistogram,
+                                    AutomaticLazyLoadFrame::kTargetFramesFound);
       return true;
+    }
   }
+
+  base::UmaHistogramEnumeration(kAutomaticLazyLoadFrameHistogram,
+                                AutomaticLazyLoadFrame::kTargetFramesNotFound);
 
   return false;
 }

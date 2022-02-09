@@ -35,12 +35,14 @@ class HatsFinchHelperTest : public testing::Test {
         features::kHappinessTrackingSystem, params);
   }
 
-  base::FieldTrialParams CreateParamMap(std::string prob,
-                                        std::string cycle_length,
-                                        std::string start_date,
-                                        std::string reset_survey,
-                                        std::string reset,
-                                        std::string trigger_id) {
+  base::FieldTrialParams CreateParamMap(
+      std::string prob,
+      std::string cycle_length,
+      std::string start_date,
+      std::string reset_survey,
+      std::string reset,
+      std::string trigger_id,
+      std::string custom_client_data = std::string()) {
     base::FieldTrialParams params;
     params[HatsFinchHelper::kProbabilityParam] = prob;
     params[HatsFinchHelper::kSurveyCycleLengthParam] = cycle_length;
@@ -48,6 +50,7 @@ class HatsFinchHelperTest : public testing::Test {
     params[HatsFinchHelper::kResetSurveyCycleParam] = reset_survey;
     params[HatsFinchHelper::kResetAllParam] = reset;
     params[HatsFinchHelper::kTriggerIdParam] = trigger_id;
+    params[HatsFinchHelper::kCustomClientDataParam] = custom_client_data;
     return params;
   }
 
@@ -122,8 +125,8 @@ TEST_F(HatsFinchHelperTest, TestComputeNextDate) {
 }
 
 TEST_F(HatsFinchHelperTest, ResetSurveyCycle) {
-  base::FieldTrialParams params =
-      CreateParamMap("0.5", "7", "1475613895337", "true", "0", kValidTriggerId);
+  base::FieldTrialParams params = CreateParamMap(
+      "0.5", "7", "1475613895337", "true", "false", kValidTriggerId);
   SetFeatureParams(params);
 
   int64_t initial_timestamp = base::Time::Now().ToInternalValue();
@@ -146,8 +149,8 @@ TEST_F(HatsFinchHelperTest, ResetSurveyCycle) {
 }
 
 TEST_F(HatsFinchHelperTest, ResetHats) {
-  base::FieldTrialParams params =
-      CreateParamMap("0.5", "7", "1475613895337", "0", "true", kValidTriggerId);
+  base::FieldTrialParams params = CreateParamMap(
+      "0.5", "7", "1475613895337", "false", "true", kValidTriggerId);
   SetFeatureParams(params);
 
   int64_t initial_timestamp = base::Time::Now().ToInternalValue();
@@ -171,6 +174,28 @@ TEST_F(HatsFinchHelperTest, ResetHats) {
             initial_timestamp);
   EXPECT_NE(pref_service->GetInt64(prefs::kHatsLastInteractionTimestamp),
             initial_timestamp);
+}
+
+TEST_F(HatsFinchHelperTest, NoCustomClientData) {
+  base::FieldTrialParams params = CreateParamMap(
+      "1.0", "7", "1475613895337", "false", "false", kValidTriggerId);
+  SetFeatureParams(params);
+
+  HatsFinchHelper hats_finch_helper(&profile_, kHatsGeneralSurvey);
+
+  EXPECT_EQ(hats_finch_helper.GetCustomClientDataAsString(kHatsGeneralSurvey),
+            std::string());
+}
+
+TEST_F(HatsFinchHelperTest, CustomClientData) {
+  base::FieldTrialParams params = CreateParamMap(
+      "1.0", "7", "1475613895337", "false", "false", kValidTriggerId, "12345");
+  SetFeatureParams(params);
+
+  HatsFinchHelper hats_finch_helper(&profile_, kHatsGeneralSurvey);
+
+  EXPECT_EQ(hats_finch_helper.GetCustomClientDataAsString(kHatsGeneralSurvey),
+            "12345");
 }
 
 }  // namespace ash

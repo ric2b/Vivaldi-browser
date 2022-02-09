@@ -14,13 +14,14 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/single_thread_task_runner.h"
-#include "base/task_runner_util.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/types/pass_key.h"
+#include "components/services/storage/public/cpp/buckets/bucket_info.h"
+#include "components/services/storage/public/cpp/buckets/constants.h"
 #include "components/services/storage/public/cpp/quota_client_callback_wrapper.h"
 #include "components/services/storage/public/mojom/quota_client.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -38,6 +39,7 @@
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/file_system/file_system_options.h"
 #include "storage/browser/file_system/file_system_quota_client.h"
+#include "storage/browser/file_system/file_system_request_info.h"
 #include "storage/browser/file_system/file_system_util.h"
 #include "storage/browser/file_system/isolated_context.h"
 #include "storage/browser/file_system/isolated_file_system_backend.h"
@@ -56,7 +58,6 @@
 #include "url/origin.h"
 
 namespace storage {
-
 namespace {
 
 void DidGetMetadataForResolveURL(const base::FilePath& path,
@@ -423,6 +424,42 @@ void FileSystemContext::OpenFileSystem(const blink::StorageKey& storage_key,
     return;
   }
 
+  // Quota manager isn't provided by all tests.
+  if (quota_manager_proxy()) {
+    // Ensure default bucket for `storage_key` exists so that Quota API
+    // is aware of the usage. Bucket type 'temporary' is used even though the
+    // actual storage type of the file system being opened may be different.
+    quota_manager_proxy()->GetOrCreateBucket(
+        storage_key, kDefaultBucketName, io_task_runner_.get(),
+        base::BindOnce(&FileSystemContext::OnGetOrCreateBucket,
+                       weak_factory_.GetWeakPtr(), storage_key, type, mode,
+                       std::move(callback)));
+  } else {
+    ResolveURLOnOpenFileSystem(storage_key, type, mode, std::move(callback));
+  }
+}
+
+void FileSystemContext::OnGetOrCreateBucket(
+    const blink::StorageKey& storage_key,
+    FileSystemType type,
+    OpenFileSystemMode mode,
+    OpenFileSystemCallback callback,
+    QuotaErrorOr<BucketInfo> result) {
+  if (!result.ok()) {
+    std::move(callback).Run(GURL(), std::string(),
+                            base::File::FILE_ERROR_FAILED);
+    return;
+  }
+  ResolveURLOnOpenFileSystem(storage_key, type, mode, std::move(callback));
+}
+
+void FileSystemContext::ResolveURLOnOpenFileSystem(
+    const blink::StorageKey& storage_key,
+    FileSystemType type,
+    OpenFileSystemMode mode,
+    OpenFileSystemCallback callback) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+
   FileSystemBackend* backend = GetFileSystemBackend(type);
   if (!backend) {
     std::move(callback).Run(GURL(), std::string(),
@@ -467,11 +504,8 @@ void FileSystemContext::ResolveURL(const FileSystemURL& url,
 void FileSystemContext::AttemptAutoMountForURLRequest(
     const FileSystemRequestInfo& request_info,
     StatusCallback callback) {
-  // TODO(https://crbug.com/1221308): function will use StorageKey for the
-  // receiver frame/worker in future CL
-  const FileSystemURL filesystem_url(
-      request_info.url,
-      blink::StorageKey(url::Origin::Create(request_info.url)));
+  const FileSystemURL filesystem_url(request_info.url,
+                                     request_info.storage_key);
   if (filesystem_url.type() == kFileSystemTypeExternal) {
     for (auto& handler : auto_mount_handlers_) {
       auto split_callback = base::SplitOnceCallback(std::move(callback));
@@ -719,7 +753,7 @@ void FileSystemContext::DidOpenFileSystemForResolveURL(
 
   FileSystemInfo info(filesystem_name, filesystem_root, url.mount_type());
 
-  // Extract the virtual path not containing a filesystem type part from |url|.
+  // Extract the virtual path not containing a filesystem type part from `url`.
   base::FilePath parent =
       CrackURLInFirstPartyContext(filesystem_root).virtual_path();
   base::FilePath child = url.virtual_path();

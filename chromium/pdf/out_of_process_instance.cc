@@ -450,6 +450,7 @@ bool OutOfProcessInstance::Init(uint32_t argc,
 
   text_input_ = std::make_unique<pp::TextInput_Dev>(this);
 
+  // Parse attributes. Keep in sync with `ParseWebPluginParams()`.
   const char* src_url = nullptr;
   const char* original_url = nullptr;
   const char* top_level_url = nullptr;
@@ -485,13 +486,14 @@ bool OutOfProcessInstance::Init(uint32_t argc,
     original_url = src_url;
 
   pp::PDF::SetCrashData(this, original_url, top_level_url);
-  InitializeBase(std::make_unique<PDFiumEngine>(this, script_option),
-                 /*embedder_origin=*/document_url.GetOrigin().spec(),
-                 /*src_url=*/src_url,
-                 /*original_url=*/original_url,
-                 /*full_frame=*/full_frame,
-                 /*background_color=*/background_color,
-                 /*has_edits=*/has_edits);
+  InitializeBase(
+      std::make_unique<PDFiumEngine>(this, script_option),
+      /*embedder_origin=*/document_url.DeprecatedGetOriginAsURL().spec(),
+      /*src_url=*/src_url,
+      /*original_url=*/original_url,
+      /*full_frame=*/full_frame,
+      /*background_color=*/background_color,
+      /*has_edits=*/has_edits);
   return true;
 }
 
@@ -508,7 +510,7 @@ bool OutOfProcessInstance::HandleInputEvent(const pp::InputEvent& event) {
 }
 
 void OutOfProcessInstance::DidChangeView(const pp::View& view) {
-  const gfx::Rect new_plugin_rect = gfx::ScaleToEnclosingRectSafe(
+  const gfx::Rect new_plugin_rect = gfx::ScaleToEnclosingRect(
       RectFromPPRect(view.GetRect()), view.GetDeviceScale());
   UpdateGeometryOnPluginRectChanged(new_plugin_rect, view.GetDeviceScale());
 }
@@ -524,32 +526,18 @@ void OutOfProcessInstance::GetPrintPresetOptionsFromDocument(
 }
 
 void OutOfProcessInstance::SetCaretPosition(const pp::FloatPoint& position) {
-  pp::Point new_position(position.x(), position.y());
-  ScalePoint(device_scale(), &new_position);
-  new_position.set_x(new_position.x() - available_area().x());
-  engine()->SetCaretPosition(PointFromPPPoint(new_position));
+  PdfViewPluginBase::SetCaretPosition(PointFFromPPFloatPoint(position));
 }
 
 void OutOfProcessInstance::MoveRangeSelectionExtent(
     const pp::FloatPoint& extent) {
-  pp::Point new_extent(extent.x(), extent.y());
-  ScalePoint(device_scale(), &new_extent);
-  new_extent.set_x(new_extent.x() - available_area().x());
-  engine()->MoveRangeSelectionExtent(PointFromPPPoint(new_extent));
+  PdfViewPluginBase::MoveRangeSelectionExtent(PointFFromPPFloatPoint(extent));
 }
 
 void OutOfProcessInstance::SetSelectionBounds(const pp::FloatPoint& base,
                                               const pp::FloatPoint& extent) {
-  pp::Point new_base_point(base.x(), base.y());
-  ScalePoint(device_scale(), &new_base_point);
-  new_base_point.set_x(new_base_point.x() - available_area().x());
-
-  pp::Point new_extent_point(extent.x(), extent.y());
-  ScalePoint(device_scale(), &new_extent_point);
-  new_extent_point.set_x(new_extent_point.x() - available_area().x());
-
-  engine()->SetSelectionBounds(PointFromPPPoint(new_base_point),
-                               PointFromPPPoint(new_extent_point));
+  PdfViewPluginBase::SetSelectionBounds(PointFFromPPFloatPoint(base),
+                                        PointFFromPPFloatPoint(extent));
 }
 
 pp::Var OutOfProcessInstance::GetLinkAtPosition(const pp::Point& point) {
@@ -666,7 +654,7 @@ void OutOfProcessInstance::InitImageData(const gfx::Size& size) {
       std::make_unique<pp::ImageData>(pepper_image_data_));
 }
 
-void OutOfProcessInstance::SetFormFieldInFocus(bool in_focus) {
+void OutOfProcessInstance::SetFormTextFieldInFocus(bool in_focus) {
   if (!text_input_)
     return;
 
@@ -757,7 +745,7 @@ Image OutOfProcessInstance::GetPluginImageData() const {
 }
 
 void OutOfProcessInstance::SetAccessibilityDocInfo(
-    const AccessibilityDocInfo& doc_info) {
+    AccessibilityDocInfo doc_info) {
   PP_PrivateAccessibilityDocInfo pp_doc_info = {
       doc_info.page_count, PP_FromBool(doc_info.text_accessible),
       PP_FromBool(doc_info.text_copyable)};
@@ -782,7 +770,7 @@ void OutOfProcessInstance::SetAccessibilityPageInfo(
 }
 
 void OutOfProcessInstance::SetAccessibilityViewportInfo(
-    const AccessibilityViewportInfo& viewport_info) {
+    AccessibilityViewportInfo viewport_info) {
   PP_PrivateAccessibilityViewportInfo pp_viewport_info = {
       viewport_info.zoom,
       viewport_info.scale,

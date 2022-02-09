@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/prefs/persistent_pref_store.h"
 #include "components/prefs/pref_value_map.h"
@@ -51,7 +50,6 @@ class TestingPrefStore : public PersistentPrefStore {
   void ReadPrefsAsync(ReadErrorDelegate* error_delegate) override;
   void CommitPendingWrite(base::OnceClosure reply_callback,
                           base::OnceClosure synchronous_done_callback) override;
-  void CommitPendingWriteSynchronously() override;
   void SchedulePendingLossyWrites() override;
 
   // Marks the store as having completed initialization.

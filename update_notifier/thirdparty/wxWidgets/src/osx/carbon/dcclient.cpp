@@ -31,7 +31,7 @@
 // wxWindowDCImpl
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxWindowDCImpl, wxGCDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxWindowDCImpl, wxGCDCImpl);
 
 wxWindowDCImpl::wxWindowDCImpl( wxDC *owner )
    : wxGCDCImpl( owner )
@@ -76,12 +76,12 @@ wxWindowDCImpl::wxWindowDCImpl( wxDC *owner, wxWindow *window )
             CGContextTranslateCTM( cg , -window->MacGetLeftBorderSize() , -window->MacGetTopBorderSize() );
 
         wxGraphicsContext* context = wxGraphicsContext::CreateFromNative( cg );
-        context->EnableOffset(true);
+        context->SetContentScaleFactor(m_contentScaleFactor);
         SetGraphicsContext( context );
     }
     DoSetClippingRegion( 0 , 0 , m_width , m_height ) ;
 
-    SetBackground(wxBrush(window->GetBackgroundColour(),wxSOLID));
+    SetBackground(window->GetBackgroundColour());
 
     SetFont( window->GetFont() ) ;
 }
@@ -105,51 +105,16 @@ void wxWindowDCImpl::DoGetSize( int* width, int* height ) const
         *height = m_height;
 }
 
-#if wxOSX_USE_CARBON
-wxBitmap wxWindowDCImpl::DoGetAsBitmap(const wxRect *subrect) const
+wxPoint wxWindowDCImpl::OSXGetOrigin() const
 {
-    // wxScreenDC is derived from wxWindowDC, so a screen dc will
-    // call this method when a Blit is performed with it as a source.
-    if (!m_window)
-        return wxNullBitmap;
-
-    ControlRef handle = (ControlRef) m_window->GetHandle();
-    if ( !handle )
-        return wxNullBitmap;
-
-    HIRect rect;
-    CGImageRef image;
-    CGContextRef context;
-
-    HIViewCreateOffscreenImage( handle, 0, &rect, &image);
-
-
-    int width = subrect != NULL ? subrect->width : (int)rect.size.width;
-    int height = subrect !=  NULL ? subrect->height : (int)rect.size.height ;
-
-    wxBitmap bmp = wxBitmap(width, height, 32);
-
-    context = (CGContextRef)bmp.GetHBITMAP();
-
-    CGContextSaveGState(context);
-
-    CGContextTranslateCTM( context, 0,  height );
-    CGContextScaleCTM( context, 1, -1 );
-
-    if ( subrect )
-        rect = CGRectOffset( rect, -subrect->x, -subrect->y ) ;
-    CGContextDrawImage( context, rect, image );
-
-    CGContextRestoreGState(context);
-    return bmp;
+    return m_origin;
 }
-#endif
 
 /*
  * wxClientDCImpl
  */
 
-IMPLEMENT_ABSTRACT_CLASS(wxClientDCImpl, wxWindowDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxClientDCImpl, wxWindowDCImpl);
 
 wxClientDCImpl::wxClientDCImpl( wxDC *owner )
  : wxWindowDCImpl( owner )
@@ -160,14 +125,14 @@ wxClientDCImpl::wxClientDCImpl( wxDC *owner, wxWindow *window ) :
     wxWindowDCImpl( owner, window )
 {
     wxCHECK_RET( window, wxT("invalid window in wxClientDCImpl") );
-    wxPoint origin = window->GetClientAreaOrigin() ;
+    m_origin = window->GetClientAreaOrigin() ;
     m_window->GetClientSize( &m_width , &m_height);
     if ( !m_window->IsShownOnScreen() )
         m_width = m_height = 0;
     
     int x0,y0;
     DoGetDeviceOrigin(&x0,&y0);
-    SetDeviceOrigin( origin.x + x0, origin.y + y0 );
+    SetDeviceOrigin( m_origin.x + x0, m_origin.y + y0 );
     
     DoSetClippingRegion( 0 , 0 , m_width , m_height ) ;
 }
@@ -182,7 +147,7 @@ wxClientDCImpl::~wxClientDCImpl()
  * wxPaintDCImpl
  */
 
-IMPLEMENT_ABSTRACT_CLASS(wxPaintDCImpl, wxWindowDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxPaintDCImpl, wxWindowDCImpl);
 
 wxPaintDCImpl::wxPaintDCImpl( wxDC *owner )
  : wxWindowDCImpl( owner )
@@ -192,10 +157,9 @@ wxPaintDCImpl::wxPaintDCImpl( wxDC *owner )
 wxPaintDCImpl::wxPaintDCImpl( wxDC *owner, wxWindow *window ) :
     wxWindowDCImpl( owner, window )
 {
-    wxASSERT_MSG( window->MacGetCGContextRef() != NULL, wxT("using wxPaintDC without being in a native paint event") );
-    wxPoint origin = window->GetClientAreaOrigin() ;
+    m_origin = window->GetClientAreaOrigin() ;
     m_window->GetClientSize( &m_width , &m_height);
-    SetDeviceOrigin( origin.x, origin.y );
+    SetDeviceOrigin( m_origin.x, m_origin.y );
     DoSetClippingRegion( 0 , 0 , m_width , m_height ) ;
 }
 

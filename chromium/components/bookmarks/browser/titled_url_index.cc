@@ -177,22 +177,25 @@ absl::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
         match_ancestor_titles && query_node->HasMatchIn(ancestor_words, false);
     query_has_ancestor_matches =
         query_has_ancestor_matches || has_ancestor_matches;
+#if !(defined(OS_ANDROID) && defined(VIVALDI_BUILD))
     if (!has_title_matches && !has_url_matches && !has_ancestor_matches)
       return absl::nullopt;
-
-#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+#else
     const bool has_description_matches =
         query_node->HasMatchIn(description_words, &description_matches);
     const bool has_nickname_matches =
         query_node->HasMatchIn(nickname_words, &nickname_matches);
     if (!has_title_matches && !has_url_matches && !has_ancestor_matches
-        && !has_description_matches && !has_nickname_matches
-        )
+        && !has_description_matches && !has_nickname_matches)
       return absl::nullopt;
 #endif
 
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+    query_parser::QueryParser::SortAndCoalesceMatchPositions(&description_matches);
+    query_parser::QueryParser::SortAndCoalesceMatchPositions(&nickname_matches);
+#endif
   }
 
   TitledUrlMatch match;

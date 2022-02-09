@@ -232,16 +232,6 @@
             "type": "boolean",
             "optional": true
           },
-          "start_recurring": {
-            "description": "When this event recurrence starts, in milliseconds since the epoch.",
-            "type": "number",
-            "optional": true
-          },
-          "end_recurring": {
-            "description": "When this event should stop recurring, in milliseconds since the epoch.",
-            "type": "number",
-            "optional": true
-          },
           "location": {
             "type": "string",
             "optional": true,
@@ -380,6 +370,16 @@
             "type": "number",
             "optional": true,
             "description": "The date and time that a todo was actually completed."
+          },
+          "syncPending": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Does this event have any pending sync changes."
+          },
+          "deletePending": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Should the event be deleted locally once server deletion is completed."
           }
         }
       },
@@ -415,16 +415,6 @@
           "is_recurring": {
             "description": "Is this a recurring event.",
             "type": "boolean",
-            "optional": true
-          },
-          "start_recurring": {
-            "description": "When this event recurrence starts, in milliseconds since the epoch.",
-            "type": "number",
-            "optional": true
-          },
-          "end_recurring": {
-            "description": "When this event should stop recurring, in milliseconds since the epoch.",
-            "type": "number",
             "optional": true
           },
           "location": {
@@ -572,6 +562,16 @@
             "type": "number",
             "optional": true,
             "description": "The date and time that a todo was actually completed."
+          },
+          "syncPending": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Does this event have any pending sync changes."
+          },
+          "deletePending": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Should the event be deleted locally once server deletion is completed."
           }
         }
       },
@@ -1119,16 +1119,6 @@
                 "type": "boolean",
                 "optional": true
               },
-              "start_recurring": {
-                "description": "When this event recurrence starts, in milliseconds since the epoch.",
-                "type": "number",
-                "optional": true
-              },
-              "end_recurring": {
-                "description": "When this event should stop recurring, in milliseconds since the epoch.",
-                "type": "number",
-                "optional": true
-              },
               "url": {
                 "description": "The url of the event.",
                 "type": "string",
@@ -1233,6 +1223,16 @@
                 "type": "number",
                 "optional": true,
                 "description": "The date and time that a todo was actually completed."
+              },
+              "syncPending": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Does this event have any pending sync changes."
+              },
+              "deletePending": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Should the event be deleted locally once server deletion is completed."
               }
             }
           }
@@ -1823,6 +1823,17 @@
         "parameters": [
           {
             "name": "url",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "onMailtoOpened",
+        "type": "function",
+        "description": "Called when the user opens a mailto link",
+        "parameters": [
+          {
+            "name": "mailto",
             "type": "string"
           }
         ]

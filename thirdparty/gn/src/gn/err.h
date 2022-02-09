@@ -59,6 +59,8 @@ class Err {
 
   ~Err();
 
+  Err& operator=(const Err&) = default;
+
   bool has_error() const { return has_error_; }
   const Location& location() const { return location_; }
   const std::string& message() const { return message_; }

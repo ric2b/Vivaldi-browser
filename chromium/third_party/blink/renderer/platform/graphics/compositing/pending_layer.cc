@@ -5,9 +5,10 @@
 #include "third_party/blink/renderer/platform/graphics/compositing/pending_layer.h"
 
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
@@ -32,10 +33,8 @@ const ClipPaintPropertyNode* HighestOutputClipBetween(
 absl::optional<gfx::RectF> VisibilityLimit(const PropertyTreeState& state) {
   if (&state.Clip().LocalTransformSpace() == &state.Transform())
     return state.Clip().PaintClipRect().Rect();
-  if (const auto* scroll = state.Transform().ScrollNode()) {
-    return gfx::RectF(
-        gfx::Rect(scroll->ContainerRect().origin(), scroll->ContentsSize()));
-  }
+  if (const auto* scroll = state.Transform().ScrollNode())
+    return gfx::RectF(scroll->ContentsRect());
   return absl::nullopt;
 }
 
@@ -109,17 +108,6 @@ PendingLayer::PendingLayer(const PaintChunkSubset& chunks,
   }
 }
 
-PendingLayer::PendingLayer(const PreCompositedLayerInfo& pre_composited_layer)
-    : chunks_(pre_composited_layer.chunks),
-      property_tree_state_(
-          pre_composited_layer.graphics_layer->GetPropertyTreeState()
-              .Unalias()),
-      graphics_layer_(pre_composited_layer.graphics_layer),
-      compositing_type_(kPreCompositedLayer) {
-  DCHECK(graphics_layer_);
-  DCHECK(!graphics_layer_->ShouldCreateLayersAfterPaint());
-}
-
 gfx::Vector2dF PendingLayer::LayerOffset() const {
   // The solid color layer optimization is important for performance. Snapping
   // the location could make the solid color drawings not cover the entire
@@ -138,15 +126,15 @@ gfx::Size PendingLayer::LayerBounds() const {
   return gfx::ToEnclosingRect(bounds_).size();
 }
 
-FloatRect PendingLayer::MapRectKnownToBeOpaque(
+gfx::RectF PendingLayer::MapRectKnownToBeOpaque(
     const PropertyTreeState& new_state) const {
   if (rect_known_to_be_opaque_.IsEmpty())
-    return FloatRect();
+    return gfx::RectF();
 
   FloatClipRect float_clip_rect(rect_known_to_be_opaque_);
   GeometryMapper::LocalToAncestorVisualRect(property_tree_state_, new_state,
                                             float_clip_rect);
-  return float_clip_rect.IsTight() ? float_clip_rect.Rect() : FloatRect();
+  return float_clip_rect.IsTight() ? float_clip_rect.Rect() : gfx::RectF();
 }
 
 std::unique_ptr<JSONObject> PendingLayer::ToJSON() const {
@@ -170,7 +158,7 @@ std::unique_ptr<JSONObject> PendingLayer::ToJSON() const {
   return result;
 }
 
-FloatRect PendingLayer::VisualRectForOverlapTesting(
+gfx::RectF PendingLayer::VisualRectForOverlapTesting(
     const PropertyTreeState& ancestor_state) const {
   FloatClipRect visual_rect(bounds_);
   GeometryMapper::LocalToAncestorVisualRect(
@@ -260,24 +248,24 @@ bool PendingLayer::MergeInternal(const PendingLayer& guest,
   GeometryMapper::LocalToAncestorVisualRect(GetPropertyTreeState(),
                                             *merged_state, new_home_bounds);
   if (merged_visibility_limit)
-    new_home_bounds.Rect().Intersect(FloatRect(*merged_visibility_limit));
+    new_home_bounds.Rect().Intersect(*merged_visibility_limit);
 
   FloatClipRect new_guest_bounds(guest.bounds_);
   GeometryMapper::LocalToAncestorVisualRect(guest_state, *merged_state,
                                             new_guest_bounds);
   if (merged_visibility_limit)
-    new_guest_bounds.Rect().Intersect(FloatRect(*merged_visibility_limit));
+    new_guest_bounds.Rect().Intersect(*merged_visibility_limit);
 
-  FloatRect merged_bounds =
-      UnionRect(new_home_bounds.Rect(), new_guest_bounds.Rect());
-  float sum_area = new_home_bounds.Rect().Size().Area() +
-                   new_guest_bounds.Rect().Size().Area();
-  if (merged_bounds.Size().Area() - sum_area > kMergeSparsityAreaTolerance)
+  gfx::RectF merged_bounds =
+      gfx::UnionRects(new_home_bounds.Rect(), new_guest_bounds.Rect());
+  float sum_area = new_home_bounds.Rect().size().GetArea() +
+                   new_guest_bounds.Rect().size().GetArea();
+  if (merged_bounds.size().GetArea() - sum_area > kMergeSparsityAreaTolerance)
     return false;
 
-  FloatRect merged_rect_known_to_be_opaque =
-      MaximumCoveredRect(MapRectKnownToBeOpaque(*merged_state),
-                         guest.MapRectKnownToBeOpaque(*merged_state));
+  gfx::RectF merged_rect_known_to_be_opaque =
+      gfx::MaximumCoveredRect(MapRectKnownToBeOpaque(*merged_state),
+                              guest.MapRectKnownToBeOpaque(*merged_state));
   bool merged_text_known_to_be_on_opaque_background =
       text_known_to_be_on_opaque_background_;
   if (text_known_to_be_on_opaque_background_ !=

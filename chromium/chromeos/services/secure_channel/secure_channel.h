@@ -7,7 +7,6 @@
 
 #include "base/callback.h"
 #include "base/containers/queue.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/services/secure_channel/authenticator.h"
@@ -82,6 +81,9 @@ class SecureChannel : public ConnectionObserver {
    private:
     static Factory* factory_instance_;
   };
+
+  SecureChannel(const SecureChannel&) = delete;
+  SecureChannel& operator=(const SecureChannel&) = delete;
 
   ~SecureChannel() override;
 
@@ -172,8 +174,6 @@ class SecureChannel : public ConnectionObserver {
   int next_sequence_number_ = 0;
   base::ObserverList<Observer>::Unchecked observer_list_;
   base::WeakPtrFactory<SecureChannel> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(SecureChannel);
 };
 
 }  // namespace secure_channel

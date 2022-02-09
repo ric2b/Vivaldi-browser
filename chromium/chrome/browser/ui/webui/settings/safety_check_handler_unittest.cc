@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -132,7 +133,9 @@ bool TestDestructionVersionUpdater::destructor_invoked_ = false;
 
 class TestPasswordsDelegate : public extensions::TestPasswordsPrivateDelegate {
  public:
-  TestPasswordsDelegate() { store_->Init(/*prefs=*/nullptr); }
+  TestPasswordsDelegate() {
+    store_->Init(/*prefs=*/nullptr, /*affiliated_match_helper=*/nullptr);
+  }
 
   void TearDown() {
     store_->ShutdownOnUIThread();
@@ -174,12 +177,6 @@ class TestPasswordsDelegate : public extensions::TestPasswordsPrivateDelegate {
         "test" + base::NumberToString(test_credential_counter_++));
     form.password_value = u"password";
     form.username_element = u"username_element";
-    // TODO(crbug.com/1223022): Once all places that operate changes on forms
-    // via UpdateLogin properly set |password_issues|, setting them to an empty
-    // map should be part of the default constructor.
-    form.password_issues =
-        base::flat_map<password_manager::InsecureType,
-                       password_manager::InsecurityMetadata>();
     store_->AddLogin(form);
     form.password_issues = {
         {password_manager::InsecureType::kLeaked,
@@ -225,7 +222,7 @@ class TestPasswordsDelegate : public extensions::TestPasswordsPrivateDelegate {
   }
 
  private:
-  password_manager::BulkLeakCheckService* leak_service_ = nullptr;
+  raw_ptr<password_manager::BulkLeakCheckService> leak_service_ = nullptr;
   int compromised_password_count_ = 0;
   int weak_password_count_ = 0;
   int done_ = 0;
@@ -313,11 +310,11 @@ class SafetyCheckHandlerTest : public testing::Test {
   content::BrowserTaskEnvironment browser_task_environment_;
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<content::WebContents> web_contents_;
-  safety_check::TestUpdateCheckHelper* update_helper_ = nullptr;
-  TestVersionUpdater* version_updater_ = nullptr;
+  raw_ptr<safety_check::TestUpdateCheckHelper> update_helper_ = nullptr;
+  raw_ptr<TestVersionUpdater> version_updater_ = nullptr;
   std::unique_ptr<password_manager::BulkLeakCheckService> test_leak_service_;
   TestPasswordsDelegate test_passwords_delegate_;
-  extensions::ExtensionPrefs* test_extension_prefs_ = nullptr;
+  raw_ptr<extensions::ExtensionPrefs> test_extension_prefs_ = nullptr;
   TestSafetyCheckExtensionService test_extension_service_;
   content::TestWebUI test_web_ui_;
   std::unique_ptr<TestingSafetyCheckHandler> safety_check_;
@@ -383,11 +380,9 @@ SafetyCheckHandlerTest::GetSafetyCheckStatusChangedWithDataIfExists(
     if (!data.arg2()->GetAsDictionary(&dictionary)) {
       continue;
     }
-    int cur_new_state;
-    if (dictionary->GetInteger("newState", &cur_new_state) &&
-        cur_new_state == new_state) {
+    absl::optional<int> cur_new_state = dictionary->FindIntKey("newState");
+    if (cur_new_state == new_state)
       return dictionary;
-    }
   }
   return nullptr;
 }

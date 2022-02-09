@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_ASH_EVENTS_EVENT_REWRITER_DELEGATE_IMPL_H_
 #define CHROME_BROWSER_ASH_EVENTS_EVENT_REWRITER_DELEGATE_IMPL_H_
 
-#include "base/macros.h"
 #include "ui/chromeos/events/event_rewriter_chromeos.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -56,10 +55,5 @@ class EventRewriterDelegateImpl : public ui::EventRewriterChromeOS::Delegate {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-using ::ash::EventRewriterDelegateImpl;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_EVENTS_EVENT_REWRITER_DELEGATE_IMPL_H_

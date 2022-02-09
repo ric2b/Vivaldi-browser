@@ -40,7 +40,7 @@ class SystemTracingServiceTest : public testing::Test {
                         system_service_->producer().c_str(), 1));
 
     // Use the current thread as the Perfetto task runner.
-    tracing::PerfettoTracedProcess::ResetTaskRunnerForTesting(
+    test_handle_ = tracing::PerfettoTracedProcess::SetupForTesting(
         base::ThreadTaskRunnerHandle::Get());
   }
 
@@ -52,12 +52,14 @@ class SystemTracingServiceTest : public testing::Test {
     } else {
       ASSERT_EQ(0, unsetenv(kProducerSockEnvName));
     }
+    task_environment_.RunUntilIdle();
   }
 
  protected:
   base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<MockSystemService> system_service_;
+  std::unique_ptr<PerfettoTracedProcess::TestHandle> test_handle_;
   const char* saved_producer_sock_env_ = nullptr;
 };
 

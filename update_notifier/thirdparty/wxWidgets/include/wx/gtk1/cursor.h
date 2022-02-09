@@ -9,7 +9,6 @@
 #ifndef __GTKCURSORH__
 #define __GTKCURSORH__
 
-#include "wx/gdiobj.h"
 #include "wx/gdicmn.h"
 
 #if wxUSE_IMAGE
@@ -20,7 +19,7 @@
 // wxCursor
 //-----------------------------------------------------------------------------
 
-class WXDLLIMPEXP_CORE wxCursor : public wxGDIObject
+class WXDLLIMPEXP_CORE wxCursor : public wxCursorBase
 {
 public:
     wxCursor();
@@ -56,7 +55,7 @@ protected:
     virtual wxGDIRefData *CloneGDIRefData(const wxGDIRefData *data) const;
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxCursor)
+    wxDECLARE_DYNAMIC_CLASS(wxCursor);
 };
 
 #endif // __GTKCURSORH__

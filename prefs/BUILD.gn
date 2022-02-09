@@ -48,8 +48,6 @@ static_library("prefs") {
   sources = [
     "vivaldi_browser_prefs.h",
     "vivaldi_browser_prefs.cc",
-    "vivaldi_browser_prefs_util.h",
-    "vivaldi_browser_prefs_util.cc",
   ]
   if (is_android) {
     sources += [

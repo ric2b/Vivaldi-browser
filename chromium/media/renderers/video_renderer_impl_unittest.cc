@@ -11,14 +11,14 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
@@ -63,7 +63,7 @@ class VideoRendererImplTest : public testing::Test {
   std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecodersForTest() {
     decoder_ = new NiceMock<MockVideoDecoder>();
     std::vector<std::unique_ptr<VideoDecoder>> decoders;
-    decoders.push_back(base::WrapUnique(decoder_));
+    decoders.push_back(base::WrapUnique(decoder_.get()));
     ON_CALL(*decoder_, Initialize_(_, _, _, _, _, _))
         .WillByDefault(DoAll(
             SaveArg<4>(&output_cb_),
@@ -348,7 +348,7 @@ class VideoRendererImplTest : public testing::Test {
   // Fixture members.
   std::unique_ptr<VideoRendererImpl> renderer_;
   base::SimpleTestTickClock tick_clock_;
-  NiceMock<MockVideoDecoder>* decoder_;    // Owned by |renderer_|.
+  raw_ptr<NiceMock<MockVideoDecoder>> decoder_;  // Owned by |renderer_|.
   NiceMock<MockDemuxerStream> demuxer_stream_;
   bool simulate_decode_delay_;
 

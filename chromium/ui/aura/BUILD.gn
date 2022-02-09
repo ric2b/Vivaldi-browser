@@ -134,7 +134,7 @@ component("aura") {
   ]
 
   public_deps = [
-    "//ui/base/cursor:cursor_base",
+    "//ui/base/cursor",
     "//ui/base/dragdrop:types",
     "//ui/base/dragdrop/mojom:mojom_headers",
     "//ui/base/ime",
@@ -151,20 +151,11 @@ component("aura") {
     ]
   }
 
-  if (use_x11) {
-    public_deps += [ "//ui/base/x" ]
-    deps += [
-      "//ui/events/platform/x11",
-      "//ui/platform_window/x11",
-    ]
-  }
-
   if (is_win) {
     sources -= [ "input_state_lookup.cc" ]
 
     deps += [
       "//ipc",
-      "//ui/base/cursor",
       "//ui/platform_window/win",
     ]
   }
@@ -181,8 +172,6 @@ component("aura") {
     public += [ "screen_ozone.h" ]
     sources += [ "screen_ozone.cc" ]
   }
-
-  configs += [ "//build/config/compiler:noshadowing" ]
 }
 
 static_library("test_support") {
@@ -237,7 +226,7 @@ static_library("test_support") {
     "//skia",
     "//testing/gtest",
     "//ui/base:test_support",
-    "//ui/base/cursor:cursor_base",
+    "//ui/base/cursor",
     "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/ime/init",
     "//ui/compositor:test_support",
@@ -253,23 +242,6 @@ static_library("test_support") {
 
   if (is_win) {
     sources += [ "test/ui_controls_factory_aurawin.cc" ]
-  }
-
-  if (is_linux || is_chromeos) {
-    sources += [ "test/ui_controls_factory_aura_linux.cc" ]
-  }
-
-  if (use_x11) {
-    sources += [
-      "test/ui_controls_aurax11.cc",
-      "test/ui_controls_aurax11.h",
-      "test/x11_event_sender.h",
-    ]
-
-    deps += [
-      "//ui/events/platform/x11",
-      "//ui/gfx/x",
-    ]
   }
 
   if (use_ozone) {
@@ -314,10 +286,6 @@ executable("aura_demo") {
     "//ui/gl",
     "//ui/gl/init",
   ]
-
-  if (use_x11) {
-    deps += [ "//ui/gfx/x" ]
-  }
 }
 
 test("aura_unittests") {
@@ -352,6 +320,7 @@ test("aura_unittests") {
     "//mojo/core/embedder",
     "//skia",
     "//testing/gtest",
+    "//ui/aura/cursor:unittests",
     "//ui/aura_extra",
     "//ui/aura_extra:tests",
     "//ui/base:test_support",

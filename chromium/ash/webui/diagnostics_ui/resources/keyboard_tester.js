@@ -4,10 +4,10 @@
 
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 
-import {MechanicalLayout as DiagramMechanicalLayout} from 'chrome://resources/ash/common/keyboard_diagram.js';
+import {MechanicalLayout as DiagramMechanicalLayout, PhysicalLayout as DiagramPhysicalLayout} from 'chrome://resources/ash/common/keyboard_diagram.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {KeyboardInfo, MechanicalLayout, PhysicalLayout} from './diagnostics_types.js'
+import {KeyboardInfo, MechanicalLayout, NumberPadPresence, PhysicalLayout} from './diagnostics_types.js';
 
 /**
  * @fileoverview
@@ -38,6 +38,20 @@ Polymer({
     diagramMechanicalLayout_: {
       type: String,
       computed: 'computeDiagramMechanicalLayout_(keyboard)',
+    },
+
+    // TODO(crbug.com/1257138): use the proper type annotation instead of
+    // string.
+    /** @private {?string} */
+    diagramPhysicalLayout_: {
+      type: String,
+      computed: 'computeDiagramPhysicalLayout_(keyboard)',
+    },
+
+    /** @private */
+    showNumberPad_: {
+      type: Boolean,
+      computed: 'computeShowNumberPad_(keyboard)',
     },
   },
 
@@ -72,6 +86,34 @@ Polymer({
       [MechanicalLayout.kIso]: DiagramMechanicalLayout.kIso,
       [MechanicalLayout.kJis]: DiagramMechanicalLayout.kJis,
     }[keyboardInfo.mechanicalLayout];
+  },
+
+  /**
+   * @param {?KeyboardInfo} keyboardInfo
+   * TODO(crbug.com/1257138): use the proper type annotation instead of string.
+   * @return {?string}
+   * @private
+   */
+  computeDiagramPhysicalLayout_(keyboardInfo) {
+    if (!keyboardInfo) {
+      return null;
+    }
+    return {
+      [PhysicalLayout.kUnknown]: null,
+      [PhysicalLayout.kChromeOS]: DiagramPhysicalLayout.kChromeOS,
+      [PhysicalLayout.kChromeOSDellEnterprise]:
+          DiagramPhysicalLayout.kChromeOSDellEnterprise,
+    }[keyboardInfo.physicalLayout];
+  },
+
+  /**
+   * @param {?KeyboardInfo} keyboard
+   * @return {boolean}
+   * @private
+   */
+  computeShowNumberPad_(keyboard) {
+    return !!keyboard &&
+        keyboard.numberPadPresent === NumberPadPresence.kPresent;
   },
 
   /** Shows the tester's dialog. */

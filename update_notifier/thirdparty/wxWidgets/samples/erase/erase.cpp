@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 // for all others, include the necessary headers (this file is usually all you
 // need because it includes almost all "standard" wxWidgets headers)
@@ -49,7 +46,7 @@
 class MyApp : public wxApp
 {
 public:
-    virtual bool OnInit();
+    virtual bool OnInit() wxOVERRIDE;
 };
 
 
@@ -159,8 +156,7 @@ public:
         }
 
         Create (parent, wxID_ANY, pos, size, wxBORDER_NONE);
-        Connect(wxEVT_PAINT,
-                wxPaintEventHandler(ControlWithTransparency::OnPaint));
+        Bind(wxEVT_PAINT, &ControlWithTransparency::OnPaint, this);
 
         if ( !reason.empty() )
         {
@@ -179,7 +175,7 @@ private:
         dc.DrawRectangle(GetClientSize());
 
         dc.SetTextForeground(*wxBLUE);
-        dc.SetBackgroundMode(wxTRANSPARENT);
+        dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
         dc.DrawText(m_message, 0, 2);
 
         // Draw some bitmap/icon to ensure transparent bitmaps are indeed
@@ -215,7 +211,7 @@ enum
 // the application class
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 bool MyApp::OnInit()
 {
@@ -349,8 +345,8 @@ MyCanvas::MyCanvas(wxFrame *parent)
     new wxStaticBitmap( this, wxID_ANY, m_bitmap, wxPoint(80,20) );
 
     new wxStaticText(this, wxID_ANY,
-                     "Left bitmap is a wxStaticBitmap,\n"
-                     "right one drawn directly",
+                     "Right bitmap is a wxStaticBitmap,\n"
+                     "left one drawn directly",
                      wxPoint(150, 20));
 
     new ControlWithTransparency(this, wxPoint(65, 125), wxSize(350, 22));
@@ -437,7 +433,7 @@ void MyCanvas::OnEraseBackground( wxEraseEvent& event )
     }
 
     dc.SetTextForeground(*wxRED);
-    dc.SetBackgroundMode(wxSOLID);
+    dc.SetBackgroundMode(wxBRUSHSTYLE_SOLID);
     dc.DrawText("This text is drawn from OnEraseBackground", 60, 160);
 }
 

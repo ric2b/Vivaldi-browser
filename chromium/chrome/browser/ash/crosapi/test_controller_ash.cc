@@ -13,9 +13,13 @@
 #include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/callback_helpers.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/crosapi/window_util.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -117,6 +121,21 @@ void TestControllerAsh::EnterTabletMode(EnterTabletModeCallback callback) {
 void TestControllerAsh::ExitTabletMode(ExitTabletModeCallback callback) {
   SetTabletModeEnabled(false);
   std::move(callback).Run();
+}
+
+void TestControllerAsh::GetContextMenuForShelfItem(
+    const std::string& item_id,
+    GetContextMenuForShelfItemCallback callback) {
+  ash::ShelfItemDelegate* delegate =
+      ash::ShelfModel::Get()->GetShelfItemDelegate(ash::ShelfID(item_id));
+  if (!delegate) {
+    std::move(callback).Run({});
+    return;
+  }
+  delegate->GetContextMenu(
+      /*display_id=*/0,
+      base::BindOnce(&TestControllerAsh::OnGetContextMenuForShelfItem,
+                     std::move(callback)));
 }
 
 void TestControllerAsh::GetMinimizeOnBackKeyWindowProperty(
@@ -231,6 +250,18 @@ void TestControllerAsh::SendTouchEvent(const std::string& window_id,
   std::move(cb).Run();
 }
 
+void TestControllerAsh::RegisterStandaloneBrowserTestController(
+    mojo::PendingRemote<mojom::StandaloneBrowserTestController> controller) {
+  // At the moment only a single controller is supported.
+  // TODO(crbug.com/1174246): Support SxS lacros.
+  if (standalone_browser_test_controller_.is_bound()) {
+    return;
+  }
+  standalone_browser_test_controller_.Bind(std::move(controller));
+  standalone_browser_test_controller_.set_disconnect_handler(base::BindOnce(
+      &TestControllerAsh::OnControllerDisconnected, base::Unretained(this)));
+}
+
 void TestControllerAsh::WaiterFinished(OverviewWaiter* waiter) {
   for (size_t i = 0; i < overview_waiters_.size(); ++i) {
     if (waiter == overview_waiters_[i].get()) {
@@ -244,6 +275,34 @@ void TestControllerAsh::WaiterFinished(OverviewWaiter* waiter) {
       break;
     }
   }
+}
+
+void TestControllerAsh::OnControllerDisconnected() {
+  standalone_browser_test_controller_.reset();
+}
+
+void TestControllerAsh::OnGetContextMenuForShelfItem(
+    GetContextMenuForShelfItemCallback callback,
+    std::unique_ptr<ui::SimpleMenuModel> model) {
+  std::vector<std::string> items;
+  for (int i = 0; i < model->GetItemCount(); ++i) {
+    items.push_back(base::UTF16ToUTF8(model->GetLabelAt(i)));
+  }
+  std::move(callback).Run(std::move(items));
+}
+
+void TestControllerAsh::GetOpenAshBrowserWindows(
+    GetOpenAshBrowserWindowsCallback callback) {
+  std::move(callback).Run(BrowserList::GetInstance()->size());
+}
+
+void TestControllerAsh::CloseAllBrowserWindows(
+    CloseAllBrowserWindowsCallback callback) {
+  for (auto* browser : *BrowserList::GetInstance()) {
+    browser->window()->Close();
+  }
+
+  std::move(callback).Run(/*success*/ true);
 }
 
 // This class waits for overview mode to either enter or exit and fires a

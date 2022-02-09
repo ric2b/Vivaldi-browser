@@ -203,14 +203,6 @@ ax::mojom::DefaultActionVerb WebAXObject::Action() const {
   return private_->Action();
 }
 
-bool WebAXObject::CanPress() const {
-  if (IsDetached())
-    return false;
-
-  return private_->ActionElement() || private_->IsButton() ||
-         private_->IsMenuRelated();
-}
-
 bool WebAXObject::CanSetValueAttribute() const {
   if (IsDetached())
     return false;
@@ -272,7 +264,13 @@ bool WebAXObject::IsClickable() const {
   if (IsDetached())
     return false;
 
-  return private_->IsClickable();
+  // Filter out any action = kClickAncestor.
+  // Explanation: although elements are technically clickable if an ancestor is
+  // clickable, we do not expose them as such unless they have a widget role,
+  // otherwise there would often be an overwhelming number of clickable nodes.
+  ax::mojom::blink::DefaultActionVerb action = Action();
+  return action != ax::mojom::blink::DefaultActionVerb::kNone &&
+         action != ax::mojom::blink::DefaultActionVerb::kClickAncestor;
 }
 
 bool WebAXObject::IsControl() const {
@@ -472,7 +470,7 @@ WebString WebAXObject::ImageDataUrl(const gfx::Size& max_size) const {
   if (IsDetached())
     return WebString();
 
-  return private_->ImageDataUrl(IntSize(max_size));
+  return private_->ImageDataUrl(max_size);
 }
 
 ax::mojom::InvalidState WebAXObject::InvalidState() const {
@@ -514,9 +512,9 @@ WebAXObject WebAXObject::HitTest(const gfx::Point& point) const {
 
   ScopedActionAnnotator annotater(private_.Get(),
                                   ax::mojom::blink::Action::kHitTest);
-  IntPoint contents_point =
+  gfx::Point contents_point =
       private_->DocumentFrameView()->SoonToBeRemovedUnscaledViewportToContents(
-          IntPoint(point));
+          point);
 
   Document* document = private_->GetDocument();
   if (!document || !document->View())
@@ -534,7 +532,8 @@ WebAXObject WebAXObject::HitTest(const gfx::Point& point) const {
   if (hit)
     return WebAXObject(hit);
 
-  if (private_->GetBoundsInFrameCoordinates().Contains(contents_point))
+  if (private_->GetBoundsInFrameCoordinates().Contains(
+          LayoutPoint(contents_point)))
     return *this;
 
   return WebAXObject();
@@ -542,7 +541,7 @@ WebAXObject WebAXObject::HitTest(const gfx::Point& point) const {
 
 gfx::Rect WebAXObject::GetBoundsInFrameCoordinates() const {
   LayoutRect rect = private_->GetBoundsInFrameCoordinates();
-  return EnclosingIntRect(rect);
+  return ToEnclosingRect(rect);
 }
 
 WebString WebAXObject::KeyboardShortcut() const {
@@ -1159,7 +1158,7 @@ void WebAXObject::SetScrollOffset(const gfx::Point& offset) const {
   if (IsDetached())
     return;
 
-  private_->SetScrollOffset(IntPoint(offset));
+  private_->SetScrollOffset(offset);
 }
 
 void WebAXObject::Dropeffects(
@@ -1193,7 +1192,7 @@ void WebAXObject::GetRelativeBounds(WebAXObject& offset_container,
   private_->GetRelativeBounds(&container, bounds, container_transform,
                               clips_children);
   offset_container = WebAXObject(container);
-  bounds_in_container = gfx::RectF(bounds);
+  bounds_in_container = ToGfxRectF(bounds);
 }
 
 void WebAXObject::GetAllObjectsWithChangedBounds(
@@ -1248,7 +1247,7 @@ bool WebAXObject::ScrollToMakeVisibleWithSubFocus(
   blink::mojom::blink::ScrollAlignment blink_vertical_scroll_alignment = {
       visible_vertical_behavior, vertical_behavior, vertical_behavior};
   return private_->RequestScrollToMakeVisibleWithSubFocusAction(
-      IntRect(subfocus), blink_horizontal_scroll_alignment,
+      subfocus, blink_horizontal_scroll_alignment,
       blink_vertical_scroll_alignment);
 }
 

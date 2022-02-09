@@ -6,7 +6,7 @@
 #define ASH_WM_DESKS_ZERO_STATE_BUTTON_H_
 
 #include "ash/ash_export.h"
-#include "ash/wm/overview/overview_highlight_controller.h"
+#include "ash/wm/overview/overview_highlightable_view.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/controls/button/label_button.h"
 
@@ -21,14 +21,19 @@ class WmHighlightItemBorder;
 
 // The base class of ZeroStateDefaultDeskButton, ZeroStateIconButton and
 // the InnerExpandedDesksBarButton of ExpandedDesksBarButton.
-class ASH_EXPORT DeskButtonBase
-    : public views::LabelButton,
-      public OverviewHighlightController::OverviewHighlightableView {
+class ASH_EXPORT DeskButtonBase : public views::LabelButton,
+                                  public OverviewHighlightableView {
  public:
   METADATA_HEADER(DeskButtonBase);
 
-  explicit DeskButtonBase(const std::u16string& text);
+  // This LabelButton will include either text or image inside. Set the text
+  // of the button to `text` only if `set_text` is true, otherwise, the given
+  // `text` will only be used for the tooltip, accessible name etc of the
+  // button. If text of the button is empty, an image will be assigned to the
+  // button instead.
+  DeskButtonBase(const std::u16string& text, bool set_text);
   DeskButtonBase(const std::u16string& text,
+                 bool set_text,
                  int border_corder_radius,
                  int corner_radius);
   ~DeskButtonBase() override = default;
@@ -39,7 +44,7 @@ class ASH_EXPORT DeskButtonBase
   void OnPaintBackground(gfx::Canvas* canvas) override;
   void OnThemeChanged() override;
 
-  // OverviewHighlightController::OverviewHighlightableView:
+  // OverviewHighlightableView:
   views::View* GetView() override;
   void MaybeActivateHighlightedView() override;
   void MaybeCloseHighlightedView() override;
@@ -47,7 +52,7 @@ class ASH_EXPORT DeskButtonBase
   void OnViewHighlighted() override;
   void OnViewUnhighlighted() override;
 
-  virtual void UpdateButtonState() {}
+  virtual void SetButtonState(bool enabled) {}
 
   // Updates the label's text of the button. E.g, ZeroStateDefaultDeskButton
   // showing the desk's name, which should be updated on desk name changes.
@@ -59,6 +64,8 @@ class ASH_EXPORT DeskButtonBase
 
  protected:
   virtual void OnButtonPressed() = 0;
+
+  virtual void UpdateBorderState();
 
   SkColor background_color_;
 
@@ -76,8 +83,6 @@ class ASH_EXPORT DeskButtonBase
  private:
   friend class DesksTestApi;
 
-  void UpdateBorderState();
-
   // Owned by this View via `View::border_`. This is just a convenient pointer
   // to it.
   WmHighlightItemBorder* border_ptr_;
@@ -94,7 +99,7 @@ class ASH_EXPORT ZeroStateDefaultDeskButton : public DeskButtonBase {
  public:
   METADATA_HEADER(ZeroStateDefaultDeskButton);
 
-  ZeroStateDefaultDeskButton(DesksBarView* bar_view);
+  explicit ZeroStateDefaultDeskButton(DesksBarView* bar_view);
   ZeroStateDefaultDeskButton(const ZeroStateDefaultDeskButton&) = delete;
   ZeroStateDefaultDeskButton& operator=(const ZeroStateDefaultDeskButton&) =
       delete;
@@ -118,6 +123,7 @@ class ASH_EXPORT ZeroStateIconButton : public DeskButtonBase {
   METADATA_HEADER(ZeroStateIconButton);
 
   ZeroStateIconButton(const gfx::VectorIcon* button_icon,
+                      const std::u16string& text,
                       base::RepeatingClosure callback);
   ZeroStateIconButton(const ZeroStateIconButton&) = delete;
   ZeroStateIconButton& operator=(const ZeroStateIconButton&) = delete;

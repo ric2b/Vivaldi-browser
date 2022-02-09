@@ -22,11 +22,13 @@
 
 #include "base/cxx17_backports.h"
 #include "base/debug/crash_logging.h"
+#include "base/ignore_result.h"
 #include "base/pending_task.h"
 #include "base/strings/string_piece.h"
 #include "base/task/common/task_annotator.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
+#include "build/os_buildflags.h"
 
 #if defined(OS_WIN)
 #include <io.h>
@@ -482,8 +484,11 @@ bool ShouldCreateLogMessage(int severity) {
 bool ShouldLogToStderr(int severity) {
   if (g_logging_destination & LOG_TO_STDERR)
     return true;
+#if !BUILDFLAG(IS_FUCHSIA)
+  // High-severity logs go to stderr by default, except on Fuchsia.
   if (severity >= kAlwaysPrintErrorLevel)
     return (g_logging_destination & ~LOG_TO_FILE) == LOG_NONE;
+#endif
   return false;
 }
 

@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/containers/unique_ptr_adapters.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
@@ -41,6 +40,10 @@ class CONTENT_EXPORT BackgroundSyncContextImpl
   REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
 
   BackgroundSyncContextImpl();
+
+  BackgroundSyncContextImpl(const BackgroundSyncContextImpl&) = delete;
+  BackgroundSyncContextImpl& operator=(const BackgroundSyncContextImpl&) =
+      delete;
 
   // Called when StoragePartition is being setup.
   void Init(
@@ -118,8 +121,6 @@ class CONTENT_EXPORT BackgroundSyncContextImpl
       test_wakeup_delta_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(BackgroundSyncContextImpl);
 };
 
 }  // namespace content

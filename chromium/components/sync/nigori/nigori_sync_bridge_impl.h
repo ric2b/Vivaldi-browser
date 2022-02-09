@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
@@ -50,8 +49,7 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
  public:
   NigoriSyncBridgeImpl(std::unique_ptr<NigoriLocalChangeProcessor> processor,
                        std::unique_ptr<NigoriStorage> storage,
-                       const std::string& packed_explicit_passphrase_key,
-                       const std::string& packed_keystore_keys);
+                       const std::string& packed_explicit_passphrase_key);
 
   NigoriSyncBridgeImpl(const NigoriSyncBridgeImpl&) = delete;
   NigoriSyncBridgeImpl& operator=(const NigoriSyncBridgeImpl&) = delete;
@@ -66,7 +64,7 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   Cryptographer* GetCryptographer() override;
   PassphraseType GetPassphraseType() override;
   void SetEncryptionPassphrase(const std::string& passphrase) override;
-  void SetDecryptionPassphrase(const std::string& passphrase) override;
+  void SetExplicitPassphraseDecryptionKey(std::unique_ptr<Nigori> key) override;
   void AddTrustedVaultDecryptionKeys(
       const std::vector<std::vector<uint8_t>>& keys) override;
   base::Time GetKeystoreMigrationTime() override;
@@ -143,16 +141,6 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   // Queues keystore rotation or full keystore migration if current state
   // assumes it should happen.
   void MaybeTriggerKeystoreReencryption();
-
-  // Prior to USS keystore keys were stored in preferences. To avoid redundant
-  // requests to the server and make USS implementation more robust against
-  // failing such requests, the value restored from preferences should be
-  // populated to current |state_|. Performs unpacking of
-  // |packed_keystore_keys| and populates them to
-  // |keystore_keys_cryptographer|. Has no effect if |packed_keystore_keys| is
-  // empty, errors occur during deserealization or
-  // |keystore_keys_cryptographer| already has keys.
-  void MaybeMigrateKeystoreKeys(const std::string& packed_keystore_keys);
 
   // Serializes state of the bridge and sync metadata into the proto.
   sync_pb::NigoriLocalData SerializeAsNigoriLocalData() const;

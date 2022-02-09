@@ -18,10 +18,12 @@
 #include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/reputation_web_contents_observer.h"
+#include "chrome/browser/reputation/safety_tip_ui.h"
 #include "chrome/browser/reputation/safety_tip_ui_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
@@ -35,7 +37,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/lookalikes/core/features.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
-#include "components/page_info/features.h"
+#include "components/page_info/core/features.h"
 #include "components/reputation/core/safety_tip_test_utils.h"
 #include "components/reputation/core/safety_tips.pb.h"
 #include "components/reputation/core/safety_tips_config.h"
@@ -338,8 +340,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest
   void CheckNoButtons() {
     auto* bubble = static_cast<SafetyTipPageInfoBubbleView*>(
         PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
-    EXPECT_FALSE(bubble->info_button_);
-    EXPECT_FALSE(bubble->ignore_button_);
+    EXPECT_FALSE(bubble->info_link_);
     EXPECT_FALSE(bubble->leave_button_);
   }
 
@@ -365,22 +366,11 @@ class SafetyTipPageInfoBubbleViewBrowserTest
     return AreLookalikeWarningsEnabled() ? IsUIShowing() : !IsUIShowing();
   }
 
-  const std::u16string GetPageInfoBubbleViewSummaryText() {
-    auto* label =
-        PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetViewByID(
-            PageInfoViewFactory::VIEW_ID_PAGE_INFO_SECURITY_SUMMARY_LABEL);
-    return static_cast<views::StyledLabel*>(label)->GetText();
-  }
-
   std::u16string GetSafetyTipSummaryText() {
     auto* page_info = PageInfoBubbleView::GetPageInfoBubbleForTesting();
-    if (base::FeatureList::IsEnabled(page_info::kPageInfoV2Desktop)) {
-      auto* summary_label = page_info->GetViewByID(
-          PageInfoViewFactory::VIEW_ID_PAGE_INFO_SECURITY_SUMMARY_LABEL);
-      return static_cast<views::StyledLabel*>(summary_label)->GetText();
-    }
-
-    return page_info->GetWindowTitle();
+    auto* summary_label = page_info->GetViewByID(
+        PageInfoViewFactory::VIEW_ID_PAGE_INFO_SECURITY_SUMMARY_LABEL);
+    return static_cast<views::StyledLabel*>(summary_label)->GetText();
   }
 
   void CheckPageInfoShowsSafetyTipInfo(
@@ -394,8 +384,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest
     OpenPageInfoBubble(browser);
     ASSERT_EQ(PageInfoBubbleViewBase::GetShownBubbleType(),
               PageInfoBubbleViewBase::BubbleType::BUBBLE_PAGE_INFO);
-    auto* page_info = static_cast<PageInfoBubbleView*>(
-        PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
+    auto* page_info = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
     ASSERT_TRUE(page_info);
 
     switch (expected_safety_tip_status) {
@@ -710,8 +699,9 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
                               WindowOpenDisposition::CURRENT_TAB);
   ASSERT_NO_FATAL_FAILURE(CheckNoButtons());
+  auto* page_info = PageInfoBubbleView::GetPageInfoBubbleForTesting();
   EXPECT_EQ(
-      GetSafetyTipSummaryText(),
+      page_info->GetWindowTitle(),
       l10n_util::GetStringUTF16(IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE));
 }
 
@@ -1148,7 +1138,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                   WindowOpenDisposition::CURRENT_TAB);
     histogram_tester.ExpectBucketCount(
         kHistogramPrefix + "SafetyTip_BadReputation",
-        SafetyTipInteraction::kStartNewNavigation, 1);
+        SafetyTipInteraction::kChangePrimaryPage, 1);
   }
 }
 
@@ -1175,7 +1165,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
     NavigateToURL(browser(), GURL("about:blank"),
                   WindowOpenDisposition::CURRENT_TAB);
     auto samples = histograms.GetAllSamples(
-        "Security.SafetyTips.OpenTime.StartNewNavigation.SafetyTip_"
+        "Security.SafetyTips.OpenTime.ChangePrimaryPage.SafetyTip_"
         "BadReputation");
     ASSERT_EQ(1u, samples.size());
     EXPECT_LE(kMinWarningTime.InMilliseconds(), samples.front().min);
@@ -1754,4 +1744,36 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewPrerenderBrowserTest,
   // prerendered page.
   EXPECT_TRUE(IsUIShowing());
   histograms.ExpectTotalCount(kHistogramName, 1);
+}
+
+class SafetyTipPageInfoBubbleViewDialogTest : public DialogBrowserTest {
+ public:
+  SafetyTipPageInfoBubbleViewDialogTest() = default;
+  SafetyTipPageInfoBubbleViewDialogTest(
+      const SafetyTipPageInfoBubbleViewDialogTest&) = delete;
+  SafetyTipPageInfoBubbleViewDialogTest& operator=(
+      const SafetyTipPageInfoBubbleViewDialogTest&) = delete;
+  ~SafetyTipPageInfoBubbleViewDialogTest() override = default;
+
+  void ShowUi(const std::string& name) override {
+    auto status = security_state::SafetyTipStatus::kUnknown;
+    if (name == "BadReputation")
+      status = security_state::SafetyTipStatus::kBadReputation;
+    else if (name == "Lookalike")
+      status = security_state::SafetyTipStatus::kLookalike;
+
+    ShowSafetyTipDialog(browser()->tab_strip_model()->GetActiveWebContents(),
+                        status, GURL("https://www.google.tld"),
+                        base::DoNothing());
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewDialogTest,
+                       InvokeUi_BadReputation) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewDialogTest,
+                       InvokeUi_Lookalike) {
+  ShowAndVerifyUi();
 }

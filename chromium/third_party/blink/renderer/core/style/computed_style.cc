@@ -622,6 +622,15 @@ StyleHighlightData& ComputedStyle::MutableHighlightData() {
   return *data;
 }
 
+void ComputedStyle::SetHasCustomHighlightName(
+    const AtomicString& custom_highlight_name) {
+  std::unique_ptr<HashSet<AtomicString>>& names_set =
+      MutableCustomHighlightNamesInternal();
+  if (!names_set)
+    names_set = std::make_unique<HashSet<AtomicString>>();
+  names_set->insert(custom_highlight_name);
+}
+
 bool ComputedStyle::InheritedEqual(const ComputedStyle& other) const {
   return IndependentInheritedEqual(other) &&
          NonIndependentInheritedEqual(other);
@@ -1079,7 +1088,7 @@ bool ComputedStyle::HasCSSPaintImagesUsingCustomProperty(
 
 void ComputedStyle::AddCursor(StyleImage* image,
                               bool hot_spot_specified,
-                              const IntPoint& hot_spot) {
+                              const gfx::Point& hot_spot) {
   if (!CursorDataInternal())
     SetCursorDataInternal(MakeGarbageCollected<CursorList>());
   MutableCursorDataInternal()->push_back(
@@ -1271,14 +1280,13 @@ void ComputedStyle::ApplyTransform(
     ApplyMotionPath apply_motion_path,
     ApplyIndependentTransformProperties apply_independent_transform_properties)
     const {
-  ApplyTransform(result, FloatRect(FloatPoint(), FloatSize(border_box_size)),
-                 apply_origin, apply_motion_path,
-                 apply_independent_transform_properties);
+  ApplyTransform(result, gfx::RectF(gfx::SizeF(border_box_size)), apply_origin,
+                 apply_motion_path, apply_independent_transform_properties);
 }
 
 void ComputedStyle::ApplyTransform(
     TransformationMatrix& result,
-    const FloatRect& bounding_box,
+    const gfx::RectF& bounding_box,
     ApplyTransformOrigin apply_origin,
     ApplyMotionPath apply_motion_path,
     ApplyIndependentTransformProperties apply_independent_transform_properties)
@@ -1292,14 +1300,14 @@ void ComputedStyle::ApplyTransform(
   float origin_y = 0;
   float origin_z = 0;
 
-  const FloatSize& box_size = bounding_box.Size();
+  const gfx::SizeF& box_size = bounding_box.size();
   if (apply_transform_origin ||
       // We need to calculate originX and originY for applying motion path.
       apply_motion_path == kIncludeMotionPath) {
-    origin_x = FloatValueForLength(TransformOriginX(), box_size.Width()) +
-               bounding_box.X();
-    origin_y = FloatValueForLength(TransformOriginY(), box_size.Height()) +
-               bounding_box.Y();
+    origin_x = FloatValueForLength(TransformOriginX(), box_size.width()) +
+               bounding_box.x();
+    origin_y = FloatValueForLength(TransformOriginY(), box_size.height()) +
+               bounding_box.y();
     if (apply_transform_origin) {
       origin_z = TransformOriginZ();
       result.Translate3d(origin_x, origin_y, origin_z);
@@ -1336,7 +1344,7 @@ bool ComputedStyle::HasFilters() const {
 void ComputedStyle::ApplyMotionPathTransform(
     float origin_x,
     float origin_y,
-    const FloatRect& bounding_box,
+    const gfx::RectF& bounding_box,
     TransformationMatrix& transform) const {
   // TODO(ericwilligers): crbug.com/638055 Apply offset-position.
   if (!OffsetPath()) {
@@ -1357,8 +1365,8 @@ void ComputedStyle::ApplyMotionPathTransform(
     path_position.tangent_in_degrees =
         ClampTo<float, float>(To<StyleRay>(*path).Angle() - 90);
     float tangent_in_radians = Deg2rad(path_position.tangent_in_degrees);
-    path_position.point.SetX(float_distance * cos(tangent_in_radians));
-    path_position.point.SetY(float_distance * sin(tangent_in_radians));
+    path_position.point.set_x(float_distance * cos(tangent_in_radians));
+    path_position.point.set_y(float_distance * sin(tangent_in_radians));
   } else {
     float zoom = EffectiveZoom();
     const StylePath& motion_path = To<StylePath>(*path);
@@ -1386,19 +1394,19 @@ void ComputedStyle::ApplyMotionPathTransform(
   float origin_shift_y = 0;
   // If the offset-position and offset-anchor properties are not yet enabled,
   // they will have the default value, auto.
-  FloatPoint anchor_point(origin_x, origin_y);
+  gfx::PointF anchor_point(origin_x, origin_y);
   if (!position.X().IsAuto() || !anchor.X().IsAuto()) {
-    anchor_point = FloatPointForLengthPoint(anchor, bounding_box.Size());
-    anchor_point += bounding_box.Location();
+    anchor_point = PointForLengthPoint(anchor, bounding_box.size());
+    anchor_point += bounding_box.OffsetFromOrigin();
 
     // Shift the origin from transform-origin to offset-anchor.
-    origin_shift_x = anchor_point.X() - origin_x;
-    origin_shift_y = anchor_point.Y() - origin_y;
+    origin_shift_x = anchor_point.x() - origin_x;
+    origin_shift_y = anchor_point.y() - origin_y;
   }
 
   transform.Translate(
-      path_position.point.X() - anchor_point.X() + origin_shift_x,
-      path_position.point.Y() - anchor_point.Y() + origin_shift_y);
+      path_position.point.x() - anchor_point.x() + origin_shift_x,
+      path_position.point.y() - anchor_point.y() + origin_shift_y);
   transform.Rotate(path_position.tangent_in_degrees + rotate.angle);
 
   if (!position.X().IsAuto() || !anchor.X().IsAuto())
@@ -1853,13 +1861,13 @@ bool ComputedStyle::TextDecorationVisualOverflowEqual(
   return true;
 }
 
-TextDecoration ComputedStyle::TextDecorationsInEffect() const {
+TextDecorationLine ComputedStyle::TextDecorationsInEffect() const {
   if (HasSimpleUnderlineInternal())
-    return TextDecoration::kUnderline;
+    return TextDecorationLine::kUnderline;
   if (!AppliedTextDecorationsInternal())
-    return TextDecoration::kNone;
+    return TextDecorationLine::kNone;
 
-  TextDecoration decorations = TextDecoration::kNone;
+  TextDecorationLine decorations = TextDecorationLine::kNone;
 
   const Vector<AppliedTextDecoration>& applied = AppliedTextDecorations();
 
@@ -1875,7 +1883,7 @@ const Vector<AppliedTextDecoration>& ComputedStyle::AppliedTextDecorations()
     DEFINE_STATIC_LOCAL(
         Vector<AppliedTextDecoration>, underline,
         (1, AppliedTextDecoration(
-                TextDecoration::kUnderline, ETextDecorationStyle::kSolid,
+                TextDecorationLine::kUnderline, ETextDecorationStyle::kSolid,
                 VisitedDependentColor(GetCSSPropertyTextDecorationColor()),
                 TextDecorationThickness(), Length::Auto())));
     // Since we only have one of these in memory, just update the color before
@@ -2202,7 +2210,7 @@ void ComputedStyle::OverrideTextDecorationColors(Color override_color) {
 void ComputedStyle::ApplyTextDecorations(
     const Color& parent_text_decoration_color,
     bool override_existing_colors) {
-  if (GetTextDecoration() == TextDecoration::kNone &&
+  if (GetTextDecorationLine() == TextDecorationLine::kNone &&
       !HasSimpleUnderlineInternal() && !AppliedTextDecorationsInternal())
     return;
 
@@ -2211,28 +2219,28 @@ void ComputedStyle::ApplyTextDecorations(
   Color current_text_decoration_color =
       VisitedDependentColor(GetCSSPropertyTextDecorationColor());
   if (HasSimpleUnderlineInternal() &&
-      (GetTextDecoration() != TextDecoration::kNone ||
+      (GetTextDecorationLine() != TextDecorationLine::kNone ||
        current_text_decoration_color != parent_text_decoration_color)) {
     SetHasSimpleUnderlineInternal(false);
     AddAppliedTextDecoration(AppliedTextDecoration(
-        TextDecoration::kUnderline, ETextDecorationStyle::kSolid,
+        TextDecorationLine::kUnderline, ETextDecorationStyle::kSolid,
         parent_text_decoration_color, TextDecorationThickness(),
         Length::Auto()));
   }
   if (override_existing_colors && AppliedTextDecorationsInternal())
     OverrideTextDecorationColors(current_text_decoration_color);
-  if (GetTextDecoration() == TextDecoration::kNone)
+  if (GetTextDecorationLine() == TextDecorationLine::kNone)
     return;
   DCHECK(!HasSimpleUnderlineInternal());
   // To save memory, we don't use AppliedTextDecoration objects in the common
   // case of a single simple underline of currentColor.
-  TextDecoration decoration_lines = GetTextDecoration();
+  TextDecorationLine decoration_lines = GetTextDecorationLine();
   ETextDecorationStyle decoration_style = TextDecorationStyle();
-  bool is_simple_underline = decoration_lines == TextDecoration::kUnderline &&
-                             decoration_style == ETextDecorationStyle::kSolid &&
-                             TextDecorationColor().IsCurrentColor() &&
-                             TextUnderlineOffset().IsAuto() &&
-                             GetTextDecorationThickness().IsAuto();
+  bool is_simple_underline =
+      decoration_lines == TextDecorationLine::kUnderline &&
+      decoration_style == ETextDecorationStyle::kSolid &&
+      TextDecorationColor().IsCurrentColor() &&
+      TextUnderlineOffset().IsAuto() && GetTextDecorationThickness().IsAuto();
   if (is_simple_underline && !AppliedTextDecorationsInternal()) {
     SetHasSimpleUnderlineInternal(true);
     return;
@@ -2336,8 +2344,13 @@ Color ComputedStyle::ResolvedColor(const StyleColor& color) const {
 
 bool ComputedStyle::ShouldForceColor(const StyleColor& unforced_color) const {
   return InForcedColorsMode() &&
-         ForcedColorAdjust() != EForcedColorAdjust::kNone &&
+         ForcedColorAdjust() == EForcedColorAdjust::kAuto &&
          !unforced_color.IsSystemColor();
+}
+
+bool ComputedStyle::ShouldPreserveParentColor() const {
+  return InForcedColorsMode() &&
+         ForcedColorAdjust() == EForcedColorAdjust::kPreserveParentColor;
 }
 
 void ComputedStyle::SetMarginStart(const Length& margin) {

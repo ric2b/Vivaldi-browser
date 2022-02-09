@@ -11,7 +11,7 @@
 #include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -21,6 +21,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/compositor/overscroll/scroll_input_handler.h"
@@ -102,15 +103,15 @@ void ConstrainScrollToBounds(View* viewport,
     DCHECK_EQ(0, view->x());
     DCHECK_EQ(0, view->y());
   }
-  gfx::Vector2dF offset = scrolls_with_layers
-                              ? view->layer()->CurrentScrollOffset()
-                              : gfx::Vector2dF(-view->x(), -view->y());
+  gfx::PointF offset = scrolls_with_layers
+                           ? view->layer()->CurrentScrollOffset()
+                           : gfx::PointF(-view->x(), -view->y());
 
   int x = CheckScrollBounds(viewport->width(), view->width(), offset.x());
   int y = CheckScrollBounds(viewport->height(), view->height(), offset.y());
 
   if (scrolls_with_layers) {
-    view->layer()->SetScrollOffset(gfx::Vector2dF(x, y));
+    view->layer()->SetScrollOffset(gfx::PointF(x, y));
   } else {
     // This is no op if bounds are the same
     view->SetBounds(-x, -y, view->width(), view->height());
@@ -177,7 +178,7 @@ class ScrollView::Viewport : public View {
     return parent() && scroll_view_->contents_viewport_ == this;
   }
 
-  ScrollView* scroll_view_;
+  raw_ptr<ScrollView> scroll_view_;
 };
 
 BEGIN_METADATA(ScrollView, Viewport, View)
@@ -323,7 +324,7 @@ void ScrollView::SetBackgroundThemeColorId(
 gfx::Rect ScrollView::GetVisibleRect() const {
   if (!contents_)
     return gfx::Rect();
-  gfx::Vector2dF offset = CurrentOffset();
+  gfx::PointF offset = CurrentOffset();
   return gfx::Rect(offset.x(), offset.y(), contents_viewport_->width(),
                    contents_viewport_->height());
 }
@@ -441,7 +442,7 @@ ScrollBar* ScrollView::SetHorizontalScrollBar(
     std::unique_ptr<ScrollBar> horiz_sb) {
   horiz_sb->SetVisible(horiz_sb_->GetVisible());
   horiz_sb->set_controller(this);
-  RemoveChildViewT(horiz_sb_);
+  RemoveChildViewT(horiz_sb_.get());
   horiz_sb_ = AddChildView(std::move(horiz_sb));
   return horiz_sb_;
 }
@@ -451,7 +452,7 @@ ScrollBar* ScrollView::SetVerticalScrollBar(
   DCHECK(vert_sb);
   vert_sb->SetVisible(vert_sb_->GetVisible());
   vert_sb->set_controller(this);
-  RemoveChildViewT(vert_sb_);
+  RemoveChildViewT(vert_sb_.get());
   vert_sb_ = AddChildView(std::move(vert_sb));
   return vert_sb_;
 }
@@ -466,12 +467,14 @@ void ScrollView::SetHasFocusIndicator(bool has_focus_indicator) {
   OnPropertyChanged(&draw_focus_indicator_, kPropertyEffectsPaint);
 }
 
-void ScrollView::AddScrollViewObserver(Observer* observer) {
-  observers_.AddObserver(observer);
+base::CallbackListSubscription ScrollView::AddContentsScrolledCallback(
+    ScrollViewCallback callback) {
+  return on_contents_scrolled_.Add(std::move(callback));
 }
 
-void ScrollView::RemoveScrollViewObserver(Observer* observer) {
-  observers_.RemoveObserver(observer);
+base::CallbackListSubscription ScrollView::AddContentsScrollEndedCallback(
+    ScrollViewCallback callback) {
+  return on_contents_scroll_ended_.Add(std::move(callback));
 }
 
 gfx::Size ScrollView::CalculatePreferredSize() const {
@@ -652,8 +655,8 @@ void ScrollView::Layout() {
     // Flip the viewport with layer transforms under RTL. Note the net effect is
     // to flip twice, so the text is not mirrored. This is necessary because
     // compositor scrolling is not RTL-aware. So although a toolkit-views layout
-    // will flip, increasing a horizontal gfx::Vector2dF will move content to
-    // the left, regardless of RTL. A gfx::Vector2dF must be positive, so to
+    // will flip, increasing a horizontal scroll offset will move content to
+    // the left, regardless of RTL. A scroll offset must be positive, so to
     // move (unscrolled) content to the right, we need to flip the viewport
     // layer. That would flip all the content as well, so flip (and translate)
     // the content layer. Compensating in this way allows the scrolling/offset
@@ -835,8 +838,7 @@ bool ScrollView::HandleAccessibleAction(const ui::AXActionData& action_data) {
     case ax::mojom::Action::kScrollDown:
       return vert_sb_->ScrollByAmount(ScrollBar::ScrollAmount::kNextPage);
     case ax::mojom::Action::kSetScrollOffset:
-      ScrollToOffset(gfx::Vector2dF(action_data.target_point.x(),
-                                    action_data.target_point.y()));
+      ScrollToOffset(gfx::PointF(action_data.target_point));
       return true;
     default:
       return View::HandleAccessibleAction(action_data);
@@ -847,7 +849,7 @@ void ScrollView::ScrollToPosition(ScrollBar* source, int position) {
   if (!contents_)
     return;
 
-  gfx::Vector2dF offset = CurrentOffset();
+  gfx::PointF offset = CurrentOffset();
   if (source == horiz_sb_ && IsHorizontalScrollEnabled()) {
     position = AdjustPosition(offset.x(), position, contents_->width(),
                               contents_viewport_->width());
@@ -880,8 +882,7 @@ int ScrollView::GetScrollIncrement(ScrollBar* source,
 }
 
 void ScrollView::OnScrollEnded() {
-  for (auto& observer : observers_)
-    observer.OnContentsScrollEnded();
+  on_contents_scroll_ended_.Notify();
 }
 
 bool ScrollView::DoesViewportOrScrollViewHaveLayer() const {
@@ -957,7 +958,7 @@ void ScrollView::ScrollContentsRegionToBeVisible(const gfx::Rect& rect) {
                         ? y
                         : std::max(0, max_y - contents_viewport_->height());
 
-  ScrollToOffset(gfx::Vector2dF(new_x, new_y));
+  ScrollToOffset(gfx::PointF(new_x, new_y));
 }
 
 void ScrollView::ComputeScrollBarsVisibility(const gfx::Size& vp_size,
@@ -1019,7 +1020,7 @@ void ScrollView::UpdateScrollBarPositions() {
   if (!contents_)
     return;
 
-  const gfx::Vector2dF offset = CurrentOffset();
+  const gfx::PointF offset = CurrentOffset();
   if (IsHorizontalScrollEnabled()) {
     int vw = contents_viewport_->width();
     int cw = contents_->width();
@@ -1032,12 +1033,12 @@ void ScrollView::UpdateScrollBarPositions() {
   }
 }
 
-gfx::Vector2dF ScrollView::CurrentOffset() const {
+gfx::PointF ScrollView::CurrentOffset() const {
   return ScrollsWithLayers() ? contents_->layer()->CurrentScrollOffset()
-                             : gfx::Vector2dF(-contents_->x(), -contents_->y());
+                             : gfx::PointF(-contents_->x(), -contents_->y());
 }
 
-void ScrollView::ScrollToOffset(const gfx::Vector2dF& offset) {
+void ScrollView::ScrollToOffset(const gfx::PointF& offset) {
   if (ScrollsWithLayers()) {
     contents_->layer()->SetScrollOffset(offset);
   } else {
@@ -1079,18 +1080,17 @@ void ScrollView::EnableViewportLayer() {
   UpdateBackground();
 }
 
-void ScrollView::OnLayerScrolled(const gfx::Vector2dF& current_offset,
+void ScrollView::OnLayerScrolled(const gfx::PointF& current_offset,
                                  const cc::ElementId&) {
   OnScrolled(current_offset);
 }
 
-void ScrollView::OnScrolled(const gfx::Vector2dF& offset) {
+void ScrollView::OnScrolled(const gfx::PointF& offset) {
   UpdateOverflowIndicatorVisibility(offset);
   UpdateScrollBarPositions();
   ScrollHeader();
 
-  for (auto& observer : observers_)
-    observer.OnContentsScrolled();
+  on_contents_scrolled_.Notify();
 
   NotifyAccessibilityEvent(ax::mojom::Event::kScrollPositionChanged,
                            /*send_native_event=*/true);
@@ -1181,8 +1181,7 @@ void ScrollView::PositionOverflowIndicators() {
                 more_content_bottom_thickness_));
 }
 
-void ScrollView::UpdateOverflowIndicatorVisibility(
-    const gfx::Vector2dF& offset) {
+void ScrollView::UpdateOverflowIndicatorVisibility(const gfx::PointF& offset) {
   SetControlVisibility(more_content_top_.get(),
                        !draw_border_ && !header_ && IsVerticalScrollEnabled() &&
                            offset.y() > vert_sb_->GetMinPosition() &&

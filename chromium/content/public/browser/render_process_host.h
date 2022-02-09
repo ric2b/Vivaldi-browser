@@ -33,7 +33,6 @@
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
-#include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
 #include "third_party/blink/public/mojom/background_sync/background_sync.mojom.h"
 #include "third_party/blink/public/mojom/buckets/bucket_manager_host.mojom-forward.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-forward.h"
@@ -80,8 +79,10 @@ class BrowserContext;
 class BrowserMessageFilter;
 class IsolationContext;
 class ProcessLock;
+class RenderFrameHost;
 class RenderProcessHostObserver;
 class StoragePartition;
+struct GlobalRenderFrameHostId;
 #if defined(OS_ANDROID)
 enum class ChildProcessImportance;
 #endif
@@ -417,11 +418,24 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // https://crbug.com/1148542 are known.
   virtual size_t GetShutdownDelayRefCount() const = 0;
   // Diagnostic code for https://crbug/1148542. This will be removed prior to
-  // resolving that issue. They're included to allow MockRenderProcessHost to
-  // override them, and should not be called from outside of content/.
-  virtual void IncrementRfhCount() = 0;
-  virtual void DecrementRfhCount() = 0;
-  virtual int GetRfhCount() const = 0;
+  // resolving that issue. It counts all RenderFrameHosts that have not been
+  // destroyed, including speculative ones and pending deletion ones. This
+  // is included to allow MockRenderProcessHost to override them, and should not
+  // be called from outside of content/.
+  virtual int GetRenderFrameHostCount() const = 0;
+
+  // Calls |on_frame| for every RenderFrameHost whose frames live in this
+  // process. Note that speculative RenderFrameHosts will be skipped.
+  virtual void ForEachRenderFrameHost(
+      base::RepeatingCallback<void(RenderFrameHost*)> on_frame) = 0;
+
+  // Register/unregister a RenderFrameHost instance whose frame lives in this
+  // process. RegisterRenderFrameHost and UnregisterRenderFrameHost are the
+  // implementation details and should be called only from within //content.
+  virtual void RegisterRenderFrameHost(
+      const GlobalRenderFrameHostId& render_frame_host_id) = 0;
+  virtual void UnregisterRenderFrameHost(
+      const GlobalRenderFrameHostId& render_frame_host_id) = 0;
 
   // "Worker ref count" is similar to "Keep alive ref count", but is specific to
   // workers since they do not have pre-defined timeouts. Also affected by
@@ -495,11 +509,21 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual bool HostHasNotBeenUsed() = 0;
 
   // Locks this RenderProcessHost to documents compatible with |process_lock|.
-  // This method is public so that it can be called from SiteInstanceImpl, and
+  // This method is public so that it can be called from within //content, and
   // used by MockRenderProcessHost. It isn't meant to be called outside of
-  // content.
+  // //content.
   virtual void SetProcessLock(const IsolationContext& isolation_context,
                               const ProcessLock& process_lock) = 0;
+
+  // Enable the given list of blink runtime features
+  virtual void EnableBlinkRuntimeFeatures(
+      const std::vector<std::string>& features) = 0;
+
+  // Returns the ProcessLock associated with this process.
+  // This method is public so that it can be called from within //content, and
+  // used by MockRenderProcessHost. It isn't meant to be called outside of
+  // //content.
+  virtual ProcessLock GetProcessLock() = 0;
 
   // Returns true if this process is locked to a particular site-specific
   // ProcessLock.  See the SetProcessLock() call above.

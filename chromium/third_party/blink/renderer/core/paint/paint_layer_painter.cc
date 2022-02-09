@@ -74,11 +74,38 @@ bool PaintLayerPainter::PaintedOutputInvisible(const ComputedStyle& style) {
   return false;
 }
 
+PhysicalRect PaintLayerPainter::ContentsVisualRect(const FragmentData& fragment,
+                                                   const LayoutBox& box) {
+  PhysicalRect contents_visual_rect = box.PhysicalContentsVisualOverflowRect();
+  contents_visual_rect.Move(fragment.PaintOffset());
+  const auto* replaced_transform =
+      fragment.PaintProperties()
+          ? fragment.PaintProperties()->ReplacedContentTransform()
+          : nullptr;
+  if (replaced_transform) {
+    FloatRect float_contents_visual_rect(contents_visual_rect);
+    GeometryMapper::SourceToDestinationRect(*replaced_transform->Parent(),
+                                            *replaced_transform,
+                                            float_contents_visual_rect);
+    contents_visual_rect =
+        PhysicalRect::EnclosingRect(float_contents_visual_rect);
+  }
+  return contents_visual_rect;
+}
+
 PaintResult PaintLayerPainter::Paint(
     GraphicsContext& context,
     const PaintLayerPaintingInfo& painting_info,
     PaintLayerFlags paint_flags) {
-  if (paint_layer_.GetLayoutObject().GetFrameView()->ShouldThrottleRendering())
+  const LayoutObject& layout_object = paint_layer_.GetLayoutObject();
+  if (UNLIKELY(layout_object.NeedsLayout() &&
+               !layout_object.ChildLayoutBlockedByDisplayLock())) {
+    // Skip if we need layout. This should never happen. See crbug.com/1244130
+    NOTREACHED();
+    return kFullyPainted;
+  }
+
+  if (layout_object.GetFrameView()->ShouldThrottleRendering())
     return kFullyPainted;
 
   // Non self-painting layers without self-painting descendants don't need to be
@@ -87,24 +114,12 @@ PaintResult PaintLayerPainter::Paint(
       !paint_layer_.HasSelfPaintingLayerDescendant())
     return kFullyPainted;
 
-  // If this layer is totally invisible then there is nothing to paint.
-  // In CompositeAfterPaint we simplify this optimization by painting even when
-  // effectively invisible but skipping the painted content during layerization
-  // in PaintArtifactCompositor.
-  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-      paint_layer_.PaintsWithTransparency(
-          painting_info.GetGlobalPaintFlags()) &&
-      PaintedOutputInvisible(paint_layer_.GetLayoutObject().StyleRef())) {
-    return kFullyPainted;
-  }
-
   // If the transform can't be inverted, don't paint anything. We still need
   // to paint with CompositeAfterPaint if there are animations to ensure the
   // animation can be setup to run on the compositor.
   bool paint_non_invertible_transforms = false;
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    const auto* properties =
-        paint_layer_.GetLayoutObject().FirstFragment().PaintProperties();
+    const auto* properties = layout_object.FirstFragment().PaintProperties();
     if (properties && properties->Transform() &&
         properties->Transform()->HasActiveTransformAnimation()) {
       paint_non_invertible_transforms = true;
@@ -342,13 +357,13 @@ void PaintLayerPainter::AdjustForPaintProperties(
   }
 }
 
-static IntRect FirstFragmentVisualRect(const LayoutBoxModelObject& object) {
+static gfx::Rect FirstFragmentVisualRect(const LayoutBoxModelObject& object) {
   // We don't want to include overflowing contents.
   PhysicalRect overflow_rect =
       object.IsBox() ? To<LayoutBox>(object).PhysicalSelfVisualOverflowRect()
                      : object.PhysicalVisualOverflowRect();
   overflow_rect.Move(object.FirstFragment().PaintOffset());
-  return EnclosingIntRect(overflow_rect);
+  return ToEnclosingRect(overflow_rect);
 }
 
 PaintResult PaintLayerPainter::PaintLayerContents(
@@ -452,17 +467,16 @@ PaintResult PaintLayerPainter::PaintLayerContents(
         IsUnclippedLayoutView(paint_layer_)) {
       result = kMayBeClippedByCullRect;
     } else {
-      IntRect visual_rect = FirstFragmentVisualRect(object);
-      IntRect cull_rect(object.FirstFragment().GetCullRect().Rect());
+      gfx::Rect visual_rect = FirstFragmentVisualRect(object);
+      gfx::Rect cull_rect = object.FirstFragment().GetCullRect().Rect();
       bool cull_rect_intersects_self = cull_rect.Intersects(visual_rect);
       if (!cull_rect.Contains(visual_rect))
         result = kMayBeClippedByCullRect;
 
       bool cull_rect_intersects_contents = true;
       if (const auto* box = DynamicTo<LayoutBox>(object)) {
-        PhysicalRect contents_visual_rect =
-            box->PhysicalContentsVisualOverflowRect();
-        contents_visual_rect.Move(object.FirstFragment().PaintOffset());
+        PhysicalRect contents_visual_rect(
+            ContentsVisualRect(object.FirstFragment(), *box));
         PhysicalRect contents_cull_rect(
             object.FirstFragment().GetContentsCullRect().Rect());
         cull_rect_intersects_contents =
@@ -800,8 +814,8 @@ static CullRect LegacyCullRect(const PaintLayerFragment& fragment,
   // |fragment.root_fragment_data|. Adjust it to the containing transform node's
   // space in which we will paint.
   new_cull_rect.Move(PhysicalOffset(
-      RoundedIntPoint(fragment.root_fragment_data->PaintOffset())));
-  return CullRect(PixelSnappedIntRect(new_cull_rect));
+      ToRoundedPoint(fragment.root_fragment_data->PaintOffset())));
+  return CullRect(ToPixelSnappedRect(new_cull_rect));
 }
 
 void PaintLayerPainter::PaintBackgroundForFragmentsWithPhase(

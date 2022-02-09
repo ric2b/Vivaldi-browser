@@ -15,7 +15,6 @@
 #include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -49,6 +48,10 @@ class FileSystemOperationImplTest : public testing::Test {
  public:
   FileSystemOperationImplTest()
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {}
+
+  FileSystemOperationImplTest(const FileSystemOperationImplTest&) = delete;
+  FileSystemOperationImplTest& operator=(const FileSystemOperationImplTest&) =
+      delete;
 
  protected:
   void SetUp() override {
@@ -277,12 +280,12 @@ class FileSystemOperationImplTest : public testing::Test {
 
   base::File::Error Move(const FileSystemURL& src,
                          const FileSystemURL& dest,
-                         FileSystemOperation::CopyOrMoveOption option) {
+                         FileSystemOperation::CopyOrMoveOptionSet options) {
     base::File::Error status;
     base::RunLoop run_loop;
     update_observer_.Enable();
     operation_runner()->Move(
-        src, dest, option, storage::FileSystemOperation::ERROR_BEHAVIOR_ABORT,
+        src, dest, options, storage::FileSystemOperation::ERROR_BEHAVIOR_ABORT,
         storage::FileSystemOperation::CopyOrMoveProgressCallback(),
         RecordStatusCallback(run_loop.QuitClosure(), &status));
     run_loop.Run();
@@ -292,12 +295,12 @@ class FileSystemOperationImplTest : public testing::Test {
 
   base::File::Error Copy(const FileSystemURL& src,
                          const FileSystemURL& dest,
-                         FileSystemOperation::CopyOrMoveOption option) {
+                         FileSystemOperation::CopyOrMoveOptionSet options) {
     base::File::Error status;
     base::RunLoop run_loop;
     update_observer_.Enable();
     operation_runner()->Copy(
-        src, dest, option, FileSystemOperation::ERROR_BEHAVIOR_ABORT,
+        src, dest, options, FileSystemOperation::ERROR_BEHAVIOR_ABORT,
         FileSystemOperation::CopyOrMoveProgressCallback(),
         RecordStatusCallback(run_loop.QuitClosure(), &status));
     run_loop.Run();
@@ -456,15 +459,13 @@ class FileSystemOperationImplTest : public testing::Test {
   UpdateObserverList update_observers_;
 
   base::WeakPtrFactory<FileSystemOperationImplTest> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(FileSystemOperationImplTest);
 };
 
 TEST_F(FileSystemOperationImplTest, TestMoveFailureSrcDoesntExist) {
   change_observer()->ResetCount();
-  EXPECT_EQ(
-      base::File::FILE_ERROR_NOT_FOUND,
-      Move(URLForPath("a"), URLForPath("b"), FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND,
+            Move(URLForPath("a"), URLForPath("b"),
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -472,8 +473,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveFailureContainsPath) {
   FileSystemURL src_dir(CreateDirectory("src"));
   FileSystemURL dest_dir(CreateDirectory("src/dest"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_INVALID_OPERATION,
-            Move(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_INVALID_OPERATION,
+      Move(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -483,8 +485,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveFailureSrcDirExistsDestFile) {
   FileSystemURL dest_dir(CreateDirectory("dest"));
   FileSystemURL dest_file(CreateFile("dest/file"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_INVALID_OPERATION,
-            Move(src_dir, dest_file, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_INVALID_OPERATION,
+      Move(src_dir, dest_file, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -495,8 +498,9 @@ TEST_F(FileSystemOperationImplTest,
   FileSystemURL dest_dir(CreateDirectory("dest"));
   FileSystemURL dest_file(CreateFile("dest/file"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_NOT_EMPTY,
-            Move(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_NOT_EMPTY,
+      Move(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -506,8 +510,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveFailureSrcFileExistsDestDir) {
   FileSystemURL src_file(CreateFile("src/file"));
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_INVALID_OPERATION,
-            Move(src_file, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_INVALID_OPERATION,
+      Move(src_file, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -516,7 +521,7 @@ TEST_F(FileSystemOperationImplTest, TestMoveFailureDestParentDoesntExist) {
   FileSystemURL src_dir(CreateDirectory("src"));
   EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND,
             Move(src_dir, URLForPath("nonexistent/deset"),
-                 FileSystemOperation::OPTION_NONE));
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -524,8 +529,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcFileAndOverwrite) {
   FileSystemURL src_file(CreateFile("src"));
   FileSystemURL dest_file(CreateFile("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Move(src_file, dest_file, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Move(src_file, dest_file, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(FileExists("dest"));
 
   EXPECT_EQ(1, change_observer()->get_and_reset_modify_file_count());
@@ -538,8 +544,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcFileAndOverwrite) {
 TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcFileAndNew) {
   FileSystemURL src_file(CreateFile("src"));
 
-  EXPECT_EQ(base::File::FILE_OK, Move(src_file, URLForPath("new"),
-                                      FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(base::File::FILE_OK,
+            Move(src_file, URLForPath("new"),
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(FileExists("new"));
 
   EXPECT_EQ(1, change_observer()->get_and_reset_create_file_from_count());
@@ -551,8 +558,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcDirAndOverwrite) {
   FileSystemURL src_dir(CreateDirectory("src"));
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Move(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Move(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_FALSE(DirectoryExists("src"));
 
   EXPECT_EQ(1, change_observer()->get_and_reset_create_directory_count());
@@ -568,8 +576,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcDirAndNew) {
   FileSystemURL src_dir(CreateDirectory("src"));
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK, Move(src_dir, URLForPath("dest/new"),
-                                      FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(base::File::FILE_OK,
+            Move(src_dir, URLForPath("dest/new"),
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_FALSE(DirectoryExists("src"));
   EXPECT_TRUE(DirectoryExists("dest/new"));
 
@@ -585,8 +594,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcDirRecursive) {
 
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Move(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Move(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(DirectoryExists("dest/dir"));
   EXPECT_TRUE(FileExists("dest/dir/sub"));
 
@@ -603,7 +613,7 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSamePath) {
   CreateFile("src/dir/sub");
 
   EXPECT_EQ(base::File::FILE_OK,
-            Move(src_dir, src_dir, FileSystemOperation::OPTION_NONE));
+            Move(src_dir, src_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(DirectoryExists("src/dir"));
   EXPECT_TRUE(FileExists("src/dir/sub"));
 
@@ -615,9 +625,9 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSamePath) {
 }
 
 TEST_F(FileSystemOperationImplTest, TestCopyFailureSrcDoesntExist) {
-  EXPECT_EQ(
-      base::File::FILE_ERROR_NOT_FOUND,
-      Copy(URLForPath("a"), URLForPath("b"), FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND,
+            Copy(URLForPath("a"), URLForPath("b"),
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -625,8 +635,9 @@ TEST_F(FileSystemOperationImplTest, TestCopyFailureContainsPath) {
   FileSystemURL src_dir(CreateDirectory("src"));
   FileSystemURL dest_dir(CreateDirectory("src/dir"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_INVALID_OPERATION,
-            Copy(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_INVALID_OPERATION,
+      Copy(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -636,8 +647,9 @@ TEST_F(FileSystemOperationImplTest, TestCopyFailureSrcDirExistsDestFile) {
   FileSystemURL dest_dir(CreateDirectory("dest"));
   FileSystemURL dest_file(CreateFile("dest/file"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_INVALID_OPERATION,
-            Copy(src_dir, dest_file, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_INVALID_OPERATION,
+      Copy(src_dir, dest_file, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -648,8 +660,9 @@ TEST_F(FileSystemOperationImplTest,
   FileSystemURL dest_dir(CreateDirectory("dest"));
   FileSystemURL dest_file(CreateFile("dest/file"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_NOT_EMPTY,
-            Copy(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_NOT_EMPTY,
+      Copy(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -658,8 +671,9 @@ TEST_F(FileSystemOperationImplTest, TestCopyFailureSrcFileExistsDestDir) {
   FileSystemURL src_file(CreateFile("src"));
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_ERROR_INVALID_OPERATION,
-            Copy(src_file, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_INVALID_OPERATION,
+      Copy(src_file, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -669,7 +683,7 @@ TEST_F(FileSystemOperationImplTest, TestCopyFailureDestParentDoesntExist) {
 
   EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND,
             Copy(src_dir, URLForPath("nonexistent/dest"),
-                 FileSystemOperation::OPTION_NONE));
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(change_observer()->HasNoChange());
 }
 
@@ -685,8 +699,9 @@ TEST_F(FileSystemOperationImplTest, TestCopyFailureByQuota) {
   GrantQuotaForCurrentUsage();
   AddQuota(6 + dest_path_cost - 1);
 
-  EXPECT_EQ(base::File::FILE_ERROR_NO_SPACE,
-            Copy(src_file, dest_file, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_ERROR_NO_SPACE,
+      Copy(src_file, dest_file, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_FALSE(FileExists("dest/file"));
 }
 
@@ -694,8 +709,9 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcFileAndOverwrite) {
   FileSystemURL src_file(CreateFile("src"));
   FileSystemURL dest_file(CreateFile("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Copy(src_file, dest_file, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Copy(src_file, dest_file, FileSystemOperation::CopyOrMoveOptionSet()));
 
   EXPECT_TRUE(FileExists("dest"));
   EXPECT_EQ(4, quota_manager_proxy()->notify_storage_accessed_count());
@@ -707,8 +723,9 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcFileAndOverwrite) {
 TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcFileAndNew) {
   FileSystemURL src_file(CreateFile("src"));
 
-  EXPECT_EQ(base::File::FILE_OK, Copy(src_file, URLForPath("new"),
-                                      FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(base::File::FILE_OK,
+            Copy(src_file, URLForPath("new"),
+                 FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(FileExists("new"));
   EXPECT_EQ(4, quota_manager_proxy()->notify_storage_accessed_count());
 
@@ -721,8 +738,9 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcDirAndOverwrite) {
   FileSystemURL src_dir(CreateDirectory("src"));
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Copy(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Copy(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
 
   // Make sure we've overwritten but not copied the source under the |dest_dir|.
   EXPECT_TRUE(DirectoryExists("dest"));
@@ -738,8 +756,9 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcDirAndNew) {
   FileSystemURL src_dir(CreateDirectory("src"));
   FileSystemURL dest_dir_new(URLForPath("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Copy(src_dir, dest_dir_new, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Copy(src_dir, dest_dir_new, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_TRUE(DirectoryExists("dest"));
   EXPECT_GE(quota_manager_proxy()->notify_storage_accessed_count(), 2);
 
@@ -754,8 +773,9 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcDirRecursive) {
 
   FileSystemURL dest_dir(CreateDirectory("dest"));
 
-  EXPECT_EQ(base::File::FILE_OK,
-            Copy(src_dir, dest_dir, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Copy(src_dir, dest_dir, FileSystemOperation::CopyOrMoveOptionSet()));
 
   EXPECT_TRUE(DirectoryExists("dest/dir"));
   EXPECT_TRUE(FileExists("dest/dir/sub"));
@@ -776,7 +796,7 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSamePath) {
   CreateFile("src/dir/sub");
 
   EXPECT_EQ(base::File::FILE_OK,
-            Copy(src_dir, src_dir, FileSystemOperation::OPTION_NONE));
+            Copy(src_dir, src_dir, FileSystemOperation::CopyOrMoveOptionSet()));
 
   EXPECT_TRUE(DirectoryExists("src/dir"));
   EXPECT_TRUE(FileExists("src/dir/sub"));
@@ -1190,7 +1210,7 @@ TEST_F(FileSystemOperationImplTest, TestMoveSuccessSrcDirRecursiveWithQuota) {
   EXPECT_EQ(all_file_size + total_path_cost, GetUsage());
 
   EXPECT_EQ(base::File::FILE_OK,
-            Move(src, dest, FileSystemOperation::OPTION_NONE));
+            Move(src, dest, FileSystemOperation::CopyOrMoveOptionSet()));
 
   EXPECT_FALSE(DirectoryExists("src/dir"));
   EXPECT_FALSE(FileExists("src/dir/file2"));
@@ -1235,7 +1255,7 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcDirRecursiveWithQuota) {
   EXPECT_EQ(expected_usage, usage);
 
   EXPECT_EQ(base::File::FILE_OK,
-            Copy(src, dest1, FileSystemOperation::OPTION_NONE));
+            Copy(src, dest1, FileSystemOperation::CopyOrMoveOptionSet()));
 
   expected_usage += all_file_size + child_path_cost + grandchild_path_cost;
   EXPECT_TRUE(DirectoryExists("src/dir"));
@@ -1247,7 +1267,7 @@ TEST_F(FileSystemOperationImplTest, TestCopySuccessSrcDirRecursiveWithQuota) {
   EXPECT_EQ(expected_usage, GetUsage());
 
   EXPECT_EQ(base::File::FILE_OK,
-            Copy(child_dir, dest2, FileSystemOperation::OPTION_NONE));
+            Copy(child_dir, dest2, FileSystemOperation::CopyOrMoveOptionSet()));
 
   expected_usage += grandchild_file_size + grandchild_path_cost;
   usage = GetUsage();
@@ -1262,8 +1282,9 @@ TEST_F(FileSystemOperationImplTest,
   FileSystemURL dest_file(CreateFile("dest"));
 
   EXPECT_EQ(base::File::FILE_OK, Truncate(dest_file, 6));
-  EXPECT_EQ(base::File::FILE_OK,
-            Copy(src_file, dest_file, FileSystemOperation::OPTION_NONE));
+  EXPECT_EQ(
+      base::File::FILE_OK,
+      Copy(src_file, dest_file, FileSystemOperation::CopyOrMoveOptionSet()));
   EXPECT_EQ(0, GetFileSize("dest"));
 }
 

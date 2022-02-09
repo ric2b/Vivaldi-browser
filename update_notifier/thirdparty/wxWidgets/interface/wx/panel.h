@@ -10,9 +10,8 @@
 
     A panel is a window on which controls are placed. It is usually placed within
     a frame. Its main feature over its parent class wxWindow is code for handling
-    child windows and TAB traversal. Since wxWidgets 2.9, there is support both
-    for TAB traversal implemented by wxWidgets itself as well as native TAB
-    traversal (such as for GTK 2.0).
+    child windows and TAB traversal, which is implemented natively if possible
+    (e.g. in wxGTK) or by wxWidgets itself otherwise.
 
     @note Tab traversal is implemented through an otherwise undocumented
           intermediate wxControlContainer class from which any class can derive
@@ -112,12 +111,12 @@ public:
         @param event
             The colour change event.
 
-        @remarks Changes the panel's colour to conform to the current settings
-                 (Windows only). Add an event table entry for your panel
-                 class if you wish the behaviour to be different (such
-                 as keeping a user-defined background colour). If you do
-                 override this function, call wxEvent::Skip() to propagate
-                 the notification to child windows and controls.
+        @remarks Changes the panel's colour to conform to the current settings.
+                 Add an event table entry for your panel class if you wish the
+                 behaviour to be different (such as keeping a user-defined
+                 background colour). If you do override this function, call
+                 wxEvent::Skip() to propagate the notification to child windows
+                 and controls.
 
         @see wxSysColourChangedEvent
     */

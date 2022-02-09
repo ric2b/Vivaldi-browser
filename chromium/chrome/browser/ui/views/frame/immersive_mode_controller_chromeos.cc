@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_chromeos.h"
 
-#include "base/macros.h"
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/platform_util.h"
@@ -31,6 +30,8 @@
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/ui/ash/window_pin_util.h"
 #include "chromeos/ui/base/window_state_type.h"
+#else
+#include "chrome/browser/ui/lacros/window_properties.h"
 #endif
 
 namespace {
@@ -238,7 +239,7 @@ void ImmersiveModeControllerChromeos::OnWindowPropertyChanged(
   bool pin_state_transition = false;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(crbug.com/1250129): Get pin state from exo.
-  pin_state_transition = key == chromeos::kWindowPinTypeKey;
+  pin_state_transition = key == lacros::kWindowPinTypeKey;
 #else
   // Track locked fullscreen changes.
   if (key == chromeos::kWindowStateTypeKey) {

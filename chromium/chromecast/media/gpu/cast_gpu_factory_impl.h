@@ -6,7 +6,7 @@
 #define CHROMECAST_MEDIA_GPU_CAST_GPU_FACTORY_IMPL_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread.h"
 #include "chromecast/media/gpu/cast_gpu_factory.h"
 #include "media/mojo/clients/mojo_video_decoder.h"
@@ -52,7 +52,8 @@ class CastGpuFactoryImpl : public CastGpuFactory,
       override;
 
   // media::GpuVideoAcceleratorFactories implementation.
-  bool IsGpuVideoAcceleratorEnabled() override;
+  bool IsGpuVideoDecodeAcceleratorEnabled() override;
+  bool IsGpuVideoEncodeAcceleratorEnabled() override;
   base::UnguessableToken GetChannelToken() override;
   int32_t GetCommandBufferRouteId() override;
   ::media::GpuVideoAcceleratorFactories::Supported IsDecoderConfigSupported(

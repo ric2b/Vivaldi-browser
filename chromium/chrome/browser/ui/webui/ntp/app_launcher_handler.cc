@@ -23,7 +23,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/apps/app_service/app_icon_source.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -53,6 +53,7 @@
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 #include "chrome/browser/web_applications/extension_status_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
@@ -198,7 +199,7 @@ void AppLauncherHandler::CreateWebAppInfo(const web_app::AppId& app_id,
   // The items which are to be written into |value| are also described in
   // chrome/browser/resources/ntp4/page_list_view.js in @typedef for AppInfo.
   // Please update it whenever you add or remove any keys here.
-  value->Clear();
+  value->DictClear();
 
   // Communicate the kiosk flag so the apps page can disable showing the
   // context menu in kiosk mode.
@@ -308,7 +309,7 @@ void AppLauncherHandler::CreateExtensionInfo(const Extension* extension,
   // The items which are to be written into |value| are also described in
   // chrome/browser/resources/ntp4/page_list_view.js in @typedef for AppInfo.
   // Please update it whenever you add or remove any keys here.
-  value->Clear();
+  value->DictClear();
 
   // Communicate the kiosk flag so the apps page can disable showing the
   // context menu in kiosk mode.
@@ -571,6 +572,16 @@ void AppLauncherHandler::OnWebAppInstalled(const web_app::AppId& app_id) {
   web_ui()->CallJavascriptFunctionUnsafe("ntp.appAdded", *app_info, highlight);
 }
 
+void AppLauncherHandler::OnWebAppInstallTimeChanged(
+    const web_app::AppId& app_id,
+    const base::Time& time) {
+  // Use the appAdded to update the app icon's color to no longer be
+  // greyscale.
+  std::unique_ptr<base::DictionaryValue> app_info = GetWebAppInfo(app_id);
+  if (app_info)
+    web_ui()->CallJavascriptFunctionUnsafe("ntp.appAdded", *app_info);
+}
+
 void AppLauncherHandler::OnWebAppWillBeUninstalled(
     const web_app::AppId& app_id) {
   std::unique_ptr<base::DictionaryValue> app_info =
@@ -802,8 +813,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
     extensions::RecordWebStoreLaunch();
 
     if (args->GetList().size() > 2) {
-      std::string source_value;
-      CHECK(args->GetString(2, &source_value));
+      const std::string& source_value = args->GetList()[2].GetString();
       if (!source_value.empty()) {
         override_url = net::AppendQueryParameter(
             full_launch_url, extension_urls::kWebstoreSourceField,
@@ -821,7 +831,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
         disposition == WindowOpenDisposition::NEW_WINDOW
             ? apps::mojom::LaunchContainer::kLaunchContainerWindow
             : apps::mojom::LaunchContainer::kLaunchContainerTab,
-        disposition, apps::mojom::AppLaunchSource::kSourceNewTabPage);
+        disposition, apps::mojom::LaunchSource::kFromNewTabPage);
     params.override_url = override_url;
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
@@ -839,7 +849,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
         extension_id, launch_container,
         old_contents ? WindowOpenDisposition::CURRENT_TAB
                      : WindowOpenDisposition::NEW_FOREGROUND_TAB,
-        extensions::AppLaunchSource::kSourceNewTabPage);
+        apps::mojom::LaunchSource::kFromNewTabPage);
     params.override_url = override_url;
     WebContents* new_contents =
         apps::AppServiceProxyFactory::GetForProfile(profile)
@@ -866,8 +876,6 @@ void AppLauncherHandler::HandleSetLaunchType(const base::ListValue* args) {
     web_app::DisplayMode display_mode = web_app::DisplayMode::kBrowser;
     switch (launch_type) {
       case extensions::LAUNCH_TYPE_FULLSCREEN:
-        display_mode = web_app::DisplayMode::kFullscreen;
-        break;
       case extensions::LAUNCH_TYPE_WINDOW:
         display_mode = web_app::DisplayMode::kStandalone;
         break;
@@ -902,8 +910,7 @@ void AppLauncherHandler::HandleSetLaunchType(const base::ListValue* args) {
 }
 
 void AppLauncherHandler::HandleUninstallApp(const base::ListValue* args) {
-  std::string extension_id;
-  CHECK(args->GetString(0, &extension_id));
+  const std::string& extension_id = args->GetList()[0].GetString();
 
   if (web_app_provider_->registrar().IsInstalled(extension_id) &&
       !IsYoutubeExtension(extension_id)) {
@@ -925,8 +932,10 @@ void AppLauncherHandler::HandleUninstallApp(const base::ListValue* args) {
         weak_ptr_factory_.GetWeakPtr());
 
     extension_id_prompting_ = extension_id;
-    bool dont_confirm = false;
-    if (args->GetBoolean(1, &dont_confirm) && dont_confirm) {
+    const auto& list = args->GetList();
+    const bool dont_confirm =
+        list.size() >= 2 && list[1].is_bool() && list[1].GetBool();
+    if (dont_confirm) {
       base::AutoReset<bool> auto_reset(&ignore_changes_, true);
       web_app_provider_->install_finalizer().UninstallWebApp(
           extension_id_prompting_, webapps::WebappUninstallSource::kAppsPage,
@@ -962,8 +971,10 @@ void AppLauncherHandler::HandleUninstallApp(const base::ListValue* args) {
 
   extension_id_prompting_ = extension_id;
 
-  bool dont_confirm = false;
-  if (args->GetBoolean(1, &dont_confirm) && dont_confirm) {
+  const auto& list = args->GetList();
+  const bool dont_confirm =
+      list.size() >= 2 && list[1].is_bool() && list[1].GetBool();
+  if (dont_confirm) {
     base::AutoReset<bool> auto_reset(&ignore_changes_, true);
     // Do the uninstall work here.
     extension_service_->UninstallExtension(
@@ -978,8 +989,7 @@ void AppLauncherHandler::HandleUninstallApp(const base::ListValue* args) {
 }
 
 void AppLauncherHandler::HandleCreateAppShortcut(const base::ListValue* args) {
-  std::string app_id;
-  CHECK(args->GetString(0, &app_id));
+  const std::string& app_id = args->GetList()[0].GetString();
 
   if (web_app_provider_->registrar().IsInstalled(app_id) &&
       !IsYoutubeExtension(app_id)) {
@@ -1015,8 +1025,7 @@ void AppLauncherHandler::HandleCreateAppShortcut(const base::ListValue* args) {
 }
 
 void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
-  std::string app_id;
-  CHECK(args->GetString(0, &app_id));
+  const std::string& app_id = args->GetList()[0].GetString();
 
   if (!web_app_provider_->registrar().IsInstalled(app_id))
     return;
@@ -1025,17 +1034,10 @@ void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
 
   web_app_provider_->sync_bridge().SetAppIsLocallyInstalled(app_id, true);
   web_app_provider_->sync_bridge().SetAppInstallTime(app_id, base::Time::Now());
-
-  // Use the appAdded to update the app icon's color to no longer be
-  // greyscale.
-  std::unique_ptr<base::DictionaryValue> app_info = GetWebAppInfo(app_id);
-  if (app_info)
-    web_ui()->CallJavascriptFunctionUnsafe("ntp.appAdded", *app_info);
 }
 
 void AppLauncherHandler::HandleShowAppInfo(const base::ListValue* args) {
-  std::string extension_id;
-  CHECK(args->GetString(0, &extension_id));
+  const std::string& extension_id = args->GetList()[0].GetString();
 
   if (web_app_provider_->registrar().IsInstalled(extension_id) &&
       !IsYoutubeExtension(extension_id)) {
@@ -1165,12 +1167,9 @@ void AppLauncherHandler::HandleRunOnOsLogin(const base::ListValue* args) {
   if (!base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin))
     return;
 
-  std::string app_id;
-  std::string mode_string;
+  const std::string& app_id = args->GetList()[0].GetString();
+  const std::string& mode_string = args->GetList()[1].GetString();
   web_app::RunOnOsLoginMode mode;
-
-  CHECK(args->GetString(0, &app_id));
-  CHECK(args->GetString(1, &mode_string));
 
   if (mode_string == kRunOnOsLoginModeNotRun) {
     mode = web_app::RunOnOsLoginMode::kNotRun;
@@ -1361,7 +1360,15 @@ void AppLauncherHandler::InstallOsHooks(const web_app::AppId& app_id) {
   options.os_hooks[web_app::OsHookType::kFileHandlers] = true;
   options.os_hooks[web_app::OsHookType::kProtocolHandlers] = true;
   options.os_hooks[web_app::OsHookType::kRunOnOsLogin] = false;
-  options.os_hooks[web_app::OsHookType::kUninstallationViaOsSettings] = true;
+
+  // Installed WebApp here is user uninstallable app, but it needs to
+  // check user uninstall-ability if there are apps with different source types.
+  // WebApp::CanUserUninstallApp will handles it.
+  const web_app::WebApp* web_app =
+      web_app_provider_->registrar().GetAppById(app_id);
+  options.os_hooks[web_app::OsHookType::kUninstallationViaOsSettings] =
+      web_app->CanUserUninstallWebApp();
+
 #if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
   options.os_hooks[web_app::OsHookType::kUrlHandlers] = true;

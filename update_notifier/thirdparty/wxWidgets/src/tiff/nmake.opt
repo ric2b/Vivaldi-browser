@@ -23,16 +23,17 @@
 # Compile time parameters for MS Visual C++ compiler.
 # You may edit this file to specify building options.
 
+# Options:
+#    DEBUG - set to disable optimizations and link with debug runtimes
+#
+# Usage examples (see details below):
+# nmake -f makefile.vc
+# nmake -f makefile.vc DEBUG=1
+# nmake -f makefile.vc clean
+#
 #
 ###### Edit the following lines to choose a feature set you need. #######
 #
-
-# 
-# Select WINMODE_CONSOLE to build a library which reports errors to stderr, or
-# WINMODE_WINDOWED to build such that errors are reported via MessageBox().
-#
-WINMODE_CONSOLE = 1
-#WINMODE_WINDOWED = 1
 
 #
 # Comment out the following lines to disable internal codecs.
@@ -108,13 +109,22 @@ CHECK_JPEG_YCBCR_SUBSAMPLING = 1
 ####################### Compiler related options. #######################
 #
 
+
+# Indicate if the compiler provides strtoll/strtoull (default 1)
+# Users of MSVC++ 14.0 ("Visual Studio 2015") and later should set this to 1
+HAVE_STRTOLL = 1
+
 #
 # Pick debug or optimized build flags.  We default to an optimized build
 # with no debugging information.
 # NOTE: /EHsc option required if you want to build the C++ stream API
 #
+!IFDEF DEBUG
+OPTFLAGS =	/MDd /EHsc /W3 /D_CRT_SECURE_NO_DEPRECATE
+!ELSE
 OPTFLAGS =	/Ox /MD /EHsc /W3 /D_CRT_SECURE_NO_DEPRECATE
-#OPTFLAGS = 	/Zi 
+!ENDIF
+#OPTFLAGS = 	/Zi
 
 #
 # Uncomment following line to enable using Windows Common RunTime Library
@@ -135,7 +145,7 @@ LD	=	link /nologo
 
 CFLAGS  =	$(OPTFLAGS) $(INCL) $(EXTRAFLAGS)
 CXXFLAGS =	$(OPTFLAGS) $(INCL) $(EXTRAFLAGS)
-EXTRAFLAGS =
+EXTRAFLAGS = -DHAVE_CONFIG_H
 LIBS	=
 
 # Name of the output shared library
@@ -147,13 +157,6 @@ DLLNAME	= libtiff.dll
 
 # Set the native cpu bit order
 EXTRAFLAGS	= -DFILLODER_LSB2MSB $(EXTRAFLAGS)
-
-!IFDEF WINMODE_WINDOWED
-EXTRAFLAGS	= -DTIF_PLATFORM_WINDOWED $(EXTRAFLAGS)
-LIBS		= user32.lib $(LIBS)
-!ELSE
-EXTRAFLAGS	= -DTIF_PLATFORM_CONSOLE $(EXTRAFLAGS)
-!ENDIF
 
 # Codec stuff
 !IFDEF CCITT_SUPPORT

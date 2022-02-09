@@ -35,12 +35,12 @@ public:
     virtual ~wxWrapSizer();
 
     // override base class virtual methods
-    virtual wxSize CalcMin();
-    virtual void RecalcSizes();
+    virtual wxSize CalcMin() wxOVERRIDE;
+    virtual void RepositionChildren(const wxSize& minSize) wxOVERRIDE;
 
     virtual bool InformFirstDirection(int direction,
                                       int size,
-                                      int availableOtherDir);
+                                      int availableOtherDir) wxOVERRIDE;
 
 protected:
     // This method is called to decide if an item represents empty space or
@@ -84,16 +84,20 @@ protected:
     bool m_lastUsed;         // Indicates whether value from InformFirst... has
                              //  been used yet
 
-    // The sizes below are computed by RecalcSizes(), i.e. they don't have
+    // The sizes below are computed by RepositionChildren(), i.e. they don't have
     // valid values during the initial call to CalcMin() and they are only
     // valid for the current layout (i.e. the current number of rows)
     int m_minSizeMinor;      // Min size in minor direction
     int m_maxSizeMajor;      // Size of longest row
     int m_minItemMajor;      // Size of smallest item in major direction
 
+    // the minimal size needed for this sizer as calculated by the last call to
+    // our CalcMin()
+    wxSize m_calculatedMinSize;
+
     wxBoxSizer m_rows;       // Sizer containing multiple rows of our items
 
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxWrapSizer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxWrapSizer);
 };
 
 #endif // _WX_WRAPSIZER_H_

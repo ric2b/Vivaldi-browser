@@ -6,6 +6,7 @@
 
 #include "ash/app_list/model/app_list_item_observer.h"
 #include "ash/public/cpp/app_list/app_list_config_provider.h"
+#include "ui/gfx/image/image_skia.h"
 
 namespace ash {
 
@@ -74,6 +75,10 @@ void AppListItem::SetIconVersion(int icon_version) {
   if (metadata_->icon_version == icon_version)
     return;
 
+  // Clears last set icon if any. AppIconLoadHelper use that to decide
+  // whether to trigger an icon load when it is created with UI.
+  metadata_->icon = gfx::ImageSkia();
+
   metadata_->icon_version = icon_version;
   for (auto& observer : observers_) {
     observer.ItemIconVersionChanged();
@@ -85,6 +90,10 @@ void AppListItem::SetNotificationBadgeColor(const SkColor color) {
   for (auto& observer : observers_) {
     observer.ItemBadgeColorChanged();
   }
+}
+
+void AppListItem::SetIconColor(const IconColor color) {
+  metadata_->icon_color = color;
 }
 
 void AppListItem::AddObserver(AppListItemObserver* observer) {
@@ -101,6 +110,10 @@ const char* AppListItem::GetItemType() const {
 }
 
 AppListItem* AppListItem::FindChildItem(const std::string& id) {
+  return nullptr;
+}
+
+AppListItem* AppListItem::GetChildItemAt(size_t index) {
   return nullptr;
 }
 
@@ -148,4 +161,13 @@ void AppListItem::UpdateNotificationBadge(bool has_badge) {
   }
 }
 
+void AppListItem::SetIsNewInstall(bool is_new_install) {
+  if (metadata_->is_new_install == is_new_install)
+    return;
+
+  metadata_->is_new_install = is_new_install;
+  for (auto& observer : observers_) {
+    observer.ItemIsNewInstallChanged();
+  }
+}
 }  // namespace ash

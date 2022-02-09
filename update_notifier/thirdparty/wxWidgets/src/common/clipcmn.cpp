@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_CLIPBOARD
 
@@ -36,7 +33,7 @@
 // wxClipboardEvent
 // ---------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxClipboardEvent,wxEvent)
+wxIMPLEMENT_DYNAMIC_CLASS(wxClipboardEvent,wxEvent);
 
 wxDEFINE_EVENT( wxEVT_CLIPBOARD_CHANGED, wxClipboardEvent );
 
@@ -99,13 +96,13 @@ bool wxClipboardBase::IsSupportedAsync( wxEvtHandler *sink )
 class wxClipboardModule : public wxModule
 {
 public:
-    bool OnInit() { return true; }
-    void OnExit() { wxDELETE(gs_clipboard); }
+    bool OnInit() wxOVERRIDE { return true; }
+    void OnExit() wxOVERRIDE { wxDELETE(gs_clipboard); }
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxClipboardModule)
+    wxDECLARE_DYNAMIC_CLASS(wxClipboardModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxClipboardModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxClipboardModule, wxModule);
 
 #endif // wxUSE_CLIPBOARD

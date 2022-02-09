@@ -321,7 +321,6 @@
 <translation id="6892812721183419409">Abrir el vínculo como <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplicación en segundo plano: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revocar acceso al archivo</translation>
-<translation id="6916590542764765824">Administrar extensiones</translation>
 <translation id="6945221475159498467">Seleccionar</translation>
 <translation id="6955446738988643816">Inspeccionar ventana emergente</translation>
 <translation id="6970856801391541997">Imprimir páginas específicas</translation>
@@ -388,7 +387,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="8032244173881942855">No se puede transmitir la pestaña.</translation>
 <translation id="8071432093239591881">Imprimir como imagen</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
-<translation id="8137559199583651773">Administrar extensiones</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
  ……=1 {Descarga en curso} other {Descargas en curso}}</translation>
 <translation id="8230134520748321204">¿Quieres guardar la contraseña para <ph name="ORIGIN" />?</translation>

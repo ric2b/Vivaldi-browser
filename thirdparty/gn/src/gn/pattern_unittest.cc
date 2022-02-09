@@ -6,7 +6,6 @@
 
 #include <iterator>
 
-#include "base/macros.h"
 #include "gn/pattern.h"
 #include "util/test/test.h"
 

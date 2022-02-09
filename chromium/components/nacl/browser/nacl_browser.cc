@@ -16,7 +16,7 @@
 #include "base/path_service.h"
 #include "base/pickle.h"
 #include "base/rand_util.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -48,8 +48,7 @@ const base::FilePath::StringType NaClIrtName() {
 #if defined(ARCH_CPU_X86_64)
   bool is64 = true;
 #elif defined(OS_WIN)
-  bool is64 = (base::win::OSInfo::GetInstance()->wow64_status() ==
-               base::win::OSInfo::WOW64_ENABLED);
+  bool is64 = base::win::OSInfo::GetInstance()->IsWowX86OnAMD64();
 #else
   bool is64 = false;
 #endif
@@ -127,7 +126,7 @@ base::File OpenNaClReadExecImpl(const base::FilePath& file_path,
   // allow a NaCl inner sandbox escape.
   uint32_t flags = base::File::FLAG_OPEN | base::File::FLAG_READ;
   if (is_executable)
-    flags |= base::File::FLAG_EXECUTE;  // Windows only flag.
+    flags |= base::File::FLAG_WIN_EXECUTE;  // Windows only flag.
   base::File file(file_path, flags);
   if (!file.IsValid())
     return file;

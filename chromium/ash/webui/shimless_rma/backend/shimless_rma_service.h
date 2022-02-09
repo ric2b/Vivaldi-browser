@@ -5,6 +5,7 @@
 #ifndef ASH_WEBUI_SHIMLESS_RMA_BACKEND_SHIMLESS_RMA_SERVICE_H_
 #define ASH_WEBUI_SHIMLESS_RMA_BACKEND_SHIMLESS_RMA_SERVICE_H_
 
+#include <memory>
 #include <string>
 
 #include "ash/webui/shimless_rma/backend/version_updater.h"
@@ -22,17 +23,19 @@
 namespace ash {
 namespace shimless_rma {
 
+class ShimlessRmaDelegate;
+
 class ShimlessRmaService : public mojom::ShimlessRmaService,
                            public chromeos::RmadClient::Observer {
  public:
-  ShimlessRmaService();
+  ShimlessRmaService(
+      std::unique_ptr<ShimlessRmaDelegate> shimless_rma_delegate);
   ShimlessRmaService(const ShimlessRmaService&) = delete;
   ShimlessRmaService& operator=(const ShimlessRmaService&) = delete;
 
   ~ShimlessRmaService() override;
 
   void GetCurrentState(GetCurrentStateCallback callback) override;
-  void TransitionNextState(TransitionNextStateCallback callback) override;
   void TransitionPreviousState(
       TransitionPreviousStateCallback callback) override;
 
@@ -65,6 +68,16 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
       const std::string& code,
       SetRsuDisableWriteProtectCodeCallback callback) override;
 
+  void WriteProtectManuallyDisabled(
+      WriteProtectManuallyDisabledCallback callback) override;
+  void GetWriteProtectManuallyDisabledInstructions(
+      GetWriteProtectManuallyDisabledInstructionsCallback callback) override;
+
+  void GetWriteProtectDisableCompleteAction(
+      GetWriteProtectDisableCompleteActionCallback callback) override;
+  void ConfirmManualWpDisableComplete(
+      ConfirmManualWpDisableCompleteCallback callback) override;
+
   void GetComponentList(GetComponentListCallback callback) override;
   void SetComponentList(
       const std::vector<::rmad::ComponentsRepairState_ComponentRepairStatus>&
@@ -72,10 +85,8 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
       SetComponentListCallback callback) override;
   void ReworkMainboard(ReworkMainboardCallback callback) override;
 
-  void ReimageRequired(ReimageRequiredCallback callback) override;
-  void ReimageSkipped(ReimageSkippedCallback callback) override;
-  void ReimageFromDownload(ReimageFromDownloadCallback callback) override;
-  void ReimageFromUsb(ReimageFromUsbCallback callback) override;
+  void RoFirmwareUpdateComplete(
+      RoFirmwareUpdateCompleteCallback callback) override;
 
   void ShutdownForRestock(ShutdownForRestockCallback callback) override;
   void ContinueFinalizationAfterRestock(
@@ -83,10 +94,12 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
 
   void GetRegionList(GetRegionListCallback callback) override;
   void GetSkuList(GetSkuListCallback callback) override;
+  void GetWhiteLabelList(GetWhiteLabelListCallback callback) override;
   void GetOriginalSerialNumber(
       GetOriginalSerialNumberCallback callback) override;
   void GetOriginalRegion(GetOriginalRegionCallback callback) override;
   void GetOriginalSku(GetOriginalSkuCallback callback) override;
+  void GetOriginalWhiteLabel(GetOriginalWhiteLabelCallback callback) override;
   void SetDeviceInformation(const std::string& serial_number,
                             uint8_t region_index,
                             uint8_t sku_index,
@@ -103,9 +116,22 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
   void ContinueCalibration(ContinueCalibrationCallback callback) override;
   void CalibrationComplete(CalibrationCompleteCallback callback) override;
 
+  void ProvisioningComplete(ProvisioningCompleteCallback callback) override;
+
+  void FinalizationComplete(FinalizationCompleteCallback callback) override;
+
+  void WriteProtectManuallyEnabled(
+      WriteProtectManuallyEnabledCallback callback) override;
+
+  void GetLog(GetLogCallback callback) override;
+  void LaunchDiagnostics() override;
   void EndRmaAndReboot(EndRmaAndRebootCallback callback) override;
   void EndRmaAndShutdown(EndRmaAndShutdownCallback callback) override;
   void EndRmaAndCutoffBattery(EndRmaAndCutoffBatteryCallback callback) override;
+
+  void CriticalErrorExitToLogin(
+      CriticalErrorExitToLoginCallback callback) override;
+  void CriticalErrorReboot(CriticalErrorRebootCallback callback) override;
 
   void ObserveError(
       ::mojo::PendingRemote<mojom::ErrorObserver> observer) override;
@@ -120,8 +146,13 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
           observer) override;
   void ObservePowerCableState(
       ::mojo::PendingRemote<mojom::PowerCableStateObserver> observer) override;
+  void ObserveHardwareVerificationStatus(
+      ::mojo::PendingRemote<mojom::HardwareVerificationStatusObserver> observer)
+      override;
   void ObserveFinalizationStatus(
       ::mojo::PendingRemote<mojom::FinalizationObserver> observer) override;
+  void ObserveRoFirmwareUpdateProgress(
+      ::mojo::PendingRemote<mojom::UpdateRoFirmwareObserver> observer) override;
 
   void BindInterface(
       mojo::PendingReceiver<mojom::ShimlessRmaService> pending_receiver);
@@ -132,23 +163,29 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
       const rmad::CalibrationComponentStatus& component_status) override;
   void CalibrationOverallProgress(
       rmad::CalibrationOverallStatus status) override;
-  void ProvisioningProgress(rmad::ProvisionDeviceState::ProvisioningStep step,
-                            double progress) override;
+  void ProvisioningProgress(const rmad::ProvisionStatus& status) override;
   void HardwareWriteProtectionState(bool enabled) override;
   void PowerCableState(bool plugged_in) override;
-  void HardwareVerificationResult(const rmad::HardwareVerificationResult&
-                                      hardware_verification_result) override;
+  void HardwareVerificationResult(
+      const rmad::HardwareVerificationResult& result) override;
+  void FinalizationProgress(const rmad::FinalizeStatus& status) override;
+  void RoFirmwareUpdateProgress(rmad::UpdateRoFirmwareStatus status) override;
 
   void OsUpdateProgress(update_engine::Operation operation, double progress);
 
  private:
+  using TransitionStateCallback =
+      base::OnceCallback<void(mojom::State, bool, bool, rmad::RmadErrorCode)>;
+
   template <class Callback>
   void TransitionNextStateGeneric(Callback callback);
   template <class Callback>
   void OnGetStateResponse(Callback callback,
                           absl::optional<rmad::GetStateReply> response);
   void OnAbortRmaResponse(AbortRmaCallback callback,
+                          bool reboot,
                           absl::optional<rmad::AbortRmaReply> response);
+  void OnGetLog(GetLogCallback callback, absl::optional<std::string> log);
   void OnNetworkListResponse(
       BeginFinalizationCallback callback,
       std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
@@ -161,9 +198,26 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
                                 const std::string& version,
                                 int64_t update_size);
 
+  void OsUpdateOrNextRmadStateCallback(TransitionStateCallback callback,
+                                       const std::string& version);
+
   rmad::RmadState state_proto_;
   bool can_abort_ = false;
   bool can_go_back_ = false;
+  // Used to validate mojo only states such as kConfigureNetwork
+  mojom::State mojo_state_;
+
+  absl::optional<rmad::CalibrationComponentStatus> last_calibration_progress_;
+  absl::optional<rmad::CalibrationOverallStatus>
+      last_calibration_overall_progress_;
+  absl::optional<rmad::ProvisionStatus> last_provisioning_progress_;
+  absl::optional<bool> last_hardware_protection_state_;
+  absl::optional<bool> last_power_cable_state_;
+  absl::optional<rmad::HardwareVerificationResult>
+      last_hardware_verification_result_;
+  absl::optional<rmad::FinalizeStatus> last_finalization_progress_;
+  absl::optional<rmad::UpdateRoFirmwareStatus>
+      last_update_ro_firmware_progress_;
 
   mojo::Remote<mojom::ErrorObserver> error_observer_;
   mojo::Remote<mojom::OsUpdateObserver> os_update_observer_;
@@ -172,13 +226,26 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
   mojo::Remote<mojom::HardwareWriteProtectionStateObserver>
       hwwp_state_observer_;
   mojo::Remote<mojom::PowerCableStateObserver> power_cable_observer_;
+  // HardwareVerificationStatusObserver is used by landing and OS update pages.
+  mojo::RemoteSet<mojom::HardwareVerificationStatusObserver>
+      hardware_verification_observers_;
   mojo::Remote<mojom::FinalizationObserver> finalization_observer_;
+  mojo::Remote<mojom::UpdateRoFirmwareObserver> update_ro_firmware_observer_;
   mojo::Receiver<mojom::ShimlessRmaService> receiver_{this};
 
   mojo::Remote<chromeos::network_config::mojom::CrosNetworkConfig>
       remote_cros_network_config_;
 
   VersionUpdater version_updater_;
+  base::OnceCallback<void(const std::string& version)> check_os_callback_;
+
+  // Provides browser functionality from //chrome to the Shimless RMA UI.
+  std::unique_ptr<ShimlessRmaDelegate> shimless_rma_delegate_;
+
+  // When a critical error occurs this is set to true and never clears.
+  // It is used to allow abort requests to reboot or exit to login, even if the
+  // request fails.
+  bool critical_error_occurred_ = false;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

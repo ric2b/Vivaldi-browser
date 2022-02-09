@@ -260,6 +260,8 @@ bool TargetGenerator::FillDependencies() {
     return false;
   if (!FillGenericDeps(variables::kDataDeps, &target_->data_deps()))
     return false;
+  if (!FillGenericDeps(variables::kGenDeps, &target_->gen_deps()))
+    return false;
 
   // "data_deps" was previously named "datadeps". For backwards-compat, read
   // the old one if no "data_deps" were specified.

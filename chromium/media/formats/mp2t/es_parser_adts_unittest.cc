@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/time/time.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/formats/mp2t/es_parser_adts.h"
@@ -25,11 +24,11 @@ class EsParserAdtsTest : public EsParserTestBase,
  public:
   EsParserAdtsTest();
 
+  EsParserAdtsTest(const EsParserAdtsTest&) = delete;
+  EsParserAdtsTest& operator=(const EsParserAdtsTest&) = delete;
+
  protected:
   bool Process(const std::vector<Packet>& pes_packets, bool sbr_in_mimetype);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(EsParserAdtsTest);
 };
 
 EsParserAdtsTest::EsParserAdtsTest() {

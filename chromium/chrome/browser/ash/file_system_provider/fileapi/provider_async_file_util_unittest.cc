@@ -15,7 +15,6 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "chrome/browser/ash/file_system_provider/fake_extension_provider.h"
@@ -341,7 +340,7 @@ TEST_F(FileSystemProviderProviderAsyncFileUtilTest, CopyFileLocal) {
       CreateOperationContext(),
       file_url_,  // src_url
       file_url_,  // dst_url
-      storage::FileSystemOperation::OPTION_NONE,
+      storage::FileSystemOperation::CopyOrMoveOptionSet(),
       base::BindRepeating(&EventLogger::OnCopyFileProgress,
                           base::Unretained(&logger)),
       base::BindOnce(&EventLogger::OnStatus, base::Unretained(&logger)));
@@ -358,7 +357,7 @@ TEST_F(FileSystemProviderProviderAsyncFileUtilTest, MoveFileLocal) {
       CreateOperationContext(),
       file_url_,  // src_url
       file_url_,  // dst_url
-      storage::FileSystemOperation::OPTION_NONE,
+      storage::FileSystemOperation::CopyOrMoveOptionSet(),
       base::BindOnce(&EventLogger::OnStatus, base::Unretained(&logger)));
   base::RunLoop().RunUntilIdle();
 

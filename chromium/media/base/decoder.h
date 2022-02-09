@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "media/base/media_export.h"
 #include "media/base/status.h"
 
@@ -55,9 +54,9 @@ enum class VideoDecoderType : int {
   // kChromeOs = 15,  // DEPRECATED, should be kVaapi or kV4L2 instead.
   kV4L2 = 16,       // V4L2VideoDecoder
 
-kVivWMFDecoder = 17,
-kVivVTVideo = 18,
-kVivPassThrough = 19,
+  kVivWMFDecoder = 17,
+  kVivVTVideo = 18,
+  kVivPassThrough = 19,
 
   kTesting = 20,  // Never send this to UKM, for tests only.
 

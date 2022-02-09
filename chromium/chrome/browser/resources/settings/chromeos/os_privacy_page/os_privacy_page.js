@@ -24,12 +24,14 @@ import '../os_people_page/lock_screen_password_prompt_dialog.m.js';
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {LockScreenUnlockType, LockStateBehavior, LockStateBehaviorImpl} from '../os_people_page/lock_state_behavior.m.js';
 import {routes} from '../os_route.m.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
+import {MetricsConsentBrowserProxy, MetricsConsentBrowserProxyImpl, MetricsConsentState} from './metrics_consent_browser_proxy.js';
 import {DataAccessPolicyState, PeripheralDataAccessBrowserProxy, PeripheralDataAccessBrowserProxyImpl} from './peripheral_data_access_browser_proxy.js';
 
 Polymer({
@@ -117,18 +119,6 @@ Polymer({
     },
 
     /**
-     * True if redesign of account management flows is enabled.
-     * @private
-     */
-    isAccountManagementFlowsV2Enabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('isAccountManagementFlowsV2Enabled');
-      },
-      readOnly: true,
-    },
-
-    /**
      * True if Pciguard UI is enabled.
      * @private
      */
@@ -136,6 +126,31 @@ Polymer({
       type: Boolean,
       value() {
         return loadTimeData.getBoolean('pciguardUiEnabled');
+      },
+      readOnly: true,
+    },
+
+    /**
+     * True if snooping protection or screen lock is enabled.
+     * @private
+     */
+    isSmartPrivacyEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isSnoopingProtectionEnabled') ||
+            loadTimeData.getBoolean('isQuickDimEnabled');
+      },
+      readOnly: true,
+    },
+
+    /**
+     * True if OS is running on reven board.
+     * @private
+     */
+    isRevenBranding_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isRevenBranding');
       },
       readOnly: true,
     },
@@ -183,13 +198,6 @@ Polymer({
       value: false,
     },
 
-    /** @private */
-    shouldShowSubsections_: {
-      type: Boolean,
-      computed: 'computeShouldShowSubsections_(' +
-          'isAccountManagementFlowsV2Enabled_, isGuestMode_)',
-    },
-
     /**
      * Whether the secure DNS setting should be displayed.
      * @private
@@ -201,10 +209,37 @@ Polymer({
         return loadTimeData.getBoolean('showSecureDnsSetting');
       },
     },
+
+    // <if expr="_google_chrome">
+    /**
+     * The preference controlling the current user's metrics consent. This will
+     * be loaded from |this.prefs| based on the response from
+     * |this.metricsConsentBrowserProxy_.getMetricsConsentState()|.
+     *
+     * @private
+     * @type {!chrome.settingsPrivate.PrefObject}
+     */
+    metricsConsentPref_: {
+      type: Object,
+      value: {
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: false,
+      },
+    },
+
+    /** @private */
+    isMetricsConsentConfigurable_: {
+      type: Boolean,
+      value: false,
+    },
+    // </if>
   },
 
   /** @private {?PeripheralDataAccessBrowserProxy} */
   browserProxy_: null,
+
+  /** @private {?MetricsConsentBrowserProxy} */
+  metricsConsentBrowserProxy_: null,
 
   observers: ['onDataAccessFlagsSet_(isThunderboltSupported_.*)'],
 
@@ -219,6 +254,19 @@ Polymer({
             chromeos.settings.mojom.Setting.kPeripheralDataAccessProtection);
       }
     });
+
+    // <if expr="_google_chrome">
+    this.metricsConsentBrowserProxy_ =
+        MetricsConsentBrowserProxyImpl.getInstance();
+    this.metricsConsentBrowserProxy_.getMetricsConsentState().then(state => {
+      const pref = /** @type {?chrome.settingsPrivate.PrefObject} */ (
+          this.get(state.prefName, this.prefs));
+      if (pref) {
+        this.metricsConsentPref_ = pref;
+        this.isMetricsConsentConfigurable_ = state.isConfigurable;
+      }
+    });
+    // </if>
   },
 
   /**
@@ -302,6 +350,11 @@ Polymer({
   /** @private */
   onManageOtherPeople_() {
     Router.getInstance().navigateTo(routes.ACCOUNTS);
+  },
+
+  /** @private */
+  onSmartPrivacy_() {
+    Router.getInstance().navigateTo(routes.SMART_PRIVACY);
   },
 
   /**
@@ -418,6 +471,30 @@ Polymer({
     this.setPrefValue(this.dataAccessProtectionPrefName_, false);
   },
 
+  // <if expr="_google_chrome">
+  /** @private */
+  onMetricsConsentChange_() {
+    this.metricsConsentBrowserProxy_
+        .updateMetricsConsent(this.getMetricsToggle_().checked)
+        .then(consent => {
+          if (consent === this.getMetricsToggle_().checked) {
+            this.getMetricsToggle_().sendPrefChange();
+          } else {
+            this.getMetricsToggle_().resetToPrefValue();
+          }
+        });
+  },
+
+  /**
+   * @private
+   * @return {SettingsToggleButtonElement}
+   */
+  getMetricsToggle_() {
+    return /** @type {SettingsToggleButtonElement} */ (
+        this.$$('#enable-logging'));
+  },
+  // </if>
+
   /**
    * This is used to add a keydown listener event for handling keyboard
    * navigation inputs. We have to wait until either
@@ -441,15 +518,6 @@ Polymer({
             });
           });
     }
-  },
-
-  /**
-   * @return {boolean} whether 'accounts' and 'lock screen' subsections should
-   * be shown.
-   * @private
-   */
-  computeShouldShowSubsections_() {
-    return this.isAccountManagementFlowsV2Enabled_ && !this.isGuestMode_;
   },
 
   /**

@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
@@ -72,6 +73,10 @@ class CONTENT_EXPORT CodeCacheHostImpl : public blink::mojom::CodeCacheHost {
       int render_process_id,
       scoped_refptr<GeneratedCodeCacheContext> generated_code_cache_context,
       const net::NetworkIsolationKey& nik);
+
+  CodeCacheHostImpl(const CodeCacheHostImpl&) = delete;
+  CodeCacheHostImpl& operator=(const CodeCacheHostImpl&) = delete;
+
   ~CodeCacheHostImpl() override;
 
   void SetCacheStorageControlForTesting(
@@ -105,8 +110,8 @@ class CONTENT_EXPORT CodeCacheHostImpl : public blink::mojom::CodeCacheHost {
   const int render_process_id_;
 
   // Used to override the CacheStorageControl from the RHPI as needed.
-  storage::mojom::CacheStorageControl* cache_storage_control_for_testing_ =
-      nullptr;
+  raw_ptr<storage::mojom::CacheStorageControl>
+      cache_storage_control_for_testing_ = nullptr;
 
   scoped_refptr<GeneratedCodeCacheContext> generated_code_cache_context_;
 
@@ -115,8 +120,6 @@ class CONTENT_EXPORT CodeCacheHostImpl : public blink::mojom::CodeCacheHost {
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<CodeCacheHostImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(CodeCacheHostImpl);
 };
 
 }  // namespace content

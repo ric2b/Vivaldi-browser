@@ -8,20 +8,19 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/containers/contains.h"
 #include "base/containers/extend.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/apps/app_service/app_icon_source.h"
-#include "chrome/browser/apps/app_service/app_service_metrics.h"
-#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_source.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
-#include "components/services/app_service/app_service_impl.h"
+#include "components/services/app_service/app_service_mojom_impl.h"
 #include "components/services/app_service/public/cpp/intent_constants.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
@@ -39,23 +38,66 @@
 
 namespace apps {
 
+namespace {
+
+// Utility struct used in GetAppsForIntent.
+struct IndexAndGeneric {
+  size_t index;
+  bool is_generic;
+};
+
+std::string GetActivityLabel(const apps::mojom::IntentFilterPtr& filter,
+                             const apps::AppUpdate& update) {
+  if (filter->activity_label && !filter->activity_label->empty()) {
+    return filter->activity_label.value();
+  } else {
+    return update.Name();
+  }
+}
+
+}  // anonymous namespace
+
 AppServiceProxyBase::InnerIconLoader::InnerIconLoader(AppServiceProxyBase* host)
     : host_(host), overriding_icon_loader_for_testing_(nullptr) {}
 
-apps::mojom::IconKeyPtr AppServiceProxyBase::InnerIconLoader::GetIconKey(
+absl::optional<IconKey> AppServiceProxyBase::InnerIconLoader::GetIconKey(
     const std::string& app_id) {
   if (overriding_icon_loader_for_testing_) {
     return overriding_icon_loader_for_testing_->GetIconKey(app_id);
   }
 
-  apps::mojom::IconKeyPtr icon_key;
-  if (host_->app_service_.is_connected()) {
-    host_->app_registry_cache_.ForOneApp(
-        app_id, [&icon_key](const apps::AppUpdate& update) {
-          icon_key = update.IconKey();
-        });
-  }
+  absl::optional<IconKey> icon_key;
+  host_->app_registry_cache_.ForApp(
+      app_id,
+      [&icon_key](const AppUpdate& update) { icon_key = update.GetIconKey(); });
   return icon_key;
+}
+
+std::unique_ptr<IconLoader::Releaser>
+AppServiceProxyBase::InnerIconLoader::LoadIconFromIconKey(
+    AppType app_type,
+    const std::string& app_id,
+    const IconKey& icon_key,
+    IconType icon_type,
+    int32_t size_hint_in_dip,
+    bool allow_placeholder_icon,
+    apps::LoadIconCallback callback) {
+  if (overriding_icon_loader_for_testing_) {
+    return overriding_icon_loader_for_testing_->LoadIconFromIconKey(
+        app_type, app_id, icon_key, icon_type, size_hint_in_dip,
+        allow_placeholder_icon, std::move(callback));
+  }
+
+  auto* publisher = host_->GetPublisher(app_type);
+  if (!publisher) {
+    std::move(callback).Run(std::make_unique<IconValue>());
+    return nullptr;
+  }
+
+  RecordAppLaunchMetrics(IconLoadingMethod::kViaNonMojomCall);
+  publisher->LoadIcon(app_id, icon_key, icon_type, size_hint_in_dip,
+                      allow_placeholder_icon, std::move(callback));
+  return nullptr;
 }
 
 std::unique_ptr<IconLoader::Releaser>
@@ -80,6 +122,7 @@ AppServiceProxyBase::InnerIconLoader::LoadIconFromIconKey(
     // for the app and app requested new icon. But new icon is not delivered
     // yet and you resolve old one instead. Now new icon arrives asynchronously
     // but you no longer notify the app or do?"
+    RecordAppLaunchMetrics(IconLoadingMethod::kViaMojomCall);
     host_->app_service_->LoadIcon(app_type, app_id, std::move(icon_key),
                                   icon_type, size_hint_in_dip,
                                   allow_placeholder_icon, std::move(callback));
@@ -130,9 +173,10 @@ void AppServiceProxyBase::Initialize() {
 
   browser_app_launcher_ = std::make_unique<apps::BrowserAppLauncher>(profile_);
 
-  app_service_impl_ =
-      std::make_unique<apps::AppServiceImpl>(profile_->GetPath());
-  app_service_impl_->BindReceiver(app_service_.BindNewPipeAndPassReceiver());
+  app_service_mojom_impl_ =
+      std::make_unique<apps::AppServiceMojomImpl>(profile_->GetPath());
+  app_service_mojom_impl_->BindReceiver(
+      app_service_.BindNewPipeAndPassReceiver());
 
   if (app_service_.is_connected()) {
     // The AppServiceProxy is a subscriber: something that wants to be able to
@@ -141,6 +185,15 @@ void AppServiceProxyBase::Initialize() {
     receivers_.Add(this, subscriber.InitWithNewPipeAndPassReceiver());
     app_service_->RegisterSubscriber(std::move(subscriber), nullptr);
   }
+
+  // Make the chrome://app-icon/ resource available.
+  content::URLDataSource::Add(profile_,
+                              std::make_unique<apps::AppIconSource>(profile_));
+}
+
+AppPublisher* AppServiceProxyBase::GetPublisher(AppType app_type) {
+  auto it = publishers_.find(app_type);
+  return it == publishers_.end() ? nullptr : it->second;
 }
 
 mojo::Remote<apps::mojom::AppService>& AppServiceProxyBase::AppService() {
@@ -160,13 +213,31 @@ BrowserAppLauncher* AppServiceProxyBase::BrowserAppLauncher() {
   return browser_app_launcher_.get();
 }
 
-apps::PreferredAppsList& AppServiceProxyBase::PreferredApps() {
+apps::PreferredAppsListHandle& AppServiceProxyBase::PreferredApps() {
   return preferred_apps_;
 }
 
-apps::mojom::IconKeyPtr AppServiceProxyBase::GetIconKey(
+void AppServiceProxyBase::RegisterPublisher(AppType app_type,
+                                            AppPublisher* publisher) {
+  publishers_[app_type] = publisher;
+}
+
+absl::optional<IconKey> AppServiceProxyBase::GetIconKey(
     const std::string& app_id) {
   return outer_icon_loader_.GetIconKey(app_id);
+}
+
+std::unique_ptr<apps::IconLoader::Releaser>
+AppServiceProxyBase::LoadIconFromIconKey(AppType app_type,
+                                         const std::string& app_id,
+                                         const IconKey& icon_key,
+                                         IconType icon_type,
+                                         int32_t size_hint_in_dip,
+                                         bool allow_placeholder_icon,
+                                         apps::LoadIconCallback callback) {
+  return outer_icon_loader_.LoadIconFromIconKey(
+      app_type, app_id, icon_key, icon_type, size_hint_in_dip,
+      allow_placeholder_icon, std::move(callback));
 }
 
 std::unique_ptr<apps::IconLoader::Releaser>
@@ -242,44 +313,44 @@ void AppServiceProxyBase::LaunchAppWithFiles(
   }
 }
 
-void AppServiceProxyBase::LaunchAppWithFileUrls(
-    const std::string& app_id,
-    int32_t event_flags,
-    apps::mojom::LaunchSource launch_source,
-    const std::vector<GURL>& file_urls,
-    const std::vector<std::string>& mime_types) {
-  LaunchAppWithIntent(
-      app_id, event_flags,
-      apps_util::CreateShareIntentFromFiles(file_urls, mime_types),
-      launch_source, MakeWindowInfo(display::kDefaultDisplayId));
-}
-
 void AppServiceProxyBase::LaunchAppWithIntent(
     const std::string& app_id,
     int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
-    apps::mojom::WindowInfoPtr window_info) {
+    apps::mojom::WindowInfoPtr window_info,
+    apps::mojom::Publisher::LaunchAppWithIntentCallback callback) {
   CHECK(intent);
   if (app_service_.is_connected()) {
     app_registry_cache_.ForOneApp(
-        app_id, [this, event_flags, &intent, launch_source,
-                 &window_info](const apps::AppUpdate& update) {
+        app_id, [this, event_flags, &intent, launch_source, &window_info,
+                 callback = std::move(callback)](
+                    const apps::AppUpdate& update) mutable {
           if (MaybeShowLaunchPreventionDialog(update)) {
+            if (callback)
+              std::move(callback).Run(/*success=*/false);
             return;
           }
 
-          RecordAppLaunch(update.AppId(), launch_source);
+          // TODO(crbug/1117655): File manager records metrics for apps it
+          // launched. So we only record launches from other places. We should
+          // eventually move those metrics here, after AppService supports all
+          // app types launched by file manager.
+          if (launch_source != apps::mojom::LaunchSource::kFromFileManager) {
+            RecordAppLaunch(update.AppId(), launch_source);
+          }
           RecordAppPlatformMetrics(
               profile_, update, launch_source,
               apps::mojom::LaunchContainer::kLaunchContainerNone);
 
           app_service_->LaunchAppWithIntent(
               update.AppType(), update.AppId(), event_flags, std::move(intent),
-              launch_source, std::move(window_info));
+              launch_source, std::move(window_info), std::move(callback));
 
           PerformPostLaunchTasks(launch_source);
         });
+  } else if (callback) {
+    std::move(callback).Run(/*success=*/false);
   }
 }
 
@@ -291,6 +362,44 @@ void AppServiceProxyBase::LaunchAppWithUrl(
     apps::mojom::WindowInfoPtr window_info) {
   LaunchAppWithIntent(app_id, event_flags, apps_util::CreateIntentFromUrl(url),
                       launch_source, std::move(window_info));
+}
+
+void AppServiceProxyBase::LaunchAppWithParams(AppLaunchParams&& params,
+                                              LaunchCallback callback) {
+  auto app_type = ConvertMojomAppTypToAppType(
+      app_registry_cache_.GetAppType(params.app_id));
+  auto* publisher = GetPublisher(app_type);
+  if (!publisher) {
+    std::move(callback).Run(LaunchResult());
+    return;
+  }
+
+  app_registry_cache_.ForOneApp(
+      params.app_id,
+      [this, &params, &callback, &publisher](const apps::AppUpdate& update) {
+        if (MaybeShowLaunchPreventionDialog(update)) {
+          std::move(callback).Run(LaunchResult());
+          return;
+        }
+        auto launch_source = params.launch_source;
+        // TODO(crbug/1117655): File manager records metrics for apps it
+        // launched. So we only record launches from other places. We should
+        // eventually move those metrics here, after AppService supports all
+        // app types launched by file manager.
+        if (launch_source != apps::mojom::LaunchSource::kFromFileManager) {
+          RecordAppLaunch(update.AppId(), launch_source);
+        }
+
+        RecordAppPlatformMetrics(profile_, update, launch_source,
+                                 params.container);
+
+        publisher->LaunchAppWithParams(
+            std::move(params),
+            base::BindOnce(&AppServiceProxyBase::OnLaunched,
+                           weak_factory_.GetWeakPtr(), std::move(callback)));
+
+        PerformPostLaunchTasks(launch_source);
+      });
 }
 
 void AppServiceProxyBase::SetPermission(const std::string& app_id,
@@ -382,37 +491,6 @@ std::vector<std::string> AppServiceProxyBase::GetAppIdsForUrl(
   return app_ids;
 }
 
-bool ShouldIgnoreApp(const apps::AppUpdate& update) {
-  // We don't ignore apps disabled by policy as they cause URL loads to be
-  // blocked.
-  bool is_ready =
-      update.Readiness() == apps::mojom::Readiness::kReady ||
-      update.Readiness() == apps::mojom::Readiness::kDisabledByPolicy;
-  bool show_in_launcher =
-      update.ShowInLauncher() == apps::mojom::OptionalBool::kTrue;
-  // TODO(1240906): Find a way to properly filter in/out apps that should
-  // participate in intent handling.
-  bool is_exempt =
-      web_app::IsSystemAppIdWithFileHandlers(update.AppId()) ||
-      update.AppId() == file_manager::kAudioPlayerAppId ||
-      update.AppId() == extension_misc::kQuickOfficeComponentExtensionId;
-  return !is_ready || (!show_in_launcher && !is_exempt);
-}
-
-std::string GetActivityLabel(const apps::mojom::IntentFilterPtr& filter,
-                             const apps::AppUpdate& update) {
-  if (filter->activity_label && !filter->activity_label->empty()) {
-    return filter->activity_label.value();
-  } else {
-    return update.Name();
-  }
-}
-
-struct IndexAndGeneric {
-  size_t index;
-  bool is_generic;
-};
-
 std::vector<IntentLaunchInfo> AppServiceProxyBase::GetAppsForIntent(
     const apps::mojom::IntentPtr& intent,
     bool exclude_browsers,
@@ -428,7 +506,13 @@ std::vector<IntentLaunchInfo> AppServiceProxyBase::GetAppsForIntent(
                                     &exclude_browsers,
                                     &exclude_browser_tab_apps](
                                        const apps::AppUpdate& update) {
-      if (ShouldIgnoreApp(update)) {
+      if (update.Readiness() != apps::mojom::Readiness::kReady &&
+          update.Readiness() != apps::mojom::Readiness::kDisabledByPolicy) {
+        // We consider apps disabled by policy to be ready as they cause URL
+        // loads to be blocked.
+        return;
+      }
+      if (update.HandlesIntents() != apps::mojom::OptionalBool::kTrue) {
         return;
       }
       if (exclude_browser_tab_apps &&
@@ -580,10 +664,12 @@ void AppServiceProxyBase::SetWindowMode(const std::string& app_id,
   }
 }
 
-void AppServiceProxyBase::AddAppIconSource(Profile* profile) {
-  // Make the chrome://app-icon/ resource available.
-  content::URLDataSource::Add(profile,
-                              std::make_unique<apps::AppIconSource>(profile));
+void AppServiceProxyBase::OnApps(std::vector<std::unique_ptr<apps::App>> deltas,
+                                 apps::AppType app_type,
+                                 bool should_notify_initialized) {
+  // TODO(crbug.com/1253250): add RemovePreferredApp related code.
+  app_registry_cache_.OnApps(std::move(deltas), app_type,
+                             should_notify_initialized);
 }
 
 void AppServiceProxyBase::OnApps(std::vector<apps::mojom::AppPtr> deltas,
@@ -610,18 +696,6 @@ void AppServiceProxyBase::OnCapabilityAccesses(
 void AppServiceProxyBase::Clone(
     mojo::PendingReceiver<apps::mojom::Subscriber> receiver) {
   receivers_.Add(this, std::move(receiver));
-}
-
-void AppServiceProxyBase::OnPreferredAppSet(
-    const std::string& app_id,
-    apps::mojom::IntentFilterPtr intent_filter) {
-  preferred_apps_.AddPreferredApp(app_id, intent_filter);
-}
-
-void AppServiceProxyBase::OnPreferredAppRemoved(
-    const std::string& app_id,
-    apps::mojom::IntentFilterPtr intent_filter) {
-  preferred_apps_.DeletePreferredApp(app_id, intent_filter);
 }
 
 void AppServiceProxyBase::OnPreferredAppsChanged(
@@ -673,6 +747,11 @@ void AppServiceProxyBase::PerformPostUninstallTasks(
     apps::mojom::AppType app_type,
     const std::string& app_id,
     apps::mojom::UninstallSource uninstall_source) {}
+
+void AppServiceProxyBase::OnLaunched(LaunchCallback callback,
+                                     LaunchResult&& launch_result) {
+  std::move(callback).Run(std::move(launch_result));
+}
 
 IntentLaunchInfo::IntentLaunchInfo() = default;
 IntentLaunchInfo::~IntentLaunchInfo() = default;

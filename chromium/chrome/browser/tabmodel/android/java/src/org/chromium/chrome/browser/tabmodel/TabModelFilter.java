@@ -254,7 +254,6 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
 
     @Override
     public void didMoveTab(Tab tab, int newIndex, int curIndex) {
-        if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
             observer.didMoveTab(tab, newIndex, curIndex);
         }

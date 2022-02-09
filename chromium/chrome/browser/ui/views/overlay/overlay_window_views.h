@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_OVERLAY_OVERLAY_WINDOW_VIEWS_H_
 #define CHROME_BROWSER_UI_VIEWS_OVERLAY_OVERLAY_WINDOW_VIEWS_H_
 
+#include "base/memory/raw_ptr.h"
 #include "content/public/browser/overlay_window.h"
 
 #include "base/timer/timer.h"
@@ -76,12 +77,15 @@ class OverlayWindowViews : public content::OverlayWindow,
   bool IsVisible() const override;
   void OnNativeFocus() override;
   void OnNativeBlur() override;
+  void OnNativeWidgetDestroying() override;
   void OnNativeWidgetDestroyed() override;
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
   void OnNativeWidgetMove() override;
   void OnNativeWidgetSizeChanged(const gfx::Size& new_size) override;
   void OnNativeWidgetWorkspaceChanged() override;
+  void OnNativeWidgetAddedToCompositor() override;
+  void OnNativeWidgetRemovingFromCompositor() override;
   void OnKeyEvent(ui::KeyEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -120,6 +124,7 @@ class OverlayWindowViews : public content::OverlayWindow,
   ToggleCameraButton* toggle_camera_button_for_testing() const;
   HangUpButton* hang_up_button_for_testing() const;
   BackToTabLabelButton* back_to_tab_label_button_for_testing() const;
+  views::CloseImageButton* close_button_for_testing() const;
   gfx::Point close_image_position_for_testing() const;
   gfx::Point resize_handle_position_for_testing() const;
   OverlayWindowViews::PlaybackState playback_state_for_testing() const;
@@ -205,12 +210,12 @@ class OverlayWindowViews : public content::OverlayWindow,
   void TogglePlayPause();
 
   // Returns the current frame sink id for the surface displayed in the
-  // |video_view_]. If |video_view_| is not currently displaying a surface then
+  // |video_view_|. If |video_view_| is not currently displaying a surface then
   // returns nullptr.
   const viz::FrameSinkId* GetCurrentFrameSinkId() const;
 
   // Not owned; |controller_| owns |this|.
-  content::PictureInPictureWindowController* controller_;
+  raw_ptr<content::PictureInPictureWindowController> controller_;
 
   // Whether or not the window has been shown before. This is used to determine
   // sizing and placement. This is different from checking whether the window
@@ -237,21 +242,21 @@ class OverlayWindowViews : public content::OverlayWindow,
   std::vector<std::unique_ptr<views::View>> view_holder_;
 
   // Views to be shown.
-  views::View* window_background_view_ = nullptr;
-  views::View* video_view_ = nullptr;
-  views::View* controls_scrim_view_ = nullptr;
-  views::View* controls_container_view_ = nullptr;
-  views::CloseImageButton* close_controls_view_ = nullptr;
-  views::BackToTabImageButton* back_to_tab_image_button_ = nullptr;
-  BackToTabLabelButton* back_to_tab_label_button_ = nullptr;
-  views::TrackImageButton* previous_track_controls_view_ = nullptr;
-  views::PlaybackImageButton* play_pause_controls_view_ = nullptr;
-  views::TrackImageButton* next_track_controls_view_ = nullptr;
-  views::SkipAdLabelButton* skip_ad_controls_view_ = nullptr;
-  views::ResizeHandleButton* resize_handle_view_ = nullptr;
-  ToggleMicrophoneButton* toggle_microphone_button_ = nullptr;
-  ToggleCameraButton* toggle_camera_button_ = nullptr;
-  HangUpButton* hang_up_button_ = nullptr;
+  raw_ptr<views::View> window_background_view_ = nullptr;
+  raw_ptr<views::View> video_view_ = nullptr;
+  raw_ptr<views::View> controls_scrim_view_ = nullptr;
+  raw_ptr<views::View> controls_container_view_ = nullptr;
+  raw_ptr<views::CloseImageButton> close_controls_view_ = nullptr;
+  raw_ptr<views::BackToTabImageButton> back_to_tab_image_button_ = nullptr;
+  raw_ptr<BackToTabLabelButton> back_to_tab_label_button_ = nullptr;
+  raw_ptr<views::TrackImageButton> previous_track_controls_view_ = nullptr;
+  raw_ptr<views::PlaybackImageButton> play_pause_controls_view_ = nullptr;
+  raw_ptr<views::TrackImageButton> next_track_controls_view_ = nullptr;
+  raw_ptr<views::SkipAdLabelButton> skip_ad_controls_view_ = nullptr;
+  raw_ptr<views::ResizeHandleButton> resize_handle_view_ = nullptr;
+  raw_ptr<ToggleMicrophoneButton> toggle_microphone_button_ = nullptr;
+  raw_ptr<ToggleCameraButton> toggle_camera_button_ = nullptr;
+  raw_ptr<HangUpButton> hang_up_button_ = nullptr;
 
   // Automatically hides the controls a few seconds after user tap gesture.
   base::RetainingOneShotTimer hide_controls_timer_;
@@ -291,6 +296,10 @@ class OverlayWindowViews : public content::OverlayWindow,
   // and hiding automatically. Only used for testing via
   // ForceControlsVisibleForTesting().
   absl::optional<bool> force_controls_visible_;
+
+  // Whether or not the current frame sink for the surface displayed in the
+  // |video_view_| is registered as the child of the overlay window frame sink.
+  bool has_registered_frame_sink_hierarchy_ = false;
 
   // Vivaldi
   vivaldi::VideoProgress* progress_view_ = nullptr;

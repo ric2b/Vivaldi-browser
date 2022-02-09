@@ -6,7 +6,11 @@ package org.chromium.chrome.browser.xsurface;
 
 import android.content.Context;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Provides application-level dependencies for an external surface.
@@ -27,11 +31,13 @@ public interface ProcessScopeDependencyProvider {
     }
 
     /** Returns the account name of the signed-in user, or the empty string. */
+    @Deprecated
     default String getAccountName() {
         return "";
     }
 
     /** Returns the client instance id for this chrome. */
+    @Deprecated
     default String getClientInstanceId() {
         return "";
     }
@@ -126,6 +132,8 @@ public interface ProcessScopeDependencyProvider {
      * Stores a view FeedAction for eventual upload. 'data' is a serialized FeedAction protobuf
      * message.
      */
+    default void processViewAction(byte[] data, LoggingParameters loggingParameters) {}
+    @Deprecated
     default void processViewAction(byte[] data) {}
 
     /**
@@ -133,5 +141,32 @@ public interface ProcessScopeDependencyProvider {
      *
      * @param success - whether the upload was successful
      */
-    default void reportOnUploadVisibilityLog(boolean success) {}
+    @Deprecated
+    default void reportOnUploadVisibilityLog(boolean success) {
+        reportOnUploadVisibilityLog(VisibilityLogType.UNSPECIFIED, success);
+    }
+
+    // Visibility log types that can be uploaded.
+    @IntDef({VisibilityLogType.UNSPECIFIED, VisibilityLogType.VIEW, VisibilityLogType.CLICK})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface VisibilityLogType {
+        int UNSPECIFIED = 0;
+        int VIEW = 1;
+        int CLICK = 2;
+    }
+
+    /**
+     * Reports whether the visibility log upload was successful.
+     *
+     * @param logType - the type of visibility log being uploaded
+     * @param success - whether the upload was successful
+     */
+    default void reportOnUploadVisibilityLog(@VisibilityLogType int logType, boolean success) {}
+
+    /**
+     * Reports whether visibility logging is enabled.
+     *
+     * @param enabled - whether logging is enabled
+     */
+    default void reportVisibilityLoggingEnabled(boolean enabled) {}
 }

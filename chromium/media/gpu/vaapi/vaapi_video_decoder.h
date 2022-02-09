@@ -12,10 +12,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/containers/mru_cache.h"
+#include "base/containers/lru_cache.h"
 #include "base/containers/queue.h"
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -30,11 +29,16 @@
 #include "media/base/video_frame_layout.h"
 #include "media/gpu/chromeos/video_decoder_pipeline.h"
 #include "media/gpu/decode_surface_handler.h"
+#include "media/gpu/vaapi/vaapi_status.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/hdr_metadata.h"
+
+namespace gpu {
+class GpuMemoryBufferFactory;
+}  // namespace gpu
 
 namespace media {
 
@@ -52,6 +56,9 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
       std::unique_ptr<MediaLog> media_log,
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
       base::WeakPtr<VideoDecoderMixin::Client> client);
+
+  VaapiVideoDecoder(const VaapiVideoDecoder&) = delete;
+  VaapiVideoDecoder& operator=(const VaapiVideoDecoder&) = delete;
 
   static absl::optional<SupportedVideoDecoderConfigs> GetSupportedConfigs();
 
@@ -86,13 +93,18 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
     DecodeTask(scoped_refptr<DecoderBuffer> buffer,
                int32_t buffer_id,
                DecodeCB decode_done_cb);
-    ~DecodeTask();
+
+    DecodeTask(const DecodeTask&) = delete;
+    DecodeTask& operator=(const DecodeTask&) = delete;
+
     DecodeTask(DecodeTask&&);
     DecodeTask& operator=(DecodeTask&&) = default;
+
+    ~DecodeTask();
+
     scoped_refptr<DecoderBuffer> buffer_;
     int32_t buffer_id_ = -1;
     DecodeCB decode_done_cb_;
-    DISALLOW_COPY_AND_ASSIGN(DecodeTask);
   };
 
   enum class State {
@@ -144,7 +156,7 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   void ResetDone(base::OnceClosure reset_cb);
 
   // Create codec-specific AcceleratedVideoDecoder and reset related variables.
-  Status CreateAcceleratedVideoDecoder();
+  VaapiStatus CreateAcceleratedVideoDecoder();
 
   // Change the current |state_| to the specified |state|.
   void SetState(State state);
@@ -160,6 +172,29 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   // browser process for the screen sizes.
   void ApplyResolutionChangeWithScreenSizes(
       const std::vector<gfx::Size>& screen_resolution);
+
+  // Private static helper to allow using weak ptr instead of an unretained ptr.
+  static CroStatus::Or<scoped_refptr<VideoFrame>> AllocateCustomFrameProxy(
+      base::WeakPtr<VaapiVideoDecoder> decoder,
+      gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      bool use_protected,
+      base::TimeDelta timestamp);
+
+  // Allocates a new VideoFrame using a new VASurface directly. Since this is
+  // only used on linux, it also sets the required YCbCr information for the
+  // frame it creates.
+  CroStatus::Or<scoped_refptr<VideoFrame>> AllocateCustomFrame(
+      gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      bool use_protected,
+      base::TimeDelta timestamp);
 
   // Having too many decoder instances at once may cause us to run out of FDs
   // and subsequently crash (b/181264362). To avoid that, we limit the maximum
@@ -193,7 +228,7 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
   // operation leads to a frame being output and frames might be reordered, so
   // we don't know when it's safe to drop a timestamp. This means we need to use
   // a cache here, with a size large enough to account for frame reordering.
-  base::MRUCache<int32_t, base::TimeDelta> buffer_id_to_timestamp_;
+  base::LRUCache<int32_t, base::TimeDelta> buffer_id_to_timestamp_;
 
   // Queue containing all requested decode tasks.
   base::queue<DecodeTask> decode_task_queue_;
@@ -247,8 +282,6 @@ class VaapiVideoDecoder : public VideoDecoderMixin,
 
   base::WeakPtr<VaapiVideoDecoder> weak_this_;
   base::WeakPtrFactory<VaapiVideoDecoder> weak_this_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(VaapiVideoDecoder);
 };
 
 }  // namespace media

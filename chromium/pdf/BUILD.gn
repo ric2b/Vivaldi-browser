@@ -21,15 +21,8 @@ buildflag_header("buildflags") {
 }
 
 if (enable_pdf) {
-  config("common") {
-    configs = [ "//build/config/compiler:noshadowing" ]
-  }
-
   config("strict") {
-    configs = [
-      ":common",
-      "//build/config/compiler:wexit_time_destructors",
-    ]
+    configs = [ "//build/config/compiler:wexit_time_destructors" ]
   }
 
   config("pdfium_includes") {
@@ -139,8 +132,6 @@ if (enable_pdf) {
       "pdfium/pdfium_engine_exports.h",
       "pdfium/pdfium_form_filler.cc",
       "pdfium/pdfium_form_filler.h",
-      "pdfium/pdfium_mem_buffer_file_read.cc",
-      "pdfium/pdfium_mem_buffer_file_read.h",
       "pdfium/pdfium_mem_buffer_file_write.cc",
       "pdfium/pdfium_mem_buffer_file_write.h",
       "pdfium/pdfium_page.cc",
@@ -226,8 +217,6 @@ if (enable_pdf) {
       "pdfium/pdfium_assert_matching_enums.cc",
       "ppapi_migration/ppapi_assert_matching_enums.cc",
     ]
-
-    configs += [ ":common" ]
 
     deps = [
       ":accessibility",
@@ -382,7 +371,7 @@ if (enable_pdf) {
       "//skia",
       "//third_party/blink/public:blink_headers",
       "//third_party/blink/public/common:headers",
-      "//ui/base/cursor:cursor_base",
+      "//ui/base/cursor",
       "//ui/base/cursor/mojom:cursor_type",
       "//ui/display",
       "//ui/events/blink",
@@ -405,8 +394,6 @@ if (enable_pdf) {
       "test/test_pdfium_engine.cc",
       "test/test_pdfium_engine.h",
     ]
-
-    configs += [ ":common" ]
 
     deps = [
       ":internal",
@@ -470,8 +457,6 @@ if (enable_pdf) {
       "ui/thumbnail_unittest.cc",
     ]
 
-    configs += [ ":common" ]
-
     data = [ "test/data/" ]
 
     deps = [
@@ -503,6 +488,7 @@ if (enable_pdf) {
       "//third_party/blink/public/common:headers",
       "//third_party/pdfium",
       "//ui/base",
+      "//ui/base/cursor",
       "//ui/events/blink:blink",
       "//ui/gfx:test_support",
       "//ui/gfx/geometry",

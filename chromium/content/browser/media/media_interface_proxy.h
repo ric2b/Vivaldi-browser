@@ -16,7 +16,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/browser/media/media_interface_factory_holder.h"
-#include "content/public/browser/render_document_host_user_data.h"
+#include "content/public/browser/document_user_data.h"
 #include "content/public/common/cdm_info.h"
 #include "media/media_buildflags.h"
 #include "media/mojo/buildflags.h"
@@ -33,7 +33,7 @@
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 
 #if defined(OS_WIN)
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "media/mojo/mojom/media_foundation_service.mojom.h"
 #endif
 
@@ -44,9 +44,8 @@ class RenderFrameHost;
 // This implements the media::mojom::InterfaceFactory interface for a
 // RenderFrameHostImpl to help create remote media components in different
 // processes.
-class MediaInterfaceProxy final
-    : public RenderDocumentHostUserData<MediaInterfaceProxy>,
-      public media::mojom::InterfaceFactory {
+class MediaInterfaceProxy final : public DocumentUserData<MediaInterfaceProxy>,
+                                  public media::mojom::InterfaceFactory {
  public:
   ~MediaInterfaceProxy() final;
 
@@ -85,14 +84,13 @@ class MediaInterfaceProxy final
       mojo::PendingReceiver<media::mojom::MediaFoundationRendererExtension>
           renderer_extension_receiver) final;
 #endif  // defined(OS_WIN)
-  void CreateCdm(const std::string& key_system,
-                 const media::CdmConfig& cdm_config,
+  void CreateCdm(const media::CdmConfig& cdm_config,
                  CreateCdmCallback create_cdm_cb) final;
 
  private:
-  friend class RenderDocumentHostUserData<MediaInterfaceProxy>;
+  friend class DocumentUserData<MediaInterfaceProxy>;
   explicit MediaInterfaceProxy(RenderFrameHost* rfh);
-  RENDER_DOCUMENT_HOST_USER_DATA_KEY_DECL();
+  DOCUMENT_USER_DATA_KEY_DECL();
 
   // Gets services provided by the browser (at RenderFrameHost level) to the
   // mojo media (or CDM) service running remotely. |cdm_file_system_id| is
@@ -106,18 +104,18 @@ class MediaInterfaceProxy final
   // error happened.
   media::mojom::CdmFactory* GetCdmFactory(const std::string& key_system);
 
-  // Connects to the CDM service associated with |cdm_guid|, adds the new
+  // Connects to the CDM service associated with |cdm_type|, adds the new
   // CdmFactoryPtr to the |cdm_factory_map_|, and returns the newly created
   // CdmFactory pointer. Returns nullptr if unexpected error happened.
   // |cdm_path| will be used to preload the CDM, if necessary.
   // |cdm_file_system_id| is used when creating the matching storage interface.
   // |cdm_name| is used as the display name of the CDM (utility) process.
-  media::mojom::CdmFactory* ConnectToCdmService(const base::Token& cdm_guid,
+  media::mojom::CdmFactory* ConnectToCdmService(const base::Token& cdm_type,
                                                 const CdmInfo& cdm_info);
 
   // Callback for connection error from the CdmFactoryPtr in the
-  // |cdm_factory_map_| associated with |cdm_guid|.
-  void OnCdmServiceConnectionError(const base::Token& cdm_guid);
+  // |cdm_factory_map_| associated with |cdm_type|.
+  void OnCdmServiceConnectionError(const base::Token& cdm_type);
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if defined(OS_CHROMEOS)
@@ -125,7 +123,6 @@ class MediaInterfaceProxy final
   // library CDM if the daemon is unavailable or other settings prevent usage of
   // it.
   void OnChromeOsCdmCreated(
-      const std::string& key_system,
       const media::CdmConfig& cdm_config,
       CreateCdmCallback callback,
       mojo::PendingRemote<media::mojom::ContentDecryptionModule> receiver,
@@ -141,7 +138,6 @@ class MediaInterfaceProxy final
 
   void ConnectToMediaFoundationService(const base::FilePath& cdm_path);
   bool ShouldUseMediaFoundationServiceForCdm(
-      const std::string& key_system,
       const media::CdmConfig& cdm_config);
 
   mojo::Remote<media::mojom::InterfaceFactory> mf_interface_factory_remote_;
@@ -161,7 +157,7 @@ class MediaInterfaceProxy final
   std::unique_ptr<MediaInterfaceFactoryHolder> secondary_interface_factory_;
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  // CDM GUID to CDM InterfaceFactory Remotes mapping, where the
+  // CDM type to CDM InterfaceFactory Remotes mapping, where the
   // InterfaceFactory instances live in the standalone CdmService instances.
   // These map entries effectively own the corresponding CDM processes.
   // Only using the GUID to identify the CdmFactory is sufficient because the

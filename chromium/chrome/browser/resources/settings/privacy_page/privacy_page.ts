@@ -7,6 +7,7 @@
  * 'settings-privacy-page' is the settings page containing privacy and
  * security settings.
  */
+import 'chrome://resources/cr_components/iph_bubble/iph_bubble.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
@@ -15,10 +16,13 @@ import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classe
 import '../controls/settings_toggle_button.js';
 import '../prefs/prefs.js';
 import '../site_settings/settings_category_default_radio_group.js';
+import '../site_settings/site_data_details_subpage.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
 import '../settings_shared_css.js';
 
+import {IPHBubbleElement} from 'chrome://resources/cr_components/iph_bubble/iph_bubble.js';
+import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
@@ -29,11 +33,11 @@ import {BaseMixin} from '../base_mixin.js';
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions} from '../metrics_browser_proxy.js';
+import {MetricsBrowserProxy, MetricsBrowserProxyImpl} from '../metrics_browser_proxy.js';
 import {PrefsMixin, PrefsMixinInterface} from '../prefs/prefs_mixin.js';
 import {routes} from '../route.js';
 import {RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
-import {ChooserType, ContentSettingsTypes, CookieControlsMode, NotificationSetting} from '../site_settings/constants.js';
+import {ChooserType, ContentSettingsTypes, NotificationSetting} from '../site_settings/constants.js';
 import {SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
 import {PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from './privacy_page_browser_proxy.js';
@@ -45,10 +49,15 @@ type BlockAutoplayStatus = {
 
 type FocusConfig = Map<string, (string|(() => void))>;
 
-// TODO(crbug.com/1234307): Remove when site_data_details_subpage.js is migrated
-// to TypeScript.
-interface SiteDataDetailsSubpageElement extends HTMLElement {
-  removeAll(): void;
+export interface SettingsPrivacyPageElement {
+  $: {
+    clearBrowsingData: CrLinkRowElement,
+    cookiesLinkRow: CrLinkRowElement,
+    iphBubble: IPHBubbleElement,
+    permissionsLinkRow: CrLinkRowElement,
+    privacySandboxLinkRow: CrLinkRowElement,
+    securityLinkRow: CrLinkRowElement,
+  };
 }
 
 const SettingsPrivacyPageElementBase =
@@ -148,6 +157,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
       enablePrivacyReview_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('privacyReviewEnabled'),
+      },
+
+      enableIphDemo_: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('iphDemoEnabled'),
       },
 
       focusConfig_: {
@@ -283,10 +298,18 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     // Intentionally not casting to SiteDataDetailsSubpageElement, as this would
     // require importing site_data_details_subpage.js and would endup in the
     // main JS bundle.
-    const node = this.shadowRoot!.querySelector<SiteDataDetailsSubpageElement>(
-        'site-data-details-subpage');
+    const node = this.shadowRoot!.querySelector('site-data-details-subpage');
     if (node) {
       node.removeAll();
+    }
+  }
+
+  private onShowIPHBubbleTap_() {
+    this.interactedWithPage_();
+    if (this.$.iphBubble.open) {
+      this.$.iphBubble.hide();
+    } else {
+      this.$.iphBubble.show();
     }
   }
 
@@ -338,7 +361,9 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
 
   private onPrivacyReviewClick_() {
     // TODO(crbug/1215630): Implement metrics.
-    Router.getInstance().navigateTo(routes.PRIVACY_REVIEW);
+    Router.getInstance().navigateTo(
+        routes.PRIVACY_REVIEW, /* dynamicParams */ undefined,
+        /* removeSearch */ true);
   }
 
   private interactedWithPage_() {
@@ -350,6 +375,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     return this.getPref('privacy_sandbox.apis_enabled').value ?
         this.i18n('privacySandboxTrialsEnabled') :
         this.i18n('privacySandboxTrialsDisabled');
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-privacy-page': SettingsPrivacyPageElement;
   }
 }
 

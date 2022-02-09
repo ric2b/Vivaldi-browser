@@ -24,7 +24,7 @@ const crypto::AppleKeychain keychain_;
 
 OSStatus GetVivaldiKeychainStatus() {
   // Turn off the keychain user interaction
-  OSStatus status = SecKeychainSetUserInteractionAllowed(false);
+  SecKeychainSetUserInteractionAllowed(false);
 
   UInt32 viv_password_length = 0;
   void* viv_password_data = NULL;
@@ -37,7 +37,7 @@ OSStatus GetVivaldiKeychainStatus() {
                                                  NULL);
 
   // Turn keychain user interaction back on
-  status = SecKeychainSetUserInteractionAllowed(true);
+  SecKeychainSetUserInteractionAllowed(true);
 
   return error;
 }

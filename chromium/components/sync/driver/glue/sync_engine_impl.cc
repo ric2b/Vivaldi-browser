@@ -16,14 +16,13 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "build/build_config.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/invalidation_helper.h"
-#include "components/sync/base/sync_base_switches.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/active_devices_provider.h"
 #include "components/sync/driver/glue/sync_engine_backend.h"
@@ -34,6 +33,7 @@
 #include "components/sync/engine/engine_components_factory_impl.h"
 #include "components/sync/engine/events/protocol_event.h"
 #include "components/sync/engine/net/http_bridge.h"
+#include "components/sync/engine/nigori/nigori.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine/sync_engine_host.h"
 #include "components/sync/engine/sync_string_conversions.h"
@@ -49,8 +49,6 @@ namespace {
 SyncEngineBackend::RestoredLocalTransportData
 RestoreLocalTransportDataFromPrefs(const SyncTransportDataPrefs& prefs) {
   SyncEngineBackend::RestoredLocalTransportData result;
-  result.keystore_encryption_bootstrap_token =
-      prefs.GetKeystoreEncryptionBootstrapToken();
   result.cache_guid = prefs.GetCacheGuid();
   result.birthday = prefs.GetBirthday();
   result.bag_of_chips = prefs.GetBagOfChips();
@@ -160,9 +158,6 @@ void SyncEngineImpl::Initialize(InitParams params) {
   const SyncTransportDataStartupState state =
       ValidateSyncTransportData(*prefs_, params.authenticated_account_info);
 
-  base::UmaHistogramEnumeration("Sync.LocalSyncTransportDataStartupState",
-                                state);
-
   if (state != SyncTransportDataStartupState::kValidData) {
     // The local data is either uninitialized or corrupt, so let's throw
     // everything away and start from scratch with a new cache GUID, which also
@@ -257,17 +252,13 @@ void SyncEngineImpl::SetEncryptionPassphrase(const std::string& passphrase) {
                                 backend_, passphrase));
 }
 
-void SyncEngineImpl::SetDecryptionPassphrase(const std::string& passphrase) {
+void SyncEngineImpl::SetExplicitPassphraseDecryptionKey(
+    std::unique_ptr<Nigori> key) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&SyncEngineBackend::DoSetDecryptionPassphrase,
-                                backend_, passphrase));
-}
-
-void SyncEngineImpl::SetKeystoreEncryptionBootstrapToken(
-    const std::string& token) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  prefs_->SetKeystoreEncryptionBootstrapToken(token);
+      FROM_HERE,
+      base::BindOnce(&SyncEngineBackend::DoSetExplicitPassphraseDecryptionKey,
+                     backend_, std::move(key)));
 }
 
 void SyncEngineImpl::AddTrustedVaultDecryptionKeys(
@@ -624,17 +615,11 @@ void SyncEngineImpl::SendInterestedTopicsToInvalidator() {
 
 void SyncEngineImpl::OnActiveDevicesChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::string local_cache_guid;
-  if (!base::FeatureList::IsEnabled(switches::kSyncE2ELatencyMeasurement)) {
-    // End-to-end latency measurement relies on reflection, so if this is
-    // enabled, don't filter out the local device.
-    local_cache_guid = cached_status_.cache_guid;
-  }
   sync_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&SyncEngineBackend::DoOnActiveDevicesChanged, backend_,
                      active_devices_provider_->CalculateInvalidationInfo(
-                         local_cache_guid)));
+                         cached_status_.cache_guid)));
 }
 
 void SyncEngineImpl::UpdateLastSyncedTime() {

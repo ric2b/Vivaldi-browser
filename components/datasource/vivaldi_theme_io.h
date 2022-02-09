@@ -28,10 +28,30 @@ constexpr int64_t kMaxArchiveSize = 30 * 1024 * 1024;
 // have any individual limit, so match this to the max unzipped archive size.
 constexpr size_t kMaxImageSize = 30 * 1024 * 1024;
 
-// Check if |value| is a valid theme JSON object and normalize it if necessary
-// to a canonical form. On return with errors |error| contains an error message.
-// When |for_export| is true, do export-specific verification and normalization.
-void VerifyAndNormalizeJson(bool for_export,
+// Theme id key.
+extern const char kIdKey[];
+
+// The theme id prefix for default Vivaldi themes.
+extern const char kVivaldiIdPrefix[];
+
+// The theme id prefix reserved for system integrators.
+extern const char kVendorIdPrefix[];
+
+// Flags for `VerifyAndNormalizeJson()`.
+struct VerifyAndNormalizeFlags {
+  // Do export-specific theme value normalization.
+  bool for_export : 1;
+
+  // Allow named theme id that are not GUID. Such names are never exposed to the
+  // user or the theme server. Inparticular, on export they replaced with a
+  // random GUID.
+  bool allow_named_id : 1;
+};
+
+// Check if `value` is a valid theme JSON object and normalize it if necessary
+// to a canonical form. On return with errors `error` contains an error message.
+// `flags` must be a combination of values from `VerifyNormalizeFlag` enum.
+void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
                             base::Value& value,
                             std::string& error);
 

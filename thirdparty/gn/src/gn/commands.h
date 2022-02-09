@@ -217,10 +217,8 @@ void FilterAndPrintTargets(bool indent, std::vector<const Target*>* targets);
 void FilterAndPrintTargets(std::vector<const Target*>* targets,
                            base::ListValue* out);
 
-void FilterAndPrintTargetSet(bool indent,
-                             const std::set<const Target*>& targets);
-void FilterAndPrintTargetSet(const std::set<const Target*>& targets,
-                             base::ListValue* out);
+void FilterAndPrintTargetSet(bool indent, const TargetSet& targets);
+void FilterAndPrintTargetSet(const TargetSet& targets, base::ListValue* out);
 
 // Computes which targets reference the given file and also stores how the
 // target references the file.

@@ -23,7 +23,6 @@
 #include "base/process/launch.h"
 #include "base/process/process_iterator.h"
 #include "base/rand_util.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -31,6 +30,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -64,6 +64,7 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppapi_constants.h"
 #include "ppapi/shared_impl/ppapi_nacl_plugin_args.h"
+#include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "sandbox/policy/switches.h"
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -154,8 +155,7 @@ void* AllocateAddressSpaceASLR(base::ProcessHandle process, size_t size) {
 namespace {
 
 bool RunningOnWOW64() {
-  return (base::win::OSInfo::GetInstance()->wow64_status() ==
-          base::win::OSInfo::WOW64_ENABLED);
+  return base::win::OSInfo::GetInstance()->IsWowX86OnAMD64();
 }
 
 }  // namespace
@@ -198,8 +198,8 @@ class NaClSandboxedProcessLauncherDelegate
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
-  sandbox::policy::SandboxType GetSandboxType() override {
-    return sandbox::policy::SandboxType::kPpapi;
+  sandbox::mojom::Sandbox GetSandboxType() override {
+    return sandbox::mojom::Sandbox::kPpapi;
   }
 };
 
@@ -388,21 +388,11 @@ void NaClProcessHost::Launch(
   }
 
   if (uses_nonsfi_mode_) {
-    bool nonsfi_mode_forced_by_command_line = false;
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
-    nonsfi_mode_forced_by_command_line =
-        cmd->HasSwitch(switches::kEnableNaClNonSfiMode);
-#endif
-    bool nonsfi_mode_enabled =
-        nonsfi_mode_forced_by_command_line || nonsfi_mode_allowed_;
-
-    if (!nonsfi_mode_enabled) {
-      SendErrorToRenderer(
-          "NaCl non-SFI mode is not available for this platform"
-          " and NaCl module.");
-      delete this;
-      return;
-    }
+    SendErrorToRenderer(
+        "NaCl non-SFI mode is not available for this platform"
+        " and NaCl module.");
+    delete this;
+    return;
   }
 
   // Launch the process

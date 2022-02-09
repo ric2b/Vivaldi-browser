@@ -63,7 +63,8 @@ const char* ImageAcceptHeader() {
 namespace {
 
 constexpr char kStylesheetAcceptHeader[] = "text/css,*/*;q=0.1";
-constexpr char kWebBundleAcceptHeader[] = "application/webbundle;v=b1";
+constexpr char kWebBundleAcceptHeader[] =
+    "application/webbundle;v=b2,application/webbundle;v=b1;q=0.8";
 
 // TODO(yhirano): Unify these with variables in
 // content/public/common/content_constants.h.
@@ -299,6 +300,13 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
   } else {
     dest->request_initiator = src.RequestorOrigin()->ToUrlOrigin();
   }
+
+  DCHECK(dest->navigation_redirect_chain.empty());
+  dest->navigation_redirect_chain.reserve(src.NavigationRedirectChain().size());
+  for (const auto& url : src.NavigationRedirectChain()) {
+    dest->navigation_redirect_chain.push_back(url);
+  }
+
   if (src.IsolatedWorldOrigin()) {
     dest->isolated_world_origin = src.IsolatedWorldOrigin()->ToUrlOrigin();
   }
@@ -420,6 +428,8 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
     dest->headers.SetHeaderIfMissing(net::HttpRequestHeaders::kAccept,
                                      network::kDefaultAcceptHeaderValue);
   }
+
+  dest->original_destination = src.GetOriginalDestination();
 }
 
 }  // namespace blink

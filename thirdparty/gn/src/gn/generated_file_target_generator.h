@@ -7,7 +7,6 @@
 
 #include <string_view>
 
-#include "base/macros.h"
 #include "gn/target.h"
 #include "gn/target_generator.h"
 
@@ -45,7 +44,9 @@ class GeneratedFileTargetGenerator : public TargetGenerator {
 
   Target::OutputType output_type_;
 
-  DISALLOW_COPY_AND_ASSIGN(GeneratedFileTargetGenerator);
+  GeneratedFileTargetGenerator(const GeneratedFileTargetGenerator&) = delete;
+  GeneratedFileTargetGenerator& operator=(const GeneratedFileTargetGenerator&) =
+      delete;
 };
 
 #endif  // TOOLS_GN_GENERATED_FILE_TARGET_GENERATOR_H_

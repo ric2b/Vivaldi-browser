@@ -31,6 +31,7 @@ import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.lens.LensController;
@@ -49,6 +50,8 @@ import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsBridge;
+import org.chromium.chrome.browser.prefetch.settings.PreloadPagesState;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -75,9 +78,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.Browser;
+import android.view.Window;
+import android.view.WindowManager;
+import org.chromium.base.ApplicationStatus;
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
@@ -175,7 +182,6 @@ class LocationBarMediator
 
     private boolean mNativeInitialized;
     private boolean mUrlFocusedFromFakebox;
-    private boolean mUrlFocusedFromQueryTiles;
     private boolean mUrlFocusedWithoutAnimations;
     private boolean mIsUrlFocusChangeInProgress;
     private final boolean mIsTablet;
@@ -190,6 +196,9 @@ class LocationBarMediator
     private final BooleanSupplier mIsToolbarMicEnabledSupplier;
     // Tracks if the location bar is laid out in a focused state due to an ntp scroll.
     private boolean mIsLocationBarFocusedFromNtpScroll;
+
+    // Vivaldi
+    private boolean mIsStatusBarModified;
 
     /*package */ LocationBarMediator(@NonNull Context context,
             @NonNull LocationBarLayout locationBarLayout,
@@ -284,7 +293,6 @@ class LocationBarMediator
             }
         } else {
             mUrlFocusedFromFakebox = false;
-            mUrlFocusedFromQueryTiles = false;
             mUrlFocusedWithoutAnimations = false;
         }
 
@@ -309,6 +317,9 @@ class LocationBarMediator
             setUrl(mLocationBarDataProvider.getCurrentUrl(),
                     mLocationBarDataProvider.getUrlBarData());
         }
+
+        // Vivaldi
+        maybeUpdateStatusBarVisibility();
     }
 
     /*package */ void onFinishNativeInitialization() {
@@ -462,7 +473,8 @@ class LocationBarMediator
 
         if (mNativeInitialized
                 && !CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_INSTANT)
-                && mPrivacyPreferencesManager.shouldPrerender()
+                && DeviceClassManager.enablePrerendering()
+                && PreloadPagesSettingsBridge.getState() != PreloadPagesState.NO_PRELOADING
                 && mLocationBarDataProvider.hasTab()) {
             mOmniboxPrerender.prerenderMaybe(userText, mOriginalUrl,
                     mAutocompleteCoordinator.getCurrentNativeAutocompleteResult(),
@@ -536,10 +548,6 @@ class LocationBarMediator
 
     /* package */ boolean didFocusUrlFromFakebox() {
         return mUrlFocusedFromFakebox;
-    }
-
-    /* package */ boolean didFocusUrlFromQueryTiles() {
-        return mUrlFocusedFromQueryTiles;
     }
 
     /** Recalculates the visibility of the buttons inside the location bar. */
@@ -1247,11 +1255,6 @@ class LocationBarMediator
                 mUrlFocusedFromFakebox = true;
             }
 
-            if (reason == OmniboxFocusReason.QUERY_TILES_NTP_TAP) {
-                mUrlFocusedFromFakebox = true;
-                mUrlFocusedFromQueryTiles = true;
-            }
-
             if (urlHasFocus && mUrlFocusedWithoutAnimations) {
                 handleUrlFocusAnimation(true);
             } else {
@@ -1460,14 +1463,18 @@ class LocationBarMediator
         if (!mNativeInitialized) return;
         mUrlCoordinator.setKeyboardVisibility(false, false);
 
-        Intent intent =
-                new Intent()
-                        .setAction(Intent.ACTION_VIEW)
-                        .setData(Uri.parse(VivaldiUrlConstants.NTP_NON_NATIVE_URL))
-                        .setClass(mContext, mContext.getClass())
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
-                        .putExtra(Browser.EXTRA_APPLICATION_ID, mContext.getPackageName())
-                        .putExtra(VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, true);
+        Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
+        if (activity == null) return;
+
+        Intent intent = new Intent(Intent.ACTION_VIEW,
+                Uri.parse(VivaldiUrlConstants.NTP_NON_NATIVE_URL));
+        intent.setClass(activity, activity.getClass());
+        intent.putExtra(VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, true);
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID,
+                activity.getApplicationContext().getPackageName());
+        intent.setPackage(activity.getApplicationContext().getPackageName());
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
         mContext.startActivity(intent);
     }
 
@@ -1488,5 +1495,43 @@ class LocationBarMediator
      */
     private void updateQrCodeButtonVisibility() {
         mLocationBarLayout.setQrCodeButtonVisibility(shouldShowQrCodeButton());
+    }
+
+    /** Vivaldi - Checks if status bar is hidden or not
+     * Due to dependency issues, we have to use hard-coded values here */
+    private boolean isStatusBarHidden() {
+        int visibilitySetting = SharedPreferencesManager.getInstance().readInt(
+                "status_bar_visibility");
+        switch (visibilitySetting) {
+            case 0: // StatusBarVisibilityPreference.StatusBarVisibilitySetting.VISIBLE
+                return false;
+            case 1: // StatusBarVisibilityPreference.StatusBarVisibilitySetting.HIDDEN
+                return true;
+            case 2: // StatusBarVisibilitySetting.HIDDEN_IN_LANDSCAPE_ONLY
+                int deviceOrientation = mContext.getResources().getConfiguration().orientation;
+                return deviceOrientation == Configuration.ORIENTATION_LANDSCAPE;
+        }
+        return false;
+    }
+
+    /** Vivaldi - Updates status bar visibility if needed */
+    private void maybeUpdateStatusBarVisibility() {
+        // Note (nagamani@vivaldi.com): When the address bar is at the bottom and the URL
+        // bar is focused, status bar should be visible for proper layout calculations and
+        // proper search suggestions display (VAB-4653).
+        Window window = mWindowAndroid.getActivity().get().getWindow();
+        if (window == null) return;
+        int flag = WindowManager.LayoutParams.FLAG_FULLSCREEN;
+        boolean isAddressBarAtBottom = SharedPreferencesManager.getInstance().readBoolean(
+                "address_bar_to_bottom", false);
+        if (isStatusBarHidden() && isAddressBarAtBottom) {
+            if (mUrlHasFocus) {
+                window.clearFlags(flag);
+                mIsStatusBarModified = true;
+            } else if (mIsStatusBarModified) {
+                mIsStatusBarModified = false;
+                window.setFlags(flag, flag);
+            }
+        }
     }
 }

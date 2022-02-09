@@ -99,9 +99,9 @@ void NetErrorTabHelper::set_state_for_testing(TestingState state) {
 
 void NetErrorTabHelper::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
-  // Ignore subframe creation - only main frame error pages can link to the
-  // platform's network diagnostics dialog.
-  if (render_frame_host->GetParent())
+  // Ignore subframe and fencedframe creation - only primary frame error pages
+  // can link to the platform's network diagnostics dialog.
+  if (render_frame_host->GetParentOrOuterDocument())
     return;
 
   mojo::AssociatedRemote<chrome::mojom::NetworkDiagnosticsClient> client;
@@ -162,6 +162,7 @@ void NetErrorTabHelper::SetIsShowingDownloadButtonInErrorPage(
 
 NetErrorTabHelper::NetErrorTabHelper(WebContents* contents)
     : WebContentsObserver(contents),
+      content::WebContentsUserData<NetErrorTabHelper>(*contents),
       network_diagnostics_receivers_(contents, this),
       network_easter_egg_receivers_(contents, this),
       net_error_page_support_(contents, this),
@@ -269,7 +270,7 @@ void NetErrorTabHelper::RunNetworkDiagnostics(const GURL& url) {
     return;
 
   // Sanitize URL prior to running diagnostics on it.
-  RunNetworkDiagnosticsHelper(url.GetOrigin().spec());
+  RunNetworkDiagnosticsHelper(url.DeprecatedGetOriginAsURL().spec());
 }
 
 void NetErrorTabHelper::RunNetworkDiagnosticsHelper(

@@ -24,19 +24,6 @@
 #include "wx/dynarray.h"
 #include "wx/itemid.h"
 
-#if WXWIN_COMPATIBILITY_2_6
-
-// flags for deprecated `Expand(int action)', will be removed in next versions
-enum
-{
-    wxTREE_EXPAND_EXPAND,
-    wxTREE_EXPAND_COLLAPSE,
-    wxTREE_EXPAND_COLLAPSE_RESET,
-    wxTREE_EXPAND_TOGGLE
-};
-
-#endif // WXWIN_COMPATIBILITY_2_6
-
 // ----------------------------------------------------------------------------
 // wxTreeItemId identifies an element of the tree. It's opaque for the
 // application and the only method which can be used by user code is IsOk().
@@ -92,7 +79,7 @@ WX_DEFINE_EXPORTED_ARRAY_PTR(wxTreeItemIdValue, wxArrayTreeItemIdsBase);
 // this is a wrapper around the array class defined above which allow to wok
 // with values of natural wxTreeItemId type instead of using wxTreeItemIdValue
 // and does it without any loss of efficiency
-class WXDLLIMPEXP_CORE wxArrayTreeItemIds : public wxArrayTreeItemIdsBase
+class wxArrayTreeItemIds : public wxArrayTreeItemIdsBase
 {
 public:
     void Add(const wxTreeItemId& id)
@@ -159,13 +146,6 @@ static const int wxTREE_ITEMSTATE_PREV  = -3;   // cycle to the previous state
     #define wxTR_DEFAULT_STYLE       (wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT)
 #endif
 
-#if WXWIN_COMPATIBILITY_2_6
-// deprecated, don't use
-#define wxTR_MAC_BUTTONS             0
-#define wxTR_AQUA_BUTTONS            0
-#endif // WXWIN_COMPATIBILITY_2_6
-
-
 // values for the `flags' parameter of wxTreeCtrl::HitTest() which determine
 // where exactly the specified point is situated:
 
@@ -201,40 +181,6 @@ static const int wxTREE_HITTEST_ONITEM  = wxTREE_HITTEST_ONITEMICON |
 extern WXDLLIMPEXP_DATA_CORE(const char) wxTreeCtrlNameStr[];
 
 // ----------------------------------------------------------------------------
-// wxTreeItemAttr: a structure containing the visual attributes of an item
-// ----------------------------------------------------------------------------
-
-class WXDLLIMPEXP_CORE wxTreeItemAttr
-{
-public:
-    // ctors
-    wxTreeItemAttr() { }
-    wxTreeItemAttr(const wxColour& colText,
-                   const wxColour& colBack,
-                   const wxFont& font)
-        : m_colText(colText), m_colBack(colBack), m_font(font) { }
-
-    // setters
-    void SetTextColour(const wxColour& colText) { m_colText = colText; }
-    void SetBackgroundColour(const wxColour& colBack) { m_colBack = colBack; }
-    void SetFont(const wxFont& font) { m_font = font; }
-
-    // accessors
-    bool HasTextColour() const { return m_colText.IsOk(); }
-    bool HasBackgroundColour() const { return m_colBack.IsOk(); }
-    bool HasFont() const { return m_font.IsOk(); }
-
-    const wxColour& GetTextColour() const { return m_colText; }
-    const wxColour& GetBackgroundColour() const { return m_colBack; }
-    const wxFont& GetFont() const { return m_font; }
-
-private:
-    wxColour m_colText,
-             m_colBack;
-    wxFont   m_font;
-};
-
-// ----------------------------------------------------------------------------
 // wxTreeEvent is a special class for all events associated with tree controls
 //
 // NB: note that not all accessors make sense for all events, see the event
@@ -252,7 +198,7 @@ public:
                 const wxTreeItemId &item = wxTreeItemId());
     wxTreeEvent(const wxTreeEvent& event);
 
-    virtual wxEvent *Clone() const { return new wxTreeEvent(*this); }
+    virtual wxEvent *Clone() const wxOVERRIDE { return new wxTreeEvent(*this); }
 
     // accessors
         // get the item on which the operation was performed or the newly
@@ -283,9 +229,9 @@ public:
     bool IsEditCancelled() const { return m_editCancelled; }
     void SetEditCanceled(bool editCancelled) { m_editCancelled = editCancelled; }
 
-        // Set the tooltip for the item (for EVT\_TREE\_ITEM\_GETTOOLTIP events)
+        // Set the tooltip for the item (for EVT_TREE_ITEM_GETTOOLTIP events)
     void SetToolTip(const wxString& toolTip) { m_label = toolTip; }
-    wxString GetToolTip() { return m_label; }
+    wxString GetToolTip() const { return m_label; }
 
 private:
     // not all of the members are used (or initialized) for all events
@@ -299,7 +245,7 @@ private:
     friend class WXDLLIMPEXP_FWD_CORE wxTreeCtrl;
     friend class WXDLLIMPEXP_FWD_CORE wxGenericTreeCtrl;
 
-    DECLARE_DYNAMIC_CLASS(wxTreeEvent)
+    wxDECLARE_DYNAMIC_CLASS(wxTreeEvent);
 };
 
 typedef void (wxEvtHandler::*wxTreeEventFunction)(wxTreeEvent&);

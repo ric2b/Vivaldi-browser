@@ -8,7 +8,6 @@
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
@@ -26,7 +25,6 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_event_type.h"
-#include "net/log/test_net_log.h"
 #include "net/log/test_net_log_util.h"
 #include "net/quic/crypto/proof_source_chromium.h"
 #include "net/quic/quic_context.h"
@@ -143,7 +141,7 @@ class URLRequestQuicTest
     context_->set_host_resolver(host_resolver_.get());
     context_->set_http_network_session_params(std::move(params));
     context_->set_cert_verifier(&cert_verifier_);
-    context_->set_net_log(&net_log_);
+    context_->set_net_log(NetLog::Get());
     transport_security_state_.SetExpectCTReporter(&expect_ct_reporter_);
     context_->set_transport_security_state(&transport_security_state_);
   }
@@ -224,8 +222,6 @@ class URLRequestQuicTest
     return std::string("https://") + std::string(kTestServerHost) +
            std::string(path);
   }
-
-  RecordingTestNetLog net_log_;
 
  private:
   void StartQuicServer(quic::ParsedQuicVersion version) {

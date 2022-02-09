@@ -14,7 +14,7 @@
 #include "third_party/blink/public/web/web_heap.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
-#include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
+#include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_void_function.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_answer_options.h"
@@ -30,8 +30,8 @@
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
 #include "third_party/blink/renderer/modules/peerconnection/mock_rtc_peer_connection_handler_platform.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_receiver_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_sender_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_session_description_platform.h"
@@ -820,9 +820,9 @@ class RTCPeerConnectionCallSetupStateTest : public RTCPeerConnectionTest {
   }
 
   ScriptValue ToScriptValue(V8TestingScope& scope, RTCOfferOptions* value) {
-    v8::Isolate* isolate = scope.GetIsolate();
-    return ScriptValue(isolate,
-                       ToV8(value, scope.GetContext()->Global(), isolate));
+    return ScriptValue(scope.GetIsolate(), ToV8Traits<RTCOfferOptions>::ToV8(
+                                               scope.GetScriptState(), value)
+                                               .ToLocalChecked());
   }
 
  private:

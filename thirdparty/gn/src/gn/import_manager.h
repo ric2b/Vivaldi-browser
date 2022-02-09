@@ -12,8 +12,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "base/macros.h"
-
 class Err;
 class ParseNode;
 class Scope;
@@ -48,7 +46,8 @@ class ImportManager {
 
   std::unordered_set<std::string> imports_in_progress_;
 
-  DISALLOW_COPY_AND_ASSIGN(ImportManager);
+  ImportManager(const ImportManager&) = delete;
+  ImportManager& operator=(const ImportManager&) = delete;
 };
 
 #endif  // TOOLS_GN_IMPORT_MANAGER_H_

@@ -30,7 +30,9 @@ namespace resource_coordinator {
 
 ResourceCoordinatorTabHelper::ResourceCoordinatorTabHelper(
     content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {
+    : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<ResourceCoordinatorTabHelper>(
+          *web_contents) {
   TabLoadTracker::Get()->StartTracking(web_contents);
   if (memory_instrumentation::MemoryInstrumentation::GetInstance()) {
     auto* rc_parts = g_browser_process->resource_coordinator_parts();
@@ -62,7 +64,7 @@ void ResourceCoordinatorTabHelper::DidStopLoading() {
   TabLoadTracker::Get()->DidStopLoading(web_contents());
 }
 
-void ResourceCoordinatorTabHelper::RenderProcessGone(
+void ResourceCoordinatorTabHelper::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
   // TODO(siggi): Looks like this can be acquired in a more timely manner from
   //    the RenderProcessHostObserver.

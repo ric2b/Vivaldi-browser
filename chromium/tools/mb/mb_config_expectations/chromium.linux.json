@@ -78,6 +78,7 @@
       "is_debug": false,
       "target_cpu": "arm64",
       "target_os": "fuchsia",
+      "test_host_cpu": "arm64",
       "use_goma": true
     }
   },
@@ -105,7 +106,8 @@
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
-      "use_goma": true
+      "use_rbe": true,
+      "use_remoteexec": true
     }
   },
   "Linux Builder (Wayland)": {
@@ -116,10 +118,12 @@
       "is_debug": false,
       "ozone_auto_platforms": false,
       "ozone_platform": "wayland",
+      "ozone_platform_headless": true,
       "ozone_platform_wayland": true,
       "proprietary_codecs": true,
       "use_bundled_weston": true,
-      "use_goma": true
+      "use_rbe": true,
+      "use_remoteexec": true
     }
   },
   "Linux Builder (dbg)": {
@@ -129,7 +133,8 @@
       "is_debug": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
-      "use_goma": true
+      "use_rbe": true,
+      "use_remoteexec": true
     }
   },
   "Linux Builder (dbg)(32)": {
@@ -140,7 +145,8 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "target_cpu": "x86",
-      "use_goma": true
+      "use_rbe": true,
+      "use_remoteexec": true
     }
   },
   "Network Service Linux": {
@@ -222,17 +228,6 @@
       "target_cpu": "x86",
       "use_cxx11": true,
       "use_goma": false
-    }
-  },
-  "linux-ozone-rel": {
-    "gn_args": {
-      "dcheck_always_on": false,
-      "is_component_build": false,
-      "is_debug": false,
-      "ozone_platform": "headless",
-      "use_bundled_weston": true,
-      "use_goma": true,
-      "use_ozone": true
     }
   },
   "linux-trusty-rel": {

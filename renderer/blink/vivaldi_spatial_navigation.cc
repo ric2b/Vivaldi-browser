@@ -161,7 +161,7 @@ gfx::Rect RevertDeviceScaling(const gfx::Rect& rect, float scale) {
 }
 
 // If a link contains an image, use the image rect.
-blink::IntRect FindImageElementRect(blink::WebElement element) {
+gfx::Rect FindImageElementRect(blink::WebElement element) {
   blink::WebNode web_node = element;
   blink::Node* node = web_node.Unwrap<blink::Node>();
   node = blink::DynamicTo<blink::ContainerNode>(node);
@@ -174,7 +174,7 @@ blink::IntRect FindImageElementRect(blink::WebElement element) {
     n = blink::FlatTreeTraversal::Next(*n, node);
   }
 
-  return blink::IntRect();
+  return gfx::Rect();
 }
 
 std::string ElementPath(blink::WebElement& element) {

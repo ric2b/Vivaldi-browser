@@ -44,7 +44,8 @@ class WebContentsIsolationInfo
   friend class WebContentsUserData<WebContentsIsolationInfo>;
   explicit WebContentsIsolationInfo(WebContents* web_contents,
                                     absl::optional<url::Origin> isolated_origin)
-      : isolated_origin_(isolated_origin) {}
+      : WebContentsUserData<WebContentsIsolationInfo>(*web_contents),
+        isolated_origin_(isolated_origin) {}
 
   absl::optional<url::Origin> isolated_origin_;
 
@@ -95,8 +96,7 @@ IsolatedAppThrottle::WillStartRequest() {
   }
 
   FrameTreeNode* frame_tree_node = navigation_request->frame_tree_node();
-  if (!frame_tree_node
-           ->is_on_initial_empty_document_or_subsequent_empty_documents()) {
+  if (!frame_tree_node->is_on_initial_empty_document()) {
     prev_origin_ = frame_tree_node->current_origin();
   }
 

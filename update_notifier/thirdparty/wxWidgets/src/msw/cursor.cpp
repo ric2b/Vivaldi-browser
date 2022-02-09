@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/cursor.h"
 
@@ -36,14 +33,10 @@
     #include "wx/module.h"
 #endif
 
+#include "wx/display.h"
+
 #include "wx/msw/private.h"
 #include "wx/msw/missing.h" // IDC_HAND
-
-// define functions missing in MicroWin
-#ifdef __WXMICROWIN__
-    static inline void DestroyCursor(HCURSOR) { }
-    static inline void SetCursor(HCURSOR) { }
-#endif // __WXMICROWIN__
 
 // ----------------------------------------------------------------------------
 // private classes
@@ -59,7 +52,7 @@ public:
 
     virtual ~wxCursorRefData() { Free(); }
 
-    virtual void Free();
+    virtual void Free() wxOVERRIDE;
 
 
     // return the size of the standard cursor: notice that the system only
@@ -69,16 +62,13 @@ public:
 
 private:
     bool m_destroyCursor;
-
-    // standard cursor size, computed on first use
-    static wxSize ms_sizeStd;
 };
 
 // ----------------------------------------------------------------------------
 // wxWin macros
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxCursor, wxGDIObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxCursor, wxGDIObject);
 
 // ----------------------------------------------------------------------------
 // globals
@@ -95,14 +85,14 @@ static wxCursor *gs_globalCursor = NULL;
 class wxCursorModule : public wxModule
 {
 public:
-    virtual bool OnInit()
+    virtual bool OnInit() wxOVERRIDE
     {
         gs_globalCursor = new wxCursor;
 
         return true;
     }
 
-    virtual void OnExit()
+    virtual void OnExit() wxOVERRIDE
     {
         wxDELETE(gs_globalCursor);
     }
@@ -116,22 +106,17 @@ public:
 // wxCursorRefData
 // ----------------------------------------------------------------------------
 
-wxSize wxCursorRefData::ms_sizeStd;
 
 wxCoord wxCursorRefData::GetStandardWidth()
 {
-    if ( !ms_sizeStd.x )
-        ms_sizeStd.x = wxSystemSettings::GetMetric(wxSYS_CURSOR_X);
-
-    return ms_sizeStd.x;
+    const wxWindow* win = wxApp::GetMainTopWindow();
+    return wxSystemSettings::GetMetric(wxSYS_CURSOR_X, win);
 }
 
 wxCoord wxCursorRefData::GetStandardHeight()
 {
-    if ( !ms_sizeStd.y )
-        ms_sizeStd.y = wxSystemSettings::GetMetric(wxSYS_CURSOR_Y);
-
-    return ms_sizeStd.y;
+    const wxWindow* win = wxApp::GetMainTopWindow();
+    return wxSystemSettings::GetMetric(wxSYS_CURSOR_Y, win);
 }
 
 wxCursorRefData::wxCursorRefData(HCURSOR hcursor, bool destroy)
@@ -151,10 +136,8 @@ void wxCursorRefData::Free()
 {
     if ( m_hCursor )
     {
-#ifndef __WXWINCE__
         if ( m_destroyCursor )
             ::DestroyCursor((HCURSOR)m_hCursor);
-#endif
 
         m_hCursor = 0;
     }
@@ -217,15 +200,6 @@ wxCursor::wxCursor(const wxImage& image)
 }
 #endif // wxUSE_IMAGE
 
-// MicroWin doesn't have support needed for the other ctors
-#ifdef __WXMICROWIN__
-
-wxCursor::InitFromStock(wxStockCursor WXUNUSED(cursor_type))
-{
-}
-
-#else // !__WXMICROWIN__
-
 wxCursor::wxCursor(const wxString& filename,
                    wxBitmapType kind,
                    int hotSpotX,
@@ -238,12 +212,10 @@ wxCursor::wxCursor(const wxString& filename,
             hcursor = ::LoadCursor(wxGetInstance(), filename.t_str());
             break;
 
-#ifndef __WXWINCE__
         case wxBITMAP_TYPE_ANI:
         case wxBITMAP_TYPE_CUR:
             hcursor = ::LoadCursorFromFile(filename.t_str());
             break;
-#endif
 
         case wxBITMAP_TYPE_ICO:
             hcursor = wxBitmapToHCURSOR
@@ -275,41 +247,54 @@ wxCursor::wxCursor(const wxString& filename,
     }
 }
 
+wxPoint wxCursor::GetHotSpot() const
+{
+    if ( !GetGDIImageData() )
+        return wxDefaultPosition;
+
+    AutoIconInfo ii;
+    if ( !ii.GetFrom((HICON)GetGDIImageData()->m_hCursor) )
+        return wxDefaultPosition;
+
+    return wxPoint(ii.xHotspot, ii.yHotspot);
+}
+
 namespace
 {
 
-void ReverseBitmap(HBITMAP bitmap, int width, int height)
+wxSize ScaleAndReverseBitmap(HBITMAP& bitmap, float scale)
 {
+    BITMAP bmp;
+    if ( !::GetObject(bitmap, sizeof(bmp), &bmp) )
+        return wxSize();
+    wxSize cs(bmp.bmWidth * scale, bmp.bmHeight * scale);
+
     MemoryHDC hdc;
     SelectInHDC selBitmap(hdc, bitmap);
-    ::StretchBlt(hdc, width - 1, 0, -width, height,
-                 hdc, 0, 0, width, height, SRCCOPY);
+    if ( scale != 1 )
+        ::SetStretchBltMode(hdc, HALFTONE);
+    ::StretchBlt(hdc, cs.x - 1, 0, -cs.x, cs.y, hdc, 0, 0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
+
+    return cs;
 }
 
 HCURSOR CreateReverseCursor(HCURSOR cursor)
 {
-    ICONINFO info;
-    if ( !::GetIconInfo(cursor, &info) )
+    AutoIconInfo info;
+    if ( !info.GetFrom(cursor) )
         return NULL;
 
-    HCURSOR cursorRev = NULL;
+    const unsigned displayID = (unsigned)wxDisplay::GetFromPoint(wxGetMousePosition());
+    wxDisplay disp(displayID == 0u || displayID < wxDisplay::GetCount() ? displayID : 0u);
+    const float scale = (float)disp.GetPPI().y / wxGetDisplayPPI().y;
 
-    BITMAP bmp;
-    if ( ::GetObject(info.hbmMask, sizeof(bmp), &bmp) )
-    {
-        ReverseBitmap(info.hbmMask, bmp.bmWidth, bmp.bmHeight);
-        if ( info.hbmColor )
-            ReverseBitmap(info.hbmColor, bmp.bmWidth, bmp.bmHeight);
-        info.xHotspot = (DWORD)bmp.bmWidth - 1 - info.xHotspot;
-
-        cursorRev = ::CreateIconIndirect(&info);
-    }
-
-    ::DeleteObject(info.hbmMask);
+    wxSize cursorSize = ScaleAndReverseBitmap(info.hbmMask, scale);
     if ( info.hbmColor )
-        ::DeleteObject(info.hbmColor);
+        ScaleAndReverseBitmap(info.hbmColor, scale);
+    info.xHotspot = (DWORD)(cursorSize.x - 1 - info.xHotspot * scale);
+    info.yHotspot = (DWORD)(info.yHotspot * scale);
 
-    return cursorRev;
+    return ::CreateIconIndirect(&info);
 }
 
 } // anonymous namespace
@@ -406,8 +391,6 @@ void wxCursor::InitFromStock(wxStockCursor idCursor)
         m_refData = new wxCursorRefData(hcursor, deleteLater);
     }
 }
-
-#endif // __WXMICROWIN__/!__WXMICROWIN__
 
 wxCursor::~wxCursor()
 {

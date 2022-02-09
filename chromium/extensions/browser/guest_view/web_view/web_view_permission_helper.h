@@ -8,12 +8,11 @@
 #include <map>
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
@@ -39,8 +38,7 @@ class WebViewPermissionHelperDelegate;
 // class is owned by WebViewGuest. Its purpose is to request permission for
 // various operations from the <webview> embedder, and reply back via callbacks
 // to the callers on a response from the embedder.
-class WebViewPermissionHelper
-      : public content::WebContentsObserver {
+class WebViewPermissionHelper {
  public:
   explicit WebViewPermissionHelper(WebViewGuest* guest);
   explicit WebViewPermissionHelper(GuestViewBase* guest);
@@ -48,7 +46,7 @@ class WebViewPermissionHelper
   WebViewPermissionHelper(const WebViewPermissionHelper&) = delete;
   WebViewPermissionHelper& operator=(const WebViewPermissionHelper&) = delete;
 
-  ~WebViewPermissionHelper() override;
+  ~WebViewPermissionHelper();
   using PermissionResponseCallback =
       base::OnceCallback<void(bool /* allow */,
                               const std::string& /* user_input */)>;
@@ -77,25 +75,25 @@ class WebViewPermissionHelper
       content::WebContents* web_contents);
   static WebViewPermissionHelper* FromFrameID(int render_process_id,
                                               int render_frame_id);
-  virtual void RequestMediaAccessPermission(content::WebContents* source,
+  void RequestMediaAccessPermission(content::WebContents* source,
                                     const content::MediaStreamRequest& request,
                                     content::MediaResponseCallback callback);
-  virtual bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   blink::mojom::MediaStreamType type);
-  virtual void CanDownload(const GURL& url,
+  void CanDownload(const GURL& url,
                    const std::string& request_method,
                    base::OnceCallback<void(bool)> callback);
-  virtual void RequestPointerLockPermission(bool user_gesture,
+  void RequestPointerLockPermission(bool user_gesture,
                                     bool last_unlocked_by_target,
                                     base::OnceCallback<void(bool)> callback);
 
   // Requests Geolocation Permission from the embedder.
-  virtual void RequestGeolocationPermission(const GURL& requesting_frame,
+  void RequestGeolocationPermission(const GURL& requesting_frame,
                                     bool user_gesture,
                                     base::OnceCallback<void(bool)> callback);
 
-  virtual void RequestFileSystemPermission(const GURL& url,
+  void RequestFileSystemPermission(const GURL& url,
                                    bool allowed_by_default,
                                    base::OnceCallback<void(bool)> callback);
 
@@ -110,11 +108,11 @@ class WebViewPermissionHelper
   // Responds to the permission request |request_id| with |action| and
   // |user_input|. Returns whether there was a pending request for the provided
   // |request_id|.
-  virtual SetPermissionResult SetPermission(int request_id,
+  SetPermissionResult SetPermission(int request_id,
                                     PermissionResponseAction action,
                                     const std::string& user_input);
 
-  virtual void CancelPendingPermissionRequest(int request_id);
+  void CancelPendingPermissionRequest(int request_id);
 
   guest_view::GuestViewBase* web_view_guest() { return web_view_guest_; }
 
@@ -133,16 +131,10 @@ class WebViewPermissionHelper
   content::DownloadInformation download_info_;
 
  private:
-  virtual void OnMediaPermissionResponse(const content::MediaStreamRequest& request,
+  void OnMediaPermissionResponse(const content::MediaStreamRequest& request,
                                  content::MediaResponseCallback callback,
                                  bool allow,
                                  const std::string& user_input);
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // content::WebContentsObserver implementation.
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
   // A counter to generate a unique request id for a permission request.
   // We only need the ids to be unique for a given WebViewGuest.
@@ -153,7 +145,7 @@ class WebViewPermissionHelper
   std::unique_ptr<WebViewPermissionHelperDelegate>
       web_view_permission_helper_delegate_;
 
-  GuestViewBase* const web_view_guest_;
+  const raw_ptr<GuestViewBase> web_view_guest_;
 
   bool default_media_access_permission_;
 

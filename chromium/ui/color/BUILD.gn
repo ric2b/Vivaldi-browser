@@ -11,6 +11,7 @@ source_set("color_headers") {
   sources = [
     "color_id.h",
     "color_id_macros.inc",
+    "color_id_map_macros.inc",
     "color_mixer.h",
     "color_provider.h",
     "color_provider_manager.h",
@@ -19,9 +20,20 @@ source_set("color_headers") {
   ]
 
   public_deps = [
-    "//base:base",
-    "//skia:skia",
+    "//base",
+    "//skia",
   ]
+}
+
+component("color_switches") {
+  sources = [
+    "color_switches.cc",
+    "color_switches.h",
+  ]
+
+  defines = [ "IS_COLOR_SWITCHES_IMPL" ]
+
+  public_deps = [ "//base" ]
 }
 
 component("color") {
@@ -45,8 +57,8 @@ component("color") {
 
   public_deps = [
     ":color_headers",
-    "//base:base",
-    "//skia:skia",
+    "//base",
+    "//skia",
     "//ui/gfx:color_utils",
   ]
 
@@ -76,6 +88,7 @@ test("color_unittests") {
     "color_provider_manager_unittest.cc",
     "color_provider_source_observer_unittest.cc",
     "color_provider_unittest.cc",
+    "color_provider_utils_unittest.cc",
     "color_recipe_unittest.cc",
     "color_transform_unittest.cc",
     "run_all_unittests.cc",
@@ -88,6 +101,27 @@ test("color_unittests") {
     "//base/test:test_support",
     "//testing/gtest",
   ]
+}
+
+if (is_win) {
+  component("accent_color_observer") {
+    sources = [
+      "win/accent_color_observer.cc",
+      "win/accent_color_observer.h",
+    ]
+
+    defines = [ "IS_COLOR_IMPL" ]
+
+    public_deps = [
+      "//base",
+      "//third_party/abseil-cpp:absl",
+    ]
+
+    deps = [
+      "//skia",
+      "//ui/gfx:color_utils",
+    ]
+  }
 }
 
 component("mixers") {
@@ -124,5 +158,9 @@ component("mixers") {
     ]
   } else if (is_win) {
     sources += [ "win/native_color_mixers_win.cc" ]
+    deps += [
+      ":accent_color_observer",
+      ":color_switches",
+    ]
   }
 }

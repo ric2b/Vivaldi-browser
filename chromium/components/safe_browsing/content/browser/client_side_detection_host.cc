@@ -11,12 +11,12 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/guid.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/sequenced_task_runner_helpers.h"
+#include "base/task/sequenced_task_runner_helpers.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
@@ -328,12 +328,12 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
   GURL url_;
   std::string mime_type_;
   net::IPEndPoint remote_endpoint_;
-  WebContents* web_contents_;
-  ClientSideDetectionService* csd_service_;
+  raw_ptr<WebContents> web_contents_;
+  raw_ptr<ClientSideDetectionService> csd_service_;
   // We keep a ref pointer here just to make sure the safe browsing
   // database manager stays alive long enough.
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
-  ClientSideDetectionHost* host_;
+  raw_ptr<ClientSideDetectionHost> host_;
 
   ShouldClassifyUrlCallback start_phishing_classification_cb_;
 };
@@ -653,10 +653,8 @@ bool ClientSideDetectionHost::CanGetAccessToken() {
   if (is_off_the_record_)
     return false;
 
-  // Return true if the finch feature is enabled for an ESB user, and if the
-  // primary user account is signed in.
-  return base::FeatureList::IsEnabled(kClientSideDetectionWithToken) &&
-         IsEnhancedProtectionEnabled(*pref_service_) &&
+  // Return true if the primary user account of an ESB user is signed in.
+  return IsEnhancedProtectionEnabled(*pref_service_) &&
          !account_signed_in_callback_.is_null() &&
          account_signed_in_callback_.Run();
 }

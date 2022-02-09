@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 
 #include "base/barrier_closure.h"
@@ -45,6 +46,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/media_start_stop_observer.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -55,6 +57,7 @@
 #include "skia/ext/image_operations.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
 #include "ui/display/display_switches.h"
@@ -180,7 +183,7 @@ class WidgetSizeChangeWaiter final : public views::WidgetObserver {
   int bounds_change_count() const { return bounds_change_count_; }
 
  private:
-  views::Widget* const widget_;
+  const raw_ptr<views::Widget> widget_;
   const gfx::Size expected_size_;
   int bounds_change_count_ = 0;
   base::RunLoop run_loop_;
@@ -303,7 +306,8 @@ class PictureInPictureWindowControllerBrowserTest
   }
 
  private:
-  content::PictureInPictureWindowController* pip_window_controller_ = nullptr;
+  raw_ptr<content::PictureInPictureWindowController> pip_window_controller_ =
+      nullptr;
   MockPictureInPictureWindowController mock_controller_;
 };
 
@@ -329,14 +333,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
 
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 
-#if defined(TOOLKIT_VIEWS)
   gfx::NativeWindow native_window = GetOverlayWindow()->GetNativeWindow();
-#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_MAC)
   EXPECT_FALSE(platform_util::IsWindowActive(native_window));
-#else
-  EXPECT_TRUE(platform_util::IsWindowActive(native_window));
-#endif
-#endif
 }
 
 IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerBrowserTest,
@@ -1603,6 +1601,44 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerPrerenderBrowserTest,
   EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
 }
 
+class PictureInPictureWindowControllerFencedFrameBrowserTest
+    : public PictureInPictureWindowControllerBrowserTest {
+ public:
+  content::test::FencedFrameTestHelper& fenced_frame_test_helper() {
+    return fenced_frame_helper_;
+  }
+
+ private:
+  content::test::FencedFrameTestHelper fenced_frame_helper_;
+};
+
+IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerFencedFrameBrowserTest,
+                       FencedFrameShouldNotCloseWindow) {
+  GURL test_page_url = embedded_test_server()->GetURL(
+      "example.com", "/media/picture-in-picture/window-size.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_page_url));
+
+  content::WebContents* active_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(active_web_contents);
+
+  SetUpWindowController(active_web_contents);
+  ASSERT_TRUE(window_controller() != nullptr);
+
+  // Open Picture-in-Picture window
+  ASSERT_EQ(true, EvalJs(active_web_contents, "enterPictureInPicture();"));
+  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
+
+  // Navigation to fenced frame page should not close Picture-in-Picture window.
+  GURL fenced_frame_url =
+      embedded_test_server()->GetURL("/fenced_frames/title1.html");
+  content::RenderFrameHost* fenced_frame_host =
+      fenced_frame_test_helper().CreateFencedFrame(
+          active_web_contents->GetMainFrame(), fenced_frame_url);
+  EXPECT_NE(nullptr, fenced_frame_host);
+  EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
+}
+
 class MediaSessionPictureInPictureWindowControllerBrowserTest
     : public PictureInPictureWindowControllerBrowserTest {
  public:
@@ -2008,7 +2044,7 @@ class WebAppPictureInPictureWindowControllerBrowserTest
   Browser* InstallAndLaunchPWA(const GURL& start_url) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
     web_app_info->start_url = start_url;
-    web_app_info->scope = start_url.GetOrigin();
+    web_app_info->scope = start_url.DeprecatedGetOriginAsURL();
     web_app_info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
     const web_app::AppId app_id = InstallWebApp(std::move(web_app_info));
 
@@ -2021,7 +2057,7 @@ class WebAppPictureInPictureWindowControllerBrowserTest
   content::WebContents* web_contents() { return web_contents_; }
 
  private:
-  content::WebContents* web_contents_ = nullptr;
+  raw_ptr<content::WebContents> web_contents_ = nullptr;
 };
 
 // Hide pwa page and check that Picture-in-Picture is entered automatically.

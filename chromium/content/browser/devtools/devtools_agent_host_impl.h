@@ -9,9 +9,7 @@
 
 #include <string>
 
-#include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/process/kill.h"
 #include "content/browser/devtools/devtools_io_context.h"
 #include "content/browser/devtools/devtools_renderer_channel.h"
@@ -36,6 +34,9 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
  public:
   // Returns DevToolsAgentHost with a given |id| or nullptr of it doesn't exist.
   static scoped_refptr<DevToolsAgentHostImpl> GetForId(const std::string& id);
+
+  DevToolsAgentHostImpl(const DevToolsAgentHostImpl&) = delete;
+  DevToolsAgentHostImpl& operator=(const DevToolsAgentHostImpl&) = delete;
 
   // DevToolsAgentHost implementation.
   bool AttachClient(DevToolsAgentHostClient* client) override;
@@ -144,8 +145,6 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   DevToolsIOContext io_context_;
   DevToolsRendererChannel renderer_channel_;
   static int s_force_creation_count_;
-
-  DISALLOW_COPY_AND_ASSIGN(DevToolsAgentHostImpl);
 };
 
 }  // namespace content

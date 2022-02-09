@@ -14,6 +14,7 @@
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -34,13 +35,9 @@ class PrefService;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 namespace ash {
 class KioskTest;
-}
-
-namespace chromeos {
 class LocaleChangeGuard;
 class Preferences;
-class SupervisedUserTestBase;
-}  // namespace chromeos
+}  // namespace ash
 #endif
 
 namespace base {
@@ -124,7 +121,6 @@ class ProfileImpl : public Profile {
   bool HasAnyOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
   const Profile* GetOriginalProfile() const override;
-  bool IsSupervised() const override;
   bool IsChild() const override;
   bool AllowsBrowserWindows() const override;
   ExtensionSpecialStoragePolicy* GetExtensionSpecialStoragePolicy() override;
@@ -172,7 +168,6 @@ class ProfileImpl : public Profile {
  private:
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   friend class ash::KioskTest;
-  friend class chromeos::SupervisedUserTestBase;
 #endif
   friend class Profile;
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorTest,
@@ -293,9 +288,9 @@ class ProfileImpl : public Profile {
   std::unique_ptr<ProfileKey> key_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  std::unique_ptr<chromeos::Preferences> chromeos_preferences_;
+  std::unique_ptr<ash::Preferences> chromeos_preferences_;
 
-  std::unique_ptr<chromeos::LocaleChangeGuard> locale_change_guard_;
+  std::unique_ptr<ash::LocaleChangeGuard> locale_change_guard_;
 #endif
 
   // TODO(mmenke):  This should be removed from the Profile, and use a
@@ -317,7 +312,7 @@ class ProfileImpl : public Profile {
   // components/keyed_service/core/keyed_service.h
   // components/keyed_service/content/browser_context_keyed_service_factory.*
 
-  Profile::Delegate* delegate_;
+  raw_ptr<Profile::Delegate> delegate_;
 };
 
 #endif  // CHROME_BROWSER_PROFILES_PROFILE_IMPL_H_

@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/modules/imagecapture/image_capture.h"
 #include "third_party/blink/renderer/modules/mediastream/apply_constraints_request.h"
+#include "third_party/blink/renderer/modules/mediastream/capture_handle_change_event.h"
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/media_error_state.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
@@ -59,8 +60,8 @@
 #include "third_party/blink/renderer/modules/mediastream/processed_local_audio_source.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_controller.h"
 #include "third_party/blink/renderer/modules/mediastream/webaudio_media_stream_audio_sink.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_web_audio_source.h"
@@ -197,6 +198,24 @@ void DidSetMediaStreamTrackEnabled(MediaStreamComponent* component) {
       MediaStreamTrackPlatform::GetTrack(WebMediaStreamTrack(component));
   if (native_track)
     native_track->SetEnabled(component->Enabled());
+}
+
+void DidCloneMediaStreamTrack(MediaStreamComponent* original,
+                              MediaStreamComponent* clone) {
+  DCHECK(clone);
+  DCHECK(!clone->GetPlatformTrack());
+  DCHECK(clone->Source());
+
+  switch (clone->Source()->GetType()) {
+    case MediaStreamSource::kTypeAudio:
+      // TODO(crbug.com/704136): Use per thread task runner.
+      MediaStreamUtils::CreateNativeAudioMediaStreamTrack(
+          clone, Thread::MainThread()->GetTaskRunner());
+      break;
+    case MediaStreamSource::kTypeVideo:
+      CloneNativeVideoMediaStreamTrack(original, clone);
+      break;
+  }
 }
 
 }  // namespace
@@ -439,12 +458,15 @@ void MediaStreamTrack::stopTrack(ExecutionContext* execution_context) {
 
 MediaStreamTrack* MediaStreamTrack::clone(ScriptState* script_state) {
   SendLogMessage(String::Format("%s()", __func__));
-  MediaStreamComponent* cloned_component = Component()->Clone();
+
+  // Instantiate the clone.
   MediaStreamTrack* cloned_track = MakeGarbageCollected<MediaStreamTrack>(
-      ExecutionContext::From(script_state), cloned_component, ready_state_,
+      ExecutionContext::From(script_state), Component()->Clone(), ready_state_,
       base::DoNothing());
-  DidCloneMediaStreamTrack(Component(), cloned_component);
-  cloned_track->CloneImageCaptureFrom(*this);
+
+  // Copy state.
+  CloneInternal(cloned_track);
+
   return cloned_track;
 }
 
@@ -898,27 +920,15 @@ void MediaStreamTrack::Trace(Visitor* visitor) const {
   EventTargetWithInlineData::Trace(visitor);
 }
 
-void MediaStreamTrack::DidCloneMediaStreamTrack(MediaStreamComponent* original,
-                                                MediaStreamComponent* clone) {
-  DCHECK(clone);
-  DCHECK(!clone->GetPlatformTrack());
-  DCHECK(clone->Source());
+void MediaStreamTrack::CloneInternal(MediaStreamTrack* cloned_track) {
+  DCHECK(cloned_track);
 
-  switch (clone->Source()->GetType()) {
-    case MediaStreamSource::kTypeAudio:
-      // TODO(crbug.com/704136): Use per thread task runner.
-      MediaStreamUtils::CreateNativeAudioMediaStreamTrack(
-          clone, Thread::MainThread()->GetTaskRunner());
-      break;
-    case MediaStreamSource::kTypeVideo:
-      CloneNativeVideoMediaStreamTrack(original, clone);
-      break;
+  DidCloneMediaStreamTrack(Component(), cloned_track->Component());
+
+  DCHECK(!cloned_track->image_capture_);
+  if (image_capture_) {
+    cloned_track->image_capture_ = image_capture_->Clone();
   }
-}
-
-void MediaStreamTrack::CloneImageCaptureFrom(const MediaStreamTrack& original) {
-  image_capture_ =
-      original.image_capture_ ? original.image_capture_->Clone() : nullptr;
 }
 
 void MediaStreamTrack::EnsureFeatureHandleForScheduler() {

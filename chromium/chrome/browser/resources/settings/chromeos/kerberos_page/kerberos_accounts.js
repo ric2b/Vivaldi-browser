@@ -21,9 +21,11 @@ import {I18nBehavior} from '//resources/js/i18n_behavior.m.js';
 import {getImage} from '//resources/js/icon.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import '//resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
+import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import {loadTimeData} from '../../i18n_setup.js';
-import {AccountManagerBrowserProxy, AccountManagerBrowserProxyImpl, Account} from '../../people_page/account_manager_browser_proxy.js';
-import {Router, Route, RouteObserverBehavior} from '../../router.js';
+import {Account} from '../os_people_page/account_manager_browser_proxy.js';
+import {Router, Route} from '../../router.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 import '../../settings_shared_css.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {recordSettingChange, recordSearch, setUserActionRecorderForTesting, recordPageFocus, recordPageBlur, recordClick, recordNavigation} from '../metrics_recorder.m.js';
@@ -52,6 +54,15 @@ Polymer({
       value() {
         return [];
       },
+    },
+
+    /**
+     * Whether dark mode is currently active.
+     * @private
+     */
+    isDarkModeActive_: {
+      type: Boolean,
+      value: false,
     },
 
     /**
@@ -132,6 +143,16 @@ Polymer({
     }
 
     this.attemptDeepLink();
+  },
+
+  /**
+   * @return {string} the icon to use for the error badge.
+   * @private
+   */
+  getErrorBadgeIcon_() {
+    return this.isDarkModeActive_ ?
+        'chrome://os-settings/images/error_badge_dark.svg' :
+        'chrome://os-settings/images/error_badge.svg';
   },
 
   /**

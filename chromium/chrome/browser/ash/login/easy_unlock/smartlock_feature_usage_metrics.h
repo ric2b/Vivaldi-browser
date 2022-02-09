@@ -5,14 +5,8 @@
 #ifndef CHROME_BROWSER_ASH_LOGIN_EASY_UNLOCK_SMARTLOCK_FEATURE_USAGE_METRICS_H_
 #define CHROME_BROWSER_ASH_LOGIN_EASY_UNLOCK_SMARTLOCK_FEATURE_USAGE_METRICS_H_
 
+#include "ash/components/proximity_auth/smart_lock_metrics_recorder.h"
 #include "chromeos/components/feature_usage/feature_usage_metrics.h"
-#include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
-
-namespace chromeos {
-namespace multidevice_setup {
-class MultiDeviceSetupClient;
-}  // namespace multidevice_setup
-}  // namespace chromeos
 
 namespace ash {
 
@@ -22,9 +16,10 @@ class SmartLockFeatureUsageMetrics
     : public feature_usage::FeatureUsageMetrics::Delegate,
       public SmartLockMetricsRecorder::UsageRecorder {
  public:
-  explicit SmartLockFeatureUsageMetrics(
-      chromeos::multidevice_setup::MultiDeviceSetupClient*
-          multi_device_setup_client);
+  SmartLockFeatureUsageMetrics(
+      base::RepeatingCallback<bool()> is_eligible_callback,
+      base::RepeatingCallback<bool()> is_enabled_callback);
+
   SmartLockFeatureUsageMetrics(SmartLockFeatureUsageMetrics&) = delete;
   SmartLockFeatureUsageMetrics& operator=(SmartLockFeatureUsageMetrics&) =
       delete;
@@ -38,8 +33,8 @@ class SmartLockFeatureUsageMetrics
   bool IsEligible() const override;
   bool IsEnabled() const override;
 
-  chromeos::multidevice_setup::MultiDeviceSetupClient*
-      multi_device_setup_client_;
+  base::RepeatingCallback<bool()> is_eligible_callback_;
+  base::RepeatingCallback<bool()> is_enabled_callback_;
   feature_usage::FeatureUsageMetrics feature_usage_metrics_;
 };
 

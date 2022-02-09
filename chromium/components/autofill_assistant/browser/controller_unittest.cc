@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "base/callback_helpers.h"
+#include "base/containers/flat_map.h"
 #include "base/guid.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
@@ -32,6 +34,8 @@
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/web/mock_web_controller.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/ukm/content/source_url_recorder.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
@@ -47,13 +51,10 @@ using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::AnyNumber;
-using ::testing::AtLeast;
-using ::testing::Contains;
 using ::testing::DoAll;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::Field;
-using ::testing::FieldsAre;
 using ::testing::Gt;
 using ::testing::InSequence;
 using ::testing::Invoke;
@@ -61,11 +62,8 @@ using ::testing::IsEmpty;
 using ::testing::NiceMock;
 using ::testing::Not;
 using ::testing::NotNull;
-using ::testing::Pair;
-using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::Return;
-using ::testing::ReturnRef;
 using ::testing::SaveArg;
 using ::testing::Sequence;
 using ::testing::SizeIs;
@@ -89,6 +87,7 @@ struct MockCollectUserDataOptions : public CollectUserDataOptions {
     base::MockOnceCallback<void(int, UserData*, const UserModel*)>
         mock_terms_callback;
     terms_link_callback = mock_terms_callback.Get();
+    selected_user_data_changed_callback = base::DoNothing();
   }
 };
 
@@ -111,6 +110,7 @@ class ControllerTest : public testing::Test {
     auto tts_controller =
         std::make_unique<NiceMock<MockAutofillAssistantTtsController>>();
     mock_tts_controller_ = tts_controller.get();
+    ukm::InitializeSourceUrlRecorderForWebContents(web_contents_.get());
 
     ON_CALL(mock_client_, GetWebContents).WillByDefault(Return(web_contents()));
     ON_CALL(mock_client_, HasHadUI()).WillByDefault(Return(true));
@@ -120,7 +120,8 @@ class ControllerTest : public testing::Test {
     controller_ = std::make_unique<Controller>(
         web_contents(), &mock_client_, task_environment()->GetMockTickClock(),
         mock_runtime_manager_->GetWeakPtr(), std::move(service),
-        std::move(tts_controller));
+        std::move(tts_controller), &ukm_recorder_,
+        /* annotate_dom_model_service= */ nullptr);
     controller_->SetWebControllerForTest(std::move(web_controller));
 
     ON_CALL(mock_client_, AttachUI()).WillByDefault(Invoke([this]() {
@@ -169,10 +170,14 @@ class ControllerTest : public testing::Test {
  protected:
   static SupportedScriptProto* AddRunnableScript(
       SupportsScriptResponseProto* response,
-      const std::string& name_and_path) {
+      const std::string& name_and_path,
+      bool direct_action = true) {
     SupportedScriptProto* script = response->add_scripts();
     script->set_path(name_and_path);
-    script->mutable_presentation()->mutable_chip()->set_text(name_and_path);
+    if (direct_action) {
+      script->mutable_presentation()->mutable_direct_action()->add_names(
+          name_and_path);
+    }
     return script;
   }
 
@@ -202,6 +207,11 @@ class ControllerTest : public testing::Test {
     GURL url(url_string);
     SetLastCommittedUrl(url);
     controller_->Start(url, std::move(trigger_context));
+  }
+
+  void Track() {
+    SetLastCommittedUrl(GURL("http://initialurl.com"));
+    controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   }
 
   void SetLastCommittedUrl(const GURL& url) {
@@ -268,12 +278,13 @@ class ControllerTest : public testing::Test {
   base::TimeTicks now_;
   std::vector<AutofillAssistantState> states_;
   std::vector<bool> keyboard_states_;
-  MockService* mock_service_;
-  MockWebController* mock_web_controller_;
-  MockAutofillAssistantTtsController* mock_tts_controller_;
+  raw_ptr<MockService> mock_service_;
+  raw_ptr<MockWebController> mock_web_controller_;
+  raw_ptr<MockAutofillAssistantTtsController> mock_tts_controller_;
   NiceMock<MockClient> mock_client_;
   std::unique_ptr<MockRuntimeManager> mock_runtime_manager_;
   NiceMock<MockControllerObserver> mock_observer_;
+  ukm::TestAutoSetUkmRecorder ukm_recorder_;
   std::unique_ptr<Controller> controller_;
 };
 
@@ -305,7 +316,7 @@ class NavigationStateChangeListener
   std::vector<NavigationState> events;
 
  private:
-  ScriptExecutorDelegate* const delegate_;
+  const raw_ptr<ScriptExecutorDelegate> delegate_;
 };
 
 NavigationStateChangeListener::~NavigationStateChangeListener() {}
@@ -335,87 +346,30 @@ void ScriptExecutorListener::OnPause(const std::string& message,
   ++pause_count;
 }
 
-TEST_F(ControllerTest, FetchAndRunScriptsWithChip) {
-  SupportsScriptResponseProto script_response;
-  AddRunnableScript(&script_response, "script1");
-  AddRunnableScript(&script_response, "script2");
-  SetNextScriptResponse(script_response);
-
-  testing::InSequence seq;
-
-  Start("http://a.example.com/path");
-
-  // Offering the choices: script1 and script2
-  EXPECT_EQ(AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT,
-            controller_->GetState());
-  EXPECT_THAT(
-      controller_->GetUserActions(),
-      UnorderedElementsAre(Property(&UserAction::chip,
-                                    AllOf(Field(&Chip::text, StrEq("script1")),
-                                          Field(&Chip::type, NORMAL_ACTION))),
-                           Property(&UserAction::chip,
-                                    AllOf(Field(&Chip::text, StrEq("script2")),
-                                          Field(&Chip::type, NORMAL_ACTION)))));
-
-  // Choose script2 and run it successfully.
-  EXPECT_CALL(*mock_service_, OnGetActions(StrEq("script2"), _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, ""));
-  EXPECT_TRUE(controller_->PerformUserAction(1));
-
-  // Offering the same scripts again.
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-  EXPECT_THAT(
-      controller_->GetUserActions(),
-      UnorderedElementsAre(Property(&UserAction::chip,
-                                    AllOf(Field(&Chip::text, StrEq("script1")),
-                                          Field(&Chip::type, NORMAL_ACTION))),
-                           Property(&UserAction::chip,
-                                    AllOf(Field(&Chip::text, StrEq("script2")),
-                                          Field(&Chip::type, NORMAL_ACTION)))));
-}
-
 TEST_F(ControllerTest, ReportDirectActions) {
   SupportsScriptResponseProto script_response;
 
-  // script1 is available as a chip and a direct action.
-  auto* script1 = AddRunnableScript(&script_response, "script1");
-  script1->mutable_presentation()->mutable_direct_action()->add_names(
-      "action_1");
-
-  // script1 is available only as a direct action.
-  auto* script2 = AddRunnableScript(&script_response, "script2");
-  script2->mutable_presentation()->mutable_direct_action()->add_names(
-      "action_2");
-  script2->mutable_presentation()->clear_chip();
+  AddRunnableScript(&script_response, "action");
 
   SetNextScriptResponse(script_response);
 
   testing::InSequence seq;
 
-  Start("http://a.example.com/path");
+  Track();
 
-  // Offering the choices: script1 and script2
-  EXPECT_EQ(AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT,
-            controller_->GetState());
-  EXPECT_THAT(
-      controller_->GetUserActions(),
-      UnorderedElementsAre(
-          AllOf(Property(&UserAction::chip, Field(&Chip::text, "script1")),
-                Property(&UserAction::direct_action,
-                         Field(&DirectAction::names, ElementsAre("action_1")))),
-          AllOf(
-              Property(&UserAction::chip, Property(&Chip::empty, true)),
-              Property(&UserAction::direct_action,
-                       Field(&DirectAction::names, ElementsAre("action_2"))))));
+  EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
+  EXPECT_THAT(controller_->GetDirectActionScripts(),
+              UnorderedElementsAre(AllOf(
+                  Field(&ScriptHandle::direct_action,
+                        Field(&DirectAction::names, ElementsAre("action"))))));
 }
 
 TEST_F(ControllerTest, RunDirectActionWithArguments) {
   SupportsScriptResponseProto script_response;
 
-  // script is available as a chip and a direct action.
-  auto* script1 = AddRunnableScript(&script_response, "script");
+  // script is available as a direct action.
+  auto* script1 = AddRunnableScript(&script_response, "action");
   auto* action = script1->mutable_presentation()->mutable_direct_action();
-  action->add_names("action");
   action->add_required_arguments("required");
   action->add_optional_arguments("arg0");
   action->add_optional_arguments("arg1");
@@ -424,20 +378,20 @@ TEST_F(ControllerTest, RunDirectActionWithArguments) {
 
   testing::InSequence seq;
 
-  Start("http://a.example.com/path");
+  SetLastCommittedUrl(GURL("http://example.com/"));
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
 
-  EXPECT_EQ(AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT,
-            controller_->GetState());
-  EXPECT_THAT(controller_->GetUserActions(),
-              ElementsAre(Property(
-                  &UserAction::direct_action,
+  EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
+  EXPECT_THAT(controller_->GetDirectActionScripts(),
+              ElementsAre(Field(
+                  &ScriptHandle::direct_action,
                   AllOf(Field(&DirectAction::names, ElementsAre("action")),
                         Field(&DirectAction::required_arguments,
                               ElementsAre("required")),
                         Field(&DirectAction::optional_arguments,
                               ElementsAre("arg0", "arg1"))))));
 
-  EXPECT_CALL(*mock_service_, OnGetActions("script", _, _, _, _, _))
+  EXPECT_CALL(*mock_service_, OnGetActions("action", _, _, _, _, _))
       .WillOnce(Invoke([](const std::string& script_path, const GURL& url,
                           const TriggerContext& trigger_context,
                           const std::string& global_payload,
@@ -445,7 +399,7 @@ TEST_F(ControllerTest, RunDirectActionWithArguments) {
                           Service::ResponseCallback& callback) {
         EXPECT_THAT(trigger_context.GetScriptParameters().ToProto(),
                     testing::UnorderedElementsAreArray(
-                        std::map<std::string, std::string>(
+                        base::flat_map<std::string, std::string>(
                             {{"required", "value"}, {"arg0", "value0"}})));
         EXPECT_TRUE(trigger_context.GetDirectAction());
 
@@ -454,11 +408,11 @@ TEST_F(ControllerTest, RunDirectActionWithArguments) {
 
   TriggerContext::Options options;
   options.is_direct_action = true;
-  EXPECT_TRUE(controller_->PerformUserActionWithContext(
+  EXPECT_TRUE(controller_->PerformDirectAction(
       0, std::make_unique<TriggerContext>(
              /* parameters = */ std::make_unique<ScriptParameters>(
-                 std::map<std::string, std::string>{{"required", "value"},
-                                                    {"arg0", "value0"}}),
+                 base::flat_map<std::string, std::string>{{"required", "value"},
+                                                          {"arg0", "value0"}}),
              options)));
 }
 
@@ -499,66 +453,55 @@ TEST_F(ControllerTest, NoRelevantScriptYet) {
   EXPECT_EQ(AutofillAssistantState::STARTING, controller_->GetState());
 }
 
-TEST_F(ControllerTest, ReportPromptAndActionsChanged) {
+TEST_F(ControllerTest, ClearUserActionsOnSelection) {
   SupportsScriptResponseProto script_response;
-  AddRunnableScript(&script_response, "script1");
-  AddRunnableScript(&script_response, "script2");
+  AddRunnableScript(&script_response, "runnable")
+      ->mutable_presentation()
+      ->set_autostart(true);
+
+  ActionsResponseProto runnable_script;
+  auto* prompt_action = runnable_script.add_actions()->mutable_prompt();
+  prompt_action->add_choices()->mutable_chip()->set_text("continue");
+  prompt_action->add_choices()->mutable_chip()->set_text("other");
+
+  SetupActionsForScript("runnable", runnable_script);
   SetNextScriptResponse(script_response);
 
-  EXPECT_CALL(mock_observer_, OnUserActionsChanged(SizeIs(2)));
-  Start("http://a.example.com/path");
-
-  EXPECT_EQ(AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT,
-            controller_->GetState());
-}
-
-TEST_F(ControllerTest, ClearUserActionsWhenRunning) {
-  SupportsScriptResponseProto script_response;
-  AddRunnableScript(&script_response, "script1");
-  AddRunnableScript(&script_response, "script2");
-  SetNextScriptResponse(script_response);
-
-  // Discover 2 scripts, one is selected and run (with no chips shown), then the
-  // same chips are shown.
   {
     testing::InSequence seq;
-    // Discover 2 scripts, script1 and script2.
+    // User actions are cleared when the script is executed.
+    EXPECT_CALL(mock_observer_, OnUserActionsChanged(SizeIs(0)));
+    // The prompt aciton has 2 chips.
     EXPECT_CALL(mock_observer_, OnUserActionsChanged(SizeIs(2)));
-    // Set of chips is cleared while running script1.
+    // When one chip is selected the user actions are cleared.
     EXPECT_CALL(mock_observer_, OnUserActionsChanged(SizeIs(0)));
     // This test doesn't specify what happens after that.
     EXPECT_CALL(mock_observer_, OnUserActionsChanged(_)).Times(AnyNumber());
   }
-  Start("http://a.example.com/path");
+  Start();
   EXPECT_TRUE(controller_->PerformUserAction(0));
 }
 
-TEST_F(ControllerTest, ShowFirstInitialStatusMessage) {
+TEST_F(ControllerTest, ClearDirectActionsWhenRunning) {
   SupportsScriptResponseProto script_response;
   AddRunnableScript(&script_response, "script1");
+  AddRunnableScript(&script_response, "script2");
 
-  SupportedScriptProto* script2 =
-      AddRunnableScript(&script_response, "script2");
-  script2->mutable_presentation()->set_initial_prompt("script2 prompt");
-  script2->mutable_presentation()->set_priority(10);
+  ActionsResponseProto runnable_script;
+  auto* prompt_action = runnable_script.add_actions()->mutable_prompt();
+  prompt_action->add_choices()->mutable_chip()->set_text("continue");
 
-  SupportedScriptProto* script3 =
-      AddRunnableScript(&script_response, "script3");
-  script3->mutable_presentation()->set_initial_prompt("script3 prompt");
-  script3->mutable_presentation()->set_priority(5);
-
-  SupportedScriptProto* script4 =
-      AddRunnableScript(&script_response, "script4");
-  script4->mutable_presentation()->set_initial_prompt("script4 prompt");
-  script4->mutable_presentation()->set_priority(8);
-
+  SetupActionsForScript("script1", runnable_script);
   SetNextScriptResponse(script_response);
 
-  Start("http://a.example.com/path");
-
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(4));
-  // Script3, with higher priority (lower number), wins.
-  EXPECT_EQ("script3 prompt", controller_->GetStatusMessage());
+  Track();
+  // We initially have 2 direct action scripts available.
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(2));
+  // We execute one of them.
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
+  // There are no direct actions available once the script is running.
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(0));
 }
 
 TEST_F(ControllerTest, ScriptStartMessage) {
@@ -578,7 +521,8 @@ TEST_F(ControllerTest, ScriptStartMessage) {
     EXPECT_CALL(mock_observer_, OnStatusMessageChanged("Starting Script..."));
     EXPECT_CALL(mock_observer_, OnStatusMessageChanged("Script running."));
   }
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
 }
 
 TEST_F(ControllerTest, UpdateClientSettings) {
@@ -665,11 +609,12 @@ TEST_F(ControllerTest, Stop) {
       .WillOnce(RunOnceCallback<5>(net::HTTP_OK, actions_response_str));
 
   Start();
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   testing::InSequence seq;
   EXPECT_CALL(mock_client_, Shutdown(Metrics::DropOutReason::SCRIPT_SHUTDOWN));
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
 }
 
 TEST_F(ControllerTest, CloseCustomTab) {
@@ -685,13 +630,14 @@ TEST_F(ControllerTest, CloseCustomTab) {
       .WillOnce(RunOnceCallback<5>(net::HTTP_OK, actions_response_str));
 
   Start();
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
   EXPECT_CALL(mock_observer_, CloseCustomTab()).Times(1);
 
   testing::InSequence seq;
   EXPECT_CALL(mock_client_,
               Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED));
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
 }
 
 TEST_F(ControllerTest, StopWithFeedbackChip) {
@@ -714,12 +660,13 @@ TEST_F(ControllerTest, StopWithFeedbackChip) {
       .WillOnce(RunOnceCallback<5>(net::HTTP_OK, actions_response_str));
 
   Start();
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   testing::InSequence seq;
   EXPECT_CALL(mock_client_,
               RecordDropOut(Metrics::DropOutReason::SCRIPT_SHUTDOWN));
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
   EXPECT_THAT(
       controller_->GetUserActions(),
       ElementsAre(Property(&UserAction::chip,
@@ -754,31 +701,20 @@ TEST_F(ControllerTest, Autostart) {
       ->set_autostart(true);
   SetNextScriptResponse(script_response);
 
-  EXPECT_CALL(*mock_service_, OnGetActions(StrEq("autostart"), _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, ""));
+  ActionsResponseProto autostart_script;
+  autostart_script.add_actions()->mutable_tell()->set_message("autostart");
+  autostart_script.add_actions()->mutable_stop();
+  SetupActionsForScript("autostart", autostart_script);
 
   EXPECT_CALL(mock_client_, AttachUI());
   Start("http://a.example.com/path");
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-
-  ActionsResponseProto runnable_script;
-  runnable_script.add_actions()->mutable_tell()->set_message("runnable");
-  runnable_script.add_actions()->mutable_stop();
-  SetupActionsForScript("runnable", runnable_script);
-
-  // The script "runnable" stops the flow and shutdowns the controller.
-  EXPECT_CALL(mock_client_,
-              RecordDropOut(Metrics::DropOutReason::SCRIPT_SHUTDOWN));
-  controller_->PerformUserAction(0);
   EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
 
   // Full history state transitions
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
                                    AutofillAssistantState::RUNNING,
-                                   AutofillAssistantState::PROMPT,
-                                   AutofillAssistantState::RUNNING,
                                    AutofillAssistantState::STOPPED));
-  EXPECT_THAT(keyboard_states_, ElementsAre(true, true, false, true, false));
+  EXPECT_THAT(keyboard_states_, ElementsAre(true, true, false));
 }
 
 TEST_F(ControllerTest,
@@ -800,7 +736,8 @@ TEST_F(ControllerTest,
       features::kAutofillAssistantFeedbackChip);
 
   SupportsScriptResponseProto script_response;
-  auto* autostart = AddRunnableScript(&script_response, "runnable");
+  auto* autostart =
+      AddRunnableScript(&script_response, "runnable", /*direct_action=*/false);
   autostart->mutable_presentation()->set_autostart(true);
   SetRepeatedScriptResponse(script_response);
 
@@ -820,51 +757,38 @@ TEST_F(ControllerTest, InitialUrlLoads) {
   controller_->Start(initialUrl, std::make_unique<TriggerContext>());
 }
 
-TEST_F(ControllerTest, ProgressIncreasesAtStart) {
-  EXPECT_EQ(0, controller_->GetProgress());
-  EXPECT_CALL(mock_observer_, OnProgressChanged(5));
+TEST_F(ControllerTest, ProgressSetAtStart) {
+  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_));
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   Start();
-  EXPECT_EQ(5, controller_->GetProgress());
-}
-
-TEST_F(ControllerTest, SetProgress) {
-  Start();
-  EXPECT_CALL(mock_observer_, OnProgressChanged(20));
-  controller_->SetProgress(20);
-  EXPECT_EQ(20, controller_->GetProgress());
-}
-
-TEST_F(ControllerTest, IgnoreProgressDecreases) {
-  Start();
-  EXPECT_CALL(mock_observer_, OnProgressChanged(Not(15))).Times(AnyNumber());
-  controller_->SetProgress(20);
-  controller_->SetProgress(15);
-  EXPECT_EQ(20, controller_->GetProgress());
+  EXPECT_EQ(0, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, SetProgressStep) {
+  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_));
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   Start();
 
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
-  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_))
-      .Times(1);
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(_)).Times(0);
+  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_));
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   controller_->SetStepProgressBarConfiguration(config);
-  EXPECT_TRUE(controller_->GetStepProgressBarConfiguration().has_value());
+  EXPECT_EQ(0, controller_->GetProgressActiveStep());
 
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(1)).Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(1));
   controller_->SetProgressActiveStep(1);
-  EXPECT_EQ(1, *controller_->GetProgressActiveStep());
+  EXPECT_EQ(1, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, IgnoreProgressStepDecreases) {
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   Start();
 
+  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_));
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
   controller_->SetStepProgressBarConfiguration(config);
@@ -872,87 +796,86 @@ TEST_F(ControllerTest, IgnoreProgressStepDecreases) {
   EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(Not(1)))
       .Times(AnyNumber());
   controller_->SetProgressActiveStep(2);
+  controller_->SetProgressActiveStep(1);
 }
 
 TEST_F(ControllerTest, NewProgressStepConfigurationClampsStep) {
   Start();
 
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
   config.add_annotated_step_icons()->set_identifier("icon3");
   controller_->SetStepProgressBarConfiguration(config);
 
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3)).Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3));
   controller_->SetProgressActiveStep(3);
-  EXPECT_EQ(3, *controller_->GetProgressActiveStep());
+  EXPECT_EQ(3, controller_->GetProgressActiveStep());
 
   ShowProgressBarProto::StepProgressBarConfiguration new_config;
-  new_config.set_use_step_progress_bar(true);
   new_config.add_annotated_step_icons()->set_identifier("icon1");
   new_config.add_annotated_step_icons()->set_identifier("icon2");
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(2)).Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(2));
   controller_->SetStepProgressBarConfiguration(new_config);
-  EXPECT_EQ(2, *controller_->GetProgressActiveStep());
+  EXPECT_EQ(2, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, ProgressStepWrapsNegativesToMax) {
   Start();
 
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
   config.add_annotated_step_icons()->set_identifier("icon3");
   controller_->SetStepProgressBarConfiguration(config);
 
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3)).Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3));
   controller_->SetProgressActiveStep(-1);
-  EXPECT_EQ(3, *controller_->GetProgressActiveStep());
+  EXPECT_EQ(3, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, ProgressStepClampsOverflowToMax) {
   Start();
 
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
   config.add_annotated_step_icons()->set_identifier("icon3");
   controller_->SetStepProgressBarConfiguration(config);
 
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3)).Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(3));
   controller_->SetProgressActiveStep(std::numeric_limits<int>::max());
-  EXPECT_EQ(3, *controller_->GetProgressActiveStep());
+  EXPECT_EQ(3, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, SetProgressStepFromIdentifier) {
   Start();
 
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
   controller_->SetStepProgressBarConfiguration(config);
 
-  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(1)).Times(1);
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(1));
   EXPECT_TRUE(controller_->SetProgressActiveStepIdentifier("icon2"));
-  EXPECT_EQ(1, *controller_->GetProgressActiveStep());
+  EXPECT_EQ(1, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, SetProgressStepFromUnknownIdentifier) {
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   Start();
+  EXPECT_EQ(0, controller_->GetProgressActiveStep());
 
+  EXPECT_CALL(mock_observer_, OnStepProgressBarConfigurationChanged(_));
+  EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(0));
   ShowProgressBarProto::StepProgressBarConfiguration config;
-  config.set_use_step_progress_bar(true);
   config.add_annotated_step_icons()->set_identifier("icon1");
   config.add_annotated_step_icons()->set_identifier("icon2");
   controller_->SetStepProgressBarConfiguration(config);
 
   EXPECT_CALL(mock_observer_, OnProgressActiveStepChanged(_)).Times(0);
   EXPECT_FALSE(controller_->SetProgressActiveStepIdentifier("icon3"));
-  EXPECT_FALSE(controller_->GetProgressActiveStep().has_value());
+  EXPECT_EQ(0, controller_->GetProgressActiveStep());
 }
 
 TEST_F(ControllerTest, AttachUIWhenStarting) {
@@ -990,13 +913,13 @@ TEST_F(ControllerTest, KeepCheckingForElement) {
        ->mutable_match() = ToSelectorProto("#element");
   SetNextScriptResponse(script_response);
 
-  Start("http://a.example.com/path");
+  Track();
   // No scripts yet; the element doesn't exit.
-  EXPECT_EQ(AutofillAssistantState::STARTING, controller_->GetState());
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(0));
 
   for (int i = 0; i < 3; i++) {
     task_environment()->FastForwardBy(base::Seconds(1));
-    EXPECT_EQ(AutofillAssistantState::STARTING, controller_->GetState());
+    EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(0));
   }
 
   EXPECT_CALL(*mock_web_controller_, FindElement(_, _, _))
@@ -1006,8 +929,7 @@ TEST_F(ControllerTest, KeepCheckingForElement) {
       }));
   task_environment()->FastForwardBy(base::Seconds(1));
 
-  EXPECT_EQ(AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT,
-            controller_->GetState());
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 }
 
 TEST_F(ControllerTest, ScriptTimeoutError) {
@@ -1231,11 +1153,12 @@ TEST_F(ControllerTest, WaitForNavigationActionTimesOut) {
                       RunOnceCallback<5>(net::HTTP_OK, "")));
 
   Start("http://a.example.com/path");
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   // Start script, which waits for some navigation event to happen after the
   // expect_navigation action has run..
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
 
   // No navigation event happened within the action timeout and the script ends.
   EXPECT_THAT(processed_actions_capture, SizeIs(0));
@@ -1264,11 +1187,12 @@ TEST_F(ControllerTest, WaitForNavigationActionStartWithinTimeout) {
                       RunOnceCallback<5>(net::HTTP_OK, "")));
 
   Start("http://a.example.com/path");
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   // Start script, which waits for some navigation event to happen after the
   // expect_navigation action has run..
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
 
   // Navigation starts, but does not end, within the timeout.
   EXPECT_THAT(processed_actions_capture, SizeIs(0));
@@ -1302,7 +1226,7 @@ TEST_F(ControllerTest, SetScriptStoreConfig) {
       .WillOnce(SaveArg<0>(&script_store_config));
 
   Start("http://a.example.com/path");
-  controller_->GetUserActions();
+  controller_->GetDirectActionScripts();
 
   EXPECT_THAT(script_store_config.bundle_path(), Eq("bundle/path"));
   EXPECT_THAT(script_store_config.bundle_version(), Eq(12));
@@ -1338,14 +1262,15 @@ TEST_F(ControllerTest, Track) {
 
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   // Execute the script, which requires showing the UI, then go back to tracking
   // mode
   EXPECT_CALL(mock_client_, AttachUI());
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   // Move to a domain for which there are no scripts. This causes the controller
   // to stop.
@@ -1386,9 +1311,10 @@ TEST_F(ControllerTest, TrackScriptWithNoUI) {
   SetLastCommittedUrl(GURL("http://example.com/"));
 
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 
   // Check the full history of state transitions.
@@ -1411,11 +1337,12 @@ TEST_F(ControllerTest, TrackScriptShowUIOnTell) {
   SetLastCommittedUrl(GURL("http://example.com/"));
 
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   EXPECT_FALSE(controller_->NeedsUI());
   EXPECT_CALL(mock_client_, AttachUI());
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 
   // As the controller is back in tracking mode; A UI is not needed anymore.
@@ -1442,11 +1369,12 @@ TEST_F(ControllerTest, TrackScriptShowUIOnError) {
   SetLastCommittedUrl(GURL("http://example.com/"));
 
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   EXPECT_FALSE(controller_->NeedsUI());
   EXPECT_CALL(mock_client_, AttachUI());
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 
   // As the controller is back in tracking mode; A UI is not needed anymore.
@@ -1473,16 +1401,17 @@ TEST_F(ControllerTest, TrackContinuesAfterScriptError) {
 
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   EXPECT_CALL(*mock_service_, OnGetActions(StrEq("runnable"), _, _, _, _, _))
       .WillOnce(RunOnceCallback<5>(net::HTTP_UNAUTHORIZED, ""));
 
   // When the script fails, the controller transitions to STOPPED state, then
   // right away back to TRACKING state.
-  EXPECT_TRUE(controller_->PerformUserAction(0));
+  EXPECT_TRUE(
+      controller_->PerformDirectAction(0, std::make_unique<TriggerContext>()));
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   // Check the full history of state transitions.
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::TRACKING,
@@ -1508,7 +1437,8 @@ TEST_F(ControllerTest, TrackReportsFirstSetOfScripts) {
                          [](Controller* controller, bool* is_done) {
                            // User actions must have been set when this is
                            // called
-                           EXPECT_THAT(controller->GetUserActions(), SizeIs(1));
+                           EXPECT_THAT(controller->GetDirectActionScripts(),
+                                       SizeIs(1));
                            *is_done = true;
                          },
                          base::Unretained(controller_.get()),
@@ -1589,7 +1519,7 @@ TEST_F(ControllerTest, TrackReportsAlreadyDone) {
 TEST_F(ControllerTest, TrackThenAutostart) {
   SupportsScriptResponseProto script_response;
   AddRunnableScript(&script_response, "runnable");
-  AddRunnableScript(&script_response, "autostart")
+  AddRunnableScript(&script_response, "autostart", /*direct_action=*/false)
       ->mutable_presentation()
       ->set_autostart(true);
   SetNextScriptResponse(script_response);
@@ -1597,10 +1527,12 @@ TEST_F(ControllerTest, TrackThenAutostart) {
   SetLastCommittedUrl(GURL("http://example.com/"));
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
-  EXPECT_CALL(*mock_service_, OnGetActions(StrEq("autostart"), _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, ""));
+  ActionsResponseProto autostart_script;
+  autostart_script.add_actions()->mutable_tell()->set_message("autostart");
+  autostart_script.add_actions()->mutable_stop();
+  SetupActionsForScript("autostart", autostart_script);
 
   ActionsResponseProto runnable_script;
   runnable_script.add_actions()->mutable_tell()->set_message("runnable");
@@ -1609,19 +1541,19 @@ TEST_F(ControllerTest, TrackThenAutostart) {
 
   EXPECT_CALL(mock_client_, AttachUI());
   Start("http://example.com/");
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-  EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
+  EXPECT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
 
   // Run "runnable", which then calls stop and ends. The controller should then
   // go back to TRACKING mode.
-  controller_->PerformUserAction(0);
+  controller_->PerformDirectAction(0, std::make_unique<TriggerContext>());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 
   // Full history of state transitions.
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::TRACKING,
                                    AutofillAssistantState::STARTING,
                                    AutofillAssistantState::RUNNING,
-                                   AutofillAssistantState::PROMPT,
+                                   AutofillAssistantState::TRACKING,
                                    AutofillAssistantState::RUNNING,
                                    AutofillAssistantState::TRACKING));
   EXPECT_THAT(keyboard_states_,
@@ -1840,11 +1772,13 @@ TEST_F(ControllerTest, UnexpectedNavigationDuringPromptAction_Tracking) {
   SetLastCommittedUrl(GURL("http://example.com/"));
   controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
-  EXPECT_EQ(controller_->GetUserActions()[0].chip().text, "runnable");
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
+  EXPECT_EQ(controller_->GetDirectActionScripts()[0].direct_action.names.count(
+                "runnable"),
+            1u);
 
   // Start the script, which should show a prompt with the continue chip.
-  controller_->PerformUserAction(0);
+  controller_->PerformDirectAction(0, std::make_unique<TriggerContext>());
   EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
   EXPECT_EQ(controller_->GetUserActions()[0].chip().text, "continue");
@@ -1863,8 +1797,10 @@ TEST_F(ControllerTest, UnexpectedNavigationDuringPromptAction_Tracking) {
       web_contents(), GURL("http://example.com/otherpage"));
 
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
-  EXPECT_EQ(controller_->GetUserActions()[0].chip().text, "runnable");
+  ASSERT_THAT(controller_->GetDirectActionScripts(), SizeIs(1));
+  EXPECT_EQ(controller_->GetDirectActionScripts()[0].direct_action.names.count(
+                "runnable"),
+            1u);
 
   // Full history of state transitions.
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::TRACKING,
@@ -2089,7 +2025,6 @@ TEST_F(ControllerTest,
 
 TEST_F(ControllerTest, UserDataFormEmpty) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
 
   // Request nothing, expect continue button to be enabled.
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
@@ -2104,7 +2039,6 @@ TEST_F(ControllerTest, UserDataFormEmpty) {
 
 TEST_F(ControllerTest, UserDataFormContactInfo) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
 
   options->required_contact_data_pieces.push_back(
       MakeRequiredDataPiece(autofill::ServerFieldType::NAME_FULL));
@@ -2134,7 +2068,7 @@ TEST_F(ControllerTest, UserDataFormContactInfo) {
   contact_profile.SetRawInfo(autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
                              u"+1 23 456 789 01");
   controller_->SetContactInfo(
-      std::make_unique<autofill::AutofillProfile>(contact_profile));
+      std::make_unique<autofill::AutofillProfile>(contact_profile), UNKNOWN);
   EXPECT_THAT(controller_->GetUserData()
                   ->selected_address("selected_profile")
                   ->Compare(contact_profile),
@@ -2143,7 +2077,6 @@ TEST_F(ControllerTest, UserDataFormContactInfo) {
 
 TEST_F(ControllerTest, UserDataFormCreditCard) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
 
   options->request_payment_method = true;
   options->billing_address_name = "billing_address";
@@ -2169,7 +2102,7 @@ TEST_F(ControllerTest, UserDataFormCreditCard) {
       .Times(1);
   controller_->SetCreditCard(
       std::make_unique<autofill::CreditCard>(*credit_card),
-      /* billing_profile =*/nullptr);
+      /* billing_profile =*/nullptr, UNKNOWN);
 
   // Credit card with valid billing address is ok.
   auto billing_address = std::make_unique<autofill::AutofillProfile>(
@@ -2189,7 +2122,7 @@ TEST_F(ControllerTest, UserDataFormCreditCard) {
       .Times(1);
   controller_->SetCreditCard(
       std::make_unique<autofill::CreditCard>(*credit_card),
-      std::make_unique<autofill::AutofillProfile>(*billing_address));
+      std::make_unique<autofill::AutofillProfile>(*billing_address), UNKNOWN);
   EXPECT_THAT(GetUserData()->selected_card()->Compare(*credit_card), Eq(0));
   EXPECT_THAT(GetUserData()
                   ->selected_address("billing_address")
@@ -2226,7 +2159,7 @@ TEST_F(ControllerTest, UserDataChangesByOutOfLoopWrite) {
   contact_profile.SetRawInfo(autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER,
                              u"+1 23 456 789 01");
   controller_->SetContactInfo(
-      std::make_unique<autofill::AutofillProfile>(contact_profile));
+      std::make_unique<autofill::AutofillProfile>(contact_profile), UNKNOWN);
   EXPECT_THAT(controller_->GetUserData()
                   ->selected_address("selected_profile")
                   ->Compare(contact_profile),
@@ -2246,9 +2179,26 @@ TEST_F(ControllerTest, UserDataChangesByOutOfLoopWrite) {
       }));
 }
 
+TEST_F(ControllerTest, UserDataFormReload) {
+  auto options = std::make_unique<MockCollectUserDataOptions>();
+  base::MockCallback<base::OnceCallback<void(UserData*)>> reload_callback;
+  options->reload_data_callback = reload_callback.Get();
+  base::MockCallback<
+      base::RepeatingCallback<void(UserDataEventField, UserDataEventType)>>
+      change_callback;
+  options->selected_user_data_changed_callback = change_callback.Get();
+
+  controller_->SetCollectUserDataOptions(options.get());
+
+  EXPECT_CALL(change_callback, Run(UserDataEventField::CONTACT_EVENT,
+                                   UserDataEventType::ENTRY_CREATED));
+  EXPECT_CALL(reload_callback, Run);
+  controller_->ReloadUserData(UserDataEventField::CONTACT_EVENT,
+                              UserDataEventType::ENTRY_CREATED);
+}
+
 TEST_F(ControllerTest, SetTermsAndConditions) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
 
   options->accept_terms_and_conditions_text.assign("Accept T&C");
   testing::InSequence seq;
@@ -2270,9 +2220,11 @@ TEST_F(ControllerTest, SetTermsAndConditions) {
 
 TEST_F(ControllerTest, SetLoginOption) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
-
   options->request_login_choice = true;
+  LoginChoice login_choice;
+  login_choice.identifier = "guest";
+  options->login_choices.push_back(login_choice);
+
   testing::InSequence seq;
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(false)))))
@@ -2285,13 +2237,13 @@ TEST_F(ControllerTest, SetLoginOption) {
   EXPECT_CALL(mock_observer_,
               OnUserDataChanged(_, UserData::FieldChange::LOGIN_CHOICE))
       .Times(1);
-  controller_->SetLoginOption("1");
-  EXPECT_THAT(controller_->GetUserData()->login_choice_identifier_, Eq("1"));
+  controller_->SetLoginOption("guest");
+  EXPECT_THAT(controller_->GetUserData()->selected_login_choice()->identifier,
+              Eq("guest"));
 }
 
 TEST_F(ControllerTest, SetShippingAddress) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
 
   options->request_shipping = true;
   options->shipping_address_name = "shipping_address";
@@ -2315,7 +2267,7 @@ TEST_F(ControllerTest, SetShippingAddress) {
                                   Property(&UserAction::enabled, Eq(true)))))
       .Times(1);
   controller_->SetShippingAddress(
-      std::make_unique<autofill::AutofillProfile>(*shipping_address));
+      std::make_unique<autofill::AutofillProfile>(*shipping_address), UNKNOWN);
   EXPECT_THAT(GetUserData()
                   ->selected_address("shipping_address")
                   ->Compare(*shipping_address),
@@ -2383,7 +2335,7 @@ TEST_F(ControllerTest, SetOverlayColors) {
   controller_->Start(url,
                      std::make_unique<TriggerContext>(
                          /* parameters = */ std::make_unique<ScriptParameters>(
-                             std::map<std::string, std::string>{
+                             base::flat_map<std::string, std::string>{
                                  {"OVERLAY_COLORS", "#FF000000:#FFFFFFFF"}}),
                          TriggerContext::Options()));
 }
@@ -2395,10 +2347,11 @@ TEST_F(ControllerTest, EnableTts) {
 
   GURL url("http://a.example.com/path");
   controller_->Start(
-      url, std::make_unique<TriggerContext>(
-               /* parameters = */ std::make_unique<ScriptParameters>(
-                   std::map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
-               TriggerContext::Options()));
+      url,
+      std::make_unique<TriggerContext>(
+          /* parameters = */ std::make_unique<ScriptParameters>(
+              base::flat_map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
+          TriggerContext::Options()));
 
   EXPECT_TRUE(controller_->GetTtsButtonVisible());
 }
@@ -2410,10 +2363,11 @@ TEST_F(ControllerTest, DoNotEnableTtsWhenAccessibilityEnabled) {
 
   GURL url("http://a.example.com/path");
   controller_->Start(
-      url, std::make_unique<TriggerContext>(
-               /* parameters = */ std::make_unique<ScriptParameters>(
-                   std::map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
-               TriggerContext::Options()));
+      url,
+      std::make_unique<TriggerContext>(
+          /* parameters = */ std::make_unique<ScriptParameters>(
+              base::flat_map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
+          TriggerContext::Options()));
 
   EXPECT_FALSE(controller_->GetTtsButtonVisible());
 }
@@ -2449,14 +2403,15 @@ TEST_F(ControllerTest, SetTtsMessageReEnablesTtsButtonWithNonStickyStateExp) {
       .WillOnce(Return(false));
   GURL url("http://a.example.com/path");
   controller_->Start(
-      url, std::make_unique<TriggerContext>(
-               /* parameters = */ std::make_unique<ScriptParameters>(
-                   std::map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
-               TriggerContext::Options(
-                   /* experiment_ids= */ "4624822", /* is_cct= */ false,
-                   /* onboarding_shown= */ false, /* is_direct_action= */ false,
-                   /* initial_url= */ "http://a.example.com/path",
-                   /* is_in_chrome_triggered= */ false)));
+      url,
+      std::make_unique<TriggerContext>(
+          /* parameters = */ std::make_unique<ScriptParameters>(
+              base::flat_map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
+          TriggerContext::Options(
+              /* experiment_ids= */ "4624822", /* is_cct= */ false,
+              /* onboarding_shown= */ false, /* is_direct_action= */ false,
+              /* initial_url= */ "http://a.example.com/path",
+              /* is_in_chrome_triggered= */ false)));
   SetTtsButtonStateForTest(TtsButtonState::DISABLED);
 
   EXPECT_CALL(mock_observer_, OnTtsButtonStateChanged(TtsButtonState::DEFAULT));
@@ -2470,10 +2425,11 @@ TEST_F(ControllerTest,
       .WillOnce(Return(false));
   GURL url("http://a.example.com/path");
   controller_->Start(
-      url, std::make_unique<TriggerContext>(
-               /* parameters = */ std::make_unique<ScriptParameters>(
-                   std::map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
-               TriggerContext::Options()));
+      url,
+      std::make_unique<TriggerContext>(
+          /* parameters = */ std::make_unique<ScriptParameters>(
+              base::flat_map<std::string, std::string>{{"ENABLE_TTS", "true"}}),
+          TriggerContext::Options()));
   SetTtsButtonStateForTest(TtsButtonState::DISABLED);
 
   EXPECT_CALL(mock_observer_, OnTtsButtonStateChanged(_)).Times(0);
@@ -2590,9 +2546,9 @@ TEST_F(ControllerTest, HidingUiStopsAnyOngoingTts) {
 
 TEST_F(ControllerTest, AddParametersToUserData) {
   auto script_parameters = std::make_unique<ScriptParameters>(
-      std::map<std::string, std::string>{{"PARAM_A", "a"}});
+      base::flat_map<std::string, std::string>{{"PARAM_A", "a"}});
   script_parameters->UpdateDeviceOnlyParameters(
-      std::map<std::string, std::string>{{"PARAM_B", "b"}});
+      base::flat_map<std::string, std::string>{{"PARAM_B", "b"}});
   GURL url("http://a.example.com/path");
   controller_->Start(
       url, std::make_unique<TriggerContext>(std::move(script_parameters),
@@ -2867,7 +2823,6 @@ TEST_F(ControllerTest, SetDateTimeRangeSameDateValidTime) {
 
 TEST_F(ControllerTest, WriteUserData) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
   controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(mock_observer_,
@@ -2965,13 +2920,14 @@ TEST_F(ControllerTest, StartPasswordChangeFlow) {
   EXPECT_TRUE(controller_->Start(
       initialUrl, std::make_unique<TriggerContext>(
                       /* parameters = */ std::make_unique<ScriptParameters>(
-                          std::map<std::string, std::string>{
+                          base::flat_map<std::string, std::string>{
                               {"PASSWORD_CHANGE_USERNAME", "test_username"}}),
                       TriggerContext::Options())));
   // Initial navigation.
   SimulateNavigateToUrl(GURL("http://b.example.com"));
   EXPECT_EQ(GetUserData()->selected_login_->username, "test_username");
-  EXPECT_EQ(GetUserData()->selected_login_->origin, initialUrl.GetOrigin());
+  EXPECT_EQ(GetUserData()->selected_login_->origin,
+            initialUrl.DeprecatedGetOriginAsURL());
   EXPECT_EQ(controller_->GetCurrentURL().host(), "b.example.com");
 }
 
@@ -3180,7 +3136,6 @@ TEST_F(ControllerTest, NotifyObserversOfInitialStatusMessageAndProgressBar) {
   SetupActionsForScript("script", actions_response);
 
   ShowProgressBarProto::StepProgressBarConfiguration progress_bar_configuration;
-  progress_bar_configuration.set_use_step_progress_bar(true);
   progress_bar_configuration.add_annotated_step_icons()
       ->mutable_icon()
       ->set_icon(DrawableProto::PROGRESSBAR_DEFAULT_INITIAL_STEP);
@@ -3322,7 +3277,7 @@ TEST_F(ControllerTest, OnScriptErrorWillAppendVanishingFeedbackChip) {
 TEST_F(ControllerTest, UpdateChipVisibility) {
   InSequence seq;
 
-  UserAction user_action(ChipProto(), DirectActionProto(), true, std::string());
+  UserAction user_action(ChipProto(), true, std::string());
   EXPECT_CALL(mock_observer_,
               OnUserActionsChanged(UnorderedElementsAre(Property(
                   &UserAction::chip, Field(&Chip::visible, Eq(true))))))

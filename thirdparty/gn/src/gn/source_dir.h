@@ -133,7 +133,7 @@ class SourceDir {
   bool operator!=(const SourceDir& other) const { return !operator==(other); }
   bool operator<(const SourceDir& other) const { return value_ < other.value_; }
 
-  size_t hash() const { return value_.hash(); }
+  size_t hash() const { return value_.ptr_hash(); }
 
  private:
   friend class SourceFile;

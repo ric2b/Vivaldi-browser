@@ -65,14 +65,22 @@ void WebRuntimeFeatures::EnableWebBluetooth(bool enable) {
   RuntimeEnabledFeatures::SetWebBluetoothEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableWebBluetoothGetDevices(bool enable) {
+  RuntimeEnabledFeatures::SetWebBluetoothGetDevicesEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableWebBluetoothManufacturerDataFilter(bool enable) {
+  RuntimeEnabledFeatures::SetWebBluetoothManufacturerDataFilterEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableWebBluetoothRemoteCharacteristicNewWriteValue(
     bool enable) {
   RuntimeEnabledFeatures::
       SetWebBluetoothRemoteCharacteristicNewWriteValueEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableWebBluetoothManufacturerDataFilter(bool enable) {
-  RuntimeEnabledFeatures::SetWebBluetoothManufacturerDataFilterEnabled(enable);
+void WebRuntimeFeatures::EnableWebBluetoothWatchAdvertisements(bool enable) {
+  RuntimeEnabledFeatures::SetWebBluetoothWatchAdvertisementsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableCompositeBGColorAnimation(bool enable) {
@@ -383,6 +391,10 @@ void WebRuntimeFeatures::EnableTextFragmentAnchor(bool enable) {
   RuntimeEnabledFeatures::SetTextFragmentIdentifiersEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableCSSSelectorFragmentAnchor(bool enable) {
+  RuntimeEnabledFeatures::SetCSSSelectorFragmentAnchorEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnablePreciseMemoryInfo(bool enable) {
   RuntimeEnabledFeatures::SetPreciseMemoryInfoEnabled(enable);
 }
@@ -393,6 +405,10 @@ void WebRuntimeFeatures::EnablePrerender2(bool enable) {
 
 bool WebRuntimeFeatures::IsPrerender2Enabled() {
   return RuntimeEnabledFeatures::Prerender2EnabledByRuntimeFlag();
+}
+
+void WebRuntimeFeatures::EnablePrerender2RelatedFeatures(bool enable) {
+  RuntimeEnabledFeatures::SetPrerender2RelatedFeaturesEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableV8IdleTasks(bool enable) {
@@ -461,10 +477,6 @@ void WebRuntimeFeatures::EnableWebXRPlaneDetection(bool enable) {
 
 void WebRuntimeFeatures::EnableWebXRViewportScale(bool enable) {
   RuntimeEnabledFeatures::SetWebXRViewportScaleEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableWheelEventRegions(bool enable) {
-  RuntimeEnabledFeatures::SetWheelEventRegionsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnablePresentationAPI(bool enable) {
@@ -641,10 +653,6 @@ void WebRuntimeFeatures::EnableTrustTokensAlwaysAllowIssuance(bool enable) {
 
 void WebRuntimeFeatures::EnableInstalledApp(bool enable) {
   RuntimeEnabledFeatures::SetInstalledAppEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableTransformInterop(bool enable) {
-  RuntimeEnabledFeatures::SetTransformInteropEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableBackfaceVisibilityInterop(bool enable) {

@@ -16,7 +16,6 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/template_util.h"
 #include "util/build_config.h"
 
@@ -797,7 +796,8 @@ class LogMessage {
   SaveLastError last_error_;
 #endif
 
-  DISALLOW_COPY_AND_ASSIGN(LogMessage);
+  LogMessage(const LogMessage&) = delete;
+  LogMessage& operator=(const LogMessage&) = delete;
 };
 
 // This class is used to explicitly ignore values in the conditional
@@ -840,7 +840,8 @@ class Win32ErrorLogMessage {
   SystemErrorCode err_;
   LogMessage log_message_;
 
-  DISALLOW_COPY_AND_ASSIGN(Win32ErrorLogMessage);
+  Win32ErrorLogMessage(const Win32ErrorLogMessage&) = delete;
+  Win32ErrorLogMessage& operator=(const Win32ErrorLogMessage&) = delete;
 };
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 // Appends a formatted system message of the errno type
@@ -860,7 +861,8 @@ class ErrnoLogMessage {
   SystemErrorCode err_;
   LogMessage log_message_;
 
-  DISALLOW_COPY_AND_ASSIGN(ErrnoLogMessage);
+  ErrnoLogMessage(const ErrnoLogMessage&) = delete;
+  ErrnoLogMessage& operator=(const ErrnoLogMessage&) = delete;
 };
 #endif  // OS_WIN
 

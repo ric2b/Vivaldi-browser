@@ -11,9 +11,11 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/process/process_iterator.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+
+namespace ash {
 
 // Provides an interface to regularly getting a full snapshot of the running
 // processes on the system.
@@ -107,5 +109,7 @@ class ProcessSnapshotServer {
 
   base::WeakPtrFactory<ProcessSnapshotServer> weak_ptr_factory_;
 };
+
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_PROCESS_SNAPSHOT_SERVER_H_

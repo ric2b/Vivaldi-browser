@@ -50,7 +50,7 @@ static WXPixmap wxGetSubPixmap( WXDisplay* xdisplay, WXPixmap xpixmap,
 // wxMask
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxMask,wxObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxMask,wxObject);
 
 wxMask::wxMask()
 {
@@ -377,7 +377,7 @@ static WXPixmap wxGetSubPixmap( WXDisplay* xdisplay, WXPixmap xpixmap,
 
 #define M_BMPDATA ((wxBitmapRefData *)m_refData)
 
-IMPLEMENT_DYNAMIC_CLASS(wxBitmap,wxGDIObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxBitmap,wxGDIObject);
 
 bool wxBitmap::Create( int width, int height, int depth )
 {
@@ -1109,6 +1109,7 @@ wxPalette *wxBitmap::GetPalette() const
     return M_BMPDATA->m_palette;
 }
 
+#if WXWIN_COMPATIBILITY_3_0
 void wxBitmap::SetHeight( int height )
 {
     AllocExclusive();
@@ -1129,6 +1130,7 @@ void wxBitmap::SetDepth( int depth )
 
     M_BMPDATA->m_bpp = depth;
 }
+#endif
 
 void wxBitmap::SetPixmap( WXPixmap pixmap )
 {
@@ -1350,10 +1352,10 @@ public:
                         int WXUNUSED(depth) = 1)
         { return false; }
 
-    DECLARE_DYNAMIC_CLASS(wxXPMFileHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxXPMFileHandler);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxXPMFileHandler, wxBitmapHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxXPMFileHandler, wxBitmapHandler);
 
 bool wxXPMFileHandler::LoadFile(wxBitmap *bitmap,
                                 const wxString& name,
@@ -1445,7 +1447,7 @@ bool wxXPMFileHandler::SaveFile(const wxBitmap *bitmap,
 
 class wxXPMDataHandler : public wxBitmapHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxXPMDataHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxXPMDataHandler);
 public:
     wxXPMDataHandler()
     {
@@ -1471,7 +1473,7 @@ public:
                         int width, int height, int depth = 1);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxXPMDataHandler, wxBitmapHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxXPMDataHandler, wxBitmapHandler);
 
 bool wxXPMDataHandler::Create(wxBitmap *bitmap, const void* bits,
                               wxBitmapType WXUNUSED(flags),
@@ -1551,7 +1553,7 @@ bool wxXPMDataHandler::Create(wxBitmap *bitmap, const void* bits,
 
 class WXDLLEXPORT wxXBMDataHandler: public wxBitmapHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxXBMDataHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxXBMDataHandler);
 public:
     inline wxXBMDataHandler()
     {
@@ -1577,7 +1579,7 @@ public:
                         int width, int height, int depth = 1);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxXBMDataHandler, wxBitmapHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxXBMDataHandler, wxBitmapHandler);
 
 bool wxXBMDataHandler::Create( wxBitmap *bitmap, const void* bits,
                                wxBitmapType WXUNUSED(type),

@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "content/browser/navigation_subresource_loader_params.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/service_worker_client_info.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -30,13 +31,13 @@ struct ResourceRequest;
 
 namespace blink {
 class PendingURLLoaderFactoryBundle;
+class StorageKey;
 class ThrottlingURLLoader;
 class URLLoaderThrottle;
 }  // namespace blink
 
 namespace content {
 
-class AppCacheHost;
 class DevToolsAgentHostImpl;
 class RenderFrameHost;
 class ServiceWorkerContextWrapper;
@@ -84,9 +85,11 @@ class WorkerScriptFetcher : public network::mojom::URLLoaderClient {
       int worker_process_id,
       const DedicatedOrSharedWorkerToken& worker_token,
       const GURL& initial_request_url,
+      RenderFrameHost* ancestor_render_frame_host,
       RenderFrameHost* creator_render_frame_host,
       const net::SiteForCookies& site_for_cookies,
       const url::Origin& request_initiator,
+      const blink::StorageKey& request_initiator_storage_key,
       const net::IsolationInfo& trusted_isolation_info,
       network::mojom::CredentialsMode credentials_mode,
       blink::mojom::FetchClientSettingsObjectPtr
@@ -94,7 +97,6 @@ class WorkerScriptFetcher : public network::mojom::URLLoaderClient {
       network::mojom::RequestDestination request_destination,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       ServiceWorkerMainResourceHandle* service_worker_handle,
-      base::WeakPtr<AppCacheHost> appcache_host,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       scoped_refptr<network::SharedURLLoaderFactory>
           url_loader_factory_override,
@@ -114,7 +116,8 @@ class WorkerScriptFetcher : public network::mojom::URLLoaderClient {
                       const std::string& storage_domain,
                       bool file_support,
                       bool filesystem_url_support,
-                      RenderFrameHost* creator_render_frame_host);
+                      RenderFrameHost* creator_render_frame_host,
+                      const blink::StorageKey& request_initiator_storage_key);
 
   // Calculates the final response URL from the redirect chain, URLs fetched by
   // the service worker and the initial request URL. The logic is mostly based
@@ -146,7 +149,6 @@ class WorkerScriptFetcher : public network::mojom::URLLoaderClient {
           subresource_loader_factories,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       ServiceWorkerMainResourceHandle* service_worker_handle,
-      base::WeakPtr<AppCacheHost> appcache_host,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       scoped_refptr<network::SharedURLLoaderFactory>
           url_loader_factory_override,
@@ -181,13 +183,11 @@ class WorkerScriptFetcher : public network::mojom::URLLoaderClient {
   std::unique_ptr<network::ResourceRequest> resource_request_;
   CreateAndStartCallback callback_;
 
-  // URLLoader instance backed by a request interceptor (e.g.,
-  // AppCacheRequestHandler) or the network service.
+  // URLLoader instance backed by a request interceptor or the network service.
   std::unique_ptr<blink::ThrottlingURLLoader> url_loader_;
 
   // URLLoader instance for handling a response received from the default
-  // network loader. This can be provided by an interceptor. For example,
-  // AppCache's interceptor creates this for AppCache's fallback case.
+  // network loader. This can be provided by an interceptor.
   mojo::PendingRemote<network::mojom::URLLoader> response_url_loader_;
   mojo::Receiver<network::mojom::URLLoaderClient> response_url_loader_receiver_{
       this};

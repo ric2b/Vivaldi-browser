@@ -8,10 +8,9 @@
 #include <atomic>
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "content/common/content_export.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_video_capture.mojom.h"

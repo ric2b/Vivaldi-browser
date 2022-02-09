@@ -30,10 +30,16 @@ public:
                         const wxSize& size = wxDefaultSize,
                         long style = wxFONTBTN_DEFAULT_STYLE,
                         const wxValidator& validator = wxDefaultValidator,
-                        const wxString& name = wxFontPickerWidgetNameStr)
+                        const wxString& name = wxASCII_STR(wxFontPickerWidgetNameStr))
     {
         Create(parent, id, initial, pos, size, style, validator, name);
     }
+
+    virtual wxColour GetSelectedColour() const wxOVERRIDE
+        { return m_data.GetColour(); }
+
+    virtual void SetSelectedColour(const wxColour &colour) wxOVERRIDE
+        { m_data.SetColour(colour); UpdateFont(); }
 
     virtual ~wxGenericFontButton() {}
 
@@ -56,19 +62,19 @@ public:
                 const wxSize& size = wxDefaultSize,
                 long style = wxFONTBTN_DEFAULT_STYLE,
                 const wxValidator& validator = wxDefaultValidator,
-                const wxString& name = wxFontPickerWidgetNameStr);
+                const wxString& name = wxASCII_STR(wxFontPickerWidgetNameStr));
 
     void OnButtonClick(wxCommandEvent &);
 
 
 protected:
 
-    void UpdateFont();
+    void UpdateFont() wxOVERRIDE;
 
     wxFontData m_data;
 
 private:
-   DECLARE_DYNAMIC_CLASS(wxGenericFontButton)
+    wxDECLARE_DYNAMIC_CLASS(wxGenericFontButton);
 };
 
 

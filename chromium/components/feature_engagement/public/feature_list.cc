@@ -23,6 +23,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHAddToHomescreenTextBubbleFeature,
     &kIPHAutoDarkOptOutFeature,
     &kIPHAutoDarkUserEducationMessageFeature,
+    &kIPHAutoDarkUserEducationMessageOptInFeature,
     &kIPHDataSaverDetailFeature,
     &kIPHDataSaverMilestonePromoFeature,
     &kIPHDataSaverPreviewFeature,
@@ -46,6 +47,11 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadInfoBarDownloadContinuingFeature,
     &kIPHDownloadInfoBarDownloadsAreFasterFeature,
     &kIPHEphemeralTabFeature,
+    &kIPHFeatureNotificationGuideDefaultBrowserNotificationShownFeature,
+    &kIPHFeatureNotificationGuideSignInNotificationShownFeature,
+    &kIPHFeatureNotificationGuideIncognitoTabNotificationShownFeature,
+    &kIPHFeatureNotificationGuideNTPSuggestionCardNotificationShownFeature,
+    &kIPHFeatureNotificationGuideVoiceSearchNotificationShownFeature,
     &kIPHFeedCardMenuFeature,
     &kIPHHomepagePromoCardFeature,
     &kIPHIdentityDiscFeature,
@@ -67,6 +73,8 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHReadLaterAppMenuBookmarkThisPageFeature,
     &kIPHReadLaterAppMenuBookmarksFeature,
     &kIPHReadLaterBottomSheetFeature,
+    &kIPHShoppingListMenuItemFeature,
+    &kIPHShoppingListSaveFlowFeature,
     &kIPHTabGroupsQuicklyComparePagesFeature,
     &kIPHTabGroupsTapToSeeAnotherTabFeature,
     &kIPHTabGroupsYourTabsAreTogetherFeature,
@@ -105,8 +113,7 @@ const base::Feature* const kAllFeatures[] = {
 #if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
     &kIPHDesktopTabGroupsNewGroupFeature,
-    &kIPHFocusModeFeature,
-    &kIPHGlobalMediaControlsFeature,
+    &kIPHFocusHelpBubbleScreenReaderPromoFeature,
     &kIPHGMCCastStartStopFeature,
     &kIPHLiveCaptionFeature,
     &kIPHPasswordsAccountStorageFeature,
@@ -120,6 +127,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDesktopPwaInstallFeature,
     &kIPHProfileSwitchFeature,
     &kIPHUpdatedConnectionSecurityIndicatorsFeature,
+    &kIPHDesktopSharedHighlightingFeature,
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
 };

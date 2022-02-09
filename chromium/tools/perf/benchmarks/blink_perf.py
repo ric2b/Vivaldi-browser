@@ -63,7 +63,7 @@ def CreateStorySetFromPath(
   def _AddPage(path):
     if not path.endswith('.html'):
       return
-    if '../' in open(path, 'r').read():
+    if b'../' in open(path, 'rb').read():
       # If the page looks like it references its parent dir, include it.
       serving_dirs.add(os.path.dirname(os.path.dirname(path)))
     page_url = 'file://' + path.replace('\\', '/')
@@ -380,7 +380,7 @@ class _BlinkPerfBenchmark(perf_benchmark.PerfBenchmark):
                                   extra_tags=self.TAGS)
 
 
-@benchmark.Info(emails=['dmazzoni@chromium.org'],
+@benchmark.Info(emails=['aleventhal@chromium.org'],
                 component='Blink>Accessibility',
                 documentation_url='https://bit.ly/blink-perf-benchmarks')
 class BlinkPerfAccessibility(_BlinkPerfBenchmark):
@@ -712,6 +712,18 @@ class BlinkPerfWebAudio(_BlinkPerfBenchmark):
   @classmethod
   def Name(cls):
     return 'blink_perf.webaudio'
+
+
+@benchmark.Info(emails=['media-dev@chromium.org'],
+                component='Blink>WebCodecs',
+                documentation_url='https://bit.ly/blink-perf-benchmarks')
+class BlinkPerfWebCodecs(_BlinkPerfBenchmark):
+  SUBDIR = 'webcodecs'
+  TAGS = _BlinkPerfBenchmark.TAGS + ['all']
+
+  @classmethod
+  def Name(cls):
+    return 'UNSCHEDULED_blink_perf.webcodecs'
 
 
 @benchmark.Info(

@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/label.h"
 #include "gn/label_ptr.h"
 #include "gn/scope.h"
@@ -120,7 +119,8 @@ class CTool : public Tool {
   SubstitutionPattern link_output_;
   SubstitutionPattern depend_output_;
 
-  DISALLOW_COPY_AND_ASSIGN(CTool);
+  CTool(const CTool&) = delete;
+  CTool& operator=(const CTool&) = delete;
 };
 
 #endif  // TOOLS_GN_C_TOOL_H_

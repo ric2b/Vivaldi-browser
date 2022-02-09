@@ -9,7 +9,6 @@
 #include <string_view>
 #include <vector>
 
-#include "base/macros.h"
 #include "gn/label_pattern.h"
 #include "gn/source_dir.h"
 
@@ -66,7 +65,8 @@ class Visibility {
  private:
   std::vector<LabelPattern> patterns_;
 
-  DISALLOW_COPY_AND_ASSIGN(Visibility);
+  Visibility(const Visibility&) = delete;
+  Visibility& operator=(const Visibility&) = delete;
 };
 
 #endif  // TOOLS_GN_VISIBILITY_H_

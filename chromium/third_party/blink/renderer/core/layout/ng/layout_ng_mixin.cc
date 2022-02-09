@@ -25,7 +25,6 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/svg/layout_ng_svg_text.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_caption.h"
-#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_cell_legacy.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_box_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -50,7 +49,9 @@ void LayoutNGMixin<Base>::Paint(const PaintInfo& paint_info) const {
   // instead of |LayoutObject|, because this function cannot handle block
   // fragmented objects. We can come here only when |this| cannot traverse
   // fragments, or the parent is legacy.
-  DCHECK(!Base::CanTraversePhysicalFragments() ||
+  DCHECK(Base::GetNGPaginationBreakability() ==
+             LayoutNGBlockFlow::kForbidBreaks ||
+         !Base::CanTraversePhysicalFragments() ||
          !Base::Parent()->CanTraversePhysicalFragments());
   DCHECK_LE(Base::PhysicalFragmentCount(), 1u);
 
@@ -78,7 +79,9 @@ bool LayoutNGMixin<Base>::NodeAtPoint(HitTestResult& result,
                                       const PhysicalOffset& accumulated_offset,
                                       HitTestAction action) {
   // See |Paint()|.
-  DCHECK(!Base::CanTraversePhysicalFragments() ||
+  DCHECK(Base::GetNGPaginationBreakability() ==
+             LayoutNGBlockFlow::kForbidBreaks ||
+         !Base::CanTraversePhysicalFragments() ||
          !Base::Parent()->CanTraversePhysicalFragments());
   DCHECK_LE(Base::PhysicalFragmentCount(), 1u);
 
@@ -216,20 +219,6 @@ void LayoutNGMixin<Base>::RecalcVisualOverflow() {
   Base::RecalcVisualOverflow();
 }
 
-// The current fragment from the last layout cycle for this box.
-// When pre-NG layout calls functions of this block flow, fragment and/or
-// LayoutResult are required to compute the result.
-// TODO(kojii): Use the cached result for now, we may need to reconsider as the
-// cache evolves.
-template <typename Base>
-const NGPhysicalBoxFragment* LayoutNGMixin<Base>::CurrentFragment() const {
-  const NGLayoutResult* cached_layout_result = Base::GetCachedLayoutResult();
-  if (!cached_layout_result)
-    return nullptr;
-
-  return &To<NGPhysicalBoxFragment>(cached_layout_result->PhysicalFragment());
-}
-
 template <typename Base>
 bool LayoutNGMixin<Base>::IsOfType(LayoutObject::LayoutObjectType type) const {
   return type == LayoutObject::kLayoutObjectNGMixin || Base::IsOfType(type);
@@ -237,34 +226,22 @@ bool LayoutNGMixin<Base>::IsOfType(LayoutObject::LayoutObjectType type) const {
 
 template <typename Base>
 MinMaxSizes LayoutNGMixin<Base>::ComputeIntrinsicLogicalWidths() const {
+  DCHECK(!Base::IsTableCell());
+
   NGBlockNode node(const_cast<LayoutNGMixin<Base>*>(this));
   if (!node.CanUseNewLayout())
     return Base::ComputeIntrinsicLogicalWidths();
 
   NGConstraintSpace space = ConstraintSpaceForMinMaxSizes();
-  MinMaxSizes sizes = node.ComputeMinMaxSizes(node.Style().GetWritingMode(),
-                                              MinMaxSizesType::kContent, space)
-                          .sizes;
-
-  if (Base::IsTableCell()) {
-    // If a table cell, or the column that it belongs to, has a specified fixed
-    // positive inline-size, and the measured intrinsic max size is less than
-    // that, use specified size as max size.
-    LayoutNGTableCellInterface* cell =
-        ToInterface<LayoutNGTableCellInterface>(node.GetLayoutBox());
-    Length table_cell_width = cell->StyleOrColLogicalWidth();
-    if (table_cell_width.IsFixed() && table_cell_width.Value() > 0) {
-      sizes.max_size = std::max(sizes.min_size,
-                                Base::AdjustBorderBoxLogicalWidthForBoxSizing(
-                                    LayoutUnit(table_cell_width.Value())));
-    }
-  }
-
-  return sizes;
+  return node
+      .ComputeMinMaxSizes(node.Style().GetWritingMode(),
+                          MinMaxSizesType::kContent, space)
+      .sizes;
 }
 
 template <typename Base>
 NGConstraintSpace LayoutNGMixin<Base>::ConstraintSpaceForMinMaxSizes() const {
+  DCHECK(!Base::IsTableCell());
   const ComputedStyle& style = Base::StyleRef();
 
   NGConstraintSpaceBuilder builder(style.GetWritingMode(),
@@ -273,15 +250,6 @@ NGConstraintSpace LayoutNGMixin<Base>::ConstraintSpaceForMinMaxSizes() const {
   builder.SetAvailableSize(
       {Base::ContainingBlockLogicalWidthForContent(),
        LayoutBoxUtils::AvailableLogicalHeight(*this, Base::ContainingBlock())});
-
-  // Table cells borders may be collapsed, we can't calculate these directly
-  // from the style.
-  if (Base::IsTableCell()) {
-    DCHECK(Base::IsTableCellLegacy());
-    builder.SetIsTableCell(true, /* is_legacy_table_cell */ true);
-    builder.SetTableCellBorders({Base::BorderStart(), Base::BorderEnd(),
-                                 Base::BorderBefore(), Base::BorderAfter()});
-  }
 
   return builder.ToConstraintSpace();
 }
@@ -357,11 +325,10 @@ void LayoutNGMixin<Base>::UpdateOutOfFlowBlockLayout() {
   auto* layout_view = DynamicTo<LayoutView>(container);
   if (layout_view && !Base::GetDocument().Printing()) {
     if (LocalFrameView* frame_view = layout_view->GetFrameView()) {
-      IntSize size =
-          frame_view->LayoutViewport()->ExcludeScrollbars(frame_view->Size());
-      PhysicalSize physical_size(size);
+      PhysicalSize size(
+          frame_view->LayoutViewport()->ExcludeScrollbars(frame_view->Size()));
       initial_containing_block_fixed_size =
-          physical_size.ConvertToLogical(container->Style()->GetWritingMode());
+          size.ConvertToLogical(container->Style()->GetWritingMode());
     }
   }
   // We really only want to lay out ourselves here, so we pass |this| to
@@ -415,12 +382,11 @@ LayoutNGMixin<Base>::UpdateInFlowBlockLayout() {
   // If we are a layout root, use the previous space if available. This will
   // include any stretched sizes if applicable.
   NGConstraintSpace constraint_space =
-      is_layout_root && previous_result
+      is_layout_root && previous_result &&
+              previous_result->GetConstraintSpaceForCaching()
+                      .GetWritingMode() == Base::StyleRef().GetWritingMode()
           ? previous_result->GetConstraintSpaceForCaching()
           : NGConstraintSpace::CreateFromLayoutObject(*this);
-
-  DCHECK_EQ(constraint_space.GetWritingMode(),
-            Base::StyleRef().GetWritingMode());
 
   scoped_refptr<const NGLayoutResult> result =
       NGBlockNode(this).Layout(constraint_space);
@@ -434,7 +400,8 @@ LayoutNGMixin<Base>::UpdateInFlowBlockLayout() {
 
   // Even if we are a layout root, our baseline may have shifted. In this
   // (rare) case, mark our containing-block for layout.
-  if (is_layout_root && previous_result) {
+  // The baseline of SVG <text> doesn't affect other boxes.
+  if (is_layout_root && previous_result && !Base::IsNGSVGText()) {
     if (To<NGPhysicalBoxFragment>(previous_result->PhysicalFragment())
             .Baseline() != physical_fragment.Baseline()) {
       if (auto* containing_block = Base::ContainingBlock()) {
@@ -478,6 +445,5 @@ template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutRubyRun>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutRubyText>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutSVGBlock>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutTableCaption>;
-template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutTableCell>;
 
 }  // namespace blink

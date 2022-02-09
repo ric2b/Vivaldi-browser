@@ -12,7 +12,6 @@
 #import <Foundation/Foundation.h>
 
 #import "base/mac/scoped_nsobject.h"
-#include "base/macros.h"
 #include "ui/vivaldi_fullscreen_menubar_tracker_mac.h"
 #include "ui/vivaldi_native_app_window_views.h"
 

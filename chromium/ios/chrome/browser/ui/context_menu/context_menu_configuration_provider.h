@@ -18,24 +18,15 @@ class Browser;
 @interface ContextMenuConfigurationProvider : NSObject
 
 // Instantiates with a |browser|.
-- (instancetype)initWithBrowser:(Browser*)browser;
+- (instancetype)initWithBrowser:(Browser*)browser
+             baseViewController:(UIViewController*)baseViewController;
 
 // Returns a configuration for a context menu, based on its associated
 // |webState|, |params| and |baseViewController|.
+// |params| is copied in order to be used in blocks.
 - (UIContextMenuConfiguration*)
     contextMenuConfigurationForWebState:(web::WebState*)webState
-                                 params:(const web::ContextMenuParams&)params
-                     baseViewController:(UIViewController*)baseViewController;
-
-// DEPRECATED.
-// Displays a context menu using an action sheet on |baseViewController|.
-- (void)showLegacyContextMenuForWebState:(web::WebState*)webState
-                                  params:(const web::ContextMenuParams&)params
-                      baseViewController:(UIViewController*)baseViewController;
-
-// DEPRECATED.
-// Dismisses the context menu shown above.
-- (void)dismissLegacyContextMenu;
+                                 params:(web::ContextMenuParams)params;
 
 @end
 

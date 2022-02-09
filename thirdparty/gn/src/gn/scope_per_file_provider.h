@@ -8,7 +8,6 @@
 #include <memory>
 #include <string_view>
 
-#include "base/macros.h"
 #include "gn/scope.h"
 
 // ProgrammaticProvider for a scope to provide it with per-file built-in
@@ -48,7 +47,8 @@ class ScopePerFileProvider : public Scope::ProgrammaticProvider {
   std::unique_ptr<Value> target_gen_dir_;
   std::unique_ptr<Value> target_out_dir_;
 
-  DISALLOW_COPY_AND_ASSIGN(ScopePerFileProvider);
+  ScopePerFileProvider(const ScopePerFileProvider&) = delete;
+  ScopePerFileProvider& operator=(const ScopePerFileProvider&) = delete;
 };
 
 #endif  // TOOLS_GN_SCOPE_PER_FILE_PROVIDER_H_

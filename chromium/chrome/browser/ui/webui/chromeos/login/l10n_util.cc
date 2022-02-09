@@ -20,12 +20,12 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/notreached.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
@@ -452,7 +452,7 @@ std::unique_ptr<base::ListValue> GetMinimalUILanguageList() {
   language_list->Append(CreateLanguageEntry(application_locale,
                                             language_native_display_name,
                                             language_native_display_name));
-  AdjustUILanguageList(std::string(), language_list.get());
+  AdjustUILanguageList(application_locale, language_list.get());
   return language_list;
 }
 

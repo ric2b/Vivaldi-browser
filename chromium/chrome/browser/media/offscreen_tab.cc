@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "components/media_router/browser/presentation/presentation_navigation_policy.h"
@@ -124,7 +125,7 @@ class OffscreenTab::WindowAdoptionAgent final : protected aura::WindowObserver {
     }
   }
 
-  aura::Window* content_window_;
+  raw_ptr<aura::Window> content_window_;
   base::WeakPtrFactory<WindowAdoptionAgent> weak_ptr_factory_{this};
 };
 #endif  // defined(USE_AURA)
@@ -253,7 +254,7 @@ void OffscreenTab::CanDownload(const GURL& url,
 }
 
 bool OffscreenTab::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   // Context menus should never be shown.  Do nothing, but indicate the context
   // menu was shown so that default implementation in libcontent does not

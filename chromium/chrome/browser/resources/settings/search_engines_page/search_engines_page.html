@@ -10,23 +10,28 @@
     </div>
     <div class="cr-row first" hidden="[[!showKeywordTriggerSetting_]]">
       <div class="flex cr-padded-text">
-        $i18n{searchEnginesKeyboardShortcutsTitle}
+        <div id="keyboardShortcutsTitle">
+          $i18n{searchEnginesKeyboardShortcutsTitle}
+        </div>
         <div class="secondary">
           $i18n{searchEnginesKeyboardShortcutsDescription}
         </div>
       </div>
     </div>
     <div class="list-frame" hidden="[[!showKeywordTriggerSetting_]]">
-      <settings-radio-group
-          pref="{{prefs.omnibox.keyword_space_triggering_enabled}}">
+      <settings-radio-group id="keyboardShortcutSettingGroup"
+          pref="{{prefs.omnibox.keyword_space_triggering_enabled}}"
+          on-change="onKeyboardShortcutSettingChange_">
         <controlled-radio-button class="list-item" name="true"
             pref="{{prefs.omnibox.keyword_space_triggering_enabled}}"
             label="$i18n{searchEnginesKeyboardShortcutsSpaceOrTab}"
+            aria-labelledby="keyboardShortcutsTitle"
             no-extension-indicator>
         </controlled-radio-button>
         <controlled-radio-button class="list-item" name="false"
             pref="{{prefs.omnibox.keyword_space_triggering_enabled}}"
             label="$i18n{searchEnginesKeyboardShortcutsTab}"
+            aria-labelledby="keyboardShortcutsTitle"
             no-extension-indicator>
         </controlled-radio-button>
       </settings-radio-group>
@@ -135,7 +140,7 @@
                 "[[isActiveSearchEnginesFlagEnabled_]]"
           show-query-url collapse-list
           expand-list-text="$i18n{searchEnginesAdditionalInactiveSites}"
-          name-column-header="$i18n{searchEnginesInactiveSite}">
+          name-column-header="$i18n{searchEnginesSiteOrPage}">
       </settings-search-engines-list>
     </template>
     <div id="noOtherEngines" class="list-frame"

@@ -75,10 +75,6 @@
 #include "ui/gl/gpu_preference.h"
 #include "ui/gl/gpu_switching_manager.h"
 
-#if defined(USE_OZONE) || defined(USE_X11)
-#include "ui/base/ui_base_features.h"
-#endif
-
 #if defined(OS_ANDROID)
 #include "base/android/application_status_listener.h"
 #endif
@@ -100,19 +96,13 @@ namespace content {
 
 namespace {
 
-// On X11 (Ozone and non-Ozone), we do not know GpuMemoryBuffer configuration
-// support until receiving the initial GPUInfo.
+// On X11, we do not know GpuMemoryBuffer configuration support until receiving
+// the initial GPUInfo.
 bool CanUpdateGmbGpuPreferences() {
 #if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform()) {
-    return !ui::OzonePlatform::GetInstance()
-                ->GetPlatformProperties()
-                .fetch_buffer_formats_for_gmb_on_gpu;
-  }
-#endif
-#if defined(USE_X11)
-  DCHECK(!features::IsUsingOzonePlatform());
-  return false;
+  return !ui::OzonePlatform::GetInstance()
+              ->GetPlatformProperties()
+              .fetch_buffer_formats_for_gmb_on_gpu;
 #else
   return true;
 #endif
@@ -233,6 +223,47 @@ void EnableIntelShaderCache() {
   }
 }
 #endif  // OS_WIN
+
+// These values are persistent to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// This should match enum CanvasOopRasterAndGpuAcceleration in
+//  \tools\metrics\histograms\enums.xml
+enum class CanvasOopRasterAndGpuAcceleration {
+  kAccelOop = 0,
+  kAccelNoOop = 1,
+  kNoAccelOop = 2,
+  kNoAccelNoOop = 3,
+  kMaxValue = kNoAccelNoOop,
+};
+
+void RecordCanvasAcceleratedOopRasterHistogram(
+    const gpu::GpuFeatureInfo& gpu_feature_info,
+    bool gpu_compositing_disabled) {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  bool accelerated_canvas =
+      gpu_feature_info
+              .status_values[gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS] ==
+          gpu::kGpuFeatureStatusEnabled &&
+      !command_line.HasSwitch(switches::kDisableAccelerated2dCanvas);
+  bool oopr_canvas =
+      gpu_feature_info
+          .status_values[gpu::GPU_FEATURE_TYPE_CANVAS_OOP_RASTERIZATION] ==
+      gpu::kGpuFeatureStatusEnabled;
+
+  CanvasOopRasterAndGpuAcceleration oop_acceleration_state =
+      CanvasOopRasterAndGpuAcceleration::kNoAccelNoOop;
+  if (!gpu_compositing_disabled) {
+    if (accelerated_canvas && oopr_canvas)
+      oop_acceleration_state = CanvasOopRasterAndGpuAcceleration::kAccelOop;
+    else if (accelerated_canvas && !oopr_canvas)
+      oop_acceleration_state = CanvasOopRasterAndGpuAcceleration::kAccelNoOop;
+    else if (!accelerated_canvas && oopr_canvas)
+      oop_acceleration_state = CanvasOopRasterAndGpuAcceleration::kNoAccelOop;
+  }
+  UMA_HISTOGRAM_ENUMERATION("GPU.CanvasOopRaster.OopRasterAndGpuAcceleration",
+                            oop_acceleration_state);
+}
 
 // Send UMA histograms about the enabled features and GPU properties.
 void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
@@ -1233,6 +1264,8 @@ void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
   if (update_histograms_) {
     UpdateFeatureStats(gpu_feature_info_);
     UpdateDriverBugListStats(gpu_feature_info_);
+    RecordCanvasAcceleratedOopRasterHistogram(gpu_feature_info_,
+                                              IsGpuCompositingDisabled());
   }
 }
 
@@ -1320,19 +1353,6 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   if (!use_gl.empty()) {
     command_line->AppendSwitchASCII(switches::kUseGL, use_gl);
   }
-
-#if !defined(OS_MAC)
-  // MacOSX bots use real GPU in tests.
-  if (browser_command_line->HasSwitch(switches::kHeadless)) {
-    if (command_line->HasSwitch(switches::kUseGL)) {
-      use_gl = command_line->GetSwitchValueASCII(switches::kUseGL);
-      // Don't append kOverrideUseSoftwareGLForHeadless when we need to enable
-      // GPU hardware for headless chromium.
-      if (use_gl != gl::kGLImplementationEGLName)
-        command_line->AppendSwitch(switches::kOverrideUseSoftwareGLForHeadless);
-    }
-  }
-#endif  // !OS_MAC
 }
 
 void GpuDataManagerImplPrivate::UpdateGpuPreferences(
@@ -1377,11 +1397,9 @@ void GpuDataManagerImplPrivate::UpdateGpuPreferences(
 #endif
 
 #if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform()) {
-    gpu_preferences->message_pump_type = ui::OzonePlatform::GetInstance()
-                                             ->GetPlatformProperties()
-                                             .message_pump_type_for_gpu;
-  }
+  gpu_preferences->message_pump_type = ui::OzonePlatform::GetInstance()
+                                           ->GetPlatformProperties()
+                                           .message_pump_type_for_gpu;
 #endif
 
 #if defined(OS_MAC)

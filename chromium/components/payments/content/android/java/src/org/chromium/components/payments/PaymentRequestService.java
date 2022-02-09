@@ -108,6 +108,9 @@ public class PaymentRequestService
     /** If not empty, use this error message for rejecting PaymentRequest.show(). */
     private String mRejectShowErrorMessage;
 
+    /** Internal reason for why PaymentRequest.show() should be rejected. */
+    private @AppCreationFailureReason int mRejectShowErrorReason = AppCreationFailureReason.UNKNOWN;
+
     /** Whether PaymentRequest.show() was invoked with a user gesture. */
     private boolean mIsUserGestureShow;
 
@@ -131,16 +134,9 @@ public class PaymentRequestService
     @Nullable
     private SecurePaymentConfirmationNoMatchingCredController mNoMatchingController;
 
-    /**
-     * A mapping of the payment method names to the corresponding payment method specific data. If
-     * STRICT_HAS_ENROLLED_AUTOFILL_INSTRUMENT is enabled, then the key "basic-card-payment-options"
-     * also maps to the following payment options:
-     *  - requestPayerEmail
-     *  - requestPayerName
-     *  - requestPayerPhone
-     *  - requestShipping
-     */
+    /** A mapping of the payment method names to the corresponding payment method specific data. */
     private HashMap<String, PaymentMethodData> mQueryForQuota;
+
     /**
      * True after at least one usable payment app has been found and the setting allows querying
      * this value. This value can be used to respond to hasEnrolledInstrument(). Should be read only
@@ -533,8 +529,7 @@ public class PaymentRequestService
         if (PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
                     PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION)
                 && methodData.containsKey(MethodStrings.SECURE_PAYMENT_CONFIRMATION)
-                && (methodData.size() > 1 || options.requestPayerEmail || options.requestPayerPhone
-                        || options.requestShipping || options.requestPayerName)) {
+                && !isValidSecurePaymentConfirmationRequest(methodData, options)) {
             mJourneyLogger.setAborted(AbortReason.INVALID_DATA_FROM_RENDERER);
             disconnectFromClientWithDebugMessage(ErrorStrings.INVALID_PAYMENT_METHODS_OR_DATA,
                     PaymentErrorReason.INVALID_DATA_FROM_RENDERER);
@@ -544,7 +539,6 @@ public class PaymentRequestService
         methodData = Collections.unmodifiableMap(methodData);
 
         mQueryForQuota = new HashMap<>(methodData);
-        mBrowserPaymentRequest.modifyQueryForQuotaCreatedIfNeeded(mQueryForQuota, mPaymentOptions);
 
         if (details.id == null || details.total == null
                 || !mDelegate.validatePaymentDetails(details)) {
@@ -572,6 +566,22 @@ public class PaymentRequestService
         logRequestedMethods(mSpec.getMethodData());
         startPaymentAppService();
         return true;
+    }
+
+    private boolean isValidSecurePaymentConfirmationRequest(
+            Map<String, PaymentMethodData> methodData, PaymentOptions options) {
+        if (methodData.size() > 1) return false;
+        if (options.requestPayerEmail || options.requestPayerPhone || options.requestShipping
+                || options.requestPayerName) {
+            return false;
+        }
+        PaymentMethodData spcMethodData = methodData.get(MethodStrings.SECURE_PAYMENT_CONFIRMATION);
+        if (spcMethodData.securePaymentConfirmation == null) return false;
+        if (spcMethodData.securePaymentConfirmation.payeeOrigin == null) return false;
+        Origin origin = new Origin(spcMethodData.securePaymentConfirmation.payeeOrigin);
+        if (origin.isOpaque()) return false;
+        if (origin.getScheme() == null) return false;
+        return origin.getScheme().equals("https");
     }
 
     private void startPaymentAppService() {
@@ -626,10 +636,12 @@ public class PaymentRequestService
         if (mClient != null) {
             boolean isSpc = PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
                                     PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION)
-                    && mSpec != null && mSpec.isSecurePaymentConfirmationRequested();
-            // Secure Payment Confirmation should make it indistinguishable
-            // to the merchant page as for whether the error is caused by
-            // user aborting or lack of credentials.
+                    && mSpec != null && mSpec.isSecurePaymentConfirmationRequested()
+                    && mRejectShowErrorReason != AppCreationFailureReason.ICON_DOWNLOAD_FAILED;
+            // Secure Payment Confirmation must make it indistinguishable to the merchant page as to
+            // whether an error is caused by user aborting or lack of credentials. An exception is
+            // erroring due to icon download failure; this happens before checking for credential
+            // matching and so is not a privacy leak.
             mClient.onError(isSpc ? PaymentErrorReason.NOT_ALLOWED_ERROR : reason,
                     isSpc ? ErrorStrings.WEB_AUTHN_OPERATION_TIMED_OUT_OR_NOT_ALLOWED
                           : debugMessage);
@@ -844,7 +856,12 @@ public class PaymentRequestService
         if (mSpec != null && !mSpec.isDestroyed() && mSpec.isSecurePaymentConfirmationRequested()
                 && !mBrowserPaymentRequest.hasAvailableApps()
                 && PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
-                        PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION)) {
+                        PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION)
+                // In most cases, we show the 'No Matching Payment Credential' dialog in order to
+                // preserve user privacy. An exception is failure to download the card art icon -
+                // because we download it in all cases, revealing a failure doesn't leak any
+                // information about the user to the site.
+                && mRejectShowErrorReason != AppCreationFailureReason.ICON_DOWNLOAD_FAILED) {
             mNoMatchingController =
                     SecurePaymentConfirmationNoMatchingCredController.create(mWebContents);
             mNoMatchingController.show(() -> {
@@ -893,10 +910,13 @@ public class PaymentRequestService
             assert mSpcAuthnUiController == null;
 
             mSpcAuthnUiController = SecurePaymentConfirmationAuthnController.create(mWebContents);
+            PaymentMethodData spcMethodData =
+                    mSpec.getMethodData().get(MethodStrings.SECURE_PAYMENT_CONFIRMATION);
+            assert spcMethodData != null;
             boolean success = mSpcAuthnUiController.show(
                     mBrowserPaymentRequest.getSelectedPaymentApp().getDrawableIcon(),
-                    mBrowserPaymentRequest.getSelectedPaymentApp().getLabel(), getRawTotal(),
-                    (response) -> {
+                    mBrowserPaymentRequest.getSelectedPaymentApp().getLabel(),
+                    getRawTotal(), (response) -> {
                         if (response) {
                             onSecurePaymentConfirmationUiAccepted(
                                     mBrowserPaymentRequest.getSelectedPaymentApp());
@@ -908,7 +928,7 @@ public class PaymentRequestService
                         }
 
                         mSpcAuthnUiController = null;
-                    });
+                    }, new Origin(spcMethodData.securePaymentConfirmation.payeeOrigin));
 
             if (success) {
                 mJourneyLogger.setShown();
@@ -1002,30 +1022,7 @@ public class PaymentRequestService
             }
             return new PaymentNotShownError(notShowReason, debugMessage, paymentErrorReason);
         }
-        return ensureHasSupportedPaymentMethodsForStrictShow(mIsUserGestureShow);
-    }
-
-    /**
-     * Ensures the available payment apps can make payment under the strict show() conditions.
-     * @param isUserGestureShow Whether the PaymentRequest.show() is triggered by user gesture.
-     * @return The error if the payment cannot be made; null otherwise.
-     */
-    @Nullable
-    private PaymentNotShownError ensureHasSupportedPaymentMethodsForStrictShow(
-            boolean isUserGestureShow) {
-        if (!isUserGestureShow || !mSpec.getMethodData().containsKey(MethodStrings.BASIC_CARD)
-                || mHasEnrolledInstrument || mHasNonAutofillApp
-                || !PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
-                        PaymentFeatureList.STRICT_HAS_ENROLLED_AUTOFILL_INSTRUMENT)) {
-            return null;
-        }
-
-        mRejectShowErrorMessage = ErrorStrings.STRICT_BASIC_CARD_SHOW_REJECT;
-        String debugMessage =
-                ErrorMessageUtil.getNotSupportedErrorMessage(mSpec.getMethodData().keySet()) + " "
-                + mRejectShowErrorMessage;
-        return new PaymentNotShownError(
-                NotShownReason.OTHER, debugMessage, PaymentErrorReason.NOT_SUPPORTED);
+        return null;
     }
 
     private boolean isInTwa() {
@@ -1051,7 +1048,9 @@ public class PaymentRequestService
         mHasEnrolledInstrument |= paymentApp.canMakePayment();
         mHasNonAutofillApp |= paymentApp.getPaymentAppType() != PaymentAppType.AUTOFILL;
 
-        if (paymentApp.getPaymentAppType() == PaymentAppType.AUTOFILL) {
+        // Note that only a test can add autofill payment apps when basic-card feature is disabled.
+        if (PaymentFeatureList.isEnabled(PaymentFeatureList.PAYMENT_REQUEST_BASIC_CARD)
+                && paymentApp.getPaymentAppType() == PaymentAppType.AUTOFILL) {
             mJourneyLogger.setAvailableMethod(PaymentMethodCategory.BASIC_CARD);
         } else if (paymentApp.getInstrumentMethodNames().contains(MethodStrings.GOOGLE_PAY)
                 || paymentApp.getInstrumentMethodNames().contains(MethodStrings.ANDROID_PAY)) {
@@ -1137,9 +1136,11 @@ public class PaymentRequestService
 
     // Implements PaymentAppFactoryDelegate:
     @Override
-    public void onPaymentAppCreationError(String errorMessage) {
+    public void onPaymentAppCreationError(
+            String errorMessage, @AppCreationFailureReason int errorReason) {
         if (TextUtils.isEmpty(mRejectShowErrorMessage)) {
             mRejectShowErrorMessage = errorMessage;
+            mRejectShowErrorReason = errorReason;
         }
     }
 
@@ -1706,9 +1707,7 @@ public class PaymentRequestService
     // PaymentAppFactoryParams implementation.
     @Override
     public boolean getMayCrawl() {
-        return !mBrowserPaymentRequest.isPaymentSheetBasedPaymentAppSupported()
-                || PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
-                        PaymentFeatureList.WEB_PAYMENTS_ALWAYS_ALLOW_JUST_IN_TIME_PAYMENT_APP);
+        return !mBrowserPaymentRequest.isPaymentSheetBasedPaymentAppSupported();
     }
 
     // PaymentAppFactoryParams implementation.

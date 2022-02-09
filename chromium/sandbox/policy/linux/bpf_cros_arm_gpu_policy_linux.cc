@@ -10,7 +10,6 @@
 #include <unistd.h>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/seccomp-bpf-helpers/syscall_sets.h"
@@ -53,14 +52,6 @@ ResultExpr CrosArmGpuProcessPolicy::EvaluateSyscall(int sysno) const {
     case __NR_sched_setscheduler:
     case __NR_sysinfo:
     case __NR_uname:
-    // We need fstatfs for supporting a local glibc patch
-    // which hooks into dlopen(), LD_PRELOAD, and --preload.
-    // https://chromium-review.googlesource.com/c/chromiumos/overlays/chromiumos-overlay/+/2910526
-    case __NR_fstatfs:
-#if defined(__arm__)
-    // Only available on ARM 32bit devices
-    case __NR_fstatfs64:
-#endif
       return Allow();
     // Allow only AF_UNIX for |domain|.
     case __NR_socket:

@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
-
 // Helper classes to generate Xcode project files.
 //
 // This code is based on gyp xcodeproj_file.py generator. It does not support
@@ -76,7 +74,8 @@ class PBXObjectVisitor {
   virtual void Visit(PBXObject* object) = 0;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXObjectVisitor);
+  PBXObjectVisitor(const PBXObjectVisitor&) = delete;
+  PBXObjectVisitor& operator=(const PBXObjectVisitor&) = delete;
 };
 
 // PBXObjectVisitorConst ------------------------------------------------------
@@ -88,7 +87,8 @@ class PBXObjectVisitorConst {
   virtual void Visit(const PBXObject* object) = 0;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXObjectVisitorConst);
+  PBXObjectVisitorConst(const PBXObjectVisitorConst&) = delete;
+  PBXObjectVisitorConst& operator=(const PBXObjectVisitorConst&) = delete;
 };
 
 // PBXObject ------------------------------------------------------------------
@@ -113,7 +113,8 @@ class PBXObject {
  private:
   std::string id_;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXObject);
+  PBXObject(const PBXObject&) = delete;
+  PBXObject& operator=(const PBXObject&) = delete;
 };
 
 // PBXBuildPhase --------------------------------------------------------------
@@ -133,7 +134,8 @@ class PBXBuildPhase : public PBXObject {
   std::vector<std::unique_ptr<PBXBuildFile>> files_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXBuildPhase);
+  PBXBuildPhase(const PBXBuildPhase&) = delete;
+  PBXBuildPhase& operator=(const PBXBuildPhase&) = delete;
 };
 
 // PBXTarget ------------------------------------------------------------------
@@ -162,7 +164,8 @@ class PBXTarget : public PBXObject {
   std::string name_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXTarget);
+  PBXTarget(const PBXTarget&) = delete;
+  PBXTarget& operator=(const PBXTarget&) = delete;
 };
 
 // PBXAggregateTarget ---------------------------------------------------------
@@ -180,7 +183,8 @@ class PBXAggregateTarget : public PBXTarget {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXAggregateTarget);
+  PBXAggregateTarget(const PBXAggregateTarget&) = delete;
+  PBXAggregateTarget& operator=(const PBXAggregateTarget&) = delete;
 };
 
 // PBXBuildFile ---------------------------------------------------------------
@@ -200,7 +204,8 @@ class PBXBuildFile : public PBXObject {
   const PBXFileReference* file_reference_ = nullptr;
   const PBXBuildPhase* build_phase_ = nullptr;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXBuildFile);
+  PBXBuildFile(const PBXBuildFile&) = delete;
+  PBXBuildFile& operator=(const PBXBuildFile&) = delete;
 };
 
 // PBXContainerItemProxy ------------------------------------------------------
@@ -218,7 +223,8 @@ class PBXContainerItemProxy : public PBXObject {
   const PBXProject* project_ = nullptr;
   const PBXTarget* target_ = nullptr;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXContainerItemProxy);
+  PBXContainerItemProxy(const PBXContainerItemProxy&) = delete;
+  PBXContainerItemProxy& operator=(const PBXContainerItemProxy&) = delete;
 };
 
 // PBXFileReference -----------------------------------------------------------
@@ -243,7 +249,8 @@ class PBXFileReference : public PBXObject {
   std::string path_;
   std::string type_;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXFileReference);
+  PBXFileReference(const PBXFileReference&) = delete;
+  PBXFileReference& operator=(const PBXFileReference&) = delete;
 };
 
 // PBXFrameworksBuildPhase ----------------------------------------------------
@@ -259,7 +266,8 @@ class PBXFrameworksBuildPhase : public PBXBuildPhase {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXFrameworksBuildPhase);
+  PBXFrameworksBuildPhase(const PBXFrameworksBuildPhase&) = delete;
+  PBXFrameworksBuildPhase& operator=(const PBXFrameworksBuildPhase&) = delete;
 };
 
 // PBXGroup -------------------------------------------------------------------
@@ -304,7 +312,8 @@ class PBXGroup : public PBXObject {
   bool is_source_ = false;
   bool autosorted_ = true;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXGroup);
+  PBXGroup(const PBXGroup&) = delete;
+  PBXGroup& operator=(const PBXGroup&) = delete;
 };
 
 // PBXNativeTarget ------------------------------------------------------------
@@ -333,7 +342,8 @@ class PBXNativeTarget : public PBXTarget {
   std::string product_type_;
   std::string product_name_;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXNativeTarget);
+  PBXNativeTarget(const PBXNativeTarget&) = delete;
+  PBXNativeTarget& operator=(const PBXNativeTarget&) = delete;
 };
 
 // PBXProject -----------------------------------------------------------------
@@ -389,7 +399,8 @@ class PBXProject : public PBXObject {
   PBXGroup* products_ = nullptr;
   PBXNativeTarget* target_for_indexing_ = nullptr;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXProject);
+  PBXProject(const PBXProject&) = delete;
+  PBXProject& operator=(const PBXProject&) = delete;
 };
 
 // PBXResourcesBuildPhase -----------------------------------------------------
@@ -405,7 +416,8 @@ class PBXResourcesBuildPhase : public PBXBuildPhase {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXResourcesBuildPhase);
+  PBXResourcesBuildPhase(const PBXResourcesBuildPhase&) = delete;
+  PBXResourcesBuildPhase& operator=(const PBXResourcesBuildPhase&) = delete;
 };
 
 // PBXShellScriptBuildPhase ---------------------------------------------------
@@ -425,7 +437,8 @@ class PBXShellScriptBuildPhase : public PBXBuildPhase {
   std::string name_;
   std::string shell_script_;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXShellScriptBuildPhase);
+  PBXShellScriptBuildPhase(const PBXShellScriptBuildPhase&) = delete;
+  PBXShellScriptBuildPhase& operator=(const PBXShellScriptBuildPhase&) = delete;
 };
 
 // PBXSourcesBuildPhase -------------------------------------------------------
@@ -441,7 +454,8 @@ class PBXSourcesBuildPhase : public PBXBuildPhase {
   void Print(std::ostream& out, unsigned indent) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PBXSourcesBuildPhase);
+  PBXSourcesBuildPhase(const PBXSourcesBuildPhase&) = delete;
+  PBXSourcesBuildPhase& operator=(const PBXSourcesBuildPhase&) = delete;
 };
 
 // PBXTargetDependency -----------------------------------------------------
@@ -463,7 +477,8 @@ class PBXTargetDependency : public PBXObject {
   const PBXTarget* target_ = nullptr;
   std::unique_ptr<PBXContainerItemProxy> container_item_proxy_;
 
-  DISALLOW_COPY_AND_ASSIGN(PBXTargetDependency);
+  PBXTargetDependency(const PBXTargetDependency&) = delete;
+  PBXTargetDependency& operator=(const PBXTargetDependency&) = delete;
 };
 
 // XCBuildConfiguration -------------------------------------------------------
@@ -483,7 +498,8 @@ class XCBuildConfiguration : public PBXObject {
   PBXAttributes attributes_;
   std::string name_;
 
-  DISALLOW_COPY_AND_ASSIGN(XCBuildConfiguration);
+  XCBuildConfiguration(const XCBuildConfiguration&) = delete;
+  XCBuildConfiguration& operator=(const XCBuildConfiguration&) = delete;
 };
 
 // XCConfigurationList --------------------------------------------------------
@@ -506,7 +522,8 @@ class XCConfigurationList : public PBXObject {
   std::vector<std::unique_ptr<XCBuildConfiguration>> configurations_;
   const PBXObject* owner_reference_ = nullptr;
 
-  DISALLOW_COPY_AND_ASSIGN(XCConfigurationList);
+  XCConfigurationList(const XCConfigurationList&) = delete;
+  XCConfigurationList& operator=(const XCConfigurationList&) = delete;
 };
 
 #endif  // TOOLS_GN_XCODE_OBJECT_H_

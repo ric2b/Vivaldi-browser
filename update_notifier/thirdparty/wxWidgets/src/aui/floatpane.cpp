@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_AUI
 
@@ -35,7 +32,7 @@
 #include "wx/msw/private.h"
 #endif
 
-IMPLEMENT_CLASS(wxAuiFloatingFrame, wxAuiFloatingFrameBaseClass)
+wxIMPLEMENT_CLASS(wxAuiFloatingFrame, wxAuiFloatingFrameBaseClass);
 
 wxAuiFloatingFrame::wxAuiFloatingFrame(wxWindow* parent,
                 wxAuiManager* owner_mgr,
@@ -52,10 +49,11 @@ wxAuiFloatingFrame::wxAuiFloatingFrame(wxWindow* parent,
                         (pane.HasMaximizeButton()?wxMAXIMIZE_BOX:0) |
                         (pane.IsFixed()?0:wxRESIZE_BORDER)
                         )
+    , m_ownerMgr(owner_mgr)
 {
-    m_ownerMgr = owner_mgr;
     m_moving = false;
     m_mgr.SetManagedWindow(this);
+    m_mgr.SetArtProvider(owner_mgr->GetArtProvider()->Clone());
     m_solidDrag = true;
 
     // find out if the system supports solid window drag.
@@ -165,6 +163,22 @@ wxAuiManager* wxAuiFloatingFrame::GetOwnerManager() const
     return m_ownerMgr;
 }
 
+bool wxAuiFloatingFrame::IsTopNavigationDomain(NavigationKind kind) const
+{
+    switch ( kind )
+    {
+        case Navigation_Tab:
+            break;
+
+        case Navigation_Accel:
+            // Floating frames are often used as tool palettes and it's
+            // convenient for the accelerators defined in the parent frame to
+            // work in them, so don't block their propagation.
+            return false;
+    }
+
+    return wxAuiFloatingFrameBaseClass::IsTopNavigationDomain(kind);
+}
 
 void wxAuiFloatingFrame::OnSize(wxSizeEvent& WXUNUSED(event))
 {
@@ -220,6 +234,7 @@ void wxAuiFloatingFrame::OnMoveEvent(wxMoveEvent& event)
 #ifndef __WXOSX__
     // skip if moving too fast to avoid massive redraws and
     // jumping hint windows
+    // TODO: Should 3x3px threshold increase on Retina displays?
     if ((abs(winRect.x - m_lastRect.x) > 3) ||
         (abs(winRect.y - m_lastRect.y) > 3))
     {
@@ -352,14 +367,14 @@ bool wxAuiFloatingFrame::isMouseDown()
 }
 
 
-BEGIN_EVENT_TABLE(wxAuiFloatingFrame, wxAuiFloatingFrameBaseClass)
+wxBEGIN_EVENT_TABLE(wxAuiFloatingFrame, wxAuiFloatingFrameBaseClass)
     EVT_SIZE(wxAuiFloatingFrame::OnSize)
     EVT_MOVE(wxAuiFloatingFrame::OnMoveEvent)
     EVT_MOVING(wxAuiFloatingFrame::OnMoveEvent)
     EVT_CLOSE(wxAuiFloatingFrame::OnClose)
     EVT_IDLE(wxAuiFloatingFrame::OnIdle)
     EVT_ACTIVATE(wxAuiFloatingFrame::OnActivate)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 
 #endif // wxUSE_AUI

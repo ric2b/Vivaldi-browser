@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
@@ -45,7 +42,7 @@
 // resources
 // ----------------------------------------------------------------------------
 
-// the application icon (under Windows and OS/2 it is in resources)
+// the application icon (under Windows it is in resources)
 #ifndef wxHAS_IMAGES_IN_RESOURCES
     #include "../sample.xpm"
 #endif
@@ -66,7 +63,7 @@ public:
                                   int WXUNUSED(flags) = 0,
                                   wxHeaderSortIconType WXUNUSED(sortArrow)
                                     = wxHDR_SORT_ICON_NONE,
-                                  wxHeaderButtonParams* params = NULL)
+                                  wxHeaderButtonParams* params = NULL) wxOVERRIDE
     {
         wxDCBrushChanger setBrush(dc, *wxBLUE_BRUSH);
         wxDCTextColourChanger setFgCol(dc, *wxWHITE);
@@ -86,7 +83,7 @@ public:
 // cases, but we show this here just for completeness)
 class MyTraits : public wxGUIAppTraits
 {
-    virtual wxRendererNative *CreateRenderer()
+    virtual wxRendererNative *CreateRenderer() wxOVERRIDE
     {
         // it will be deleted on program shutdown by wxWidgets itself
         return new MyRenderer;
@@ -97,10 +94,10 @@ class MyTraits : public wxGUIAppTraits
 class MyApp : public wxApp
 {
 public:
-    virtual bool OnInit();
+    virtual bool OnInit() wxOVERRIDE;
 
     // if we want MyTraits to be used we must override CreateTraits()
-    virtual wxAppTraits *CreateTraits() { return new MyTraits; }
+    virtual wxAppTraits *CreateTraits() wxOVERRIDE { return new MyTraits; }
 };
 
 // Define a new frame type: this is going to be our main frame
@@ -125,6 +122,8 @@ private:
         { OnToggleDrawFlag(event, wxCONTROL_CURRENT); }
     void OnDrawUndetermined(wxCommandEvent &event)
         { OnToggleDrawFlag(event, wxCONTROL_UNDETERMINED); }
+    void OnDrawSpecial(wxCommandEvent &event)
+        { OnToggleDrawFlag(event, wxCONTROL_SPECIAL); }
 
     void OnAlignLeft(wxCommandEvent& WXUNUSED(event))
         { OnChangeAlign(wxALIGN_LEFT); }
@@ -136,6 +135,7 @@ private:
     void OnUseIcon(wxCommandEvent& event);
     void OnUseBitmap(wxCommandEvent& event);
 
+    void OnUseGeneric(wxCommandEvent& event);
 #if wxUSE_DYNLIB_CLASS
     void OnLoad(wxCommandEvent& event);
     void OnUnload(wxCommandEvent& event);
@@ -161,7 +161,8 @@ public:
         m_flags = 0;
         m_align = wxALIGN_LEFT;
         m_useIcon =
-        m_useBitmap = false;
+        m_useBitmap =
+        m_useGeneric = false;
     }
 
     int GetFlags() const { return m_flags; }
@@ -170,13 +171,15 @@ public:
     void SetAlignment(int align) { m_align = align; }
     void SetUseIcon(bool useIcon) { m_useIcon = useIcon; }
     void SetUseBitmap(bool useBitmap) { m_useBitmap = useBitmap; }
+    void SetUseGeneric(bool useGeneric) { m_useGeneric = useGeneric; }
 
 private:
     void OnPaint(wxPaintEvent&)
     {
         wxPaintDC dc(this);
 
-        wxRendererNative& renderer = wxRendererNative::Get();
+        wxRendererNative& renderer = m_useGeneric ? wxRendererNative::GetGeneric()
+                                                  : wxRendererNative::Get();
 
         int x1 = 10,    // text offset
             x2 = 300,   // drawing offset
@@ -198,7 +201,9 @@ private:
             flagsString += "wxCONTROL_CHECKED ";
         if ( m_flags & wxCONTROL_UNDETERMINED )
             flagsString += "wxCONTROL_UNDETERMINED ";
-        if ( flagsString.empty() )
+        if (m_flags & wxCONTROL_SPECIAL)
+            flagsString += "wxCONTROL_SPECIAL ";
+        if (flagsString.empty())
             flagsString = "(none)";
         dc.DrawText("Using flags: " + flagsString, x1, y);
         y += lineHeight*3;
@@ -219,6 +224,8 @@ private:
                                                                wxART_LIST);
         }
 
+        // Note that we need to use GetDefault() explicitly to show the default
+        // implementation.
         dc.DrawText("DrawHeaderButton() (default)", x1, y);
         wxRendererNative::GetDefault().DrawHeaderButton(this, dc,
                                   wxRect(x2, y, widthHdr, heightHdr), m_flags,
@@ -237,15 +244,28 @@ private:
                               wxRect(wxPoint(x2, y), sizeCheck), m_flags);
         y += lineHeight + sizeCheck.y;
 
+        dc.DrawText("DrawCheckMark()", x1, y);
+        const wxSize sizeMark = renderer.GetCheckMarkSize(this);
+        renderer.DrawCheckMark(this, dc,
+                               wxRect(wxPoint(x2, y), sizeMark), m_flags);
+        y += lineHeight + sizeMark.y;
+
         dc.DrawText("DrawRadioBitmap()", x1, y);
         renderer.DrawRadioBitmap(this, dc,
                                  wxRect(wxPoint(x2, y), sizeCheck), m_flags);
         y += lineHeight + sizeCheck.y;
 
+        dc.DrawText("DrawCollapseButton()", x1, y);
+        const wxSize sizeCollapse = renderer.GetCollapseButtonSize(this, dc);
+        renderer.DrawCollapseButton(this, dc,
+                                    wxRect(wxPoint(x2, y), sizeCollapse), m_flags);
+        y += lineHeight + sizeCollapse.y;
+
         dc.DrawText("DrawTreeItemButton()", x1, y);
+        const wxSize sizeExpand = renderer.GetExpanderSize(this);
         renderer.DrawTreeItemButton(this, dc,
-                                    wxRect(x2, y, 20, 20), m_flags);
-        y += lineHeight + 20;
+                                    wxRect(wxPoint(x2, y), sizeExpand), m_flags);
+        y += lineHeight + sizeExpand.y;
 
 #ifdef wxHAS_DRAW_TITLE_BAR_BITMAP
         dc.DrawText("DrawTitleBarBitmap()", x1, y);
@@ -267,12 +287,44 @@ private:
 
         y += lineHeight + rBtn.height;
 #endif // wxHAS_DRAW_TITLE_BAR_BITMAP
+
+        // The meanings of those are reversed for the vertical gauge below.
+        const wxCoord heightGauge = 24;
+        const wxCoord widthGauge = 180;
+
+        dc.DrawText("DrawGauge()", x1, y);
+        renderer.DrawGauge(this, dc,
+            wxRect(x2, y, widthGauge, heightGauge), 25, 100, m_flags);
+        renderer.DrawGauge(this, dc,
+            wxRect(x2 + widthGauge + 30, y + heightGauge - widthGauge,
+                   heightGauge, widthGauge),
+            25, 100, m_flags | wxCONTROL_SPECIAL);
+
+        y += lineHeight + heightGauge;
+
+        const wxCoord heightListItem = 48;
+        const wxCoord widthListItem = 260;
+
+        dc.DrawText("DrawItemSelectionRect()", x1, y);
+        renderer.DrawItemSelectionRect(this, dc,
+            wxRect(x2, y, widthListItem, heightListItem), m_flags | wxCONTROL_SELECTED);
+
+        renderer.DrawItemText(this, dc, "DrawItemText()",
+            wxRect(x2, y, widthListItem, heightListItem).Inflate(-2, -2), m_align, m_flags | wxCONTROL_SELECTED);
+
+        y += heightListItem;
+
+        dc.DrawText("DrawChoice()", x1, y + 20);
+        renderer.DrawChoice(this, dc, wxRect(x2, y, 80, 50), m_flags);
+        y += 50;
+
     }
 
     int m_flags;
     int m_align;
     bool m_useIcon,
-         m_useBitmap;
+         m_useBitmap,
+         m_useGeneric;
 
     wxDECLARE_EVENT_TABLE();
 };
@@ -295,6 +347,7 @@ enum
     Render_DrawChecked,
     Render_DrawHot,
     Render_DrawUndetermined,
+    Render_DrawSpecial,
 
     Render_AlignLeft,
     Render_AlignCentre,
@@ -303,6 +356,7 @@ enum
     Render_UseIcon,
     Render_UseBitmap,
 
+    Render_UseGeneric,
 #if wxUSE_DYNLIB_CLASS
     Render_Load,
     Render_Unload,
@@ -331,6 +385,7 @@ wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
     EVT_MENU(Render_DrawChecked, MyFrame::OnDrawChecked)
     EVT_MENU(Render_DrawHot, MyFrame::OnDrawHot)
     EVT_MENU(Render_DrawUndetermined, MyFrame::OnDrawUndetermined)
+    EVT_MENU(Render_DrawSpecial, MyFrame::OnDrawSpecial)
     EVT_MENU(Render_AlignLeft, MyFrame::OnAlignLeft)
     EVT_MENU(Render_AlignCentre, MyFrame::OnAlignCentre)
     EVT_MENU(Render_AlignRight, MyFrame::OnAlignRight)
@@ -338,6 +393,7 @@ wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
     EVT_MENU(Render_UseIcon, MyFrame::OnUseIcon)
     EVT_MENU(Render_UseBitmap, MyFrame::OnUseBitmap)
 
+    EVT_MENU(Render_UseGeneric, MyFrame::OnUseGeneric)
 #if wxUSE_DYNLIB_CLASS
     EVT_MENU(Render_Load,  MyFrame::OnLoad)
     EVT_MENU(Render_Unload,MyFrame::OnUnload)
@@ -352,7 +408,7 @@ wxEND_EVENT_TABLE()
 // static object for many reasons) and also implements the accessor function
 // wxGetApp() which will return the reference of the right type (i.e. MyApp and
 // not wxApp)
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 // ============================================================================
 // implementation
@@ -389,9 +445,7 @@ bool MyApp::OnInit()
 MyFrame::MyFrame()
        : wxFrame(NULL,
                  wxID_ANY,
-                 wxT("Render wxWidgets Sample"),
-                 wxPoint(50, 50),
-                 wxSize(450, 340))
+                 "Render wxWidgets Sample")
 {
     // set the frame icon
     SetIcon(wxICON(sample));
@@ -411,6 +465,8 @@ MyFrame::MyFrame()
                               "Draw in &hot state\tCtrl-H");
     menuFile->AppendCheckItem(Render_DrawUndetermined,
                               "Draw in unde&termined state\tCtrl-T");
+    menuFile->AppendCheckItem(Render_DrawSpecial,
+                              "Draw in &special state\tCtrl-S");
     menuFile->AppendSeparator();
 
     menuFile->AppendRadioItem(Render_AlignLeft, "&Left align\tCtrl-1");
@@ -422,9 +478,10 @@ MyFrame::MyFrame()
     menuFile->AppendCheckItem(Render_UseBitmap, "Draw &bitmap\tCtrl-B");
     menuFile->AppendSeparator();
 
+    menuFile->AppendCheckItem(Render_UseGeneric, "Use &generic renderer\tCtrl-G");
 #if wxUSE_DYNLIB_CLASS
-    menuFile->Append(Render_Load, wxT("&Load renderer...\tCtrl-L"));
-    menuFile->Append(Render_Unload, wxT("&Unload renderer\tCtrl-U"));
+    menuFile->Append(Render_Load, "&Load renderer...\tCtrl-L");
+    menuFile->Append(Render_Unload, "&Unload renderer\tCtrl-U");
     menuFile->AppendSeparator();
 #endif // wxUSE_DYNLIB_CLASS
     menuFile->Append(Render_Quit);
@@ -435,8 +492,8 @@ MyFrame::MyFrame()
 
     // now append the freshly created menu to the menu bar...
     wxMenuBar *menuBar = new wxMenuBar();
-    menuBar->Append(menuFile, wxT("&File"));
-    menuBar->Append(helpMenu, wxT("&Help"));
+    menuBar->Append(menuFile, "&File");
+    menuBar->Append(helpMenu, "&Help");
 
     // ... and attach this menu bar to the frame
     SetMenuBar(menuBar);
@@ -444,10 +501,12 @@ MyFrame::MyFrame()
 
     m_panel = new MyPanel(this);
 
+    SetClientSize(600, 600);
+
 #if wxUSE_STATUSBAR
     // create a status bar just for fun (by default with 1 pane only)
     CreateStatusBar(2);
-    SetStatusText(wxT("Welcome to wxWidgets!"));
+    SetStatusText("Welcome to wxWidgets!");
 #endif // wxUSE_STATUSBAR
 
     Show();
@@ -491,16 +550,22 @@ void MyFrame::OnUseBitmap(wxCommandEvent& event)
     m_panel->Refresh();
 }
 
+void MyFrame::OnUseGeneric(wxCommandEvent& event)
+{
+    m_panel->SetUseGeneric(event.IsChecked());
+    m_panel->Refresh();
+}
+
 #if wxUSE_DYNLIB_CLASS
 
 void MyFrame::OnLoad(wxCommandEvent& WXUNUSED(event))
 {
-    static wxString s_name = wxT("renddll");
+    static wxString s_name = "renddll";
 
     wxString name = wxGetTextFromUser
                     (
-                        wxT("Name of the renderer to load:"),
-                        wxT("Render wxWidgets Sample"),
+                        "Name of the renderer to load:",
+                        "Render wxWidgets Sample",
                         s_name,
                         this
                     );
@@ -515,7 +580,7 @@ void MyFrame::OnLoad(wxCommandEvent& WXUNUSED(event))
     wxRendererNative *renderer = wxRendererNative::Load(name);
     if ( !renderer )
     {
-        wxLogError(wxT("Failed to load renderer \"%s\"."), name.c_str());
+        wxLogError("Failed to load renderer \"%s\".", name);
     }
     else // loaded ok
     {
@@ -523,8 +588,8 @@ void MyFrame::OnLoad(wxCommandEvent& WXUNUSED(event))
 
         m_panel->Refresh();
 
-        wxLogStatus(this, wxT("Successfully loaded the renderer \"%s\"."),
-                    name.c_str());
+        wxLogStatus(this, "Successfully loaded the renderer \"%s\".",
+                    name);
     }
 }
 
@@ -537,11 +602,11 @@ void MyFrame::OnUnload(wxCommandEvent& WXUNUSED(event))
 
         m_panel->Refresh();
 
-        wxLogStatus(this, wxT("Unloaded the previously loaded renderer."));
+        wxLogStatus(this, "Unloaded the previously loaded renderer.");
     }
     else
     {
-        wxLogWarning(wxT("No renderer to unload."));
+        wxLogWarning("No renderer to unload.");
     }
 }
 
@@ -555,10 +620,10 @@ void MyFrame::OnQuit(wxCommandEvent& WXUNUSED(event))
 
 void MyFrame::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
-    wxMessageBox(wxT("Render sample shows how to use custom renderers.\n")
-                 wxT("\n")
-                 wxT("(c) 2003 Vadim Zeitlin"),
-                 wxT("About Render wxWidgets Sample"),
+    wxMessageBox("Render sample shows how to use custom renderers.\n"
+                 "\n"
+                 "(c) 2003 Vadim Zeitlin",
+                 "About Render wxWidgets Sample",
                  wxOK | wxICON_INFORMATION, this);
 }
 

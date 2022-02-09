@@ -17,13 +17,12 @@
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
-#include "ash/system/night_light/time_of_day.h"
+#include "ash/system/time/time_of_day.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test_shell_delegate.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "base/test/scoped_feature_list.h"
@@ -1919,7 +1918,7 @@ TEST_F(AmbientEQTest, TestAmbientColorMatrix) {
   }
 
   // Turn color temperature down.
-  float ambient_temperature = SimulateAmbientColorFromPowerd(8000, 7350.0f);
+  SimulateAmbientColorFromPowerd(8000, 7350.0f);
   auto internal_rgb = GetDisplayCompositorRGBScaleFactors(kInternalDisplayId);
   auto external_rgb = GetDisplayCompositorRGBScaleFactors(kExternalDisplayId);
 
@@ -1932,7 +1931,7 @@ TEST_F(AmbientEQTest, TestAmbientColorMatrix) {
   EXPECT_TRUE((external_rgb - gfx::Vector3dF(1.0f, 1.0f, 1.0f)).IsZero());
 
   // Turn color temperature up.
-  ambient_temperature = SimulateAmbientColorFromPowerd(2700, 5800.0f);
+  SimulateAmbientColorFromPowerd(2700, 5800.0f);
   internal_rgb = GetDisplayCompositorRGBScaleFactors(kInternalDisplayId);
   external_rgb = GetDisplayCompositorRGBScaleFactors(kExternalDisplayId);
 

@@ -36,6 +36,7 @@ namespace blink {
 class CascadeLayer;
 class CSSRule;
 class CSSStyleSheet;
+class ExecutionContext;
 
 class CORE_EXPORT StyleRuleBase : public GarbageCollected<StyleRuleBase> {
  public:
@@ -63,6 +64,7 @@ class CORE_EXPORT StyleRuleBase : public GarbageCollected<StyleRuleBase> {
   // vector. Note that this may not be the full layer name if the rule is nested
   // in another @layer rule or in a layered @import.
   using LayerName = Vector<AtomicString, 1>;
+  static String LayerNameAsString(const LayerName&);
 
   RuleType GetType() const { return static_cast<RuleType>(type_); }
 
@@ -297,6 +299,7 @@ class CORE_EXPORT StyleRuleLayerBlock : public StyleRuleGroup {
   ~StyleRuleLayerBlock();
 
   const LayerName& GetName() const { return name_; }
+  String GetNameAsString() const;
 
   StyleRuleLayerBlock* Copy() const {
     return MakeGarbageCollected<StyleRuleLayerBlock>(*this);
@@ -316,6 +319,7 @@ class CORE_EXPORT StyleRuleLayerStatement : public StyleRuleBase {
   ~StyleRuleLayerStatement();
 
   const Vector<LayerName>& GetNames() const { return names_; }
+  Vector<String> GetNamesAsStrings() const;
 
   StyleRuleLayerStatement* copy() const {
     return MakeGarbageCollected<StyleRuleLayerStatement>(*this);
@@ -394,6 +398,8 @@ class CORE_EXPORT StyleRuleContainer : public StyleRuleCondition {
   StyleRuleContainer* Copy() const {
     return MakeGarbageCollected<StyleRuleContainer>(*this);
   }
+
+  void SetConditionText(const ExecutionContext*, String);
 
   void TraceAfterDispatch(blink::Visitor*) const;
 

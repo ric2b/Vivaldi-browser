@@ -7,6 +7,7 @@
 
 NSString* kOperaProfileDirectory = @"Opera";
 NSString* kOperaMailDirectory = @"Opera/mail";
+NSString* kThunderbirdMailDirectory = @"Thunderbird";
 
 base::FilePath GetDirectory(NSString* directoryName) {
   base::mac::ScopedNSAutoreleasePool pool;
@@ -29,4 +30,8 @@ base::FilePath GetProfileDir() {
 
 base::FilePath GetMailDirectory() {
   return GetDirectory(kOperaMailDirectory);
+}
+
+base::FilePath GetThunderbirdMailDirectory() {
+  return GetDirectory(kThunderbirdMailDirectory);
 }

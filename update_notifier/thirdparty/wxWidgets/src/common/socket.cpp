@@ -16,9 +16,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_SOCKETS
 
@@ -34,10 +31,12 @@
     #include "wx/utils.h"
     #include "wx/timer.h"
     #include "wx/module.h"
+    #include "wx/filefn.h"
 #endif
 
 #include "wx/apptrait.h"
 #include "wx/sckaddr.h"
+#include "wx/scopeguard.h"
 #include "wx/stopwatch.h"
 #include "wx/thread.h"
 #include "wx/evtloop.h"
@@ -120,11 +119,11 @@ wxDEFINE_EVENT(wxEVT_SOCKET, wxSocketEvent);
 // wxWin macros
 // --------------------------------------------------------------------------
 
-IMPLEMENT_CLASS(wxSocketBase, wxObject)
-IMPLEMENT_CLASS(wxSocketServer, wxSocketBase)
-IMPLEMENT_CLASS(wxSocketClient, wxSocketBase)
-IMPLEMENT_CLASS(wxDatagramSocket, wxSocketBase)
-IMPLEMENT_DYNAMIC_CLASS(wxSocketEvent, wxEvent)
+wxIMPLEMENT_CLASS(wxSocketBase, wxObject);
+wxIMPLEMENT_CLASS(wxSocketServer, wxSocketBase);
+wxIMPLEMENT_CLASS(wxSocketClient, wxSocketBase);
+wxIMPLEMENT_CLASS(wxDatagramSocket, wxSocketBase);
+wxIMPLEMENT_DYNAMIC_CLASS(wxSocketEvent, wxEvent);
 
 // ----------------------------------------------------------------------------
 // private functions
@@ -133,7 +132,7 @@ IMPLEMENT_DYNAMIC_CLASS(wxSocketEvent, wxEvent)
 namespace
 {
 
-void SetTimeValFromMS(timeval& tv, unsigned long ms)
+void SetTimeValFromMS(wxTimeVal_t& tv, unsigned long ms)
 {
     tv.tv_sec  = (ms / 1000);
     tv.tv_usec = (ms % 1000) * 1000;
@@ -364,9 +363,9 @@ void wxSocketImpl::PostCreation()
     if ( m_initialSendBufferSize >= 0 )
         SetSocketOption(SO_SNDBUF, m_initialSendBufferSize);
 
-    // we always put our sockets in unblocked mode and handle blocking
+    // Call this to put our socket in unblocked mode: we'll handle blocking
     // ourselves in DoRead/Write() if wxSOCKET_WAITALL is specified
-    UnblockAndRegisterWithEventLoop();
+    UpdateBlockingState();
 }
 
 wxSocketError wxSocketImpl::UpdateLocalAddress()
@@ -534,6 +533,8 @@ wxSocketImpl *wxSocketImpl::Accept(wxSocketBase& wxsocket)
     if ( fd == INVALID_SOCKET )
         return NULL;
 
+    wxScopeGuard closeSocket = wxMakeGuard(wxCloseSocket, fd);
+
     wxSocketManager * const manager = wxSocketManager::Get();
     if ( !manager )
         return NULL;
@@ -542,10 +543,12 @@ wxSocketImpl *wxSocketImpl::Accept(wxSocketBase& wxsocket)
     if ( !sock )
         return NULL;
 
+    // Ownership of the socket now passes to wxSocketImpl object.
+    closeSocket.Dismiss();
     sock->m_fd = fd;
     sock->m_peer = wxSockAddressImpl(from.addr, fromlen);
 
-    sock->UnblockAndRegisterWithEventLoop();
+    sock->UpdateBlockingState();
 
     return sock;
 }
@@ -922,6 +925,14 @@ wxSocketError wxSocketBase::LastError() const
     return m_impl->GetError();
 }
 
+/* static */
+int wxSocketBase::GetBlockingFlagIfNeeded()
+{
+    return wxIsMainThread() && wxApp::IsMainLoopRunning()
+            ? wxSOCKET_NONE
+            : wxSOCKET_BLOCK;
+}
+
 // --------------------------------------------------------------------------
 // Basic IO calls
 // --------------------------------------------------------------------------
@@ -1290,12 +1301,12 @@ wxSocketBase& wxSocketBase::Discard()
     and it will return a mask indicating which operations can be performed.
  */
 wxSocketEventFlags wxSocketImpl::Select(wxSocketEventFlags flags,
-                                        const timeval *timeout)
+                                        wxTimeVal_t *timeout)
 {
     if ( m_fd == INVALID_SOCKET )
         return (wxSOCKET_LOST_FLAG & flags);
 
-    struct timeval tv;
+    wxTimeVal_t tv;
     if ( timeout )
         tv = *timeout;
     else
@@ -1488,7 +1499,7 @@ wxSocketBase::DoWait(long timeout, wxSocketEventFlags flags)
         else // no event loop or waiting in another thread
         {
             // as explained below, we should always check for wxSOCKET_LOST_FLAG
-            timeval tv;
+            wxTimeVal_t tv;
             SetTimeValFromMS(tv, timeLeft);
             events = m_impl->Select(flags | wxSOCKET_LOST_FLAG, &tv);
         }
@@ -1658,7 +1669,20 @@ void wxSocketBase::SetFlags(wxSocketFlags flags)
                   "Using wxSOCKET_WAITALL or wxSOCKET_BLOCK with "
                   "wxSOCKET_NOWAIT doesn't make sense" );
 
+    // Blocking sockets are very different from non-blocking ones and we need
+    // to [un]register the socket with the event loop if wxSOCKET_BLOCK is
+    // being [un]set.
+    const bool
+        blockChanged = (m_flags & wxSOCKET_BLOCK) != (flags & wxSOCKET_BLOCK);
+
     m_flags = flags;
+
+    if ( blockChanged )
+    {
+        // Of course, we only do this if we already have the actual socket.
+        if ( m_impl )
+            m_impl->UpdateBlockingState();
+    }
 }
 
 
@@ -1960,6 +1984,15 @@ bool wxSocketBase::SetLocal(const wxIPV4address& local)
 wxSocketClient::wxSocketClient(wxSocketFlags flags)
               : wxSocketBase(flags, wxSOCKET_CLIENT)
 {
+    // Notice that we don't check for a running event loop here, unlike in
+    // GetBlockingFlagIfNeeded() because it is common to create the sockets
+    // before the event loop is entered and we shouldn't break existing code
+    // doing this as it can still work correctly if it only uses non-blocking
+    // sockets once the event loop is running.
+    wxASSERT_MSG( (flags & wxSOCKET_BLOCK) || wxIsMainThread(),
+                  wxS("Non-blocking sockets may only be created ")
+                  wxS("in the main thread") );
+
     m_initialRecvBufferSize =
     m_initialSendBufferSize = -1;
 }
@@ -2125,24 +2158,24 @@ wxDatagramSocket& wxDatagramSocket::SendTo( const wxSockAddress& addr,
 class wxSocketModule : public wxModule
 {
 public:
-    virtual bool OnInit()
+    virtual bool OnInit() wxOVERRIDE
     {
         // wxSocketBase will call Initialize() itself only if sockets are
         // really used, don't do it from here
         return true;
     }
 
-    virtual void OnExit()
+    virtual void OnExit() wxOVERRIDE
     {
         if ( wxSocketBase::IsInitialized() )
             wxSocketBase::Shutdown();
     }
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxSocketModule)
+    wxDECLARE_DYNAMIC_CLASS(wxSocketModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxSocketModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSocketModule, wxModule);
 
 #if defined(wxUSE_SELECT_DISPATCHER) && wxUSE_SELECT_DISPATCHER
 // NOTE: we need to force linking against socketiohandler.cpp otherwise in

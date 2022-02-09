@@ -34,6 +34,12 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
   // embedders. Used to reset guest_host_ in between hand-overs. Ie. move
   // between docked/un-docked devtools.
   BrowserPluginGuest* delegate_to_browser_plugin_ = nullptr;
+
+  // NOTE(andre@vivaldi.com):
+  // Helper to create and initialize a BrowserPluginGuest for a webcontents
+  // already created.
+  virtual void CreatePluginGuest(WebContents* contents);
+
 };
 
 }  // namespace content

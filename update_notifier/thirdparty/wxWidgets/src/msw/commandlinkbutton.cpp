@@ -14,9 +14,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_COMMANDLINKBUTTON
 
@@ -79,7 +76,7 @@ bool wxCommandLinkButton::Create(wxWindow *parent,
         return false;
 
     SetMainLabelAndNote(mainLabel, note);
-    SetInitialSize();
+    SetInitialSize(size);
 
     return true;
 }
@@ -193,8 +190,6 @@ wxSize wxCommandLinkButton::DoGetBestSize() const
     size.y += MAINLABEL_TOP_MARGIN + NOTE_BOTTOM_MARGIN;
     if ( !GetNote().empty() )
         size.y += MAINLABEL_NOTE_MARGIN;
-
-    CacheBestSize(size);
 
     return size;
 }

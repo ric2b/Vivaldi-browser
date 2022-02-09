@@ -9,7 +9,6 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -90,7 +89,7 @@ class ImageClipboardCopyManager : public ImageDecoder::ImageRequest {
 
     // Note: An image over 128MB (uncompressed) may fail, due to the limitation
     // of IPC message size.
-    ImageDecoder::Start(this, data);
+    ImageDecoder::Start(this, std::move(data));
   }
 
   void OnImageDecoded(const SkBitmap& decoded_image) override {

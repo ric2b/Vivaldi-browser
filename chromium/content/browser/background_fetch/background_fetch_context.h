@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -57,6 +56,9 @@ class CONTENT_EXPORT BackgroundFetchContext
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
       scoped_refptr<DevToolsBackgroundServicesContextImpl> devtools_context);
 
+  BackgroundFetchContext(const BackgroundFetchContext&) = delete;
+  BackgroundFetchContext& operator=(const BackgroundFetchContext&) = delete;
+
   void Initialize();
 
   // Called by the StoragePartitionImpl destructor.
@@ -89,6 +91,7 @@ class CONTENT_EXPORT BackgroundFetchContext
                   const SkBitmap& icon,
                   blink::mojom::BackgroundFetchUkmDataPtr ukm_data,
                   RenderFrameHostImpl* rfh,
+                  const net::IsolationInfo& isolation_info,
                   blink::mojom::BackgroundFetchService::FetchCallback callback);
 
   // Gets display size for the icon for Background Fetch UI.
@@ -191,6 +194,7 @@ class CONTENT_EXPORT BackgroundFetchContext
                         const SkBitmap& icon,
                         blink::mojom::BackgroundFetchUkmDataPtr ukm_data,
                         const GlobalRenderFrameHostId& rfh_id,
+                        const net::IsolationInfo& isolation_info,
                         BackgroundFetchPermission permission);
 
   std::unique_ptr<BackgroundFetchDataManager> data_manager_;
@@ -212,8 +216,6 @@ class CONTENT_EXPORT BackgroundFetchContext
 
   base::WeakPtrFactory<BackgroundFetchContext> weak_factory_{
       this};  // Must be last.
-
-  DISALLOW_COPY_AND_ASSIGN(BackgroundFetchContext);
 };
 
 }  // namespace content

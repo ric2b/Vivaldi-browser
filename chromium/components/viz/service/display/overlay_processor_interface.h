@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
 #include "components/viz/service/display/aggregated_frame.h"
@@ -18,6 +17,7 @@
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/ipc/gpu_task_scheduler_helper.h"
+#include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/overlay_priority_hint.h"
 
 #if defined(OS_WIN)
@@ -107,6 +107,8 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
     gpu::Mailbox mailbox;
     // Hints for overlay prioritization.
     gfx::OverlayPriorityHint priority_hint;
+    // Specifies the rounded corners.
+    gfx::RRectF rounded_corners;
   };
 
   // TODO(weiliangc): Eventually the asymmetry between primary plane and

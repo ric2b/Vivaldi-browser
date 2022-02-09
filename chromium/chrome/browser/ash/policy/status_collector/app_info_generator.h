@@ -11,14 +11,19 @@
 #include <vector>
 
 #include "base/time/default_clock.h"
-#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "base/unguessable_token.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_forward.h"
 #include "chrome/browser/ash/policy/status_collector/activity_storage.h"
 #include "chrome/browser/ash/policy/status_collector/managed_session_service.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/services/app_service/public/cpp/instance.h"
+#include "components/services/app_service/public/cpp/instance_registry.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
+
+namespace apps {
+class AppUpdate;
+}
 
 namespace enterprise_management {
 class AppInfo;
@@ -81,7 +86,7 @@ class AppInfoGenerator : public apps::InstanceRegistry::Observer,
     ~AppInstances();
 
     const base::Time start_time;
-    std::unordered_set<apps::Instance::InstanceKey, apps::InstanceKeyHash>
+    std::unordered_set<base::UnguessableToken, base::UnguessableTokenHash>
         running_instances;
   };
   struct AppInfoProvider {
@@ -91,7 +96,7 @@ class AppInfoGenerator : public apps::InstanceRegistry::Observer,
     ~AppInfoProvider();
 
     ActivityStorage activity_storage;
-    apps::AppServiceProxyChromeOs& app_service_proxy;
+    apps::AppServiceProxy& app_service_proxy;
   };
 
   const enterprise_management::AppInfo ConvertToAppInfo(
@@ -103,11 +108,11 @@ class AppInfoGenerator : public apps::InstanceRegistry::Observer,
   void SetIdleDurationsToOpen();
 
   void OpenUsageInterval(const std::string& app_id,
-                         const apps::Instance::InstanceKey& instance_key,
+                         const base::UnguessableToken& instance_key,
                          const base::Time start_time);
 
   void CloseUsageInterval(const std::string& app_id,
-                          const apps::Instance::InstanceKey& instance_key,
+                          const base::UnguessableToken& instance_key,
                           const base::Time end_time);
 
   std::unique_ptr<AppInfoProvider> provider_;

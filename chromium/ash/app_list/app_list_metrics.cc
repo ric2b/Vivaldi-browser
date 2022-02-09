@@ -8,11 +8,10 @@
 #include <string>
 
 #include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_item_list.h"
-#include "ash/app_list/model/app_list_model.h"
-#include "ash/app_list/model/search/search_model.h"
 #include "ash/app_list/model/search/search_result.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_menu_constants.h"
@@ -62,6 +61,31 @@ constexpr char kAppListZeroStateSearchResultRemovalHistogram[] =
 // disabled in clamshell mode) and the Shelf.
 constexpr char kAppListAppLaunched[] = "Apps.AppListAppLaunchedV2";
 
+// UMA histograms that log app launches within the app list, and the shelf.
+// Split depending on whether tablet mode is active or not.
+constexpr char kAppLaunchInTablet[] = "Apps.AppList.AppLaunched.TabletMode";
+constexpr char kAppLaunchInClamshell[] =
+    "Apps.AppList.AppLaunched.ClamshellMode";
+
+// UMA histograms that log launcher workflow actions (launching an app, search
+// result, or a continue section task) in the app list UI. Split depending on
+// whether tablet mode is active or not. Note that unlike `kAppListAppLaunched`
+// histograms, these do not include actions from shelf, but do include non-app
+// launch actions.
+constexpr char kLauncherUserActionInTablet[] =
+    "Apps.AppList.UserAction.TabletMode";
+constexpr char kLauncherUserActionInClamshell[] =
+    "Apps.AppList.UserAction.ClamshellMode";
+
+// UMA histograms that log time elapsed from launcher getting shown at the time
+// of an user taking a launcher workflow action (launching an app, search
+// result, or a continue section task) in the app list UI. Split depending on
+// whether tablet mode is active or not.
+constexpr char kTimeToLauncherUserActionInTablet[] =
+    "Apps.AppList.TimeToUserAction.TabletMode";
+constexpr char kTimeToLauncherUserActionInClamshell[] =
+    "Apps.AppList.TimeToUserAction.ClamshellMode";
+
 // The UMA histograms that log app launches within the AppList, AppListBubble
 // and Shelf. The app launches are divided by histogram for each of the the
 // different AppList states.
@@ -95,6 +119,21 @@ enum class ApplistSearchResultOpenedSource {
   kFullscreenTablet = 2,
   kMaxApplistSearchResultOpenedSource = 3,
 };
+
+AppLaunchedMetricParams::AppLaunchedMetricParams() = default;
+
+AppLaunchedMetricParams::AppLaunchedMetricParams(
+    const AppLaunchedMetricParams&) = default;
+
+AppLaunchedMetricParams& AppLaunchedMetricParams::operator=(
+    const AppLaunchedMetricParams&) = default;
+
+AppLaunchedMetricParams::AppLaunchedMetricParams(
+    AppListLaunchedFrom launched_from,
+    AppListLaunchType launch_type)
+    : launched_from(launched_from), launch_type(launch_type) {}
+
+AppLaunchedMetricParams::~AppLaunchedMetricParams() = default;
 
 void AppListRecordPageSwitcherSourceByEventType(ui::EventType type,
                                                 bool is_tablet_mode) {
@@ -137,15 +176,14 @@ void RecordPageSwitcherSource(AppListPageSwitcherSource source,
 }
 
 void RecordSearchResultOpenSource(const SearchResult* result,
-                                  const AppListModel* model,
-                                  const SearchModel* search_model) {
+                                  AppListViewState state,
+                                  bool is_tablet_mode) {
   // Record the search metric if the SearchResult is not a suggested app.
   if (result->is_recommendation())
     return;
 
   ApplistSearchResultOpenedSource source;
-  AppListViewState state = model->state_fullscreen();
-  if (search_model->tablet_mode()) {
+  if (is_tablet_mode) {
     source = ApplistSearchResultOpenedSource::kFullscreenTablet;
   } else {
     source = state == AppListViewState::kHalf
@@ -200,8 +238,8 @@ void RecordPeriodicAppListMetrics() {
   int number_of_apps_in_launcher = 0;
   int number_of_root_level_items = 0;
 
-  AppListItemList* item_list =
-      Shell::Get()->app_list_controller()->GetModel()->top_level_item_list();
+  AppListModel* const model = AppListModelProvider::Get()->model();
+  AppListItemList* const item_list = model->top_level_item_list();
   for (size_t i = 0; i < item_list->item_count(); ++i) {
     AppListItem* item = item_list->item_at(i);
     if (item->GetItemType() == AppListFolderItem::kItemType) {
@@ -225,6 +263,13 @@ void RecordAppListAppLaunched(AppListLaunchedFrom launched_from,
                               bool is_tablet_mode,
                               bool app_list_shown) {
   UMA_HISTOGRAM_ENUMERATION(kAppListAppLaunched, launched_from);
+
+  if (is_tablet_mode) {
+    base::UmaHistogramEnumeration(kAppLaunchInTablet, launched_from);
+
+  } else {
+    base::UmaHistogramEnumeration(kAppLaunchInClamshell, launched_from);
+  }
 
   if (features::IsProductivityLauncherEnabled() && !is_tablet_mode) {
     if (!app_list_shown) {
@@ -283,6 +328,29 @@ void RecordAppListAppLaunched(AppListLaunchedFrom launched_from,
                                   launched_from);
       }
       break;
+  }
+}
+
+ASH_EXPORT void RecordLauncherWorkflowMetrics(
+    AppListUserAction action,
+    bool is_tablet_mode,
+    absl::optional<base::TimeTicks> launcher_show_time) {
+  if (is_tablet_mode) {
+    base::UmaHistogramEnumeration(kLauncherUserActionInTablet, action);
+
+    if (launcher_show_time) {
+      base::UmaHistogramMediumTimes(
+          kTimeToLauncherUserActionInTablet,
+          base::TimeTicks::Now() - *launcher_show_time);
+    }
+  } else {
+    base::UmaHistogramEnumeration(kLauncherUserActionInClamshell, action);
+
+    if (launcher_show_time) {
+      base::UmaHistogramMediumTimes(
+          kTimeToLauncherUserActionInClamshell,
+          base::TimeTicks::Now() - *launcher_show_time);
+    }
   }
 }
 
@@ -350,6 +418,10 @@ bool IsCommandIdAnAppLaunch(int command_id_number) {
     case CommandId::USE_LAUNCH_TYPE_WINDOW:
     case CommandId::USE_LAUNCH_TYPE_TABBED_WINDOW:
     case CommandId::USE_LAUNCH_TYPE_COMMAND_END:
+    case CommandId::REORDER_SUBMENU:
+    case CommandId::REORDER_BY_NAME_ALPHABETICAL:
+    case CommandId::REORDER_BY_NAME_REVERSE_ALPHABETICAL:
+    case CommandId::REORDER_BY_COLOR:
     case CommandId::SHUTDOWN_GUEST_OS:
     case CommandId::EXTENSIONS_CONTEXT_CUSTOM_FIRST:
     case CommandId::EXTENSIONS_CONTEXT_CUSTOM_LAST:

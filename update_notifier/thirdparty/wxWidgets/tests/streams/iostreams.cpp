@@ -11,9 +11,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_STREAMS
 
@@ -29,7 +26,7 @@ class IOStreamsTestCase : public CppUnit::TestCase
 public:
     IOStreamsTestCase() { }
 
-    virtual void tearDown()
+    virtual void tearDown() wxOVERRIDE
     {
         if ( !m_fnTemp.empty() )
         {
@@ -65,7 +62,7 @@ private:
 
     wxString m_fnTemp;
 
-    DECLARE_NO_COPY_CLASS(IOStreamsTestCase)
+    wxDECLARE_NO_COPY_CLASS(IOStreamsTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default

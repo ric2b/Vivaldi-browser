@@ -10,17 +10,16 @@ import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
@@ -33,6 +32,8 @@ import java.util.List;
  */
 public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
+    private StripLayoutHelperManager mTabStripLayoutHelperManager;
+
     // Vivaldi
     private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
 
@@ -40,19 +41,25 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      * Creates an instance of a {@link LayoutManagerChromePhone}.
      * @param host                     A {@link LayoutManagerHost} instance.
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
+     * @param startSurface An interface to talk to the Grid Tab Switcher.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param layerTitleCacheSupplier Supplier of the {@link LayerTitleCache}.
      * @param overviewModeBehaviorSupplier Supplier of the {@link OverviewModeBehavior}.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      */
     public LayoutManagerChromeTablet(LayoutManagerHost host, ViewGroup contentContainer,
+            StartSurface startSurface,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<LayerTitleCache> layerTitleCacheSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker) {
-        super(host, contentContainer, false, null, tabContentManagerSupplier,
-                layerTitleCacheSupplier, overviewModeBehaviorSupplier, topUiThemeColorProvider,
-                jankTracker);
+        super(host, contentContainer,
+                TabUiFeatureUtilities.isGridTabSwitcherEnabled(host.getContext()), startSurface,
+                tabContentManagerSupplier, layerTitleCacheSupplier, overviewModeBehaviorSupplier,
+                topUiThemeColorProvider, jankTracker);
+
+        mTabStripLayoutHelperManager = new StripLayoutHelperManager(host.getContext(), this,
+                mHost.getLayoutRenderHost(), () -> mTitleCache, layerTitleCacheSupplier);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -84,12 +91,6 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
-    protected void tabClosureCommitted(int id, boolean incognito) {
-        super.tabClosureCommitted(id, incognito);
-        if (mTitleCache != null) mTitleCache.remove(id);
-    }
-
-    @Override
     protected void tabModelSwitched(boolean incognito) {
         super.tabModelSwitched(incognito);
         getTabModelSelector().commitAllTabClosures();
@@ -106,17 +107,13 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
         super.init(selector, creator, controlContainer, dynamicResourceLoader, topUiColorProvider);
 
-        // Make sure any tabs already restored get loaded into the title cache.
-        List<TabModel> models = selector.getModels();
-        for (int i = 0; i < models.size(); i++) {
-            TabModel model = models.get(i);
-            for (int j = 0; j < model.getCount(); j++) {
-                Tab tab = model.getTabAt(j);
-                if (tab != null && mTitleCache != null) {
-                    mTitleCache.getUpdatedTitle(
-                            tab, mHost.getContext().getString(R.string.tab_loading_default_title));
-                }
-            }
+        if (mTabStripLayoutHelperManager != null) {
+            mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
         }
+    }
+
+    @Override
+    public StripLayoutHelperManager getStripLayoutHelperManager() {
+        return mTabStripLayoutHelperManager;
     }
 }

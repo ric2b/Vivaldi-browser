@@ -8,21 +8,11 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-#   pragma hdrstop
-#endif
-
 #ifndef WX_PRECOMP
 #   include "wx/wx.h"
 #endif
 
 #if wxUSE_STREAMS && wxUSE_ARCHIVE_STREAMS
-
-// VC++ 6 warns that the list iterator's '->' operator will not work whenever
-// std::list is used with a non-pointer, so switch it off.
-#if defined _MSC_VER && _MSC_VER < 1300
-#pragma warning (disable:4284)
-#endif
 
 #include "archivetest.h"
 #include "wx/dir.h"
@@ -32,22 +22,14 @@
 #include <sys/stat.h>
 
 using std::string;
-using std::auto_ptr;
 
 
 // Check whether member templates can be used
 //
-#if defined __GNUC__ && \
-    (__GNUC__ >= 3 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 95))
+#if defined __GNUC__
 #   define WXARC_MEMBER_TEMPLATES
 #endif
 #if defined _MSC_VER && _MSC_VER >= 1310 && !defined __WIN64__
-#   define WXARC_MEMBER_TEMPLATES
-#endif
-#if defined __BORLANDC__ && __BORLANDC__ >= 0x530
-#   define WXARC_MEMBER_TEMPLATES
-#endif
-#if defined __DMC__ && __DMC__ >= 0x832
 #   define WXARC_MEMBER_TEMPLATES
 #endif
 #if defined __HP_aCC && __HP_aCC > 33300
@@ -396,7 +378,7 @@ void TempDir::RemoveDir(wxString& path)
 #if defined __UNIX__ || defined __MINGW32__
 #   define WXARC_popen popen
 #   define WXARC_pclose pclose
-#elif defined _MSC_VER || defined __BORLANDC__
+#elif defined _MSC_VER
 #   define WXARC_popen _popen
 #   define WXARC_pclose _pclose
 #else
@@ -472,7 +454,13 @@ void ArchiveTestCase<ClassFactoryT>::runTest()
     if (m_archiver.empty())
         CreateArchive(out);
     else
+    {
+#ifndef __WXOSX_IPHONE__
         CreateArchive(out, m_archiver);
+#else
+        CPPUNIT_FAIL("using external archivers is not supported on iOS");
+#endif
+    }
 
     // check archive could be created
     CPPUNIT_ASSERT(out.GetLength() > 0);
@@ -499,7 +487,13 @@ void ArchiveTestCase<ClassFactoryT>::runTest()
     if (m_unarchiver.empty())
         ExtractArchive(in);
     else
+    {
+#ifndef __WXOSX_IPHONE__
         ExtractArchive(in, m_unarchiver);
+#else
+        CPPUNIT_FAIL("using external archivers is not supported on iOS");
+#endif
+    }
 
     // check that all the test entries were found in the archive
     CPPUNIT_ASSERT(m_testEntries.empty());
@@ -559,7 +553,7 @@ TestEntry& ArchiveTestCase<ClassFactoryT>::Add(const char *name,
 template <class ClassFactoryT>
 void ArchiveTestCase<ClassFactoryT>::CreateArchive(wxOutputStream& out)
 {
-    auto_ptr<OutputStreamT> arc(m_factory->NewStream(out));
+    wxScopedPtr<OutputStreamT> arc(m_factory->NewStream(out));
     TestEntries::iterator it;
 
     OnCreateArchive(*arc);
@@ -587,7 +581,7 @@ void ArchiveTestCase<ClassFactoryT>::CreateArchive(wxOutputStream& out)
 
         if ((choices & 2) || testEntry.IsText()) {
             // try PutNextEntry(EntryT *pEntry)
-            auto_ptr<EntryT> entry(m_factory->NewEntry());
+            wxScopedPtr<EntryT> entry(m_factory->NewEntry());
             entry->SetName(name, wxPATH_UNIX);
             if (setIsDir)
                 entry->SetIsDir();
@@ -630,6 +624,7 @@ void ArchiveTestCase<ClassFactoryT>::CreateArchive(wxOutputStream& out)
 
 // Create an archive using an external archive program
 //
+#ifndef __WXOSX_IPHONE__
 template <class ClassFactoryT>
 void ArchiveTestCase<ClassFactoryT>::CreateArchive(wxOutputStream& out,
                                                    const wxString& archiver)
@@ -693,6 +688,7 @@ void ArchiveTestCase<ClassFactoryT>::CreateArchive(wxOutputStream& out,
             out.Write(in);
     }
 }
+#endif
 
 // Do a standard set of modification on an archive, delete an entry,
 // rename an entry and add an entry
@@ -701,8 +697,8 @@ template <class ClassFactoryT>
 void ArchiveTestCase<ClassFactoryT>::ModifyArchive(wxInputStream& in,
                                                    wxOutputStream& out)
 {
-    auto_ptr<InputStreamT> arcIn(m_factory->NewStream(in));
-    auto_ptr<OutputStreamT> arcOut(m_factory->NewStream(out));
+    wxScopedPtr<InputStreamT> arcIn(m_factory->NewStream(in));
+    wxScopedPtr<OutputStreamT> arcOut(m_factory->NewStream(out));
     EntryT *pEntry;
 
     const wxString deleteName = wxT("bin/bin1000");
@@ -714,7 +710,7 @@ void ArchiveTestCase<ClassFactoryT>::ModifyArchive(wxInputStream& in,
     arcOut->CopyArchiveMetaData(*arcIn);
 
     while ((pEntry = arcIn->GetNextEntry()) != NULL) {
-        auto_ptr<EntryT> entry(pEntry);
+        wxScopedPtr<EntryT> entry(pEntry);
         OnSetNotifier(*entry);
         wxString name = entry->GetName(wxPATH_UNIX);
 
@@ -759,7 +755,7 @@ void ArchiveTestCase<ClassFactoryT>::ModifyArchive(wxInputStream& in,
 
     // try adding a new entry
     TestEntry& testEntry = Add(newName.mb_str(), newData);
-    auto_ptr<EntryT> newentry(m_factory->NewEntry());
+    wxScopedPtr<EntryT> newentry(m_factory->NewEntry());
     newentry->SetName(newName);
     newentry->SetDateTime(testEntry.GetDateTime());
     newentry->SetSize(testEntry.GetLength());
@@ -782,7 +778,7 @@ void ArchiveTestCase<ClassFactoryT>::ExtractArchive(wxInputStream& in)
     typedef std::list<EntryPtr> Entries;
     typedef typename Entries::iterator EntryIter;
 
-    auto_ptr<InputStreamT> arc(m_factory->NewStream(in));
+    wxScopedPtr<InputStreamT> arc(m_factory->NewStream(in));
     int expectedTotal = m_testEntries.size();
     EntryPtr entry;
     Entries entries;
@@ -817,8 +813,8 @@ void ArchiveTestCase<ClassFactoryT>::ExtractArchive(wxInputStream& in)
         // non-seekable entries are allowed to have GetSize == wxInvalidOffset
         // until the end of the entry's data has been read past
         CPPUNIT_ASSERT_MESSAGE("entry size check" + error_context,
-            testEntry.GetLength() == entry->GetSize() ||
-            ((m_options & PipeIn) != 0 && entry->GetSize() == wxInvalidOffset));
+            (testEntry.GetLength() == entry->GetSize() ||
+            ((m_options & PipeIn) != 0 && entry->GetSize() == wxInvalidOffset)));
         CPPUNIT_ASSERT_MESSAGE(
             "arc->GetLength() == entry->GetSize()" + error_context,
             arc->GetLength() == entry->GetSize());
@@ -874,6 +870,7 @@ void ArchiveTestCase<ClassFactoryT>::ExtractArchive(wxInputStream& in)
 
 // Extract an archive using an external unarchive program
 //
+#ifndef __WXOSX_IPHONE__
 template <class ClassFactoryT>
 void ArchiveTestCase<ClassFactoryT>::ExtractArchive(wxInputStream& in,
                                                     const wxString& unarchiver)
@@ -915,6 +912,7 @@ void ArchiveTestCase<ClassFactoryT>::ExtractArchive(wxInputStream& in,
     wxString dir = tmpdir.GetName();
     VerifyDir(dir);
 }
+#endif
 
 // Verifies the files produced by an external unarchiver are as expected
 //
@@ -991,7 +989,7 @@ void ArchiveTestCase<ClassFactoryT>::TestIterator(wxInputStream& in)
     typedef std::list<EntryT*> ArchiveCatalog;
     typedef typename ArchiveCatalog::iterator CatalogIter;
 
-    auto_ptr<InputStreamT> arc(m_factory->NewStream(in));
+    wxScopedPtr<InputStreamT> arc(m_factory->NewStream(in));
     size_t count = 0;
 
 #ifdef WXARC_MEMBER_TEMPLATES
@@ -1003,7 +1001,7 @@ void ArchiveTestCase<ClassFactoryT>::TestIterator(wxInputStream& in)
 #endif
 
     for (CatalogIter it = cat.begin(); it != cat.end(); ++it) {
-        auto_ptr<EntryT> entry(*it);
+        wxScopedPtr<EntryT> entry(*it);
         count += m_testEntries.count(entry->GetName(wxPATH_UNIX));
     }
 
@@ -1020,7 +1018,7 @@ void ArchiveTestCase<ClassFactoryT>::TestPairIterator(wxInputStream& in)
     typedef std::map<wxString, EntryT*> ArchiveCatalog;
     typedef typename ArchiveCatalog::iterator CatalogIter;
 
-    auto_ptr<InputStreamT> arc(m_factory->NewStream(in));
+    wxScopedPtr<InputStreamT> arc(m_factory->NewStream(in));
     size_t count = 0;
 
 #ifdef WXARC_MEMBER_TEMPLATES
@@ -1032,7 +1030,7 @@ void ArchiveTestCase<ClassFactoryT>::TestPairIterator(wxInputStream& in)
 #endif
 
     for (CatalogIter it = cat.begin(); it != cat.end(); ++it) {
-        auto_ptr<EntryT> entry(it->second);
+        wxScopedPtr<EntryT> entry(it->second);
         count += m_testEntries.count(entry->GetName(wxPATH_UNIX));
     }
 
@@ -1049,7 +1047,7 @@ void ArchiveTestCase<ClassFactoryT>::TestSmartIterator(wxInputStream& in)
     typedef typename ArchiveCatalog::iterator CatalogIter;
     typedef wxArchiveIterator<InputStreamT, Ptr<EntryT> > Iter;
 
-    auto_ptr<InputStreamT> arc(m_factory->NewStream(in));
+    wxScopedPtr<InputStreamT> arc(m_factory->NewStream(in));
 
 #ifdef WXARC_MEMBER_TEMPLATES
     ArchiveCatalog cat((Iter)*arc, Iter());
@@ -1080,7 +1078,7 @@ void ArchiveTestCase<ClassFactoryT>::TestSmartPairIterator(wxInputStream& in)
     typedef wxArchiveIterator<InputStreamT,
                 std::pair<wxString, Ptr<EntryT> > > PairIter;
 
-    auto_ptr<InputStreamT> arc(m_factory->NewStream(in));
+    wxScopedPtr<InputStreamT> arc(m_factory->NewStream(in));
 
 #ifdef WXARC_MEMBER_TEMPLATES
     ArchiveCatalog cat((PairIter)*arc, PairIter());
@@ -1108,8 +1106,8 @@ void ArchiveTestCase<ClassFactoryT>::ReadSimultaneous(TestInputStream& in)
 
     // create two archive input streams
     TestInputStream in2(in);
-    auto_ptr<InputStreamT> arc(m_factory->NewStream(in));
-    auto_ptr<InputStreamT> arc2(m_factory->NewStream(in2));
+    wxScopedPtr<InputStreamT> arc(m_factory->NewStream(in));
+    wxScopedPtr<InputStreamT> arc2(m_factory->NewStream(in2));
 
     // load the catalog
 #ifdef WXARC_MEMBER_TEMPLATES
@@ -1169,7 +1167,7 @@ template <class NotifierT, class EntryT>
 class ArchiveNotifier : public NotifierT
 {
 public:
-    void OnEntryUpdated(EntryT& WXUNUSED(entry)) { }
+    void OnEntryUpdated(EntryT& WXUNUSED(entry)) wxOVERRIDE { }
 };
 
 template <class ClassFactoryT>
@@ -1194,14 +1192,14 @@ public:
         m_options(options)
     { }
 
-protected:
     // the entry point for the test
-    void runTest();
+    void runTest() wxOVERRIDE;
 
+protected:
     void CreateArchive(wxOutputStream& out);
     void ExtractArchive(wxInputStream& in);
 
-    auto_ptr<wxArchiveClassFactory> m_factory;  // factory to make classes
+    wxScopedPtr<wxArchiveClassFactory> m_factory;  // factory to make classes
     int m_options;                              // test options
 };
 
@@ -1241,7 +1239,7 @@ void CorruptionTestCase::runTest()
 
 void CorruptionTestCase::CreateArchive(wxOutputStream& out)
 {
-    auto_ptr<wxArchiveOutputStream> arc(m_factory->NewStream(out));
+    wxScopedPtr<wxArchiveOutputStream> arc(m_factory->NewStream(out));
 
     arc->PutNextDirEntry(wxT("dir"));
     arc->PutNextEntry(wxT("file"));
@@ -1250,8 +1248,8 @@ void CorruptionTestCase::CreateArchive(wxOutputStream& out)
 
 void CorruptionTestCase::ExtractArchive(wxInputStream& in)
 {
-    auto_ptr<wxArchiveInputStream> arc(m_factory->NewStream(in));
-    auto_ptr<wxArchiveEntry> entry(arc->GetNextEntry());
+    wxScopedPtr<wxArchiveInputStream> arc(m_factory->NewStream(in));
+    wxScopedPtr<wxArchiveEntry> entry(arc->GetNextEntry());
 
     while (entry.get() != NULL) {
         char buf[1024];
@@ -1259,8 +1257,7 @@ void CorruptionTestCase::ExtractArchive(wxInputStream& in)
         while (arc->IsOk())
             arc->Read(buf, sizeof(buf));
 
-        auto_ptr<wxArchiveEntry> next(arc->GetNextEntry());
-        entry = next;
+        entry.reset(arc->GetNextEntry());
     }
 }
 
@@ -1309,9 +1306,9 @@ bool ArchiveTestSuite::IsInPath(const wxString& cmd)
     return !m_path.FindValidPath(c).empty();
 }
 
-// make the test suite
+// run all the tests in the test suite
 //
-ArchiveTestSuite *ArchiveTestSuite::makeSuite()
+void ArchiveTestSuite::DoRunTest()
 {
     typedef wxArrayString::iterator Iter;
 
@@ -1334,7 +1331,10 @@ ArchiveTestSuite *ArchiveTestSuite::makeSuite()
                                                    generic != 0, *j, *i);
 
                     if (test)
-                        addTest(test);
+                    {
+                        test->runTest();
+                        delete test;
+                    }
                 }
 
     for (int options = 0; options <= PipeIn; options += PipeIn)
@@ -1350,11 +1350,10 @@ ArchiveTestSuite *ArchiveTestSuite::makeSuite()
             if (options)
                 descr += " (PipeIn)";
 
-            addTest(new CorruptionTestCase(descr, factory, options));
+            CorruptionTestCase test(descr, factory, options);
+            test.runTest();
         }
     }
-
-    return this;
 }
 
 CppUnit::Test *ArchiveTestSuite::makeTest(

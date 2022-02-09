@@ -14,7 +14,6 @@
 
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "components/autofill/core/common/field_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
@@ -64,7 +63,7 @@ class FormCache {
   // form_util::FormOrFieldsetsToFormData():
   // - if the number of fields over all forms exceeds |kMaxParseableFields|,
   //   only a subset of forms is returned which does not exceed the limit;
-  // - if the number of frames over all forms exceeds MaxParseableFrames(), all
+  // - if the number of frames over all forms exceeds kMaxParseableFrames, all
   //   forms are returned but only a subset of them have non-empty
   //   FormData::child_frames.
   // In either case, the subset is chosen so that the returned list of forms
@@ -94,7 +93,7 @@ class FormCache {
   // form_util::FormOrFieldsetsToFormData():
   // - if the number of fields over all forms exceeds |kMaxParseableFields|,
   //   only a subset of forms is returned which does not exceed the limit;
-  // - if the number of frames over all forms exceeds MaxParseableFrames(), all
+  // - if the number of frames over all forms exceeds kMaxParseableFrames, all
   //   forms are returned but only a subset of them have non-empty
   //   FormData::child_frames.
   // In either case, the subset is chosen so that the returned list of forms

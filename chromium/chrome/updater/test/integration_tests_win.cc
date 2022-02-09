@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -25,9 +27,11 @@
 #include "base/test/bind.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/values.h"
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_bstr.h"
+#include "build/branding_buildflags.h"
 #include "chrome/updater/app/server/win/updater_idl.h"
 #include "chrome/updater/app/server/win/updater_internal_idl.h"
 #include "chrome/updater/app/server/win/updater_legacy_idl.h"
@@ -90,6 +94,10 @@ absl::optional<base::FilePath> GetProductVersionPath(UpdaterScope scope) {
   absl::optional<base::FilePath> product_path = GetProductPath(scope);
   return product_path ? product_path->AppendASCII(kUpdaterVersion)
                       : product_path;
+}
+
+std::wstring GetAppClientsKey(const std::wstring& id) {
+  return base::StrCat({CLIENTS_KEY, id});
 }
 
 std::wstring GetAppClientStateKey(const std::string& id) {
@@ -200,7 +208,15 @@ void CheckInstallation(UpdaterScope scope,
       EXPECT_EQ(is_installed, RegKeyExists(root, key));
     }
 
-    if (!is_installed) {
+    if (is_installed) {
+      std::wstring uninstall_cmd_line_string;
+      EXPECT_EQ(ERROR_SUCCESS,
+                base::win::RegKey(root, UPDATER_KEY, Wow6432(KEY_READ))
+                    .ReadValue(kRegValueUninstallCmdLine,
+                               &uninstall_cmd_line_string));
+      EXPECT_TRUE(base::CommandLine::FromString(uninstall_cmd_line_string)
+                      .HasSwitch(kUninstallIfUnusedSwitch));
+    } else {
       for (const wchar_t* key :
            {kRegKeyCompanyCloudManagement, kRegKeyCompanyEnrollment,
             UPDATER_POLICIES_KEY}) {
@@ -269,6 +285,13 @@ void CheckInstallation(UpdaterScope scope,
     EXPECT_TRUE(WaitFor(base::BindLambdaForTesting(
         [&]() { return is_installed == base::PathExists(*path); })));
   }
+}
+
+// Returns true is any updater process is found running in any session in the
+// system, regardless of its path.
+bool IsUpdaterRunning() {
+  ProcessFilterName filter(kUpdaterProcessName);
+  return base::ProcessIterator(&filter).NextProcessEntry();
 }
 
 }  // namespace
@@ -425,9 +448,10 @@ void ExpectNotActive(UpdaterScope /*scope*/, const std::string& id) {
   }
 }
 
-void WaitForServerExit(UpdaterScope scope) {
-  // CreateGlobalPrefs will block until it can acquire the prefs lock.
-  CreateGlobalPrefs(scope);
+// Waits for all updater processes to end, including the server process holding
+// the prefs lock.
+void WaitForServerExit(UpdaterScope /*scope*/) {
+  WaitFor(base::BindRepeating([]() { return !IsUpdaterRunning(); }));
 }
 
 // Tests if the typelibs and some of the public, internal, and
@@ -446,6 +470,7 @@ void ExpectInterfacesRegistered(UpdaterScope scope) {
     Microsoft::WRL::ComPtr<IUpdater> updater;
     EXPECT_HRESULT_SUCCEEDED(updater_server.As(&updater));
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     Microsoft::WRL::ComPtr<IUnknown> updater_legacy_server;
     EXPECT_HRESULT_SUCCEEDED(::CoCreateInstance(
         scope == UpdaterScope::kSystem ? __uuidof(GoogleUpdate3WebSystemClass)
@@ -457,6 +482,7 @@ void ExpectInterfacesRegistered(UpdaterScope scope) {
     Microsoft::WRL::ComPtr<IDispatch> dispatch;
     EXPECT_HRESULT_SUCCEEDED(google_update->createAppBundleWeb(&dispatch));
     EXPECT_HRESULT_SUCCEEDED(dispatch.As(&app_bundle));
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
   }
 
   // IUpdaterInternal.
@@ -488,13 +514,17 @@ HRESULT InitializeBundle(UpdaterScope scope,
   return S_OK;
 }
 
-HRESULT DoLoopUntilDone(Microsoft::WRL::ComPtr<IAppBundleWeb> bundle) {
+HRESULT DoLoopUntilDone(Microsoft::WRL::ComPtr<IAppBundleWeb> bundle,
+                        int expected_final_state,
+                        HRESULT expected_error_code) {
   bool done = false;
   static const base::TimeDelta kExpirationTimeout = base::Minutes(1);
   base::ElapsedTimer timer;
 
   EXPECT_TRUE(timer.Elapsed() < kExpirationTimeout);
 
+  LONG state_value = 0;
+  LONG error_code = 0;
   while (!done && (timer.Elapsed() < kExpirationTimeout)) {
     EXPECT_TRUE(bundle);
 
@@ -511,7 +541,6 @@ HRESULT DoLoopUntilDone(Microsoft::WRL::ComPtr<IAppBundleWeb> bundle) {
     std::wstring stateDescription;
     std::wstring extraData;
 
-    LONG state_value = 0;
     EXPECT_HRESULT_SUCCEEDED(state->get_stateValue(&state_value));
 
     switch (state_value) {
@@ -607,7 +636,6 @@ HRESULT DoLoopUntilDone(Microsoft::WRL::ComPtr<IAppBundleWeb> bundle) {
       case STATE_ERROR: {
         stateDescription = L"Error!";
 
-        LONG error_code = 0;
         EXPECT_HRESULT_SUCCEEDED(state->get_errorCode(&error_code));
 
         base::win::ScopedBstr completion_message;
@@ -639,22 +667,80 @@ HRESULT DoLoopUntilDone(Microsoft::WRL::ComPtr<IAppBundleWeb> bundle) {
   }
 
   EXPECT_TRUE(done);
+  EXPECT_EQ(expected_final_state, state_value);
+  EXPECT_EQ(expected_error_code, error_code);
 
   return S_OK;
 }
 
-HRESULT DoUpdate(UpdaterScope scope, const base::win::ScopedBstr& appid) {
+HRESULT DoUpdate(UpdaterScope scope,
+                 const base::win::ScopedBstr& appid,
+                 int expected_final_state,
+                 HRESULT expected_error_code) {
   Microsoft::WRL::ComPtr<IAppBundleWeb> bundle;
   EXPECT_HRESULT_SUCCEEDED(InitializeBundle(scope, bundle));
   EXPECT_HRESULT_SUCCEEDED(bundle->createInstalledApp(appid.Get()));
   EXPECT_HRESULT_SUCCEEDED(bundle->checkForUpdate());
-  return DoLoopUntilDone(bundle);
+  return DoLoopUntilDone(bundle, expected_final_state, expected_error_code);
 }
 
 void ExpectLegacyUpdate3WebSucceeds(UpdaterScope scope,
-                                    const std::string& app_id) {
+                                    const std::string& app_id,
+                                    int expected_final_state,
+                                    int expected_error_code) {
   EXPECT_HRESULT_SUCCEEDED(
-      DoUpdate(scope, base::win::ScopedBstr(base::UTF8ToWide(app_id).c_str())));
+      DoUpdate(scope, base::win::ScopedBstr(base::UTF8ToWide(app_id).c_str()),
+               expected_final_state, expected_error_code));
+}
+
+void SetFcLaunchCmd(const std::wstring& id) {
+  base::win::RegKey key;
+  ASSERT_EQ(key.Create(HKEY_LOCAL_MACHINE, GetAppClientsKey(id).c_str(),
+                       Wow6432(KEY_WRITE)),
+            ERROR_SUCCESS);
+  EXPECT_EQ(key.WriteValue(L"fc", L"fc /?"), ERROR_SUCCESS);
+}
+
+void DeleteFcLaunchCmd(const std::wstring& id) {
+  base::win::RegKey key;
+  ASSERT_EQ(key.Create(HKEY_LOCAL_MACHINE, GetAppClientsKey(id).c_str(),
+                       Wow6432(KEY_WRITE)),
+            ERROR_SUCCESS);
+  EXPECT_EQ(key.DeleteValue(L"fc"), ERROR_SUCCESS);
+}
+
+void ExpectLegacyProcessLauncherSucceeds(UpdaterScope scope) {
+  // ProcessLauncher is only implemented for kSystem at the moment.
+  if (scope != UpdaterScope::kSystem)
+    return;
+
+  Microsoft::WRL::ComPtr<IProcessLauncher> process_launcher;
+  EXPECT_HRESULT_SUCCEEDED(::CoCreateInstance(__uuidof(ProcessLauncherClass),
+                                              nullptr, CLSCTX_LOCAL_SERVER,
+                                              IID_PPV_ARGS(&process_launcher)));
+  EXPECT_TRUE(process_launcher);
+
+  const wchar_t* const kAppId1 = L"{831EF4D0-B729-4F61-AA34-91526481799D}";
+  ULONG_PTR proc_handle = 0;
+  DWORD caller_proc_id = ::GetCurrentProcessId();
+
+  // Succeeds when the command is present in the registry.
+  SetFcLaunchCmd(kAppId1);
+  EXPECT_HRESULT_SUCCEEDED(process_launcher->LaunchCmdElevated(
+      kAppId1, _T("fc"), caller_proc_id, &proc_handle));
+  EXPECT_NE(static_cast<ULONG_PTR>(0), proc_handle);
+
+  HANDLE handle = reinterpret_cast<HANDLE>(proc_handle);
+  EXPECT_NE(WAIT_FAILED, ::WaitForSingleObject(handle, 10000));
+  EXPECT_TRUE(::CloseHandle(handle));
+  DeleteFcLaunchCmd(kAppId1);
+
+  // Returns HRESULT_FROM_WIN32(ERROR_NOT_FOUND) when the command is missing in
+  // the registry.
+  EXPECT_EQ(HRESULT_FROM_WIN32(ERROR_NOT_FOUND),
+            process_launcher->LaunchCmdElevated(kAppId1, _T("fc"),
+                                                caller_proc_id, &proc_handle));
+  EXPECT_EQ(static_cast<ULONG_PTR>(0), proc_handle);
 }
 
 int RunVPythonCommand(const base::CommandLine& command_line) {
@@ -680,6 +766,48 @@ void RunTestServiceCommand(const std::string& sub_command) {
   command.AppendArg(sub_command);
 
   EXPECT_EQ(RunVPythonCommand(command), 0);
+}
+
+void InvokeTestServiceFunction(
+    const std::string& function_name,
+    const base::flat_map<std::string, base::Value>& arguments) {
+  std::string arguments_json_string;
+  EXPECT_TRUE(
+      base::JSONWriter::Write(base::Value(arguments), &arguments_json_string));
+
+  base::FilePath path(base::CommandLine::ForCurrentProcess()->GetProgram());
+  path = path.DirName();
+  path = MakeAbsoluteFilePath(path);
+  path = path.Append(FILE_PATH_LITERAL("test_service"))
+             .Append(FILE_PATH_LITERAL("service_client.py"));
+  EXPECT_TRUE(base::PathExists(path));
+
+  base::CommandLine command(path);
+  command.AppendSwitchASCII("--function", function_name);
+  command.AppendSwitchASCII("--args", arguments_json_string);
+  EXPECT_EQ(RunVPythonCommand(command), 0);
+}
+
+void RunUninstallCmdLine(UpdaterScope scope) {
+  HKEY root =
+      (scope == UpdaterScope::kSystem) ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+
+  std::wstring uninstall_cmd_line_string;
+  EXPECT_EQ(
+      ERROR_SUCCESS,
+      base::win::RegKey(root, UPDATER_KEY, Wow6432(KEY_READ))
+          .ReadValue(kRegValueUninstallCmdLine, &uninstall_cmd_line_string));
+  base::CommandLine command_line =
+      base::CommandLine::FromString(uninstall_cmd_line_string);
+
+  base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait_process;
+
+  base::Process process = base::LaunchProcess(command_line, {});
+  EXPECT_TRUE(process.IsValid());
+
+  int exit_code = 0;
+  EXPECT_TRUE(process.WaitForExitWithTimeout(base::Seconds(45), &exit_code));
+  EXPECT_EQ(0, exit_code);
 }
 
 }  // namespace test

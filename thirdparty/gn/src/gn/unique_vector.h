@@ -126,6 +126,10 @@ class UniqueVector {
       push_back(*i);
   }
 
+  void Append(const UniqueVector& other) {
+    Append(other.begin(), other.end());
+  }
+
   // Returns the index of the item matching the given value in the list, or
   // (size_t)(-1) if it's not found.
   size_t IndexOf(const T& t) const {

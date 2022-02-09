@@ -53,6 +53,9 @@ class SimpleBigQueryQuerier(queries_module.BigQueryQuerier):
   def _StripPrefixFromTestId(self, test_id):
     return test_id.split('.')[-1]
 
+  def _GetActiveBuilderQuery(self, _):
+    return ''
+
 
 def CreateGenericQuerier(suite=None,
                          project=None,
@@ -157,10 +160,10 @@ class GenericExpectations(expectations.Expectations):
   def GetExpectationFilepaths(self):
     return []
 
-  def _GetExpectationFileTagHeader(self):
+  def _GetExpectationFileTagHeader(self, _):
     return """\
 # tags: [ linux mac win ]
-# results: [ Failure RetryOnFailure Skip ]
+# results: [ Failure RetryOnFailure Skip Pass ]
 """
 
 

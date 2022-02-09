@@ -290,14 +290,9 @@ enum wxBorder
  * should be passed to wxWindow::SetExtraStyle(), not SetWindowStyle())
  */
 
-/*  by default, TransferDataTo/FromWindow() only work on direct children of the */
-/*  window (compatible behaviour), set this flag to make them recursively */
-/*  descend into all subwindows */
-#define wxWS_EX_VALIDATE_RECURSIVELY    0x00000001
-
 /*  wxCommandEvents and the objects of the derived classes are forwarded to the */
 /*  parent window and so on recursively by default. Using this flag for the */
-/*  given window allows to block this propagation at this window, i.e. prevent */
+/*  given window allows blocking this propagation at this window, i.e. preventing */
 /*  the events from being propagated further upwards. The dialogs have this */
 /*  flag on by default. */
 #define wxWS_EX_BLOCK_EVENTS            0x00000002
@@ -384,9 +379,8 @@ enum wxBorder
 
 /*
  * wxRadioBox style flags
+ * These styles are not used in any port.
  */
-/*  should we number the items from left to right or from top to bottom in a 2d */
-/*  radiobox? */
 #define wxRA_LEFTTORIGHT    0x0001
 #define wxRA_TOPTOBOTTOM    0x0002
 
@@ -542,7 +536,7 @@ enum wxBackgroundStyle
         with this style.
      */
     wxBG_STYLE_PAINT,
-    
+
     /* this style is deprecated and doesn't do anything, don't use */
     wxBG_STYLE_COLOUR,
 
@@ -562,20 +556,27 @@ enum wxBackgroundStyle
 
     Notice that some, but @em not all, of these IDs are also stock IDs, i.e.
     you can use them for the button or menu items without specifying the label
-    which will be provided by the underlying platform itself. See @ref page_stockitems "the
-    list of stock items" for the subset of standard IDs which are stock IDs as well.
+    which will be provided by the underlying platform itself. See
+    @ref page_stockitems "the list of stock items" for the subset of standard
+    IDs which are stock IDs as well.
 */
 enum wxStandardID
 {
     /**
        This id delimits the lower bound of the range used by automatically-generated ids
-       (i.e. those used when wxID_ANY is specified during construction).
+       (i.e.\ those used when wxID_ANY is specified during construction).
+
+       It is defined as a relatively large negative number and its exact value
+       is platform-dependent.
      */
     wxID_AUTO_LOWEST,
 
     /**
        This id delimits the upper bound of the range used by automatically-generated ids
-       (i.e. those used when wxID_ANY is specified during construction).
+       (i.e.\ those used when wxID_ANY is specified during construction).
+
+       It is defined as a relatively small negative number and its exact value
+       is platform-dependent.
      */
     wxID_AUTO_HIGHEST,
 
@@ -595,6 +596,11 @@ enum wxStandardID
     */
     wxID_ANY = -1,
 
+    /**
+        Start of the range reserved for wxWidgets-defined IDs.
+
+        Don't define custom IDs in the range from wxID_LOWEST to wxID_HIGHEST.
+     */
     wxID_LOWEST = 4999,
 
     wxID_OPEN,
@@ -742,6 +748,15 @@ enum wxStandardID
     /** IDs used by generic file ctrl (4 consecutive starting from this value) */
     wxID_FILECTRL = 5950,
 
+    /**
+        End of the range reserved for wxWidgets-defined IDs.
+
+        Don't define custom IDs in the range from wxID_LOWEST to wxID_HIGHEST.
+
+        When using an enum to define a number of custom IDs, assigning the
+        value of @c wxID_HIGHEST+1 to the first element ensures that none of
+        the enum elements will conflict with any standard IDs.
+     */
     wxID_HIGHEST = 5999
 };
 
@@ -839,6 +854,7 @@ enum wxDataFormatId
     wxDF_LOCALE =           16,
     wxDF_PRIVATE =          20,
     wxDF_HTML =             30, /* Note: does not correspond to CF_ constant */
+    wxDF_PNG =              31, /* Note: does not correspond to CF_ constant */
     wxDF_MAX
 };
 
@@ -892,7 +908,7 @@ enum wxKeyCode
     WXK_CONTROL_X,
     WXK_CONTROL_Y,
     WXK_CONTROL_Z,
-    
+
     WXK_BACK    =    8,     //!< Backspace.
     WXK_TAB     =    9,
     WXK_RETURN  =    13,
@@ -916,13 +932,13 @@ enum wxKeyCode
     WXK_CLEAR,
     WXK_SHIFT,
     WXK_ALT,
-    /** Note that under Mac OS X, to improve compatibility with other
+    /** Note that under macOS, to improve compatibility with other
       * systems, 'WXK_CONTROL' represents the 'Command' key. Use this
       * constant to work with keyboard shortcuts. See 'WXK_RAW_CONTROL'
       * to get the state of the actual 'Control' key.
       */
     WXK_CONTROL,
-    /** Under Mac OS X, where the 'Command' key is mapped to 'Control'
+    /** Under macOS, where the 'Command' key is mapped to 'Control'
       * to improve compatibility with other systems, WXK_RAW_CONTROL may
       * be used to obtain the state of the actual 'Control' key
       * ('WXK_CONTROL' would obtain the status of the 'Command' key).
@@ -1019,8 +1035,8 @@ enum wxKeyCode
     WXK_WINDOWS_LEFT,
     WXK_WINDOWS_RIGHT,
     WXK_WINDOWS_MENU ,
-    
-    /** This special key code was used to represent the key used for keyboard shortcuts. Under Mac OS X,
+
+    /** This special key code was used to represent the key used for keyboard shortcuts. Under macOS,
       * this key maps to the 'Command' (aka logo or 'Apple') key, whereas on Linux/Windows/others
       * this is the Control key, with the new semantic of WXK_CONTROL, WXK_COMMAND is not needed anymore
       */
@@ -1046,7 +1062,25 @@ enum wxKeyCode
     WXK_SPECIAL17,
     WXK_SPECIAL18,
     WXK_SPECIAL19,
-    WXK_SPECIAL20
+    WXK_SPECIAL20,
+
+    WXK_BROWSER_BACK = 501,
+    WXK_BROWSER_FORWARD,
+    WXK_BROWSER_REFRESH,
+    WXK_BROWSER_STOP,
+    WXK_BROWSER_SEARCH,
+    WXK_BROWSER_FAVORITES,
+    WXK_BROWSER_HOME,
+    WXK_VOLUME_MUTE,
+    WXK_VOLUME_DOWN,
+    WXK_VOLUME_UP,
+    WXK_MEDIA_NEXT_TRACK,
+    WXK_MEDIA_PREV_TRACK,
+    WXK_MEDIA_STOP,
+    WXK_MEDIA_PLAY_PAUSE,
+    WXK_LAUNCH_MAIL,
+    WXK_LAUNCH_APP1,
+    WXK_LAUNCH_APP2
 };
 
 /**
@@ -1056,17 +1090,17 @@ enum wxKeyModifier
 {
     wxMOD_NONE      = 0x0000,
     wxMOD_ALT       = 0x0001,
-    /** Ctlr Key, corresponds to Command key on OS X */
+    /** Ctlr Key, corresponds to Command key on macOS */
     wxMOD_CONTROL   = 0x0002,
     wxMOD_ALTGR     = wxMOD_ALT | wxMOD_CONTROL,
     wxMOD_SHIFT     = 0x0004,
     wxMOD_META      = 0x0008,
     wxMOD_WIN       = wxMOD_META,
-    
-    /** used to describe the true Ctrl Key under OSX, 
+
+    /** used to describe the true Ctrl Key under macOS,
     identic to @c wxMOD_CONTROL on other platforms */
     wxMOD_RAW_CONTROL,
-    
+
     /** deprecated, identic to @c wxMOD_CONTROL on all platforms */
     wxMOD_CMD       = wxMOD_CONTROL,
     wxMOD_ALL       = 0xffff
@@ -1219,13 +1253,24 @@ enum wxDuplexMode
 };
 
 /**
-    Print quality.
-*/
+    Predefined print quality constants.
+
+    @see ::wxPrintQuality
+ */
 #define wxPRINT_QUALITY_HIGH    -1
 #define wxPRINT_QUALITY_MEDIUM  -2
 #define wxPRINT_QUALITY_LOW     -3
 #define wxPRINT_QUALITY_DRAFT   -4
 
+/**
+    Specifies the print quality as either a predefined level or explicit
+    resolution.
+
+    The print quality may be one of ::wxPRINT_QUALITY_HIGH,
+    ::wxPRINT_QUALITY_MEDIUM, ::wxPRINT_QUALITY_LOW or ::wxPRINT_QUALITY_DRAFT
+    (which are all negative) or express the desired resolution, in DPI, e.g.
+    600.
+ */
 typedef int wxPrintQuality;
 
 /**
@@ -1533,7 +1578,7 @@ typedef double wxDouble;
 
     @header{wx/defs.h}
 */
-template <typename T> wxDELETE(T*& ptr);
+template <typename T> void wxDELETE(T*& ptr);
 
 /**
     A function which deletes and nulls the pointer.
@@ -1553,7 +1598,7 @@ template <typename T> wxDELETE(T*& ptr);
 
     @header{wx/defs.h}
 */
-template <typename T> wxDELETEA(T*& array);
+template <typename T> void wxDELETEA(T*& array);
 
 /**
     Generate deprecation warning with the given message when a function is
@@ -1579,6 +1624,7 @@ template <typename T> wxDELETEA(T*& array);
 
     @header{wx/defs.h}
  */
+#define wxDEPRECATED_MSG(msg)
 
 /**
     This macro can be used around a function declaration to generate warnings
@@ -1676,15 +1722,31 @@ template <typename T> wxDELETEA(T*& array);
 #define wxDEPRECATED_BUT_USED_INTERNALLY_INLINE(func, body)
 
 /**
-    @c wxEXPLICIT is a macro which expands to the C++ @c explicit keyword if
-    the compiler supports it or nothing otherwise. Thus, it can be used even in
-    the code which might have to be compiled with an old compiler without
-    support for this language feature but still take advantage of it when it is
-    available.
+    @c wxOVERRIDE expands to the C++11 @c override keyword if it's supported by
+    the compiler or nothing otherwise.
+
+    This macro is useful for writing code which may be compiled by both C++11
+    and non-C++11 compilers and still allow the use of @c override for the
+    former.
+
+    Example of using this macro:
+    @code
+        class MyApp : public wxApp {
+        public:
+            virtual bool OnInit() wxOVERRIDE;
+
+            // This would result in an error from a C++11 compiler as the
+            // method doesn't actually override the base class OnExit() due to
+            // a typo in its name.
+            //virtual int OnEzit() wxOVERRIDE;
+        };
+    @endcode
 
     @header{wx/defs.h}
-*/
-#define wxEXPLICIT
+
+    @since 3.1.0
+ */
+#define wxOVERRIDE
 
 /**
     GNU C++ compiler gives a warning for any class whose destructor is private
@@ -1735,7 +1797,7 @@ template <typename T> wxDELETEA(T*& array);
         wxASSERT( x == 4 && y == 3 );
     @endcode
  */
-template <typename T> wxSwap(T& first, T& second);
+template <typename T> void wxSwap(T& first, T& second);
 
 /**
     This macro is the same as the standard C99 @c va_copy for the compilers

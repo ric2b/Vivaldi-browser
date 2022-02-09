@@ -9,7 +9,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
@@ -321,6 +321,9 @@ void ConnectivityCheckerImpl::OnUrlRequestError(ErrorType type) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   ++check_errors_;
   if (check_errors_ > kNumErrorsToNotifyOffline) {
+    LOG(INFO) << "Notify connectivity check failure.";
+    NotifyCheckFailure();
+
     // Only record event on the connectivity transition.
     if (connected_and_time_synced_) {
       cast_metrics_helper_->RecordEventWithValue(

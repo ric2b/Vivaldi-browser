@@ -92,7 +92,7 @@ private :
 
 #define _DEFAULT_CONSTRUCTOR(name)                                          \
 wxObject* wxConstructorFor##name()                                          \
-{ return new name; }                                                        
+{ return new name; }
 
 #define _DEFAULT_CONVERTERS(name)                                          \
 wxObject* wxVariantOfPtrToObjectConverter##name ( const wxAny &data )        \
@@ -123,7 +123,7 @@ wxObject* wxVariantOfPtrToObjectConverter##name ( const wxAny &data )        \
     _DEFAULT_CONSTRUCTOR(name)                                                  \
     _DEFAULT_CONVERTERS(name)                                                   \
     void wxVariantToObjectConverter##name ( const wxAny &data, wxObjectFunctor* fn )                 \
-    { name o = wxANY_AS(data, name); (*fn)( &o ); }                        \
+    { name o = data.As<name>(); (*fn)( &o ); }                        \
     \
     const wxClassInfo* name::ms_classParents[] = { &basename::ms_classInfo,NULL };  \
     wxClassInfo name::ms_classInfo(name::ms_classParents, wxT(unit),                \
@@ -258,28 +258,28 @@ template<typename T>
 void wxStringWriteValue( wxString &s, const T &data);
 
 template<typename T>
-void wxToStringConverter( const wxAny &v, wxString &s ) 
-{ wxStringWriteValue(s, wxANY_AS(v, T)); }
+void wxToStringConverter( const wxAny &v, wxString &s )
+{ wxStringWriteValue(s, v.As<T>()); }
 
 template<typename T>
-void wxFromStringConverter( const wxString &s, wxAny &v) 
+void wxFromStringConverter( const wxString &s, wxAny &v)
 { T d; wxStringReadValue(s, d); v = wxAny(d); }
 
 // --------------------------------------------------------------------------
 // Collection Support
 // --------------------------------------------------------------------------
 
-template<typename iter, typename collection_t > void wxListCollectionToAnyList( 
+template<typename iter, typename collection_t > void wxListCollectionToAnyList(
                                                                                const collection_t& coll, wxAnyList &value )
 {
-    for ( iter current = coll.GetFirst(); current; 
+    for ( iter current = coll.GetFirst(); current;
          current = current->GetNext() )
     {
         value.Append( new wxAny(current->GetData()) );
     }
 }
 
-template<typename collection_t> void wxArrayCollectionToVariantArray( 
+template<typename collection_t> void wxArrayCollectionToVariantArray(
                                                                      const collection_t& coll, wxAnyList &value )
 {
     for( size_t i = 0; i < coll.GetCount(); i++ )

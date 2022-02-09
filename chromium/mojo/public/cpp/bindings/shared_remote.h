@@ -8,11 +8,11 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/macros.h"
+#include "base/ignore_result.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/lib/thread_safe_forwarder_base.h"
@@ -75,6 +75,9 @@ class SharedRemoteBase
  public:
   using InterfaceType = typename RemoteType::InterfaceType;
   using PendingType = typename RemoteType::PendingType;
+
+  SharedRemoteBase(const SharedRemoteBase&) = delete;
+  SharedRemoteBase& operator=(const SharedRemoteBase&) = delete;
 
   InterfaceType* get() { return &forwarder_->proxy(); }
   InterfaceType* operator->() { return get(); }
@@ -218,8 +221,6 @@ class SharedRemoteBase
 
   const scoped_refptr<RemoteWrapper> wrapper_;
   const std::unique_ptr<ThreadSafeForwarder<InterfaceType>> forwarder_;
-
-  DISALLOW_COPY_AND_ASSIGN(SharedRemoteBase);
 };
 
 // SharedRemote wraps a non-thread-safe Remote and proxies messages to it. Note

@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_DIRDLG
 
@@ -24,7 +21,7 @@
 
 #include "wx/dirctrl.h"
 
-IMPLEMENT_DYNAMIC_CLASS(wxGenericDirCtrlXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxGenericDirCtrlXmlHandler, wxXmlResourceHandler);
 
 wxGenericDirCtrlXmlHandler::wxGenericDirCtrlXmlHandler()
 : wxXmlResourceHandler()

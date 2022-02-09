@@ -6,6 +6,7 @@
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -75,6 +76,11 @@ def ExtractSDKInfo(info, sdk):
       ['xcrun', '--sdk', sdk, '--show-sdk-' + info]).strip()
 
 
+def GetDeveloperDir():
+  """Returns the developer dir."""
+  return subprocess.check_output(['xcode-select', '-print-path']).strip()
+
+
 def GetSDKInfoForCpu(target_cpu, sdk_version, deployment_target):
   """Returns a dictionary with information about the SDK."""
   platform = GetPlatform(target_cpu)
@@ -97,6 +103,8 @@ def GetSDKInfoForCpu(target_cpu, sdk_version, deployment_target):
   sdk_info['sdk'] = effective_sdk
   sdk_info['sdk_build'] = ExtractSDKInfo('build-version', effective_sdk)
   sdk_info['sdk_path'] = ExtractSDKInfo('path', effective_sdk)
+  sdk_info['toolchain_path'] = os.path.join(
+      GetDeveloperDir(), 'Toolchains/XcodeDefault.xctoolchain')
   sdk_info['sdk_version'] = sdk_version
   sdk_info['target'] = target
   sdk_info['xcode_build'] = xcode_build

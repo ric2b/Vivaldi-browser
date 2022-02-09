@@ -9,7 +9,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
@@ -261,9 +260,9 @@ class ManagePasswordsUIController
   // it shouldn't anymore.
   void ClearPopUpFlagForBubble();
 
-  // Closes the account chooser gracefully so the callback is called. Then sets
-  // the state to MANAGE_STATE.
-  void DestroyAccountChooser();
+  // Closes the account chooser gracefully so the callback is called. Closes the
+  // password bubble. Then sets the state to MANAGE_STATE.
+  void DestroyPopups();
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;

@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_LISTCTRL
 
@@ -42,24 +39,33 @@
 #include "wx/vector.h"
 
 #include "wx/msw/private.h"
+#include "wx/msw/private/customdraw.h"
 #include "wx/msw/private/keyboard.h"
 
-#if defined(__WXWINCE__) && !defined(__HANDHELDPC__)
-  #include <ole2.h>
-  #include <shellapi.h>
-  #if _WIN32_WCE < 400
-    #include <aygshell.h>
-  #endif
-#endif
-
-// Currently gcc and watcom don't define NMLVFINDITEM, and DMC only defines
+// Currently gcc doesn't define NMLVFINDITEM, and DMC only defines
 // it by its old name NM_FINDTIEM.
 //
-#if defined(__VISUALC__) || defined(__BORLANDC__) || defined(NMLVFINDITEM)
+#if defined(__VISUALC__) || defined(NMLVFINDITEM)
     #define HAVE_NMLVFINDITEM 1
-#elif defined(__DMC__) || defined(NM_FINDITEM)
+#elif defined(NM_FINDITEM)
     #define HAVE_NMLVFINDITEM 1
     #define NMLVFINDITEM NM_FINDITEM
+#endif
+
+// MinGW headers lack casts to WPARAM inside several ListView_XXX() macros, so
+// add them to suppress the warnings about implicit conversions/truncation.
+// However do not add them for MSVC as it has casts not only to WPARAM but
+// actually to int first, and then to WPARAM, and casting to WPARAM here would
+// result in warnings when casting 64 bit WPARAM to 32 bit int inside the
+// macros in Win64 builds.
+#ifdef __MINGW32__
+    #define NO_ITEM (static_cast<WPARAM>(-1))
+#else
+    #define NO_ITEM (-1)
+#endif
+
+#ifndef LVM_ISITEMVISIBLE
+    #define LVM_ISITEMVISIBLE (LVM_FIRST + 182)
 #endif
 
 // ----------------------------------------------------------------------------
@@ -194,7 +200,7 @@ private:
 ///////////////////////////////////////////////////////
 // Problem:
 // The MSW version had problems with SetTextColour() et
-// al as the wxListItemAttr's were stored keyed on the
+// al as the wxItemAttr's were stored keyed on the
 // item index. If a item was inserted anywhere but the end
 // of the list the text attributes (colour etc) for
 // the following items were out of sync.
@@ -219,16 +225,45 @@ public:
    wxMSWListItemData() : attr(NULL), lParam(0) {}
    ~wxMSWListItemData() { delete attr; }
 
-    wxListItemAttr *attr;
+    wxItemAttr *attr;
     LPARAM lParam; // real user data
 
     wxDECLARE_NO_COPY_CLASS(wxMSWListItemData);
 };
 
-BEGIN_EVENT_TABLE(wxListCtrl, wxListCtrlBase)
+// wxMSWListHeaderCustomDraw: custom draw helper for the header
+class wxMSWListHeaderCustomDraw : public wxMSWImpl::CustomDraw
+{
+public:
+    wxMSWListHeaderCustomDraw()
+    {
+    }
+
+    // Make this field public to let wxListCtrl update it directly when its
+    // header attributes change.
+    wxItemAttr m_attr;
+
+private:
+    virtual bool HasCustomDrawnItems() const wxOVERRIDE
+    {
+        // We only exist if the header does need to be custom drawn.
+        return true;
+    }
+
+    virtual const wxItemAttr*
+    GetItemAttr(DWORD_PTR WXUNUSED(dwItemSpec)) const wxOVERRIDE
+    {
+        // We use the same attribute for all items for now.
+        return &m_attr;
+    }
+};
+
+
+wxBEGIN_EVENT_TABLE(wxListCtrl, wxListCtrlBase)
     EVT_PAINT(wxListCtrl::OnPaint)
     EVT_CHAR_HOOK(wxListCtrl::OnCharHook)
-END_EVENT_TABLE()
+    EVT_DPI_CHANGED(wxListCtrl::OnDPIChanged)
+wxEND_EVENT_TABLE()
 
 // ============================================================================
 // implementation
@@ -248,10 +283,11 @@ void wxListCtrl::Init()
     m_ownsImageListState = false;
 
     m_colCount = 0;
-    m_count = 0;
     m_textCtrl = NULL;
 
     m_hasAnyAttr = false;
+
+    m_headerCustomDraw = NULL;
 }
 
 bool wxListCtrl::Create(wxWindow *parent,
@@ -268,8 +304,10 @@ bool wxListCtrl::Create(wxWindow *parent,
     if ( !MSWCreateControl(WC_LISTVIEW, wxEmptyString, pos, size) )
         return false;
 
+    EnableSystemThemeByDefault();
+
     // explicitly say that we want to use Unicode because otherwise we get ANSI
-    // versions of _some_ messages (notably LVN_GETDISPINFOA) in MSLU build
+    // versions of _some_ messages (notably LVN_GETDISPINFOA)
     wxSetCCUnicodeFormat(GetHwnd());
 
     // We must set the default text colour to the system/theme color, otherwise
@@ -279,31 +317,44 @@ bool wxListCtrl::Create(wxWindow *parent,
     if ( InReportView() )
         MSWSetExListStyles();
 
+    if ( HasFlag(wxLC_LIST) )
+        m_colCount = 1;
+
     return true;
 }
 
 void wxListCtrl::MSWSetExListStyles()
 {
-    // for comctl32.dll v 4.70+ we want to have some non default extended
+    // we want to have some non default extended
     // styles because it's prettier (and also because wxGTK does it like this)
-    if ( wxApp::GetComCtl32Version() >= 470 )
+    int exStyle =
+        LVS_EX_FULLROWSELECT |
+        LVS_EX_SUBITEMIMAGES |
+        // normally this should be governed by a style as it's probably not
+        // always appropriate, but we don't have any free styles left and
+        // it seems better to enable it by default than disable
+        LVS_EX_HEADERDRAGDROP;
+
+    // Showing the tooltip items not fitting into the control is nice, but not
+    // really compatible with having custom tooltips, as this could result in
+    // showing 2 tooltips simultaneously, which would be confusing. So only
+    // enable this style if there is no risk of this happening.
+    if ( !GetToolTip() )
+        exStyle |= LVS_EX_LABELTIP;
+
+    if ( wxApp::GetComCtl32Version() >= 600 )
     {
-        ::SendMessage
-        (
-            GetHwnd(), LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
-            // LVS_EX_LABELTIP shouldn't be used under Windows CE where it's
-            // not defined in the SDK headers
-#ifdef LVS_EX_LABELTIP
-            LVS_EX_LABELTIP |
-#endif
-            LVS_EX_FULLROWSELECT |
-            LVS_EX_SUBITEMIMAGES |
-            // normally this should be governed by a style as it's probably not
-            // always appropriate, but we don't have any free styles left and
-            // it seems better to enable it by default than disable
-            LVS_EX_HEADERDRAGDROP
-        );
+        // We must enable double buffering when using the system theme to avoid
+        // various display glitches and it should be harmless to just always do
+        // it when using comctl32.dll v6.
+        exStyle |= LVS_EX_DOUBLEBUFFER;
+
+        // When using LVS_EX_DOUBLEBUFFER, we don't need to erase our
+        // background and doing it only results in flicker.
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
     }
+
+    ::SendMessage(GetHwnd(), LVM_SETEXTENDEDLISTVIEWSTYLE, 0, exStyle);
 }
 
 WXDWORD wxListCtrl::MSWGetStyle(long style, WXDWORD *exstyle) const
@@ -363,23 +414,57 @@ WXDWORD wxListCtrl::MSWGetStyle(long style, WXDWORD *exstyle) const
     else if ( style & wxLC_SORT_DESCENDING )
         wstyle |= LVS_SORTDESCENDING;
 
-#if !( defined(__GNUWIN32__) && !wxCHECK_W32API_VERSION( 1, 0 ) )
     if ( style & wxLC_VIRTUAL )
     {
-        int ver = wxApp::GetComCtl32Version();
-        if ( ver < 470 )
-        {
-            wxLogWarning(_("Please install a newer version of comctl32.dll\n(at least version 4.70 is required but you have %d.%02d)\nor this program won't operate correctly."),
-                        ver / 100, ver % 100);
-        }
-
         wstyle |= LVS_OWNERDATA;
     }
-#endif // ancient cygwin
 
     return wstyle;
 }
 
+void wxListCtrl::MSWUpdateFontOnDPIChange(const wxSize& newDPI)
+{
+    wxListCtrlBase::MSWUpdateFontOnDPIChange(newDPI);
+
+    if ( m_headerCustomDraw && m_headerCustomDraw->m_attr.HasFont() )
+    {
+        wxItemAttr item(m_headerCustomDraw->m_attr);
+        wxFont f = item.GetFont();
+        f.WXAdjustToPPI(newDPI);
+        item.SetFont(f);
+
+        // reset the item attribute first so wxListCtrl::SetHeaderAttr
+        // will detect the font change
+        SetHeaderAttr(wxItemAttr());
+        SetHeaderAttr(item);
+    }
+}
+
+void wxListCtrl::OnDPIChanged(wxDPIChangedEvent &event)
+{
+    const int numCols = GetColumnCount();
+    for ( int i = 0; i < numCols; ++i )
+    {
+        int width = GetColumnWidth(i);
+        if ( width > 0 )
+            width = width * event.GetNewDPI().x / event.GetOldDPI().x;
+        SetColumnWidth(i, width);
+    }
+}
+
+bool wxListCtrl::IsDoubleBuffered() const
+{
+    // LVS_EX_DOUBLEBUFFER is turned on for comctl32 v6+.
+    return wxApp::GetComCtl32Version() >= 600;
+}
+
+void wxListCtrl::SetDoubleBuffered(bool WXUNUSED(on))
+{
+    // Nothing to do, it's always enabled if supported.
+}
+
+#if WXWIN_COMPATIBILITY_3_0
+// Deprecated
 void wxListCtrl::UpdateStyle()
 {
     if ( GetHwnd() )
@@ -405,11 +490,12 @@ void wxListCtrl::UpdateStyle()
 
             // if we switched to the report view, set the extended styles for
             // it too
-            if ( !(dwStyleOld & LVS_REPORT) && (dwStyleNew & LVS_REPORT) )
+            if ( (dwStyleOld & LVS_TYPEMASK) != LVS_REPORT && (dwStyleNew & LVS_TYPEMASK) == LVS_REPORT )
                 MSWSetExListStyles();
         }
     }
 }
+#endif // WXWIN_COMPATIBILITY_3_0
 
 void wxListCtrl::FreeAllInternalData()
 {
@@ -442,6 +528,8 @@ wxListCtrl::~wxListCtrl()
         delete m_imageListSmall;
     if (m_ownsImageListState)
         delete m_imageListState;
+
+    delete m_headerCustomDraw;
 }
 
 // ----------------------------------------------------------------------------
@@ -477,9 +565,24 @@ void wxListCtrl::SetWindowStyleFlag(long flag)
 {
     if ( flag != m_windowStyle )
     {
-        wxListCtrlBase::SetWindowStyleFlag(flag);
+        const bool wasInReportView = InReportView();
 
-        UpdateStyle();
+        // we don't have wxVSCROLL style, but the list control may have it,
+        // don't change it then in the call to parent's SetWindowStyleFlags()
+        DWORD dwStyle = ::GetWindowLong(GetHwnd(), GWL_STYLE);
+        flag &= ~(wxHSCROLL | wxVSCROLL);
+        if ( dwStyle & WS_HSCROLL )
+            flag |= wxHSCROLL;
+        if ( dwStyle & WS_VSCROLL )
+            flag |= wxVSCROLL;
+        wxListCtrlBase::SetWindowStyleFlag(flag);
+        // As it was said, we don't have wxSCROLL style
+        m_windowStyle &= ~(wxHSCROLL | wxVSCROLL);
+
+        // if we switched to the report view, set the extended styles for
+        // it too
+        if ( !wasInReportView && InReportView() )
+            MSWSetExListStyles();
 
         Refresh();
     }
@@ -506,7 +609,7 @@ bool wxListCtrl::SetForegroundColour(const wxColour& col)
     if ( !wxWindow::SetForegroundColour(col) )
         return false;
 
-    ListView_SetTextColor(GetHwnd(), wxColourToRGB(col));
+    SetTextColour(col);
 
     return true;
 }
@@ -520,8 +623,76 @@ bool wxListCtrl::SetBackgroundColour(const wxColour& col)
     // we set the same colour for both the "empty" background and the items
     // background
     COLORREF color = wxColourToRGB(col);
-    ListView_SetBkColor(GetHwnd(), color);
-    ListView_SetTextBkColor(GetHwnd(), color);
+    if ( !ListView_SetBkColor(GetHwnd(), color) )
+        wxLogLastError(wxS("ListView_SetBkColor()"));
+    if ( !ListView_SetTextBkColor(GetHwnd(), color) )
+        wxLogLastError(wxS("ListView_SetTextBkColor()"));
+
+    return true;
+}
+
+bool wxListCtrl::SetHeaderAttr(const wxItemAttr& attr)
+{
+    // We need to propagate the change of the font to the native header window
+    // as it also affects its layout.
+    bool fontChanged;
+
+    // Start or stop custom drawing the header.
+    if ( attr.IsDefault() )
+    {
+        if ( !m_headerCustomDraw )
+        {
+            // Nothing changed, skip refreshing the control below.
+            return true;
+        }
+
+        fontChanged = m_headerCustomDraw->m_attr.HasFont();
+
+        delete m_headerCustomDraw;
+        m_headerCustomDraw = NULL;
+    }
+    else // We do have custom attributes.
+    {
+        if ( !m_headerCustomDraw )
+            m_headerCustomDraw = new wxMSWListHeaderCustomDraw();
+
+        if ( m_headerCustomDraw->m_attr == attr )
+        {
+            // As above, skip refresh.
+            return true;
+        }
+
+        fontChanged = attr.GetFont() != m_headerCustomDraw->m_attr.GetFont();
+
+        m_headerCustomDraw->m_attr = attr;
+    }
+
+    if ( HWND hwndHdr = ListView_GetHeader(GetHwnd()) )
+    {
+        if ( fontChanged )
+        {
+            // Don't just reset the font if no font is specified, as the header
+            // uses the same font as the listview control and not the ugly
+            // default GUI font by default.
+            if ( attr.HasFont() )
+            {
+                wxSetWindowFont(hwndHdr, attr.GetFont());
+            }
+            else
+            {
+                // make sure m_font is valid before using its HFONT reference
+                SetFont(GetFont());
+                wxSetWindowFont(hwndHdr, m_font);
+            }
+        }
+
+        // Refreshing the listview makes it notice the change in height of its
+        // header and redraws it too. We probably could do something less than
+        // a full refresh, but it doesn't seem to be worth it, the header
+        // attributes won't be changed that often, so keep it simple for now.
+        Refresh();
+    }
+    //else: header not shown or not in report view?
 
     return true;
 }
@@ -580,16 +751,10 @@ bool wxListCtrl::GetColumn(int col, wxListItem& item) const
         }
     }
 
-    // the column images were not supported in older versions but how to check
-    // for this? we can't use _WIN32_IE because we always define it to a very
-    // high value, so see if another symbol which is only defined starting from
-    // comctl32.dll 4.70 is available
-#ifdef NM_CUSTOMDRAW // _WIN32_IE >= 0x0300
     if ( item.m_mask & wxLIST_MASK_IMAGE )
     {
         item.m_image = lvCol.iImage;
     }
-#endif // LVCOLUMN::iImage exists
 
     return success;
 }
@@ -620,7 +785,15 @@ bool wxListCtrl::SetColumnWidth(int col, int width)
     else if ( width == wxLIST_AUTOSIZE_USEHEADER)
         width = LVSCW_AUTOSIZE_USEHEADER;
 
-    return ListView_SetColumnWidth(GetHwnd(), col, width) != 0;
+    if ( !ListView_SetColumnWidth(GetHwnd(), col, width) )
+        return false;
+
+    // Failure to explicitly refresh the control with horizontal rules results
+    // in corrupted rules display.
+    if ( HasFlag(wxLC_HRULES) )
+        Refresh();
+
+    return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -727,7 +900,11 @@ bool wxListCtrl::GetItem(wxListItem& info) const
     lvItem.iItem = info.m_itemId;
     lvItem.iSubItem = info.m_col;
 
-    if ( info.m_mask & wxLIST_MASK_TEXT )
+    // If no mask is specified, get everything: this is compatible with the
+    // generic version and conforms to the principle of least surprise.
+    const long mask = info.m_mask ? info.m_mask : -1;
+
+    if ( mask & wxLIST_MASK_TEXT )
     {
         lvItem.mask |= LVIF_TEXT;
         lvItem.pszText = new wxChar[513];
@@ -738,13 +915,13 @@ bool wxListCtrl::GetItem(wxListItem& info) const
         lvItem.pszText = NULL;
     }
 
-    if (info.m_mask & wxLIST_MASK_DATA)
+    if ( mask & wxLIST_MASK_DATA )
         lvItem.mask |= LVIF_PARAM;
 
-    if (info.m_mask & wxLIST_MASK_IMAGE)
+    if ( mask & wxLIST_MASK_IMAGE )
         lvItem.mask |= LVIF_IMAGE;
 
-    if ( info.m_mask & wxLIST_MASK_STATE )
+    if ( mask & wxLIST_MASK_STATE )
     {
         lvItem.mask |= LVIF_STATE;
         wxConvertToMSWFlags(0, info.m_stateMask, lvItem);
@@ -766,6 +943,25 @@ bool wxListCtrl::GetItem(wxListItem& info) const
         delete[] lvItem.pszText;
 
     return success;
+}
+
+// Check if the item is visible
+bool wxListCtrl::IsVisible(long item) const
+{
+    bool result = ::SendMessage( GetHwnd(), LVM_ISITEMVISIBLE, (WPARAM) item, 0 ) != 0;
+    if ( result )
+    {
+        HWND hwndHdr = ListView_GetHeader(GetHwnd());
+        wxRect itemRect;
+        RECT headerRect;
+        if ( Header_GetItemRect( hwndHdr, 0, &headerRect ) )
+        {
+            GetItemRect( item, itemRect );
+            wxRect rectHeader = wxRectFromRECT( headerRect );
+            result = itemRect.GetBottom() > rectHeader.GetBottom();
+        }
+    }
+    return result;
 }
 
 // Sets information about the item
@@ -805,13 +1001,13 @@ bool wxListCtrl::SetItem(wxListItem& info)
         // attributes
         if ( info.HasAttributes() )
         {
-            const wxListItemAttr& attrNew = *info.GetAttributes();
+            const wxItemAttr& attrNew = *info.GetAttributes();
 
             // don't overwrite the already set attributes if we have them
             if ( data->attr )
                 data->attr->AssignFrom(attrNew);
             else
-                data->attr = new wxListItemAttr(attrNew);
+                data->attr = new wxItemAttr(attrNew);
         }
     }
 
@@ -849,7 +1045,7 @@ bool wxListCtrl::SetItem(wxListItem& info)
     return true;
 }
 
-long wxListCtrl::SetItem(long index, int col, const wxString& label, int imageId)
+bool wxListCtrl::SetItem(long index, int col, const wxString& label, int imageId)
 {
     wxListItem info;
     info.m_text = label;
@@ -868,6 +1064,9 @@ long wxListCtrl::SetItem(long index, int col, const wxString& label, int imageId
 // Gets the item state
 int wxListCtrl::GetItemState(long item, long stateMask) const
 {
+    wxCHECK_MSG( item >= 0 && item < GetItemCount(), 0,
+                 wxS("invalid list control item index in GetItemState()") );
+
     wxListItem info;
 
     info.m_mask = wxLIST_MASK_STATE;
@@ -933,7 +1132,7 @@ bool wxListCtrl::SetItemState(long item, long state, long stateMask)
     // to, so do it explicitly
     if ( changingFocus && !HasFlag(wxLC_SINGLE_SEL) )
     {
-        ListView_SetSelectionMark(GetHwnd(), item);
+        (void)ListView_SetSelectionMark(GetHwnd(), item);
     }
 
     return true;
@@ -1082,16 +1281,33 @@ bool wxListCtrl::GetSubItemRect(long item, long subItem, wxRect& rect, int code)
                  wxT("invalid item in GetSubItemRect") );
 
     int codeWin;
-    if ( code == wxLIST_RECT_BOUNDS )
-        codeWin = LVIR_BOUNDS;
-    else if ( code == wxLIST_RECT_ICON )
-        codeWin = LVIR_ICON;
-    else if ( code == wxLIST_RECT_LABEL )
-        codeWin = LVIR_LABEL;
-    else
+    switch ( code )
     {
-        wxFAIL_MSG( wxT("incorrect code in GetItemRect() / GetSubItemRect()") );
-        codeWin = LVIR_BOUNDS;
+        case wxLIST_RECT_BOUNDS:
+            codeWin = LVIR_BOUNDS;
+            break;
+
+        case wxLIST_RECT_ICON:
+            // Only the first subitem can have an icon, so it doesn't make
+            // sense to query the native control for the other ones --
+            // especially because it returns a nonsensical non-empty icon
+            // rectangle for them.
+            if ( subItem > 0 )
+            {
+                rect = wxRect();
+                return true;
+            }
+
+            codeWin = LVIR_ICON;
+            break;
+
+        case wxLIST_RECT_LABEL:
+            codeWin = LVIR_LABEL;
+            break;
+
+        default:
+            wxFAIL_MSG( wxT("incorrect code in GetItemRect() / GetSubItemRect()") );
+            return false;
     }
 
     RECT rectWin;
@@ -1141,7 +1357,7 @@ bool wxListCtrl::SetItemPosition(long item, const wxPoint& pos)
 // Gets the number of items in the list control
 int wxListCtrl::GetItemCount() const
 {
-    return m_count;
+    return GetHwnd() ? ListView_GetItemCount(GetHwnd()) : 0;
 }
 
 wxSize wxListCtrl::GetItemSpacing() const
@@ -1150,15 +1366,6 @@ wxSize wxListCtrl::GetItemSpacing() const
 
     return wxSize(LOWORD(spacing), HIWORD(spacing));
 }
-
-#if WXWIN_COMPATIBILITY_2_6
-
-int wxListCtrl::GetItemSpacing(bool isSmall) const
-{
-    return ListView_GetItemSpacing(GetHwnd(), (BOOL) isSmall);
-}
-
-#endif // WXWIN_COMPATIBILITY_2_6
 
 void wxListCtrl::SetItemTextColour( long item, const wxColour &col )
 {
@@ -1214,6 +1421,30 @@ wxFont wxListCtrl::GetItemFont( long item ) const
     return f;
 }
 
+bool wxListCtrl::HasCheckBoxes() const
+{
+    const DWORD currStyle = ListView_GetExtendedListViewStyle(GetHwnd());
+    return (currStyle & LVS_EX_CHECKBOXES) != 0;
+}
+
+bool wxListCtrl::EnableCheckBoxes(bool enable)
+{
+    (void)ListView_SetExtendedListViewStyleEx(GetHwnd(), LVS_EX_CHECKBOXES,
+                                              enable ? LVS_EX_CHECKBOXES : 0);
+
+    return true;
+}
+
+void wxListCtrl::CheckItem(long item, bool state)
+{
+    ListView_SetCheckState(GetHwnd(), (UINT)item, (BOOL)state);
+}
+
+bool wxListCtrl::IsItemChecked(long item) const
+{
+    return ListView_GetCheckState(GetHwnd(), (UINT)item) != 0;
+}
+
 // Gets the number of selected items in the list control
 int wxListCtrl::GetSelectedItemCount() const
 {
@@ -1231,7 +1462,8 @@ wxColour wxListCtrl::GetTextColour() const
 // Sets the text colour of the listview
 void wxListCtrl::SetTextColour(const wxColour& col)
 {
-    ListView_SetTextColor(GetHwnd(), PALETTERGB(col.Red(), col.Green(), col.Blue()));
+    if ( !ListView_SetTextColor(GetHwnd(), wxColourToPalRGB(col)) )
+        wxLogLastError(wxS("ListView_SetTextColor()"));
 }
 
 // Gets the index of the topmost visible item when in
@@ -1319,6 +1551,18 @@ void wxListCtrl::SetImageList(wxImageList *imageList, int which)
         m_ownsImageListState = false;
     }
     (void) ListView_SetImageList(GetHwnd(), (HIMAGELIST) imageList ? imageList->GetHIMAGELIST() : 0, flags);
+
+    // For ComCtl32 prior 6.0 we need to re-assign all existing
+    // text labels in order to position them correctly.
+    if ( wxApp::GetComCtl32Version() < 600 )
+    {
+        const int n = GetItemCount();
+        for( int i = 0; i < n; i++ )
+        {
+            wxString text = GetItemText(i);
+            SetItemText(i, text);
+        }
+    }
 }
 
 void wxListCtrl::AssignImageList(wxImageList *imageList, int which)
@@ -1338,10 +1582,11 @@ void wxListCtrl::AssignImageList(wxImageList *imageList, int which)
 
 wxSize wxListCtrl::MSWGetBestViewRect(int x, int y) const
 {
-    // The cast is necessary to suppress a MinGW warning due to a missing cast
-    // to WPARAM in the definition of ListView_ApproximateViewRect() in its
-    // own headers (this was the case up to at least MinGW 4.8).
-    const DWORD rc = ListView_ApproximateViewRect(GetHwnd(), x, y, (WPARAM)-1);
+    // Older Platform SDKs lack a cast to WPARAM inside the
+    // ListView_ApproximateViewRect macro, so cast -1 to
+    // WPARAM here to suppress a warning about signed/unsigned mismatch.
+    const DWORD rc = ListView_ApproximateViewRect(GetHwnd(), x, y,
+        static_cast<WPARAM>(-1));
 
     wxSize size(LOWORD(rc), HIWORD(rc));
 
@@ -1351,11 +1596,14 @@ wxSize wxListCtrl::MSWGetBestViewRect(int x, int y) const
     const DWORD mswStyle = ::GetWindowLong(GetHwnd(), GWL_STYLE);
 
     if ( mswStyle & WS_HSCROLL )
-        size.y += wxSystemSettings::GetMetric(wxSYS_HSCROLL_Y);
+        size.y += wxSystemSettings::GetMetric(wxSYS_HSCROLL_Y, m_parent);
     if ( mswStyle & WS_VSCROLL )
-        size.x += wxSystemSettings::GetMetric(wxSYS_VSCROLL_X);
+        size.x += wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, m_parent);
 
-    return size;
+    // OTOH we have to subtract the size of our borders because the base class
+    // public method already adds them, but ListView_ApproximateViewRect()
+    // already takes the borders into account, so this would be superfluous.
+    return size - DoGetBorderSize();
 }
 
 // ----------------------------------------------------------------------------
@@ -1387,10 +1635,6 @@ bool wxListCtrl::DeleteItem(long item)
         return false;
     }
 
-    m_count--;
-    wxASSERT_MSG( m_count == ListView_GetItemCount(GetHwnd()),
-                  wxT("m_count should match ListView_GetItemCount"));
-
     // the virtual list control doesn't refresh itself correctly, help it
     if ( IsVirtual() )
     {
@@ -1421,7 +1665,18 @@ bool wxListCtrl::DeleteAllItems()
 {
     // Calling ListView_DeleteAllItems() will always generate an event but we
     // shouldn't do it if the control is empty
-    return !GetItemCount() || ListView_DeleteAllItems(GetHwnd()) != 0;
+    if ( !GetItemCount() )
+        return true;
+
+    if ( !ListView_DeleteAllItems(GetHwnd()) )
+        return false;
+
+    // Virtual controls don't refresh their scrollbar position automatically,
+    // do it for them when clearing them.
+    if ( IsVirtual() )
+        Refresh();
+
+    return true;
 }
 
 // Deletes all items
@@ -1627,7 +1882,7 @@ wxListCtrl::HitTest(const wxPoint& point, int& flags, long *ptrSubItem) const
 
     long item;
 #ifdef LVM_SUBITEMHITTEST
-    if ( ptrSubItem && wxApp::GetComCtl32Version() >= 470 )
+    if ( ptrSubItem )
     {
         item = ListView_SubItemHitTest(GetHwnd(), &hitTestInfo);
         *ptrSubItem = hitTestInfo.iSubItem;
@@ -1640,35 +1895,53 @@ wxListCtrl::HitTest(const wxPoint& point, int& flags, long *ptrSubItem) const
 
     flags = 0;
 
-    if ( hitTestInfo.flags & LVHT_ABOVE )
-        flags |= wxLIST_HITTEST_ABOVE;
-    if ( hitTestInfo.flags & LVHT_BELOW )
-        flags |= wxLIST_HITTEST_BELOW;
-    if ( hitTestInfo.flags & LVHT_TOLEFT )
-        flags |= wxLIST_HITTEST_TOLEFT;
-    if ( hitTestInfo.flags & LVHT_TORIGHT )
-        flags |= wxLIST_HITTEST_TORIGHT;
-
-    if ( hitTestInfo.flags & LVHT_NOWHERE )
-        flags |= wxLIST_HITTEST_NOWHERE;
-
-    // note a bug or at least a very strange feature of comtl32.dll (tested
-    // with version 4.0 under Win95 and 6.0 under Win 2003): if you click to
-    // the right of the item label, ListView_HitTest() returns a combination of
-    // LVHT_ONITEMICON, LVHT_ONITEMLABEL and LVHT_ONITEMSTATEICON -- filter out
-    // the bits which don't make sense
-    if ( hitTestInfo.flags & LVHT_ONITEMLABEL )
+    // test whether an actual item was hit or not
+    if ( hitTestInfo.flags == LVHT_ONITEMICON )
     {
-        flags |= wxLIST_HITTEST_ONITEMLABEL;
-
-        // do not translate LVHT_ONITEMICON here, as per above
+        flags = wxLIST_HITTEST_ONITEMICON;
     }
-    else
+    // note a bug in comctl32.dll:
+    // 1) in report mode, when there are 2 or more columns, if you click to the
+    //    right of the first column, ListView_HitTest() returns LVHT_ONITEM
+    //    (LVHT_ONITEMICON|LVHT_ONITEMLABEL|LVHT_ONITEMSTATEICON).
+    else if ( hitTestInfo.flags & LVHT_ONITEMLABEL )
     {
-        if ( hitTestInfo.flags & LVHT_ONITEMICON )
-            flags |= wxLIST_HITTEST_ONITEMICON;
-        if ( hitTestInfo.flags & LVHT_ONITEMSTATEICON )
-            flags |= wxLIST_HITTEST_ONITEMSTATEICON;
+        flags = wxLIST_HITTEST_ONITEMLABEL;
+    }
+    // note another bug in comctl32.dll:
+    // 2) LVHT_ONITEMSTATEICON and LVHT_ABOVE have the same value. However, the
+    //    former (used for the checkbox when LVS_EX_CHECKBOXES is used) can
+    //    only occur when y >= 0, while the latter ("above the control's client
+    //    area") can only occur when y < 0.
+    else if ( (hitTestInfo.flags == LVHT_ONITEMSTATEICON) && point.y >= 0 )
+    {
+        flags = wxLIST_HITTEST_ONITEMSTATEICON;
+    }
+    else if ( hitTestInfo.flags == LVHT_NOWHERE )
+    {
+        flags = wxLIST_HITTEST_NOWHERE;
+    }
+
+    if ( flags ) // any flags found so far couldn't be combined with others
+        return item;
+
+    // outside an item, values could be combined
+    if ( (hitTestInfo.flags & LVHT_ABOVE) && point.y < 0 ) // see second MS bug
+    {
+        flags = wxLIST_HITTEST_ABOVE;
+    }
+    else if ( hitTestInfo.flags & LVHT_BELOW )
+    {
+        flags = wxLIST_HITTEST_BELOW;
+    }
+
+    if ( hitTestInfo.flags & LVHT_TOLEFT )
+    {
+        flags |= wxLIST_HITTEST_TOLEFT;
+    }
+    else if ( hitTestInfo.flags & LVHT_TORIGHT )
+    {
+        flags |= wxLIST_HITTEST_TORIGHT;
     }
 
     return item;
@@ -1709,23 +1982,14 @@ long wxListCtrl::InsertItem(const wxListItem& info)
         if ( info.HasAttributes() )
         {
             // take copy of attributes
-            data->attr = new wxListItemAttr(*info.GetAttributes());
+            data->attr = new wxItemAttr(*info.GetAttributes());
 
             // and remember that we have some now...
             m_hasAnyAttr = true;
         }
     }
 
-    const long rv = ListView_InsertItem(GetHwnd(), & item);
-
-    // failing to insert the item is really unexpected
-    wxCHECK_MSG( rv != -1, rv, "failed to insert an item in wxListCtrl" );
-
-    m_count++;
-    wxASSERT_MSG( m_count == ListView_GetItemCount(GetHwnd()),
-                  wxT("m_count should match ListView_GetItemCount"));
-
-    return rv;
+    return ListView_InsertItem(GetHwnd(), &item);
 }
 
 long wxListCtrl::InsertItem(long index, const wxString& label)
@@ -1917,16 +2181,7 @@ int WXDLLIMPEXP_CORE wxMSWGetColumnClicked(NMHDR *nmhdr, POINT *ptClick)
     // notification message doesn't provide this info
 
     // where did the click occur?
-#if defined(__WXWINCE__) && !defined(__HANDHELDPC__) && _WIN32_WCE < 400
-    if ( nmhdr->code == GN_CONTEXTMENU )
-    {
-        *ptClick = ((NMRGINFO*)nmhdr)->ptAction;
-    }
-    else
-#endif //__WXWINCE__
-    {
-       wxGetCursorPosMSW(ptClick);
-    }
+    wxGetCursorPosMSW(ptClick);
 
     // we need to use listctrl coordinates for the event point so this is what
     // we return in ptClick, but for comparison with Header_GetItemRect()
@@ -1971,11 +2226,6 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
 
     NMHDR *nmhdr = (NMHDR *)lParam;
 
-    // if your compiler is as broken as this, you should really change it: this
-    // code is needed for normal operation! #ifdef below is only useful for
-    // automatic rebuilds which are done with a very old compiler version
-#ifdef HDN_BEGINTRACKA
-
     // check for messages from the header (in report view)
     HWND hwndHdr = ListView_GetHeader(GetHwnd());
 
@@ -2004,7 +2254,7 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
             case HDN_BEGINTRACKA:
             case HDN_BEGINTRACKW:
                 eventType = wxEVT_LIST_COL_BEGIN_DRAG;
-                // fall through
+                wxFALLTHROUGH;
 
             case HDN_ITEMCHANGING:
                 if ( eventType == wxEVT_NULL )
@@ -2030,7 +2280,7 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
 
                     eventType = wxEVT_LIST_COL_DRAGGING;
                 }
-                // fall through
+                wxFALLTHROUGH;
 
             case HDN_ENDTRACKA:
             case HDN_ENDTRACKW:
@@ -2041,9 +2291,21 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                 event.m_col = nmHDR->iItem;
                 break;
 
-#if defined(__WXWINCE__) && !defined(__HANDHELDPC__) && _WIN32_WCE < 400
-            case GN_CONTEXTMENU:
-#endif //__WXWINCE__
+            case HDN_DIVIDERDBLCLICK:
+            {
+                NMHEADER *pHeader = (NMHEADER *) lParam;
+                // If the control is non-empty, the native control will
+                // autosize the column to its contents, however if it is empty,
+                // it just resets it to some default width, while we want to
+                // still autosize it in this case, to fit its label width.
+                if ( IsEmpty() )
+                {
+                    SetColumnWidth(pHeader->iItem, wxLIST_AUTOSIZE_USEHEADER);
+                    return true;
+                }
+            }
+            break;
+
             case NM_RCLICK:
                 {
                     POINT ptClick;
@@ -2066,6 +2328,15 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                 // doesn't seem to have any negative consequences
                 return true;
 
+            case NM_CUSTOMDRAW:
+                if ( m_headerCustomDraw )
+                {
+                    *result = m_headerCustomDraw->HandleCustomDraw(lParam);
+                    if ( *result != CDRF_DODEFAULT )
+                        return true;
+                }
+                wxFALLTHROUGH;
+
             default:
                 ignore = true;
         }
@@ -2073,9 +2344,7 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
         if ( ignore )
             return wxListCtrlBase::MSWOnNotify(idCtrl, lParam, result);
     }
-    else
-#endif // defined(HDN_BEGINTRACKA)
-    if ( nmhdr->hwndFrom == GetHwnd() )
+    else if ( nmhdr->hwndFrom == GetHwnd() )
     {
         // almost all messages use NM_LISTVIEW
         NM_LISTVIEW *nmLV = (NM_LISTVIEW *)nmhdr;
@@ -2099,7 +2368,7 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
         {
             case LVN_BEGINRDRAG:
                 eventType = wxEVT_LIST_BEGIN_RDRAG;
-                // fall through
+                wxFALLTHROUGH;
 
             case LVN_BEGINDRAG:
                 if ( eventType == wxEVT_NULL )
@@ -2176,16 +2445,8 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                 break;
 
             case LVN_DELETEITEM:
-                if ( m_count == 0 )
-                {
-                    // this should be prevented by the post-processing code
-                    // below, but "just in case"
-                    return false;
-                }
-
                 eventType = wxEVT_LIST_DELETE_ITEM;
                 event.m_itemIndex = iItem;
-
                 break;
 
             case LVN_INSERTITEM:
@@ -2196,49 +2457,78 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
             case LVN_ITEMCHANGED:
                 // we translate this catch all message into more interesting
                 // (and more easy to process) wxWidgets events
-
-                // first of all, we deal with the state change events only and
-                // only for valid items (item == -1 for the virtual list
-                // control)
-                if ( nmLV->uChanged & LVIF_STATE && iItem != -1 )
                 {
                     // temp vars for readability
                     const UINT stOld = nmLV->uOldState;
                     const UINT stNew = nmLV->uNewState;
 
-                    event.m_item.SetId(iItem);
-                    event.m_item.SetMask(wxLIST_MASK_TEXT |
-                                         wxLIST_MASK_IMAGE |
-                                         wxLIST_MASK_DATA);
-                    GetItem(event.m_item);
-
-                    // has the focus changed?
-                    if ( !(stOld & LVIS_FOCUSED) && (stNew & LVIS_FOCUSED) )
+                    // first of all, we deal with the state change events only and
+                    // only for valid items (item == -1 for the virtual list
+                    // control)
+                    if ( nmLV->uChanged & LVIF_STATE &&
+                         (iItem != -1 || (stNew & LVIS_SELECTED) != (stOld & LVIS_SELECTED)))
                     {
-                        eventType = wxEVT_LIST_ITEM_FOCUSED;
-                        event.m_itemIndex = iItem;
-                    }
 
-                    if ( (stNew & LVIS_SELECTED) != (stOld & LVIS_SELECTED) )
-                    {
-                        if ( eventType != wxEVT_NULL )
+                        event.m_item.SetId(iItem);
+                        event.m_item.SetMask(wxLIST_MASK_TEXT |
+                                             wxLIST_MASK_IMAGE |
+                                             wxLIST_MASK_DATA);
+                        if (iItem != -1)
+                            GetItem(event.m_item);
+
+                        // has the focus changed?
+                        if ( !(stOld & LVIS_FOCUSED) && (stNew & LVIS_FOCUSED) )
                         {
-                            // focus and selection have both changed: send the
-                            // focus event from here and the selection one
-                            // below
-                            event.SetEventType(eventType);
-                            (void)HandleWindowEvent(event);
-                        }
-                        else // no focus event to send
-                        {
-                            // then need to set m_itemIndex as it wasn't done
-                            // above
+                            eventType = wxEVT_LIST_ITEM_FOCUSED;
                             event.m_itemIndex = iItem;
                         }
 
-                        eventType = stNew & LVIS_SELECTED
-                                        ? wxEVT_LIST_ITEM_SELECTED
-                                        : wxEVT_LIST_ITEM_DESELECTED;
+                        if ( (stNew & LVIS_SELECTED) != (stOld & LVIS_SELECTED) )
+                        {
+                            if ( eventType != wxEVT_NULL )
+                            {
+                                // focus and selection have both changed: send the
+                                // focus event from here and the selection one
+                                // below
+                                event.SetEventType(eventType);
+                                (void)HandleWindowEvent(event);
+                            }
+                            else // no focus event to send
+                            {
+                                // then need to set m_itemIndex as it wasn't done
+                                // above
+                                event.m_itemIndex = iItem;
+                            }
+
+                            eventType = stNew & LVIS_SELECTED
+                                            ? wxEVT_LIST_ITEM_SELECTED
+                                            : wxEVT_LIST_ITEM_DESELECTED;
+                        }
+
+                        if ( (stNew & LVIS_STATEIMAGEMASK) != (stOld & LVIS_STATEIMAGEMASK) )
+                        {
+                            if ( stOld == INDEXTOSTATEIMAGEMASK(0) )
+                            {
+                                // item does not yet have a state
+                                // occurs when checkboxes are enabled and when a new item is added
+                                eventType = wxEVT_NULL;
+                            }
+                            else if ( stNew == INDEXTOSTATEIMAGEMASK(1) )
+                            {
+                                eventType = wxEVT_LIST_ITEM_UNCHECKED;
+                            }
+                            else if ( stNew == INDEXTOSTATEIMAGEMASK(2) )
+                            {
+                                eventType = wxEVT_LIST_ITEM_CHECKED;
+                            }
+                            else
+                            {
+                                eventType = wxEVT_NULL;
+                                wxLogDebug(wxS("Unknown LVIS_STATEIMAGE state: %u"), stNew);
+                            }
+
+                            event.m_itemIndex = iItem;
+                        }
                     }
                 }
 
@@ -2318,9 +2608,33 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                 event.m_item.m_data = GetItemData(iItem);
                 break;
 
-#if defined(__WXWINCE__) && !defined(__HANDHELDPC__) && _WIN32_WCE < 400
-            case GN_CONTEXTMENU:
-#endif //__WXWINCE__
+            case NM_CLICK:
+                processed = false;
+
+                // In virtual mode, check if user clicks on a checkbox.
+                if ( IsVirtual() && HasCheckBoxes() )
+                {
+                    LV_HITTESTINFO lvhti;
+                    wxZeroMemory(lvhti);
+
+                    wxGetCursorPosMSW(&(lvhti.pt));
+                    ::ScreenToClient(GetHwnd(), &lvhti.pt);
+
+                    if ( ListView_SubItemHitTest(GetHwnd(), &lvhti) != -1 )
+                    {
+                        if ( (lvhti.flags & LVHT_ONITEMSTATEICON) && (lvhti.iSubItem == 0) )
+                        {
+                            event.m_itemIndex = lvhti.iItem;
+                            if ( OnGetItemIsChecked(event.m_itemIndex) )
+                                eventType = wxEVT_LIST_ITEM_UNCHECKED;
+                            else
+                                eventType = wxEVT_LIST_ITEM_CHECKED;
+                            processed = true;
+                        }
+                    }
+                }
+                break;
+
             case NM_RCLICK:
                 // if the user processes it in wxEVT_COMMAND_RIGHT_CLICK(),
                 // don't do anything else
@@ -2333,16 +2647,7 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                 LV_HITTESTINFO lvhti;
                 wxZeroMemory(lvhti);
 
-#if defined(__WXWINCE__) && !defined(__HANDHELDPC__) && _WIN32_WCE < 400
-                if ( nmhdr->code == GN_CONTEXTMENU )
-                {
-                    lvhti.pt = ((NMRGINFO*)nmhdr)->ptAction;
-                }
-                else
-#endif //__WXWINCE__
-                {
-                    wxGetCursorPosMSW(&(lvhti.pt));
-                }
+                wxGetCursorPosMSW(&(lvhti.pt));
 
                 ::ScreenToClient(GetHwnd(), &lvhti.pt);
                 if ( ListView_HitTest(GetHwnd(), &lvhti) != -1 )
@@ -2357,12 +2662,10 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                 }
                 break;
 
-#ifdef NM_CUSTOMDRAW
             case NM_CUSTOMDRAW:
                 *result = OnCustomDraw(lParam);
 
                 return *result != CDRF_DODEFAULT;
-#endif // _WIN32_IE >= 0x300
 
             case LVN_ODCACHEHINT:
                 {
@@ -2512,25 +2815,28 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                         wxStrlcpy(lvi.pszText, text.c_str(), lvi.cchTextMax);
                     }
 
-                    // see comment at the end of wxListCtrl::GetColumn()
-#ifdef NM_CUSTOMDRAW
                     if ( lvi.mask & LVIF_IMAGE )
                     {
                         lvi.iImage = OnGetItemColumnImage(item, lvi.iSubItem);
                     }
-#endif // NM_CUSTOMDRAW
 
                     // even though we never use LVM_SETCALLBACKMASK, we still
                     // can get messages with LVIF_STATE in lvi.mask under Vista
                     if ( lvi.mask & LVIF_STATE )
                     {
-                        // we don't have anything to return from here...
                         lvi.stateMask = 0;
+
+                        if ( HasCheckBoxes() && (lvi.iSubItem == 0) )
+                        {
+                            const bool checked = OnGetItemIsChecked(item);
+                            lvi.state = INDEXTOSTATEIMAGEMASK(checked ? 2 : 1);
+                            lvi.stateMask = LVIS_STATEIMAGEMASK;
+                        }
                     }
 
                     return true;
                 }
-                // fall through
+                wxFALLTHROUGH;
 
             default:
                 processed = false;
@@ -2571,6 +2877,14 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
     // ---------------
     switch ( nmhdr->code )
     {
+        case HDN_ITEMCHANGING:
+            // Always let the default handling of this event take place when
+            // using comctl32.dll v6, as otherwise the selected items are not
+            // redrawn to correspond to the new column widths, see #18032.
+            if ( wxApp::GetComCtl32Version() >= 600 )
+                return false;
+            break;
+
         case LVN_DELETEALLITEMS:
             // always return true to suppress all additional LVN_DELETEITEM
             // notifications - this makes deleting all items from a list ctrl
@@ -2581,9 +2895,6 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
             // the user should have access to it in OnDeleteAllItems() handler)
             FreeAllInternalData();
 
-            // the control is empty now, synchronize the cached number of items
-            // with the real one
-            m_count = 0;
             return true;
 
         case LVN_DELETEITEM:
@@ -2629,9 +2940,6 @@ bool wxListCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
 // custom draw stuff
 // ----------------------------------------------------------------------------
 
-// see comment at the end of wxListCtrl::GetColumn()
-#ifdef NM_CUSTOMDRAW // _WIN32_IE >= 0x0300
-
 static RECT GetCustomDrawnItemRect(const NMCUSTOMDRAW& nmcd)
 {
     RECT rc;
@@ -2657,8 +2965,9 @@ bool HandleSubItemPrepaint(LPNMLVCUSTOMDRAW pLVCD, HFONT hfont, int colCount)
     const int col = pLVCD->iSubItem;
     const DWORD item = nmcd.dwItemSpec;
 
-    // the font must be valid, otherwise we wouldn't be painting the item at all
-    SelectInHDC selFont(hdc, hfont);
+    SelectInHDC selFont;
+    if ( hfont )
+        selFont.Init(hdc, hfont);
 
     // get the rectangle to paint
     RECT rc;
@@ -2686,7 +2995,8 @@ bool HandleSubItemPrepaint(LPNMLVCUSTOMDRAW pLVCD, HFONT hfont, int colCount)
     it.iSubItem = col;
     it.pszText = text;
     it.cchTextMax = WXSIZEOF(text);
-    ListView_GetItem(hwndList, &it);
+    if ( !ListView_GetItem(hwndList, &it) )
+        return false;
 
     HIMAGELIST himl = ListView_GetImageList(hwndList, LVSIL_SMALL);
     if ( himl && ImageList_GetImageCount(himl) )
@@ -2714,9 +3024,7 @@ bool HandleSubItemPrepaint(LPNMLVCUSTOMDRAW pLVCD, HFONT hfont, int colCount)
     ::SetBkMode(hdc, TRANSPARENT);
 
     UINT fmt = DT_SINGLELINE |
-#ifndef __WXWINCE__
                DT_WORD_ELLIPSIS |
-#endif // __WXWINCE__
                DT_NOPREFIX |
                DT_VCENTER;
 
@@ -2788,12 +3096,8 @@ static void HandleItemPaint(LPNMLVCUSTOMDRAW pLVCD, HFONT hfont)
     }
 
     // same thing for CDIS_FOCUS (except simpler as there is only one of them)
-    //
-    // NB: cast is needed to work around the bug in mingw32 headers which don't
-    //     have it inside ListView_GetNextItem() itself (unlike SDK ones)
     if ( ::GetFocus() == hwndList &&
-            ListView_GetNextItem(
-                hwndList, static_cast<WPARAM>(-1), LVNI_FOCUSED) == item )
+            ListView_GetNextItem(hwndList, NO_ITEM, LVNI_FOCUSED) == item )
     {
         nmcd.uItemState |= CDIS_FOCUS;
     }
@@ -2844,7 +3148,7 @@ static void HandleItemPaint(LPNMLVCUSTOMDRAW pLVCD, HFONT hfont)
 
 static WXLPARAM HandleItemPrepaint(wxListCtrl *listctrl,
                                    LPNMLVCUSTOMDRAW pLVCD,
-                                   wxListItemAttr *attr)
+                                   wxItemAttr *attr)
 {
     if ( !attr )
     {
@@ -2865,6 +3169,7 @@ static WXLPARAM HandleItemPrepaint(wxListCtrl *listctrl,
     if ( attr->HasFont() )
     {
         wxFont font = attr->GetFont();
+        font.WXAdjustToPPI(listctrl->GetDPI());
         if ( font.GetEncoding() != wxFONTENCODING_SYSTEM )
         {
             // the standard control ignores the font encoding/charset, at least
@@ -2878,6 +3183,22 @@ static WXLPARAM HandleItemPrepaint(wxListCtrl *listctrl,
         ::SelectObject(pLVCD->nmcd.hdc, GetHfontOf(font));
 
         return CDRF_NEWFONT;
+    }
+
+    // For some unknown reason, native control incorrectly uses the active
+    // selection colour for the background of the items using COLOR_BTNFACE as
+    // their custom background even when the control doesn't have focus (see
+    // #17988). To work around this, draw the item ourselves in this case.
+    //
+    // Note that the problem doesn't arise when using system theme, which is
+    // lucky as HandleItemPaint() doesn't result in the same appearance as with
+    // the system theme, so we should avoid using it in this case to ensure
+    // that all items appear consistently.
+    if ( listctrl->IsSystemThemeDisabled() &&
+            pLVCD->clrTextBk == ::GetSysColor(COLOR_BTNFACE) )
+    {
+        HandleItemPaint(pLVCD, NULL);
+        return CDRF_SKIPDEFAULT;
     }
 
     return CDRF_DODEFAULT;
@@ -2921,8 +3242,6 @@ WXLPARAM wxListCtrl::OnCustomDraw(WXLPARAM lParam)
     return CDRF_DODEFAULT;
 }
 
-#endif // NM_CUSTOMDRAW supported
-
 // Necessary for drawing hrules and vrules, if specified
 void wxListCtrl::OnPaint(wxPaintEvent& event)
 {
@@ -2948,48 +3267,71 @@ void wxListCtrl::OnPaint(wxPaintEvent& event)
     dc.SetBrush(* wxTRANSPARENT_BRUSH);
 
     wxSize clientSize = GetClientSize();
-    wxRect itemRect;
+
+    const int countPerPage = GetCountPerPage();
+    if (countPerPage < 0)
+    {
+        // Can be -1 in which case it's useless to try to draw rules.
+        return;
+    }
+
+    const long top = GetTopItem();
+    const long bottom = wxMin(top + countPerPage, itemCount - 1);
 
     if (drawHRules)
     {
-        const long top = GetTopItem();
-        for ( int i = top; i < top + GetCountPerPage() + 1; i++ )
+        wxRect itemRect;
+        for ( long i = top; i <= bottom; i++ )
         {
             if (GetItemRect(i, itemRect))
             {
-                int cy = itemRect.GetTop();
-                if (i != 0) // Don't draw the first one
-                {
-                    dc.DrawLine(0, cy, clientSize.x, cy);
-                }
-                // Draw last line
-                if (i == itemCount - 1)
-                {
-                    cy = itemRect.GetBottom();
-                    dc.DrawLine(0, cy, clientSize.x, cy);
-                    break;
-                }
+                const int cy = itemRect.GetBottom();
+                dc.DrawLine(0, cy, clientSize.x, cy);
             }
         }
     }
 
     if (drawVRules)
     {
-        wxRect firstItemRect;
-        GetItemRect(0, firstItemRect);
+        wxRect topItemRect, bottomItemRect;
+        GetItemRect(top, topItemRect);
 
-        if (GetItemRect(itemCount - 1, itemRect))
+        if (GetItemRect(bottom, bottomItemRect))
         {
-            // this is a fix for bug 673394: erase the pixels which we would
-            // otherwise leave on the screen
-            static const int gap = 2;
-            dc.SetPen(*wxTRANSPARENT_PEN);
-            dc.SetBrush(wxBrush(GetBackgroundColour()));
-            dc.DrawRectangle(0, firstItemRect.GetY() - gap,
-                             clientSize.GetWidth(), gap);
+            /*
+                This is a fix for ticket #747: erase the pixels which we would
+                otherwise leave on the screen.
 
-            dc.SetPen(pen);
-            dc.SetBrush(*wxTRANSPARENT_BRUSH);
+                The drawing of the rectangle as a fix to erase trailing pixels
+                when resizing a column is only needed for ComCtl32 prior to
+                6.0, i.e. when not using a manifest in which case 5.82 is used.
+                And even then it only happens when "Show window contents while
+                dragging" is enabled under Windows, resulting in live updates
+                when resizing columns. Note that even with that setting on, at
+                least under Windows 7 and 10 no live updating is done when
+                using ComCtl32 5.82.
+
+                Revision b66c3a67519caa9debfd76e6d74954eaebfa56d9 made this fix
+                almost redundant, except that when you do NOT handle
+                EVT_LIST_COL_DRAGGING (or do and skip the event) the trailing
+                pixels still appear. In case of wanting to reproduce the
+                problem in the listctrl sample: comment out handling oF
+                EVT_LIST_COL_DRAGGING and also set useDrawFix to false and gap
+                to 2 (not 0).
+            */
+
+            static const bool useDrawFix = wxApp::GetComCtl32Version() < 600;
+
+            static const int gap = useDrawFix ? 2 : 0;
+
+            if (useDrawFix)
+            {
+                wxDCPenChanger changePen(dc, *wxTRANSPARENT_PEN);
+                wxDCBrushChanger changeBrush(dc, GetBackgroundColour());
+
+                dc.DrawRectangle(0, topItemRect.GetY() - gap,
+                                 clientSize.GetWidth(), gap);
+            }
 
             const int numCols = GetColumnCount();
             wxVector<int> indexArray(numCols);
@@ -3001,13 +3343,13 @@ void wxListCtrl::OnPaint(wxPaintEvent& event)
                 return;
             }
 
-            int x = itemRect.GetX();
+            int x = bottomItemRect.GetX();
             for (int col = 0; col < numCols; col++)
             {
                 int colWidth = GetColumnWidth(indexArray[col]);
                 x += colWidth ;
-                dc.DrawLine(x-1, firstItemRect.GetY() - gap,
-                            x-1, itemRect.GetBottom());
+                dc.DrawLine(x-1, topItemRect.GetY() - gap,
+                            x-1, bottomItemRect.GetBottom());
             }
         }
     }
@@ -3039,12 +3381,10 @@ wxListCtrl::MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam)
 {
     switch ( nMsg )
     {
-#ifdef WM_PRINT
         case WM_PRINT:
             // we should bypass our own WM_PRINT handling as we don't handle
             // PRF_CHILDREN flag, so leave it to the native control itself
             return MSWDefWindowProc(nMsg, wParam, lParam);
-#endif // WM_PRINT
 
         case WM_CONTEXTMENU:
             // because this message is propagated upwards the child-parent
@@ -3064,32 +3404,7 @@ wxListCtrl::MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam)
 // virtual list controls
 // ----------------------------------------------------------------------------
 
-wxString wxListCtrl::OnGetItemText(long WXUNUSED(item), long WXUNUSED(col)) const
-{
-    // this is a pure virtual function, in fact - which is not really pure
-    // because the controls which are not virtual don't need to implement it
-    wxFAIL_MSG( wxT("wxListCtrl::OnGetItemText not supposed to be called") );
-
-    return wxEmptyString;
-}
-
-int wxListCtrl::OnGetItemImage(long WXUNUSED(item)) const
-{
-    wxCHECK_MSG(!GetImageList(wxIMAGE_LIST_SMALL),
-                -1,
-                wxT("List control has an image list, OnGetItemImage or OnGetItemColumnImage should be overridden."));
-    return -1;
-}
-
-int wxListCtrl::OnGetItemColumnImage(long item, long column) const
-{
-    if (!column)
-        return OnGetItemImage(item);
-
-    return -1;
-}
-
-wxListItemAttr *wxListCtrl::DoGetItemColumnAttr(long item, long column) const
+wxItemAttr *wxListCtrl::DoGetItemColumnAttr(long item, long column) const
 {
     if ( IsVirtual() )
         return OnGetItemColumnAttr(item, column);
@@ -3107,9 +3422,6 @@ void wxListCtrl::SetItemCount(long count)
     {
         wxLogLastError(wxT("ListView_SetItemCount"));
     }
-    m_count = count;
-    wxASSERT_MSG( m_count == ListView_GetItemCount(GetHwnd()),
-                  wxT("m_count should match ListView_GetItemCount"));
 }
 
 void wxListCtrl::RefreshItem(long item)
@@ -3119,7 +3431,8 @@ void wxListCtrl::RefreshItem(long item)
 
 void wxListCtrl::RefreshItems(long itemFrom, long itemTo)
 {
-    ListView_RedrawItems(GetHwnd(), itemFrom, itemTo);
+    if ( !ListView_RedrawItems(GetHwnd(), itemFrom, itemTo) )
+        wxLogLastError(wxS("ListView_RedrawItems"));
 }
 
 // ----------------------------------------------------------------------------
@@ -3328,46 +3641,52 @@ static void wxConvertToMSWListCol(HWND hwndList,
             lvCol.cx = item.m_width;
     }
 
-    // see comment at the end of wxListCtrl::GetColumn()
-#ifdef NM_CUSTOMDRAW // _WIN32_IE >= 0x0300
     if ( item.m_mask & wxLIST_MASK_IMAGE )
     {
-        if ( wxApp::GetComCtl32Version() >= 470 )
+        // as we're going to overwrite the format field, get its
+        // current value first -- unless we want to overwrite it anyhow
+        if ( !(lvCol.mask & LVCF_FMT) )
         {
-            lvCol.mask |= LVCF_IMAGE;
-
-            // we use LVCFMT_BITMAP_ON_RIGHT because the images on the right
-            // seem to be generally nicer than on the left and the generic
-            // version only draws them on the right (we don't have a flag to
-            // specify the image location anyhow)
-            //
-            // we don't use LVCFMT_COL_HAS_IMAGES because it doesn't seem to
-            // make any difference in my tests -- but maybe we should?
-            if ( item.m_image != -1 )
+            LV_COLUMN lvColOld;
+            wxZeroMemory(lvColOld);
+            lvColOld.mask = LVCF_FMT;
+            if ( ListView_GetColumn(hwndList, col, &lvColOld) )
             {
-                // as we're going to overwrite the format field, get its
-                // current value first -- unless we want to overwrite it anyhow
-                if ( !(lvCol.mask & LVCF_FMT) )
-                {
-                    LV_COLUMN lvColOld;
-                    wxZeroMemory(lvColOld);
-                    lvColOld.mask = LVCF_FMT;
-                    if ( ListView_GetColumn(hwndList, col, &lvColOld) )
-                    {
-                        lvCol.fmt = lvColOld.fmt;
-                    }
-
-                    lvCol.mask |= LVCF_FMT;
-                }
-
-                lvCol.fmt |= LVCFMT_BITMAP_ON_RIGHT | LVCFMT_IMAGE;
+                lvCol.fmt = lvColOld.fmt;
             }
 
+            lvCol.mask |= LVCF_FMT;
+        }
+
+        // we use LVCFMT_BITMAP_ON_RIGHT because the images on the right
+        // seem to be generally nicer than on the left and the generic
+        // version only draws them on the right (we don't have a flag to
+        // specify the image location anyhow)
+        const int fmtImage = LVCFMT_BITMAP_ON_RIGHT | LVCFMT_IMAGE;
+        if ( item.m_image != -1 )
+        {
+            lvCol.fmt |= fmtImage;
+
+            lvCol.mask |= LVCF_IMAGE;
             lvCol.iImage = item.m_image;
         }
-        //else: it doesn't support item images anyhow
+        else // remove any existing image
+        {
+            lvCol.fmt &= ~fmtImage;
+        }
     }
-#endif // _WIN32_IE >= 0x0300
 }
+
+#if wxUSE_TOOLTIPS
+
+void wxListCtrl::DoSetToolTip(wxToolTip *tip)
+{
+    wxWindow::DoSetToolTip(tip);
+
+    // Add or remove LVS_EX_LABELTIP style as necessary.
+    MSWSetExListStyles();
+}
+
+#endif // wxUSE_TOOLTIPS
 
 #endif // wxUSE_LISTCTRL

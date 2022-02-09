@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+
 #include "gn/builder.h"
 #include "gn/config.h"
 #include "gn/loader.h"
 #include "gn/target.h"
+#include "gn/test_with_scheduler.h"
 #include "gn/test_with_scope.h"
 #include "gn/toolchain.h"
 #include "util/test/test.h"
@@ -55,6 +58,9 @@ class MockLoader : public Loader {
     files_.clear();
     return match;
   }
+  bool HasLoadedOnce(const SourceFile& f) {
+    return count(files_.begin(), files_.end(), f) == 1;
+  }
 
  private:
   ~MockLoader() override = default;
@@ -62,7 +68,7 @@ class MockLoader : public Loader {
   std::vector<SourceFile> files_;
 };
 
-class BuilderTest : public testing::Test {
+class BuilderTest : public TestWithScheduler {
  public:
   BuilderTest()
       : loader_(new MockLoader),
@@ -220,6 +226,92 @@ TEST_F(BuilderTest, ShouldGenerate) {
   EXPECT_TRUE(a_record->should_generate());
 
   // It should have gotten pushed to B.
+  EXPECT_TRUE(b_record->should_generate());
+}
+
+// Test that "gen_deps" forces targets to be generated.
+TEST_F(BuilderTest, GenDeps) {
+  DefineToolchain();
+
+  // Define another toolchain
+  Settings settings2(&build_settings_, "alternate/");
+  Label alt_tc(SourceDir("//tc/"), "alternate");
+  settings2.set_toolchain_label(alt_tc);
+  Toolchain* tc2 = new Toolchain(&settings2, alt_tc);
+  TestWithScope::SetupToolchain(tc2);
+  builder_.ItemDefined(std::unique_ptr<Item>(tc2));
+
+  // Construct the dependency chain A -> B -gen-> C -gen-> D where A is the only
+  // target in the default toolchain. This should cause all 4 targets to be
+  // generated.
+  Label a_label(SourceDir("//a/"), "a", settings_.toolchain_label().dir(),
+                settings_.toolchain_label().name());
+  Label b_label(SourceDir("//b/"), "b", alt_tc.dir(), alt_tc.name());
+  Label c_label(SourceDir("//c/"), "c", alt_tc.dir(), alt_tc.name());
+  Label d_label(SourceDir("//d/"), "d", alt_tc.dir(), alt_tc.name());
+
+  Target* c = new Target(&settings2, c_label);
+  c->set_output_type(Target::EXECUTABLE);
+  c->gen_deps().push_back(LabelTargetPair(d_label));
+  builder_.ItemDefined(std::unique_ptr<Item>(c));
+
+  Target* b = new Target(&settings2, b_label);
+  b->set_output_type(Target::EXECUTABLE);
+  b->gen_deps().push_back(LabelTargetPair(c_label));
+  builder_.ItemDefined(std::unique_ptr<Item>(b));
+
+  Target* a = new Target(&settings_, a_label);
+  a->set_output_type(Target::EXECUTABLE);
+  a->private_deps().push_back(LabelTargetPair(b_label));
+  builder_.ItemDefined(std::unique_ptr<Item>(a));
+
+  // At this point, "should generate" should have propogated to C which should
+  // request for D to be loaded
+  EXPECT_TRUE(loader_->HasLoadedOnce(SourceFile("//d/BUILD.gn")));
+
+  Target* d = new Target(&settings2, d_label);
+  d->set_output_type(Target::EXECUTABLE);
+  builder_.ItemDefined(std::unique_ptr<Item>(d));
+
+  BuilderRecord* a_record = builder_.GetRecord(a_label);
+  BuilderRecord* b_record = builder_.GetRecord(b_label);
+  BuilderRecord* c_record = builder_.GetRecord(c_label);
+  BuilderRecord* d_record = builder_.GetRecord(d_label);
+  EXPECT_TRUE(a_record->should_generate());
+  EXPECT_TRUE(b_record->should_generate());
+  EXPECT_TRUE(c_record->should_generate());
+  EXPECT_TRUE(d_record->should_generate());
+}
+
+// Test that circular dependencies between gen_deps and deps are allowed
+TEST_F(BuilderTest, GenDepsCircle) {
+  DefineToolchain();
+  Settings settings2(&build_settings_, "alternate/");
+  Label alt_tc(SourceDir("//tc/"), "alternate");
+  settings2.set_toolchain_label(alt_tc);
+  Toolchain* tc2 = new Toolchain(&settings2, alt_tc);
+  TestWithScope::SetupToolchain(tc2);
+  builder_.ItemDefined(std::unique_ptr<Item>(tc2));
+
+  // A is in the default toolchain and lists B as a gen_dep
+  // B is in an alternate toolchain and lists A as a normal dep
+  Label a_label(SourceDir("//a/"), "a", settings_.toolchain_label().dir(),
+                settings_.toolchain_label().name());
+  Label b_label(SourceDir("//b/"), "b", alt_tc.dir(), alt_tc.name());
+
+  Target* a = new Target(&settings_, a_label);
+  a->gen_deps().push_back(LabelTargetPair(b_label));
+  a->set_output_type(Target::EXECUTABLE);
+  builder_.ItemDefined(std::unique_ptr<Item>(a));
+
+  Target* b = new Target(&settings2, b_label);
+  b->private_deps().push_back(LabelTargetPair(a_label));
+  b->set_output_type(Target::EXECUTABLE);
+  builder_.ItemDefined(std::unique_ptr<Item>(b));
+
+  Err err;
+  EXPECT_TRUE(builder_.CheckForBadItems(&err));
+  BuilderRecord* b_record = builder_.GetRecord(b_label);
   EXPECT_TRUE(b_record->should_generate());
 }
 

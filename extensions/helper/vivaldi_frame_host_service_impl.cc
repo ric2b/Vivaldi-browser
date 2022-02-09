@@ -67,11 +67,10 @@ void VivaldiFrameHostServiceImpl::NotifyMediaElementAdded() {
 }
 
 void VivaldiFrameHostServiceImpl::DidChangeLoadProgressExtended(
-    double load_progress,
-    double loaded_bytes,
-    int loaded_elements,
-    int total_elements) {
+    int64_t loaded_bytes_delta,
+    int loaded_resource_delta,
+    int started_resource_delta) {
   content::PageImpl& page = frame_host_->GetPage();
-  page.vivaldi_update_load_counters(loaded_bytes, loaded_elements,
-                                    total_elements);
+  page.vivaldi_update_load_counters(loaded_bytes_delta, loaded_resource_delta,
+                                    started_resource_delta);
 }

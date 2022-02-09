@@ -18,9 +18,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
@@ -53,13 +50,6 @@ bool wxMSWDateControls::CheckInitialization()
         // in any case do nothing the next time, the result won't change and
         // it's enough to give the error only once
         s_initResult = false;
-
-        if ( wxApp::GetComCtl32Version() < 470 )
-        {
-            wxLogError(_("This system doesn't support date controls, please upgrade your version of comctl32.dll"));
-
-            return false;
-        }
 
 #if wxUSE_DYNLIB_CLASS
         INITCOMMONCONTROLSEX icex;

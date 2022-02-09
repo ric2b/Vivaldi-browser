@@ -15,7 +15,7 @@ import {Size} from '../data/size.js';
 import {State} from '../data/state.js';
 
 import {PrintPreviewMarginControlElement} from './margin_control.js';
-import {SettingsMixin, SettingsMixinInterface} from './settings_mixin.js';
+import {SettingsMixin} from './settings_mixin.js';
 
 export const MARGIN_KEY_MAP: Map<CustomMarginsOrientation, string> = new Map([
   [CustomMarginsOrientation.TOP, 'marginTop'],
@@ -376,7 +376,6 @@ export class PrintPreviewMarginControlContainerElement extends
   /**
    * @param marginSide The margin side. Must be a CustomMarginsOrientation.
    * @param marginValue New value for the margin in points.
-   * @private
    */
   private setMargin_(
       marginSide: CustomMarginsOrientation, marginValue: number) {
@@ -514,6 +513,13 @@ export class PrintPreviewMarginControlContainerElement extends
     }
     this.clipSize_ = clipSize;
     this.notifyPath('clipSize_');
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'print-preview-margin-control-container':
+        PrintPreviewMarginControlContainerElement;
   }
 }
 

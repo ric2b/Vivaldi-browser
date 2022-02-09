@@ -7,13 +7,13 @@
 
 #include <string>
 
+#include "ash/services/ime/public/cpp/suggestions.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/input_method/input_method_engine_base.h"
 #include "chrome/browser/ash/input_method/suggester.h"
 #include "chrome/browser/ash/input_method/suggestion_enums.h"
 #include "chrome/browser/ash/input_method/suggestion_handler_interface.h"
 #include "chrome/browser/ash/input_method/ui/assistive_delegate.h"
-#include "chromeos/services/ime/public/cpp/suggestions.h"
 
 class Profile;
 
@@ -26,7 +26,7 @@ constexpr int kEmojiSuggesterShowSettingMaxCount = 10;
 // dismiss the suggestion according to the user action.
 class EmojiSuggester : public Suggester {
  public:
-  explicit EmojiSuggester(SuggestionHandlerInterface* engine, Profile* profile);
+  EmojiSuggester(SuggestionHandlerInterface* engine, Profile* profile);
   ~EmojiSuggester() override;
 
   // Suggester overrides:
@@ -46,6 +46,8 @@ class EmojiSuggester : public Suggester {
 
   bool ShouldShowSuggestion(const std::u16string& text);
 
+  // TODO(crbug/1223666): Remove when we no longer need to prod private vars
+  //     for unit testing.
   void LoadEmojiMapForTesting(const std::string& emoji_data);
   size_t GetCandidatesSizeForTesting() const;
 

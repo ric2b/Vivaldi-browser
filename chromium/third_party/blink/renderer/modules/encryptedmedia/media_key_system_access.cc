@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "media/base/eme_constants.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -43,9 +42,12 @@ class NewCdmResultPromise : public ContentDecryptionModuleResultPromise {
  public:
   NewCdmResultPromise(
       ScriptState* script_state,
-      const WebVector<WebEncryptedMediaSessionType>& supported_session_types,
-      EmeApiType type)
-      : ContentDecryptionModuleResultPromise(script_state, type),
+      const MediaKeysConfig& config,
+      const WebVector<WebEncryptedMediaSessionType>& supported_session_types)
+      : ContentDecryptionModuleResultPromise(script_state,
+                                             config,
+                                             EmeApiType::kCreateMediaKeys),
+        config_(config),
         supported_session_types_(supported_session_types) {}
 
   NewCdmResultPromise(const NewCdmResultPromise&) = delete;
@@ -63,13 +65,15 @@ class NewCdmResultPromise : public ContentDecryptionModuleResultPromise {
 
     // 2.9. Let media keys be a new MediaKeys object.
     auto* media_keys = MakeGarbageCollected<MediaKeys>(
-        GetExecutionContext(), supported_session_types_, base::WrapUnique(cdm));
+        GetExecutionContext(), supported_session_types_, base::WrapUnique(cdm),
+        config_);
 
     // 2.10. Resolve promise with media keys.
     Resolve(media_keys);
   }
 
  private:
+  MediaKeysConfig config_;
   WebVector<WebEncryptedMediaSessionType> supported_session_types_;
 };
 
@@ -152,7 +156,7 @@ void ReportMetrics(ExecutionContext* execution_context,
     return;
 
   ukm::builders::Media_EME_CreateMediaKeys builder(document->UkmSourceID());
-  builder.SetKeySystem(KeySystemForUkm::kWidevine);
+  builder.SetKeySystem(KeySystemForUkmLegacy::kWidevine);
   builder.SetIsAdFrame(static_cast<int>(frame->IsAdSubframe()));
   builder.SetIsCrossOrigin(static_cast<int>(frame->IsCrossOriginToMainFrame()));
   builder.SetIsTopFrame(static_cast<int>(frame->IsMainFrame()));
@@ -162,9 +166,8 @@ void ReportMetrics(ExecutionContext* execution_context,
 }  // namespace
 
 MediaKeySystemAccess::MediaKeySystemAccess(
-    const String& key_system,
     std::unique_ptr<WebContentDecryptionModuleAccess> access)
-    : key_system_(key_system), access_(std::move(access)) {}
+    : access_(std::move(access)) {}
 
 MediaKeySystemAccess::~MediaKeySystemAccess() = default;
 
@@ -207,8 +210,9 @@ ScriptPromise MediaKeySystemAccess::createMediaKeys(ScriptState* script_state) {
   WebMediaKeySystemConfiguration configuration = access_->GetConfiguration();
 
   // 1. Let promise be a new promise.
+  MediaKeysConfig config = {keySystem(), UseHardwareSecureCodecs()};
   NewCdmResultPromise* helper = MakeGarbageCollected<NewCdmResultPromise>(
-      script_state, configuration.session_types, EmeApiType::kCreateMediaKeys);
+      script_state, config, configuration.session_types);
   ScriptPromise promise = helper->Promise();
 
   // 2. Asynchronously create and initialize the MediaKeys object.
@@ -222,7 +226,7 @@ ScriptPromise MediaKeySystemAccess::createMediaKeys(ScriptState* script_state) {
       helper->Result(),
       execution_context->GetTaskRunner(TaskType::kInternalMedia));
 
-  ReportMetrics(execution_context, key_system_);
+  ReportMetrics(execution_context, keySystem());
 
   // 3. Return promise.
   return promise;

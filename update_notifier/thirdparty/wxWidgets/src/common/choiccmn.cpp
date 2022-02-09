@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_CHOICE
 
@@ -66,7 +63,7 @@ wxFLAGS_MEMBER(wxHSCROLL)
 
 wxEND_FLAGS( wxChoiceStyle )
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxChoice, wxControl, "wx/choice.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxChoice, wxControl, "wx/choice.h");
 
 wxBEGIN_PROPERTIES_TABLE(wxChoice)
 wxEVENT_PROPERTY( Select, wxEVT_CHOICE, wxCommandEvent )
@@ -107,7 +104,7 @@ wxChoiceBase::~wxChoiceBase()
 wxSize wxChoiceBase::DoGetBestSize() const
 {
     // a reasonable width for an empty choice list
-    wxSize best(80, -1);
+    wxSize best(FromDIP(80), -1);
 
     const unsigned int nItems = GetCount();
     if ( nItems > 0 )

@@ -4,9 +4,8 @@
 // Author:      Julian Smart
 // Modified by:
 // Created:     21/10/2010 11:34:24
-// RCS-ID:
 // Copyright:   (c) Julian Smart
-// Licence:
+// Licence:     wxWindows licence
 /////////////////////////////////////////////////////////////////////////////
 
 #ifndef _RICHTEXTBORDERSPAGE_H_
@@ -49,8 +48,8 @@ class WXDLLIMPEXP_FWD_RICHTEXT wxRichTextBorderPreviewCtrl;
 
 class WXDLLIMPEXP_RICHTEXT wxRichTextBordersPage: public wxRichTextDialogPage
 {
-    DECLARE_DYNAMIC_CLASS( wxRichTextBordersPage )
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_DYNAMIC_CLASS(wxRichTextBordersPage);
+    wxDECLARE_EVENT_TABLE();
     DECLARE_HELP_PROVISION()
 
 public:
@@ -74,8 +73,8 @@ public:
     wxRichTextAttr* GetAttributes();
 
     /// Data transfer
-    virtual bool TransferDataToWindow();
-    virtual bool TransferDataFromWindow();
+    virtual bool TransferDataToWindow() wxOVERRIDE;
+    virtual bool TransferDataFromWindow() wxOVERRIDE;
 
     /// Updates the synchronization checkboxes to reflect the state of the attributes
     void UpdateSyncControls();
@@ -159,6 +158,9 @@ public:
     /// wxEVT_UPDATE_UI event handler for ID_RICHTEXT_OUTLINE_SYNCHRONIZE
     void OnRichtextOutlineSynchronizeUpdate( wxUpdateUIEvent& event );
 
+    /// wxEVT_UPDATE_UI event handler for ID_RICHTEXTBORDERSPAGE_CORNER_TEXT
+    void OnRichtextborderspageCornerUpdate( wxUpdateUIEvent& event );
+
 ////@end wxRichTextBordersPage event handler declarations
 
 ////@begin wxRichTextBordersPage member function declarations
@@ -216,6 +218,9 @@ public:
     wxComboBox* m_bottomOutlineStyle;
     wxRichTextColourSwatchCtrl* m_bottomOutlineColour;
     wxCheckBox* m_outlineSyncCtrl;
+    wxCheckBox* m_cornerRadiusCheckBox;
+    wxTextCtrl* m_cornerRadiusText;
+    wxComboBox* m_cornerRadiusUnits;
     wxRichTextBorderPreviewCtrl* m_borderPreviewCtrl;
     /// Control identifiers
     enum {
@@ -265,6 +270,10 @@ public:
         ID_RICHTEXT_OUTLINE_BOTTOM_STYLE = 10842,
         ID_RICHTEXT_OUTLINE_BOTTOM_COLOUR = 10843,
         ID_RICHTEXT_OUTLINE_SYNCHRONIZE = 10846,
+        ID_RICHTEXTBORDERSPAGE_CORNER = 10847,
+        ID_RICHTEXTBORDERSPAGE_CORNER_CHECKBOX = 10848,
+        ID_RICHTEXTBORDERSPAGE_CORNER_TEXT = 10849,
+        ID_RICHTEXTBORDERSPAGE_CORNER_UNITS = 10850,
         ID_RICHTEXT_BORDER_PREVIEW = 10844
     };
 ////@end wxRichTextBordersPage member variables
@@ -286,7 +295,7 @@ private:
     wxRichTextAttr* m_attributes;
 
     void OnPaint(wxPaintEvent& event);
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif

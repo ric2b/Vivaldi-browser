@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -41,7 +41,9 @@ using base::StringPiece;
 using testing::_;
 using testing::IsEmpty;
 using testing::Pointee;
+using testing::Property;
 using testing::Return;
+using testing::SaveArg;
 using testing::UnorderedElementsAre;
 using testing::UnorderedElementsAreArray;
 using testing::WithArg;
@@ -145,8 +147,8 @@ class FakePasswordManagerClient : public StubPasswordManagerClient {
   }
 
   std::unique_ptr<CredentialsFilter> filter_;
-  PasswordStoreInterface* profile_store_ = nullptr;
-  PasswordStoreInterface* account_store_ = nullptr;
+  raw_ptr<PasswordStoreInterface> profile_store_ = nullptr;
+  raw_ptr<PasswordStoreInterface> account_store_ = nullptr;
   mutable FakeNetworkContext network_context_;
 };
 
@@ -225,8 +227,11 @@ std::vector<std::unique_ptr<PasswordForm>> MakeResults(
   return results;
 }
 
-ACTION_P(GetAndAssignWeakPtr, ptr) {
-  *ptr = arg0->GetWeakPtr();
+// Accepts a WeakPtr<T> and succeeds WeakPtr<T>::get() matches |m|.
+// Analogous to testing::Address.
+template <typename T, typename Matcher>
+auto WeakAddress(Matcher m) {
+  return Property(&base::WeakPtr<T>::get, m);
 }
 
 }  // namespace
@@ -269,10 +274,12 @@ class FormFetcherImplTestBase : public testing::Test {
   // A wrapper around form_fetcher_.Fetch(), adding the call expectations.
   void Fetch() {
     EXPECT_CALL(*profile_mock_store_,
-                GetLogins(form_digest_, form_fetcher_.get()));
+                GetLogins(form_digest_, WeakAddress<PasswordStoreConsumer>(
+                                            form_fetcher_.get())));
     if (account_mock_store_) {
       EXPECT_CALL(*account_mock_store_,
-                  GetLogins(form_digest_, form_fetcher_.get()));
+                  GetLogins(form_digest_, WeakAddress<PasswordStoreConsumer>(
+                                              form_fetcher_.get())));
     }
     form_fetcher_->Fetch();
     task_environment_.RunUntilIdle();
@@ -538,7 +545,8 @@ TEST_P(FormFetcherImplTest, Update_Reentrance) {
   // Delivering the first results will trigger the new GetLogins call, because
   // of the Fetch() above.
   EXPECT_CALL(*profile_mock_store_,
-              GetLogins(form_digest_, form_fetcher_.get()));
+              GetLogins(form_digest_, WeakAddress<PasswordStoreConsumer>(
+                                          form_fetcher_.get())));
   DeliverPasswordStoreResults(/*profile_store_results=*/std::move(old_results),
                               /*account_store_results=*/{});
 
@@ -562,19 +570,20 @@ TEST_P(FormFetcherImplTest, Update_Reentrance) {
 #if !defined(OS_IOS) && !defined(OS_ANDROID)
 TEST_P(FormFetcherImplTest, FetchStatistics) {
   InteractionsStats stats;
-  stats.origin_domain = form_digest_.url.GetOrigin();
+  stats.origin_domain = form_digest_.url.DeprecatedGetOriginAsURL();
   stats.username_value = u"some username";
   stats.dismissal_count = 5;
   std::vector<InteractionsStats> db_stats = {stats};
   EXPECT_CALL(*profile_mock_store_,
-              GetLogins(form_digest_, form_fetcher_.get()));
+              GetLogins(form_digest_, WeakAddress<PasswordStoreConsumer>(
+                                          form_fetcher_.get())));
   EXPECT_CALL(mock_smart_bubble_stats_store_,
               GetSiteStats(stats.origin_domain, _))
-      .WillOnce(
-          testing::WithArg<1>([db_stats](PasswordStoreConsumer* consumer) {
+      .WillOnce(testing::WithArg<1>(
+          [db_stats](base::WeakPtr<PasswordStoreConsumer> consumer) {
             base::ThreadTaskRunnerHandle::Get()->PostTask(
                 FROM_HERE, base::BindOnce(
-                               [](PasswordStoreConsumer* con,
+                               [](base::WeakPtr<PasswordStoreConsumer> con,
                                   const std::vector<InteractionsStats>& stats) {
                                  con->OnGetSiteStatistics(
                                      std::vector<InteractionsStats>(stats));
@@ -590,7 +599,8 @@ TEST_P(FormFetcherImplTest, FetchStatistics) {
 #else
 TEST_P(FormFetcherImplTest, DontFetchStatistics) {
   EXPECT_CALL(*profile_mock_store_,
-              GetLogins(form_digest_, form_fetcher_.get()));
+              GetLogins(form_digest_, WeakAddress<PasswordStoreConsumer>(
+                                          form_fetcher_.get())));
   EXPECT_CALL(mock_smart_bubble_stats_store_, GetSiteStats).Times(0);
   form_fetcher_->Fetch();
   task_environment_.RunUntilIdle();
@@ -602,8 +612,9 @@ TEST_P(FormFetcherImplTest, DoNotTryToMigrateHTTPPasswordsOnHTTPSites) {
   GURL::Replacements http_rep;
   http_rep.SetSchemeStr(url::kHttpScheme);
   const GURL http_url = form_digest_.url.ReplaceComponents(http_rep);
-  form_digest_ = PasswordFormDigest(PasswordForm::Scheme::kHtml,
-                                    http_url.GetOrigin().spec(), http_url);
+  form_digest_ =
+      PasswordFormDigest(PasswordForm::Scheme::kHtml,
+                         http_url.DeprecatedGetOriginAsURL().spec(), http_url);
 
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
@@ -655,7 +666,8 @@ TEST_P(FormFetcherImplTest, DoNotTryToMigrateHTTPPasswordsOnNonHTMLForms) {
   https_rep.SetSchemeStr(url::kHttpsScheme);
   const GURL https_url = form_digest_.url.ReplaceComponents(https_rep);
   form_digest_ = PasswordFormDigest(PasswordForm::Scheme::kBasic,
-                                    https_url.GetOrigin().spec(), https_url);
+                                    https_url.DeprecatedGetOriginAsURL().spec(),
+                                    https_url);
 
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
@@ -686,7 +698,8 @@ TEST_P(FormFetcherImplTest, TryToMigrateHTTPPasswordsOnHTTPSSites) {
   https_rep.SetSchemeStr(url::kHttpsScheme);
   const GURL https_url = form_digest_.url.ReplaceComponents(https_rep);
   form_digest_ = PasswordFormDigest(PasswordForm::Scheme::kHtml,
-                                    https_url.GetOrigin().spec(), https_url);
+                                    https_url.DeprecatedGetOriginAsURL().spec(),
+                                    https_url);
 
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
@@ -703,23 +716,24 @@ TEST_P(FormFetcherImplTest, TryToMigrateHTTPPasswordsOnHTTPSSites) {
   http_rep.SetSchemeStr(url::kHttpScheme);
   PasswordForm http_form = https_form;
   http_form.url = https_form.url.ReplaceComponents(http_rep);
-  http_form.signon_realm = http_form.url.GetOrigin().spec();
+  http_form.signon_realm = http_form.url.DeprecatedGetOriginAsURL().spec();
 
   // Tests that there is only an attempt to migrate credentials on HTTPS origins
   // when no other credentials are available.
   const GURL form_digest_http_url =
       form_digest_.url.ReplaceComponents(http_rep);
-  PasswordFormDigest http_form_digest(PasswordForm::Scheme::kHtml,
-                                      form_digest_http_url.GetOrigin().spec(),
-                                      form_digest_http_url);
+  PasswordFormDigest http_form_digest(
+      PasswordForm::Scheme::kHtml,
+      form_digest_http_url.DeprecatedGetOriginAsURL().spec(),
+      form_digest_http_url);
   Fetch();
   base::WeakPtr<PasswordStoreConsumer> profile_store_migrator;
   base::WeakPtr<PasswordStoreConsumer> account_store_migrator;
   EXPECT_CALL(*profile_mock_store_, GetLogins(http_form_digest, _))
-      .WillOnce(WithArg<1>(GetAndAssignWeakPtr(&profile_store_migrator)));
+      .WillOnce(SaveArg<1>(&profile_store_migrator));
   if (account_mock_store_) {
     EXPECT_CALL(*account_mock_store_, GetLogins(http_form_digest, _))
-        .WillOnce(WithArg<1>(GetAndAssignWeakPtr(&account_store_migrator)));
+        .WillOnce(SaveArg<1>(&account_store_migrator));
   }
   DeliverPasswordStoreResults(/*profile_store_results=*/{},
                               /*account_store_results=*/{});
@@ -787,7 +801,8 @@ TEST_P(FormFetcherImplTest, StateIsWaitingDuringMigration) {
   https_rep.SetSchemeStr(url::kHttpsScheme);
   const GURL https_url = form_digest_.url.ReplaceComponents(https_rep);
   form_digest_ = PasswordFormDigest(PasswordForm::Scheme::kHtml,
-                                    https_url.GetOrigin().spec(), https_url);
+                                    https_url.DeprecatedGetOriginAsURL().spec(),
+                                    https_url);
 
   // A new form fetcher is created to be able to set the form digest and
   // migration flag.
@@ -802,15 +817,16 @@ TEST_P(FormFetcherImplTest, StateIsWaitingDuringMigration) {
   http_rep.SetSchemeStr(url::kHttpScheme);
   PasswordForm http_form = https_form;
   http_form.url = https_form.url.ReplaceComponents(http_rep);
-  http_form.signon_realm = http_form.url.GetOrigin().spec();
+  http_form.signon_realm = http_form.url.DeprecatedGetOriginAsURL().spec();
 
   // Ensure there is an attempt to migrate credentials on HTTPS origins and
   // extract the migrator.
   const GURL form_digest_http_url =
       form_digest_.url.ReplaceComponents(http_rep);
-  PasswordFormDigest http_form_digest(PasswordForm::Scheme::kHtml,
-                                      form_digest_http_url.GetOrigin().spec(),
-                                      form_digest_http_url);
+  PasswordFormDigest http_form_digest(
+      PasswordForm::Scheme::kHtml,
+      form_digest_http_url.DeprecatedGetOriginAsURL().spec(),
+      form_digest_http_url);
   Fetch();
   // First the FormFetcher is waiting for the initial response from the
   // PasswordStore(s).
@@ -818,10 +834,10 @@ TEST_P(FormFetcherImplTest, StateIsWaitingDuringMigration) {
   base::WeakPtr<PasswordStoreConsumer> profile_store_migrator;
   base::WeakPtr<PasswordStoreConsumer> account_store_migrator;
   EXPECT_CALL(*profile_mock_store_, GetLogins(http_form_digest, _))
-      .WillOnce(WithArg<1>(GetAndAssignWeakPtr(&profile_store_migrator)));
+      .WillOnce(SaveArg<1>(&profile_store_migrator));
   if (account_mock_store_) {
     EXPECT_CALL(*account_mock_store_, GetLogins(http_form_digest, _))
-        .WillOnce(WithArg<1>(GetAndAssignWeakPtr(&account_store_migrator)));
+        .WillOnce(SaveArg<1>(&account_store_migrator));
   }
   DeliverPasswordStoreResults(/*profile_store_results=*/{},
                               /*account_store_results=*/{});

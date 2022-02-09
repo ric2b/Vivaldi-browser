@@ -5,13 +5,13 @@
 #ifndef CHROME_BROWSER_PREDICTORS_LOADING_PREDICTOR_TAB_HELPER_H_
 #define CHROME_BROWSER_PREDICTORS_LOADING_PREDICTOR_TAB_HELPER_H_
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/types/id_type.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
+#include "content/public/browser/document_user_data.h"
 #include "content/public/browser/navigation_handle_user_data.h"
-#include "content/public/browser/render_document_host_user_data.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -122,12 +122,12 @@ class LoadingPredictorTabHelper
   // The DocumentPageDataHolder is used to store the state after the navigation
   // has committed.
   class DocumentPageDataHolder
-      : public content::RenderDocumentHostUserData<DocumentPageDataHolder> {
+      : public content::DocumentUserData<DocumentPageDataHolder> {
    public:
     explicit DocumentPageDataHolder(
         content::RenderFrameHost* render_frame_host);
     ~DocumentPageDataHolder() override;
-    RENDER_DOCUMENT_HOST_USER_DATA_KEY_DECL();
+    DOCUMENT_USER_DATA_KEY_DECL();
 
     scoped_refptr<PageData> page_data_;
     base::WeakPtrFactory<DocumentPageDataHolder> weak_factory_{this};
@@ -164,8 +164,8 @@ class LoadingPredictorTabHelper
   base::WeakPtr<LoadingPredictor> predictor_;
 
   // The optimization guide decider to consult for remote predictions.
-  optimization_guide::OptimizationGuideDecider* optimization_guide_decider_ =
-      nullptr;
+  raw_ptr<optimization_guide::OptimizationGuideDecider>
+      optimization_guide_decider_ = nullptr;
 
   // Used to get a weak pointer to |this|.
   base::WeakPtrFactory<LoadingPredictorTabHelper> weak_ptr_factory_{this};

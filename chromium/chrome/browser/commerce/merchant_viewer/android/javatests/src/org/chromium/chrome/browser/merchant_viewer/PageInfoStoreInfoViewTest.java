@@ -36,9 +36,9 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
 
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge.OptimizationGuideCallback;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeJni;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
+import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -78,7 +79,6 @@ import java.io.IOException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
 @Batch(Batch.PER_CLASS)
-@DisabledTest(message = "crbug.com/1252308")
 public class PageInfoStoreInfoViewTest {
     @ClassRule
     public static final ChromeTabbedActivityTestRule sActivityTestRule =
@@ -130,7 +130,7 @@ public class PageInfoStoreInfoViewTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             new ChromePageInfo(activity.getModalDialogManagerSupplier(), null,
                     PageInfoController.OpenedFromSource.TOOLBAR, () -> mMockStoreInfoActionHandler)
-                    .show(tab, PageInfoController.NO_HIGHLIGHTED_PERMISSION, fromStoreIcon);
+                    .show(tab, ChromePageInfoHighlight.forStoreInfo(fromStoreIcon));
         });
         onViewWaiting(allOf(withId(R.id.page_info_url_wrapper), isDisplayed()));
     }
@@ -252,7 +252,8 @@ public class PageInfoStoreInfoViewTest {
         onView(withId(PageInfoStoreInfoController.STORE_INFO_ROW_ID))
                 .check((v, noMatchException) -> {
                     if (noMatchException != null) throw noMatchException;
-                    try {
+                    // Allow disk writes and slow calls to render from UI thread.
+                    try (StrictModeContext ignored = StrictModeContext.allowAllThreadPolicies()) {
                         mRenderTestRule.render(v, renderId);
                     } catch (IOException e) {
                         assert false : "Render test failed due to " + e;

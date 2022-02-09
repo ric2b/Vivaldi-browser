@@ -5,39 +5,32 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_REORDER_APP_LIST_REORDER_DELEGATE_H_
 #define CHROME_BROWSER_UI_APP_LIST_REORDER_APP_LIST_REORDER_DELEGATE_H_
 
-#include <stack>
-#include <string>
-#include <vector>
-
-#include "ash/public/cpp/app_list/app_list_types.h"
 #include "components/sync/model/string_ordinal.h"
+
+namespace ash {
+enum class AppListSortOrder;
+}
 
 namespace app_list {
 namespace reorder {
-struct ReorderParam;
-}
 
-class AppListSyncableService;
-
-// The helper class for sorting launcher apps in order.
+// An interface to provide functions for app list sorting.
 class AppListReorderDelegate {
  public:
-  explicit AppListReorderDelegate(
-      AppListSyncableService* app_list_syncable_service);
-  AppListReorderDelegate(const AppListReorderDelegate&) = delete;
-  AppListReorderDelegate& operator=(const AppListReorderDelegate&) = delete;
-  ~AppListReorderDelegate() = default;
+  virtual ~AppListReorderDelegate() {}
 
-  // Returns reorder params which indicate the changes in ordinals to ensure
-  // `order` among sync items. This function ensures that the number of updates
-  // is as few as possible.
-  std::vector<reorder::ReorderParam> GenerateReorderParams(
-      ash::AppListSortOrder order) const;
+  // Sets the preferred sorting order.
+  virtual void SetAppListPreferredOrder(ash::AppListSortOrder order) = 0;
 
- private:
-  AppListSyncableService* const app_list_syncable_service_;
+  // Returns the front position among all sync items.
+  virtual syncer::StringOrdinal CalculateGlobalFrontPosition() const = 0;
+
+  // Returns the sorting order that is saved in perf service and gets shared
+  // among synced devices.
+  virtual ash::AppListSortOrder GetPermanentSortingOrder() const = 0;
 };
 
+}  // namespace reorder
 }  // namespace app_list
 
 #endif  // CHROME_BROWSER_UI_APP_LIST_REORDER_APP_LIST_REORDER_DELEGATE_H_

@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/list.h"
@@ -38,7 +35,7 @@
 // wxWin macros
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxIcon, wxGDIObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxIcon, wxGDIObject);
 
 // ============================================================================
 // implementation
@@ -52,9 +49,7 @@ void wxIconRefData::Free()
 {
     if ( m_hIcon )
     {
-#ifndef __WXMICROWIN__
         ::DestroyIcon((HICON) m_hIcon);
-#endif
 
         m_hIcon = 0;
     }
@@ -113,7 +108,6 @@ wxObjectRefData *wxIcon::CloneRefData(const wxObjectRefData *dataOrig) const
 
 void wxIcon::CopyFromBitmap(const wxBitmap& bmp)
 {
-#ifndef __WXMICROWIN__
     HICON hicon = wxBitmapToHICON(bmp);
     if ( !hicon )
     {
@@ -121,10 +115,8 @@ void wxIcon::CopyFromBitmap(const wxBitmap& bmp)
     }
     else
     {
-        SetHICON((WXHICON)hicon);
-        SetSize(bmp.GetWidth(), bmp.GetHeight());
+        InitFromHICON((WXHICON)hicon, bmp.GetWidth(), bmp.GetHeight());
     }
-#endif // __WXMICROWIN__
 }
 
 void wxIcon::CreateIconFromXpm(const char* const* data)
@@ -158,11 +150,26 @@ bool wxIcon::LoadFile(const wxString& filename,
 
 bool wxIcon::CreateFromHICON(WXHICON icon)
 {
-    SetHICON(icon);
-    if ( !IsOk() )
-        return false;
+    wxSize size = wxGetHiconSize(icon);
+    return InitFromHICON(icon, size.GetWidth(), size.GetHeight());
+}
 
-    SetSize(wxGetHiconSize(icon));
+bool wxIcon::InitFromHICON(WXHICON icon, int width, int height)
+{
+#if wxDEBUG_LEVEL >= 2
+    if ( icon != NULL )
+    {
+        wxSize size = wxGetHiconSize(icon);
+        wxASSERT_MSG(size.GetWidth() == width && size.GetHeight() == height,
+                     wxS("Inconsistent icon parameters"));
+    }
+#endif // wxDEBUG_LEVEL >= 2
 
-    return true;
+    AllocExclusive();
+
+    GetGDIImageData()->m_handle = (WXHANDLE)icon;
+    GetGDIImageData()->m_width = width;
+    GetGDIImageData()->m_height = height;
+
+    return IsOk();
 }

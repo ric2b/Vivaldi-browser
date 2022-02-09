@@ -5,14 +5,19 @@
 #include "chrome/browser/web_applications/web_app_shortcut.h"
 
 #include <functional>
+#include <string>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/span.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -85,18 +90,27 @@ void DeletePlatformShortcutsAndPostCallback(
                                      std::move(callback));
 }
 
-void DeleteMultiProfileShortcutsForAppAndPostCallback(
-    const std::string& app_id,
-    DeleteShortcutsCallback callback) {
+void DeleteMultiProfileShortcutsForAppAndPostCallback(const std::string& app_id,
+                                                      ResultCallback callback) {
   internals::DeleteMultiProfileShortcutsForApp(app_id);
   content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), true));
+      FROM_HERE, base::BindOnce(std::move(callback), Result::kOk));
 }
 
 absl::optional<ScopedShortcutOverrideForTesting*>&
 GetMutableShortcutOverrideForTesting() {
   static absl::optional<ScopedShortcutOverrideForTesting*> g_shortcut_override;
   return g_shortcut_override;
+}
+
+std::string GetAllFilesInDir(const base::FilePath& file_path) {
+  std::vector<std::string> files_as_strs;
+  base::FileEnumerator files(file_path, true, base::FileEnumerator::FILES);
+  for (base::FilePath current = files.Next(); !current.empty();
+       current = files.Next()) {
+    files_as_strs.push_back(current.AsUTF8Unsafe());
+  }
+  return base::JoinString(base::make_span(files_as_strs), "\n  ");
 }
 
 }  // namespace
@@ -109,14 +123,28 @@ ScopedShortcutOverrideForTesting::~ScopedShortcutOverrideForTesting() {
   directories = {&desktop, &application_menu, &quick_launch, &startup};
 #elif defined(OS_MAC)
   directories = {&chrome_apps_folder};
+  // Checks and cleans up possible hidden files in directories.
+  std::vector<std::string> hidden_files{"Icon\r", ".localized"};
+  for (base::ScopedTempDir* dir : directories) {
+    if (dir->IsValid()) {
+      for (auto& f : hidden_files) {
+        base::FilePath path = dir->GetPath().Append(f);
+        if (base::PathExists(path))
+          base::DeletePathRecursively(path);
+      }
+    }
+  }
 #elif defined(OS_LINUX)
   directories = {&desktop};
 #endif
   for (base::ScopedTempDir* dir : directories) {
-    DCHECK(!dir->IsValid() || base::IsDirectoryEmpty(dir->GetPath()))
+    if (!dir->IsValid())
+      continue;
+    DCHECK(base::IsDirectoryEmpty(dir->GetPath()))
         << "Directory not empty: " << dir->GetPath().AsUTF8Unsafe()
         << ". Please uninstall all webapps that have been installed while "
-           "shortcuts were overriden.";
+           "shortcuts were overriden. Contents:\n"
+        << GetAllFilesInDir(dir->GetPath());
   }
   GetMutableShortcutOverrideForTesting() = absl::nullopt;  // IN-TEST
 }
@@ -278,9 +306,8 @@ void ScheduleDeletePlatformShortcuts(
                      std::move(shortcut_info));
 }
 
-void ScheduleDeleteMultiProfileShortcutsForApp(
-    const std::string& app_id,
-    DeleteShortcutsCallback callback) {
+void ScheduleDeleteMultiProfileShortcutsForApp(const std::string& app_id,
+                                               ResultCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   GetShortcutIOTaskRunner()->PostTask(

@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/time/time.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sync_sessions/synced_session.h"
@@ -61,8 +60,11 @@ class DistantSession {
   DistantSession& operator=(const DistantSession&) = delete;
 
   ~DistantSession();
-  void InitWithSyncedSession(const sync_sessions::SyncedSession* synced_session,
-                             sync_sessions::OpenTabsUIDelegate* open_tabs);
+
+  void InitWithSyncedSession(
+      const sync_sessions::SyncedSession* synced_session,
+      sync_sessions::OpenTabsUIDelegate* open_tabs_delegate);
+
   std::string tag;
   std::string name;
   base::Time modified_time;

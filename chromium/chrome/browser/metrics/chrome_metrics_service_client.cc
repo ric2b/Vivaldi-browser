@@ -20,6 +20,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -154,7 +155,6 @@
 #include "chrome/browser/metrics/cros_healthd_metrics_provider.h"
 #include "chrome/browser/metrics/family_link_user_metrics_provider.h"
 #include "chrome/browser/metrics/family_user_metrics_provider.h"
-#include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
 #include "components/metrics/structured/structured_metrics_provider.h"  // nogncheck
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -450,7 +450,7 @@ class ChromeComponentMetricsProviderDelegate
   }
 
  private:
-  component_updater::ComponentUpdateService* component_updater_service_;
+  raw_ptr<component_updater::ComponentUpdateService> component_updater_service_;
 };
 
 }  // namespace
@@ -771,9 +771,6 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
     metrics_service_->RegisterMetricsProvider(
         std::make_unique<CrosHealthdMetricsProvider>());
   }
-
-  metrics_service_->RegisterMetricsProvider(
-      std::make_unique<SigninStatusMetricsProviderChromeOS>());
 
   // Record default UMA state as opt-out for all Chrome OS users, if not
   // recorded yet.

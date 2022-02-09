@@ -15,8 +15,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
-#include "base/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -126,7 +126,7 @@ void DesktopCloudPolicyStore::Clear() {
       FROM_HERE, base::BindOnce(base::GetDeleteFileCallback(), policy_path_));
   background_task_runner()->PostTask(
       FROM_HERE, base::BindOnce(base::GetDeleteFileCallback(), key_path_));
-  policy_.reset();
+  ResetPolicy();
   policy_map_.Clear();
   policy_signature_public_key_.clear();
   persisted_policy_key_.clear();
@@ -321,7 +321,8 @@ void DesktopCloudPolicyStore::InstallLoadedPolicyAfterValidation(
     persisted_policy_key_ = signing_key;
   }
 
-  InstallPolicy(std::move(validator->policy_data()),
+  InstallPolicy(std::move(validator->policy()),
+                std::move(validator->policy_data()),
                 std::move(validator->payload()), persisted_policy_key_);
   status_ = STATUS_OK;
   NotifyStoreLoaded();
@@ -362,7 +363,8 @@ void DesktopCloudPolicyStore::OnPolicyToStoreValidated(
   if (validator->policy()->has_new_public_key())
     persisted_policy_key_ = validator->policy()->new_public_key();
 
-  InstallPolicy(std::move(validator->policy_data()),
+  InstallPolicy(std::move(validator->policy()),
+                std::move(validator->policy_data()),
                 std::move(validator->payload()), persisted_policy_key_);
   status_ = STATUS_OK;
   NotifyStoreLoaded();

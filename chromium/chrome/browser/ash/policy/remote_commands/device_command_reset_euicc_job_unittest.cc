@@ -4,7 +4,11 @@
 
 #include "chrome/browser/ash/policy/remote_commands/device_command_reset_euicc_job.h"
 
+#include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/dbus/hermes/hermes_clients.h"
 #include "chromeos/dbus/hermes/hermes_euicc_client.h"
 #include "chromeos/dbus/hermes/hermes_manager_client.h"
@@ -13,6 +17,7 @@
 #include "chromeos/network/network_state_test_helper.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace policy {
 
@@ -23,6 +28,10 @@ namespace {
 const char kTestEuiccPath[] = "/test/hermes/123456789";
 const char kTestEid[] = "123456789";
 const RemoteCommandJob::UniqueIDType kUniqueID = 123456789;
+const char kResetEuiccOperationResultHistogram[] =
+    "Network.Cellular.ESim.Policy.ResetEuicc.Result";
+const char kResetEuiccDurationHistogram[] =
+    "Network.Cellular.ESim.Policy.ResetEuicc.Duration";
 
 em::RemoteCommand GenerateResetEuiccCommandProto(
     base::TimeDelta age_of_command) {
@@ -86,7 +95,7 @@ class DeviceCommandResetEuiccJobTest : public ChromeAshTestBase {
     auto reset_euicc_command_proto =
         GenerateResetEuiccCommandProto(base::TimeTicks::Now() - issued_time);
     EXPECT_TRUE(job->Init(base::TimeTicks::Now(), reset_euicc_command_proto,
-                          /*signed_command=*/nullptr));
+                          em::SignedData()));
     EXPECT_EQ(kUniqueID, job->unique_id());
     EXPECT_EQ(RemoteCommandJob::NOT_STARTED, job->status());
     return job;
@@ -100,6 +109,7 @@ class DeviceCommandResetEuiccJobTest : public ChromeAshTestBase {
             kAddProfileWithService);
   }
 
+  base::HistogramTester histogram_tester_;
   chromeos::NetworkStateTestHelper helper_{
       /*use_default_devices_and_services=*/true};
   std::unique_ptr<chromeos::CellularInhibitor> cellular_inhibitor_ =
@@ -109,6 +119,10 @@ class DeviceCommandResetEuiccJobTest : public ChromeAshTestBase {
 
 TEST_F(DeviceCommandResetEuiccJobTest, ResetEuicc) {
   base::RunLoop run_loop;
+  TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
+      std::make_unique<SystemNotificationHelper>());
+  NotificationDisplayServiceTester tester(/*profile=*/nullptr);
+
   std::unique_ptr<RemoteCommandJob> job = CreateResetEuiccJob(test_start_time_);
   EXPECT_TRUE(
       job->Run(base::Time::Now(), base::TimeTicks::Now(),
@@ -117,10 +131,23 @@ TEST_F(DeviceCommandResetEuiccJobTest, ResetEuicc) {
                               RemoteCommandJob::Status::SUCCEEDED,
                               /*expected_profile_count=*/0)));
   run_loop.Run();
+  // Verify that the notification should be displayed.
+  EXPECT_TRUE(tester.GetNotification(
+      DeviceCommandResetEuiccJob::kResetEuiccNotificationId));
+  // Verfiy that appropriate metrics have been logged.
+  histogram_tester_.ExpectTotalCount(kResetEuiccOperationResultHistogram, 1);
+  histogram_tester_.ExpectBucketCount(
+      kResetEuiccOperationResultHistogram,
+      DeviceCommandResetEuiccJob::ResetEuiccResult::kSuccess,
+      /*expected_count=*/1);
+  histogram_tester_.ExpectTotalCount(kResetEuiccDurationHistogram, 1);
 }
 
 TEST_F(DeviceCommandResetEuiccJobTest, ResetEuiccInhibitFailure) {
   chromeos::ShillManagerClient::Get()->GetTestInterface()->ClearDevices();
+  TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
+      std::make_unique<SystemNotificationHelper>());
+  NotificationDisplayServiceTester tester(/*profile=*/nullptr);
   base::RunLoop run_loop;
   std::unique_ptr<RemoteCommandJob> job = CreateResetEuiccJob(test_start_time_);
   EXPECT_TRUE(
@@ -130,6 +157,16 @@ TEST_F(DeviceCommandResetEuiccJobTest, ResetEuiccInhibitFailure) {
                               RemoteCommandJob::Status::FAILED,
                               /*expected_profile_count=*/2)));
   run_loop.Run();
+  // Verify that the notification should be displayed.
+  EXPECT_TRUE(tester.GetNotification(
+      DeviceCommandResetEuiccJob::kResetEuiccNotificationId));
+  // Verfiy that appropriate metrics have been logged.
+  histogram_tester_.ExpectTotalCount(kResetEuiccOperationResultHistogram, 1);
+  histogram_tester_.ExpectBucketCount(
+      kResetEuiccOperationResultHistogram,
+      DeviceCommandResetEuiccJob::ResetEuiccResult::kInhibitFailed,
+      /*expected_count=*/1);
+  histogram_tester_.ExpectTotalCount(kResetEuiccDurationHistogram, 0);
 }
 
 }  // namespace policy

@@ -21,10 +21,11 @@ import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {routes} from '../os_route.m.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 import {getLabelForAssignment} from './switch_access_action_assignment_pane.js';
 import {actionToPref, AssignmentContext, AUTO_SCAN_SPEED_RANGE_MS, SwitchAccessCommand, SwitchAccessDeviceType} from './switch_access_constants.js';
@@ -233,9 +234,7 @@ Polymer({
 
   /** @private */
   onSetupGuideRerunClick_() {
-    if (this.showSetupGuide_()) {
-      this.showSwitchAccessSetupGuideWarningDialog_ = true;
-    }
+    this.showSwitchAccessSetupGuideWarningDialog_ = true;
   },
 
   /** @private */
@@ -256,9 +255,7 @@ Polymer({
   /** @private */
   openSetupGuide_() {
     this.showSwitchAccessSetupGuideWarningDialog_ = false;
-    if (this.showSetupGuide_()) {
-      this.showSwitchAccessSetupGuideDialog_ = true;
-    }
+    this.showSwitchAccessSetupGuideDialog_ = true;
   },
 
   /** @private */
@@ -307,8 +304,7 @@ Polymer({
     // Any complete assignment will have at least one switch assigned to SELECT.
     // If this method is called with no SELECT switches, then the page has just
     // loaded, and we should open the setup guide.
-    if (Object.keys(this.selectAssignments_).length === 0 &&
-        this.showSetupGuide_()) {
+    if (Object.keys(this.selectAssignments_).length === 0) {
       this.openSetupGuide_();
     }
   },
@@ -361,15 +357,6 @@ Polymer({
     const autoScanEnabled = /** @type {boolean} */
         (this.getPref(PREFIX + 'auto_scan.enabled').value);
     return improvedTextInputEnabled && autoScanEnabled;
-  },
-
-  /**
-   * @return {boolean} Whether to show the Switch Access setup guide.
-   * @private
-   */
-  showSetupGuide_() {
-    return loadTimeData.getBoolean('showSwitchAccessSetupGuide') &&
-        !this.showSwitchAccessActionAssignmentDialog_;
   },
 
   /**

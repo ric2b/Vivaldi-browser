@@ -18,8 +18,7 @@ namespace blink {
 
 class FakeCanvasResourceHost : public CanvasResourceHost {
  public:
-  FakeCanvasResourceHost(IntSize size) : size_(size) {}
-  ~FakeCanvasResourceHost() override {}
+  explicit FakeCanvasResourceHost(gfx::Size size) : size_(size) {}
   void NotifyGpuContextLost() override {}
   void SetNeedsCompositingUpdate() override {}
   void RestoreCanvasMatrixClipStack(cc::PaintCanvas*) const override {}
@@ -33,6 +32,8 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
       RasterModeHint hint) override {
     if (ResourceProvider())
       return ResourceProvider();
+    const SkImageInfo resource_info =
+        SkImageInfo::MakeN32Premul(size_.width(), size_.height());
 
     std::unique_ptr<CanvasResourceProvider> provider;
     if (hint == RasterModeHint::kPreferGPU ||
@@ -40,7 +41,7 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
       uint32_t shared_image_usage_flags =
           gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_SCANOUT;
       provider = CanvasResourceProvider::CreateSharedImageProvider(
-          size_, cc::PaintFlags::FilterQuality::kMedium, CanvasResourceParams(),
+          resource_info, cc::PaintFlags::FilterQuality::kMedium,
           CanvasResourceProvider::ShouldInitialize::kCallClear,
           SharedGpuContext::ContextProviderWrapper(),
           hint == RasterModeHint::kPreferGPU ? RasterMode::kGPU
@@ -49,13 +50,13 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
     }
     if (!provider) {
       provider = CanvasResourceProvider::CreateSharedBitmapProvider(
-          size_, cc::PaintFlags::FilterQuality::kMedium, CanvasResourceParams(),
+          resource_info, cc::PaintFlags::FilterQuality::kMedium,
           CanvasResourceProvider::ShouldInitialize::kCallClear,
           nullptr /* dispatcher_weakptr */);
     }
     if (!provider) {
       provider = CanvasResourceProvider::CreateBitmapProvider(
-          size_, cc::PaintFlags::FilterQuality::kMedium, CanvasResourceParams(),
+          resource_info, cc::PaintFlags::FilterQuality::kMedium,
           CanvasResourceProvider::ShouldInitialize::kCallClear);
     }
 
@@ -65,7 +66,7 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
   }
 
  private:
-  IntSize size_;
+  gfx::Size size_;
 };
 
 }  // namespace blink

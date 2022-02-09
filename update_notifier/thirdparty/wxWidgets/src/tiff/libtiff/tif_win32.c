@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -27,14 +26,38 @@
  * TIFF Library Win32-specific Routines.  Adapted from tif_unix.c 4/5/95 by
  * Scott Wagner (wagner@itek.com), Itek Graphix, Rochester, NY USA
  */
+
 #include "tiffiop.h"
 
 #include <windows.h>
 
-/* This define is missing from VC6 headers. */
-#ifndef INVALID_SET_FILE_POINTER
-#define INVALID_SET_FILE_POINTER ((DWORD)-1)
-#endif
+/*
+  CreateFileA/CreateFileW return type 'HANDLE' while TIFFFdOpen() takes 'int',
+  which is formally incompatible and can even seemingly be of different size:
+  HANDLE is 64 bit under Win64, while int is still 32 bits there.
+
+  However, only the lower 32 bits of a HANDLE are significant under Win64 as,
+  for interoperability reasons, they must have the same values in 32- and
+  64-bit programs running on the same system, see
+
+  https://docs.microsoft.com/en-us/windows/win32/winprog64/interprocess-communication
+
+  Because of this, it is safe to define the following trivial functions for
+  casting between ints and HANDLEs, which are only really needed to avoid
+  compiler warnings (and, perhaps, to make the code slightly more clear).
+  Note that using the intermediate cast to "intptr_t" is crucial for warning
+  avoidance, as this integer type has the same size as HANDLE in all builds.
+*/
+
+static inline thandle_t thandle_from_int(int ifd)
+{
+    return (thandle_t)(intptr_t)ifd;
+}
+
+static inline int thandle_to_int(thandle_t fd)
+{
+    return (int)(intptr_t)fd;
+}
 
 static tmsize_t
 _tiffReadProc(thandle_t fd, void* buf, tmsize_t size)
@@ -132,9 +155,11 @@ _tiffCloseProc(thandle_t fd)
 static uint64
 _tiffSizeProc(thandle_t fd)
 {
-	ULARGE_INTEGER m;
-	m.LowPart=GetFileSize(fd,&m.HighPart);
-	return(m.QuadPart);
+	LARGE_INTEGER m;
+	if (GetFileSizeEx(fd,&m))
+		return(m.QuadPart);
+	else
+		return(0);
 }
 
 static int
@@ -166,7 +191,7 @@ _tiffMapProc(thandle_t fd, void** pbase, toff_t* psize)
 
 	size = _tiffSizeProc(fd);
 	sizem = (tmsize_t)size;
-	if ((uint64)sizem!=size)
+	if (!size || (uint64)sizem!=size)
 		return (0);
 
 	/* By passing in 0 for the maximum file size, it specifies that we
@@ -218,7 +243,7 @@ TIFFFdOpen(int ifd, const char* name, const char* mode)
 			break;
 		}
 	}
-	tif = TIFFClientOpen(name, mode, (thandle_t)ifd,
+	tif = TIFFClientOpen(name, mode, thandle_from_int(ifd),
 			_tiffReadProc, _tiffWriteProc,
 			_tiffSeekProc, _tiffCloseProc, _tiffSizeProc,
 			fSuppressMap ? _tiffDummyMapProc : _tiffMapProc,
@@ -252,7 +277,7 @@ TIFFOpen(const char* name, const char* mode)
 		case O_RDWR|O_CREAT|O_TRUNC:	dwMode = CREATE_ALWAYS; break;
 		default:			return ((TIFF*)0);
 	}
-
+        
 	fd = (thandle_t)CreateFileA(name,
 		(m == O_RDONLY)?GENERIC_READ:(GENERIC_READ | GENERIC_WRITE),
 		FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, dwMode,
@@ -263,7 +288,7 @@ TIFFOpen(const char* name, const char* mode)
 		return ((TIFF *)0);
 	}
 
-	tif = TIFFFdOpen((int)fd, name, mode);
+	tif = TIFFFdOpen(thandle_to_int(fd), name, mode);
 	if(!tif)
 		CloseHandle(fd);
 	return tif;
@@ -318,7 +343,7 @@ TIFFOpenW(const wchar_t* name, const char* mode)
 				    NULL, NULL);
 	}
 
-	tif = TIFFFdOpen((int)fd,
+	tif = TIFFFdOpen(thandle_to_int(fd),
 			 (mbname != NULL) ? mbname : "<unknown>", mode);
 	if(!tif)
 		CloseHandle(fd);
@@ -333,7 +358,18 @@ TIFFOpenW(const wchar_t* name, const char* mode)
 void*
 _TIFFmalloc(tmsize_t s)
 {
+        if (s == 0)
+                return ((void *) NULL);
+
 	return (malloc((size_t) s));
+}
+
+void* _TIFFcalloc(tmsize_t nmemb, tmsize_t siz)
+{
+    if( nmemb == 0 || siz == 0 )
+        return ((void *) NULL);
+
+    return calloc((size_t) nmemb, (size_t)siz);
 }
 
 void
@@ -381,8 +417,8 @@ Win32WarningHandler(const char* module, const char* fmt, va_list ap)
 	const char *szTitleText = "%s Warning";
 	const char *szDefaultModule = "LIBTIFF";
 	const char *szTmpModule = (module == NULL) ? szDefaultModule : module;
-	SIZE_T nBufSize = (strlen(szTmpModule) +
-			strlen(szTitleText) + strlen(fmt) + 256)*sizeof(char);
+        SIZE_T nBufSize = (strlen(szTmpModule) +
+                        strlen(szTitleText) + strlen(fmt) + 256)*sizeof(char);
 
 	if ((szTitle = (char*)LocalAlloc(LMEM_FIXED, nBufSize)) == NULL)
 		return;
@@ -404,7 +440,7 @@ Win32WarningHandler(const char* module, const char* fmt, va_list ap)
 TIFFErrorHandler _TIFFwarningHandler = Win32WarningHandler;
 
 static void
-Win32ErrorHandler(const char *module, const char *fmt, va_list ap)
+Win32ErrorHandler(const char* module, const char* fmt, va_list ap)
 {
 #ifndef TIF_PLATFORM_CONSOLE
 	char *szTitle;
@@ -412,8 +448,8 @@ Win32ErrorHandler(const char *module, const char *fmt, va_list ap)
 	const char *szTitleText = "%s Error";
 	const char *szDefaultModule = "LIBTIFF";
 	const char *szTmpModule = (module == NULL) ? szDefaultModule : module;
-	SIZE_T nBufSize = (strlen(szTmpModule) +
-			strlen(szTitleText) + strlen(fmt) + 256)*sizeof(char);
+        SIZE_T nBufSize = (strlen(szTmpModule) +
+                        strlen(szTitleText) + strlen(fmt) + 256)*sizeof(char);
 
 	if ((szTitle = (char*)LocalAlloc(LMEM_FIXED, nBufSize)) == NULL)
 		return;

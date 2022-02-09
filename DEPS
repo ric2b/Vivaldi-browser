@@ -1,5 +1,9 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
+vars = {
+  "upstream_commit_id": "I803dc87f03e013a6fb7ac6477ae8f6072e1f26cf",
+}
+
 hooks = [
   # Download and initialize "vpython" VirtualEnv environment packages for
   # Python2. We do this before running any other hooks so that any other
@@ -28,9 +32,9 @@ hooks = [
     ],
   },
   {
-    # This clobbers when necessary (based on get_landmines.py). It must be the
-    # first hook so that other things that get/generate into the output
-    # directory will not subsequently be clobbered.
+    # This clobbers when necessary (based on get_landmines.py). This should
+    # run as early as possible so that other things that get/generate into the
+    # output directory will not subsequently be clobbered.
     'name': 'landmines',
     'pattern': '.',
     'action': [
@@ -139,10 +143,11 @@ hooks = [
     'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py'],
   },
   {
-    # Should run after the clang hook.
+    # Should run after the clang hook. Used on mac, as well as for orderfile
+    # generation on Android.
     'name': 'objdump',
     'pattern': '.',
-    'condition': 'checkout_mac and host_os != "mac"',
+    'condition': 'checkout_mac  or checkout_android and host_os != "mac"',
     'action': ['python3', 'chromium/tools/clang/scripts/update.py',
                '--package=objdump'],
   },
@@ -161,7 +166,8 @@ hooks = [
     'name': 'lastchange_chromium',
     'pattern': '.',
     'action': ['python3', "-u", 'chromium/build/util/lastchange.py',
-      '-o', 'chromium/build/util/LASTCHANGE.chromium'],
+      '-o', 'chromium/build/util/LASTCHANGE.chromium',
+      "--filter", "^Change-Id: " + Var("upstream_commit_id")],
   },
   {
     # Update GPU lists version string (for gpu/config).

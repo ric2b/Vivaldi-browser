@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/i18n/time_formatting.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -410,6 +409,71 @@ TEST_F(NotificationListTest, GetNotificationsByAppId) {
     for (auto* notification :
          notification_list_->GetNotificationsByAppId(app_id)) {
       EXPECT_EQ(app_id, notification->notifier_id().id);
+    }
+  }
+}
+
+// Tests that GetNotificationsByOriginUrl returns notifications regardless of
+// their visibility.
+TEST_F(NotificationListTest, GetNotificationsByOriginUrl) {
+  const GURL kUrl1(u"http://www.kurl1.com");
+  const GURL kUrl2(u"http://www.kUrl2.com");
+
+  {
+    // Add a notification for `kurl1`.
+    const std::string id1("id1");
+    std::unique_ptr<Notification> notification(
+        new Notification(NOTIFICATION_TYPE_PROGRESS, id1, u"updated",
+                         u"updated", gfx::Image(), std::u16string(), kUrl1,
+                         NotifierId(), RichNotificationData(), nullptr));
+    notification_list_->AddNotification(std::move(notification));
+    EXPECT_EQ(1u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
+
+    // Mark the popup as shown but not read.
+    notification_list_->MarkSinglePopupAsShown(id1, false);
+    EXPECT_EQ(1u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
+
+    // Mark the popup as shown and read.
+    notification_list_->MarkSinglePopupAsShown(id1, true);
+    EXPECT_EQ(1u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
+
+    // Remove the notification.
+    notification_list_->RemoveNotification(id1);
+    EXPECT_EQ(0u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
+
+    // Add two notifications for `kurl1` and one for `kUrl2`.
+    notification = std::make_unique<Notification>(
+        NOTIFICATION_TYPE_PROGRESS, id1, u"updated", u"updated", gfx::Image(),
+        std::u16string(), kUrl1, NotifierId(), RichNotificationData(), nullptr);
+    notification_list_->AddNotification(std::move(notification));
+
+    const std::string id2("id2");
+    notification = std::make_unique<Notification>(
+        NOTIFICATION_TYPE_PROGRESS, id2, u"updated", u"updated", gfx::Image(),
+        std::u16string(), kUrl1, NotifierId(), RichNotificationData(), nullptr);
+    notification_list_->AddNotification(std::move(notification));
+    EXPECT_EQ(2u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
+
+    const std::string id3("id3");
+    notification = std::make_unique<Notification>(
+        NOTIFICATION_TYPE_PROGRESS, id3, u"updated", u"updated", gfx::Image(),
+        std::u16string(), kUrl2, NotifierId(), RichNotificationData(), nullptr);
+    notification_list_->AddNotification(std::move(notification));
+    EXPECT_EQ(2u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl1).size());
+    EXPECT_EQ(1u,
+              notification_list_->GetNotificationsByOriginUrl(kUrl2).size());
+  }
+
+  for (GURL url : {kUrl1, kUrl2}) {
+    for (auto* notification :
+         notification_list_->GetNotificationsByOriginUrl(url)) {
+      EXPECT_EQ(url, notification->origin_url());
     }
   }
 }

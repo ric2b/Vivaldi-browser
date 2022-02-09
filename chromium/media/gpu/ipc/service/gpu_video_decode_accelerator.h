@@ -14,7 +14,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/config/gpu_info.h"
@@ -46,6 +46,11 @@ class GpuVideoDecodeAccelerator
       gpu::CommandBufferStub* stub,
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
       const AndroidOverlayMojoFactoryCB& factory);
+
+  GpuVideoDecodeAccelerator() = delete;
+  GpuVideoDecodeAccelerator(const GpuVideoDecodeAccelerator&) = delete;
+  GpuVideoDecodeAccelerator& operator=(const GpuVideoDecodeAccelerator&) =
+      delete;
 
   // Static query for the capabilities, which includes the supported profiles.
   // This query calls the appropriate platform-specific version.  The returned
@@ -109,7 +114,7 @@ class GpuVideoDecodeAccelerator
   // Unowned pointer to the underlying gpu::CommandBufferStub.  |this| is
   // registered as a DestuctionObserver of |stub_| and will self-delete when
   // |stub_| is destroyed.
-  gpu::CommandBufferStub* const stub_;
+  const raw_ptr<gpu::CommandBufferStub> stub_;
 
   // The underlying VideoDecodeAccelerator.
   std::unique_ptr<VideoDecodeAccelerator> video_decode_accelerator_;
@@ -159,8 +164,6 @@ class GpuVideoDecodeAccelerator
   // cleared.
   std::map<int32_t, std::vector<scoped_refptr<gpu::gles2::TextureRef>>>
       uncleared_textures_;
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(GpuVideoDecodeAccelerator);
 };
 
 }  // namespace media

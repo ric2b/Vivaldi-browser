@@ -7,7 +7,6 @@
 #ifndef UI_VIVALDI_APP_WINDOW_DESKTOP_WINDOW_TREE_HOST_WIN_H_
 #define UI_VIVALDI_APP_WINDOW_DESKTOP_WINDOW_TREE_HOST_WIN_H_
 
-#include "base/macros.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 
 namespace views {

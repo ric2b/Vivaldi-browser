@@ -16,7 +16,6 @@
 #include "base/bind.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/i18n/string_search.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -881,7 +880,7 @@ void AutomationInternalCustomBindings::AddRoutes() {
       [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
          AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
         const std::vector<int> line_starts =
-            node->GetOrComputeLineStartOffsets();
+            node->GetIntListAttribute(ax::mojom::IntListAttribute::kLineStarts);
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
         v8::Local<v8::Array> array_result(
             v8::Array::New(isolate, line_starts.size()));
@@ -1528,6 +1527,46 @@ void AutomationInternalCustomBindings::AddRoutes() {
             v8::String::NewFromUtf8(isolate, current_state_string.c_str())
                 .ToLocalChecked());
       });
+  RouteNodeIDFunction(
+      "GetInvalidState",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        ax::mojom::InvalidState invalid_state = node->GetInvalidState();
+        if (invalid_state == ax::mojom::InvalidState::kNone)
+          return;
+        const std::string& invalid_state_string = ui::ToString(invalid_state);
+        result.Set(
+            v8::String::NewFromUtf8(isolate, invalid_state_string.c_str())
+                .ToLocalChecked());
+      });
+  RouteNodeIDFunction(
+      "GetIsButton",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        bool value = ui::IsButton(node->GetRole());
+        result.Set(v8::Boolean::New(isolate, value));
+      });
+  RouteNodeIDFunction(
+      "GetIsCheckBox",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        bool value = ui::IsCheckBox(node->GetRole());
+        result.Set(v8::Boolean::New(isolate, value));
+      });
+  RouteNodeIDFunction(
+      "GetIsComboBox",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        bool value = ui::IsComboBox(node->GetRole());
+        result.Set(v8::Boolean::New(isolate, value));
+      });
+  RouteNodeIDFunction(
+      "GetIsImage",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        bool value = ui::IsImage(node->GetRole());
+        result.Set(v8::Boolean::New(isolate, value));
+      });
   RouteNodeIDPlusStringBoolFunction(
       "GetNextTextMatch",
       [this](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
@@ -2098,8 +2137,10 @@ void AutomationInternalCustomBindings::UpdateOverallTreeChangeObserverFilter() {
 
 ui::AXNode* AutomationInternalCustomBindings::GetParent(
     ui::AXNode* node,
-    AutomationAXTreeWrapper** in_out_tree_wrapper) const {
-  if (node->HasStringAttribute(ax::mojom::StringAttribute::kAppId)) {
+    AutomationAXTreeWrapper** in_out_tree_wrapper,
+    bool should_use_app_id) const {
+  if (should_use_app_id &&
+      node->HasStringAttribute(ax::mojom::StringAttribute::kAppId)) {
     ui::AXNode* parent_app_node =
         AutomationAXTreeWrapper::GetParentTreeNodeForAppID(
             node->GetStringAttribute(ax::mojom::StringAttribute::kAppId), this);
@@ -2110,9 +2151,23 @@ ui::AXNode* AutomationInternalCustomBindings::GetParent(
     }
   }
 
-  if (node->GetUnignoredParent())
-    return node->GetUnignoredParent();
+  ui::AXNode* parent = node->GetUnignoredParent();
+  if (!parent) {
+    // Search up ancestor trees until we find one with a host that is unignored.
+    while ((parent = GetHostInParentTree(in_out_tree_wrapper))) {
+      if (*in_out_tree_wrapper && !(*in_out_tree_wrapper)->IsTreeIgnored())
+        break;
+    }
 
+    if (parent && parent->IsIgnored())
+      parent = parent->GetUnignoredParent();
+  }
+
+  return parent;
+}
+
+ui::AXNode* AutomationInternalCustomBindings::GetHostInParentTree(
+    AutomationAXTreeWrapper** in_out_tree_wrapper) const {
   AutomationAXTreeWrapper* parent_tree_wrapper = nullptr;
 
   ui::AXTreeID parent_tree_id =
@@ -2430,6 +2485,12 @@ bool AutomationInternalCustomBindings::SendTreeChangeEvent(
   // At this point, don't bother dispatching to js if the node is ignored. A js
   // client shouldn't process ignored nodes.
   if (node->IsIgnored())
+    return false;
+
+  // Likewise, don't process tree changes on ignored trees.
+  auto* tree_wrapper =
+      GetAutomationAXTreeWrapperFromTreeID(tree->GetAXTreeID());
+  if (!tree_wrapper || tree_wrapper->IsTreeIgnored())
     return false;
 
   bool has_filter = false;
@@ -2842,9 +2903,10 @@ gfx::Rect AutomationInternalCustomBindings::ComputeGlobalNodeBounds(
     bounds = tree_wrapper->tree()->RelativeToTreeBounds(node, bounds, offscreen,
                                                         clip_bounds);
 
+    bool should_use_app_id = tree_wrapper->tree()->root() == node;
     AutomationAXTreeWrapper* previous_tree_wrapper = tree_wrapper;
-    ui::AXNode* parent_of_root =
-        GetParent(tree_wrapper->tree()->root(), &tree_wrapper);
+    ui::AXNode* parent_of_root = GetParent(tree_wrapper->tree()->root(),
+                                           &tree_wrapper, should_use_app_id);
     if (parent_of_root == node)
       break;
 

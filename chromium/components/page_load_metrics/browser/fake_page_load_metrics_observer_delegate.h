@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PAGE_LOAD_METRICS_BROWSER_FAKE_PAGE_LOAD_METRICS_OBSERVER_DELEGATE_H_
 #define COMPONENTS_PAGE_LOAD_METRICS_BROWSER_FAKE_PAGE_LOAD_METRICS_OBSERVER_DELEGATE_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
@@ -59,7 +60,8 @@ class FakePageLoadMetricsObserverDelegate
   const NormalizedResponsivenessMetrics& GetNormalizedResponsivenessMetrics()
       const override;
   const mojom::InputTiming& GetPageInputTiming() const override;
-  const blink::MobileFriendliness& GetMobileFriendliness() const override;
+  const absl::optional<blink::MobileFriendliness>& GetMobileFriendliness()
+      const override;
   const PageRenderData& GetMainFrameRenderData() const override;
   const ui::ScopedVisibilityTracker& GetVisibilityTracker() const override;
   const ResourceTracker& GetResourceTracker() const override;
@@ -77,7 +79,7 @@ class FakePageLoadMetricsObserverDelegate
 
   // These instance variables will be returned by calls to the method with the
   // corresponding name. Tests should set these variables appropriately.
-  content::WebContents* web_contents_;
+  raw_ptr<content::WebContents> web_contents_;
   UserInitiatedInfo user_initiated_info_;
   GURL url_;
   GURL start_url_;
@@ -90,7 +92,7 @@ class FakePageLoadMetricsObserverDelegate
   NormalizedCLSData normalized_cls_data_;
   NormalizedResponsivenessMetrics normalized_responsiveness_metrics_;
   mojom::InputTiming page_input_timing_;
-  blink::MobileFriendliness mobile_friendliness_;
+  absl::optional<blink::MobileFriendliness> mobile_friendliness_;
   PageRenderData main_frame_render_data_;
   ui::ScopedVisibilityTracker visibility_tracker_;
   ResourceTracker resource_tracker_;

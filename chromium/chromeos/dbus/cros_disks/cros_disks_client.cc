@@ -19,13 +19,12 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
@@ -157,6 +156,9 @@ void MaybeGetStringFromDictionaryValue(const base::Value& dict,
 class CrosDisksClientImpl : public CrosDisksClient {
  public:
   CrosDisksClientImpl() : proxy_(nullptr) {}
+
+  CrosDisksClientImpl(const CrosDisksClientImpl&) = delete;
+  CrosDisksClientImpl& operator=(const CrosDisksClientImpl&) = delete;
 
   // CrosDisksClient override.
   void AddObserver(Observer* observer) override {
@@ -573,8 +575,6 @@ class CrosDisksClientImpl : public CrosDisksClient {
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.
   base::WeakPtrFactory<CrosDisksClientImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(CrosDisksClientImpl);
 };
 
 }  // namespace
@@ -772,10 +772,12 @@ void DiskInfo::InitializeFromResponse(dbus::Response* response) {
   if (media_type_double.has_value())
     device_type_ = DeviceMediaTypeToDeviceType(media_type_double.value());
 
-  base::ListValue* mount_paths = NULL;
-  if (properties->GetListWithoutPathExpansion(cros_disks::kDeviceMountPaths,
-                                              &mount_paths))
-    mount_paths->GetString(0, &mount_path_);
+  base::Value* mount_paths =
+      properties->FindListKey(cros_disks::kDeviceMountPaths);
+  if (mount_paths && !mount_paths->GetList().empty() &&
+      mount_paths->GetList()[0].is_string()) {
+    mount_path_ = mount_paths->GetList()[0].GetString();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

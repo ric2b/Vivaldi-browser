@@ -4,12 +4,9 @@
 
 package org.chromium.chrome.browser.share.link_to_text;
 
-import android.net.Uri;
-
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.blink.mojom.TextFragmentReceiver;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -59,28 +56,19 @@ public class LinkToTextIPHController {
                     return;
                 }
 
-                if (!hasTextFragment(tab, url)) return;
+                if (!LinkToTextHelper.hasTextFragment(url)) return;
 
                 if (!mTracker.wouldTriggerHelpUI(FEATURE_NAME)) {
                     return;
                 }
 
-                getExistingSelectors(tab);
+                LinkToTextHelper.hasExistingSelectors(tab, (hasSelectors) -> {
+                    if (mTracker.shouldTriggerHelpUI(FEATURE_NAME)) {
+                        showMessageIPH(tab);
+                    }
+                });
             }
         }, null);
-    }
-
-    // Request text fragment selectors for existing highlights
-    private void getExistingSelectors(Tab tab) {
-        TextFragmentReceiver producer =
-                tab.getWebContents().getMainFrame().getInterfaceToRendererFrame(
-                        TextFragmentReceiver.MANAGER);
-        LinkToTextCoordinator.getExistingSelectors(producer, (text) -> {
-            if (text.length > 0) {
-                if (mTracker.shouldTriggerHelpUI(FEATURE_NAME)) showMessageIPH(tab);
-            }
-            producer.close();
-        });
     }
 
     private void showMessageIPH(Tab tab) {
@@ -108,7 +96,7 @@ public class LinkToTextIPHController {
     }
 
     private void onMessageButtonClicked() {
-        onOpenInChrome(LinkToTextCoordinator.SHARED_HIGHLIGHTING_SUPPORT_URL);
+        onOpenInChrome(LinkToTextHelper.SHARED_HIGHLIGHTING_SUPPORT_URL);
         mTracker.dismissed(FEATURE_NAME);
     }
 
@@ -119,12 +107,5 @@ public class LinkToTextIPHController {
     private void onOpenInChrome(String linkUrl) {
         mTabModelSelector.openNewTab(new LoadUrlParams(linkUrl), TabLaunchType.FROM_LINK,
                 mTabModelSelector.getCurrentTab(), mTabModelSelector.isIncognitoSelected());
-    }
-
-    private boolean hasTextFragment(Tab tab, GURL url) {
-        Uri uri = Uri.parse(url.getSpec());
-        String fragment = uri.getEncodedFragment();
-        return fragment != null ? fragment.contains(LinkToTextCoordinator.TEXT_FRAGMENT_PREFIX)
-                                : false;
     }
 }

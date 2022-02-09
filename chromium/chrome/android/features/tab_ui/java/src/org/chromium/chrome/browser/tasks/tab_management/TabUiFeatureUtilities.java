@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST;
-
 import android.content.Context;
 import android.os.Build;
 import android.text.TextUtils;
@@ -21,12 +19,9 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.DoubleCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.ui.base.DeviceFormFactor;
-
-import java.util.Random;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -94,6 +89,15 @@ public class TabUiFeatureUtilities {
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, TAB_GROUP_AUTO_CREATION_PARAM, true);
 
+    // Field trial parameter for configuring the "Open in new tab" and "Open in new tab in group"
+    // item order in the context menu.
+    private static final String SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST_PARAM =
+            "show_open_in_tab_group_menu_item_first";
+
+    public static final BooleanCachedFieldTrialParameter SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
+                    SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST_PARAM, false);
+
     private static final String TAB_GROUP_SHARING_PARAM = "enable_tab_group_sharing";
     public static final BooleanCachedFieldTrialParameter ENABLE_TAB_GROUP_SHARING =
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID,
@@ -124,11 +128,11 @@ public class TabUiFeatureUtilities {
      * @param context The activity context.
      */
     public static boolean isGridTabSwitcherEnabled(Context context) {
-        // Disable grid tab switcher for tablet.
+        // Only enable grid tab switcher for tablet if flag is enabled.
         // Note(david@vivaldi.com): But we want it.
         if (!ChromeApplicationImpl.isVivaldi())
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
-            return false;
+            return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS);
         }
 
         // Having Tab Groups or Start implies Grid Tab Switcher.
@@ -148,7 +152,7 @@ public class TabUiFeatureUtilities {
 
         // Disable tab group for tablet.
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
-            return false;
+            return CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GROUPS_FOR_TABLETS);
         }
 
         return !DeviceClassManager.enableAccessibilityLayout(context)
@@ -228,15 +232,6 @@ public class TabUiFeatureUtilities {
     public static boolean showContextMenuOpenNewTabInGroupItemFirst() {
         assert !ENABLE_TAB_GROUP_AUTO_CREATION.getValue();
 
-        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
-
-        if (!sharedPreferencesManager.contains(CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST)) {
-            Random random = new Random();
-            sharedPreferencesManager.writeBoolean(
-                    CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST, random.nextBoolean());
-        }
-
-        return sharedPreferencesManager.readBoolean(
-                CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST, false);
+        return SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST.getValue();
     }
 }

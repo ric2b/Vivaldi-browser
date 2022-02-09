@@ -80,10 +80,6 @@
 #include "content/shell/android/shell_descriptors.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "content/public/browser/context_factory.h"
-#endif
-
 #if defined(OS_ANDROID)
 #include "components/crash/content/browser/crash_handler_host_linux.h"
 #endif
@@ -148,8 +144,8 @@ class ShellControllerImpl : public mojom::ShellController {
   void ShutDown() override { Shell::Shutdown(); }
 };
 
-// https://crbug.com/1219642 consider not needing VariationsServiceClient just
-// to use VariationsFieldTrialCreator.
+// TODO(crbug/1219642): Consider not needing VariationsServiceClient just to use
+// VariationsFieldTrialCreator.
 class ShellVariationsServiceClient
     : public variations::VariationsServiceClient {
  public:
@@ -166,7 +162,7 @@ class ShellVariationsServiceClient
     return nullptr;
   }
   version_info::Channel GetChannel() override {
-    return version_info::Channel::STABLE;
+    return version_info::Channel::UNKNOWN;
   }
   bool OverridesRestrictParameter(std::string* parameter) override {
     return false;
@@ -191,8 +187,8 @@ class ShellContentBrowserClient::ShellFieldTrials
   ~ShellFieldTrials() override = default;
 
   // variations::PlatformFieldTrials:
-  void SetupFieldTrials() override {}
-  void SetupFeatureControllingFieldTrials(
+  void SetUpFieldTrials() override {}
+  void SetUpFeatureControllingFieldTrials(
       bool has_seed,
       const base::FieldTrial::EntropyProvider* low_entropy_provider,
       base::FeatureList* feature_list) override {}
@@ -218,6 +214,8 @@ blink::UserAgentMetadata GetShellUserAgentMetadata() {
 
   metadata.brand_version_list.emplace_back("content_shell",
                                            CONTENT_SHELL_MAJOR_VERSION);
+  metadata.brand_full_version_list.emplace_back("content_shell",
+                                                CONTENT_SHELL_VERSION);
   metadata.full_version = CONTENT_SHELL_VERSION;
   metadata.platform = "Unknown";
   metadata.architecture = BuildCpuInfo();
@@ -252,8 +250,9 @@ ShellContentBrowserClient::~ShellContentBrowserClient() {
 
 std::unique_ptr<BrowserMainParts>
 ShellContentBrowserClient::CreateBrowserMainParts(
-    const MainFunctionParams& parameters) {
-  auto browser_main_parts = std::make_unique<ShellBrowserMainParts>(parameters);
+    MainFunctionParams parameters) {
+  auto browser_main_parts =
+      std::make_unique<ShellBrowserMainParts>(std::move(parameters));
 
   shell_browser_main_parts_ = browser_main_parts.get();
 
@@ -353,12 +352,14 @@ base::OnceClosure ShellContentBrowserClient::SelectClientCertificate(
     net::ClientCertIdentityList client_certs,
     std::unique_ptr<ClientCertificateDelegate> delegate) {
   if (select_client_certificate_callback_)
-    std::move(select_client_certificate_callback_).Run();
+    return std::move(select_client_certificate_callback_)
+        .Run(web_contents, cert_request_info, std::move(client_certs),
+             std::move(delegate));
   return base::OnceClosure();
 }
 
 SpeechRecognitionManagerDelegate*
-    ShellContentBrowserClient::CreateSpeechRecognitionManagerDelegate() {
+ShellContentBrowserClient::CreateSpeechRecognitionManagerDelegate() {
   return new ShellSpeechRecognitionManagerDelegate();
 }
 
@@ -444,13 +445,13 @@ std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
     const net::AuthChallengeInfo& auth_info,
     content::WebContents* web_contents,
     const content::GlobalRequestID& request_id,
-    bool is_main_frame,
+    bool is_request_for_primary_main_frame,
     const GURL& url,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
     LoginAuthRequiredCallback auth_required_callback) {
   if (!login_request_callback_.is_null()) {
-    std::move(login_request_callback_).Run(is_main_frame);
+    std::move(login_request_callback_).Run(is_request_for_primary_main_frame);
   }
   return nullptr;
 }
@@ -546,7 +547,7 @@ ShellBrowserContext* ShellContentBrowserClient::browser_context() {
 }
 
 ShellBrowserContext*
-    ShellContentBrowserClient::off_the_record_browser_context() {
+ShellContentBrowserClient::off_the_record_browser_context() {
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
 
@@ -596,6 +597,9 @@ bool ShellContentBrowserClient::HasErrorPage(int http_status_code) {
 void ShellContentBrowserClient::CreateFeatureListAndFieldTrials() {
   local_state_ = CreateLocalState();
   SetUpFieldTrials();
+  // Schedule a Local State write since the above function resulted in some
+  // prefs being updated.
+  local_state_->CommitPendingWrite();
 }
 
 std::unique_ptr<PrefService> ShellContentBrowserClient::CreateLocalState() {
@@ -650,10 +654,10 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
 
   variations::SafeSeedManager safe_seed_manager(local_state_.get());
 
-  // Since this is a test-only code path, some arguments to SetupFieldTrials are
+  // Since this is a test-only code path, some arguments to SetUpFieldTrials are
   // null.
   // TODO(crbug/1248066): Consider passing a low entropy provider and source.
-  field_trial_creator.SetupFieldTrials(
+  field_trial_creator.SetUpFieldTrials(
       variation_ids,
       content::GetSwitchDependentFeatureOverrides(
           *base::CommandLine::ForCurrentProcess()),

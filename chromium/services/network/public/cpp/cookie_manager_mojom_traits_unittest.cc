@@ -385,29 +385,37 @@ TEST(CookieManagerTraitsTest, Roundtrips_PartitionKey) {
   EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::CanonicalCookie>(
       *original, copied));
   EXPECT_EQ(original->PartitionKey(), copied.PartitionKey());
+  EXPECT_FALSE(copied.PartitionKey()->from_script());
+
+  original = net::CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__Host-A", "B", "x.y", "/", base::Time(), base::Time(), base::Time(),
+      true, false, net::CookieSameSite::NO_RESTRICTION,
+      net::COOKIE_PRIORITY_LOW, false, net::CookiePartitionKey::FromScript(),
+      net::CookieSourceScheme::kSecure, 8433);
+  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::CanonicalCookie>(
+      *original, copied));
+  EXPECT_TRUE(copied.PartitionKey()->from_script());
 }
 
-TEST(CookieManagerTraitsTest, Roundtrips_CookiePartitionKeychain) {
+TEST(CookieManagerTraitsTest, Roundtrips_CookiePartitionKeyCollection) {
   {
-    net::CookiePartitionKeychain original;
-    net::CookiePartitionKeychain copied;
+    net::CookiePartitionKeyCollection original;
+    net::CookiePartitionKeyCollection copied;
 
-    EXPECT_TRUE(
-        mojo::test::SerializeAndDeserialize<mojom::CookiePartitionKeychain>(
-            original, copied));
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::CookiePartitionKeyCollection>(original, copied));
     EXPECT_FALSE(copied.ContainsAllKeys());
     EXPECT_EQ(0u, copied.PartitionKeys().size());
   }
 
   {
-    net::CookiePartitionKeychain original(
+    net::CookiePartitionKeyCollection original(
         net::CookiePartitionKey::FromURLForTesting(
             GURL("https://www.example.com")));
-    net::CookiePartitionKeychain copied;
+    net::CookiePartitionKeyCollection copied;
 
-    EXPECT_TRUE(
-        mojo::test::SerializeAndDeserialize<mojom::CookiePartitionKeychain>(
-            original, copied));
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::CookiePartitionKeyCollection>(original, copied));
     EXPECT_FALSE(copied.ContainsAllKeys());
     EXPECT_THAT(copied.PartitionKeys(),
                 testing::UnorderedElementsAre(
@@ -416,15 +424,14 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookiePartitionKeychain) {
   }
 
   {
-    net::CookiePartitionKeychain original({
+    net::CookiePartitionKeyCollection original({
         net::CookiePartitionKey::FromURLForTesting(GURL("https://a.foo.com")),
         net::CookiePartitionKey::FromURLForTesting(GURL("https://b.bar.com")),
     });
-    net::CookiePartitionKeychain copied;
+    net::CookiePartitionKeyCollection copied;
 
-    EXPECT_TRUE(
-        mojo::test::SerializeAndDeserialize<mojom::CookiePartitionKeychain>(
-            original, copied));
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::CookiePartitionKeyCollection>(original, copied));
     EXPECT_FALSE(copied.ContainsAllKeys());
     EXPECT_THAT(copied.PartitionKeys(),
                 testing::UnorderedElementsAre(
@@ -435,13 +442,12 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookiePartitionKeychain) {
   }
 
   {
-    net::CookiePartitionKeychain original =
-        net::CookiePartitionKeychain::ContainsAll();
-    net::CookiePartitionKeychain copied;
+    net::CookiePartitionKeyCollection original =
+        net::CookiePartitionKeyCollection::ContainsAll();
+    net::CookiePartitionKeyCollection copied;
 
-    EXPECT_TRUE(
-        mojo::test::SerializeAndDeserialize<mojom::CookiePartitionKeychain>(
-            original, copied));
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::CookiePartitionKeyCollection>(original, copied));
     EXPECT_TRUE(copied.ContainsAllKeys());
   }
 }

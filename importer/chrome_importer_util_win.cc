@@ -32,7 +32,7 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
   if (importerType == importer::TYPE_OPERA_OPIUM ||
       importerType == importer::TYPE_OPERA_OPIUM_BETA ||
       importerType == importer::TYPE_OPERA_OPIUM_DEV) {
-    if (!PathService::Get(base::DIR_APP_DATA, &app_data_path)) {
+    if (!PathService::Get(base::DIR_ROAMING_APP_DATA, &app_data_path)) {
       return app_data_path.AppendASCII("not-supported");
     }
   } else {

@@ -21,6 +21,7 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.StreamUtil;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
@@ -49,6 +50,7 @@ import org.chromium.chrome.browser.tab.state.FilePersistedTabDataStorage;
 import org.chromium.chrome.browser.tab.state.PersistedTabData;
 import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
 import org.chromium.chrome.browser.tabpersistence.TabStateFileManager;
+import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -581,7 +583,13 @@ public class TabPersistentStore {
         // 1. The user just upgraded, has not yet set the new active tab id pref yet. Or
         // 2. restoreTab is used to preempt async queue and restore immediately on the UI thread.
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-        try {
+        // As we add more field to TabState, we are crossing the 10 operation counts threshold to
+        // enforce the detection of unbuffered input/output operations, which results in
+        // https://crbug.com/1276907. After evaluating the performance impact, here we disabled the
+        // detection of unbuffered input/output operations.
+        // TabState is on a deprecation path and the intention is to replace with
+        // CriticalPersistedTabData. So this workaround should be temporary.
+        try (StrictModeContext ignored = StrictModeContext.allowUnbufferedIo()) {
             TabState state;
             int restoredTabId = SharedPreferencesManager.getInstance().readInt(
                     ChromePreferenceKeys.TABMODEL_ACTIVE_TAB_ID, Tab.INVALID_TAB_ID);
@@ -705,7 +713,9 @@ public class TabPersistentStore {
             boolean wasIncognitoTabModelSelected = mTabModelSelector.isIncognitoSelected();
             int selectedModelTabCount = mTabModelSelector.getCurrentModel().getCount();
 
-            TabModelUtils.setIndex(model, TabModelUtils.getTabIndexById(model, tabId));
+            TabModelUtils.setIndex(model, TabModelUtils.getTabIndexById(model, tabId),
+                    StartSurfaceUserData.getInstance().getUnusedTabRestoredAtStartup());
+            StartSurfaceUserData.getInstance().setLastVisitedTabAtStartupUrl(tabToRestore.url);
             boolean isIncognitoTabModelSelected = mTabModelSelector.isIncognitoSelected();
 
             // Setting the index will cause the tab's model to be selected. Set it back to the model
@@ -795,7 +805,7 @@ public class TabPersistentStore {
 
     private void addTabToSaveQueueIfApplicable(Tab tab) {
         if (tab == null) return;
-        if (mTabsToSave.contains(tab) || !((TabImpl) tab).isTabStateDirty()
+        if (mTabsToSave.contains(tab) // Vivaldi: Don't take dirty state into account (VAB-5262).
                 || isTabUrlContentScheme(tab)) {
             return;
         }
@@ -975,6 +985,11 @@ public class TabPersistentStore {
         stream.writeInt(incognitoInfo.index);
         stream.writeInt(standardInfo.index + incognitoCount);
         Log.i(TAG, "Serializing tab lists; counts: " + standardCount + ", " + incognitoCount);
+
+        SharedPreferencesManager.getInstance().writeInt(
+                ChromePreferenceKeys.REGULAR_TAB_COUNT, standardCount);
+        SharedPreferencesManager.getInstance().writeInt(
+                ChromePreferenceKeys.INCOGNITO_TAB_COUNT, incognitoCount);
 
         // Save incognito state first, so when we load, if the incognito files are unreadable
         // we can fall back easily onto the standard selected tab.

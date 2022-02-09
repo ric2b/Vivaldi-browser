@@ -330,7 +330,6 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     return false;
   UpdateChecksum(*type_string);
 
-  std::u16string content_string;
   if (*type_string == kTypeNote) {
     const std::string* content_string = value.FindStringKey(kContentKey);
     if (!content_string)
@@ -385,17 +384,17 @@ bool NotesCodec::DecodeNode(const base::Value& value,
       if (!child_value.is_dict())
         return false;
 
-      const std::string* type_string = child_value.FindStringKey(kTypeKey);
-      if (!type_string)
+      const std::string* type_string2 = child_value.FindStringKey(kTypeKey);
+      if (!type_string2)
         return false;
-      if (*type_string == kTypeOther) {
+      if (*type_string2 == kTypeOther) {
         if (!child_other_node)
           return false;
         DecodeNode(child_value, nullptr, child_other_node, nullptr, nullptr);
         child_other_node = nullptr;
         continue;
       }
-      if (*type_string == kTypeTrash) {
+      if (*type_string2 == kTypeTrash) {
         if (!child_trash_node)
           return false;
         DecodeNode(child_value, nullptr, child_trash_node, nullptr, nullptr);

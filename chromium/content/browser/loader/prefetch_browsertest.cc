@@ -830,6 +830,8 @@ IN_PROC_BROWSER_TEST_P(PrefetchBrowserTest, CrossOriginWithPreloadAnonymous) {
 // - PrefetchBrowserTest.CrossOriginWithPreloadCredentialled
 IN_PROC_BROWSER_TEST_P(PrefetchBrowserTest,
                        CrossOriginWithPreloadCredentialled) {
+  ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
+  const auto port = embedded_test_server()->port();
   const char target_path[] = "/target.html";
   const char preload_path[] = "/preload.js";
   RegisterResponse(
@@ -844,7 +846,7 @@ IN_PROC_BROWSER_TEST_P(PrefetchBrowserTest,
                         },
                         {
                             "Access-Control-Allow-Origin",
-                            "http://prefetch.com:22072",
+                            "http://prefetch.com:" + base::NumberToString(port),
                         },
                         {
                             "Access-Control-Allow-Credentials",
@@ -878,7 +880,7 @@ IN_PROC_BROWSER_TEST_P(PrefetchBrowserTest,
                        "crossorigin='use-credentials'></body>",
                        cross_origin_target_url.spec().c_str())));
   RegisterRequestHandler(embedded_test_server());
-  ASSERT_TRUE(embedded_test_server()->Start(22072));
+  embedded_test_server()->StartAcceptingConnections();
   EXPECT_EQ(0, GetPrefetchURLLoaderCallCount());
 
   // Loading a page that prefetches the target URL would increment both

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_PERMISSION_REQUEST_CHIP_H_
 #define CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_PERMISSION_REQUEST_CHIP_H_
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/views/location_bar/permission_chip.h"
 
 class Browser;
@@ -14,9 +15,14 @@ class Browser;
 class PermissionRequestChip : public PermissionChip {
  public:
   METADATA_HEADER(PermissionRequestChip);
-  explicit PermissionRequestChip(
-      Browser* browser,
-      permissions::PermissionPrompt::Delegate* delegate);
+  // If `should_bubble_start_open` is true, a permission prompt bubble will be
+  // displayed automatically after PermissionRequestChip is created.
+  // `should_bubble_start_open` is evaluated based on
+  // `PermissionChipGestureSensitive` and `PermissionChipRequestTypeSensitive`
+  // experiments.
+  PermissionRequestChip(Browser* browser,
+                        permissions::PermissionPrompt::Delegate* delegate,
+                        bool should_bubble_start_open);
   PermissionRequestChip(const PermissionRequestChip& chip) = delete;
   PermissionRequestChip& operator=(const PermissionRequestChip& chip) = delete;
   ~PermissionRequestChip() override;
@@ -24,11 +30,10 @@ class PermissionRequestChip : public PermissionChip {
  private:
   // PermissionChip:
   views::View* CreateBubble() override;
-  void Collapse(bool allow_restart) override;
 
   void RecordChipButtonPressed();
 
-  Browser* browser_ = nullptr;
+  raw_ptr<Browser> browser_ = nullptr;
 
   // The time when the chip was displayed.
   base::TimeTicks chip_shown_time_;

@@ -20,9 +20,10 @@ import {loadTimeData} from '../i18n_setup.js';
 
 import {SearchEngine, SearchEnginesBrowserProxy, SearchEnginesBrowserProxyImpl, SearchEnginesInfo} from './search_engines_browser_proxy.js';
 
-interface SettingsSearchEngineDialogElement {
+export interface SettingsSearchEngineDialogElement {
   $: {
     actionButton: CrButtonElement,
+    cancel: CrButtonElement,
     dialog: CrDialogElement,
     keyword: CrInputElement,
     queryUrl: CrInputElement,
@@ -33,7 +34,7 @@ interface SettingsSearchEngineDialogElement {
 const SettingsSearchEngineDialogElementBase =
     WebUIListenerMixin(PolymerElement);
 
-class SettingsSearchEngineDialogElement extends
+export class SettingsSearchEngineDialogElement extends
     SettingsSearchEngineDialogElementBase {
   static get is() {
     return 'settings-search-engine-dialog';
@@ -56,6 +57,12 @@ class SettingsSearchEngineDialogElement extends
       queryUrl_: String,
       dialogTitle_: String,
       actionButtonText_: String,
+
+      isActiveSearchEnginesFlagEnabled_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('isActiveSearchEnginesFlagEnabled'),
+      },
     };
   }
 
@@ -68,6 +75,7 @@ class SettingsSearchEngineDialogElement extends
   private browserProxy_: SearchEnginesBrowserProxy =
       SearchEnginesBrowserProxyImpl.getInstance();
   DEFAULT_MODEL_INDEX: number;
+  private isActiveSearchEnginesFlagEnabled_: boolean;
 
   constructor() {
     super();
@@ -170,6 +178,12 @@ class SettingsSearchEngineDialogElement extends
       return !inputElement.invalid && inputElement.value.length > 0;
     });
     this.$.actionButton.disabled = !allValid;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-search-engine-dialog': SettingsSearchEngineDialogElement;
   }
 }
 

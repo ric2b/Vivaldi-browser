@@ -4,7 +4,6 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -140,7 +139,13 @@ IN_PROC_BROWSER_TEST_F(MediaStreamPermissionTest, TestDenyingUserMedia) {
   GetUserMediaAndDeny(tab_contents);
 }
 
-IN_PROC_BROWSER_TEST_F(MediaStreamPermissionTest, TestDismissingRequest) {
+// Disabled: https://crbug.com/1263442
+#if defined(THREAD_SANITIZER)
+#define MAYBE_TestDismissingRequest DISABLED_TestDismissingRequest
+#else
+#define MAYBE_TestDismissingRequest TestDismissingRequest
+#endif
+IN_PROC_BROWSER_TEST_F(MediaStreamPermissionTest, MAYBE_TestDismissingRequest) {
   content::WebContents* tab_contents = LoadTestPageInTab();
   ASSERT_EQ(tab_contents, browser()->tab_strip_model()->GetActiveWebContents());
   GetUserMediaAndDismiss(tab_contents);

@@ -8,7 +8,6 @@
 #define BROWSER_TRANSLATE_VIVALDI_TRANSLATE_CLIENT_H_
 
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
 #include "components/language/core/browser/url_language_histogram.h"

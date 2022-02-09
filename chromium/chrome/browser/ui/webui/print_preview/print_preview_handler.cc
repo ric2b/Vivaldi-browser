@@ -21,7 +21,6 @@
 #include "base/i18n/number_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -38,6 +37,7 @@
 #include "chrome/browser/printing/print_view_manager.h"
 #include "chrome/browser/printing/printer_manager_dialog.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/account_consistency_mode_manager_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -85,22 +85,17 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/account_manager/account_manager_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/local_printer_ash.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/lacros/account_manager/account_manager_util.h"
 #include "chromeos/crosapi/mojom/drive_integration_service.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
 #endif
 
 using content::RenderFrameHost;
 using content::WebContents;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-using ash::IsAccountManagerAvailable;
-#endif
 
 namespace printing {
 
@@ -703,9 +698,9 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
 
   // All of the conditions below should be guaranteed by the print preview
   // javascript.
-  args->GetString(0, &callback_id);
+  callback_id = args->GetList()[0].GetString();
   CHECK(!callback_id.empty());
-  args->GetString(1, &json_str);
+  json_str = args->GetList()[1].GetString();
   base::Value settings = GetSettingsDictionary(json_str);
   CHECK(settings.is_dict());
   int request_id = settings.FindIntKey(kPreviewRequestID).value();
@@ -771,11 +766,11 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
 void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
   ReportRegeneratePreviewRequestCountBeforePrint(
       regenerate_preview_request_count_);
-  std::string callback_id;
-  CHECK(args->GetString(0, &callback_id));
+  CHECK(args->GetList()[0].is_string());
+  std::string callback_id = args->GetList()[0].GetString();
   CHECK(!callback_id.empty());
-  std::string json_str;
-  CHECK(args->GetString(1, &json_str));
+  CHECK(args->GetList()[1].is_string());
+  std::string json_str = args->GetList()[1].GetString();
 
   base::Value settings = GetSettingsDictionary(json_str);
   if (!settings.is_dict()) {
@@ -847,7 +842,9 @@ void PrintPreviewHandler::HandleSaveAppState(const base::ListValue* args) {
   std::string data_to_save;
   PrintPreviewStickySettings* sticky_settings =
       PrintPreviewStickySettings::GetInstance();
-  if (args->GetString(0, &data_to_save) && !data_to_save.empty())
+  if (args->GetList()[0].is_string())
+    data_to_save = args->GetList()[0].GetString();
+  if (!data_to_save.empty())
     sticky_settings->StoreAppState(data_to_save);
   sticky_settings->SaveInPrefs(GetPrefs());
 }
@@ -857,7 +854,7 @@ void PrintPreviewHandler::HandleSignin(const base::ListValue* /*args*/) {
   DCHECK(profile);
 
 #if defined(OS_CHROMEOS)
-  if (IsAccountManagerAvailable(profile)) {
+  if (AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile)) {
     // Chrome OS Account Manager is enabled on this Profile and hence, all
     // account management flows will go through native UIs and not through a
     // tabbed browser window.
@@ -938,8 +935,8 @@ void PrintPreviewHandler::GetLocaleInformation(base::Value* settings) {
 
 void PrintPreviewHandler::HandleGetInitialSettings(
     const base::ListValue* args) {
-  std::string callback_id;
-  CHECK(args->GetString(0, &callback_id));
+  CHECK(args->GetList()[0].is_string());
+  std::string callback_id = args->GetList()[0].GetString();
   CHECK(!callback_id.empty());
 
   AllowJavascript();
@@ -1305,15 +1302,6 @@ void PrintPreviewHandler::FileSelectedForTesting(const base::FilePath& path,
 void PrintPreviewHandler::SetPdfSavedClosureForTesting(
     base::OnceClosure closure) {
   GetPdfPrinterHandler()->SetPdfSavedClosureForTesting(std::move(closure));
-}
-
-void PrintPreviewHandler::SendEnableManipulateSettingsForTest() {
-  FireWebUIListener("enable-manipulate-settings-for-test", base::Value());
-}
-
-void PrintPreviewHandler::SendManipulateSettingsForTest(
-    const base::DictionaryValue& settings) {
-  FireWebUIListener("manipulate-settings-for-test", settings);
 }
 
 void PrintPreviewHandler::HandleManagePrinters(const base::ListValue* args) {

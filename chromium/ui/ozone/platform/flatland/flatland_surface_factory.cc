@@ -12,7 +12,6 @@
 #include "base/containers/contains.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "third_party/angle/src/common/fuchsia_egl/fuchsia_egl.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -124,6 +123,12 @@ fuchsia::sysmem::AllocatorHandle ConnectSysmemAllocator() {
   return allocator;
 }
 
+fuchsia::ui::composition::AllocatorHandle ConnectFlatlandAllocator() {
+  fuchsia::ui::composition::AllocatorHandle allocator;
+  base::ComponentContextForProcess()->svc()->Connect(allocator.NewRequest());
+  return allocator;
+}
+
 }  // namespace
 
 FlatlandSurfaceFactory::FlatlandSurfaceFactory()
@@ -147,7 +152,8 @@ void FlatlandSurfaceFactory::Initialize(
   DCHECK(!gpu_host_);
   gpu_host_.Bind(std::move(gpu_host));
 
-  flatland_sysmem_buffer_manager_.Initialize(ConnectSysmemAllocator());
+  flatland_sysmem_buffer_manager_.Initialize(ConnectSysmemAllocator(),
+                                             ConnectFlatlandAllocator());
 }
 
 void FlatlandSurfaceFactory::Shutdown() {
@@ -208,6 +214,7 @@ scoped_refptr<gfx::NativePixmap> FlatlandSurfaceFactory::CreateNativePixmap(
     gfx::BufferUsage usage,
     absl::optional<gfx::Size> framebuffer_size) {
   DCHECK(!framebuffer_size || framebuffer_size == size);
+
   auto collection = flatland_sysmem_buffer_manager_.CreateCollection(
       vk_device, size, format, usage, 1);
   if (!collection)

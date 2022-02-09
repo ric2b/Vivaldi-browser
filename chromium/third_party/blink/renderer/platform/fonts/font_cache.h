@@ -47,7 +47,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_fallback_priority.h"
 #include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_cache.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -74,8 +74,9 @@ class SkTypeface;
 namespace base {
 namespace trace_event {
 class ProcessMemoryDump;
-}
-}
+}  // namespace trace_event
+struct Feature;
+}  // namespace base
 
 namespace blink {
 
@@ -84,6 +85,9 @@ class FontFaceCreationParams;
 class FontFallbackMap;
 class FontGlobalContext;
 class SimpleFontData;
+class WebFontPrewarmer;
+
+PLATFORM_EXPORT extern const base::Feature kAsyncFontAccess;
 
 enum class AlternateFontName {
   kAllowAlternate,
@@ -178,6 +182,16 @@ class PLATFORM_EXPORT FontCache {
   sk_sp<SkFontMgr> FontManager() { return font_manager_; }
   static void SetFontManager(sk_sp<SkFontMgr>);
 
+#if defined(OS_WIN)
+  static WebFontPrewarmer* GetFontPrewarmer() { return prewarmer_; }
+  static void SetFontPrewarmer(WebFontPrewarmer* prewarmer) {
+    prewarmer_ = prewarmer;
+  }
+  static void PrewarmFamily(const AtomicString& family_name);
+#else
+  static void PrewarmFamily(const AtomicString& family_name) {}
+#endif
+
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // These are needed for calling QueryRenderStyleForStrike, since
   // gfx::GetFontRenderParams makes distinctions based on DSF.
@@ -250,6 +264,7 @@ class PLATFORM_EXPORT FontCache {
 #if defined(OS_ANDROID)
   static AtomicString GetGenericFamilyNameForScript(
       const AtomicString& family_name,
+      const AtomicString& generic_family_name_fallback,
       const FontDescription&);
   // Locale-specific families can use different |SkTypeface| for a family name
   // if locale is different.
@@ -367,6 +382,7 @@ class PLATFORM_EXPORT FontCache {
   static SkFontMgr* static_font_manager_;
 
 #if defined(OS_WIN)
+  static WebFontPrewarmer* prewarmer_;
   static bool antialiased_text_enabled_;
   static bool lcd_text_enabled_;
   static HashMap<String, sk_sp<SkTypeface>, CaseFoldingHash>* sideloaded_fonts_;

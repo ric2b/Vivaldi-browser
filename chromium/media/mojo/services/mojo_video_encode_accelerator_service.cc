@@ -47,7 +47,7 @@ MojoVideoEncodeAcceleratorService::~MojoVideoEncodeAcceleratorService() {
 
 void MojoVideoEncodeAcceleratorService::Initialize(
     const media::VideoEncodeAccelerator::Config& config,
-    mojo::PendingRemote<mojom::VideoEncodeAcceleratorClient> client,
+    mojo::PendingAssociatedRemote<mojom::VideoEncodeAcceleratorClient> client,
     InitializeCallback success_callback) {
   DVLOG(1) << __func__ << " " << config.AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -67,6 +67,14 @@ void MojoVideoEncodeAcceleratorService::Initialize(
       config.output_profile >= VP9PROFILE_PROFILE0 &&
       config.output_profile <= VP9PROFILE_PROFILE3) {
     LOG(ERROR) << __func__ << " VP9 encoding disabled by GPU policy";
+    std::move(success_callback).Run(false);
+    return;
+  }
+
+  if (gpu_workarounds_.disable_accelerated_h264_encode &&
+      config.output_profile >= H264PROFILE_MIN &&
+      config.output_profile <= H264PROFILE_MAX) {
+    LOG(ERROR) << __func__ << " H.264 encoding disabled by GPU policy";
     std::move(success_callback).Run(false);
     return;
   }

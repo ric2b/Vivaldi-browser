@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "gn/label_ptr.h"
 #include "gn/source_file.h"
 #include "gn/substitution_list.h"
@@ -64,7 +63,8 @@ class ActionValues {
   SubstitutionList rsp_file_contents_;
   LabelPtrPair<Pool> pool_;
 
-  DISALLOW_COPY_AND_ASSIGN(ActionValues);
+  ActionValues(const ActionValues&) = delete;
+  ActionValues& operator=(const ActionValues&) = delete;
 };
 
 #endif  // TOOLS_GN_ACTION_VALUES_H_

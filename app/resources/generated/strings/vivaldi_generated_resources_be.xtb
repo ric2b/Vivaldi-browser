@@ -333,7 +333,6 @@
 <translation id="6892812721183419409">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="6900284862687837908">Праграма ў фоне: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Адклікаць доступ да файлаў</translation>
-<translation id="6916590542764765824">Кіраванне пашырэннямі</translation>
 <translation id="6945221475159498467">Абраць</translation>
 <translation id="6955446738988643816">Інспектаваць выплыўное акно</translation>
 <translation id="6970856801391541997">Надрукаваць абраныя старонкі</translation>
@@ -401,7 +400,6 @@
 <translation id="8032244173881942855">Немагчыма выканаць трансляцыю ўкладкі.</translation>
 <translation id="8071432093239591881">Надрукаваць як выяву</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />КБ</translation>
-<translation id="8137559199583651773">Кіраванне пашырэннямі</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выконваецца спампоўванне}one{Выконваецца спампоўванне}few{Выконваюцца спампоўванні}many{Выконваюцца спампоўванні}other{Выконваюцца спампоўванні}}</translation>
 <translation id="8230134520748321204">Захаваць пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">У <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> няма звестак пра гэтае пашырэнне, яно магло быць усталявана без вашага ведама.</translation>

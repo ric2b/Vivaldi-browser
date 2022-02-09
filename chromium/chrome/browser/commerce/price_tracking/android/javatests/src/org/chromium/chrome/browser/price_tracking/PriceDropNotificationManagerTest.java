@@ -26,6 +26,7 @@ import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,6 +52,8 @@ import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceFac
 import org.chromium.chrome.browser.subscriptions.SubscriptionsManagerImpl;
 import org.chromium.chrome.browser.tasks.tab_management.PriceTrackingUtilities;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy;
 
@@ -74,12 +77,20 @@ public class PriceDropNotificationManagerTest {
     private static final String ACTION_ID_TURN_OFF_ALERT = "turn_off_alert";
     private static final String TEST_URL = "www.test.com";
     private static final String OFFER_ID = "offer_id";
+    private static final String PRODUCT_CLUSTER_ID = "cluster_id";
 
     private MockNotificationManagerProxy mMockNotificationManager;
     private PriceDropNotificationManager mPriceDropNotificationManager;
 
+    @ClassRule
+    public static ChromeTabbedActivityTestRule sActivityTestRule =
+            new ChromeTabbedActivityTestRule();
     @Rule
     public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
+    @Rule
+    public BlankCTATabInitialStateRule mInitialStateRule =
+            new BlankCTATabInitialStateRule(sActivityTestRule, false);
 
     @Mock
     private CommerceSubscriptionsService mMockSubscriptionsService;
@@ -210,12 +221,15 @@ public class PriceDropNotificationManagerTest {
     @MediumTest
     public void testGetNotificationActionClickIntent() {
         verifyClickIntent(mPriceDropNotificationManager.getNotificationActionClickIntent(
-                ACTION_ID_VISIT_SITE, TEST_URL, OFFER_ID));
+                ACTION_ID_VISIT_SITE, TEST_URL, OFFER_ID, PRODUCT_CLUSTER_ID));
         Intent turnOffAlertIntent = mPriceDropNotificationManager.getNotificationActionClickIntent(
-                ACTION_ID_TURN_OFF_ALERT, TEST_URL, OFFER_ID);
+                ACTION_ID_TURN_OFF_ALERT, TEST_URL, OFFER_ID, PRODUCT_CLUSTER_ID);
         assertNotNull(turnOffAlertIntent);
         assertEquals(PriceDropNotificationManager.TrampolineActivity.class.getName(),
                 turnOffAlertIntent.getComponent().getClassName());
+        assertEquals(PRODUCT_CLUSTER_ID,
+                IntentUtils.safeGetStringExtra(
+                        turnOffAlertIntent, PriceDropNotificationManager.EXTRA_PRODUCT_CLUSTER_ID));
         assertEquals(OFFER_ID,
                 IntentUtils.safeGetStringExtra(
                         turnOffAlertIntent, PriceDropNotificationManager.EXTRA_OFFER_ID));
@@ -242,12 +256,12 @@ public class PriceDropNotificationManagerTest {
                         SubscriptionManagementType.CHROME_MANAGED, TrackingIdType.OFFER_ID);
 
         mPriceDropNotificationManager.onNotificationActionClicked(
-                ACTION_ID_TURN_OFF_ALERT, TEST_URL, null, false);
+                ACTION_ID_TURN_OFF_ALERT, TEST_URL, null, null, false);
         verify(mMockSubscriptionsManager, times(0))
                 .unsubscribe(eq(commerceSubscription), any(Callback.class));
 
         mPriceDropNotificationManager.onNotificationActionClicked(
-                ACTION_ID_TURN_OFF_ALERT, TEST_URL, offerId, false);
+                ACTION_ID_TURN_OFF_ALERT, TEST_URL, offerId, null, false);
         verify(mMockSubscriptionsManager, times(1))
                 .unsubscribe(eq(commerceSubscription), any(Callback.class));
     }

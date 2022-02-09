@@ -228,7 +228,7 @@ public class BookmarkManager
             mSelectableListLayout.setBackgroundColor(ApiCompatibilityUtils.
                     getColor(mContext.getResources(), android.R.color.transparent));
 
-        mAdapter = new BookmarkItemsAdapter(mContext);
+        mAdapter = new BookmarkItemsAdapter(mContext, snackbarManager);
 
         mAdapterDataObserver = new AdapterDataObserver() {
             @Override

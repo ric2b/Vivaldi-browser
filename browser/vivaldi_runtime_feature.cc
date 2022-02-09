@@ -5,10 +5,8 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
-#include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -19,12 +17,18 @@
 #include "components/prefs/scoped_user_pref_update.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/datasource/resource_reader.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
 
 namespace vivaldi_runtime_feature {
 
 namespace {
+
+// We store the features that the user changed as a list in preferences. For the
+// feature that the user enabled the list contain its name, for the feature that
+// the user disabled the name is prefixed with this symbol.
+constexpr char negation_prefix = '^';
 
 bool g_initialized = false;
 
@@ -43,31 +47,6 @@ FeatureMap& GetFeatureMapStorage() {
 // chrome/browser.
 Profile* ProfileFromBrowserContext(content::BrowserContext* browser_context) {
   return static_cast<Profile*>(browser_context);
-}
-
-std::string LoadRuntimeFeaturesFile() {
-  // This might be called outside the startup, eg. during creation of a guest
-  // window, so need to allow IO.
-  // base::ThreadRestrictions::ScopedAllowIO allow_io;
-  base::FilePath path;
-
-  bool ok;
-#if defined(OS_MAC)
-  ok = base::PathService::Get(chrome::DIR_RESOURCES, &path);
-#else
-  ok = base::PathService::Get(base::DIR_MODULE, &path);
-#endif  // defined(OS_MAC)
-  if (ok) {
-    path = path.AppendASCII(kRuntimeFeaturesFilename);
-
-    std::string features_text;
-    if (base::ReadFileToString(path, &features_text))
-      return features_text;
-    LOG(ERROR) << "failed to read " << path;
-  } else {
-    LOG(ERROR) << "Unable to locate the \"flags\" preference file.";
-  }
-  return std::string();
 }
 
 absl::optional<FeatureMap> ParseFeatures(base::Value json) {
@@ -96,7 +75,12 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
 #if !defined(OFFICIAL_BUILD)
     if (absl::optional<bool> value = dict.FindBoolKey("internal_value")) {
       if (*value) {
-        feature.forced = true;
+        feature.default_value = true;
+      }
+    }
+    if (absl::optional<bool> value = dict.FindBoolKey("internal_locked")) {
+      if (*value) {
+        feature.locked = true;
       }
     }
 #endif
@@ -133,13 +117,15 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
 
     if (command_line.HasSwitch(switch_name)) {
       // always enable this feature and force it always on
-      feature.forced = true;
+      feature.default_value = true;
+      feature.locked = true;
     }
     switch_name = "disable-feature:";
     switch_name.append(name);
     if (command_line.HasSwitch(switch_name)) {
       // always disable this feature and force it always off
-      feature.forced = false;
+      feature.default_value = false;
+      feature.locked = true;
     }
   }
 
@@ -147,28 +133,49 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
 }
 
 EnabledSet CreateEnabledSet(PrefService* prefs) {
-  std::vector<std::string> enabled_list;
-  base::Value::ConstListView list_view;
+  // Build name->enabled map based on default values.
+  std::vector<std::pair<std::string, bool>> name_enabled_list;
+  for (const auto& name_feature : GetFeatureMapStorage()) {
+    name_enabled_list.emplace_back(name_feature.first,
+                                   name_feature.second.default_value);
+  }
+  base::flat_map<std::string, bool> name_enabled = std::move(name_enabled_list);
+
+  // Override with the user preferences.
   const base::Value* list_value = prefs->Get(vivaldiprefs::kVivaldiExperiments);
   if (list_value && list_value->is_list()) {
-    list_view = list_value->GetList();
+    for (const base::Value& v : list_value->GetList()) {
+      if (v.is_string()) {
+        base::StringPiece name(v.GetString());
+        bool enabled = true;
+        if (!name.empty() && name[0] == negation_prefix) {
+          enabled = false;
+          name.remove_prefix(1);
+        }
+        auto i = name_enabled.find(name);
+        if (i != name_enabled.end()) {
+          i->second = enabled;
+        }
+      }
+    }
   }
+
+  // Override with locked values (those include values set from the command
+  // line).
   for (const auto& name_feature : GetFeatureMapStorage()) {
-    bool enabled;
-    if (name_feature.second.forced) {
-      enabled = name_feature.second.forced.value();
-    } else {
-      auto i = std::find_if(
-          list_view.begin(), list_view.end(), [&](const base::Value& v) {
-            return v.is_string() && v.GetString() == name_feature.first;
-          });
-      enabled = (i != list_view.end());
-    }
-    if (enabled) {
-      enabled_list.push_back(name_feature.first);
+    if (name_feature.second.locked) {
+      name_enabled[name_feature.first] = name_feature.second.default_value;
     }
   }
-  return EnabledSet(enabled_list);
+
+  // Convert enabled names into a set.
+  std::vector<std::string> enabled_list;
+  for (auto& name_enabled_pair : std::move(name_enabled).extract()) {
+    if (name_enabled_pair.second) {
+      enabled_list.push_back(std::move(name_enabled_pair.first));
+    }
+  }
+  return EnabledSet(std::move(enabled_list));
 }
 
 EnabledSet& GetEnabledImpl(content::BrowserContext* browser_context) {
@@ -198,10 +205,9 @@ void Init() {
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  std::string features_text = LoadRuntimeFeaturesFile();
-  absl::optional<base::Value> json = base::JSONReader::Read(features_text);
+  absl::optional<base::Value> json =
+      ResourceReader::ReadJSON("", kRuntimeFeaturesFilename);
   if (!json) {
-    LOG(ERROR) << kRuntimeFeaturesFilename << " does not contain a valid JSON.";
     return;
   }
   absl::optional<FeatureMap> feature_map = ParseFeatures(std::move(*json));
@@ -246,7 +252,7 @@ bool Enable(content::BrowserContext* browser_context,
   DCHECK(feature_iter != feature_map.end());
   if (feature_iter == feature_map.end())
     return false;
-  if (feature_iter->second.forced)
+  if (feature_iter->second.locked)
     return false;
 
   EnabledSet& enabled_set = GetEnabledImpl(browser_context);
@@ -259,23 +265,41 @@ bool Enable(content::BrowserContext* browser_context,
   // Store the value in preferences.
   Profile* profile = ProfileFromBrowserContext(browser_context);
   profile = profile->GetOriginalProfile();
-  ListPrefUpdate update(profile->GetPrefs(), vivaldiprefs::kVivaldiExperiments);
-  base::Value* list_value = update.Get();
-  if (enabled) {
-    base::Value::ConstListView list_view = list_value->GetList();
-    base::Value v(feature_name);
-    auto i = std::find(list_view.begin(), list_view.end(), v);
-    if (i == list_view.end()) {
-      list_value->Append(std::move(v));
+  const base::Value* list_value =
+      profile->GetPrefs()->Get(vivaldiprefs::kVivaldiExperiments);
+  std::vector<base::Value> updated;
+  for (const base::Value& v : list_value->GetList()) {
+    if (!v.is_string())
+      continue;
+    base::StringPiece name = v.GetString();
+    if (name.empty())
+      continue;
+    if (name[0] == negation_prefix) {
+      name.remove_prefix(1);
     }
-  } else {
-    list_value->EraseListValue(base::Value(feature_name));
+
+    // Remove no longer supported values from the list to prevent junk
+    // accumulation.
+    if (!feature_map.contains(name))
+      continue;
+
+    // The enabled/disabled feature is pushed to the list after the loop
+    // according to enabled/disabled state.
+    if (feature_name == name)
+      continue;
+
+    updated.push_back(v.Clone());
   }
-  // Remove no longer supported values from the list to prevent junk
-  // accumulation.
-  list_value->EraseListValueIf([&](const base::Value& v) {
-    return !v.is_string() || !feature_map.contains(v.GetString());
-  });
+
+  std::string value_string(feature_name.data(), feature_name.size());
+  if (!enabled) {
+    value_string.insert(0, 1, negation_prefix);
+  }
+  updated.emplace_back(std::move(value_string));
+
+  profile->GetPrefs()->Set(vivaldiprefs::kVivaldiExperiments,
+                           base::Value(std::move(updated)));
+
   return true;
 }
 

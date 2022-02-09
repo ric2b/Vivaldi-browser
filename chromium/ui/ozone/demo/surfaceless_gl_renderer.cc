@@ -12,7 +12,6 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_snapshot.h"
@@ -272,7 +271,8 @@ void SurfacelessGlRenderer::RenderFrame() {
         gfx::OverlayPlaneData(0, gfx::OVERLAY_TRANSFORM_NONE,
                               primary_plane_rect_, unity_rect, false,
                               gfx::Rect(buffers_[back_buffer_]->size()), 1.0f,
-                              gfx::OverlayPriorityHint::kNone));
+                              gfx::OverlayPriorityHint::kNone, gfx::RRectF(),
+                              gfx::ColorSpace::CreateSRGB(), absl::nullopt));
   }
 
   for (size_t i = 0; i < overlay_cnt_; ++i) {
@@ -282,7 +282,8 @@ void SurfacelessGlRenderer::RenderFrame() {
           gfx::OverlayPlaneData(
               1, gfx::OVERLAY_TRANSFORM_NONE, overlay_rect[i], unity_rect,
               false, gfx::Rect(overlay_buffers_[i][back_buffer_]->size()), 1.0f,
-              gfx::OverlayPriorityHint::kNone));
+              gfx::OverlayPriorityHint::kNone, gfx::RRectF(),
+              gfx::ColorSpace::CreateSRGB(), absl::nullopt));
     }
   }
 

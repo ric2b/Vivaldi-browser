@@ -13,7 +13,7 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/input/touch_action.h"
@@ -32,6 +32,7 @@
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
+#include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom-forward.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -64,6 +65,11 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       RenderWidgetHost* widget,
       const display::ScreenInfos& parent_screen_infos);
 
+  RenderWidgetHostViewChildFrame(const RenderWidgetHostViewChildFrame&) =
+      delete;
+  RenderWidgetHostViewChildFrame& operator=(
+      const RenderWidgetHostViewChildFrame&) = delete;
+
   void SetFrameConnector(CrossProcessFrameConnector* frame_connector);
 
   // TouchSelectionControllerClientManager::Observer implementation.
@@ -82,7 +88,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
   void EnsureSurfaceSynchronizedForWebTest() override;
-  void Show() override;
   void Hide() override;
   bool IsShowing() override;
   void WasUnOccluded() override;
@@ -107,6 +112,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void SendInitialPropertiesIfNeeded() override;
   void SetIsLoading(bool is_loading) override;
   void RenderProcessGone() override;
+  void ShowWithVisibility(PageVisibilityState page_visibility) final;
   void Destroy() override;
   void UpdateTooltipUnderCursor(const std::u16string& tooltip_text) override;
   void UpdateTooltipFromKeyboard(const std::u16string& tooltip_text,
@@ -167,8 +173,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
-  void GetScreenInfo(display::ScreenInfo* screen_info) override;
-  display::ScreenInfos GetScreenInfos() override;
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
@@ -240,6 +244,11 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   absl::optional<DisplayFeature> GetDisplayFeature() override;
   void SetDisplayFeatureForTesting(
       const DisplayFeature* display_feature) override;
+  void NotifyHostAndDelegateOnWasShown(
+      blink::mojom::RecordContentToVisibleTimeRequestPtr) final;
+  void RequestPresentationTimeFromHostOrDelegate(
+      blink::mojom::RecordContentToVisibleTimeRequestPtr) final;
+  void CancelPresentationTimeRequestForHostAndDelegate() final;
 
   void StopFlingingIfNecessary(
       const blink::WebGestureEvent& event,
@@ -254,7 +263,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // frame_connector_ provides a platform abstraction. Messages
   // sent through it are routed to the embedding renderer process.
-  CrossProcessFrameConnector* frame_connector_;
+  raw_ptr<CrossProcessFrameConnector> frame_connector_;
 
   base::WeakPtr<RenderWidgetHostViewChildFrame> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -314,14 +323,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // properties.
   bool initial_properties_sent_ = false;
 
-  // The ScreenInfos information from the parent at the time this class is
-  // created, to be used before this view is connected to its FrameDelegate.
-  // This is kept up to date anytime GetScreenInfos() is called and we have
-  // a FrameDelegate.
-  display::ScreenInfos parent_screen_infos_;
-
   base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);
 };
 
 }  // namespace content

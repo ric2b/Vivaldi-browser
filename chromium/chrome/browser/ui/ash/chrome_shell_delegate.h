@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "ash/shell_delegate.h"
-#include "base/macros.h"
+#include "base/callback_forward.h"
 
 class ChromeShellDelegate : public ash::ShellDelegate {
  public:
@@ -27,9 +27,13 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   std::unique_ptr<ash::BackGestureContextualNudgeDelegate>
   CreateBackGestureContextualNudgeDelegate(
       ash::BackGestureContextualNudgeController* controller) override;
+  std::unique_ptr<ash::NearbyShareDelegate> CreateNearbyShareDelegate(
+      ash::NearbyShareController* controller) const override;
+  std::unique_ptr<ash::DesksTemplatesDelegate> CreateDesksTemplatesDelegate()
+      const override;
   void OpenKeyboardShortcutHelpPage() const override;
   bool CanGoBack(gfx::NativeWindow window) const override;
-  void SetTabScrubberEnabled(bool enabled) override;
+  void SetTabScrubberChromeOSEnabled(bool enabled) override;
   bool AllowDefaultTouchActions(gfx::NativeWindow window) override;
   bool ShouldWaitForTouchPressAck(gfx::NativeWindow window) override;
   bool IsTabDrag(const ui::OSExchangeData& drop_data) override;
@@ -44,9 +48,8 @@ class ChromeShellDelegate : public ash::ShellDelegate {
           chromeos::multidevice_setup::mojom::MultiDeviceSetup> receiver)
       override;
   media_session::MediaSessionService* GetMediaSessionService() override;
-  std::unique_ptr<ash::NearbyShareDelegate> CreateNearbyShareDelegate(
-      ash::NearbyShareController* controller) const override;
   bool IsSessionRestoreInProgress() const override;
+  void SetUpEnvironmentForLockedFullscreen(bool locked) override;
   bool IsUiDevToolsStarted() const override;
   void StartUiDevTools() override;
   void StopUiDevTools() override;
@@ -54,12 +57,6 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   bool IsLoggingRedirectDisabled() const override;
   base::FilePath GetPrimaryUserDownloadsFolder() const override;
   void OpenFeedbackPageForPersistentDesksBar() override;
-  std::unique_ptr<app_restore::AppLaunchInfo> GetAppLaunchDataForDeskTemplate(
-      aura::Window* window) const override;
-  desks_storage::DeskModel* GetDeskModel() override;
-  void SetPinnedFromExo(aura::Window* window,
-                        chromeos::WindowPinType type) override;
-
   static void SetDisableLoggingRedirectForTesting(bool value);
   static void ResetDisableLoggingRedirectForTesting();
 };

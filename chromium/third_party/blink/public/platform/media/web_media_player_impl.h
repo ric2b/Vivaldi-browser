@@ -15,6 +15,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
 #include "base/time/default_tick_clock.h"
@@ -87,6 +88,7 @@ class RasterContextProvider;
 
 namespace blink {
 class PowerStatusHelper;
+class ThreadSafeBrowserInterfaceBrokerProxy;
 class UrlIndex;
 class VideoDecodeStatsReporter;
 class VideoFrameCompositor;
@@ -117,6 +119,7 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerImpl
       std::unique_ptr<media::RendererFactorySelector> renderer_factory_selector,
       UrlIndex* url_index,
       std::unique_ptr<VideoFrameCompositor> compositor,
+      scoped_refptr<ThreadSafeBrowserInterfaceBrokerProxy> remote_interfaces,
       std::unique_ptr<WebMediaPlayerParams> params);
   WebMediaPlayerImpl(const WebMediaPlayerImpl&) = delete;
   WebMediaPlayerImpl& operator=(const WebMediaPlayerImpl&) = delete;
@@ -274,6 +277,8 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerImpl
   void UpdateFrameIfStale() override;
 
   base::WeakPtr<WebMediaPlayer> AsWeakPtr() override;
+  void RegisterFrameSinkHierarchy() override;
+  void UnregisterFrameSinkHierarchy() override;
 
   bool IsBackgroundMediaSuspendEnabled() const {
     return is_background_suspend_enabled_;
@@ -816,10 +821,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerImpl
   // Captured once the cdm is provided to SetCdmInternal(). Used in creation of
   // |video_decode_stats_reporter_|.
   absl::optional<media::CdmConfig> cdm_config_;
-
-  // String identifying the KeySystem described by |cdm_config_|. Empty until a
-  // CDM has been attached. Used in creation |video_decode_stats_reporter_|.
-  std::string key_system_;
 
   // Tracks if we are currently flinging a video (e.g. in a RemotePlayback
   // session). Used to prevent videos from being paused when hidden.

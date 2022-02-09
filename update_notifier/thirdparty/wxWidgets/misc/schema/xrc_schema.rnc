@@ -1,7 +1,7 @@
 #
 # RELAX NG schema for XRC files.
 #
-# See http://docs.wxwidgets.org/trunk/overview_xrcformat.html for freeform
+# See https://docs.wxwidgets.org/trunk/overview_xrcformat.html for freeform
 # description of the format.
 #
 #
@@ -24,6 +24,9 @@
 #
 # You can also add validation for custom classes:
 #
+#     default namespace = "http://www.wxwidgets.org/wxxrc"
+#     namespace xrc = "http://www.wxwidgets.org/wxxrc"
+#
 #     include "xrc_schema.rnc" {
 #         customClasses = myExtensionClasses
 #     }
@@ -31,8 +34,9 @@
 #     myExtensionClasses = (MyFoo | MyBar | ...)
 #     MyFoo =
 #         element object {
-#             attribute class { "MyFoo" },
-#             stdObjectNodeAttributes,
+#             attribute class { "MyFoo" } &
+#             stdObjectNodeAttributes &
+#             [xrc:p="o"] element myElem {_, t_text }*
 #             ...
 #         }
 #     ...
@@ -152,8 +156,12 @@ builtinToplevelClasses =
 
 builtinWindowClasses =
     ( unknown
+    | wxActivityIndicator
     | wxAnimationCtrl
+    | wxAuiManager
     | wxAuiNotebook
+    | wxAuiPaneInfo
+    | wxAuiToolBar
     | wxBannerWindow
     | wxBitmapButton
     | wxBitmapComboBox
@@ -169,6 +177,9 @@ builtinWindowClasses =
     | wxColourPickerCtrl
     | wxComboBox
     | wxComboCtrl
+    | wxDataViewCtrl
+    | wxDataViewListCtrl
+    | wxDataViewTreeCtrl
     | wxDatePickerCtrl
     | wxDialog
     | wxDirPickerCtrl
@@ -178,10 +189,12 @@ builtinWindowClasses =
     | wxFontPickerCtrl
     | wxFrame
     | wxGauge
+    | wxGenericAnimationCtrl
     | wxGenericDirCtrl
     | wxGrid
     | wxHtmlWindow
     | wxHyperlinkCtrl
+    | wxInfoBar
     | wxListBox
     | wxListbook
     | wxListCtrl
@@ -206,6 +219,7 @@ builtinWindowClasses =
     | wxSlider
     | wxSpinButton
     | wxSpinCtrl
+    | wxSpinCtrlDouble
     | wxSplitterWindow
     | wxSearchCtrl
     | wxStatusBar
@@ -224,12 +238,15 @@ builtinWindowClasses =
     )
 
 builtinSizerClasses =
-    ( wxBoxSizer
-    | wxStaticBoxSizer
+    ( wxBoxSizer_horz
+    | wxBoxSizer_vert
+    | wxStaticBoxSizer_horz
+    | wxStaticBoxSizer_vert
     | wxGridSizer
     | wxFlexGridSizer
     | wxGridBagSizer
-    | wxWrapSizer
+    | wxWrapSizer_horz
+    | wxWrapSizer_vert
     | wxStdDialogButtonSizer
     )
 
@@ -241,8 +258,12 @@ builtinClassesNames =
 
     | "unknown"
 
+    | "wxActivityIndicator"
     | "wxAnimationCtrl"
+    | "wxAuiManager"
     | "wxAuiNotebook"
+    | "wxAuiPaneInfo"
+    | "wxAuiToolBar"
     | "wxBannerWindow"
     | "wxBitmapButton"
     | "wxBitmapComboBox"
@@ -258,6 +279,9 @@ builtinClassesNames =
     | "wxColourPickerCtrl"
     | "wxComboBox"
     | "wxComboCtrl"
+    | "wxDataViewCtrl"
+    | "wxDataViewListCtrl"
+    | "wxDataViewTreeCtrl"
     | "wxDatePickerCtrl"
     | "wxDialog"
     | "wxDirPickerCtrl"
@@ -267,10 +291,12 @@ builtinClassesNames =
     | "wxFontPickerCtrl"
     | "wxFrame"
     | "wxGauge"
+    | "wxGenericAnimationCtrl"
     | "wxGenericDirCtrl"
     | "wxGrid"
     | "wxHtmlWindow"
     | "wxHyperlinkCtrl"
+    | "wxInfoBar"
     | "wxListBox"
     | "wxListbook"
     | "wxListCtrl"
@@ -295,6 +321,7 @@ builtinClassesNames =
     | "wxSlider"
     | "wxSpinButton"
     | "wxSpinCtrl"
+    | "wxSpinCtrlDouble"
     | "wxSplitterWindow"
     | "wxSearchCtrl"
     | "wxStatusBar"
@@ -326,6 +353,7 @@ builtinNestedClassesNames =
     | "separator"
     | "break"
     | "space"
+    | "label"
     | "tool"
     | "panewindow"
     | "notebookpage"
@@ -402,7 +430,7 @@ stdWindowProperties =
 
 platform =
         attribute platform {
-            xsd:string { pattern = "(win|mac|unix|os2)( *\| *(win|mac|unix|os2))*" }
+            xsd:string { pattern = "(win|mac|unix)( *\| *(win|mac|unix))*" }
         }?
 # shorthand alias for 'platform' for use in properties definitions and
 # elsewhere where 'platform' would be too verbose
@@ -420,12 +448,19 @@ t_unsigned   = xsd:nonNegativeInteger
 t_float      = xsd:float
 t_direction  = "wxLEFT" | "wxRIGHT" | "wxTOP" | "wxBOTTOM"
 t_style      = xsd:string { pattern = "(wx[A-Z0-9_]+)( *\| *(wx[A-Z0-9_]+))*" }
+t_showeffect = "wxSHOW_EFFECT_NONE" | "wxSHOW_EFFECT_ROLL_TO_LEFT" |
+               "wxSHOW_EFFECT_ROLL_TO_RIGHT" | "wxSHOW_EFFECT_ROLL_TO_TOP" |
+               "wxSHOW_EFFECT_ROLL_TO_BOTTOM" | "wxSHOW_EFFECT_SLIDE_TO_LEFT" |
+               "wxSHOW_EFFECT_SLIDE_TO_RIGHT" | "wxSHOW_EFFECT_SLIDE_TO_TOP" |
+               "wxSHOW_EFFECT_SLIDE_TO_BOTTOM" | "wxSHOW_EFFECT_BLEND" |
+               "wxSHOW_EFFECT_EXPAND"
 
 t_url        = string
 t_colour     = xsd:string { pattern = "#[0-9a-zA-Z][0-9a-zA-Z][0-9a-zA-Z][0-9a-zA-Z][0-9a-zA-Z][0-9a-zA-Z]" } |
                xsd:string { pattern = "[^#].*" }
 t_position   = t_size
 t_size       = xsd:string { pattern = "(-?\d+),(-?\d+)d?" }
+t_pair_ints  = xsd:string { pattern = "(-?\d+),(-?\d+)" }
 t_dimension  = xsd:string { pattern = "(-?\d+)d?" }
 
 t_bitmap     = t_url?,
@@ -435,12 +470,15 @@ t_bitmap     = t_url?,
                )?
 
 t_font       = (
-                   [xrc:p="o"] element size         {_, t_integer }* &
+                   [xrc:p="o"] element size         {_, t_float }* &
                    [xrc:p="o"] element style        {_, ("normal" | "italic" | "slant") }* &
-                   [xrc:p="o"] element weight       {_, ("normal" | "bold" | "light") }* &
+                   [xrc:p="o"] element weight       {_, ("normal" | "thin" | "extralight" | "light" | 
+                                                         "medium" | "semibold" | "bold" | "extrabold" | 
+                                                         "heavy" | "extraheavy" | t_integer) }* &
                    [xrc:p="o"] element family       {_, ("roman" | "script" | "decorative" | "swiss" |
                                                          "modern" | "teletype") }* &
                    [xrc:p="o"] element underlined   {_, t_bool }* &
+                   [xrc:p="o"] element strikethrough{_, t_bool }* &
                    [xrc:p="o"] element face         {_, t_text }* &
                    [xrc:p="o"] element encoding     {_, t_text }* &
                    [xrc:p="o"] element sysfont      {_, ("wxSYS_OEM_FIXED_FONT" | "wxSYS_ANSI_FIXED_FONT" |
@@ -460,6 +498,8 @@ t_imagelist  = (
                )
 
 t_list_of_numbers = xsd:string { pattern = "\d+(,\d+)*" }
+
+t_list_of_numbers_with_weights = xsd:string { pattern = "\d+(:\d+)?(,\d+(:\d+)?)*" }
 
 
 #
@@ -503,6 +543,15 @@ wxBitmap_or_wxIcon =
     }
 
 
+wxActivityIndicator =
+    element object {
+        attribute class { "wxActivityIndicator" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties &
+        [xrc:p="o"] element running {_, t_bool }*
+    }
+
+
 wxAnimationCtrl =
     element object {
         attribute class { "wxAnimationCtrl" } &
@@ -510,6 +559,14 @@ wxAnimationCtrl =
         stdWindowProperties &
         [xrc:p="o"] element animation       {_, t_url }* &
         [xrc:p="o"] element inactive-bitmap {_, t_bitmap }*
+    }
+
+
+wxAuiManager =
+    element object {
+        attribute class { "wxAuiManager" } &
+        stdObjectNodeAttributes &
+        (wxAuiPaneInfo | objectRef)*
     }
 
 
@@ -530,6 +587,80 @@ wxAuiNotebook_notebookpage =
         windowNode
     }
 
+
+wxAuiPaneInfo =
+    element object {
+        attribute class { "wxAuiPaneInfo" } &
+        stdObjectNodeAttributes &
+        [xrc:p="important"] element caption {_, t_text }* &
+        [xrc:p="o"] element caption_visible {_, t_bool }* &
+        [xrc:p="o"] element close_button    {_, t_bool }* &
+        [xrc:p="o"] element minimize_button {_, t_bool }* &
+        [xrc:p="o"] element maximize_button {_, t_bool }* &
+        [xrc:p="o"] element pin_button      {_, t_bool }* &
+        [xrc:p="o"] element gripper         {_, t_bool }* &
+        [xrc:p="o"] element pane_border     {_, t_bool }* &
+        [xrc:p="o"] element dock            {_} * &
+        [xrc:p="o"] element float           {_} * &
+        [xrc:p="o"] element top_dockable    {_, t_bool }* &
+        [xrc:p="o"] element bottom_dockable {_, t_bool }* &
+        [xrc:p="o"] element left_dockable   {_, t_bool }* &
+        [xrc:p="o"] element right_dockable  {_, t_bool }* &
+        [xrc:p="o"] element dock_fixed      {_, t_bool }* &
+        [xrc:p="o"] element resizable       {_, t_bool }* &
+        [xrc:p="o"] element movable         {_, t_bool }* &
+        [xrc:p="o"] element floatable       {_, t_bool }* &
+        [xrc:p="o"] element floating_size   {_, t_size }* &
+        [xrc:p="o"] element min_size        {_, t_size }* &
+        [xrc:p="o"] element max_size        {_, t_size }* &
+        [xrc:p="o"] element best_size       {_, t_size }* &
+        [xrc:p="o"] element row             {_, t_integer }* &
+        [xrc:p="o"] element layer           {_, t_integer }* &
+        [xrc:p="o"] element default_pane    {_} * &
+        [xrc:p="o"] element toolbar_pane    {_} * &
+        [xrc:p="o"] element center_pane     {_} * &
+        [xrc:p="o"] element direction       {_, t_integer }* &
+        [xrc:p="o"] element top             {_} * &
+        [xrc:p="o"] element bottom          {_} * &
+        [xrc:p="o"] element left            {_} * &
+        [xrc:p="o"] element right           {_} * &
+        [xrc:p="o"] element centre          {_} * &
+        [xrc:p="o"] element center          {_} * &
+        windowNode
+    }
+
+
+wxAuiToolBar =
+    element object {
+        attribute class { "wxAuiToolBar" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties &
+        [xrc:p="o"] element bitmapsize        {_, t_size }* &
+        [xrc:p="o"] element margins           {_, t_size }* &
+        [xrc:p="o"] element packing           {_, t_integer }* &
+        [xrc:p="o"] element separation        {_, t_integer }* &
+        [xrc:p="o"] element dontattachtoframe {_, t_bool }* &
+        (
+            windowNode |
+            wxToolBar_tool |
+            wxAuiToolBar_label |
+            element object { attribute class { "separator" }, platform } |
+            element object { attribute class { "space" } &
+                platform &
+                [xrc:p="o"] element width {_, t_integer }* &
+                [xrc:p="o"] element proportion {_, t_integer }*
+            }
+        )*
+    }
+
+wxAuiToolBar_label =
+    element object {
+        attribute class { "label" } &
+            platform &
+            attribute name { t_identifier }? &
+            [xrc:p="important"] element label {_, t_text }* &
+            [xrc:p="o"]         element width {_, t_integer }*
+        }
 
 wxBannerWindow =
     element object {
@@ -555,6 +686,7 @@ wxBitmapButton =
         stdObjectNodeAttributes &
         stdWindowProperties &
         [xrc:p="o"] element default  {_, t_bool }* &
+        [xrc:p="o"] element close    {_, t_bool }* &
         [xrc:p="important"] element bitmap {_, t_bitmap }* &
         [xrc:p="o"] element selected {_, t_bitmap }* &
         [xrc:p="o"] element focus    {_, t_bitmap }* &
@@ -679,7 +811,9 @@ wxCommandLinkButton =
         stdObjectNodeAttributes &
         stdWindowProperties &
         [xrc:p="important"] element label {_, t_text }* &
-        [xrc:p="o"] element note  {_, t_text }*
+        [xrc:p="o"] element note {_, t_text }* &
+        [xrc:p="o"] element bitmap {_, t_bitmap }* &
+        [xrc:p="o"] element default {_, t_bool }*
     }
 
 
@@ -717,6 +851,7 @@ wxComboBox =
         stdWindowProperties &
         [xrc:p="o"] element selection {_, t_integer }* &
         [xrc:p="o"] element value     {_, t_string }* &
+        [xrc:p="o"] element hint      {_, t_text }* &
         element content {
             platform,
             element item {_, t_text }*
@@ -733,11 +868,37 @@ wxComboCtrl =
     }
 
 
+wxDataViewCtrl =
+    element object {
+        attribute class { "wxDataViewCtrl" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties
+    }
+
+
+wxDataViewListCtrl =
+    element object {
+        attribute class { "wxDataViewListCtrl" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties
+    }
+
+
+wxDataViewTreeCtrl =
+    element object {
+        attribute class { "wxDataViewTreeCtrl" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties &
+        [xrc:p="o"] element imagelist {_, t_imagelist }*
+    }
+
+
 wxDatePickerCtrl =
     element object {
         attribute class { "wxDatePickerCtrl" } &
         stdObjectNodeAttributes &
-        stdWindowProperties
+        stdWindowProperties &
+        [xrc:p="o"] element null-text {_, t_text }*
     }
 
 
@@ -831,6 +992,16 @@ wxGauge =
     }
 
 
+wxGenericAnimationCtrl =
+    element object {
+        attribute class { "wxGenericAnimationCtrl" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties &
+        [xrc:p="o"] element animation       {_, t_url }* &
+        [xrc:p="o"] element inactive-bitmap {_, t_bitmap }*
+    }
+
+
 wxGenericDirCtrl =
     element object {
         attribute class { "wxGenericDirCtrl" } &
@@ -870,6 +1041,23 @@ wxHyperlinkCtrl =
         stdWindowProperties &
         [xrc:p="important"] element label {_, t_text }* &
         [xrc:p="important"] element url   {_, t_url }*
+    }
+
+
+wxInfoBar =
+    element object {
+        attribute class { "wxInfoBar" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties &
+        [xrc:p="o"] element effectduration {_, t_integer }* &
+        [xrc:p="o"] element showeffect     {_, t_showeffect }* &
+        [xrc:p="o"] element hideeffect     {_, t_showeffect }* &
+        element object {
+            attribute class { "button" } &
+            attribute name  { t_identifier }? &
+            platform &
+            [xrc:p="o"] element label {_, t_text }*
+        }*
     }
 
 
@@ -1113,6 +1301,7 @@ wxRadioBox =
                 attribute helptext { t_string }?,
                 attribute enabled  { t_bool }?,
                 attribute hidden   { t_bool }?,
+                attribute label    { t_bool }?,
                 t_text
             }*
         }?
@@ -1303,6 +1492,18 @@ wxSpinCtrl =
     }
 
 
+wxSpinCtrlDouble =
+    element object {
+        attribute class { "wxSpinCtrlDouble" } &
+        stdObjectNodeAttributes &
+        stdWindowProperties &
+        [xrc:p="o"] element value {_, t_float }* &
+        [xrc:p="o"] element min   {_, t_float }* &
+        [xrc:p="o"] element max   {_, t_float }* &
+        [xrc:p="o"] element inc   {_, t_float}*
+    }
+
+
 wxSplitterWindow =
     element object {
         attribute class { "wxSplitterWindow" } &
@@ -1321,7 +1522,8 @@ wxSearchCtrl =
         attribute class { "wxSearchCtrl" } &
         stdObjectNodeAttributes &
         stdWindowProperties &
-        [xrc:p="o"] element value {_, t_text }*
+        [xrc:p="o"] element value {_, t_text }* &
+        [xrc:p="o"] element hint      {_, t_text }*
     }
 
 
@@ -1379,6 +1581,7 @@ wxTextCtrl =
         stdWindowProperties &
         [xrc:p="o"] element value     {_, t_text }* &
         [xrc:p="o"] element maxlength {_, t_integer }* &
+        [xrc:p="o"] element forceupper{_, t_bool }* &
         [xrc:p="o"] element hint      {_, t_text }*
     }
 
@@ -1397,7 +1600,9 @@ wxToggleButton =
         stdObjectNodeAttributes &
         stdWindowProperties &
         [xrc:p="important"] element label {_, t_text }* &
-        [xrc:p="o"] element checked {_, t_bool }*
+        [xrc:p="o"] element checked {_, t_bool }* &
+        [xrc:p="o"] element bitmap         {_, t_bitmap }* &
+        [xrc:p="o"] element bitmapposition {_, t_direction }*
     }
 
 
@@ -1515,9 +1720,123 @@ wxWizardPage_any =
     }
 
 
+# There is no simple way to validate the combination of flags using "|" symbol,
+# so we have to resort to regular expressions here. They are long and unwieldy
+# which is especially bad for the error messages, so we try to make them more
+# clear by inserting a dummy match element providing the description of the
+# expected value.
+#
+# And to make writing and reading patterns simpler in this schema itself, we
+# always put the part containing the always allowed flags on a (very long) line
+# of its own (the one starting with "wxALL").
+
+t_sizer_flags_grow = xsd:string {
+        pattern = "(wxGROW|wxEXPAND" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  "( *\| *" ~
+                  "(wxGROW|wxEXPAND" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  ")*"
+    }
+
+t_sizer_flags_alignv = xsd:string {
+        pattern = "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL" ~
+                  "|wxALIGN_TOP|wxALIGN_BOTTOM" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  "( *\| *" ~
+                  "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL" ~
+                  "|wxALIGN_TOP|wxALIGN_BOTTOM" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  ")*"
+    }
+
+t_sizer_flags_alignh = xsd:string {
+        pattern = "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL" ~
+                  "|wxALIGN_LEFT|wxALIGN_RIGHT" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  "( *\| *" ~
+                  "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL" ~
+                  "|wxALIGN_LEFT|wxALIGN_RIGHT" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  ")*"
+    }
+
+t_horz_sizer_flags = ("*** Sizer flags excluding horizontal alignment ones ***"
+        | t_sizer_flags_grow
+        | t_sizer_flags_alignv
+        )
+t_vert_sizer_flags = ("*** Sizer flags excluding vertical alignment ones ***"
+        | t_sizer_flags_grow
+        | t_sizer_flags_alignh
+        )
+
+t_sizer_flags_grow_alignv = xsd:string {
+        pattern = "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL" ~
+                  "|wxALIGN_TOP|wxALIGN_BOTTOM" ~
+                  "|wxGROW|wxEXPAND" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  "( *\| *" ~
+                  "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL" ~
+                  "|wxALIGN_TOP|wxALIGN_BOTTOM" ~
+                  "|wxGROW|wxEXPAND" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  ")*"
+    }
+
+t_sizer_flags_grow_alignh = xsd:string {
+        pattern = "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL" ~
+                  "|wxALIGN_LEFT|wxALIGN_RIGHT" ~
+                  "|wxGROW|wxEXPAND" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  "( *\| *" ~
+                  "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL" ~
+                  "|wxALIGN_LEFT|wxALIGN_RIGHT" ~
+                  "|wxGROW|wxEXPAND" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  ")*"
+    }
+
+t_sizer_flags_align = xsd:string {
+        pattern = "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL" ~
+                  "|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL" ~
+                  "|wxALIGN_LEFT|wxALIGN_RIGHT" ~
+                  "|wxALIGN_TOP|wxALIGN_BOTTOM" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  "( *\| *" ~
+                  "(wxALIGN_CENTER|wxALIGN_CENTRE" ~
+                  "|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL" ~
+                  "|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL" ~
+                  "|wxALIGN_LEFT|wxALIGN_RIGHT" ~
+                  "|wxALIGN_TOP|wxALIGN_BOTTOM" ~
+                  "|wxALL|wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxSHAPED|wxSTRETCH_NOT|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)" ~
+                  ")*"
+    }
+
+t_grid_sizer_flags = ("*** Sizer flags with either wxGROW/wxEXPAND or alignment in each direction ***"
+        | t_sizer_flags_grow
+        | t_sizer_flags_grow_alignv
+        | t_sizer_flags_grow_alignh
+        | t_sizer_flags_align
+        )
 
 
-wxSizer_item =
+# The items of different sizers are very similar but not quite identical:
+#  - For 1D sizers we need to define 2 versions to ensure that alignment flags
+#    in the major sizer direction are not accepted.
+#  - Only 1D sizers have "option" attribute.
+#  - For 2D sizers we accept alignment flags in both directions but not when
+#    combined with wxGROW and/or wxEXPAND.
+#  - Only wxGridBagSizer items have cell{pos,span} attributes.
+wxBoxSizer_horz_item =
     element object {
         (
             (
@@ -1534,53 +1853,142 @@ wxSizer_item =
         [xrc:p="o"] element option   {_, t_integer }* &
         [xrc:p="o"] element border   {_, t_dimension }* &
         [xrc:p="o"] element minsize  {_, t_size }* &
-        [xrc:p="o"] element ratio    {_, t_size }* &
-        # TODO: cell{pos,span} are wxGridBagSizer-only and required in it, this is too lax
-        [xrc:p="o"] element cellpos  {_, t_position }* &
-        [xrc:p="o"] element cellspan {_, t_size }* &
+        [xrc:p="o"] element ratio    {_, t_pair_ints }* &
+        [xrc:p="o"] element flag     {_, t_horz_sizer_flags}*
+    }
+
+wxBoxSizer_vert_item =
+    element object {
+        (
+            (
+                attribute class { "spacer" } &
+                [xrc:p="o"] element size {_, t_size }*
+            )
+            |
+            (
+                attribute class { "sizeritem" } &
+                (windowNode | sizerNode)
+            )
+        ) &
+        stdObjectNodeAttributes &
+        [xrc:p="o"] element option   {_, t_integer }* &
+        [xrc:p="o"] element border   {_, t_dimension }* &
+        [xrc:p="o"] element minsize  {_, t_size }* &
+        [xrc:p="o"] element ratio    {_, t_pair_ints }* &
+        [xrc:p="o"] element flag     {_, t_vert_sizer_flags }*
+    }
+
+wxGridSizer_item =
+    element object {
+        (
+            (
+                attribute class { "spacer" } &
+                [xrc:p="o"] element size {_, t_size }*
+            )
+            |
+            (
+                attribute class { "sizeritem" } &
+                (windowNode | sizerNode)
+            )
+        ) &
+        stdObjectNodeAttributes &
+        [xrc:p="o"] element border   {_, t_dimension }* &
+        [xrc:p="o"] element minsize  {_, t_size }* &
+        [xrc:p="o"] element ratio    {_, t_pair_ints }* &
+        [xrc:p="o"] element flag     {_, t_grid_sizer_flags }*
+    }
+
+wxSizerGB_item =
+    element object {
+        (
+            (
+                attribute class { "spacer" } &
+                [xrc:p="o"] element size {_, t_size }*
+            )
+            |
+            (
+                attribute class { "sizeritem" } &
+                (windowNode | sizerNode)
+            )
+        ) &
+        stdObjectNodeAttributes &
+        [xrc:p="o"] element border   {_, t_dimension }* &
+        [xrc:p="o"] element minsize  {_, t_size }* &
+        [xrc:p="o"] element ratio    {_, t_pair_ints }* &
+        [xrc:p="o"] element cellpos  {_, t_pair_ints }* &
+        [xrc:p="o"] element cellspan {_, t_pair_ints }* &
         [xrc:p="o"] element flag     {_,
             xsd:string {
-                pattern = "(wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxALL|wxGROW|wxEXPAND|wxSHAPED|wxSTRETCH_NOT|wxALIGN_CENTER|wxALIGN_CENTRE|wxALIGN_LEFT|wxALIGN_RIGHT|wxALIGN_TOP|wxALIGN_BOTTOM|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL)( *\| *(wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxALL|wxGROW|wxEXPAND|wxSHAPED|wxSTRETCH_NOT|wxALIGN_CENTER|wxALIGN_CENTRE|wxALIGN_LEFT|wxALIGN_RIGHT|wxALIGN_TOP|wxALIGN_BOTTOM|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL))*"
+                pattern = "(wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxALL|wxGROW|wxEXPAND|wxSHAPED|wxSTRETCH_NOT|wxALIGN_CENTER|wxALIGN_CENTRE|wxALIGN_LEFT|wxALIGN_RIGHT|wxALIGN_TOP|wxALIGN_BOTTOM|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN)( *\| *(wxLEFT|wxRIGHT|wxTOP|wxBOTTOM|wxNORTH|wxSOUTH|wxEAST|wxWEST|wxALL|wxGROW|wxEXPAND|wxSHAPED|wxSTRETCH_NOT|wxALIGN_CENTER|wxALIGN_CENTRE|wxALIGN_LEFT|wxALIGN_RIGHT|wxALIGN_TOP|wxALIGN_BOTTOM|wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTRE_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALIGN_CENTRE_VERTICAL|wxFIXED_MINSIZE|wxRESERVE_SPACE_EVEN_IF_HIDDEN))*"
             }
         }*
     }
 
-wxBoxSizer =
+# All sizer objects except wxStdDialogButtonSizer have these properties.
+stdSizerProperties =
+        [xrc:p="o"] element minsize   {_, t_size }* &
+        [xrc:p="o"] element hideitems {_, t_bool }*
+
+# Notice that horizontal orientation is the default (only for backwards
+# compatibility reasons, it would make more sense to require always specifying
+# it probably).
+wxBoxSizer_horz =
     element object {
         attribute class { "wxBoxSizer" } &
         stdObjectNodeAttributes &
-        [xrc:p="o"] element minsize {_, t_size }* &
-        [xrc:p="o"] element orient  {_, ("wxHORIZONTAL" | "wxVERTICAL") }* &
-        (wxSizer_item | objectRef)*
+        stdSizerProperties &
+        [xrc:p="o"] element orient {_, "wxHORIZONTAL" }* &
+        (wxBoxSizer_horz_item | objectRef)*
     }
 
-wxStaticBoxSizer =
+wxBoxSizer_vert =
+    element object {
+        attribute class { "wxBoxSizer" } &
+        stdObjectNodeAttributes &
+        stdSizerProperties &
+        element orient {_, "wxVERTICAL" } &
+        (wxBoxSizer_vert_item | objectRef)*
+    }
+
+wxStaticBoxSizer_horz =
     element object {
         attribute class { "wxStaticBoxSizer" } &
         stdObjectNodeAttributes &
-        [xrc:p="o"] element minsize {_, t_size }* &
+        stdSizerProperties &
         [xrc:p="important"] element label {_, t_text }* &
-        [xrc:p="o"] element orient  {_, ("wxHORIZONTAL" | "wxVERTICAL") }* &
-        (wxSizer_item | objectRef)*
+        element windowlabel {windowNode}* &
+        [xrc:p="o"] element orient  {_, "wxHORIZONTAL" }* &
+        (wxBoxSizer_horz_item | objectRef)*
+    }
+
+wxStaticBoxSizer_vert =
+    element object {
+        attribute class { "wxStaticBoxSizer" } &
+        stdObjectNodeAttributes &
+        stdSizerProperties &
+        [xrc:p="important"] element label {_, t_text }* &
+        element windowlabel {windowNode}* &
+        element orient {_, "wxVERTICAL" } &
+        (wxBoxSizer_vert_item | objectRef)*
     }
 
 wxGridSizer =
     element object {
         attribute class { "wxGridSizer" } &
         stdObjectNodeAttributes &
-        [xrc:p="o"] element minsize {_, t_size }* &
+        stdSizerProperties &
         [xrc:p="o"] element rows    {_, t_unsigned }* &
         [xrc:p="o"] element cols    {_, t_unsigned }* &
         [xrc:p="o"] element vgap    {_, t_dimension }* &
         [xrc:p="o"] element hgap    {_, t_dimension }* &
-        (wxSizer_item | objectRef)*
+        (wxGridSizer_item | objectRef)*
     }
 
 wxFlexGridSizer =
     element object {
         attribute class { "wxFlexGridSizer" } &
         stdObjectNodeAttributes &
-        [xrc:p="o"] element minsize             {_, t_size }* &
+        stdSizerProperties &
         [xrc:p="o"] element rows                {_, t_unsigned }* &
         [xrc:p="o"] element cols                {_, t_unsigned }* &
         [xrc:p="o"] element vgap                {_, t_dimension }* &
@@ -1589,35 +1997,45 @@ wxFlexGridSizer =
         [xrc:p="o"] element nonflexiblegrowmode {_, ("wxFLEX_GROWMODE_NONE" |
                                                      "wxFLEX_GROWMODE_SPECIFIED" |
                                                      "wxFLEX_GROWMODE_ALL") }* &
-        [xrc:p="o"] element growablerows        {_, t_list_of_numbers }* &
-        [xrc:p="o"] element growablecols        {_, t_list_of_numbers }* &
-        (wxSizer_item | objectRef)*
+        [xrc:p="o"] element growablerows        {_, t_list_of_numbers_with_weights }* &
+        [xrc:p="o"] element growablecols        {_, t_list_of_numbers_with_weights }* &
+        (wxGridSizer_item | objectRef)*
     }
 
 wxGridBagSizer =
     element object {
         attribute class { "wxGridBagSizer" } &
         stdObjectNodeAttributes &
-        [xrc:p="o"] element minsize             {_, t_size }* &
+        stdSizerProperties &
         [xrc:p="o"] element vgap                {_, t_dimension }* &
         [xrc:p="o"] element hgap                {_, t_dimension }* &
         [xrc:p="o"] element flexibledirection   {_, ("wxVERTICAL" | "wxHORIZONTAL" | "wxBOTH") }* &
         [xrc:p="o"] element nonflexiblegrowmode {_, ("wxFLEX_GROWMODE_NONE" |
                                                      "wxFLEX_GROWMODE_SPECIFIED" |
                                                      "wxFLEX_GROWMODE_ALL") }* &
-        [xrc:p="o"] element growablerows        {_, t_list_of_numbers }* &
-        [xrc:p="o"] element growablecols        {_, t_list_of_numbers }* &
-        (wxSizer_item | objectRef)*
+        [xrc:p="o"] element growablerows        {_, t_list_of_numbers_with_weights }* &
+        [xrc:p="o"] element growablecols        {_, t_list_of_numbers_with_weights }* &
+        (wxSizerGB_item | objectRef)*
     }
 
-wxWrapSizer =
+wxWrapSizer_horz =
     element object {
         attribute class { "wxWrapSizer" } &
         stdObjectNodeAttributes &
-        [xrc:p="o"] element minsize {_, t_size }* &
-        [xrc:p="important"] element orient {_, ("wxHORIZONTAL" | "wxVERTICAL") }* &
+        stdSizerProperties &
+        [xrc:p="important"] element orient {_, "wxHORIZONTAL" }* &
         [xrc:p="o"] element flag    {_, t_style }* &
-        (wxSizer_item | objectRef)*
+        (wxBoxSizer_horz_item | objectRef)*
+    }
+
+wxWrapSizer_vert =
+    element object {
+        attribute class { "wxWrapSizer" } &
+        stdObjectNodeAttributes &
+        stdSizerProperties &
+        element orient {_, "wxVERTICAL" } &
+        [xrc:p="o"] element flag    {_, t_style }* &
+        (wxBoxSizer_vert_item | objectRef)*
     }
 
 wxStdDialogButtonSizer =

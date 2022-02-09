@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
@@ -13,7 +13,6 @@ import tempfile
 
 from common_args import AddCommonArgs, AddTargetSpecificArgs, \
                         ConfigureLogging, GetDeploymentTargetForArgs
-from deploy_to_pkg_repo import InstallSymbols
 from net_test_server import SetupTestServer
 from run_test_package import RunTestPackage, RunTestPackageArgs
 from runner_exceptions import HandleExceptionAndReturnExitCode
@@ -42,6 +41,10 @@ def AddTestExecutionArgs(arg_parser):
       '--test-launcher-retry-limit',
       help='Number of times that test suite will retry failing '
       'tests. This is multiplicative with --gtest_repeat.')
+  test_args.add_argument('--test-launcher-print-test-stdio',
+                         choices=['auto', 'always', 'never'],
+                         help='Controls when full test output is printed.'
+                         'auto means to print it when the test failed.')
   test_args.add_argument('--test-launcher-shard-index',
                          type=int,
                          default=os.environ.get('GTEST_SHARD_INDEX'),
@@ -167,6 +170,9 @@ def main():
       test_concurrency = args.cpu_cores
   if test_concurrency:
     child_args.append('--test-launcher-jobs=%d' % test_concurrency)
+  if args.test_launcher_print_test_stdio:
+    child_args.append('--test-launcher-print-test-stdio=%s' %
+                      args.test_launcher_print_test_stdio)
 
   if args.gtest_filter:
     child_args.append('--gtest_filter=' + args.gtest_filter)
@@ -206,7 +212,7 @@ def main():
         test_launcher_filter_files = args.test_launcher_filter_file.split(';')
         with tempfile.NamedTemporaryFile('a+b') as combined_filter_file:
           for filter_file in test_launcher_filter_files:
-            with open(filter_file, 'r') as f:
+            with open(filter_file, 'rb') as f:
               combined_filter_file.write(f.read())
           combined_filter_file.seek(0)
           target.PutFile(combined_filter_file.name,
@@ -220,12 +226,6 @@ def main():
         assert test_concurrency
         test_server = SetupTestServer(target, test_concurrency,
                                       args.package_name, test_realms)
-
-      if args.device is not None and args.fuchsia_out_dir is not None:
-        build_ids_path = os.path.join(args.fuchsia_out_dir, '.build-id')
-        for package in args.package:
-          InstallSymbols(os.path.join(os.path.dirname(package), 'ids.txt'),
-                         build_ids_path)
 
       run_package_args = RunTestPackageArgs.FromCommonArgs(args)
       if args.use_run_test_component:

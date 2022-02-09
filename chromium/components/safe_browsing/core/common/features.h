@@ -8,7 +8,6 @@
 #include <stddef.h>
 
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/values.h"
 
@@ -59,9 +58,11 @@ const char kClientSideDetectionTagParamName[] = "reporter_omaha_tag";
 // Enables client side detection referrer chain.
 extern const base::Feature kClientSideDetectionReferrerChain;
 
-// Enables GAIA-keying of client side detection requests for Enhanced Safe
-// Browsing users.
-extern const base::Feature kClientSideDetectionWithToken;
+// Controls the non-blocking scanning UI for Connectors scanning requests. If
+// this is enabled, the downloaded file(s) will be renamed immediately and the
+// scanning will take place without UI when the policy is set to "non-blocking"
+// instead of just showing an "Open Now" button with the blocking UI.
+extern const base::Feature kConnectorsScanningReportOnlyUI;
 
 // Controls whether the delayed warning experiment is enabled.
 extern const base::Feature kDelayedWarnings;
@@ -69,9 +70,11 @@ extern const base::Feature kDelayedWarnings;
 // warnings feature is enabled.
 extern const base::FeatureParam<bool> kDelayedWarningsEnableMouseClicks;
 
-// This gates mime type sniffing for DLP file support until the mime type list
-// and implementation are validated experimentally.
-extern const base::Feature kFileAnalysisMimeTypeSniff;
+// Enables collection of signals related to extension activity and uploads
+// of telemetry reports to SB servers.
+extern const base::Feature kExtensionTelemetry;
+// Specifies the upload interval for extension telemetry reports.
+extern const base::FeatureParam<int> kExtensionTelemetryUploadIntervalSeconds;
 
 // Determines the tag to pass to Omaha to get a file type policy.
 extern const base::Feature kFileTypePoliciesTag;
@@ -85,10 +88,6 @@ extern const base::Feature kOmitNonUserGesturesFromReferrerChain;
 
 // Enable GAIA password protection for signed-in users.
 extern const base::Feature kPasswordProtectionForSignedInUsers;
-
-// Enables GAIA-keying of password protection requests for Enhanced Safe
-// Browsing users.
-extern const base::Feature kPasswordProtectionWithToken;
 
 // Controls whether Chrome prompts Enhanced Safe Browsing users for deep
 // scanning.
@@ -114,22 +113,11 @@ extern const base::Feature kSafeBrowsingPageLoadToken;
 extern const base::Feature
     kSafeBrowsingPasswordCheckIntegrationForSavedPasswordsAndroid;
 
-// Controls whether Safe Browsing uses separate NetworkContexts for each
-// profile.
-extern const base::Feature kSafeBrowsingSeparateNetworkContexts;
-
-// Controls whether cookies are removed from certain communications with Safe
-// Browsing.
-extern const base::Feature kSafeBrowsingRemoveCookies;
-
 // Controls whether cookies are removed when the access token is present.
 extern const base::Feature kSafeBrowsingRemoveCookiesInAuthRequests;
 
 // Controls the daily quota for the suspicious site trigger.
 extern const base::Feature kSuspiciousSiteTriggerQuotaFeature;
-
-// Controls whether the referrer chain is attached to real time requests.
-extern const base::Feature kRealTimeUrlLookupReferrerChain;
 
 // Controls whether the referrer chain is attached to real time requests for
 // enterprise.
@@ -140,6 +128,9 @@ extern const base::Feature kRealTimeUrlLookupReferrerChainForEnterprise;
 // The feature is only set by Finch so that we can differentiate between
 // default and control groups of the experiment.
 extern const base::Feature kSimplifiedUrlDisplay;
+
+// Controls whether the integration of tailored security settings is enabled.
+extern const base::Feature kTailoredSecurityIntegration;
 
 // Specifies which non-resource HTML Elements to collect based on their tag and
 // attributes. It's a single param containing a comma-separated list of pairs.

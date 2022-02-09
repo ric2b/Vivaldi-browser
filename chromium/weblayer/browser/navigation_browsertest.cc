@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "weblayer/test/weblayer_browser_test.h"
 
 #include "base/callback.h"
@@ -99,7 +100,7 @@ class NavigationObserverImpl : public NavigationObserver {
   }
 
  private:
-  NavigationController* controller_;
+  raw_ptr<NavigationController> controller_;
   Callback started_callback_;
   Callback redirected_callback_;
   Callback completed_callback_;
@@ -337,7 +338,7 @@ class BrowserObserverImpl : public BrowserObserver {
 
  private:
   base::RepeatingCallback<void(Tab*)> new_tab_callback_;
-  Browser* browser_;
+  raw_ptr<Browser> browser_;
 };
 
 class NewTabDelegateImpl : public NewTabDelegate {
@@ -805,23 +806,6 @@ class WaitForMediaPlaying : public content::WebContentsObserver {
   base::RunLoop run_loop_;
 };
 
-class WaitForResponseStart : public content::WebContentsObserver {
- public:
-  explicit WaitForResponseStart(content::WebContents* web_contents)
-      : WebContentsObserver(web_contents) {}
-
-  WaitForResponseStart(const WaitForResponseStart&) = delete;
-  WaitForResponseStart& operator=(const WaitForResponseStart&) = delete;
-
-  // WebContentsObserver:
-  void DidReceiveResponse() final { run_loop_.Quit(); }
-
-  void Wait() { run_loop_.Run(); }
-
- private:
-  base::RunLoop run_loop_;
-};
-
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, AutoPlayEnabled) {
@@ -1148,17 +1132,21 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
         observer.reset();
       }));
 
+  auto* tab = static_cast<TabImpl*>(shell()->tab());
+  auto wait_for_response_start =
+      std::make_unique<content::TestNavigationManager>(tab->web_contents(),
+                                                       url);
   shell()->LoadURL(url);
+  // Wait until request is ready to start.
+  EXPECT_TRUE(wait_for_response_start->WaitForRequestStart());
+  // Start the request.
+  wait_for_response_start->ResumeNavigation();
+  // Wait for the request to arrive to ControllableHttpResponse.
   response.WaitForRequest();
 
   response.Send(net::HTTP_OK, "text/html", "<html>");
 
-  // Ensure that the navigation has started receiving the response before
-  // proceeding.
-  auto* tab = static_cast<TabImpl*>(shell()->tab());
-  auto wait_for_response_start =
-      std::make_unique<WaitForResponseStart>(tab->web_contents());
-  wait_for_response_start->Wait();
+  ASSERT_TRUE(wait_for_response_start->WaitForResponse());
 
   EXPECT_EQ(NavigationState::kReceivingBytes, ongoing_navigation->GetState());
 

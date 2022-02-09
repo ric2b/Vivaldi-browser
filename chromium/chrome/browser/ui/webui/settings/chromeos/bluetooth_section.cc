@@ -206,6 +206,18 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_BATTERY_PERCENTAGE_A11Y_LABEL},
       {"bluetoothDeviceDetailConnectedA11yLabel",
        IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_CONNECTED_A11Y_LABEL},
+      {"bluetoothDeviceDetailConnectingA11yLabel",
+       IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_CONNECTING_A11Y_LABEL},
+      {"bluetoothDeviceDetailConnectionFailureA11yLabel",
+       IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_CONNECTION_FAILURE_A11Y_LABEL},
+      {"bluetoothDeviceDetailLeftBudBatteryPercentageA11yLabel",
+       IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_LEFT_BUD_BATTERY_PERCENTAGE_A11Y_LABEL},
+      {"bluetoothDeviceDetailCaseBatteryPercentageA11yLabel",
+       IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_CASE_BATTERY_PERCENTAGE_A11Y_LABEL},
+      {"bluetoothDeviceDetailRightBudBatteryPercentageA11yLabel",
+       IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_RIGHT_BUD_BATTERY_PERCENTAGE_A11Y_LABEL},
+      {"bluetoothDeviceDetailConnectionFailureLabel",
+       IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_CONNECTION_FAILURE_LABEL},
       {"bluetoothDeviceDetailDisconnectedA11yLabel",
        IDS_SETTINGS_BLUETOOTH_DEVICE_DETAIL_DISCONNECTED_A11Y_LABEL},
       {"bluetoothChangeNameDialogInputA11yLabel",
@@ -242,6 +254,12 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_BLUETOOTH_PAIRED_DEVICE_ITEM_A11Y_LABEL_TYPE_UNKNOWN_WITH_BATTERY_INFO},
       {"bluetoothPairedDeviceItemA11yLabelTypeComputer",
        IDS_SETTINGS_BLUETOOTH_PAIRED_DEVICE_ITEM_A11Y_LABEL_TYPE_COMPUTER},
+      {"bluetoothPairedDeviceItemA11yLabelCaseBattery",
+       IDS_SETTINGS_BLUETOOTH_PAIRED_DEVICE_ITEM_A11Y_LABEL_CASE_BATTERY},
+      {"bluetoothPairedDeviceItemA11yLabelRightBudBattery",
+       IDS_SETTINGS_BLUETOOTH_PAIRED_DEVICE_ITEM_A11Y_LABEL_RIGHT_BUD_BATTERY},
+      {"bluetoothPairedDeviceItemA11yLabelLeftBudBattery",
+       IDS_SETTINGS_BLUETOOTH_PAIRED_DEVICE_ITEM_A11Y_LABEL_LEFT_BUD_BATTERY},
       {"bluetoothPairedDeviceItemA11yLabelTypeComputerWithBatteryInfo",
        IDS_SETTINGS_BLUETOOTH_PAIRED_DEVICE_ITEM_A11Y_LABEL_TYPE_COMPUTER_WITH_BATTERY_INFO},
       {"bluetoothPairedDeviceItemA11yLabelTypePhone",
@@ -278,6 +296,8 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE_TITLE},
       {"bluetoothRemove", IDS_SETTINGS_BLUETOOTH_REMOVE},
       {"bluetoothManaged", IDS_SETTINGS_BLUETOOTH_MANAGED},
+      {"enableFastPairLabel", IDS_BLUETOOTH_ENABLE_FAST_PAIR_LABEL},
+      {"enableFastPairSubtitle", IDS_BLUETOOTH_ENABLE_FAST_PAIR_SUBTITLE},
       {"bluetoothPrimaryUserControlled",
        IDS_SETTINGS_BLUETOOTH_PRIMARY_USER_CONTROLLED},
       {"bluetoothDeviceWithConnectionStatus",
@@ -314,8 +334,11 @@ void BluetoothSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_BLUETOOTH_DEVICE_LIST_CURRENTLY_CONNECTED},
       {"bluetoothDeviceListPreviouslyConnected",
        IDS_BLUETOOTH_DEVICE_LIST_PREVIOUSLY_CONNECTED},
+      {"bluetoothDeviceListNoConnectedDevices",
+       IDS_BLUETOOTH_DEVICE_LIST_NO_CONNECTED_DEVICES},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
+  html_source->AddBoolean("enableFastPairFlag", features::IsFastPairEnabled());
   chromeos::bluetooth::AddLoadTimeData(html_source);
 }
 
@@ -429,6 +452,8 @@ void BluetoothSection::UpdateSearchTags() {
   }
 
   updater.AddSearchTags(GetBluetoothOnSearchConcepts());
+
+  // TODO(crbug/1257312): Add Fast Pair search concepts.
 
   // Filter devices so that only those shown in the UI are returned. Note that
   // passing |max_devices| of 0 indicates that there is no maximum.

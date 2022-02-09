@@ -17,7 +17,6 @@
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
-#include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
@@ -38,6 +37,7 @@
 #include "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
+#include "testing/data_driven_testing/data_driven_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -50,6 +50,7 @@ namespace autofill {
 
 namespace {
 
+const base::FilePath::CharType kFeatureName[] = FILE_PATH_LITERAL("autofill");
 const base::FilePath::CharType kTestName[] = FILE_PATH_LITERAL("heuristics");
 
 base::FilePath GetTestDataDir() {
@@ -65,7 +66,7 @@ base::FilePath GetIOSInputDirectory() {
   return dir.AppendASCII("components")
       .AppendASCII("test")
       .AppendASCII("data")
-      .AppendASCII("autofill")
+      .Append(kFeatureName)
       .Append(kTestName)
       .AppendASCII("input");
 }
@@ -77,7 +78,7 @@ base::FilePath GetIOSOutputDirectory() {
   return dir.AppendASCII("components")
       .AppendASCII("test")
       .AppendASCII("data")
-      .AppendASCII("autofill")
+      .Append(kFeatureName)
       .Append(kTestName)
       .AppendASCII("output");
 }
@@ -107,8 +108,8 @@ const std::vector<base::FilePath> GetTestFiles() {
 // TODO(crbug.com/245246): Unify the tests.
 class FormStructureBrowserTest
     : public ChromeWebTest,
-      public DataDrivenTest,
-      public ::testing::WithParamInterface<base::FilePath> {
+      public testing::DataDrivenTest,
+      public testing::WithParamInterface<base::FilePath> {
  public:
   FormStructureBrowserTest(const FormStructureBrowserTest&) = delete;
   FormStructureBrowserTest& operator=(const FormStructureBrowserTest&) = delete;
@@ -140,15 +141,13 @@ class FormStructureBrowserTest
 
 FormStructureBrowserTest::FormStructureBrowserTest()
     : ChromeWebTest(std::make_unique<ChromeWebClient>()),
-      DataDrivenTest(GetTestDataDir()) {
+      DataDrivenTest(GetTestDataDir(), kFeatureName, kTestName) {
   feature_list_.InitWithFeatures(
       // Enabled
       {// TODO(crbug.com/1098943): Remove once experiment is over.
        autofill::features::kAutofillEnableSupportForMoreStructureInNames,
        // TODO(crbug.com/1125978): Remove once launched.
        autofill::features::kAutofillEnableSupportForMoreStructureInAddresses,
-       // TODO(crbug.com/896689): Remove once launched.
-       autofill::features::kAutofillNameSectionsWithRendererIds,
        // TODO(crbug.com/1076175) Remove once launched.
        autofill::features::kAutofillUseNewSectioningMethod,
        // TODO(crbug.com/1150890) Remove once launched
@@ -159,6 +158,8 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        autofill::features::kAutofillEnableSupportForParsingWithSharedLabels,
        // TODO(crbug.com/1150895) Remove once launched.
        autofill::features::kAutofillParsingPatternsLanguageDetection,
+       // TODO(crbug.com/1277480): Remove once launched.
+       autofill::features::kAutofillEnableNameSurenameParsing,
        // TODO(crbug.com/1190334): Remove once launched.
        autofill::features::kAutofillParseMerchantPromoCodeFields},
       // Disabled

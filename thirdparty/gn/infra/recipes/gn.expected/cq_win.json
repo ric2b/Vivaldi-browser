@@ -52,7 +52,6 @@
     "cwd": "[START_DIR]\\gn",
     "infra_step": true,
     "name": "git.rev-parse",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -92,6 +91,8 @@
       "[START_DIR]\\cipd",
       "-ensure-file",
       "infra/ninja/${platform} version:1.8.2",
+      "-max-threads",
+      "0",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -119,6 +120,8 @@
       "[CACHE]\\windows_sdk",
       "-ensure-file",
       "chrome_internal/third_party/sdk/windows uploaded:2019-09-06",
+      "-max-threads",
+      "0",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -322,7 +325,6 @@
     "name": "taskkill mspdbsrv"
   },
   {
-    "jsonResult": null,
     "name": "$result"
   }
 ]

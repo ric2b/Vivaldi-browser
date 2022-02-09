@@ -14,6 +14,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -187,7 +188,7 @@ class ConnectionTypeWaiter
       run_loop_->Quit();
   }
 
-  network::NetworkConnectionTracker* tracker_;
+  raw_ptr<network::NetworkConnectionTracker> tracker_;
   std::unique_ptr<base::RunLoop> run_loop_;
 };
 
@@ -364,7 +365,7 @@ class NetworkContextConfigurationBrowserTest
             ->GetURLLoaderFactory();
       case NetworkContextType::kSafeBrowsing:
         return g_browser_process->safe_browsing_service()
-            ->GetURLLoaderFactory()
+            ->GetURLLoaderFactory(browser()->profile())
             .get();
       case NetworkContextType::kProfile:
       case NetworkContextType::kIncognitoProfile:
@@ -390,7 +391,8 @@ class NetworkContextConfigurationBrowserTest
         return g_browser_process->system_network_context_manager()
             ->GetContext();
       case NetworkContextType::kSafeBrowsing:
-        return g_browser_process->safe_browsing_service()->GetNetworkContext();
+        return g_browser_process->safe_browsing_service()->GetNetworkContext(
+            browser()->profile());
       case NetworkContextType::kProfile:
       case NetworkContextType::kIncognitoProfile:
       case NetworkContextType::kOnDiskApp:
@@ -441,8 +443,8 @@ class NetworkContextConfigurationBrowserTest
   PrefService* GetPrefService() {
     switch (GetParam().network_context_type) {
       case NetworkContextType::kSystem:
-      case NetworkContextType::kSafeBrowsing:
         return g_browser_process->local_state();
+      case NetworkContextType::kSafeBrowsing:
       case NetworkContextType::kProfile:
       case NetworkContextType::kInMemoryApp:
       case NetworkContextType::kOnDiskApp:
@@ -611,7 +613,7 @@ class NetworkContextConfigurationBrowserTest
         break;
       case NetworkContextType::kSafeBrowsing:
         g_browser_process->safe_browsing_service()
-            ->FlushNetworkInterfaceForTesting();
+            ->FlushNetworkInterfaceForTesting(GetProfile());
         break;
       case NetworkContextType::kProfile:
       case NetworkContextType::kIncognitoProfile:
@@ -652,7 +654,7 @@ class NetworkContextConfigurationBrowserTest
         ->GetCookieManager(cookie_manager.BindNewPipeAndPassReceiver());
     cookie_manager->GetCookieList(
         url, net::CookieOptions::MakeAllInclusive(),
-        net::CookiePartitionKeychain(),
+        net::CookiePartitionKeyCollection(),
         base::BindOnce(
             [](std::string* cookies_out, base::RunLoop* run_loop,
                const net::CookieAccessResultList& cookies,
@@ -719,7 +721,7 @@ class NetworkContextConfigurationBrowserTest
     FlushNetworkInterface();
   }
 
-  Browser* incognito_ = nullptr;
+  raw_ptr<Browser> incognito_ = nullptr;
   base::test::ScopedFeatureList feature_list_;
 
   net::EmbeddedTestServer https_server_;
@@ -1951,6 +1953,7 @@ IN_PROC_BROWSER_TEST_P(
   RunMaxConnectionsPerProxyTest();
 }
 
+#if BUILDFLAG(ENABLE_REPORTING)
 // Used to test that we persist Reporting clients and NEL policies to disk, but
 // only when appropriate.
 class NetworkContextConfigurationReportingAndNelBrowserTest
@@ -2152,6 +2155,7 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationReportingAndNelBrowserTest,
               upload_response.http_request()->method);
   }
 }
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
 // Instantiates tests with a prefix indicating which NetworkContext is being
 // tested, and a suffix of "/0" if the network service is enabled, "/1" if it's
@@ -2211,7 +2215,9 @@ INSTANTIATE_TEST_CASES_FOR_TEST_FIXTURE(
     NetworkContextConfigurationProxySettingsBrowserTest);
 INSTANTIATE_TEST_CASES_FOR_TEST_FIXTURE(
     NetworkContextConfigurationManagedProxySettingsBrowserTest);
+#if BUILDFLAG(ENABLE_REPORTING)
 INSTANTIATE_TEST_CASES_FOR_TEST_FIXTURE(
     NetworkContextConfigurationReportingAndNelBrowserTest);
+#endif
 
 }  // namespace

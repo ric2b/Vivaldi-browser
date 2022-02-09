@@ -18,6 +18,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "content/browser/interest_group/interest_group_storage.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/isolation_info.h"
@@ -25,6 +26,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/client_security_state.mojom.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
@@ -96,11 +98,13 @@ void InterestGroupManager::UpdateInterestGroup(blink::InterestGroup group) {
 }
 
 void InterestGroupManager::UpdateInterestGroupsOfOwner(
-    const url::Origin& owner) {
+    const url::Origin& owner,
+    network::mojom::ClientSecurityStatePtr client_security_state) {
   ClaimInterestGroupsForUpdate(
-      owner, base::BindOnce(
-                 &InterestGroupManager::DidUpdateInterestGroupsOfOwnerDbLoad,
-                 weak_factory_.GetWeakPtr(), owner));
+      owner,
+      base::BindOnce(
+          &InterestGroupManager::DidUpdateInterestGroupsOfOwnerDbLoad,
+          weak_factory_.GetWeakPtr(), owner, std::move(client_security_state)));
 }
 
 void InterestGroupManager::RecordInterestGroupBid(const ::url::Origin& owner,
@@ -124,7 +128,7 @@ void InterestGroupManager::GetAllInterestGroupOwners(
 
 void InterestGroupManager::GetInterestGroupsForOwner(
     const url::Origin& owner,
-    base::OnceCallback<void(std::vector<BiddingInterestGroup>)> callback) {
+    base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback) {
   impl_.AsyncCall(&InterestGroupStorage::GetInterestGroupsForOwner)
       .WithArgs(owner)
       .Then(std::move(callback));
@@ -132,7 +136,7 @@ void InterestGroupManager::GetInterestGroupsForOwner(
 
 void InterestGroupManager::ClaimInterestGroupsForUpdate(
     const url::Origin& owner,
-    base::OnceCallback<void(std::vector<BiddingInterestGroup>)> callback) {
+    base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback) {
   impl_.AsyncCall(&InterestGroupStorage::ClaimInterestGroupsForUpdate)
       .WithArgs(owner)
       .Then(std::move(callback));
@@ -152,15 +156,17 @@ void InterestGroupManager::GetLastMaintenanceTimeForTesting(
 
 void InterestGroupManager::DidUpdateInterestGroupsOfOwnerDbLoad(
     url::Origin owner,
-    std::vector<BiddingInterestGroup> interest_groups) {
+    network::mojom::ClientSecurityStatePtr client_security_state,
+    std::vector<StorageInterestGroup> interest_groups) {
   net::IsolationInfo per_update_isolation_info =
       net::IsolationInfo::CreateTransient();
 
   for (auto& interest_group : interest_groups) {
-    if (!interest_group.group->group.update_url)
+    if (!interest_group.bidding_group->group.update_url)
       continue;
     auto resource_request = std::make_unique<network::ResourceRequest>();
-    resource_request->url = interest_group.group->group.update_url.value();
+    resource_request->url =
+        interest_group.bidding_group->group.update_url.value();
     resource_request->redirect_mode = network::mojom::RedirectMode::kError;
     resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
     resource_request->request_initiator = owner;
@@ -168,18 +174,20 @@ void InterestGroupManager::DidUpdateInterestGroupsOfOwnerDbLoad(
         network::ResourceRequest::TrustedParams();
     resource_request->trusted_params->isolation_info =
         per_update_isolation_info;
+    resource_request->trusted_params->client_security_state =
+        client_security_state.Clone();
     auto simple_url_loader = network::SimpleURLLoader::Create(
         std::move(resource_request), kTrafficAnnotation);
+    simple_url_loader->SetTimeoutDuration(base::Seconds(30));
     auto simple_url_loader_it =
         url_loaders_.insert(url_loaders_.end(), std::move(simple_url_loader));
-    // TODO(crbug.com/1186444): Time out these requests if they take too long.
     (*simple_url_loader_it)
         ->DownloadToString(
             url_loader_factory_.get(),
             base::BindOnce(
                 &InterestGroupManager::DidUpdateInterestGroupsOfOwnerNetFetch,
                 weak_factory_.GetWeakPtr(), simple_url_loader_it, owner,
-                interest_group.group->group.name),
+                interest_group.bidding_group->group.name),
             kMaxUpdateSize);
   }
 }

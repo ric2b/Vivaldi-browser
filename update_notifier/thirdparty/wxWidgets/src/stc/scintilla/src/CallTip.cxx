@@ -7,25 +7,27 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+#include <stdexcept>
+#include <string>
 
 #include "Platform.h"
 
 #include "Scintilla.h"
+
+#include "StringCopy.h"
+#include "Position.h"
 #include "CallTip.h"
-#include <stdio.h>
 
 #ifdef SCI_NAMESPACE
 using namespace Scintilla;
 #endif
 
-static const int insetX = 5;    // text inset in x from calltip border
-static const int widthArrow = 14;
-
 CallTip::CallTip() {
 	wCallTip = 0;
 	inCallTipMode = false;
 	posStartCallTip = 0;
-	val = 0;
 	rectUp = PRectangle(0,0,0,0);
 	rectDown = PRectangle(0,0,0,0);
 	lineHeight = 1;
@@ -35,6 +37,11 @@ CallTip::CallTip() {
 	tabSize = 0;
 	above = false;
 	useStyleCallTip = false;    // for backwards compatibility
+
+	insetX = 5;
+	widthArrow = 14;
+	borderHeight = 2; // Extra line for border and an empty line at top and bottom.
+	verticalOffset = 1;
 
 #ifdef __APPLE__
 	// proper apple colours for the default
@@ -54,8 +61,6 @@ CallTip::CallTip() {
 CallTip::~CallTip() {
 	font.Release();
 	wCallTip.Destroy();
-	delete []val;
-	val = 0;
 }
 
 // Although this test includes 0, we should never see a \0 character.
@@ -68,7 +73,7 @@ bool CallTip::IsTabCharacter(char ch) const {
 	return (tabSize > 0) && (ch == '\t');
 }
 
-int CallTip::NextTabPos(int x) {
+int CallTip::NextTabPos(int x) const {
 	if (tabSize > 0) {              // paranoia... not called unless this is true
 		x -= insetX;                // position relative to text
 		x = (x + tabSize) / tabSize;  // tab "number"
@@ -106,13 +111,15 @@ void CallTip::DrawChunk(Surface *surface, int &x, const char *s,
 		int endSeg = ends[seg];
 		if (endSeg > startSeg) {
 			if (IsArrowCharacter(s[startSeg])) {
+				xEnd = x + widthArrow;
 				bool upArrow = s[startSeg] == '\001';
-				rcClient.left = x;
-				rcClient.right = rcClient.left + widthArrow;
+				rcClient.left = static_cast<XYPOSITION>(x);
+				rcClient.right = static_cast<XYPOSITION>(xEnd);
 				if (draw) {
 					const int halfWidth = widthArrow / 2 - 3;
-					const int centreX = rcClient.left + widthArrow / 2 - 1;
-					const int centreY = (rcClient.top + rcClient.bottom) / 2;
+					const int quarterWidth = halfWidth / 2;
+					const int centreX = x + widthArrow / 2 - 1;
+					const int centreY = static_cast<int>(rcClient.top + rcClient.bottom) / 2;
 					surface->FillRectangle(rcClient, colourBG);
 					PRectangle rcClientInner(rcClient.left + 1, rcClient.top + 1,
 					                         rcClient.right - 2, rcClient.bottom - 1);
@@ -120,23 +127,20 @@ void CallTip::DrawChunk(Surface *surface, int &x, const char *s,
 
 					if (upArrow) {      // Up arrow
 						Point pts[] = {
-    						Point(centreX - halfWidth, centreY + halfWidth / 2),
-    						Point(centreX + halfWidth, centreY + halfWidth / 2),
-    						Point(centreX, centreY - halfWidth + halfWidth / 2),
+    						Point::FromInts(centreX - halfWidth, centreY + quarterWidth),
+    						Point::FromInts(centreX + halfWidth, centreY + quarterWidth),
+    						Point::FromInts(centreX, centreY - halfWidth + quarterWidth),
 						};
-						surface->Polygon(pts, sizeof(pts) / sizeof(pts[0]),
-                 						colourBG, colourBG);
+						surface->Polygon(pts, ELEMENTS(pts), colourBG, colourBG);
 					} else {            // Down arrow
 						Point pts[] = {
-    						Point(centreX - halfWidth, centreY - halfWidth / 2),
-    						Point(centreX + halfWidth, centreY - halfWidth / 2),
-    						Point(centreX, centreY + halfWidth - halfWidth / 2),
+    						Point::FromInts(centreX - halfWidth, centreY - quarterWidth),
+    						Point::FromInts(centreX + halfWidth, centreY - quarterWidth),
+    						Point::FromInts(centreX, centreY + halfWidth - quarterWidth),
 						};
-						surface->Polygon(pts, sizeof(pts) / sizeof(pts[0]),
-                 						colourBG, colourBG);
+						surface->Polygon(pts, ELEMENTS(pts), colourBG, colourBG);
 					}
 				}
-				xEnd = rcClient.right;
 				offsetMain = xEnd;
 				if (upArrow) {
 					rectUp = rcClient;
@@ -146,11 +150,11 @@ void CallTip::DrawChunk(Surface *surface, int &x, const char *s,
 			} else if (IsTabCharacter(s[startSeg])) {
 				xEnd = NextTabPos(x);
 			} else {
-				xEnd = x + surface->WidthText(font, s + startSeg, endSeg - startSeg);
+				xEnd = x + RoundXYPosition(surface->WidthText(font, s + startSeg, endSeg - startSeg));
 				if (draw) {
-					rcClient.left = x;
-					rcClient.right = xEnd;
-					surface->DrawTextTransparent(rcClient, font, ytext,
+					rcClient.left = static_cast<XYPOSITION>(x);
+					rcClient.right = static_cast<XYPOSITION>(xEnd);
+					surface->DrawTextTransparent(rcClient, font, static_cast<XYPOSITION>(ytext),
 										s+startSeg, endSeg - startSeg,
 					                             highlight ? colourSel : colourUnSel);
 				}
@@ -163,29 +167,29 @@ void CallTip::DrawChunk(Surface *surface, int &x, const char *s,
 
 int CallTip::PaintContents(Surface *surfaceWindow, bool draw) {
 	PRectangle rcClientPos = wCallTip.GetClientPosition();
-	PRectangle rcClientSize(0, 0, rcClientPos.right - rcClientPos.left,
+	PRectangle rcClientSize(0.0f, 0.0f, rcClientPos.right - rcClientPos.left,
 	                        rcClientPos.bottom - rcClientPos.top);
-	PRectangle rcClient(1, 1, rcClientSize.right - 1, rcClientSize.bottom - 1);
+	PRectangle rcClient(1.0f, 1.0f, rcClientSize.right - 1, rcClientSize.bottom - 1);
 
 	// To make a nice small call tip window, it is only sized to fit most normal characters without accents
-	int ascent = surfaceWindow->Ascent(font) - surfaceWindow->InternalLeading(font);
+	int ascent = RoundXYPosition(surfaceWindow->Ascent(font) - surfaceWindow->InternalLeading(font));
 
 	// For each line...
 	// Draw the definition in three parts: before highlight, highlighted, after highlight
-	int ytext = rcClient.top + ascent + 1;
+	int ytext = static_cast<int>(rcClient.top) + ascent + 1;
 	rcClient.bottom = ytext + surfaceWindow->Descent(font) + 1;
-	char *chunkVal = val;
+	const char *chunkVal = val.c_str();
 	bool moreChunks = true;
 	int maxWidth = 0;
 
 	while (moreChunks) {
-		char *chunkEnd = strchr(chunkVal, '\n');
+		const char *chunkEnd = strchr(chunkVal, '\n');
 		if (chunkEnd == NULL) {
 			chunkEnd = chunkVal + strlen(chunkVal);
 			moreChunks = false;
 		}
-		int chunkOffset = chunkVal - val;
-		int chunkLength = chunkEnd - chunkVal;
+		int chunkOffset = static_cast<int>(chunkVal - val.c_str());
+		int chunkLength = static_cast<int>(chunkEnd - chunkVal);
 		int chunkEndOffset = chunkOffset + chunkLength;
 		int thisStartHighlight = Platform::Maximum(startHighlight, chunkOffset);
 		thisStartHighlight = Platform::Minimum(thisStartHighlight, chunkEndOffset);
@@ -193,7 +197,7 @@ int CallTip::PaintContents(Surface *surfaceWindow, bool draw) {
 		int thisEndHighlight = Platform::Maximum(endHighlight, chunkOffset);
 		thisEndHighlight = Platform::Minimum(thisEndHighlight, chunkEndOffset);
 		thisEndHighlight -= chunkOffset;
-		rcClient.top = ytext - ascent - 1;
+		rcClient.top = static_cast<XYPOSITION>(ytext - ascent - 1);
 
 		int x = insetX;     // start each line at this inset
 
@@ -213,12 +217,12 @@ int CallTip::PaintContents(Surface *surfaceWindow, bool draw) {
 }
 
 void CallTip::PaintCT(Surface *surfaceWindow) {
-	if (!val)
+	if (val.empty())
 		return;
 	PRectangle rcClientPos = wCallTip.GetClientPosition();
-	PRectangle rcClientSize(0, 0, rcClientPos.right - rcClientPos.left,
+	PRectangle rcClientSize(0.0f, 0.0f, rcClientPos.right - rcClientPos.left,
 	                        rcClientPos.bottom - rcClientPos.top);
-	PRectangle rcClient(1, 1, rcClientSize.right - 1, rcClientSize.bottom - 1);
+	PRectangle rcClient(1.0f, 1.0f, rcClientSize.right - 1, rcClientSize.bottom - 1);
 
 	surfaceWindow->FillRectangle(rcClient, colourBG);
 
@@ -228,13 +232,13 @@ void CallTip::PaintCT(Surface *surfaceWindow) {
 #ifndef __APPLE__
 	// OSX doesn't put borders on "help tags"
 	// Draw a raised border around the edges of the window
-	surfaceWindow->MoveTo(0, rcClientSize.bottom - 1);
+	surfaceWindow->MoveTo(0, static_cast<int>(rcClientSize.bottom) - 1);
 	surfaceWindow->PenColour(colourShade);
-	surfaceWindow->LineTo(rcClientSize.right - 1, rcClientSize.bottom - 1);
-	surfaceWindow->LineTo(rcClientSize.right - 1, 0);
+	surfaceWindow->LineTo(static_cast<int>(rcClientSize.right) - 1, static_cast<int>(rcClientSize.bottom) - 1);
+	surfaceWindow->LineTo(static_cast<int>(rcClientSize.right) - 1, 0);
 	surfaceWindow->PenColour(colourLight);
 	surfaceWindow->LineTo(0, 0);
-	surfaceWindow->LineTo(0, rcClientSize.bottom - 1);
+	surfaceWindow->LineTo(0, static_cast<int>(rcClientSize.bottom) - 1);
 #endif
 }
 
@@ -251,10 +255,7 @@ PRectangle CallTip::CallTipStart(int pos, Point pt, int textHeight, const char *
                                  int codePage_, int characterSet,
 								 int technology, Window &wParent) {
 	clickPlace = 0;
-	delete []val;
-	val = 0;
-	val = new char[strlen(defn) + 1];
-	strcpy(val, defn);
+	val = defn;
 	codePage = codePage_;
 	Surface *surfaceMeasure = Surface::Allocate(technology);
 	if (!surfaceMeasure)
@@ -266,14 +267,14 @@ PRectangle CallTip::CallTipStart(int pos, Point pt, int textHeight, const char *
 	endHighlight = 0;
 	inCallTipMode = true;
 	posStartCallTip = pos;
-	int deviceHeight = surfaceMeasure->DeviceHeightFont(size);
+	XYPOSITION deviceHeight = static_cast<XYPOSITION>(surfaceMeasure->DeviceHeightFont(size));
 	FontParameters fp(faceName, deviceHeight / SC_FONT_SIZE_MULTIPLIER, SC_WEIGHT_NORMAL, false, 0, technology, characterSet);
 	font.Create(fp);
 	// Look for multiple lines in the text
 	// Only support \n here - simply means container must avoid \r!
 	int numLines = 1;
 	const char *newline;
-	const char *look = val;
+	const char *look = val.c_str();
 	rectUp = PRectangle(0,0,0,0);
 	rectDown = PRectangle(0,0,0,0);
 	offsetMain = insetX;            // changed to right edge of any arrows
@@ -282,17 +283,17 @@ PRectangle CallTip::CallTipStart(int pos, Point pt, int textHeight, const char *
 		look = newline + 1;
 		numLines++;
 	}
-	lineHeight = surfaceMeasure->Height(font);
+	lineHeight = RoundXYPosition(surfaceMeasure->Height(font));
 
-	// Extra line for border and an empty line at top and bottom. The returned
+	// The returned
 	// rectangle is aligned to the right edge of the last arrow encountered in
 	// the tip text, else to the tip text left edge.
-	int height = lineHeight * numLines - surfaceMeasure->InternalLeading(font) + 2 + 2;
+	int height = lineHeight * numLines - static_cast<int>(surfaceMeasure->InternalLeading(font)) + borderHeight * 2;
 	delete surfaceMeasure;
 	if (above) {
-		return PRectangle(pt.x - offsetMain, pt.y - 1 - height, pt.x + width - offsetMain, pt.y - 1);
+		return PRectangle(pt.x - offsetMain, pt.y - verticalOffset - height, pt.x + width - offsetMain, pt.y - verticalOffset);
 	} else {
-		return PRectangle(pt.x - offsetMain, pt.y + 1 + textHeight, pt.x + width - offsetMain, pt.y + 1 + textHeight + height);
+		return PRectangle(pt.x - offsetMain, pt.y + verticalOffset + textHeight, pt.x + width - offsetMain, pt.y + verticalOffset + textHeight + height);
 	}
 }
 
@@ -307,7 +308,7 @@ void CallTip::SetHighlight(int start, int end) {
 	// Avoid flashing by checking something has really changed
 	if ((start != startHighlight) || (end != endHighlight)) {
 		startHighlight = start;
-		endHighlight = end;
+		endHighlight = (end > start) ? end : start;
 		if (wCallTip.Created()) {
 			wCallTip.InvalidateAll();
 		}

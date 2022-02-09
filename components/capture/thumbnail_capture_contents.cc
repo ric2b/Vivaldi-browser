@@ -31,13 +31,11 @@ namespace {
 constexpr bool use_CopyFromSurface = false;
 
 // Time intervals used by the logic that times out content loading.
-constexpr base::TimeDelta kMaxWaitForPageLoad =
-    base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kMaxWaitForPageLoad = base::Seconds(30);
 
 // As the capture involves IPC to the renderer process, we must be prepared that
 // it becomes unresponsive.
-constexpr base::TimeDelta kMaxWaitForCaptureResult =
-    base::TimeDelta::FromSeconds(15);
+constexpr base::TimeDelta kMaxWaitForCaptureResult = base::Seconds(15);
 
 scoped_refptr<base::RefCountedMemory> ConvertToPNGOnWorkerThread(
     SkBitmap bitmap) {
@@ -164,7 +162,7 @@ void ThumbnailCaptureContents::CanDownload(
 }
 
 bool ThumbnailCaptureContents::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   // Context menus should never be shown.  Do nothing, but indicate the context
   // menu was shown so that default implementation in libcontent does not
@@ -237,7 +235,7 @@ void ThumbnailCaptureContents::DidFinishLoad(
     return;
   }
 
-  next_capture_try_wait_ = base::TimeDelta::FromSeconds(1);
+  next_capture_try_wait_ = base::Seconds(1);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ThumbnailCaptureContents::TryCapture,
@@ -346,7 +344,7 @@ void ThumbnailCaptureContents::OnIpcCaptureDone(
   RespondAndDelete(std::move(bitmap));
 }
 
-void ThumbnailCaptureContents::RenderProcessGone(
+void ThumbnailCaptureContents::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
   if (status == base::TerminationStatus::TERMINATION_STATUS_PROCESS_CRASHED) {
     LOG(ERROR) << "render process capturing thumbnail crashed";

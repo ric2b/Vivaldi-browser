@@ -11,7 +11,6 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
 #include "calendar/event_type.h"
 #include "sql/statement.h"
 
@@ -58,6 +57,7 @@ class EventDatabase {
   bool MigrateCalendarToVersion6();
   bool MigrateCalendarToVersion8();
   bool MigrateCalendarToVersion9();
+  bool MigrateCalendarToVersion11();
 };
 
 // This is available BOTH as a macro and a static string (kURLRowFields). Use
@@ -66,10 +66,10 @@ class EventDatabase {
 // string dynamically anyway, use the constant, it will save space.
 #define CALENDAR_EVENT_ROW_FIELDS                                            \
   " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
-  "is_recurring, start_recurring, end_recurring, location, url, etag, href," \
+  "is_recurring, location, url, etag, href," \
   "uid, event_type_id, task, complete, trash, trash_time, sequence, ical, "  \
   "rrule, organizer, timezone, due, priority, status, percentage_complete, " \
-  "categories, component_class, attachment, completed "
+  "categories, component_class, attachment, completed, sync_pending, delete_pending "
 
 }  // namespace calendar
 

@@ -118,9 +118,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_TEXTCTRL
 
@@ -626,11 +623,11 @@ private:
 // implementation
 // ============================================================================
 
-BEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
+wxBEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
     EVT_CHAR(wxTextCtrl::OnChar)
 
     EVT_SIZE(wxTextCtrl::OnSize)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ----------------------------------------------------------------------------
 // creation
@@ -650,6 +647,9 @@ void wxTextCtrl::Init()
     m_curPos =
     m_curCol =
     m_curRow = 0;
+
+    // if m_maxLength is zero means there is no restriction of max length
+    m_maxLength = 0;
 
     m_heightLine =
     m_widthAvg = -1;
@@ -743,7 +743,7 @@ bool wxTextCtrl::Create(wxWindow *parent,
     }
 
     RecalcFontMetrics();
-    SetValue(value);
+    ChangeValue(value);
     SetInitialSize(size);
 
     m_isEditable = !(style & wxTE_READONLY);
@@ -941,6 +941,11 @@ void wxTextCtrl::Replace(wxTextPos from, wxTextPos to, const wxString& text)
 {
     wxTextCoord colStart, colEnd,
                 lineStart, lineEnd;
+    // as convention, ( src/gtk/textctrl.cpp:1411, src/msw/textctrl.cpp:759, 
+    // test/controls/textentrytest.cpp:171 )
+    // if `to` equal -1, it means go to the last position
+    if ( to == -1 )
+        to = GetLastPosition();
 
     if ( (from > to) ||
          !PositionToXY(from, &colStart, &lineStart) ||
@@ -968,8 +973,14 @@ void wxTextCtrl::Replace(wxTextPos from, wxTextPos to, const wxString& text)
     int selStartOld = m_selStart,
         selEndOld = m_selEnd;
 
-    m_selStart =
-    m_selEnd = -1;
+    // set selection range for GetSelection and GetInsertionPoint call
+    // if give a range but the text length that give doesn't equal the range
+    // it mean clear the text in the range and set the text after `from` 
+    if ( (to - from) != (wxTextPos)text.Len() )
+    {
+        m_selStart = from;
+        m_selEnd = from + text.Len();
+    }
 
     if ( IsSingleLine() )
     {
@@ -1266,6 +1277,10 @@ void wxTextCtrl::Replace(wxTextPos from, wxTextPos to, const wxString& text)
 
 void wxTextCtrl::Remove(wxTextPos from, wxTextPos to)
 {
+    // treat -1 as the last position
+    if ( to == -1 )
+        to = GetLastPosition();
+
     // Replace() only works with correctly ordered arguments, so exchange them
     // if necessary
     OrderPositions(from, to);
@@ -1293,6 +1308,9 @@ void wxTextCtrl::AppendText(const wxString& text)
 
 void wxTextCtrl::SetInsertionPoint(wxTextPos pos)
 {
+    if ( pos == -1 )
+        pos = GetLastPosition();
+
     wxCHECK_RET( pos >= 0 && pos <= GetLastPosition(),
                  wxT("insertion point position out of range") );
 
@@ -1344,7 +1362,14 @@ void wxTextCtrl::SetInsertionPointEnd()
 
 wxTextPos wxTextCtrl::GetInsertionPoint() const
 {
-    return m_curPos;
+    // if has selection, the insert point should be the lower number of selection,
+    // else should be current cursor position
+    long from;
+    if ( HasSelection() )
+        GetSelection(&from, NULL);
+    else 
+        from = m_curPos;
+    return from;
 }
 
 wxTextPos wxTextCtrl::GetLastPosition() const
@@ -1656,8 +1681,8 @@ int wxTextCtrl::GetLineLength(wxTextCoord line) const
     }
     else // multiline
     {
-        wxCHECK_MSG( (size_t)line < GetLineCount(), -1,
-                     wxT("line index out of range") );
+        if ( line < 0 || (size_t)line >= GetLineCount() )
+            return -1;
 
         return GetLines()[line].length();
     }
@@ -2513,6 +2538,23 @@ void wxTextCtrl::OnSize(wxSizeEvent& event)
     }
 
     event.Skip();
+}
+
+void wxTextCtrl::SetMaxLength(unsigned long len)
+{
+    // if the existing value in the text control is too long,
+    // then it is clipped to the newly imposed limit.
+    if ( m_value.Length() > len )
+    {
+        // block the wxEVT_TEXT event temporaryly
+        // otherwise Remove will generate a wxEVT_TEXT event
+        // that not what we want
+        ForwardEnableTextChangedEvents(false);
+        Remove(len, -1);
+        ForwardEnableTextChangedEvents(true);
+    }
+
+    m_maxLength = len;
 }
 
 wxCoord wxTextCtrl::GetTotalWidth() const
@@ -4416,9 +4458,6 @@ bool wxTextCtrl::PerformAction(const wxControlAction& actionOrig,
                                long numArg,
                                const wxString& strArg)
 {
-    // has the text changed as result of this action?
-    bool textChanged = false;
-
     // the remembered cursor abscissa for multiline text controls is usually
     // reset after each user action but for ones which do use it (UP and DOWN
     // for example) we shouldn't do it - as indicated by this flag
@@ -4515,11 +4554,22 @@ bool wxTextCtrl::PerformAction(const wxControlAction& actionOrig,
     {
         if ( IsEditable() && !strArg.empty() )
         {
-            // inserting text can be undone
-            command = new wxTextCtrlInsertCommand(strArg);
+            bool isTextClipped = m_maxLength && (m_value.length() + strArg.length() > m_maxLength);
+            const wxString& acceptedString = isTextClipped ? strArg.Left(m_maxLength - m_value.length())
+                                                        : strArg;
 
-            textChanged = true;
+            if ( isTextClipped ) // text was clipped so emit wxEVT_TEXT_MAXLEN
+            {
+                wxCommandEvent event(wxEVT_TEXT_MAXLEN, m_windowId);
+                InitCommandEvent(event);
+                GetEventHandler()->ProcessEvent(event);
+            }
+
+            if ( !acceptedString.empty() )
+                // inserting text can be undone
+                command = new wxTextCtrlInsertCommand(acceptedString);
         }
+
     }
     else if ( (action == wxACTION_TEXT_PAGE_UP) ||
               (action == wxACTION_TEXT_PAGE_DOWN) )
@@ -4691,28 +4741,11 @@ bool wxTextCtrl::PerformAction(const wxControlAction& actionOrig,
         }
     }
 
+    // Submit call will insert text and generate wxEVT_TEXT event.
     if ( command )
     {
         // execute and remember it to be able to undo it later
         m_cmdProcessor->Submit(command);
-
-        // undoable commands always change text
-        textChanged = true;
-    }
-    else // no undoable command
-    {
-        // m_cmdProcessor->StopCompressing()
-    }
-
-    if ( textChanged )
-    {
-        wxASSERT_MSG( IsEditable(), wxT("non editable control changed?") );
-
-        wxCommandEvent event(wxEVT_TEXT, GetId());
-        InitCommandEvent(event);
-        GetEventHandler()->ProcessEvent(event);
-
-        // as the text changed...
         m_isModified = true;
     }
 
@@ -4921,7 +4954,14 @@ bool wxStdTextCtrlInputHandler::HandleKey(wxInputConsumer *consumer,
     {
         consumer->PerformAction(action, -1, str);
 
-        return true;
+        // the key down of WXK_UP/DOWN and WXK_PAGEUP/DOWN
+        // must generate a wxEVT_TEXT event. For the controls
+        // that use wxTextCtrl, such as wxSpinCtrl
+        if ( (action != wxACTION_TEXT_UP) &
+             (action != wxACTION_TEXT_DOWN) &
+             (action != wxACTION_TEXT_PAGE_DOWN) &
+             (action != wxACTION_TEXT_PAGE_UP) )
+            return true;
     }
 
     return wxStdInputHandler::HandleKey(consumer, event, pressed);

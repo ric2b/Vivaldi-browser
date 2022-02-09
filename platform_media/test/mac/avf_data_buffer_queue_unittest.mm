@@ -15,7 +15,7 @@
 namespace media {
 namespace {
 
-const base::TimeDelta kCapacity = base::TimeDelta::FromMicroseconds(16);
+const base::TimeDelta kCapacity = base::Microseconds(16);
 
 scoped_refptr<DataBuffer> CreateBuffer(const base::TimeDelta& timestamp,
                                        const base::TimeDelta& duration) {

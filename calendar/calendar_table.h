@@ -11,7 +11,6 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
 #include "calendar/calendar_type.h"
 #include "sql/statement.h"
 

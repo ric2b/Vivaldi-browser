@@ -29,6 +29,7 @@ schema_sources = [
   "page_actions.json",
   "pip_private.json",
   "prefs.json",
+  "reading_list_private.json",
   "runtime_private.json",
   "savedpasswords.json",
   "settings.json",

@@ -49,7 +49,7 @@ def get_bundle_id(app_path):
       '-c',
       'Print:CFBundleIdentifier',
       os.path.join(app_path, 'Info.plist'),
-  ]).rstrip().decode("utf-8")
+  ]).decode("utf-8").rstrip()
 
 
 def is_running_rosetta():
@@ -266,13 +266,15 @@ class GTestsApp(object):
         self.release,
         enabled_tests_only=False):
       test_name = '%s/%s' % (test_class, test_method)
-      if ((not any(
-          test_name.startswith(prefix) for prefix in non_test_prefixes)) and
-          # |self.initial_included_tests| contains the tests to execute, which
-          # may be a subset of all tests b/c of the iOS test sharding logic in
-          # run.py. Filter by |self.initial_included_tests| if specified.
-          (test_class in self.initial_included_tests
-           if self.initial_included_tests else True)):
+
+      if any(test_name.startswith(prefix) for prefix in non_test_prefixes):
+        continue
+      # |self.initial_included_tests| contains the tests to execute, which
+      # may be a subset of all tests b/c of the iOS test sharding logic in
+      # run.py. Filter by |self.initial_included_tests| if specified.
+      # |self.initial_included_tests| might store test class or full name.
+      included = self.initial_included_tests
+      if not included or test_name in included or test_class in included:
         if test_method.startswith('test'):
           all_tests.append(test_name)
         elif store_disabled_tests:
@@ -373,6 +375,8 @@ class EgtestsApp(GTestsApp):
       module_data['IsUITestBundle'] = True
       module_data['IsXCTRunnerHostedTestBundle'] = True
       module_data['UITargetAppPath'] = '%s' % self.host_app_path
+      module_data['UITargetAppBundleIdentifier'] = get_bundle_id(
+          self.host_app_path)
       # Special handling for Xcode10.2
       dependent_products = [
           module_data['UITargetAppPath'],

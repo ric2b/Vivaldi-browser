@@ -11,7 +11,6 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "base/macros.h"
 #include "gn/scope.h"
 
 class Err;
@@ -144,7 +143,7 @@ class Args {
 
   SourceFileSet build_args_dependency_files_;
 
-  DISALLOW_ASSIGN(Args);
+  Args& operator=(const Args&) = delete;
 };
 
 #endif  // TOOLS_GN_ARGS_H_

@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "gn/lib_file.h"
 #include "gn/source_dir.h"
 #include "gn/source_file.h"

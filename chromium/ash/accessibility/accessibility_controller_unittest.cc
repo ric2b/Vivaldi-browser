@@ -20,7 +20,6 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -1110,7 +1109,7 @@ TEST_F(AccessibilityControllerTest,
   const std::u16string kFailedTitle = u"Couldn't download English speech files";
   const std::u16string kFailedDescription =
       u"Download will be attempted later. Speech will be sent to Google for "
-      u"processing for now.";
+      u"processing until download is completed.";
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
 

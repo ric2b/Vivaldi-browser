@@ -13,6 +13,7 @@ config("wxwidgets_common_config") {
   cflags_cc = [
     "-Wno-c++98-compat-extra-semi",
     "-Wno-unused-local-typedef",
+    "-Wno-shadow",
   ]
 
   # TODO(igor@vivaldi.com): Chromium uses -fcomplete-member-pointers to prevent
@@ -22,10 +23,13 @@ config("wxwidgets_common_config") {
   # this compiler setting.
   cflags_cc += [ "-fno-complete-member-pointers" ]
 
-  # Workaround for lack of #pragma support in LLVM for manifest dependencies.
-  # Note that chromium includes the necessary bits in all relevenat
-  # executables, see the usage of common_controls.manifest in the build system.
-  defines = [ "wxUSE_NO_MANIFEST=1" ]
+  defines = [
+    # Workaround for lack of #pragma support in LLVM for manifest dependencies.
+    # Note that chromium includes the necessary bits in all relevant
+    # executables, see the usage of common_controls.manifest in the build
+    # system.
+    "wxUSE_NO_MANIFEST=1",
+  ]
 }
 
 static_library("wxwidgets") {
@@ -50,12 +54,17 @@ static_library("wxwidgets") {
     "-Wno-unused-private-field",
     "-Wno-misleading-indentation",
     "-Wno-undefined-bool-conversion",
+    "-Wno-shadow",
+    "-Wno-deprecated-declarations",
   ]
 
-  # Workaround broken definition of __TDATE__ and __TTIME__ in wxWidgets
   defines = [
-    "__TDATE__=\"2020-12-01\"",
-    "__TTIME__=\"00:00:00\"",
+    # Disable precompiled headers. wxWidgets 3.1.5 does not compile otherwise
+    # with Chromium Windows SDK.
+    "NOPCH=1",
+
+    # This should be defined when building the library files.
+    "WXBUILDING=1"
   ]
 
   sources = [
@@ -82,12 +91,12 @@ static_library("wxwidgets") {
     wxwidgets_top + "/src/common/dlgcmn.cpp",
     wxwidgets_top + "/src/common/dobjcmn.cpp",
     wxwidgets_top + "/src/common/dpycmn.cpp",
-    wxwidgets_top + "/src/common/dynarray.cpp",
     wxwidgets_top + "/src/common/dynlib.cpp",
     wxwidgets_top + "/src/common/encconv.cpp",
     wxwidgets_top + "/src/common/event.cpp",
     wxwidgets_top + "/src/common/evtloopcmn.cpp",
     wxwidgets_top + "/src/common/extended.c",
+    wxwidgets_top + "/src/common/ffile.cpp",
     wxwidgets_top + "/src/common/file.cpp",
     wxwidgets_top + "/src/common/fileback.cpp",
     wxwidgets_top + "/src/common/filefn.cpp",
@@ -138,6 +147,7 @@ static_library("wxwidgets") {
     wxwidgets_top + "/src/common/stream.cpp",
     wxwidgets_top + "/src/common/string.cpp",
     wxwidgets_top + "/src/common/stringimpl.cpp",
+    wxwidgets_top + "/src/common/stringops.cpp",
     wxwidgets_top + "/src/common/strvararg.cpp",
     wxwidgets_top + "/src/common/sysopt.cpp",
     wxwidgets_top + "/src/common/textbuf.cpp",
@@ -203,17 +213,16 @@ static_library("wxwidgets") {
     wxwidgets_top + "/src/msw/menu.cpp",
     wxwidgets_top + "/src/msw/menuitem.cpp",
     wxwidgets_top + "/src/msw/msgdlg.cpp",
-    wxwidgets_top + "/src/msw/mslu.cpp",
     wxwidgets_top + "/src/msw/nativdlg.cpp",
     wxwidgets_top + "/src/msw/nativewin.cpp",
     wxwidgets_top + "/src/msw/nonownedwnd.cpp",
     wxwidgets_top + "/src/msw/ole/activex.cpp",
     wxwidgets_top + "/src/msw/ole/automtn.cpp",
+    wxwidgets_top + "/src/msw/ole/comimpl.cpp",
     wxwidgets_top + "/src/msw/ole/dataobj.cpp",
     wxwidgets_top + "/src/msw/ole/oleutils.cpp",
     wxwidgets_top + "/src/msw/ole/safearray.cpp",
     wxwidgets_top + "/src/msw/ole/uuid.cpp",
-    wxwidgets_top + "/src/msw/panel.cpp",
     wxwidgets_top + "/src/msw/pen.cpp",
     wxwidgets_top + "/src/msw/power.cpp",
     wxwidgets_top + "/src/msw/region.cpp",

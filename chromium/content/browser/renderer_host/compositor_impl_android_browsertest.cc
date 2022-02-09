@@ -7,6 +7,7 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/viz/common/features.h"
 #include "content/browser/browser_main_loop.h"
@@ -45,6 +46,10 @@ class CompositorImplBrowserTest
       public ContentBrowserTest {
  public:
   CompositorImplBrowserTest() {}
+
+  CompositorImplBrowserTest(const CompositorImplBrowserTest&) = delete;
+  CompositorImplBrowserTest& operator=(const CompositorImplBrowserTest&) =
+      delete;
 
   void SetUp() override {
     std::vector<base::Feature> features;
@@ -94,8 +99,6 @@ class CompositorImplBrowserTest
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(CompositorImplBrowserTest);
 };
 
 INSTANTIATE_TEST_SUITE_P(P,
@@ -152,7 +155,7 @@ class ContextLostRunLoop : public viz::ContextLostObserver {
   // viz::LostContextProvider:
   void OnContextLost() override { did_lose_context_ = true; }
 
-  viz::ContextProvider* const context_provider_;
+  const raw_ptr<viz::ContextProvider> context_provider_;
   bool did_lose_context_ = false;
   base::RunLoop run_loop_;
 };
@@ -161,6 +164,8 @@ class ContextLostRunLoop : public viz::ContextLostObserver {
 class CompositorSwapRunLoop {
  public:
   CompositorSwapRunLoop(CompositorImpl* compositor) : compositor_(compositor) {
+    static_cast<Compositor*>(compositor_)
+        ->SetDidSwapBuffersCallbackEnabled(true);
     compositor_->SetSwapCompletedWithSizeCallbackForTesting(base::BindRepeating(
         &CompositorSwapRunLoop::DidSwap, base::Unretained(this)));
   }
@@ -180,7 +185,7 @@ class CompositorSwapRunLoop {
     run_loop_.Quit();
   }
 
-  CompositorImpl* compositor_;
+  raw_ptr<CompositorImpl> compositor_;
   base::RunLoop run_loop_;
 };
 

@@ -7,12 +7,20 @@ import {fakeComponentsForRepairStateTest} from 'chrome://shimless-rma/fake_data.
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
 import {OnboardingSelectComponentsPageElement} from 'chrome://shimless-rma/onboarding_select_components_page.js';
+import {ShimlessRma} from 'chrome://shimless-rma/shimless_rma.js';
 import {Component, ComponentRepairStatus} from 'chrome://shimless-rma/shimless_rma_types.js';
 
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 import {flushTasks} from '../../test_util.js';
 
 export function onboardingSelectComponentsPageTest() {
+  /**
+   * ShimlessRma is needed to handle the 'transition-state' event used by
+   * the rework button.
+   * @type {?ShimlessRma}
+   */
+  let shimless_rma_component = null;
+
   /** @type {?OnboardingSelectComponentsPageElement} */
   let component = null;
 
@@ -31,6 +39,8 @@ export function onboardingSelectComponentsPageTest() {
   teardown(() => {
     component.remove();
     component = null;
+    shimless_rma_component.remove();
+    shimless_rma_component = null;
     service.reset();
   });
 
@@ -43,6 +53,11 @@ export function onboardingSelectComponentsPageTest() {
 
     // Initialize the fake data.
     service.setGetComponentListResult(deviceComponents);
+
+    shimless_rma_component =
+        /** @type {!ShimlessRma} */ (document.createElement('shimless-rma'));
+    assertTrue(!!shimless_rma_component);
+    document.body.appendChild(shimless_rma_component);
 
     component = /** @type {!OnboardingSelectComponentsPageElement} */ (
         document.createElement('onboarding-select-components-page'));
@@ -68,7 +83,8 @@ export function onboardingSelectComponentsPageTest() {
    * @return {!Promise}
    */
   function clickReworkButton() {
-    const reworkFlowLink = component.shadowRoot.querySelector('#reworkFlow');
+    const reworkFlowLink =
+        component.shadowRoot.querySelector('#reworkFlowLink');
     assertTrue(!!reworkFlowLink);
     reworkFlowLink.click();
     return flushTasks();
@@ -86,7 +102,8 @@ export function onboardingSelectComponentsPageTest() {
   test('SelectComponentsPageInitializes', async () => {
     await initializeComponentSelectPage(fakeComponentsForRepairStateTest);
 
-    const reworkFlowLink = component.shadowRoot.querySelector('#reworkFlow');
+    const reworkFlowLink =
+        component.shadowRoot.querySelector('#reworkFlowLink');
     const cameraComponent =
         component.shadowRoot.querySelector('#componentCamera');
     const batteryComponent =

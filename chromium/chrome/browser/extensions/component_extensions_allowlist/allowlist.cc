@@ -37,7 +37,6 @@ bool IsComponentExtensionAllowlisted(const std::string& extension_id) {
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     extension_misc::kAccessibilityCommonExtensionId,
-    extension_misc::kCameraAppId,
     extension_misc::kChromeVoxExtensionId,
     extension_misc::kEnhancedNetworkTtsExtensionId,
     extension_misc::kEspeakSpeechSynthesisExtensionId,
@@ -87,7 +86,6 @@ bool IsComponentExtensionAllowlisted(int manifest_resource_id) {
     case IDR_FILEMANAGER_MANIFEST:
     case IDR_IMAGE_LOADER_MANIFEST:
     case IDR_KEYBOARD_MANIFEST:
-    case IDR_MOBILE_MANIFEST:
     case IDR_WALLPAPERMANAGER_MANIFEST:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case IDR_HELP_MANIFEST:

@@ -15,6 +15,7 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/search/omnibox_result.h"
+#include "chrome/browser/ui/app_list/search/ranking/util.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -102,9 +103,10 @@ void OmniboxProvider::PopulateFromACResult(const AutocompleteResult& result) {
       continue;
     }
 
-    new_results.emplace_back(std::make_unique<OmniboxResult>(
+    auto result = std::make_unique<OmniboxResult>(
         profile_, list_controller_, controller_.get(), &favicon_cache_, match,
-        is_zero_state_input_));
+        is_zero_state_input_);
+    new_results.emplace_back(std::move(result));
   }
 
   SwapResults(&new_results);

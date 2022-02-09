@@ -73,6 +73,9 @@ public class AboutChromeSettings
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
             version = version.concat(" (OEM)");
         }
+        if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
+            version = version.concat("(PS)");
+        }
         if (ChromeVersionInfo.isOfficialBuild()) {
             return version;
         }

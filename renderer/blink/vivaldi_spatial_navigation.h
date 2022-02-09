@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/core/core_export.h"
 
 #include "third_party/blink/public/web/web_element.h"
-#include "third_party/blink/renderer/platform/geometry/int_rect.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -17,7 +16,7 @@ class WebLocalFrame;
 namespace vivaldi {
 
 gfx::Rect CORE_EXPORT RevertDeviceScaling(const gfx::Rect& rect, float scale);
-blink::IntRect CORE_EXPORT FindImageElementRect(blink::WebElement element);
+gfx::Rect CORE_EXPORT FindImageElementRect(blink::WebElement element);
 std::string CORE_EXPORT ElementPath(blink::WebElement& element);
 
 std::vector<blink::WebElement> CORE_EXPORT

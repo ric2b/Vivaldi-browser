@@ -15,7 +15,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/viz/common/buildflags.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -45,6 +44,7 @@
 #include "content/browser/devtools/protocol/storage_handler.h"
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tracing_handler.h"
+#include "content/browser/fenced_frame/fenced_frame.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -116,7 +116,7 @@ FrameTreeNode* GetFrameTreeNodeAncestor(FrameTreeNode* frame_tree_node) {
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetOrCreateFor(
     WebContents* web_contents) {
   FrameTreeNode* node =
-      static_cast<WebContentsImpl*>(web_contents)->GetFrameTree()->root();
+      static_cast<WebContentsImpl*>(web_contents)->GetPrimaryFrameTree().root();
   // TODO(dgozman): this check should not be necessary. See
   // http://crbug.com/489664.
   if (!node)
@@ -158,7 +158,7 @@ bool RenderFrameDevToolsAgentHost::ShouldCreateDevToolsForHost(
 
 // static
 scoped_refptr<DevToolsAgentHost>
-RenderFrameDevToolsAgentHost::CreateForLocalRootOrPortalNavigation(
+RenderFrameDevToolsAgentHost::CreateForLocalRootOrEmbeddedPageNavigation(
     NavigationRequest* request) {
   // Note that this method does not use FrameTreeNode::current_frame_host(),
   // since it is used while the frame host may not be set as current yet,
@@ -180,14 +180,14 @@ scoped_refptr<DevToolsAgentHost> RenderFrameDevToolsAgentHost::FindForDangling(
 // static
 bool DevToolsAgentHost::HasFor(WebContents* web_contents) {
   FrameTreeNode* node =
-      static_cast<WebContentsImpl*>(web_contents)->GetFrameTree()->root();
+      static_cast<WebContentsImpl*>(web_contents)->GetPrimaryFrameTree().root();
   return node ? FindAgentHost(node) != nullptr : false;
 }
 
 // static
 bool DevToolsAgentHost::IsDebuggerAttached(WebContents* web_contents) {
   FrameTreeNode* node =
-      static_cast<WebContentsImpl*>(web_contents)->GetFrameTree()->root();
+      static_cast<WebContentsImpl*>(web_contents)->GetPrimaryFrameTree().root();
   RenderFrameDevToolsAgentHost* host = node ? FindAgentHost(node) : nullptr;
   return host && host->IsAttached();
 }
@@ -196,7 +196,10 @@ bool DevToolsAgentHost::IsDebuggerAttached(WebContents* web_contents) {
 void RenderFrameDevToolsAgentHost::AddAllAgentHosts(
     DevToolsAgentHost::List* result) {
   for (WebContentsImpl* wc : WebContentsImpl::GetAllWebContents()) {
-    for (FrameTreeNode* node : wc->GetFrameTree()->Nodes()) {
+    // TODO(https://crbug.com/1264031): With MPArch a WebContents might have
+    // multiple FrameTrees. This probably needs to iterate over all FrameTrees.
+    // Investigate.
+    for (FrameTreeNode* node : wc->GetPrimaryFrameTree().Nodes()) {
       if (!node->current_frame_host() || !ShouldCreateDevToolsForNode(node))
         continue;
       if (!node->current_frame_host()->IsRenderFrameLive())
@@ -275,7 +278,7 @@ void RenderFrameDevToolsAgentHost::SetFrameTreeNode(
                  ? WebContentsImpl::FromFrameTreeNode(frame_tree_node_)
                  : nullptr;
   if (wc)
-    page_scale_factor_ = wc->page_scale_factor();
+    page_scale_factor_ = wc->GetPrimaryPage().page_scale_factor();
   WebContentsObserver::Observe(wc);
 }
 
@@ -306,7 +309,8 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       session->GetClient()->MayReadLocalFiles()));
   session->AddHandler(std::move(emulation_handler));
   auto input_handler = std::make_unique<protocol::InputHandler>(
-      session->GetClient()->MayReadLocalFiles());
+      session->GetClient()->MayReadLocalFiles(),
+      session->GetClient()->MaySendInputEventsToBrowser());
   input_handler->OnPageScaleFactorChanged(page_scale_factor_);
   session->AddHandler(std::move(input_handler));
   session->AddHandler(std::make_unique<protocol::InspectorHandler>());
@@ -345,7 +349,7 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       GetId(), auto_attacher_.get(), session->GetRootSession()));
   session->AddHandler(std::make_unique<protocol::PageHandler>(
       emulation_handler_ptr, browser_handler_ptr,
-      session->GetClient()->MayReadLocalFiles()));
+      session->GetClient()->AllowUnsafeOperations()));
   session->AddHandler(std::make_unique<protocol::SecurityHandler>());
   if (!frame_tree_node_ || !frame_tree_node_->parent()) {
     session->AddHandler(
@@ -423,7 +427,7 @@ void RenderFrameDevToolsAgentHost::ReadyToCommitNavigation(
         request->GetRenderFrameHost()->is_local_root_subframe()) {
       // An agent may have been created earlier if auto attach is on.
       if (!FindAgentHost(request->frame_tree_node()))
-        CreateForLocalRootOrPortalNavigation(request);
+        CreateForLocalRootOrEmbeddedPageNavigation(request);
     }
     return;
   }
@@ -593,7 +597,7 @@ void RenderFrameDevToolsAgentHost::RenderProcessExited(
   switch (info.status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
     case base::TERMINATION_STATUS_PROCESS_CRASHED:
@@ -649,7 +653,13 @@ void RenderFrameDevToolsAgentHost::OnNavigationRequestWillBeSent(
 }
 
 void RenderFrameDevToolsAgentHost::UpdatePortals() {
-  auto_attacher_->UpdatePortals();
+  auto_attacher_->UpdatePages();
+}
+
+void RenderFrameDevToolsAgentHost::DidCreateFencedFrame(
+    FencedFrame* fenced_frame) {
+  auto_attacher_->AutoAttachToPage(fenced_frame->GetInnerRoot()->frame_tree(),
+                                   true);
 }
 
 void RenderFrameDevToolsAgentHost::DisconnectWebContents() {
@@ -739,8 +749,18 @@ std::string RenderFrameDevToolsAgentHost::GetTitle() {
     if (!title.empty())
       return title;
   }
-  if (IsChildFrame() && frame_host_)
-    return frame_host_->GetLastCommittedURL().spec();
+  if (frame_host_) {
+    if (IsChildFrame())
+      return frame_host_->GetLastCommittedURL().spec();
+    if (!frame_host_->GetPage().IsPrimary()) {
+      NavigationEntryImpl* entry = frame_host_->frame_tree_node()
+                                       ->frame_tree()
+                                       ->controller()
+                                       .GetLastCommittedEntry();
+      return entry ? base::UTF16ToUTF8(entry->GetTitleForDisplay())
+                   : std::string();
+    }
+  }
   if (web_contents())
     return base::UTF16ToUTF8(web_contents()->GetTitle());
   return GetURL().spec();
@@ -755,11 +775,12 @@ std::string RenderFrameDevToolsAgentHost::GetDescription() {
 
 GURL RenderFrameDevToolsAgentHost::GetURL() {
   // Order is important here.
-  WebContents* web_contents = GetWebContents();
-  if (web_contents && !IsChildFrame())
-    return web_contents->GetVisibleURL();
-  if (frame_host_)
+  if (frame_host_ && (IsChildFrame() || !frame_host_->GetPage().IsPrimary()))
     return frame_host_->GetLastCommittedURL();
+  WebContents* web_contents = GetWebContents();
+  if (web_contents) {
+    return web_contents->GetVisibleURL();
+  }
   return GURL();
 }
 

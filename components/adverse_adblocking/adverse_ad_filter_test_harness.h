@@ -7,7 +7,6 @@
 #define ADVERSE_AD_FILTER_TEST_HARNESS_H_
 
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"

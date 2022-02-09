@@ -24,14 +24,15 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/singleton.h"
 #include "base/process/process_handle.h"
-#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
@@ -174,14 +175,14 @@ class TraceEventTestFixture : public testing::Test {
   void TearDown() override {
     if (TraceLog::GetInstance())
       EXPECT_FALSE(TraceLog::GetInstance()->IsEnabled());
-    PlatformThread::SetName(old_thread_name_ ? old_thread_name_ : "");
+    PlatformThread::SetName(old_thread_name_ ? old_thread_name_.get() : "");
     free(old_thread_name_);
     old_thread_name_ = nullptr;
     // We want our singleton torn down after each test.
     TraceLog::ResetForTesting();
   }
 
-  char* old_thread_name_;
+  raw_ptr<char> old_thread_name_;
   Value trace_parsed_;
   TraceResultBuffer trace_buffer_;
   TraceResultBuffer::SimpleOutput json_output_;
@@ -1147,7 +1148,7 @@ TEST_F(TraceEventTestFixture, AddMetadataEvent) {
     }
 
    private:
-    int* num_calls_;
+    raw_ptr<int> num_calls_;
   };
 
   std::unique_ptr<ConvertableToTraceFormat> conv1(new Convertable(&num_calls));

@@ -30,7 +30,12 @@ struct EscapeOptions;
 //     DoSomething(iter.cur());
 class ConfigValuesIterator {
  public:
-  explicit ConfigValuesIterator(const Target* target) : target_(target) {}
+  explicit ConfigValuesIterator(const Target* target) : target_(target) {
+    // If the target doesn't have its own config_values()
+    if (!target->has_config_values()) {
+      cur_index_ = 0;
+    }
+  }
 
   bool done() const {
     return cur_index_ >= static_cast<int>(target_->configs().size());
@@ -68,32 +73,43 @@ class ConfigValuesIterator {
   int cur_index_ = -1;
 };
 
-template <typename T, class Writer>
-inline void ConfigValuesToStream(const ConfigValues& values,
-                                 const std::vector<T>& (ConfigValues::*getter)()
-                                     const,
-                                 const Writer& writer,
-                                 std::ostream& out) {
-  const std::vector<T>& v = (values.*getter)();
-  for (size_t i = 0; i < v.size(); i++)
-    writer(v[i], out);
-}
+enum RecursiveWriterConfig {
+  kRecursiveWriterKeepDuplicates,
+  kRecursiveWriterSkipDuplicates,
+};
 
 // Writes a given config value that applies to a given target. This collects
 // all values from the target itself and all configs that apply, and writes
 // then in order.
 template <typename T, class Writer>
 inline void RecursiveTargetConfigToStream(
+    RecursiveWriterConfig config,
     const Target* target,
     const std::vector<T>& (ConfigValues::*getter)() const,
     const Writer& writer,
     std::ostream& out) {
-  for (ConfigValuesIterator iter(target); !iter.done(); iter.Next())
-    ConfigValuesToStream(iter.cur(), getter, writer, out);
+  std::set<T> seen;
+  for (ConfigValuesIterator iter(target); !iter.done(); iter.Next()) {
+    const std::vector<T>& values = ((iter.cur()).*getter)();
+    for (size_t i = 0; i < values.size(); i++) {
+      switch (config) {
+        case kRecursiveWriterKeepDuplicates:
+          writer(values[i], out);
+          break;
+
+        case kRecursiveWriterSkipDuplicates:
+          if (seen.find(values[i]) == seen.end()) {
+            seen.insert(values[i]);
+            writer(values[i], out);
+          }
+      }
+    }
+  }
 }
 
 // Writes the values out as strings with no transformation.
 void RecursiveTargetConfigStringsToStream(
+    RecursiveWriterConfig config,
     const Target* target,
     const std::vector<std::string>& (ConfigValues::*getter)() const,
     const EscapeOptions& escape_options,

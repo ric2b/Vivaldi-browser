@@ -17,14 +17,17 @@
 #include "wx/frame.h"
 #include "wx/icon.h"
 #include "wx/menu.h"
+#include "wx/choicdlg.h"
 #include "wx/msgdlg.h"
 #include "wx/button.h"
 #include "wx/dcclient.h"
+#include "wx/timer.h"
 
 #include "wx/datetime.h"
 #include "wx/ffile.h"
 #include "wx/filename.h"
 #include "wx/debugrpt.h"
+#include "wx/dynlib.h"
 
 #if !wxUSE_DEBUGREPORT
     #error "This sample can't be built without wxUSE_DEBUGREPORT"
@@ -50,9 +53,9 @@ class MyDebugReport : public wxDebugReportUpload
 public:
     MyDebugReport() : wxDebugReportUpload
                        (
-                        wxT("http://your.url.here/"),
-                        wxT("report:file"),
-                        wxT("action")
+                        "http://your.url.here/",
+                        "report:file",
+                        "action"
                        )
     {
     }
@@ -61,23 +64,23 @@ protected:
     // this is called with the contents of the server response: you will
     // probably want to parse the XML document in OnServerReply() instead of
     // just dumping it as I do
-    virtual bool OnServerReply(const wxArrayString& reply)
+    virtual bool OnServerReply(const wxArrayString& reply) wxOVERRIDE
     {
         if ( reply.IsEmpty() )
         {
-            wxLogError(wxT("Didn't receive the expected server reply."));
+            wxLogError("Didn't receive the expected server reply.");
             return false;
         }
 
-        wxString s(wxT("Server replied:\n"));
+        wxString s("Server replied:\n");
 
         const size_t count = reply.GetCount();
         for ( size_t n = 0; n < count; n++ )
         {
-            s << wxT('\t') << reply[n] << wxT('\n');
+            s << '\t' << reply[n] << '\n';
         }
 
-        wxLogMessage(wxT("%s"), s.c_str());
+        wxLogMessage("%s", s);
 
         return true;
     }
@@ -96,12 +99,12 @@ public:
     {
         if ( !wxDebugReportCompress::DoProcess() )
             return false;
-        wxMailMessage msg(GetReportName() + wxT(" crash report"),
-                          wxT("vadim@wxwindows.org"),
+        wxMailMessage msg(GetReportName() + " crash report",
+                          "vadim@wxwidgets.org",
                           wxEmptyString, // mail body
                           wxEmptyString, // from address
                           GetCompressedFileName(),
-                          wxT("crashreport.zip"));
+                          "crashreport.zip");
 
         return wxEmail::Send(msg);
     }
@@ -141,10 +144,12 @@ void foo(int n)
 
 enum
 {
+    DebugRpt_ListLoadedDLLs = 50,
     DebugRpt_Quit = wxID_EXIT,
     DebugRpt_Crash = 100,
     DebugRpt_Current,
     DebugRpt_Paint,
+    DebugRpt_Timer,
     DebugRpt_Upload,
     DebugRpt_About = wxID_ABOUT
 };
@@ -155,15 +160,28 @@ public:
     MyFrame();
 
 private:
+    void OnListLoadedDLLs(wxCommandEvent& event);
     void OnQuit(wxCommandEvent& event);
     void OnReportForCrash(wxCommandEvent& event);
     void OnReportForCurrent(wxCommandEvent& event);
     void OnReportPaint(wxCommandEvent& event);
+    void OnReportTimer(wxCommandEvent& event);
     void OnReportUpload(wxCommandEvent& event);
     void OnAbout(wxCommandEvent& event);
 
     void OnPaint(wxPaintEvent& event);
 
+    // a timer whose only purpose in life is to crash as soon as it's started
+    class BadTimer : public wxTimer
+    {
+    public:
+        BadTimer() { }
+
+        virtual void Notify() wxOVERRIDE
+        {
+            foo(8);
+        }
+    } m_badTimer;
 
     // number of lines drawn in OnPaint()
     int m_numLines;
@@ -187,10 +205,10 @@ public:
     MyApp();
 
     // create our main window here
-    virtual bool OnInit();
+    virtual bool OnInit() wxOVERRIDE;
 
     // called when a crash occurs in this application
-    virtual void OnFatalException();
+    virtual void OnFatalException() wxOVERRIDE;
 
     // this is where we really generate the debug report
     void GenerateReport(wxDebugReport::Context ctx);
@@ -206,7 +224,7 @@ private:
     wxDECLARE_NO_COPY_CLASS(MyApp);
 };
 
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 // ============================================================================
 // implementation
@@ -217,10 +235,12 @@ IMPLEMENT_APP(MyApp)
 // ----------------------------------------------------------------------------
 
 wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
+    EVT_MENU(DebugRpt_ListLoadedDLLs, MyFrame::OnListLoadedDLLs)
     EVT_MENU(DebugRpt_Quit, MyFrame::OnQuit)
     EVT_MENU(DebugRpt_Crash, MyFrame::OnReportForCrash)
     EVT_MENU(DebugRpt_Current, MyFrame::OnReportForCurrent)
     EVT_MENU(DebugRpt_Paint, MyFrame::OnReportPaint)
+    EVT_MENU(DebugRpt_Timer, MyFrame::OnReportTimer)
     EVT_MENU(DebugRpt_Upload, MyFrame::OnReportUpload)
     EVT_MENU(DebugRpt_About, MyFrame::OnAbout)
 
@@ -228,7 +248,7 @@ wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
 wxEND_EVENT_TABLE()
 
 MyFrame::MyFrame()
-       : wxFrame(NULL, wxID_ANY, wxT("wxWidgets Debug Report Sample"),
+       : wxFrame(NULL, wxID_ANY, "wxWidgets Debug Report Sample",
                  wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE|wxDEFAULT_FRAME_STYLE)
 {
     m_numLines = 10;
@@ -236,31 +256,76 @@ MyFrame::MyFrame()
     SetIcon(wxICON(sample));
 
     wxMenu *menuFile = new wxMenu;
-    menuFile->Append(DebugRpt_Quit, wxT("E&xit\tAlt-X"));
+    menuFile->Append(DebugRpt_ListLoadedDLLs, "&List loaded DLLs...\tCtrl-L");
+    menuFile->AppendSeparator();
+    menuFile->Append(DebugRpt_Quit, "E&xit\tAlt-X");
 
     wxMenu *menuReport = new wxMenu;
-    menuReport->Append(DebugRpt_Crash, wxT("Report for &crash\tCtrl-C"),
-                       wxT("Provoke a crash inside the program and create report for it"));
-    menuReport->Append(DebugRpt_Current, wxT("Report for c&urrent context\tCtrl-U"),
-                       wxT("Create report for the current program context"));
-    menuReport->Append(DebugRpt_Paint, wxT("Report for &paint handler\tCtrl-P"),
-                       wxT("Provoke a repeatable crash in wxEVT_PAINT handler"));
+    menuReport->Append(DebugRpt_Crash, "Report for &crash\tCtrl-C",
+                       "Provoke a crash inside the program and create report for it");
+    menuReport->Append(DebugRpt_Current, "Report for c&urrent context\tCtrl-U",
+                       "Create report for the current program context");
+    menuReport->Append(DebugRpt_Paint, "Report for &paint handler\tCtrl-P",
+                       "Provoke a repeatable crash in wxEVT_PAINT handler");
+    menuReport->Append(DebugRpt_Timer, "Report for &timer handler\tCtrl-T",
+                       "Provoke a crash in wxEVT_TIMER handler");
     menuReport->AppendSeparator();
-    menuReport->AppendCheckItem(DebugRpt_Upload, wxT("Up&load debug report"),
-                       wxT("You need to configure a web server accepting debug report uploads to use this function"));
+    menuReport->AppendCheckItem(DebugRpt_Upload, "Up&load debug report",
+                       "You need to configure a web server accepting debug report uploads to use this function");
 
     wxMenu *menuHelp = new wxMenu;
-    menuHelp->Append(DebugRpt_About, wxT("&About\tF1"));
+    menuHelp->Append(DebugRpt_About, "&About\tF1");
 
     wxMenuBar *mbar = new wxMenuBar();
-    mbar->Append(menuFile, wxT("&File"));
-    mbar->Append(menuReport, wxT("&Report"));
-    mbar->Append(menuHelp, wxT("&Help"));
+    mbar->Append(menuFile, "&File");
+    mbar->Append(menuReport, "&Report");
+    mbar->Append(menuHelp, "&Help");
     SetMenuBar(mbar);
 
     CreateStatusBar();
 
     Show();
+}
+
+void MyFrame::OnListLoadedDLLs(wxCommandEvent& WXUNUSED(event))
+{
+    const wxDynamicLibraryDetailsArray loaded = wxDynamicLibrary::ListLoaded();
+    const size_t count = loaded.size();
+    if ( !count )
+    {
+        wxLogError("Failed to get the list of loaded dynamic libraries.");
+        return;
+    }
+
+    wxArrayString names;
+    names.reserve(count);
+    for ( size_t n = 0; n < count; n++ )
+    {
+        names.push_back(loaded[n].GetName());
+    }
+
+    for ( ;; )
+    {
+        const int sel = wxGetSingleChoiceIndex
+                        (
+                            "Choose a library to show more information about it",
+                            "List of loaded dynamic libraries",
+                            names,
+                            this
+                        );
+        if ( sel == wxNOT_FOUND )
+            return;
+
+        const wxDynamicLibraryDetails& det = loaded[sel];
+        void *addr = 0;
+        size_t len = 0;
+        det.GetAddress(&addr, &len);
+        wxLogMessage("Full path is \"%s\", memory range %p:%p, version \"%s\"",
+                     det.GetPath(),
+                     addr,
+                     static_cast<void*>(static_cast<char*>(addr) + len),
+                     det.GetVersion());
+    }
 }
 
 void MyFrame::OnQuit(wxCommandEvent& WXUNUSED(event))
@@ -291,6 +356,12 @@ void MyFrame::OnReportPaint(wxCommandEvent& WXUNUSED(event))
     Refresh();
 }
 
+void MyFrame::OnReportTimer(wxCommandEvent& WXUNUSED(event))
+{
+    // this will result in a crash in BadTimer::OnNotify() soon
+    m_badTimer.StartOnce(100);
+}
+
 void MyFrame::OnReportUpload(wxCommandEvent& event)
 {
     wxGetApp().UploadReport(event.IsChecked());
@@ -300,8 +371,8 @@ void MyFrame::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
     wxMessageBox
     (
-        wxT("wxDebugReport sample\n(c) 2005 Vadim Zeitlin <vadim@wxwindows.org>"),
-        wxT("wxWidgets Debug Report Sample"),
+        "wxDebugReport sample\n(c) 2005 Vadim Zeitlin <vadim@wxwidgets.org>",
+        "wxWidgets Debug Report Sample",
         wxOK | wxICON_INFORMATION,
         this
     );
@@ -355,24 +426,34 @@ void MyApp::GenerateReport(wxDebugReport::Context ctx)
     // you can also call report->AddFile(...) with your own log files, files
     // created using wxRegKey::Export() and so on, here we just add a test
     // file containing the date of the crash
-    wxFileName fn(report->GetDirectory(), wxT("timestamp.my"));
-    wxFFile file(fn.GetFullPath(), wxT("w"));
+    wxFileName fn(report->GetDirectory(), "timestamp.my");
+    wxFFile file(fn.GetFullPath(), "w");
     if ( file.IsOpened() )
     {
         wxDateTime dt = wxDateTime::Now();
-        file.Write(dt.FormatISODate() + wxT(' ') + dt.FormatISOTime());
+        file.Write(dt.FormatISODate() + ' ' + dt.FormatISOTime());
         file.Close();
     }
 
-    report->AddFile(fn.GetFullName(), wxT("timestamp of this report"));
+    report->AddFile(fn.GetFullName(), "timestamp of this report");
 
     // can also add an existing file directly, it will be copied
     // automatically
 #ifdef __WXMSW__
-    report->AddFile(wxT("c:\\autoexec.bat"), wxT("DOS startup file"));
-#else
-    report->AddFile(wxT("/etc/motd"), wxT("Message of the day"));
-#endif
+    wxString windir;
+    if ( !wxGetEnv("WINDIR", &windir) )
+        windir = "C:\\Windows";
+    fn.AssignDir(windir);
+    fn.AppendDir("system32");
+    fn.AppendDir("drivers");
+    fn.AppendDir("etc");
+#else // !__WXMSW__
+    fn.AssignDir("/etc");
+#endif // __WXMSW__/!__WXMSW__
+    fn.SetFullName("hosts");
+
+    if ( fn.FileExists() )
+        report->AddFile(fn.GetFullPath(), "Local hosts file");
 
     // calling Show() is not mandatory, but is more polite
     if ( wxDebugReportPreviewStd().Show(*report) )
@@ -381,12 +462,12 @@ void MyApp::GenerateReport(wxDebugReport::Context ctx)
         {
             if ( m_uploadReport )
             {
-                wxLogMessage(wxT("Report successfully uploaded."));
+                wxLogMessage("Report successfully uploaded.");
             }
             else
             {
-                wxLogMessage(wxT("Report generated in \"%s\"."),
-                             report->GetCompressedFileName().c_str());
+                wxLogMessage("Report generated in \"%s\".",
+                             report->GetCompressedFileName());
                 report->Reset();
             }
         }

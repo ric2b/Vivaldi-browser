@@ -18,12 +18,13 @@
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_executor.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/default_tick_clock.h"
 #include "base/values.h"
@@ -127,6 +128,9 @@ class TransportClient : public media::cast::CastTransport::Client {
       media::cast::LogEventDispatcher* log_event_dispatcher)
       : log_event_dispatcher_(log_event_dispatcher) {}
 
+  TransportClient(const TransportClient&) = delete;
+  TransportClient& operator=(const TransportClient&) = delete;
+
   void OnStatusChanged(media::cast::CastTransportStatus status) final {
     VLOG(1) << "Transport status: " << status;
   }
@@ -141,10 +145,8 @@ class TransportClient : public media::cast::CastTransport::Client {
   void ProcessRtpPacket(std::unique_ptr<media::cast::Packet> packet) final {}
 
  private:
-  media::cast::LogEventDispatcher* const
+  const raw_ptr<media::cast::LogEventDispatcher>
       log_event_dispatcher_;  // Not owned by this class.
-
-  DISALLOW_COPY_AND_ASSIGN(TransportClient);
 };
 
 }  // namespace

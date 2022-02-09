@@ -236,6 +236,7 @@ android_library("content_full_java") {
     "java/src/org/chromium/content/browser/accessibility/AccessibilityActionAndEventTracker.java",
     "java/src/org/chromium/content/browser/accessibility/AccessibilityDelegate.java",
     "java/src/org/chromium/content/browser/accessibility/AccessibilityEventDispatcher.java",
+    "java/src/org/chromium/content/browser/accessibility/AccessibilityNodeInfoUtils.java",
     "java/src/org/chromium/content/browser/accessibility/BrowserAccessibilityState.java",
     "java/src/org/chromium/content/browser/accessibility/OViewStructureBuilder.java",
     "java/src/org/chromium/content/browser/accessibility/OWebContentsAccessibility.java",
@@ -359,6 +360,7 @@ android_library("content_full_java") {
     "java/src/org/chromium/content_public/browser/RenderWidgetHostView.java",
     "java/src/org/chromium/content_public/browser/ScreenOrientationDelegate.java",
     "java/src/org/chromium/content_public/browser/ScreenOrientationProvider.java",
+    "java/src/org/chromium/content_public/browser/SelectAroundCaretResult.java",
     "java/src/org/chromium/content_public/browser/SelectionClient.java",
     "java/src/org/chromium/content_public/browser/SelectionEventProcessor.java",
     "java/src/org/chromium/content_public/browser/SelectionPopupController.java",
@@ -537,6 +539,7 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/ChildProcessLauncherIntegrationTest.java",
     "javatests/src/org/chromium/content/browser/ChildProcessLauncherTest.java",
     "javatests/src/org/chromium/content/browser/ClipboardTest.java",
+    "javatests/src/org/chromium/content/browser/ContactsProviderTest.java",
     "javatests/src/org/chromium/content/browser/ContentCommandLineTest.java",
     "javatests/src/org/chromium/content/browser/ContentTextSelectionTest.java",
     "javatests/src/org/chromium/content/browser/ContentViewLocationTest.java",
@@ -577,6 +580,7 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/accessibility/TestViewStructureInterface.java",
     "javatests/src/org/chromium/content/browser/accessibility/WebContentsAccessibilityEventsTest.java",
     "javatests/src/org/chromium/content/browser/accessibility/WebContentsAccessibilityTest.java",
+    "javatests/src/org/chromium/content/browser/accessibility/WebContentsAccessibilityTreeTest.java",
     "javatests/src/org/chromium/content/browser/accessibility/captioning/CaptioningChangeDelegateTest.java",
     "javatests/src/org/chromium/content/browser/androidoverlay/DialogOverlayImplPixelTest.java",
     "javatests/src/org/chromium/content/browser/androidoverlay/DialogOverlayImplTest.java",
@@ -603,7 +607,9 @@ android_library("content_javatests") {
   ]
 
   data = [
+    "//content/test/data/accessibility/aria/",
     "//content/test/data/accessibility/event/",
+    "//content/test/data/accessibility/html/",
     "//content/test/data/android/",
     "//content/test/data/media/",
   ]

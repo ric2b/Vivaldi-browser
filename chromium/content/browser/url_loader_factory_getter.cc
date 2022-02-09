@@ -14,7 +14,6 @@
 #include "base/lazy_instance.h"
 #include "base/run_loop.h"
 #include "content/browser/storage_partition_impl.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/common/content_switches.h"
 #include "services/network/public/cpp/features.h"
@@ -73,6 +72,10 @@ class URLLoaderFactoryGetter::URLLoaderFactoryForIOThread
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
   }
 
+  URLLoaderFactoryForIOThread(const URLLoaderFactoryForIOThread&) = delete;
+  URLLoaderFactoryForIOThread& operator=(const URLLoaderFactoryForIOThread&) =
+      delete;
+
   // mojom::URLLoaderFactory implementation:
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
@@ -112,8 +115,6 @@ class URLLoaderFactoryGetter::URLLoaderFactoryForIOThread
 
   scoped_refptr<URLLoaderFactoryGetter> factory_getter_;
   bool is_corb_enabled_;
-
-  DISALLOW_COPY_AND_ASSIGN(URLLoaderFactoryForIOThread);
 };
 
 scoped_refptr<network::SharedURLLoaderFactory>

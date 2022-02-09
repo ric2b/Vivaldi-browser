@@ -3,15 +3,20 @@
 // found in the LICENSE file.
 
 #include "components/page_load_metrics/browser/observers/back_forward_cache_page_load_metrics_observer.h"
-#include "base/metrics/histogram_functions.h"
 
+#include "base/metrics/histogram_functions.h"
+#include "base/time/default_tick_clock.h"
 #include "components/page_load_metrics/browser/observers/core/uma_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/browser/responsiveness_metrics_normalization.h"
+#include "components/page_load_metrics/common/page_visit_final_status.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/features.h"
+
+using page_load_metrics::PageVisitFinalStatus;
 
 namespace internal {
 
@@ -122,7 +127,13 @@ BackForwardCachePageLoadMetricsObserver::
     BackForwardCachePageLoadMetricsObserver() = default;
 
 BackForwardCachePageLoadMetricsObserver::
-    ~BackForwardCachePageLoadMetricsObserver() = default;
+    ~BackForwardCachePageLoadMetricsObserver() {
+  // TODO(crbug.com/1265307): Revert to the default destructor when we've
+  // figured out why sometimes page end metrics are not logged.
+  if (back_forward_cache_navigation_ids_.size() > 0) {
+    DCHECK(logged_page_end_metrics_);
+  }
+}
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 BackForwardCachePageLoadMetricsObserver::OnStart(
@@ -138,6 +149,7 @@ BackForwardCachePageLoadMetricsObserver::OnHidden(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   if (!in_back_forward_cache_) {
     MaybeRecordForegroundDurationAfterBackForwardCacheRestore(
+        base::DefaultTickClock::GetInstance(),
         /*app_entering_background=*/false);
   }
   was_hidden_ = true;
@@ -156,13 +168,18 @@ BackForwardCachePageLoadMetricsObserver::OnEnterBackForwardCache(
 void BackForwardCachePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     content::NavigationHandle* navigation_handle) {
+  page_metrics_logged_due_to_backgrounding_ = false;
   in_back_forward_cache_ = false;
   back_forward_cache_navigation_ids_.push_back(
       navigation_handle->GetNavigationId());
   content::WebContents* web_contents = GetDelegate().GetWebContents();
   was_hidden_ = web_contents &&
                 web_contents->GetVisibility() == content::Visibility::HIDDEN;
-
+  logged_page_end_metrics_ = false;
+  restored_main_frame_layout_shift_score_ =
+      GetDelegate().GetMainFrameRenderData().layout_shift_score;
+  restored_layout_shift_score_ =
+      GetDelegate().GetPageRenderData().layout_shift_score;
   // HistoryNavigation is a singular event, and we share the same instance as
   // long as we use the same source ID.
   ukm::builders::HistoryNavigation builder(
@@ -174,10 +191,26 @@ void BackForwardCachePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
   builder.Record(ukm::UkmRecorder::Get());
 }
 
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+BackForwardCachePageLoadMetricsObserver::ShouldObserveMimeType(
+    const std::string& mime_type) const {
+  PageLoadMetricsObserver::ObservePolicy policy =
+      PageLoadMetricsObserver::ShouldObserveMimeType(mime_type);
+  if (policy == STOP_OBSERVING && has_ever_entered_back_forward_cache_) {
+    ukm::builders::UserPerceivedPageVisit(
+        GetLastUkmSourceIdForBackForwardCacheRestore())
+        .SetNotCountedForCoreWebVitals(true)
+        .Record(ukm::UkmRecorder::Get());
+  }
+  return policy;
+}
+
 void BackForwardCachePageLoadMetricsObserver::
     OnFirstPaintAfterBackForwardCacheRestoreInPage(
         const page_load_metrics::mojom::BackForwardCacheTiming& timing,
         size_t index) {
+  if (index >= back_forward_cache_navigation_ids_.size())
+    return;
   auto first_paint = timing.first_paint_after_back_forward_cache_restore;
   DCHECK(!first_paint.is_zero());
   if (page_load_metrics::
@@ -210,6 +243,8 @@ void BackForwardCachePageLoadMetricsObserver::
     OnRequestAnimationFramesAfterBackForwardCacheRestoreInPage(
         const page_load_metrics::mojom::BackForwardCacheTiming& timing,
         size_t index) {
+  if (index >= back_forward_cache_navigation_ids_.size())
+    return;
   auto request_animation_frames =
       timing.request_animation_frames_after_back_forward_cache_restore;
   DCHECK_EQ(request_animation_frames.size(), 3u);
@@ -244,6 +279,8 @@ void BackForwardCachePageLoadMetricsObserver::
     OnFirstInputAfterBackForwardCacheRestoreInPage(
         const page_load_metrics::mojom::BackForwardCacheTiming& timing,
         size_t index) {
+  if (index >= back_forward_cache_navigation_ids_.size())
+    return;
   auto first_input_delay =
       timing.first_input_delay_after_back_forward_cache_restore;
   DCHECK(first_input_delay.has_value());
@@ -275,7 +312,8 @@ BackForwardCachePageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   if (!in_back_forward_cache_)
     RecordMetricsOnPageVisitEnd(timing, /*app_entering_background=*/true);
-  return STOP_OBSERVING;
+  page_metrics_logged_due_to_backgrounding_ = true;
+  return CONTINUE_OBSERVING;
 }
 
 void BackForwardCachePageLoadMetricsObserver::OnComplete(
@@ -291,11 +329,18 @@ void BackForwardCachePageLoadMetricsObserver::OnComplete(
 void BackForwardCachePageLoadMetricsObserver::RecordMetricsOnPageVisitEnd(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     bool app_entering_background) {
+  if (page_metrics_logged_due_to_backgrounding_)
+    return;
   MaybeRecordLayoutShiftScoreAfterBackForwardCacheRestore(timing);
   MaybeRecordPageEndAfterBackForwardCacheRestore(app_entering_background);
   MaybeRecordForegroundDurationAfterBackForwardCacheRestore(
-      app_entering_background);
+      base::DefaultTickClock::GetInstance(), app_entering_background);
   MaybeRecordNormalizedResponsivenessMetrics();
+
+  if (has_ever_entered_back_forward_cache_) {
+    page_load_metrics::RecordPageVisitFinalStatusForTiming(
+        timing, GetDelegate(), GetLastUkmSourceIdForBackForwardCacheRestore());
+  }
 }
 
 void BackForwardCachePageLoadMetricsObserver::
@@ -446,27 +491,18 @@ void BackForwardCachePageLoadMetricsObserver::
 void BackForwardCachePageLoadMetricsObserver::
     MaybeRecordLayoutShiftScoreAfterBackForwardCacheRestore(
         const page_load_metrics::mojom::PageLoadTiming& timing) {
-  if (!last_main_frame_layout_shift_score_.has_value()) {
-    DCHECK(!last_layout_shift_score_.has_value());
-    last_main_frame_layout_shift_score_ =
-        GetDelegate().GetMainFrameRenderData().layout_shift_score;
-    last_layout_shift_score_ =
-        GetDelegate().GetPageRenderData().layout_shift_score;
-
-    // When this function is called first time, the page has not been in back-
-    // forward cache. The scores not after the page is restored from back-
-    // forward cache are recorded in other observers like
-    // UkmPageLoadMetricsObserver.
+  if (!has_ever_entered_back_forward_cache_ ||
+      !restored_main_frame_layout_shift_score_.has_value()) {
     return;
   }
-
+  DCHECK(restored_layout_shift_score_.has_value());
   double layout_main_frame_shift_score =
       GetDelegate().GetMainFrameRenderData().layout_shift_score -
-      last_main_frame_layout_shift_score_.value();
+      restored_main_frame_layout_shift_score_.value();
   DCHECK_GE(layout_main_frame_shift_score, 0);
   double layout_shift_score =
       GetDelegate().GetPageRenderData().layout_shift_score -
-      last_layout_shift_score_.value();
+      restored_layout_shift_score_.value();
   DCHECK_GE(layout_shift_score, 0);
 
   UMA_HISTOGRAM_COUNTS_100(
@@ -508,11 +544,6 @@ void BackForwardCachePageLoadMetricsObserver::
 
   builder.Record(ukm::UkmRecorder::Get());
 
-  last_main_frame_layout_shift_score_ =
-      GetDelegate().GetMainFrameRenderData().layout_shift_score;
-  last_layout_shift_score_ =
-      GetDelegate().GetPageRenderData().layout_shift_score;
-
   if (base::FeatureList::IsEnabled(
           internal::kBackForwardCacheEmitZeroSamplesForKeyMetrics)) {
     UMA_HISTOGRAM_COUNTS_100(
@@ -541,10 +572,12 @@ void BackForwardCachePageLoadMetricsObserver::
       GetLastUkmSourceIdForBackForwardCacheRestore());
   builder.SetPageEndReasonAfterBackForwardCacheRestore(page_end_reason);
   builder.Record(ukm::UkmRecorder::Get());
+  logged_page_end_metrics_ = true;
 }
 
 void BackForwardCachePageLoadMetricsObserver::
     MaybeRecordForegroundDurationAfterBackForwardCacheRestore(
+        const base::TickClock* clock,
         bool app_entering_background) const {
   if (!was_hidden_ && has_ever_entered_back_forward_cache_) {
     // This logic for finding the foreground duration is intended to mimic
@@ -574,7 +607,7 @@ void BackForwardCachePageLoadMetricsObserver::
 
     if (!foreground_duration && app_entering_background) {
       foreground_duration =
-          base::TimeTicks::Now() - back_forward_state.navigation_start_time;
+          clock->NowTicks() - back_forward_state.navigation_start_time;
     }
 
     if (foreground_duration.has_value()) {

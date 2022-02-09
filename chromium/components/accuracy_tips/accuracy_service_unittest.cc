@@ -5,6 +5,7 @@
 #include "components/accuracy_tips/accuracy_service.h"
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
@@ -117,8 +118,8 @@ class AccuracyServiceTest : public content::RenderViewHostTestHarness {
   AccuracyServiceTest() = default;
 
   void SetUp() override {
-    content::RenderViewHostTestHarness::SetUp();
     SetUpFeatureList(feature_list_);
+    content::RenderViewHostTestHarness::SetUp();
 
     AccuracyService::RegisterProfilePrefs(prefs_.registry());
     unified_consent::UnifiedConsentService::RegisterPrefs(prefs_.registry());
@@ -165,7 +166,7 @@ class AccuracyServiceTest : public content::RenderViewHostTestHarness {
   sync_preferences::TestingPrefServiceSyncable prefs_;
   base::SimpleTestClock clock_;
 
-  MockAccuracyServiceDelegate* delegate_;
+  raw_ptr<MockAccuracyServiceDelegate> delegate_;
   scoped_refptr<MockSafeBrowsingDatabaseManager> sb_database_;
   std::unique_ptr<AccuracyService> service_;
 };
@@ -423,7 +424,7 @@ TEST_F(AccuracyServiceSurveyTest, SurveyTimeRange) {
   testing::Mock::VerifyAndClearExpectations(delegate());
 
   std::map<std::string, std::string> expected_product_specific_data = {
-      {"Tip shown for URL", gurl_.GetOrigin().spec()},
+      {"Tip shown for URL", gurl_.DeprecatedGetOriginAsURL().spec()},
       {"UI interaction", base::NumberToString(static_cast<int>(
                              AccuracyTipInteraction::kLearnMore))}};
 
@@ -487,7 +488,7 @@ TEST_F(AccuracyServiceSurveyTest, DontShowSurveyAfterDeletingHistoryForUrls) {
   history::DeletionInfo deletion_info = history::DeletionInfo::ForUrls(
       {history::URLRow(gurl_)}, std::set<GURL>());
   deletion_info.set_deleted_urls_origin_map({
-      {gurl_.GetOrigin(), {0, base::Time::Now()}},
+      {gurl_.DeprecatedGetOriginAsURL(), {0, base::Time::Now()}},
   });
   service()->OnURLsDeleted(nullptr, deletion_info);
   // ...and even though all other conditions apply, a survey can't be shown
@@ -526,12 +527,12 @@ TEST_F(AccuracyServiceSurveyTest, ShowSurveyAfterDeletingHistoryForOtherUrls) {
   history::DeletionInfo deletion_info = history::DeletionInfo::ForUrls(
       {history::URLRow(other_gurl)}, std::set<GURL>());
   deletion_info.set_deleted_urls_origin_map({
-      {other_gurl.GetOrigin(), {0, base::Time::Now()}},
+      {other_gurl.DeprecatedGetOriginAsURL(), {0, base::Time::Now()}},
   });
   service()->OnURLsDeleted(nullptr, deletion_info);
 
   std::map<std::string, std::string> expected_product_specific_data = {
-      {"Tip shown for URL", gurl_.GetOrigin().spec()},
+      {"Tip shown for URL", gurl_.DeprecatedGetOriginAsURL().spec()},
       {"UI interaction", base::NumberToString(static_cast<int>(
                              AccuracyTipInteraction::kLearnMore))}};
 

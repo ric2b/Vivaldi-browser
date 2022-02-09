@@ -59,6 +59,7 @@
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
+#include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/picture_in_picture_controller.h"
@@ -82,7 +83,6 @@
 #include "third_party/blink/renderer/core/page/context_menu_provider.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/page/scrolling/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 
@@ -173,8 +173,8 @@ void ContextMenuController::DocumentDetached(Document* document) {
 void ContextMenuController::HandleContextMenuEvent(MouseEvent* mouse_event) {
   DCHECK(mouse_event->type() == event_type_names::kContextmenu);
   LocalFrame* frame = mouse_event->target()->ToNode()->GetDocument().GetFrame();
-  PhysicalOffset location = PhysicalOffset::FromFloatPointRound(
-      FloatPoint(mouse_event->AbsoluteLocation()));
+  PhysicalOffset location = PhysicalOffset::FromPointFRound(
+      gfx::PointF(mouse_event->AbsoluteLocation()));
 
   if (ShowContextMenu(frame, location, mouse_event->GetMenuSourceType(),
                       mouse_event))
@@ -376,27 +376,28 @@ static mojom::blink::ContextMenuDataInputFieldType ComputeInputFieldType(
 }
 
 static gfx::Rect ComputeSelectionRect(LocalFrame* selected_frame) {
-  IntRect anchor;
-  IntRect focus;
+  gfx::Rect anchor;
+  gfx::Rect focus;
   selected_frame->Selection().ComputeAbsoluteBounds(anchor, focus);
   anchor = selected_frame->View()->FrameToViewport(anchor);
   focus = selected_frame->View()->FrameToViewport(focus);
-  int left = std::min(focus.X(), anchor.X());
-  int top = std::min(focus.Y(), anchor.Y());
-  int right = std::max(focus.X() + focus.Width(), anchor.X() + anchor.Width());
+  int left = std::min(focus.x(), anchor.x());
+  int top = std::min(focus.y(), anchor.y());
+  int right = std::max(focus.x() + focus.width(), anchor.x() + anchor.width());
   int bottom =
-      std::max(focus.Y() + focus.Height(), anchor.Y() + anchor.Height());
+      std::max(focus.y() + focus.height(), anchor.y() + anchor.height());
   // Intersect the selection rect and the visible bounds of the focused_element
   // to ensure the selection rect is visible.
   Document* doc = selected_frame->GetDocument();
   if (doc) {
     Element* focused_element = doc->FocusedElement();
     if (focused_element) {
-      IntRect visible_bound = focused_element->VisibleBoundsInVisualViewport();
-      left = std::max(visible_bound.X(), left);
-      top = std::max(visible_bound.Y(), top);
-      right = std::min(visible_bound.MaxX(), right);
-      bottom = std::min(visible_bound.MaxY(), bottom);
+      gfx::Rect visible_bound =
+          focused_element->VisibleBoundsInVisualViewport();
+      left = std::max(visible_bound.x(), left);
+      top = std::max(visible_bound.y(), top);
+      right = std::min(visible_bound.right(), right);
+      bottom = std::min(visible_bound.bottom(), bottom);
     }
   }
 
@@ -428,9 +429,8 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
   if (context_menu_client_receiver_.is_bound())
     context_menu_client_receiver_.reset();
 
-  HitTestRequest::HitTestRequestType type = HitTestRequest::kReadOnly |
-                                            HitTestRequest::kActive |
-                                            HitTestRequest::kRetargetForInert;
+  HitTestRequest::HitTestRequestType type =
+      HitTestRequest::kReadOnly | HitTestRequest::kActive;
   if (base::FeatureList::IsEnabled(
           features::kEnablePenetratingImageSelection)) {
     type |= HitTestRequest::kPenetratingList | HitTestRequest::kListBased;
@@ -457,7 +457,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         .GetSelectionController()
         .UpdateSelectionForContextMenuEvent(
             mouse_event, hit_test_result_,
-            PhysicalOffset(FlooredIntPoint(point)));
+            PhysicalOffset(ToFlooredPoint(point)));
   }
 
   ContextMenuData data;

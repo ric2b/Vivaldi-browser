@@ -26,7 +26,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.drawable.DrawableCompat;
 
-import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
@@ -38,7 +37,9 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.banners.AppMenuVerbiage;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.bookmarks.BookmarkFeatures;
+import org.chromium.chrome.browser.bookmarks.PowerBookmarkUtils;
 import org.chromium.chrome.browser.bookmarks.ReadingListFeatures;
+import org.chromium.chrome.browser.commerce.shopping_list.ShoppingFeatures;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.device.DeviceConditions;
@@ -53,8 +54,10 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
-import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.power_bookmarks.PowerBookmarkMeta;
+import org.chromium.chrome.browser.power_bookmarks.PowerBookmarkType;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.tab.Tab;
@@ -72,10 +75,11 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuUtil;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
+import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.components.webapps.WebappsUtils;
@@ -104,7 +108,7 @@ import org.vivaldi.browser.common.VivaldiUtils;
  */
 public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate {
     private static Boolean sItemBookmarkedForTesting;
-
+    private static Boolean sItemInReadingListForTesting;
     protected PropertyModel mReloadPropertyModel;
 
     protected final Context mContext;
@@ -115,13 +119,13 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     protected final ToolbarManager mToolbarManager;
     protected final View mDecorView;
     private CallbackController mCallbackController = new CallbackController();
-    private final ObservableSupplier<BookmarkBridge> mBookmarkBridgeSupplier;
-    private Callback<BookmarkBridge> mBookmarkBridgeSupplierCallback;
+    private ObservableSupplier<BookmarkBridge> mBookmarkBridgeSupplier;
     private boolean mUpdateMenuItemVisible;
     private ShareUtils mShareUtils;
     // Keeps track of which menu item was shown when installable app is detected.
     private int mAddAppTitleShown;
     private Map<CustomViewBinder, Integer> mCustomViewTypeOffsetMap;
+    private boolean mIsTypeSpecificBookmarkItemRowPresent;
 
     @VisibleForTesting
     @IntDef({MenuGroup.INVALID, MenuGroup.PAGE_MENU, MenuGroup.OVERVIEW_MODE_MENU,
@@ -156,7 +160,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     private @Nullable OneshotSupplier<StartSurface> mStartSurfaceSupplier;
     private @Nullable StartSurface.StateObserver mStartSurfaceStateObserver;
     private @StartSurfaceState int mStartSurfaceState;
-    protected BookmarkBridge mBookmarkBridge;
     protected Runnable mAppMenuInvalidator;
 
     /**
@@ -206,14 +209,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             }));
         }
         mBookmarkBridgeSupplier = bookmarkBridgeSupplier;
-        mBookmarkBridgeSupplierCallback = (bookmarkBridge) -> mBookmarkBridge = bookmarkBridge;
-        mBookmarkBridgeSupplier.addObserver(mBookmarkBridgeSupplierCallback);
         mShareUtils = new ShareUtils();
     }
 
     @Override
     public void destroy() {
-        mBookmarkBridgeSupplier.removeObserver(mBookmarkBridgeSupplierCallback);
         if (mCallbackController != null) {
             mCallbackController.destroy();
             mCallbackController = null;
@@ -426,18 +426,20 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             actionBar.findItem(R.id.reload_menu_id).setIcon(icon);
             loadingStateChanged(isCurrentTabNotNull && currentTab.isLoading());
 
-            MenuItem bookmarkMenuItem = actionBar.findItem(R.id.bookmark_this_page_id);
-            updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
+            MenuItem bookmarkMenuItemShortcut = actionBar.findItem(R.id.bookmark_this_page_id);
+            updateBookmarkMenuItemShortcut(bookmarkMenuItemShortcut, currentTab);
 
             // Vivaldi
-            if (currentTab.isNativePage() || currentTab.getWebContents() == null)
-                bookmarkMenuItem.setEnabled(false);
+            if (isCurrentTabNotNull
+                    && (currentTab.isNativePage() || currentTab.getWebContents() == null)) {
+                bookmarkMenuItemShortcut.setEnabled(false);
+            }
 
             // Vivaldi
             // Disable the "Back" menu item if there is no page to go to.
             MenuItem backMenuItem = actionBar.findItem(R.id.backward_menu_id);
             if (backMenuItem != null)
-                backMenuItem.setEnabled(currentTab.canGoBack());
+                backMenuItem.setEnabled(isCurrentTabNotNull && currentTab.canGoBack());
 
             if (!ChromeApplicationImpl.isVivaldi()) {
             MenuItem offlineMenuItem = actionBar.findItem(R.id.offline_page_id);
@@ -445,6 +447,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             }
 
             if (!isCurrentTabNotNull) {
+                if (!ChromeApplicationImpl.isVivaldi())
                 actionBar.findItem(R.id.info_menu_id).setEnabled(false);
                 actionBar.findItem(R.id.reload_menu_id).setEnabled(false);
             }
@@ -459,8 +462,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 DrawableCompat.setTintList(icon, AppCompatResources.getColorStateList(mContext,
                          R.color.default_icon_color_tint_list));
                 offlineMenuItem.setIcon(icon);
-                offlineMenuItem.setVisible(DownloadUtils.isAllowedToDownloadPage(currentTab)
-                        && !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD); // Vivaldi [POLE-10]
+                offlineMenuItem.setVisible(isCurrentTabNotNull
+                        && DownloadUtils.isAllowedToDownloadPage(currentTab) &&
+                        !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD); // Vivaldi [POLE-10]
             }
         }
 
@@ -481,27 +485,17 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                     mContext.getString(R.string.menu_manage_all_windows, getInstanceCount()));
         }
 
-        menu.findItem(R.id.add_to_reading_list_menu_id)
-                .setVisible(isCurrentTabNotNull && isHttpOrHttpsScheme
-                        && ReadingListFeatures.isAddToReadingListAppMenuItemEnabled());
-        // TODO(crbug.com/1252228): Show this only on URLs already on the Reading List.
-        menu.findItem(R.id.delete_from_reading_list_menu_id)
-                .setVisible(isHttpOrHttpsScheme
-                        && ReadingListFeatures.isDeleteFromReadingListAppMenuItemEnabled());
-        // TODO(crbug.com/1252228): Show this only on URLs already on the Reading List.
-        menu.findItem(R.id.edit_reading_list_menu_id)
-                .setVisible(isCurrentTabNotNull && isHttpOrHttpsScheme
-                        && ReadingListFeatures.isEditReadingListAppMenuItemEnabled());
+        updateBookmarkMenuItemRow(menu.findItem(R.id.add_bookmark_menu_id),
+                menu.findItem(R.id.edit_bookmark_menu_id), currentTab);
+        // Updates the type-specific bookmark menu item rows.
+        // The order listed here is reflects the relative priority. Subsequent updates should check
+        // the `mIsTypeSpecificBookmarkItemRowPresent` bit before updating their row.
+        mIsTypeSpecificBookmarkItemRowPresent = false;
+        updatePriceTrackingMenuItemRow(menu.findItem(R.id.enable_price_tracking_menu_id),
+                menu.findItem(R.id.disable_price_tracking_menu_id), currentTab);
+        updateReadingListMenuItemRow(menu.findItem(R.id.add_to_reading_list_menu_id),
+                menu.findItem(R.id.delete_from_reading_list_menu_id), currentTab);
 
-        if (!ChromeApplicationImpl.isVivaldi()) {
-        // TODO(crbug.com/1257406): Show this only if the current page is not in bookmarks.
-        menu.findItem(R.id.add_bookmark_menu_id)
-                .setVisible(isCurrentTabNotNull && BookmarkFeatures.isAddBookmarkMenuItemEnabled());
-        // TODO(crbug.com/1257406): Show this only if the current page is in bookmarks.
-        menu.findItem(R.id.edit_bookmark_menu_id)
-                .setVisible(
-                        isCurrentTabNotNull && BookmarkFeatures.isEditBookmarkMenuItemEnabled());
-        } // Vivaldi
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.all_bookmarks_menu_id).setVisible(false);
             menu.findItem(R.id.downloads_menu_id).setVisible(false);
@@ -510,8 +504,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             // Check Vivaldi only menu items for null returns.
             MenuItem cloneTabMenuItem = menu.findItem(R.id.vivaldi_clone_tab_menu_id);
             if (cloneTabMenuItem != null)
-                cloneTabMenuItem.setVisible(
-                        !currentTab.isNativePage() && currentTab.getWebContents() != null);
+                cloneTabMenuItem.setVisible(isCurrentTabNotNull
+                        && !currentTab.isNativePage() && currentTab.getWebContents() != null);
 
             MenuItem launchGameMenuItem = menu.findItem(R.id.launch_game_menu_id);
             if (launchGameMenuItem != null)
@@ -566,14 +560,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             MenuItem capturePageMenuItem = menu.findItem(R.id.capture_page_id);
             if (capturePageMenuItem != null)
                 capturePageMenuItem.setVisible(!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
+                        && isCurrentTabNotNull
                         && !currentTab.isNativePage()
                         && currentTab.getWebContents() != null);
         }
 
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.page_actions_id)
-                    .setVisible(!currentTab.isNativePage()
-                            && currentTab.getWebContents() != null);
+                    .setVisible(isCurrentTabNotNull
+                            && !currentTab.isNativePage() && currentTab.getWebContents() != null);
         }
 
         // Prepare translate menu button.
@@ -584,7 +579,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                         isChromeScheme, isFileScheme, isContentScheme, isIncognito, url));
 
         if (ChromeApplicationImpl.isVivaldi())
-            updateRequestDesktopSiteMenuItem(menu, currentTab, !currentTab.isNativePage(), isChromeScheme);
+            updateRequestDesktopSiteMenuItem(menu, currentTab, isCurrentTabNotNull
+                    && !currentTab.isNativePage(), isChromeScheme);
         else
         updateRequestDesktopSiteMenuItem(menu, currentTab, true /* can show */, isChromeScheme);
 
@@ -603,12 +599,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // Only display the Enter VR button if VR Shell Dev environment is enabled.
         menu.findItem(R.id.enter_vr_id).setVisible(isCurrentTabNotNull && shouldShowEnterVr());
 
-        MenuItem managedByMenuItem = menu.findItem(R.id.managed_by_menu_id);
-        managedByMenuItem.setVisible(
-                isCurrentTabNotNull && shouldShowManagedByMenuItem(currentTab));
-        // TODO(https://crbug.com/1092175): Enable "managed by" menu item after chrome://management
-        // page is added.
-        managedByMenuItem.setEnabled(false);
+        updateManagedByMenuItem(menu, currentTab);
     }
 
     /**
@@ -633,7 +624,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                                 .size()
                         > 1;
         boolean isPriceTrackingVisible = isOverviewModeMenu
-                && PriceTrackingUtilities.isPriceTrackingEligible()
+                && PriceTrackingUtilities.shouldShowPriceTrackingMenu()
                 && !DeviceClassManager.enableAccessibilityLayout(mContext) && !isIncognito;
         boolean isPriceTrackingEnabled = isPriceTrackingVisible;
         boolean hasItemBetweenDividers = false;
@@ -739,9 +730,35 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public boolean shouldCheckBookmarkStar(@NonNull Tab currentTab) {
-        return sItemBookmarkedForTesting != null
-                ? sItemBookmarkedForTesting
-                : mBookmarkBridge != null && mBookmarkBridge.hasBookmarkIdForTab(currentTab);
+        if (sItemBookmarkedForTesting != null) return sItemBookmarkedForTesting;
+
+        if (!mBookmarkBridgeSupplier.hasValue()) return false;
+        return mBookmarkBridgeSupplier.get().hasBookmarkIdForTab(currentTab);
+    }
+
+    /**
+     * @param currentTab The currentTab for which the app menu is showing.
+     * @return Whether reading list menu item should be highlighted, indicating that the current tab
+     *         exists in the reading list.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    public boolean shouldHighlightReadingList(@NonNull Tab currentTab) {
+        if (sItemInReadingListForTesting != null) return sItemInReadingListForTesting;
+
+        if (!mBookmarkBridgeSupplier.hasValue()) return false;
+        BookmarkId existingBookmark =
+                mBookmarkBridgeSupplier.get().getUserBookmarkIdForTab(currentTab);
+        return existingBookmark != null && existingBookmark.getType() == BookmarkType.READING_LIST;
+    }
+
+    /**
+     * @param currentTab The currentTab for which the app menu is showing.
+     * @return Whether price tracking is enabled and the button should be highlighted.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    public boolean shouldHighlightPriceTracking(@NonNull Tab currentTab) {
+        // TODO(crbug.com/1266624): Read this information from power bookmarks when available.
+        return false;
     }
 
     /**
@@ -790,12 +807,13 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public boolean isAutoDarkWebContentsEnabled() {
+        Profile profile = mTabModelSelector.getCurrentModel().getProfile();
+        assert profile != null;
         boolean isFlagEnabled = ChromeFeatureList.isEnabled(
                 ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING);
-
-        return isFlagEnabled
-                && UserPrefs.get(mTabModelSelector.getCurrentModel().getProfile())
-                           .getBoolean(Pref.WEB_KIT_FORCE_DARK_MODE_ENABLED);
+        boolean isFeatureEnabled =
+                WebContentsDarkModeController.isFeatureEnabled(mContext, profile);
+        return isFlagEnabled && isFeatureEnabled;
     }
 
     /**
@@ -1080,40 +1098,135 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     /**
      * Updates the bookmark item's visibility.
      *
-     * @param bookmarkMenuItem {@link MenuItem} for adding/editing the bookmark.
-     * @param currentTab        Current tab being displayed.
+     * @param bookmarkMenuItemShortcut {@link MenuItem} for adding/editing the bookmark.
+     * @param currentTab Current tab being displayed.
      */
-    protected void updateBookmarkMenuItem(MenuItem bookmarkMenuItem, @Nullable Tab currentTab) {
-        // If this method is called before the {@link #mBookmarkBridgeSupplierCallback} has been
-        // called, try to retrieve the bridge directly from the supplier.
-        if (mBookmarkBridge == null && mBookmarkBridgeSupplier != null) {
-            mBookmarkBridge = mBookmarkBridgeSupplier.get();
+    protected void updateBookmarkMenuItemShortcut(
+            MenuItem bookmarkMenuItemShortcut, @Nullable Tab currentTab) {
+        if (BookmarkFeatures.isBookmarkMenuItemAsDedicatedRowEnabled()) {
+            bookmarkMenuItemShortcut.setVisible(false);
+            return;
         }
 
-        if (mBookmarkBridge == null || currentTab == null) {
+        if (!mBookmarkBridgeSupplier.hasValue() || currentTab == null) {
             // If the BookmarkBridge still isn't available, assume the bookmark menu item is not
             // editable.
-            bookmarkMenuItem.setEnabled(false);
+            bookmarkMenuItemShortcut.setEnabled(false);
         } else {
-            bookmarkMenuItem.setEnabled(mBookmarkBridge.isEditBookmarksEnabled());
+            bookmarkMenuItemShortcut.setEnabled(
+                    mBookmarkBridgeSupplier.get().isEditBookmarksEnabled());
         }
 
         if (currentTab != null && shouldCheckBookmarkStar(currentTab)) {
-            bookmarkMenuItem.setIcon(R.drawable.btn_star_filled);
-            bookmarkMenuItem.setChecked(true);
-            bookmarkMenuItem.setTitleCondensed(mContext.getString(R.string.edit_bookmark));
+            bookmarkMenuItemShortcut.setIcon(R.drawable.btn_star_filled);
+            bookmarkMenuItemShortcut.setChecked(true);
+            bookmarkMenuItemShortcut.setTitleCondensed(mContext.getString(R.string.edit_bookmark));
         } else {
             if (ChromeApplicationImpl.isVivaldi()) {
                 Drawable icon =
                         AppCompatResources.getDrawable(mContext, R.drawable.btn_star);
                 DrawableCompat.setTintList(icon, AppCompatResources.getColorStateList(mContext,
                         R.color.default_icon_color_tint_list));
-                bookmarkMenuItem.setIcon(icon);
+                bookmarkMenuItemShortcut.setIcon(icon);
             } else
-            bookmarkMenuItem.setIcon(R.drawable.btn_star);
-            bookmarkMenuItem.setChecked(false);
-            bookmarkMenuItem.setTitleCondensed(mContext.getString(R.string.menu_bookmark));
+            bookmarkMenuItemShortcut.setIcon(R.drawable.btn_star);
+            bookmarkMenuItemShortcut.setChecked(false);
+            bookmarkMenuItemShortcut.setTitleCondensed(mContext.getString(R.string.menu_bookmark));
         }
+    }
+
+    /**
+     * Updates the bookmark item's visibility.
+     *
+     * @param bookmarkMenuItemAdd {@link MenuItem} for adding the bookmark.
+     * @param bookmarkMenuItemEdit {@link MenuItem} for editing the bookmark.
+     * @param currentTab Current tab being displayed.
+     */
+    protected void updateBookmarkMenuItemRow(
+            MenuItem bookmarkMenuItemAdd, MenuItem bookmarkMenuItemEdit, @Nullable Tab currentTab) {
+        // If the bookmark menu item row is disabled, then hide both item.
+        if (!BookmarkFeatures.isBookmarkMenuItemAsDedicatedRowEnabled()
+                || !mBookmarkBridgeSupplier.hasValue() || currentTab == null) {
+            bookmarkMenuItemAdd.setVisible(false);
+            bookmarkMenuItemEdit.setVisible(false);
+            return;
+        }
+
+        boolean editEnabled = mBookmarkBridgeSupplier.get().isEditBookmarksEnabled();
+        bookmarkMenuItemAdd.setEnabled(editEnabled);
+        bookmarkMenuItemEdit.setEnabled(editEnabled);
+
+        boolean shouldCheckBookmarkStar = currentTab != null && shouldCheckBookmarkStar(currentTab);
+        bookmarkMenuItemAdd.setVisible(!shouldCheckBookmarkStar);
+        bookmarkMenuItemEdit.setVisible(shouldCheckBookmarkStar);
+    }
+
+    /**
+     * Updates the bookmark item's visibility.
+     *
+     * @param readingListMenuItemAdd {@link MenuItem} for adding to the reading list.
+     * @param readingListMenuItemDelete {@link MenuItem} for deleting from the reading list.
+     * @param currentTab Current tab being displayed.
+     */
+    protected void updateReadingListMenuItemRow(@NonNull MenuItem readingListMenuItemAdd,
+            @NonNull MenuItem readingListMenuItemDelete, @Nullable Tab currentTab) {
+        // If the reading list item row is disabled, then hide both items.
+        if (!ReadingListFeatures.isReadingListMenuItemAsDedicatedRowEnabled()
+                || !mBookmarkBridgeSupplier.hasValue() || currentTab == null
+                || !ReadingListUtils.isReadingListSupported(currentTab.getUrl())
+                || mIsTypeSpecificBookmarkItemRowPresent) {
+            readingListMenuItemAdd.setVisible(false);
+            readingListMenuItemDelete.setVisible(false);
+            return;
+        }
+
+        mIsTypeSpecificBookmarkItemRowPresent = true;
+
+        boolean editEnabled = mBookmarkBridgeSupplier.get().isEditBookmarksEnabled();
+        readingListMenuItemAdd.setEnabled(editEnabled);
+        readingListMenuItemDelete.setEnabled(editEnabled);
+
+        boolean readingListItemExists = shouldHighlightReadingList(currentTab);
+        readingListMenuItemAdd.setVisible(!readingListItemExists);
+        readingListMenuItemDelete.setVisible(readingListItemExists);
+    }
+
+    /**
+     * Updates the price-tracking menu item visibility.
+     *
+     * @param startPriceTrackingMenuItem The menu item to start price tracking.
+     * @param stopPriceTrackingMenuItem The menu item to stop price tracking.
+     * @param currentTab Current tab being displayed.
+     */
+    protected void updatePriceTrackingMenuItemRow(@NonNull MenuItem startPriceTrackingMenuItem,
+            @NonNull MenuItem stopPriceTrackingMenuItem, @Nullable Tab currentTab) {
+        // If price tracking isn't enabled or the page isn't eligible, then hide both items.
+        if (!ShoppingFeatures.isShoppingListEnabled()
+                || !PowerBookmarkUtils.isPriceTrackingEligible(currentTab)
+                || mIsTypeSpecificBookmarkItemRowPresent) {
+            startPriceTrackingMenuItem.setVisible(false);
+            stopPriceTrackingMenuItem.setVisible(false);
+            return;
+        }
+
+        PowerBookmarkMeta meta = PowerBookmarkUtils.getBookmarkBookmarkMetaForTab(
+                mBookmarkBridgeSupplier.get(), currentTab);
+        if (meta != null && meta.getType() != PowerBookmarkType.SHOPPING) {
+            startPriceTrackingMenuItem.setVisible(false);
+            stopPriceTrackingMenuItem.setVisible(false);
+            return;
+        }
+
+        mIsTypeSpecificBookmarkItemRowPresent = true;
+
+        boolean editEnabled = mBookmarkBridgeSupplier.get().isEditBookmarksEnabled();
+        startPriceTrackingMenuItem.setEnabled(editEnabled);
+        stopPriceTrackingMenuItem.setEnabled(editEnabled);
+
+        boolean priceTrackingEnabled =
+                meta != null && meta.getShoppingSpecifics().getIsPriceTracked();
+        startPriceTrackingMenuItem.setVisible(!priceTrackingEnabled);
+        stopPriceTrackingMenuItem.setVisible(priceTrackingEnabled);
     }
 
     /**
@@ -1184,6 +1297,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         autoDarkMenuCheck.setChecked(isEnabled);
     }
 
+    protected void updateManagedByMenuItem(Menu menu, @Nullable Tab currentTab) {
+        MenuItem managedByMenuItem = menu.findItem(R.id.managed_by_menu_id);
+        boolean managedByMenuItemVisible =
+                currentTab != null && shouldShowManagedByMenuItem(currentTab);
+        managedByMenuItem.setVisible(managedByMenuItemVisible);
+        managedByMenuItem.setEnabled(managedByMenuItemVisible
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_MANAGEMENT_PAGE));
+    }
+
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public boolean isIncognitoEnabled() {
         return IncognitoUtils.isIncognitoModeEnabled();
@@ -1194,15 +1316,25 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         sItemBookmarkedForTesting = bookmarked;
     }
 
+    @VisibleForTesting
+    static void setPageInReadingListForTesting(Boolean highlight) {
+        sItemInReadingListForTesting = highlight;
+    }
+
+    void setBookmarkBridgeSupplierForTesting(
+            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier) {
+        mBookmarkBridgeSupplier = bookmarkBridgeSupplier;
+    }
+
     /**
      * @return Whether the menu item's icon need to be tinted to blue.
      */
     protected @ColorRes int getMenuItemIconColorRes(MenuItem menuItem) {
-        int itemId = menuItem.getItemId();
-        if (itemId == R.id.edit_bookmark_menu_id || itemId == R.id.add_bookmark_menu_id) {
-            return R.color.default_icon_color_blue;
+        final int itemId = menuItem.getItemId();
+        if (itemId == R.id.edit_bookmark_menu_id || itemId == R.id.delete_from_reading_list_menu_id
+                || itemId == R.id.disable_price_tracking_menu_id) {
+            return R.color.default_icon_color_accent1_tint_list;
         }
-
         return R.color.default_icon_color_secondary_tint_list;
     }
 }

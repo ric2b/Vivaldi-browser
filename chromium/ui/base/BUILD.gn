@@ -13,6 +13,7 @@ import("//build/config/ozone.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/util/branding.gni")
+import("//skia/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
@@ -74,15 +75,6 @@ source_set("hit_test") {
     "hit_test.cc",
     "hit_test.h",
   ]
-
-  if (use_x11 || use_ozone) {
-    sources += [
-      "hit_test_x11.cc",
-      "hit_test_x11.h",
-    ]
-  }
-
-  deps = [ "//base" ]
 }
 
 component("base") {
@@ -243,6 +235,10 @@ component("base") {
       "win/shell.h",
       "win/touch_input.cc",
       "win/touch_input.h",
+      "win/win_cursor.cc",
+      "win/win_cursor.h",
+      "win/win_cursor_factory.cc",
+      "win/win_cursor_factory.h",
       "win/window_event_target.cc",
       "win/window_event_target.h",
     ]
@@ -487,6 +483,8 @@ component("base") {
     sources += [
       "l10n/l10n_util_mac.h",
       "l10n/l10n_util_mac.mm",
+      "l10n/l10n_util_mac_bridge.h",
+      "l10n/l10n_util_mac_bridge.mm",
     ]
     public_deps += [ "//ui/events:event_constants" ]
     deps -= [
@@ -495,27 +493,16 @@ component("base") {
     ]
   }
 
-  if (toolkit_views) {
-    deps += [ "//ui/events" ]
+  if (is_win) {
+    public_deps += [
+      "//ui/base/cursor",
+      "//ui/base/cursor/mojom:cursor_type_shared",
+    ]
+    deps += [ "//ui/resources:ui_unscaled_resources_grd" ]
   }
 
-  if ((is_linux || is_chromeos) && (use_x11 || ozone_platform_x11)) {
-    public_deps += [ "//ui/base/x" ]
-
-    # X11 drag and drop wants to use common drag and drop types.
-    allow_circular_includes_from = [ "//ui/base/x" ]
-
-    if (!is_chromeos_ash) {
-      # These files/deps aren't used in ChromeOS.
-      sources += [
-        "dragdrop/os_exchange_data_provider_x11.cc",
-        "dragdrop/os_exchange_data_provider_x11.h",
-      ]
-      deps += [
-        "//ui/events/platform/x11",
-        "//ui/gfx/x",
-      ]
-    }
+  if (toolkit_views) {
+    deps += [ "//ui/events" ]
   }
 
   if (use_aura && (is_linux || is_chromeos)) {
@@ -634,6 +621,13 @@ component("features") {
     "ui_base_features.h",
   ]
 
+  if (is_chromeos_ash) {
+    sources += [
+      "shortcut_mapping_pref_delegate.cc",
+      "shortcut_mapping_pref_delegate.h",
+    ]
+  }
+
   deps = [
     ":buildflags",
     "//base",
@@ -731,6 +725,7 @@ static_library("test_support") {
       "accelerators/test_accelerator_target.h",
       "test/mock_base_window.cc",
       "test/mock_base_window.h",
+      "test/test_dialog_model_host.cc",
       "test/test_dialog_model_host.h",
       "test/ui_controls.h",
       "test/view_tree_validator.h",
@@ -882,6 +877,7 @@ test("ui_base_unittests") {
     "class_property_unittest.cc",
     "clipboard/file_info_unittest.cc",
     "ime/utf_offset_unittest.cc",
+    "interaction/element_identifier_unittest.cc",
     "interaction/element_tracker_unittest.cc",
     "interaction/interaction_sequence_unittest.cc",
     "l10n/l10n_util_unittest.cc",
@@ -1062,20 +1058,17 @@ test("ui_base_unittests") {
       ]
     }
     if ((is_linux || is_chromeos_lacros) && use_aura) {
-      sources += [ "dragdrop/os_exchange_data_provider_non_backed_unittest.cc" ]
-
-      if (use_x11 || use_ozone) {
-        sources += [ "ime/linux/input_method_auralinux_unittest.cc" ]
-        deps += [
-          "//ui/base/ime/init",
-          "//ui/base/ime/linux",
-        ]
-      }
-      if (!use_x11) {
-        sources += [ "ime/input_method_minimal_unittest.cc" ]
-      }
+      sources += [
+        "dragdrop/os_exchange_data_provider_non_backed_unittest.cc",
+        "ime/input_method_minimal_unittest.cc",
+        "ime/linux/input_method_auralinux_unittest.cc",
+      ]
+      deps += [
+        "//ui/base/ime/init",
+        "//ui/base/ime/linux",
+      ]
     }
-    if (use_x11) {
+    if (is_linux && !is_chromecast && !is_chromeos_lacros) {
       sources += [ "ime/linux/composition_text_util_pango_unittest.cc" ]
     }
     if (is_chromeos_ash || use_ozone) {
@@ -1115,6 +1108,11 @@ test("ui_base_unittests") {
       "dragdrop/os_exchange_data_win_unittest.cc",
       "view_prop_unittest.cc",
       "win/hwnd_subclass_unittest.cc",
+      "win/win_cursor_factory_unittest.cc",
+    ]
+    deps += [
+      "//ui/base/cursor",
+      "//ui/base/cursor/mojom:cursor_type_shared",
     ]
   }
 
@@ -1127,14 +1125,6 @@ test("ui_base_unittests") {
 
   if (use_pangocairo) {
     configs += [ "//build/config/linux/pangocairo" ]
-  }
-
-  if (use_x11) {
-    deps += [
-      "//ui/base/x:unittests",
-      "//ui/events/platform/x11",
-      "//ui/gfx/x",
-    ]
   }
 
   if (is_mac) {
@@ -1180,9 +1170,14 @@ test("ui_base_unittests") {
     data += [ "$root_out_dir/ui_unittests Framework.framework/" ]
   }
 
-  if (!is_ios) {
+  if (skia_support_skottie && !is_ios) {
     sources += [ "//ui/lottie/animation_unittest.cc" ]
-    deps += [ "//ui/lottie" ]
+    deps += [
+      "//cc:test_support",
+      "//cc/paint",
+      "//third_party/abseil-cpp:absl",
+      "//ui/lottie",
+    ]
   }
 }
 

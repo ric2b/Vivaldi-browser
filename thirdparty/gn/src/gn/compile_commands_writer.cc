@@ -57,12 +57,13 @@ struct CompileFlags {
 // NOTE: The Windows compiler cannot properly deduce the first parameter type
 // so pass it at each call site to ensure proper builds for this platform.
 template <typename T, typename Writer>
-std::string FlagsGetter(const Target* target,
+std::string FlagsGetter(RecursiveWriterConfig config,
+                        const Target* target,
                         const std::vector<T>& (ConfigValues::*getter)() const,
                         const Writer& writer) {
   std::string result;
   std::ostringstream out;
-  RecursiveTargetConfigToStream<T>(target, getter, writer, out);
+  RecursiveTargetConfigToStream<T>(config, target, getter, writer, out);
   base::EscapeJSONString(out.str(), false, &result);
   return result;
 };
@@ -74,54 +75,60 @@ void SetupCompileFlags(const Target* target,
   bool has_precompiled_headers =
       target->config_values().has_precompiled_headers();
 
-  flags.defines =
-      FlagsGetter<std::string>(target, &ConfigValues::defines,
-                               DefineWriter(ESCAPE_COMPILATION_DATABASE));
+  flags.defines = FlagsGetter<std::string>(
+      kRecursiveWriterSkipDuplicates, target, &ConfigValues::defines,
+      DefineWriter(ESCAPE_COMPILATION_DATABASE));
 
-  flags.framework_dirs =
-      FlagsGetter<SourceDir>(target, &ConfigValues::framework_dirs,
-                             FrameworkDirsWriter(path_output, "-F"));
+  flags.framework_dirs = FlagsGetter<SourceDir>(
+      kRecursiveWriterSkipDuplicates, target, &ConfigValues::framework_dirs,
+      FrameworkDirsWriter(path_output, "-F"));
 
   flags.frameworks = FlagsGetter<std::string>(
-      target, &ConfigValues::frameworks,
+      kRecursiveWriterSkipDuplicates, target, &ConfigValues::frameworks,
       FrameworksWriter(ESCAPE_COMPILATION_DATABASE, "-framework"));
   flags.frameworks += FlagsGetter<std::string>(
-      target, &ConfigValues::weak_frameworks,
+      kRecursiveWriterSkipDuplicates, target, &ConfigValues::weak_frameworks,
       FrameworksWriter(ESCAPE_COMPILATION_DATABASE, "-weak_framework"));
 
-  flags.includes = FlagsGetter<SourceDir>(target, &ConfigValues::include_dirs,
+  flags.includes = FlagsGetter<SourceDir>(kRecursiveWriterSkipDuplicates,
+                                          target, &ConfigValues::include_dirs,
                                           IncludeWriter(path_output));
 
   // Helper lambda to call WriteOneFlag() and return the resulting
   // escaped JSON string.
-  auto one_flag = [&](const Substitution* substitution,
+  auto one_flag = [&](RecursiveWriterConfig config,
+                      const Substitution* substitution,
                       bool has_precompiled_headers, const char* tool_name,
                       const std::vector<std::string>& (ConfigValues::*getter)()
                           const) -> std::string {
     std::string result;
     std::ostringstream out;
-    WriteOneFlag(target, substitution, has_precompiled_headers, tool_name,
-                 getter, opts, path_output, out, /*write_substitution=*/false);
+    WriteOneFlag(config, target, substitution, has_precompiled_headers,
+                 tool_name, getter, opts, path_output, out,
+                 /*write_substitution=*/false);
     base::EscapeJSONString(out.str(), false, &result);
     return result;
   };
 
-  flags.cflags = one_flag(&CSubstitutionCFlags, false, Tool::kToolNone,
-                          &ConfigValues::cflags);
+  flags.cflags = one_flag(kRecursiveWriterKeepDuplicates, &CSubstitutionCFlags,
+                          false, Tool::kToolNone, &ConfigValues::cflags);
 
-  flags.cflags_c = one_flag(&CSubstitutionCFlagsC, has_precompiled_headers,
+  flags.cflags_c = one_flag(kRecursiveWriterKeepDuplicates,
+                            &CSubstitutionCFlagsC, has_precompiled_headers,
                             CTool::kCToolCc, &ConfigValues::cflags_c);
 
-  flags.cflags_cc = one_flag(&CSubstitutionCFlagsCc, has_precompiled_headers,
+  flags.cflags_cc = one_flag(kRecursiveWriterKeepDuplicates,
+                             &CSubstitutionCFlagsCc, has_precompiled_headers,
                              CTool::kCToolCxx, &ConfigValues::cflags_cc);
 
-  flags.cflags_objc =
-      one_flag(&CSubstitutionCFlagsObjC, has_precompiled_headers,
-               CTool::kCToolObjC, &ConfigValues::cflags_objc);
+  flags.cflags_objc = one_flag(
+      kRecursiveWriterKeepDuplicates, &CSubstitutionCFlagsObjC,
+      has_precompiled_headers, CTool::kCToolObjC, &ConfigValues::cflags_objc);
 
   flags.cflags_objcc =
-      one_flag(&CSubstitutionCFlagsObjCc, has_precompiled_headers,
-               CTool::kCToolObjCxx, &ConfigValues::cflags_objcc);
+      one_flag(kRecursiveWriterKeepDuplicates, &CSubstitutionCFlagsObjCc,
+               has_precompiled_headers, CTool::kCToolObjCxx,
+               &ConfigValues::cflags_objcc);
 }
 
 void WriteFile(const SourceFile& source,
@@ -245,7 +252,7 @@ void OutputJSON(const BuildSettings* build_settings,
     for (const auto& source : target->sources()) {
       // If this source is not a C/C++/ObjC/ObjC++ source (not header) file,
       // continue as it does not belong in the compilation database.
-      SourceFile::Type source_type = source.type();
+      const SourceFile::Type source_type = source.GetType();
       if (source_type != SourceFile::SOURCE_CPP &&
           source_type != SourceFile::SOURCE_C &&
           source_type != SourceFile::SOURCE_M &&
@@ -331,7 +338,7 @@ std::vector<const Target*> CompileCommandsWriter::FilterTargets(
     const std::set<std::string>& target_filters_set) {
   std::vector<const Target*> preserved_targets;
 
-  std::set<const Target*> visited;
+  TargetSet visited;
   for (auto& target : all_targets) {
     if (target_filters_set.count(target->label().name())) {
       VisitDeps(target, &visited);
@@ -342,7 +349,7 @@ std::vector<const Target*> CompileCommandsWriter::FilterTargets(
   // Preserve the original ordering of all_targets
   // to allow easier debugging and testing.
   for (auto& target : all_targets) {
-    if (visited.count(target)) {
+    if (visited.contains(target)) {
       preserved_targets.push_back(target);
     }
   }
@@ -350,9 +357,8 @@ std::vector<const Target*> CompileCommandsWriter::FilterTargets(
 }
 
 void CompileCommandsWriter::VisitDeps(const Target* target,
-                                      std::set<const Target*>* visited) {
-  if (!visited->count(target)) {
-    visited->insert(target);
+                                      TargetSet* visited) {
+  if (visited->add(target)) {
     for (const auto& pair : target->GetDeps(Target::DEPS_ALL)) {
       VisitDeps(pair.ptr, visited);
     }

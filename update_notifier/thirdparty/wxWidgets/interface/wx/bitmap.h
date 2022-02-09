@@ -172,7 +172,7 @@ public:
     class (either wxNativePixelData for RGB bitmaps or wxAlphaPixelData
     for bitmaps with an additionally alpha channel).
 
-    Note that many wxBitmap functions take a @e type parameter, which is a 
+    Note that many wxBitmap functions take a @e type parameter, which is a
     value of the ::wxBitmapType enumeration.
     The validity of those values depends however on the platform where your program
     is running and from the wxWidgets configuration.
@@ -183,9 +183,9 @@ public:
     - wxX11 supports XPM files, XPM data, XBM data;
 
     In addition, wxBitmap can load and save all formats that wxImage can; see wxImage
-    for more info. Of course, you must have loaded the wxImage handlers 
+    for more info. Of course, you must have loaded the wxImage handlers
     (see ::wxInitAllImageHandlers() and wxImage::AddHandler).
-    Note that all available wxBitmapHandlers for a given wxWidgets port are 
+    Note that all available wxBitmapHandlers for a given wxWidgets port are
     automatically loaded at startup so you won't need to use wxBitmap::AddHandler.
 
     More on the difference between wxImage and wxBitmap: wxImage is just a
@@ -291,9 +291,16 @@ public:
         the current colour setting.
 
         A depth of 32 including an alpha channel is supported under MSW, Mac and GTK+.
+
+        @param width
+            The width of the bitmap in pixels, must be strictly positive.
+        @param height
+            The height of the bitmap in pixels, must be strictly positive.
+        @param depth
+            The number of bits used to represent each bitmap pixel.
     */
     wxBitmap(int width, int height, int depth = wxBITMAP_SCREEN_DEPTH);
-    
+
     /**
         @overload
     */
@@ -347,6 +354,18 @@ public:
     wxBitmap(const wxImage& img, int depth = wxBITMAP_SCREEN_DEPTH);
 
     /**
+        Creates bitmap corresponding to the given cursor.
+
+        This can be useful to display a cursor as it cannot be drawn directly
+        on a window.
+
+        @param cursor A valid wxCursor.
+
+        @since 3.1.0
+    */
+    explicit wxBitmap(const wxCursor& cursor);
+
+    /**
         Destructor.
         See @ref overview_refcount_destruct for more info.
 
@@ -364,12 +383,12 @@ public:
         @param handler
             A new bitmap format handler object. There is usually only one instance
             of a given handler class in an application session.
-            
+
         Note that unlike wxImage::AddHandler, there's no documented list of
         the wxBitmapHandlers available in wxWidgets.
-        This is because they are platform-specific and most important, they are 
+        This is because they are platform-specific and most important, they are
         all automatically loaded at startup.
-        
+
         If you want to be sure that wxBitmap can load a certain type of image,
         you'd better use wxImage::AddHandler.
 
@@ -398,15 +417,56 @@ public:
     /**
         Creates a fresh bitmap.
         If the final argument is omitted, the display depth of the screen is used.
-        
+
+        @param width
+            The width of the bitmap in pixels, must be strictly positive.
+        @param height
+            The height of the bitmap in pixels, must be strictly positive.
+        @param depth
+            The number of bits used to represent each bitmap pixel.
+
         @return @true if the creation was successful.
     */
     virtual bool Create(int width, int height, int depth = wxBITMAP_SCREEN_DEPTH);
-    
+
     /**
         @overload
     */
     virtual bool Create(const wxSize& sz, int depth = wxBITMAP_SCREEN_DEPTH);
+
+    /**
+        Create a bitmap compatible with the given DC, inheriting its magnification factor
+
+        @param width
+            The width of the bitmap in pixels, must be strictly positive.
+        @param height
+            The height of the bitmap in pixels, must be strictly positive.
+        @param dc
+            DC from which the scaling factor is inherited
+
+        @return @true if the creation was successful.
+
+        @since 3.1.0
+    */
+    bool Create(int width, int height, const wxDC& dc);
+
+    /**
+        Create a bitmap with a scale factor, width and height are multiplied with that factor
+
+        @param width
+            The width of the bitmap in pixels, must be strictly positive.
+        @param height
+            The height of the bitmap in pixels, must be strictly positive.
+        @param depth
+            The number of bits used to represent each bitmap pixel.
+        @param logicalScale
+            Scale factor used by the bitmap
+
+        @return @true if the creation was successful.
+
+        @since 3.1.0
+    */
+    bool CreateScaled(int width, int height, int depth, double logicalScale);
 
     /*
         Creates a bitmap from the given data, which can be of arbitrary type.
@@ -602,7 +662,7 @@ public:
         @endcode
         in your application startup code.
 
-        However under OS X this function uses native image loading and so
+        However under macOS this function uses native image loading and so
         doesn't require wxWidgets PNG support.
 
         @since 2.9.5
@@ -644,17 +704,21 @@ public:
                           const wxPalette* palette = NULL) const;
 
     /**
-        Sets the depth member (does not affect the bitmap data).
+         @deprecated This function is deprecated since version 3.1.2, dimensions
+            and depth can only be set at construction time.
 
-        @todo since these functions do not affect the bitmap data,
-              why they exist??
+        Sets the depth member (does not affect the bitmap data).
 
         @param depth
             Bitmap depth.
+
     */
     virtual void SetDepth(int depth);
 
     /**
+        @deprecated This function is deprecated since version 3.1.2, dimensions
+            and depth can only be set at construction time.
+
         Sets the height member (does not affect the bitmap data).
 
         @param height
@@ -666,6 +730,10 @@ public:
         Sets the mask for this bitmap.
 
         @remarks The bitmap object owns the mask once this has been called.
+
+        @note A mask can be set also for bitmap with an alpha channel but
+        doing so under wxMSW is not recommended because performance of drawing
+        such bitmap is not very good.
 
         @see GetMask(), wxMask
     */
@@ -682,6 +750,9 @@ public:
     virtual void SetPalette(const wxPalette& palette);
 
     /**
+        @deprecated This function is deprecated since version 3.1.2, dimensions
+            and depth can only be set at construction time.
+
         Sets the width member (does not affect the bitmap data).
 
         @param width
@@ -706,6 +777,10 @@ wxBitmap wxNullBitmap;
 
     When associated with a bitmap and drawn in a device context, the unmasked
     area of the bitmap will be drawn, and the masked area will not be drawn.
+
+    @note A mask can be associated also with a bitmap with an alpha channel
+    but drawing such bitmaps under wxMSW may be slow so using them should be
+    avoided if drawing performance is an important factor.
 
     @library{wxcore}
     @category{gdi}

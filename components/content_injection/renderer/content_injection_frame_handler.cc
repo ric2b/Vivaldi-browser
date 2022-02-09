@@ -257,7 +257,8 @@ void FrameHandler::InjectJS(const std::string& content, int world_id) {
 
   render_frame()->GetWebFrame()->RequestExecuteScript(
       world_id, sources, false, blink::WebLocalFrame::kSynchronous, nullptr,
-      blink::BackForwardCacheAware::kPossiblyDisallow);
+      blink::BackForwardCacheAware::kPossiblyDisallow,
+      blink::WebLocalFrame::PromiseBehavior::kDontWait);
 }
 
 void FrameHandler::InjectPendingScripts() {

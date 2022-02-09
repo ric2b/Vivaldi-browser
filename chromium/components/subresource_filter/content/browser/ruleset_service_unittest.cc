@@ -19,12 +19,12 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
@@ -71,7 +71,7 @@ class ScopedFunctionOverride {
   ~ScopedFunctionOverride() { std::swap(*target_, replacement_); }
 
  private:
-  Fun* target_;
+  raw_ptr<Fun> target_;
   Fun replacement_;
 };
 
@@ -146,7 +146,7 @@ class MockRulesetPublisherImpl : public RulesetPublisher {
     return RulesetFilePtr(
         new base::File(file_path, base::File::FLAG_OPEN |
                                       base::File::FLAG_READ |
-                                      base::File::FLAG_SHARE_DELETE),
+                                      base::File::FLAG_WIN_SHARE_DELETE),
         base::OnTaskRunnerDeleter(base::SequencedTaskRunnerHandle::Get()));
   }
 

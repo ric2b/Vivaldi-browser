@@ -12,7 +12,6 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
@@ -47,8 +46,6 @@
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
-#include "chrome/renderer/lite_video/lite_video_hint_agent.h"
-#include "chrome/renderer/lite_video/lite_video_util.h"
 #include "chrome/renderer/loadtimes_extension_bindings.h"
 #include "chrome/renderer/media/flash_embed_rewrite.h"
 #include "chrome/renderer/media/webrtc_logging_agent_impl.h"
@@ -58,7 +55,6 @@
 #include "chrome/renderer/plugins/non_loadable_plugin_placeholder.h"
 #include "chrome/renderer/plugins/pdf_plugin_placeholder.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
-#include "chrome/renderer/previews/resource_loading_hints_agent.h"
 #include "chrome/renderer/subresource_redirect/login_robots_decider_agent.h"
 #include "chrome/renderer/subresource_redirect/public_image_hints_decider_agent.h"
 #include "chrome/renderer/subresource_redirect/subresource_redirect_params.h"
@@ -71,6 +67,7 @@
 #include "components/autofill/content/renderer/autofill_assistant_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/password_generation_agent.h"
+#include "components/autofill_assistant/content/renderer/autofill_assistant_agent.h"
 #include "components/content_capture/common/content_capture_features.h"
 #include "components/content_capture/renderer/content_capture_sender.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -87,7 +84,7 @@
 #include "components/error_page/common/localized_error.h"
 #include "components/feed/buildflags.h"
 #include "components/grit/components_scaled_resources.h"
-#include "components/history_clusters/core/memories_features.h"
+#include "components/history_clusters/core/features.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/no_state_prefetch/common/prerender_url_loader_throttle.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_client.h"
@@ -178,8 +175,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "base/win/core_winrt_util.h"
-#include "base/win/scoped_hstring.h"
+#include "base/win/windows_version.h"
 #endif
 
 #if BUILDFLAG(ENABLE_FEED_V2)
@@ -217,7 +213,6 @@
 #endif  // BUILDFLAG(ENABLE_PDF)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-#include "chrome/common/plugin_utils.h"
 #include "chrome/renderer/plugins/chrome_plugin_placeholder.h"
 #include "ppapi/shared_impl/ppapi_switches.h"  // nogncheck crbug.com/1125897
 #else
@@ -257,7 +252,6 @@
 #include "renderer/vivaldi_render_frame_blink_proxy_impl.h"
 
 using autofill::AutofillAgent;
-using autofill::AutofillAssistantAgent;
 using autofill::PasswordAutofillAgent;
 using autofill::PasswordGenerationAgent;
 using base::ASCIIToUTF16;
@@ -339,9 +333,8 @@ std::unique_ptr<base::Unwinder> CreateV8Unwinder(v8::Isolate* isolate) {
 // Mojo implementation (e.g. WebView).
 void MaybeEnableWebShare() {
 #if defined(OS_WIN)
-  if (!base::win::ResolveCoreWinRTDelayload() ||
-      !base::win::ScopedHString::ResolveCoreWinRTStringDelayload()) {
-    // Web Share API is not available for Windows 7.
+  if (base::win::GetVersion() < base::win::Version::WIN10) {
+    // Web Share API is not functional for non-UWP apps prior to Windows 10.
     return;
   }
 #endif
@@ -397,10 +390,19 @@ void ChromeContentRendererClient::RenderThreadStarted() {
       base::BindRepeating(&CreateV8Unwinder,
                           base::Unretained(v8::Isolate::GetCurrent())));
 
+  const bool is_extension = IsStandaloneContentExtensionProcess();
+
   thread->SetRendererProcessType(
-      IsStandaloneContentExtensionProcess()
+      is_extension
           ? blink::scheduler::WebRendererProcessType::kExtensionRenderer
           : blink::scheduler::WebRendererProcessType::kRenderer);
+
+  if (is_extension) {
+    // The process name was set to "Renderer" in RendererMain(). Update it to
+    // "Extension Renderer" to highlight that it's hosting an extension.
+    base::trace_event::TraceLog::GetInstance()->set_process_name(
+        "Extension Renderer");
+  }
 
 #if defined(OS_WIN)
   mojo::PendingRemote<mojom::ModuleEventSink> module_event_sink;
@@ -590,14 +592,13 @@ void ChromeContentRendererClient::RenderFrameCreated(
     new webapps::WebPageMetadataAgent(render_frame);
 
 #if defined(OS_ANDROID)
-  const base::Feature& kSearchResultExtractorFeature =
-      features::kContinuousSearch;
+  const bool search_result_extractor_enabled =
+      base::FeatureList::IsEnabled(features::kContinuousSearch);
 #else
-  const base::Feature& kSearchResultExtractorFeature =
-      history_clusters::kJourneys;
+  const bool search_result_extractor_enabled =
+      history_clusters::IsJourneysEnabled(RenderThread::Get()->GetLocale());
 #endif
-  if (render_frame->IsMainFrame() &&
-      base::FeatureList::IsEnabled(kSearchResultExtractorFeature)) {
+  if (render_frame->IsMainFrame() && search_result_extractor_enabled) {
     continuous_search::SearchResultExtractorImpl::Create(render_frame);
   }
 
@@ -642,11 +643,16 @@ void ChromeContentRendererClient::RenderFrameCreated(
   PasswordGenerationAgent* password_generation_agent =
       new PasswordGenerationAgent(render_frame, password_autofill_agent,
                                   associated_interfaces);
-  AutofillAssistantAgent* autofill_assistant_agent =
-      new AutofillAssistantAgent(render_frame);
+  autofill::AutofillAssistantAgent* autofill_assistant_agent =
+      new autofill::AutofillAssistantAgent(render_frame);
   new AutofillAgent(render_frame, password_autofill_agent,
                     password_generation_agent, autofill_assistant_agent,
                     associated_interfaces);
+
+#if defined(OS_ANDROID)
+  new autofill_assistant::AutofillAssistantAgent(render_frame,
+                                                 associated_interfaces);
+#endif
 
   if (content_capture::features::IsContentCaptureEnabled()) {
     new content_capture::ContentCaptureSender(render_frame,
@@ -677,11 +683,6 @@ void ChromeContentRendererClient::RenderFrameCreated(
             std::move(ad_resource_tracker));
     subresource_filter_agent->Initialize();
   }
-
-  if (lite_video::IsLiteVideoEnabled())
-    new lite_video::LiteVideoHintAgent(render_frame);
-
-  new previews::ResourceLoadingHintsAgent(associated_interfaces, render_frame);
 
   if (subresource_redirect::ShouldEnablePublicImageHintsBasedCompression()) {
     new subresource_redirect::PublicImageHintsDeciderAgent(
@@ -920,16 +921,6 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
           render_frame, original_params);
     }
   } else {
-    // Flash is deprecated in M87 and removed in M88+. If a plugin uses flash,
-    // its status will be |PluginStatus::kNotFound|. If for some reason the
-    // status is different, we should not treat it as JavaScript plugin but
-    // return a deprecated message.
-    if (!ShouldUseJavaScriptSettingForPlugin(info)) {
-      return NonLoadablePluginPlaceholder::CreateFlashDeprecatedPlaceholder(
-                 render_frame, original_params)
-          ->plugin();
-    }
-
     // TODO(bauerb): This should be in content/.
     WebPluginParams params(original_params);
     for (const auto& mime_type : info.mime_types) {
@@ -1594,6 +1585,11 @@ void ChromeContentRendererClient::
 
   if (base::FeatureList::IsEnabled(subresource_filter::kAdTagging))
     blink::WebRuntimeFeatures::EnableAdTagging(true);
+
+  if (blink::features::IsPrerender2Enabled() &&
+      base::FeatureList::IsEnabled(features::kOmniboxTriggerForPrerender2)) {
+    blink::WebRuntimeFeatures::EnablePrerender2RelatedFeatures(true);
+  }
 }
 
 bool ChromeContentRendererClient::AllowScriptExtensionForServiceWorker(
@@ -1663,11 +1659,6 @@ void ChromeContentRendererClient::WillDestroyServiceWorkerContextOnWorkerThread(
       ->WillDestroyServiceWorkerContextOnWorkerThread(
           context, service_worker_version_id, service_worker_scope, script_url);
 #endif
-}
-
-bool ChromeContentRendererClient::IsExcludedHeaderForServiceWorkerFetchEvent(
-    const std::string& header_name) {
-  return variations::IsVariationsHeader(header_name);
 }
 
 // If we're in an extension, there is no need disabling multiple routes as

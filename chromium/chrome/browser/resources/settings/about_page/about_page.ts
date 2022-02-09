@@ -29,12 +29,15 @@ import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/poly
 import {loadTimeData} from '../i18n_setup.js';
 import {LifetimeBrowserProxyImpl} from '../lifetime_browser_proxy.js';
 
-import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, PromoteUpdaterStatus, UpdateStatus, UpdateStatusChangedEvent} from './about_page_browser_proxy.js';
+import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, UpdateStatus, UpdateStatusChangedEvent} from './about_page_browser_proxy.js';
+
+// <if expr="_google_chrome and is_macosx">
+import {PromoteUpdaterStatus} from './about_page_browser_proxy.js';
+// </if>
 
 const SettingsAboutPageElementBase =
     WebUIListenerMixin(I18nMixin(PolymerElement));
 
-/** @polymer */
 export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   static get is() {
     return 'settings-about-page';
@@ -46,7 +49,6 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
 
   static get properties() {
     return {
-      /** @private {?UpdateStatusChangedEvent} */
       currentUpdateStatusEvent_: {
         type: Object,
         value: {
@@ -60,7 +62,6 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
       /**
        * Whether the browser/ChromeOS is managed by their organization
        * through enterprise policies.
-       * @private
        */
       isManaged_: {
         type: Boolean,
@@ -70,12 +71,10 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
       },
 
       // <if expr="_google_chrome and is_macosx">
-      /** @private {!PromoteUpdaterStatus} */
       promoteUpdaterStatus_: Object,
       // </if>
 
       // <if expr="not chromeos">
-      /** @private {!{obsolete: boolean, endOfLine: boolean}} */
       obsoleteSystemInfo_: {
         type: Object,
         value() {
@@ -86,16 +85,13 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
         },
       },
 
-      /** @private */
       showUpdateStatus_: {
         type: Boolean,
         value: false,
       },
 
-      /** @private */
       showButtonContainer_: Boolean,
 
-      /** @private */
       showRelaunch_: {
         type: Boolean,
         value: false,
@@ -132,7 +128,6 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   private aboutBrowserProxy_: AboutPageBrowserProxy =
       AboutPageBrowserProxyImpl.getInstance();
 
-  /** @override */
   connectedCallback() {
     super.connectedCallback();
 
@@ -143,11 +138,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
     // </if>
   }
 
-  /**
-   * @return {string}
-   * @private
-   */
-  getPromoteUpdaterClass_() {
+  private getPromoteUpdaterClass_(): string {
     // <if expr="_google_chrome and is_macosx">
     if (this.promoteUpdaterStatus_.disabled) {
       return 'cr-secondary-text';
@@ -158,8 +149,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
 
   // <if expr="not chromeos">
-  /** @private */
-  startListening_() {
+  private startListening_() {
     this.addWebUIListener(
         'update-status-changed', this.onUpdateStatusChanged_.bind(this));
     // <if expr="_google_chrome and is_macosx">
@@ -320,11 +310,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
 
   // <if expr="chromeos">
-  /**
-   * @return {string}
-   * @private
-   */
-  getUpdateOsSettingsLink_() {
+  private getUpdateOsSettingsLink_(): string {
     // Note: This string contains raw HTML and thus requires i18nAdvanced().
     // Since the i18n template syntax (e.g., $i18n{}) does not include an
     // "advanced" version, it's not possible to inline this link directly in the
@@ -333,8 +319,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
   // </if>
 
-  /** @private */
-  onProductLogoTap_() {
+  private onProductLogoTap_() {
     this.$['product-logo'].animate(
         {
           transform: ['none', 'rotate(-10turn)'],
@@ -346,8 +331,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
 
   // <if expr="_google_chrome">
-  /** @private */
-  onReportIssueTap_() {
+  private onReportIssueTap_() {
     this.aboutBrowserProxy_.openFeedbackDialog();
   }
   // </if>
@@ -360,6 +344,12 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
     return this.showUpdateStatus_;
   }
   // </if>
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-about-page': SettingsAboutPageElement;
+  }
 }
 
 customElements.define(SettingsAboutPageElement.is, SettingsAboutPageElement);

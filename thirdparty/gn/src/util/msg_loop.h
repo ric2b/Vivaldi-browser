@@ -5,8 +5,6 @@
 #ifndef UTIL_RUN_LOOP_H_
 #define UTIL_RUN_LOOP_H_
 
-#include "base/macros.h"
-
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -41,7 +39,8 @@ class MsgLoop {
   std::condition_variable notifier_;
   bool should_quit_ = false;
 
-  DISALLOW_COPY_AND_ASSIGN(MsgLoop);
+  MsgLoop(const MsgLoop&) = delete;
+  MsgLoop& operator=(const MsgLoop&) = delete;
 };
 
 #endif  // UTIL_RUN_LOOP_H_

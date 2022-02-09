@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros_local.h"
 #include "base/rand_util.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -99,7 +99,7 @@ void NetworkQualitiesPrefsManager::ClearPrefs() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   LOCAL_HISTOGRAM_COUNTS_100("NQE.PrefsSizeOnClearing", prefs_->DictSize());
-  prefs_->Clear();
+  prefs_->DictClear();
   DCHECK_EQ(0u, prefs_->DictSize());
   pref_delegate_->SetDictionaryValue(*prefs_);
 }

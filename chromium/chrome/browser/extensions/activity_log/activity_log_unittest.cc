@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
@@ -223,7 +224,6 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
   static void RetrieveActions_ArgUrlExtraction(
       std::unique_ptr<std::vector<scoped_refptr<Action>>> i) {
     const base::DictionaryValue* other = NULL;
-    int dom_verb = -1;
 
     ASSERT_EQ(4U, i->size());
     scoped_refptr<Action> action = i->at(0);
@@ -236,8 +236,8 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
     // so just test once.
     other = action->other();
     ASSERT_TRUE(other);
-    ASSERT_TRUE(other->GetInteger(activity_log_constants::kActionDomVerb,
-                                  &dom_verb));
+    absl::optional<int> dom_verb =
+        other->FindIntKey(activity_log_constants::kActionDomVerb);
     ASSERT_EQ(DomActionType::XHR, dom_verb);
 
     action = i->at(1);
@@ -263,7 +263,6 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
       std::unique_ptr<std::vector<scoped_refptr<Action>>> actions) {
     size_t api_calls_size = base::size(kUrlApiCalls);
     const base::DictionaryValue* other = NULL;
-    int dom_verb = -1;
 
     ASSERT_EQ(api_calls_size, actions->size());
 
@@ -277,13 +276,13 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
       ASSERT_EQ("http://www.google.co.uk/", action->arg_url().spec());
       other = action->other();
       ASSERT_TRUE(other);
-      ASSERT_TRUE(
-          other->GetInteger(activity_log_constants::kActionDomVerb, &dom_verb));
+      absl::optional<int> dom_verb =
+          other->FindIntKey(activity_log_constants::kActionDomVerb);
       ASSERT_EQ(DomActionType::SETTER, dom_verb);
     }
   }
 
-  ExtensionService* extension_service_;
+  raw_ptr<ExtensionService> extension_service_;
 };
 
 TEST_F(ActivityLogTest, Construct) {
@@ -333,7 +332,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
 
   const gfx::Size kSize(640, 480);
   std::unique_ptr<prerender::NoStatePrefetchHandle> no_state_prefetch_handle(
-      no_state_prefetch_manager->AddPrerenderFromOmnibox(
+      no_state_prefetch_manager->StartPrefetchingFromOmnibox(
           url,
           web_contents()->GetController().GetDefaultSessionStorageNamespace(),
           kSize));
@@ -342,7 +341,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
       no_state_prefetch_manager->GetAllNoStatePrefetchingContentsForTesting();
   ASSERT_EQ(1U, contentses.size());
   content::WebContents *contents = contentses[0];
-  ASSERT_TRUE(no_state_prefetch_manager->IsWebContentsPrerendering(contents));
+  ASSERT_TRUE(no_state_prefetch_manager->IsWebContentsPrefetching(contents));
 
   activity_log->OnScriptsExecuted(contents, {{extension->id(), {"script"}}},
                                   url);

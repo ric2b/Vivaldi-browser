@@ -223,6 +223,8 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     profiles.push_back(bookmarks_profile);
   }
 
+  viv_importer::DetectThunderbirdProfiles(&profiles);
+
   importer::SourceProfile opera_bookmarks_file;
   opera_bookmarks_file.importer_name =
       l10n_util::GetStringUTF16(IDS_OPERA_IMPORT_FROM_BOOKMARKS_HTML_FILE);

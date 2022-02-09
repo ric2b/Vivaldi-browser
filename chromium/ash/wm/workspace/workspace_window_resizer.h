@@ -50,6 +50,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
 
  private:
   friend class WorkspaceWindowResizerTest;
+  FRIEND_TEST_ALL_PREFIXES(HapticsUtilTest, HapticFeedbackForNormalWindowSnap);
 
   WorkspaceWindowResizer(WindowState* window_state,
                          const std::vector<aura::Window*>& attached_windows);
@@ -149,10 +150,9 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   SnapType GetSnapType(const display::Display& display,
                        const gfx::PointF& location_in_screen) const;
 
-  // Returns true if |bounds_in_parent| are valid bounds for snapped state type
-  // |snapped_type|.
-  bool AreBoundsValidSnappedBounds(chromeos::WindowStateType snapped_type,
-                                   const gfx::Rect& bounds_in_parent) const;
+  // Returns true if |window| bounds are valid bounds for a snap state and snap
+  // ratio in |window_state_|.
+  bool AreBoundsValidSnappedBounds(aura::Window* window) const;
 
   // Sets |window|'s state type to |new_state_type|. Called after the drag has
   // been completed for fling/swipe gestures.
@@ -163,10 +163,6 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   void StartDragForAttachedWindows();
   void EndDragForAttachedWindows(bool revert_drag);
 
-  // Updates phantom window to maximize phantom window and hides maximize cue
-  // widget.
-  void ShowMaximizePhantom();
-
   // Gets the display associated with GetTarget() if touch dragging. Gets the
   // display associated with the cursor if mouse dragging.
   display::Display GetDisplay() const;
@@ -174,10 +170,10 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   WindowState* window_state() { return window_state_; }
   const WindowState* window_state() const { return window_state_; }
 
-  const std::vector<aura::Window*> attached_windows_;
-
   // Returns the currently used instance for test.
   static WorkspaceWindowResizer* GetInstanceForTest();
+
+  const std::vector<aura::Window*> attached_windows_;
 
   bool did_lock_cursor_ = false;
 
@@ -212,7 +208,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   // Timer for dwell time countdown.
   base::OneShotTimer dwell_countdown_timer_;
   // The location for drag maximize in screen.
-  gfx::PointF dwell_location_in_screen_;
+  absl::optional<gfx::PointF> dwell_location_in_screen_;
 
   // The mouse location passed to Drag().
   gfx::PointF last_mouse_location_;

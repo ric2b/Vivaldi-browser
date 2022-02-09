@@ -281,6 +281,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
 #if defined(OS_ANDROID)
   DestroyJavaObject();
   std::swap(java_match_, match.java_match_);
+  std::swap(matching_java_tab_, match.matching_java_tab_);
   UpdateJavaObjectNativeRef();
 #endif
   return *this;
@@ -720,7 +721,14 @@ bool AutocompleteMatch::IsSearchHistoryType(Type type) {
 bool AutocompleteMatch::IsActionCompatibleType(Type type) {
   // Note: There is a PEDAL type, but it is deprecated because Pedals always
   // attach to matches of other types instead of creating dedicated matches.
-  return type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY;
+  return type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY &&
+         // Attaching to Tail Suggest types looks weird, and is actually
+         // technically wrong because the Pedals annotator (and history clusters
+         // annotator) both use match.contents. If we do want to turn on Actions
+         // for tail suggest in the future, we should switch to using
+         // match.fill_into_edit or maybe page title for URL matches, and come
+         // up with a UI design for the button in the tail suggest layout.
+         type != AutocompleteMatchType::SEARCH_SUGGEST_TAIL;
 }
 
 // static
@@ -817,8 +825,7 @@ GURL AutocompleteMatch::GURLToStrippedGURL(
       (input.terms_prefixed_by_http_or_https().empty() ||
        !WordMatchesURLContent(
            input.terms_prefixed_by_http_or_https(), url))) {
-    replacements.SetScheme(url::kHttpScheme,
-                           url::Component(0, strlen(url::kHttpScheme)));
+    replacements.SetSchemeStr(url::kHttpScheme);
     needs_replacement = true;
   }
 

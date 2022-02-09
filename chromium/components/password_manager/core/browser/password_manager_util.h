@@ -159,10 +159,23 @@ password_manager::PasswordForm MakeNormalizedBlocklistedForm(
     password_manager::PasswordFormDigest digest);
 
 // Helper which checks if biometric authentication is available.
-bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator);
+bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator,
+                         device_reauth::BiometricAuthRequester requester);
 
 // Strips any authentication data, as well as query and ref portions of URL.
 GURL StripAuthAndParams(const GURL& gurl);
+
+// Helper which checks for scheme in the |url|. If not present, adds "https://"
+// by default. For ip-addresses, scheme "http://" is used.
+GURL ConstructGURLWithScheme(const std::string& url);
+
+// Returns whether |url| has valid format and either an HTTP or HTTPS scheme.
+bool IsValidPasswordURL(const GURL& url);
+
+// TODO(crbug.com/1261752): Deduplicate GetSignonRealm implementations.
+// Returns the value of PasswordForm::signon_realm for an HTML form with the
+// origin |url|.
+std::string GetSignonRealm(const GURL& url);
 
 }  // namespace password_manager_util
 

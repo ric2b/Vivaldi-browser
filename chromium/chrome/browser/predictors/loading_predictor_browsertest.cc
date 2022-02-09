@@ -13,11 +13,11 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -135,7 +135,7 @@ class PredictorInitializer : public TestObserver {
   void OnPredictorInitialized() override { run_loop_.Quit(); }
 
  private:
-  ResourcePrefetchPredictor* predictor_;
+  raw_ptr<ResourcePrefetchPredictor> predictor_;
   base::RunLoop run_loop_;
 };
 
@@ -149,7 +149,7 @@ class TestPreconnectManagerObserver : public PreconnectManager::Observer {
   void OnPreconnectUrl(const GURL& url,
                        int num_sockets,
                        bool allow_credentials) override {
-    preconnect_url_attempts_.insert(url.GetOrigin());
+    preconnect_url_attempts_.insert(url.DeprecatedGetOriginAsURL());
   }
 
   void OnPreresolveFinished(
@@ -197,7 +197,7 @@ class TestPreconnectManagerObserver : public PreconnectManager::Observer {
   }
 
   bool HasOriginAttemptedToPreconnect(const GURL& origin) {
-    DCHECK_EQ(origin, origin.GetOrigin());
+    DCHECK_EQ(origin, origin.DeprecatedGetOriginAsURL());
     return base::Contains(preconnect_url_attempts_, origin);
   }
 
@@ -300,7 +300,7 @@ class TestPreconnectManagerObserver : public PreconnectManager::Observer {
   }
 
   WaitEvent wait_event_ = WaitEvent::kNone;
-  base::RunLoop* run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> run_loop_ = nullptr;
 
   ResolveHostRequestInfo waiting_on_dns_;
   std::set<ResolveHostRequestInfo> successful_dns_lookups_;
@@ -531,7 +531,7 @@ class LoadingPredictorBrowserTest : public InProcessBrowserTest {
   net::EmbeddedTestServer preconnecting_test_server_;
 
  private:
-  LoadingPredictor* loading_predictor_ = nullptr;
+  raw_ptr<LoadingPredictor> loading_predictor_ = nullptr;
   std::unique_ptr<net::test_server::ConnectionTracker> connection_tracker_;
   std::unique_ptr<net::test_server::ConnectionTracker>
       preconnecting_server_connection_tracker_;
@@ -631,7 +631,7 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest,
   EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
       "", network_isolation_key));
   EXPECT_FALSE(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
-      url.GetOrigin()));
+      url.DeprecatedGetOriginAsURL()));
   EXPECT_FALSE(
       preconnect_manager_observer()->HasOriginAttemptedToPreconnect(GURL()));
 }
@@ -671,7 +671,7 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest,
           browser()->profile());
 
   std::unique_ptr<prerender::NoStatePrefetchHandle> handle =
-      no_state_prefetch_manager->AddPrerenderFromNavigationPredictor(
+      no_state_prefetch_manager->StartPrefetchingFromNavigationPredictor(
           url,
           browser()
               ->tab_strip_model()
@@ -693,7 +693,7 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest,
   EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
       "", network_isolation_key));
   EXPECT_FALSE(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
-      url.GetOrigin()));
+      url.DeprecatedGetOriginAsURL()));
   EXPECT_FALSE(
       preconnect_manager_observer()->HasOriginAttemptedToPreconnect(GURL()));
 }
@@ -2209,7 +2209,7 @@ class MultiPageBrowserTest : public InProcessBrowserTest {
   content::WebContents* GetWebContents() { return web_contents_; }
 
   net::test_server::EmbeddedTestServerHandle test_server_handle_;
-  content::WebContents* web_contents_;
+  raw_ptr<content::WebContents> web_contents_;
 };
 
 IN_PROC_BROWSER_TEST_F(MultiPageBrowserTest, LoadingPredictor) {

@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"

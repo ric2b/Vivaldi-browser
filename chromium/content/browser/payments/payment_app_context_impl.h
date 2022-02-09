@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/check_op.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/atomic_flag.h"
 #include "content/browser/payments/payment_app_database.h"
@@ -33,6 +32,9 @@ class CONTENT_EXPORT PaymentAppContextImpl
     : public base::RefCounted<PaymentAppContextImpl> {
  public:
   PaymentAppContextImpl();
+
+  PaymentAppContextImpl(const PaymentAppContextImpl&) = delete;
+  PaymentAppContextImpl& operator=(const PaymentAppContextImpl&) = delete;
 
   // Init() must be called before using this. It is separate from the
   // constructor for tests that want to inject a `service_worker_context`.
@@ -59,8 +61,6 @@ class CONTENT_EXPORT PaymentAppContextImpl
   // destructor or when the channel is closed via
   // PaymentManagerHadConnectionError.
   std::map<PaymentManager*, std::unique_ptr<PaymentManager>> payment_managers_;
-
-  DISALLOW_COPY_AND_ASSIGN(PaymentAppContextImpl);
 };
 
 }  // namespace content

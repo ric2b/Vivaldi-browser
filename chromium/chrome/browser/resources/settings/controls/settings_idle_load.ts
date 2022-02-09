@@ -30,17 +30,6 @@ export class SettingsIdleLoadElement extends PolymerElement {
     return html`<slot></slot>`;
   }
 
-  static get properties() {
-    return {
-      /**
-       * If specified, it will be loaded via an HTML import before stamping the
-       * template.
-       */
-      url: String,
-    };
-  }
-
-  url: string;
   private child_: Element|null = null;
   private instance_: TemplateInstanceBase|null = null;
   private idleCallback_: number = 0;
@@ -109,6 +98,12 @@ export class SettingsIdleLoadElement extends PolymerElement {
     if (this.instance_) {
       this.instance_.forwardHostProp(prop, value);
     }
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-idle-load': SettingsIdleLoadElement;
   }
 }
 

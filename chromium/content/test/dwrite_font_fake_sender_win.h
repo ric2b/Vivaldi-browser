@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "third_party/blink/public/mojom/dwrite_font_proxy/dwrite_font_proxy.mojom.h"
@@ -33,6 +32,8 @@ CreateFakeCollectionSender();
 class FakeFont {
  public:
   explicit FakeFont(const std::u16string& name);
+
+  FakeFont& operator=(const FakeFont&) = delete;
 
   FakeFont(FakeFont&& other);
 
@@ -62,8 +63,6 @@ class FakeFont {
   std::vector<base::FilePath> file_paths_;
   std::vector<base::File> file_handles_;
   std::vector<std::pair<std::u16string, std::u16string>> family_names_;
-
-  DISALLOW_ASSIGN(FakeFont);
 };
 
 // Implements a font collection that supports interaction through sending IPC

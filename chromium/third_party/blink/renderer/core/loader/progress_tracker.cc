@@ -82,8 +82,7 @@ void ProgressTracker::Reset() {
   bytes_received_ = 0;
   estimated_bytes_for_pending_requests_ = 0;
 
-  elementsLoaded_ = 0;
-  elementsTotal_ = 0;
+  vivaldi_reset_deltas();
 }
 
 LocalFrameClient* ProgressTracker::GetLocalFrameClient() const {
@@ -124,11 +123,13 @@ void ProgressTracker::SendFinalProgress() {
   if (progress_value_ == 1)
     return;
   progress_value_ = 1;
-  VivaldiRenderFrameBlinkProxy::DidChangeLoadProgressExtended(
-      frame_, progress_value_, bytes_received_, elementsLoaded_,
-      elementsTotal_);
-  frame_->GetLocalFrameHostRemote().DidChangeLoadProgress(progress_value_);
 
+  VivaldiRenderFrameBlinkProxy::DidChangeLoadProgressExtended(
+      frame_, vivaldi_bytes_delta_, vivaldi_loaded_resource_delta_,
+      vivaldi_started_resource_delta_);
+  vivaldi_reset_deltas();
+
+  frame_->GetLocalFrameHostRemote().DidChangeLoadProgress(progress_value_);
 }
 
 void ProgressTracker::WillStartLoading(uint64_t identifier,
@@ -140,6 +141,8 @@ void ProgressTracker::WillStartLoading(uint64_t identifier,
   ProgressItem new_item;
   UpdateProgressItem(new_item, 0, kProgressItemDefaultEstimatedLength);
   progress_items_.Set(identifier, new_item);
+
+  vivaldi_started_resource_delta_++;
 }
 
 void ProgressTracker::IncrementProgress(uint64_t identifier,
@@ -152,13 +155,14 @@ void ProgressTracker::IncrementProgress(uint64_t identifier,
   if (estimated_length < 0)
     estimated_length = kProgressItemDefaultEstimatedLength;
   UpdateProgressItem(item->value, 0, estimated_length);
-  elementsTotal_++;
 }
 
 void ProgressTracker::IncrementProgress(uint64_t identifier, uint64_t length) {
   auto item = progress_items_.find(identifier);
   if (item == progress_items_.end())
     return;
+
+  vivaldi_bytes_delta_ += length;
 
   ProgressItem& progress_item = item->value;
   int64_t bytes_received = progress_item.bytes_received + length;
@@ -224,8 +228,10 @@ void ProgressTracker::MaybeSendProgress() {
   if (notification_progress_delta >= kProgressNotificationInterval ||
       notified_progress_time_delta >= kProgressNotificationTimeInterval) {
     VivaldiRenderFrameBlinkProxy::DidChangeLoadProgressExtended(
-        frame_, progress_value_, bytes_received_, elementsLoaded_,
-        elementsTotal_);
+        frame_, vivaldi_bytes_delta_, vivaldi_loaded_resource_delta_,
+        vivaldi_started_resource_delta_);
+    vivaldi_reset_deltas();
+
     frame_->GetLocalFrameHostRemote().DidChangeLoadProgress(progress_value_);
 
     last_notified_progress_value_ = progress_value_;
@@ -242,11 +248,8 @@ void ProgressTracker::CompleteProgress(uint64_t identifier) {
   UpdateProgressItem(item->value, progress_item.bytes_received,
                      progress_item.bytes_received);
 
-  // NOTE(pettern@vivaldi.com): Empty bytesReceived means it never got loaded
-  // to begin with.
-  if (progress_item.bytes_received) {
-    elementsLoaded_++;
-  }
+  vivaldi_loaded_resource_delta_++;
+
   MaybeSendProgress();
 }
 

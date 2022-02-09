@@ -34,7 +34,6 @@ export class PrintPreviewMarginsSettingsElement extends
         observer: 'updateMarginsDisabled_',
       },
 
-      /** @type {!State} */
       state: {
         type: Number,
         observer: 'onStateChange_',
@@ -100,6 +99,12 @@ export class PrintPreviewMarginsSettingsElement extends
   private updateMarginsDisabled_() {
     this.marginsDisabled_ =
         (this.getSettingValue('pagesPerSheet') as number) > 1 || this.disabled;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'print-preview-margins-settings': PrintPreviewMarginsSettingsElement;
   }
 }
 

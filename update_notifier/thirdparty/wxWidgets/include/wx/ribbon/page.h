@@ -41,33 +41,33 @@ public:
                 const wxBitmap& icon = wxNullBitmap,
                 long style = 0);
 
-    void SetArtProvider(wxRibbonArtProvider* art);
+    void SetArtProvider(wxRibbonArtProvider* art) wxOVERRIDE;
 
     wxBitmap& GetIcon() {return m_icon;}
-    virtual wxSize GetMinSize() const;
+    virtual wxSize GetMinSize() const wxOVERRIDE;
     void SetSizeWithScrollButtonAdjustment(int x, int y, int width, int height);
     void AdjustRectToIncludeScrollButtons(wxRect* rect) const;
 
     bool DismissExpandedPanel();
 
-    virtual bool Realize();
-    virtual bool Show(bool show = true);
-    virtual bool Layout();
-    virtual bool ScrollLines(int lines);
+    virtual bool Realize() wxOVERRIDE;
+    virtual bool Show(bool show = true) wxOVERRIDE;
+    virtual bool Layout() wxOVERRIDE;
+    virtual bool ScrollLines(int lines) wxOVERRIDE;
     bool ScrollPixels(int pixels);
     bool ScrollSections(int sections);
 
     wxOrientation GetMajorAxis() const;
 
-    virtual void RemoveChild(wxWindowBase *child);
+    virtual void RemoveChild(wxWindowBase *child) wxOVERRIDE;
 
     void HideIfExpanded();
 
 protected:
-    virtual wxSize DoGetBestSize() const;
-    virtual wxBorder GetDefaultBorder() const { return wxBORDER_NONE; }
+    virtual wxSize DoGetBestSize() const wxOVERRIDE;
+    virtual wxBorder GetDefaultBorder() const wxOVERRIDE { return wxBORDER_NONE; }
 
-    void DoSetSize(int x, int y, int width, int height, int sizeFlags = wxSIZE_AUTO);
+    void DoSetSize(int x, int y, int width, int height, int sizeFlags = wxSIZE_AUTO) wxOVERRIDE;
     bool DoActualLayout();
     void OnEraseBackground(wxEraseEvent& evt);
     void OnPaint(wxPaintEvent& evt);
@@ -75,7 +75,7 @@ protected:
 
     bool ExpandPanels(wxOrientation direction, int maximum_amount);
     bool CollapsePanels(wxOrientation direction, int minimum_amount);
-    void ShowScrollButtons();
+    bool ShowScrollButtons();
     void HideScrollButtons();
 
     void CommonInit(const wxString& label, const wxBitmap& icon);
@@ -95,8 +95,8 @@ protected:
     bool m_scroll_buttons_visible;
 
 #ifndef SWIG
-    DECLARE_CLASS(wxRibbonPage)
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_CLASS(wxRibbonPage);
+    wxDECLARE_EVENT_TABLE();
 #endif
 };
 

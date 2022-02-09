@@ -12,17 +12,18 @@
   "background": {
     "page": "accessibility_common/background.html"
   },
+  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
   "permissions": [
     "accessibilityPrivate",
     "accessibilityFeatures.read",
     "accessibilityFeatures.modify",
-    "audio",
-    "audioCapture",
     "commandLinePrivate",
     "input",
     "inputMethodPrivate",
+    "metricsPrivate",
     "settingsPrivate",
-    "languageSettingsPrivate"
+    "languageSettingsPrivate",
+    "speechRecognitionPrivate"
   ],
   "automation": {
     "desktop": true
@@ -31,9 +32,7 @@
   "input_components": [
     {
       "name": "Dictation",
-      "type": "ime",
       "id": "dictation",
-      "description": "Dictation",
       "language": ["none"]
     }
   ]

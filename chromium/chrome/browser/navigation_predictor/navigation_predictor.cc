@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/check_op.h"
-#include "base/containers/contains.h"
 #include "base/hash/hash.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/rand_util.h"
@@ -72,7 +71,7 @@ void NavigationPredictor::Create(
   DCHECK(!IsPrerendering(render_frame_host));
 
   // Only valid for the main frame.
-  if (render_frame_host->GetParent())
+  if (render_frame_host->GetParentOrOuterDocument())
     return;
 
   content::WebContents* web_contents =

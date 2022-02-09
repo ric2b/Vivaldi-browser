@@ -31,7 +31,7 @@ struct OpenURLParams;
 
 // A delegate API used by Navigator to notify its embedder of navigation
 // related events.
-class CONTENT_EXPORT NavigatorDelegate {
+class NavigatorDelegate {
  public:
   // Called when a navigation started. The same NavigationHandle will be
   // provided for events related to the same navigation.
@@ -68,12 +68,10 @@ class CONTENT_EXPORT NavigatorDelegate {
   // NavigationController's last committed entry is for this navigation.
   virtual void DidNavigateMainFramePostCommit(
       RenderFrameHostImpl* render_frame_host,
-      const LoadCommittedDetails& details,
-      const mojom::DidCommitProvisionalLoadParams& params) = 0;
+      const LoadCommittedDetails& details) = 0;
   virtual void DidNavigateAnyFramePostCommit(
       RenderFrameHostImpl* render_frame_host,
-      const LoadCommittedDetails& details,
-      const mojom::DidCommitProvisionalLoadParams& params) = 0;
+      const LoadCommittedDetails& details) = 0;
 
   // Notification to the Navigator embedder that navigation state has
   // changed. This method corresponds to

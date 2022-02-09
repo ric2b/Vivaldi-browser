@@ -12,8 +12,8 @@
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
@@ -30,6 +30,7 @@
 #include "mojo/public/cpp/bindings/lib/message_quota_checker.h"
 #include "mojo/public/cpp/bindings/mojo_buildflags.h"
 #include "mojo/public/cpp/bindings/sync_handle_watcher.h"
+#include "mojo/public/cpp/bindings/tracing_helpers.h"
 #include "mojo/public/cpp/system/wait.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_mojo_event_info.pbzero.h"
 
@@ -117,7 +118,7 @@ class Connector::RunLoopNestingObserver
  private:
   friend class ActiveDispatchTracker;
 
-  ActiveDispatchTracker* top_tracker_ = nullptr;
+  raw_ptr<ActiveDispatchTracker> top_tracker_ = nullptr;
 };
 
 Connector::ActiveDispatchTracker::ActiveDispatchTracker(
@@ -531,17 +532,23 @@ bool Connector::DispatchMessage(Message message) {
               incoming_serialization_mode_);
   }
 
-  TRACE_EVENT_WITH_FLOW0("toplevel.flow", "mojo::Message Receive",
-                         message.header()->trace_id, TRACE_EVENT_FLAG_FLOW_IN);
-#if !BUILDFLAG(MOJO_TRACE_ENABLED)
-  // This emits just full class name, and is inferior to mojo tracing.
-  TRACE_EVENT("toplevel", "Connector::DispatchMessage",
-              [this](perfetto::EventContext ctx) {
-                ctx.event()
-                    ->set_chrome_mojo_event_info()
-                    ->set_watcher_notify_interface_tag(interface_name_);
-              });
-#endif
+  // This emits just full class name, and is inferior to full mojo tracing, so
+  // the category is "toplevel" if full tracing isn't available. If it's
+  // available, it's emitted under "disabled-by-default-mojom" for debugging
+  // purposes.
+  TRACE_EVENT(
+      TRACE_CATEGORY_OR_DISABLED_BY_DEFAULT_MOJOM("toplevel"),
+      "Connector::DispatchMessage", [&](perfetto::EventContext& ctx) {
+        ctx.event()->set_chrome_mojo_event_info()->set_mojo_interface_tag(
+            interface_name_);
+
+        static const uint8_t* flow_enabled =
+            TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED("toplevel.flow");
+        if (!*flow_enabled)
+          return;
+
+        perfetto::Flow::Global(message.GetTraceId())(ctx);
+      });
 
   if (connection_group_)
     message.set_receiver_connection_group(&connection_group_);

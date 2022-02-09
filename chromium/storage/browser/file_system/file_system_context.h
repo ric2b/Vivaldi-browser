@@ -15,15 +15,17 @@
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/files/file.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/sequenced_task_runner_helpers.h"
+#include "base/memory/weak_ptr.h"
+#include "base/task/sequenced_task_runner_helpers.h"
 #include "base/threading/sequence_bound.h"
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
+#include "components/services/storage/public/cpp/quota_error_or.h"
 #include "components/services/storage/public/mojom/quota_client.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "storage/browser/file_system/file_system_request_info.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "storage/browser/file_system/open_file_system_mode.h"
 #include "storage/browser/file_system/plugin_private_file_system_backend.h"
@@ -71,16 +73,8 @@ class QuotaReservation;
 class SandboxFileSystemBackend;
 class SpecialStoragePolicy;
 
+struct BucketInfo;
 struct FileSystemInfo;
-
-struct FileSystemRequestInfo {
-  // The original request URL (always set).
-  const GURL url;
-  // The storage domain (always set).
-  const std::string storage_domain;
-  // Set by the network service for use by callbacks.
-  int content_id = 0;
-};
 
 // An auto mount handler will attempt to mount the file system requested in
 // `request_info`. If the URL is for this auto mount handler, it returns true
@@ -98,6 +92,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
     : public base::RefCountedDeleteOnSequence<FileSystemContext> {
  public:
   REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
+
+  FileSystemContext() = delete;
+  FileSystemContext(const FileSystemContext&) = delete;
+  FileSystemContext& operator=(const FileSystemContext&) = delete;
 
   // Returns file permission policy we should apply for the given `type`.
   // The return value must be bitwise-or'd of FilePermissionPolicy.
@@ -254,7 +252,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   void ResolveURL(const FileSystemURL& url, ResolveURLCallback callback);
 
   // Attempts to mount the filesystem needed to satisfy `request_info` made from
-  // `request_info.storage_domain`. If an appropriate file system is not found,
+  // `request_info.storage_domain_`. If an appropriate file system is not found,
   // callback will return an error.
   void AttemptAutoMountForURLRequest(const FileSystemRequestInfo& request_info,
                                      StatusCallback callback);
@@ -402,6 +400,21 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
                                       const std::string& filesystem_name,
                                       base::File::Error error);
 
+  // OnGetOrCreateBucket is the callback for calling
+  // QuotaManagerProxy::GetOrCreateDefault.
+  void OnGetOrCreateBucket(const blink::StorageKey& storage_key,
+                           FileSystemType type,
+                           OpenFileSystemMode mode,
+                           OpenFileSystemCallback callback,
+                           QuotaErrorOr<BucketInfo> result);
+  // ResolveURLOnOpenFileSystem is called, either by OnGetOrCreateBucket
+  // on successful bucket creation, or (tests onlyh) by OpenFileSystem
+  // directly in the absence of a quota manager.
+  void ResolveURLOnOpenFileSystem(const blink::StorageKey& storage_key,
+                                  FileSystemType type,
+                                  OpenFileSystemMode mode,
+                                  OpenFileSystemCallback callback);
+
   // Returns a FileSystemBackend, used only by test code.
   SandboxFileSystemBackend* sandbox_backend() const {
     return sandbox_backend_.get();
@@ -459,7 +472,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   std::unique_ptr<mojo::Receiver<mojom::QuotaClient>> quota_client_receiver_;
 
-  DISALLOW_IMPLICIT_CONSTRUCTORS(FileSystemContext);
+  base::WeakPtrFactory<FileSystemContext> weak_factory_{this};
 };
 
 }  // namespace storage

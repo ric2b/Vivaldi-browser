@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/hats/trust_safety_sentiment_service.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/time/time_override.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
@@ -51,11 +52,11 @@ class TrustSafetySentimentServiceBrowserTest : public InProcessBrowserTest {
     permission.type = ContentSettingsType::NOTIFICATIONS;
     permission.setting = ContentSetting::CONTENT_SETTING_BLOCK;
     permission.default_setting = ContentSetting::CONTENT_SETTING_ASK;
-    permission.source = content_settings::SettingSource::SETTING_SOURCE_USER;
 
-    static_cast<PageInfoBubbleView*>(
-        PageInfoBubbleView::GetPageInfoBubbleForTesting())
-        ->OnPermissionChanged(permission);
+    auto* bubble = static_cast<PageInfoBubbleView*>(
+        PageInfoBubbleView::GetPageInfoBubbleForTesting());
+    bubble->presenter_for_testing()->OnSitePermissionChanged(
+        permission.type, permission.setting, permission.is_one_time);
   }
 
   void OpenEnoughNewTabs() {
@@ -71,7 +72,7 @@ class TrustSafetySentimentServiceBrowserTest : public InProcessBrowserTest {
 
  protected:
   base::test::ScopedFeatureList feature_list_;
-  MockHatsService* mock_hats_service_;
+  raw_ptr<MockHatsService> mock_hats_service_;
 };
 
 IN_PROC_BROWSER_TEST_F(TrustSafetySentimentServiceBrowserTest,

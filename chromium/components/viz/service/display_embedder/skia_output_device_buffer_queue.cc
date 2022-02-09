@@ -4,6 +4,7 @@
 
 #include "components/viz/service/display_embedder/skia_output_device_buffer_queue.h"
 
+#include <iterator>
 #include <memory>
 #include <set>
 #include <utility>
@@ -22,6 +23,7 @@
 #include "gpu/command_buffer/service/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkSurfaceProps.h"
 #include "ui/gfx/swap_result.h"
@@ -39,6 +41,10 @@ NOINLINE void CheckForLoopFailuresBufferQueue() {
   }
   g_last_reshape_failure = now;
 }
+
+// See |needs_background_image| for details.
+constexpr size_t kNumberOfBackgroundImages = 2u;
+constexpr gfx::Size kBackgroundImageSize(4, 4);
 
 }  // namespace
 
@@ -124,14 +130,17 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
     gpu::SharedImageRepresentationFactory* representation_factory,
     gpu::MemoryTracker* memory_tracker,
     const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback,
-    bool needs_background_image)
+    bool needs_background_image,
+    bool supports_non_backed_solid_color_images)
     : SkiaOutputDevice(deps->GetSharedContextState()->gr_context(),
                        memory_tracker,
                        did_swap_buffer_complete_callback),
       presenter_(std::move(presenter)),
       context_state_(deps->GetSharedContextState()),
       representation_factory_(representation_factory),
-      needs_background_image_(needs_background_image) {
+      needs_background_image_(needs_background_image),
+      supports_non_backed_solid_color_images_(
+          supports_non_backed_solid_color_images) {
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.preserve_buffer_content = true;
   capabilities_.only_invalidates_damage_rect = false;
@@ -150,17 +159,24 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kDoubleBufferCompositing))
     capabilities_.number_of_buffers = 2;
-  capabilities_.max_frames_pending = capabilities_.number_of_buffers - 1;
+  capabilities_.pending_swap_params.max_pending_swaps =
+      capabilities_.number_of_buffers - 1;
 #if defined(OS_ANDROID)
   if (::features::IncreaseBufferCountForHighFrameRate() &&
       capabilities_.number_of_buffers == 5) {
-    capabilities_.max_frames_pending = 2;
-    capabilities_.max_frames_pending_120hz = 4;
+    capabilities_.pending_swap_params.max_pending_swaps = 2;
+    capabilities_.pending_swap_params.max_pending_swaps_90hz = 3;
+    capabilities_.pending_swap_params.max_pending_swaps_120hz = 4;
   }
 #endif
-  DCHECK_LT(capabilities_.max_frames_pending, capabilities_.number_of_buffers);
-  DCHECK_LT(capabilities_.max_frames_pending_120hz.value_or(0),
+  DCHECK_LT(capabilities_.pending_swap_params.max_pending_swaps,
             capabilities_.number_of_buffers);
+  DCHECK_LT(
+      capabilities_.pending_swap_params.max_pending_swaps_90hz.value_or(0),
+      capabilities_.number_of_buffers);
+  DCHECK_LT(
+      capabilities_.pending_swap_params.max_pending_swaps_120hz.value_or(0),
+      capabilities_.number_of_buffers);
 
   presenter_->InitializeCapabilities(&capabilities_);
 
@@ -237,16 +253,14 @@ bool SkiaOutputDeviceBufferQueue::IsPrimaryPlaneOverlay() const {
 void SkiaOutputDeviceBufferQueue::SchedulePrimaryPlane(
     const absl::optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>&
         plane) {
-  if (background_image_ && !background_image_is_scheduled_) {
-    background_image_->BeginPresent();
-    presenter_->ScheduleBackground(background_image_.get());
-    background_image_is_scheduled_ = true;
-  }
+  // See |needs_background_image|.
+  MaybeScheduleBackgroundImage();
 
   if (plane) {
     // If the current_image_ is nullptr, it means there is no change on the
     // primary plane. So we just need to schedule the last submitted image.
-    auto* image = current_image_ ? current_image_ : submitted_image_;
+    auto* image =
+        current_image_ ? current_image_.get() : submitted_image_.get();
     // |image| can be null if there was a fullscreen overlay last frame (e.g.
     // no primary plane). If the fullscreen quad suddenly fails the fullscreen
     // overlay check this frame (e.g. TestPageFlip failing) and then gets
@@ -326,9 +340,15 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
     auto& overlay = overlays[i];
 
 #if defined(USE_OZONE)
-    // TODO(petermcneeley) : Remove this code when http://crbug/1204102 is done.
     if (overlay.solid_color.has_value()) {
-      overlay.mailbox = GetImageMailboxForColor(overlay.solid_color.value());
+      // TODO(msisov): reconsider this once Linux Wayland compositors also
+      // support that. See https://bit.ly/2ZqUO0w.
+      if (!supports_non_backed_solid_color_images_) {
+        overlay.mailbox = GetImageMailboxForColor(overlay.solid_color.value());
+      } else {
+        accesses[i] = nullptr;
+        continue;
+      }
     }
 #endif
 
@@ -626,11 +646,8 @@ bool SkiaOutputDeviceBufferQueue::Reshape(const gfx::Size& size,
 
   overlay_transform_ = transform;
 
-  if (needs_background_image_ && !background_image_) {
-    background_image_ =
-        presenter_->AllocateSingleImage(color_space, gfx::Size(4, 4));
-    background_image_is_scheduled_ = false;
-  }
+  // See |needs_background_image|.
+  MaybeAllocateBackgroundImages();
 
   if (color_space_ == color_space && image_size_ == size)
     return true;
@@ -665,6 +682,40 @@ bool SkiaOutputDeviceBufferQueue::RecreateImages() {
   return !images_.empty();
 }
 
+void SkiaOutputDeviceBufferQueue::MaybeAllocateBackgroundImages() {
+  if (!needs_background_image_ || !background_images_.empty())
+    return;
+
+  background_images_ = presenter_->AllocateImages(
+      color_space_, kBackgroundImageSize, kNumberOfBackgroundImages);
+  DCHECK(!background_images_.empty());
+
+  // Clear the background images to avoid undesired artifacts.
+  for (auto& image : background_images_) {
+    image->BeginWriteSkia();
+    image->sk_surface()->getCanvas()->clear(SkColors::kTransparent);
+    image->EndWriteSkia(/*force_flush*/ true);
+  }
+}
+
+void SkiaOutputDeviceBufferQueue::MaybeScheduleBackgroundImage() {
+  if (!needs_background_image_)
+    return;
+
+  if (current_background_image_)
+    current_background_image_->EndPresent({});
+  current_background_image_ = GetNextBackgroundImage();
+  current_background_image_->BeginPresent();
+  presenter_->ScheduleBackground(current_background_image_);
+}
+
+OutputPresenter::Image* SkiaOutputDeviceBufferQueue::GetNextBackgroundImage() {
+  DCHECK_EQ(background_images_.size(), kNumberOfBackgroundImages);
+  return current_background_image_ == background_images_.front().get()
+             ? background_images_.back().get()
+             : background_images_.front().get();
+}
+
 SkSurface* SkiaOutputDeviceBufferQueue::BeginPaint(
     bool allocate_frame_buffer,
     std::vector<GrBackendSemaphore>* end_semaphores) {
@@ -675,17 +726,11 @@ SkSurface* SkiaOutputDeviceBufferQueue::BeginPaint(
 
   if (allocate_frame_buffer) {
     DCHECK(!current_image_);
-    std::vector<std::unique_ptr<OutputPresenter::Image>> images =
-        presenter_->AllocateImages(color_space_, image_size_, 1u);
-    if (images.size() != 1u) {
-      LOG(ERROR) << "AllocateImages failed " << images.size();
+    if (!AllocateFrameBuffers(1u))
       return nullptr;
-    }
-    current_image_ = images[0].get();
-    images_.push_back(std::move(images[0]));
-  } else {
-    if (!current_image_)
-      current_image_ = GetNextImage();
+  }
+  if (!current_image_) {
+    current_image_ = GetNextImage();
   }
 
   if (!current_image_->sk_surface())
@@ -697,6 +742,22 @@ SkSurface* SkiaOutputDeviceBufferQueue::BeginPaint(
 void SkiaOutputDeviceBufferQueue::EndPaint() {
   DCHECK(current_image_);
   current_image_->EndWriteSkia();
+}
+
+bool SkiaOutputDeviceBufferQueue::AllocateFrameBuffers(size_t n) {
+  std::vector<std::unique_ptr<OutputPresenter::Image>> new_images =
+      presenter_->AllocateImages(color_space_, image_size_, n);
+  if (new_images.size() != n) {
+    LOG(ERROR) << "AllocateImages failed " << new_images.size() << " " << n;
+    CheckForLoopFailuresBufferQueue();
+    return false;
+  }
+  for (auto& image : new_images) {
+    available_images_.push_front(image.get());
+  }
+  images_.insert(images_.end(), std::make_move_iterator(new_images.begin()),
+                 std::make_move_iterator(new_images.end()));
+  return true;
 }
 
 void SkiaOutputDeviceBufferQueue::ReleaseOneFrameBuffer() {

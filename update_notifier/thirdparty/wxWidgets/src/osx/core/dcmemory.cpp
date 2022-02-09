@@ -20,7 +20,7 @@
 // wxMemoryDCImpl
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxMemoryDCImpl,wxPaintDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxMemoryDCImpl, wxPaintDCImpl);
 
 
 wxMemoryDCImpl::wxMemoryDCImpl( wxMemoryDC *owner )
@@ -56,7 +56,7 @@ wxMemoryDCImpl::~wxMemoryDCImpl()
 {
     if ( m_selected.IsOk() )
     {
-        m_selected.EndRawAccess() ;
+        m_selected.SetSelectedInto(NULL);
         wxDELETE(m_graphicContext);
     }
 }
@@ -65,16 +65,18 @@ void wxMemoryDCImpl::DoSelect( const wxBitmap& bitmap )
 {
     if ( m_selected.IsOk() )
     {
-        m_selected.EndRawAccess() ;
+        m_selected.SetSelectedInto(NULL);
         wxDELETE(m_graphicContext);
     }
 
     m_selected = bitmap;
     if (m_selected.IsOk())
     {
-        if ( m_selected.GetDepth() != 1 )
-            m_selected.UseAlpha() ;
-        m_selected.BeginRawAccess() ;
+        wxASSERT_MSG( !bitmap.GetSelectedInto() ||
+                     (bitmap.GetSelectedInto() == GetOwner()),
+                     "Bitmap is selected in another wxMemoryDC, delete the first wxMemoryDC or use SelectObject(NULL)" );
+
+        m_selected.SetSelectedInto(GetOwner());
         m_width = bitmap.GetScaledWidth();
         m_height = bitmap.GetScaledHeight();
         m_contentScaleFactor = bitmap.GetScaleFactor();
@@ -87,7 +89,9 @@ void wxMemoryDCImpl::DoSelect( const wxBitmap& bitmap )
             CGContextSetStrokeColorSpace( bmCtx, genericColorSpace );
             SetGraphicsContext( wxGraphicsContext::CreateFromNative( bmCtx ) );
             if (m_graphicContext)
-                m_graphicContext->EnableOffset(true);
+            {
+                m_graphicContext->SetContentScaleFactor(m_contentScaleFactor);
+            }
         }
         m_ok = (m_graphicContext != NULL) ;
     }

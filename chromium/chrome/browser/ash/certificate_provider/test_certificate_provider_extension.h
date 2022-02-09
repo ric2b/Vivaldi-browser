@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/values.h"
 #include "extensions/common/extension_id.h"
@@ -30,6 +29,8 @@ class BrowserContext;
 namespace crypto {
 class RSAPrivateKey;
 }
+
+namespace ash {
 
 // This class provides the C++ side of the test certificate provider extension's
 // implementation (the JavaScript side is in
@@ -117,5 +118,7 @@ class TestCertificateProviderExtension final {
   bool should_fail_sign_digest_requests_ = false;
   ExtensionTestMessageListener message_listener_;
 };
+
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_CERTIFICATE_PROVIDER_TEST_CERTIFICATE_PROVIDER_EXTENSION_H_

@@ -19,9 +19,6 @@
 // for compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 // for all others, include the necessary headers
 #ifndef WX_PRECOMP
@@ -35,6 +32,7 @@
     #include "wx/textctrl.h"
 #endif
 
+#include "wx/artprov.h"
 #include "wx/filename.h"
 
 #include "wx/generic/statbmpg.h"
@@ -51,9 +49,9 @@ public:
     StatBmpWidgetsPage(WidgetsBookCtrl *book, wxImageList *imaglist)
         : WidgetsPage(book, imaglist, statbmp_xpm) {}
 
-    virtual void CreateContent();
-    virtual wxControl *GetWidget() const { return m_statbmp; }
-    virtual void RecreateWidget();
+    virtual void CreateContent() wxOVERRIDE;
+    virtual wxWindow *GetWidget() const wxOVERRIDE { return m_statbmp; }
+    virtual void RecreateWidget() wxOVERRIDE;
 
 private:
     void OnFileChange(wxFileDirPickerEvent &WXUNUSED(ev)) { RecreateWidget(); }
@@ -61,18 +59,19 @@ private:
 
     void OnMouseEvent(wxMouseEvent& WXUNUSED(event))
     {
-        wxLogMessage(wxT("wxStaticBitmap clicked."));
+        wxLogMessage("wxStaticBitmap clicked.");
     }
 
     wxStaticBitmapBase *m_statbmp;
     wxFilePickerCtrl *m_filepicker;
     wxRadioBox *m_radio;
+    wxRadioBox *m_scaleRadio;
     wxStaticBoxSizer *m_sbsizer;
 
     DECLARE_WIDGETS_PAGE(StatBmpWidgetsPage)
 };
 
-IMPLEMENT_WIDGETS_PAGE(StatBmpWidgetsPage, wxT("StaticBitmap"),
+IMPLEMENT_WIDGETS_PAGE(StatBmpWidgetsPage, "StaticBitmap",
                        ALL_CTRLS);
 
 void StatBmpWidgetsPage::CreateContent()
@@ -82,10 +81,20 @@ void StatBmpWidgetsPage::CreateContent()
     m_radio = new wxRadioBox(this, wxID_ANY, "implementation",
                              wxDefaultPosition, wxDefaultSize,
                              WXSIZEOF(choices), choices);
+    static const wxString scaleChoices[] = { "None", "Fill", "Aspect Fit", "Aspect Fill" };
+    m_scaleRadio = new wxRadioBox(this, wxID_ANY, "Scale Mode",
+                                  wxDefaultPosition, wxDefaultSize,
+                                  WXSIZEOF(scaleChoices), scaleChoices);
 
     wxString testImage;
 #if wxUSE_LIBPNG
-    wxFileName fn("../image/toucan.png");
+    wxPathList pathlist;
+    pathlist.Add(".");
+    pathlist.Add("..");
+    pathlist.Add("../image");
+    pathlist.Add("../../../samples/image");
+
+    wxFileName fn(pathlist.FindValidPath("toucan.png"));
     if ( fn.FileExists() )
         testImage = fn.GetFullPath();
 #endif // wxUSE_LIBPNG
@@ -95,6 +104,7 @@ void StatBmpWidgetsPage::CreateContent()
 
     wxSizer *leftsizer = new wxBoxSizer(wxVERTICAL);
     leftsizer->Add(m_radio, wxSizerFlags().Expand().Border());
+    leftsizer->Add(m_scaleRadio, wxSizerFlags().Expand().Border());
     leftsizer->Add(m_filepicker, wxSizerFlags().Expand().Border());
     wxSizer *sizer = new wxBoxSizer(wxHORIZONTAL);
     sizer->Add(leftsizer, wxSizerFlags().Border());
@@ -103,10 +113,8 @@ void StatBmpWidgetsPage::CreateContent()
 
     wxInitAllImageHandlers();
 
-    Connect(wxEVT_FILEPICKER_CHANGED,
-            wxFileDirPickerEventHandler(StatBmpWidgetsPage::OnFileChange));
-    Connect(wxEVT_RADIOBOX,
-            wxCommandEventHandler(StatBmpWidgetsPage::OnRadioChange));
+    Bind(wxEVT_FILEPICKER_CHANGED, &StatBmpWidgetsPage::OnFileChange, this);
+    Bind(wxEVT_RADIOBOX, &StatBmpWidgetsPage::OnRadioChange, this);
 
     m_statbmp = NULL;
     RecreateWidget();
@@ -116,25 +124,62 @@ void StatBmpWidgetsPage::RecreateWidget()
 {
     wxDELETE(m_statbmp);
 
-    wxString filepath = m_filepicker->GetPath();
-    if ( filepath.empty() )
-        return;
+    wxBitmap bmp;
 
-    wxImage image(filepath);
-    if (! image.IsOk() )
+    wxString filepath = m_filepicker->GetPath();
+    if ( !filepath.empty() )
     {
-        wxLogMessage("Reading image from file '%s' failed.", filepath.c_str());
-        return;
+        wxImage image(filepath);
+        if ( image.IsOk() )
+        {
+            bmp = image;
+        }
+        else
+        {
+            wxLogMessage("Reading image from file '%s' failed.", filepath);
+        }
     }
+
+    if ( !bmp.IsOk() )
+    {
+        // Show at least something.
+        bmp = wxArtProvider::GetBitmap(wxART_MISSING_IMAGE);
+    }
+
+    long style = GetAttrs().m_defaultFlags;
+
     if (m_radio->GetSelection() == 0)
-        m_statbmp = new wxStaticBitmap(this, wxID_ANY, wxBitmap(image));
+    {
+        m_statbmp = new wxStaticBitmap(this, wxID_ANY, bmp,
+                                       wxDefaultPosition, wxDefaultSize,
+                                       style);
+    }
     else
-        m_statbmp = new wxGenericStaticBitmap(this, wxID_ANY, wxBitmap(image));
+    {
+        m_statbmp = new wxGenericStaticBitmap(this, wxID_ANY, bmp,
+                                              wxDefaultPosition, wxDefaultSize,
+                                              style);
+    }
+
+    wxStaticBitmapBase::ScaleMode scaleMode = (wxStaticBitmapBase::ScaleMode) m_scaleRadio->GetSelection();
+    m_statbmp->SetScaleMode(scaleMode);
+    if ( m_statbmp->GetScaleMode() != scaleMode )
+        wxLogError("Scale mode not supported by current implementation");
+    wxSizerItem* sbsizerItem = GetSizer()->GetItem(m_sbsizer);
+    if ( scaleMode == wxStaticBitmapBase::Scale_None )
+    {
+        sbsizerItem->SetProportion(0);
+        sbsizerItem->SetFlag(wxCENTER);
+    }
+    else
+    {
+        sbsizerItem->SetProportion(1);
+        sbsizerItem->SetFlag(wxEXPAND);
+    }
     m_sbsizer->Add(m_statbmp, wxSizerFlags(1).Expand());
     GetSizer()->Layout();
-    m_statbmp->Connect(wxEVT_LEFT_DOWN,
-                       wxMouseEventHandler(StatBmpWidgetsPage::OnMouseEvent),
-                       NULL, this);
+    m_statbmp->Bind(wxEVT_LEFT_DOWN, &StatBmpWidgetsPage::OnMouseEvent, this);
+
     // When switching from generic to native control on wxMSW under Wine,
     // the explicit Refresh() is necessary
     m_statbmp->Refresh();

@@ -7,6 +7,7 @@
 #include "base/notreached.h"
 #include "base/strings/string_piece.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 
 namespace autofill {
 
@@ -121,8 +122,8 @@ bool IsFillableFieldType(ServerFieldType field_type) {
       return true;
 
     case MERCHANT_PROMO_CODE:
-      // TODO(crbug/1190334): Create flag for this and use flag value instead.
-      return false;
+      return base::FeatureList::IsEnabled(
+          features::kAutofillParseMerchantPromoCodeFields);
 
     // Fillable credential fields.
     case USERNAME:
@@ -469,6 +470,8 @@ base::StringPiece FieldTypeToStringPiece(HtmlFieldType type) {
       return "HTML_TYPE_UPI_VPA";
     case HTML_TYPE_ONE_TIME_CODE:
       return "HTML_TYPE_ONE_TIME_CODE";
+    case HTML_TYPE_MERCHANT_PROMO_CODE:
+      return "HTML_TYPE_MERCHANT_PROMO_CODE";
     case HTML_TYPE_UNRECOGNIZED:
       return "HTML_TYPE_UNRECOGNIZED";
   }

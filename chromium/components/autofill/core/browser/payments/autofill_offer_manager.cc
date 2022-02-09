@@ -7,6 +7,7 @@
 #include <map>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/ranges/algorithm.h"
 #include "base/ranges/ranges.h"
 #include "base/strings/utf_string_conversions.h"
@@ -43,7 +44,8 @@ void AutofillOfferManager::OnPersonalDataChanged() {
 void AutofillOfferManager::UpdateSuggestionsWithOffers(
     const GURL& last_committed_url,
     std::vector<Suggestion>& suggestions) {
-  GURL last_committed_url_origin = last_committed_url.GetOrigin();
+  GURL last_committed_url_origin =
+      last_committed_url.DeprecatedGetOriginAsURL();
   if (eligible_merchant_domains_.count(last_committed_url_origin) == 0) {
     return;
   }
@@ -74,16 +76,12 @@ void AutofillOfferManager::UpdateSuggestionsWithOffers(
 }
 
 bool AutofillOfferManager::IsUrlEligible(const GURL& last_committed_url) {
-  // Checking set::empty and using set::count to prevent possible crashes (see
-  // crbug.com/1195949).
   if (coupon_service_delegate_ &&
       coupon_service_delegate_->IsUrlEligible(last_committed_url)) {
     return true;
   }
-  // For most cases this vector will be empty, so add the empty check to avoid
-  // unnecessary calls.
-  return !eligible_merchant_domains_.empty() &&
-         eligible_merchant_domains_.count(last_committed_url.GetOrigin());
+  return base::Contains(eligible_merchant_domains_,
+                        last_committed_url.DeprecatedGetOriginAsURL());
 }
 
 AutofillOfferData* AutofillOfferManager::GetOfferForUrl(
@@ -92,14 +90,16 @@ AutofillOfferData* AutofillOfferManager::GetOfferForUrl(
     for (AutofillOfferData* offer :
          coupon_service_delegate_->GetFreeListingCouponsForUrl(
              last_committed_url)) {
-      if (offer->IsActiveAndEligibleForOrigin(last_committed_url.GetOrigin())) {
+      if (offer->IsActiveAndEligibleForOrigin(
+              last_committed_url.DeprecatedGetOriginAsURL())) {
         return offer;
       }
     }
   }
 
   for (AutofillOfferData* offer : personal_data_->GetAutofillOffers()) {
-    if (offer->IsActiveAndEligibleForOrigin(last_committed_url.GetOrigin())) {
+    if (offer->IsActiveAndEligibleForOrigin(
+            last_committed_url.DeprecatedGetOriginAsURL())) {
       return offer;
     }
   }

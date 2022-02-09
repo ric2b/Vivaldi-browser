@@ -54,8 +54,10 @@ AllPasswordsBottomSheetController::AllPasswordsBottomSheetController(
   password_manager::ContentPasswordManagerDriverFactory* factory =
       password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
           web_contents_);
+  auto* focused_frame = web_contents->GetFocusedFrame();
+  CHECK(focused_frame->IsRenderFrameLive());
   password_manager::ContentPasswordManagerDriver* driver =
-      factory->GetDriverForFrame(web_contents_->GetFocusedFrame());
+      factory->GetDriverForFrame(focused_frame);
   driver_ = driver->AsWeakPtr();
   client_ = ChromePasswordManagerClient::FromWebContents(web_contents_);
 }
@@ -68,7 +70,8 @@ AllPasswordsBottomSheetController::~AllPasswordsBottomSheetController() {
 }
 
 void AllPasswordsBottomSheetController::Show() {
-  store_->GetAllLoginsWithAffiliationAndBrandingInformation(this);
+  store_->GetAllLoginsWithAffiliationAndBrandingInformation(
+      weak_ptr_factory_.GetWeakPtr());
 }
 
 void AllPasswordsBottomSheetController::OnGetPasswordStoreResults(
@@ -100,7 +103,9 @@ void AllPasswordsBottomSheetController::OnCredentialSelected(
     DCHECK(client_);
     scoped_refptr<device_reauth::BiometricAuthenticator> authenticator =
         client_->GetBiometricAuthenticator();
-    if (password_manager_util::CanUseBiometricAuth(authenticator.get())) {
+    if (password_manager_util::CanUseBiometricAuth(
+            authenticator.get(),
+            device_reauth::BiometricAuthRequester::kAllPasswordsList)) {
       authenticator_ = std::move(authenticator);
       authenticator_->Authenticate(
           device_reauth::BiometricAuthRequester::kAllPasswordsList,

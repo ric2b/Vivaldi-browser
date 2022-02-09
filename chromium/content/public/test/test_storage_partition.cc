@@ -4,6 +4,7 @@
 
 #include "content/public/test/test_storage_partition.h"
 
+#include "base/ignore_result.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "content/public/browser/file_system_access_entry_factory.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
@@ -65,10 +66,6 @@ TestStoragePartition::CreateURLLoaderNetworkObserverForNavigationRequest(
 
 storage::QuotaManager* TestStoragePartition::GetQuotaManager() {
   return quota_manager_;
-}
-
-AppCacheService* TestStoragePartition::GetAppCacheService() {
-  return app_cache_service_;
 }
 
 BackgroundSyncContext* TestStoragePartition::GetBackgroundSyncContext() {
@@ -239,5 +236,13 @@ void TestStoragePartition::WaitForCodeCacheShutdownForTesting() {}
 void TestStoragePartition::SetNetworkContextForTesting(
     mojo::PendingRemote<network::mojom::NetworkContext>
         network_context_remote) {}
+
+base::WeakPtr<StoragePartition> TestStoragePartition::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+void TestStoragePartition::InvalidateWeakPtrs() {
+  weak_factory_.InvalidateWeakPtrs();
+}
 
 }  // namespace content

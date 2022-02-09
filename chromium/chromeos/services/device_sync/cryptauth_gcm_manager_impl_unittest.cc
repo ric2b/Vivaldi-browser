@@ -4,7 +4,6 @@
 
 #include "chromeos/services/device_sync/cryptauth_gcm_manager_impl.h"
 
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromeos/services/device_sync/cryptauth_feature_type.h"
 #include "chromeos/services/device_sync/cryptauth_key_bundle.h"
@@ -63,6 +62,12 @@ class MockGCMDriver : public gcm::FakeGCMDriver {
 class DeviceSyncCryptAuthGCMManagerImplTest
     : public testing::Test,
       public CryptAuthGCMManager::Observer {
+ public:
+  DeviceSyncCryptAuthGCMManagerImplTest(
+      const DeviceSyncCryptAuthGCMManagerImplTest&) = delete;
+  DeviceSyncCryptAuthGCMManagerImplTest& operator=(
+      const DeviceSyncCryptAuthGCMManagerImplTest&) = delete;
+
  protected:
   DeviceSyncCryptAuthGCMManagerImplTest()
       : gcm_manager_(&gcm_driver_, &pref_service_) {}
@@ -122,8 +127,6 @@ class DeviceSyncCryptAuthGCMManagerImplTest
   TestingPrefServiceSimple pref_service_;
 
   CryptAuthGCMManagerImpl gcm_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceSyncCryptAuthGCMManagerImplTest);
 };
 
 TEST_F(DeviceSyncCryptAuthGCMManagerImplTest, RegisterPrefs) {

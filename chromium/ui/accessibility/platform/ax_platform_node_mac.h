@@ -8,7 +8,6 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/scoped_nsobject.h"
-#include "base/macros.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/platform/ax_platform_node_base.h"
 
@@ -18,8 +17,7 @@ namespace ui {
 
 class AXPlatformNodeMac : public AXPlatformNodeBase {
  public:
-  AXPlatformNodeMac();
-
+  ~AXPlatformNodeMac() override;
   AXPlatformNodeMac(const AXPlatformNodeMac&) = delete;
   AXPlatformNodeMac& operator=(const AXPlatformNodeMac&) = delete;
 
@@ -37,19 +35,23 @@ class AXPlatformNodeMac : public AXPlatformNodeBase {
   base::scoped_nsobject<AXPlatformNodeCocoa> ReleaseNativeWrapper() {
     return std::move(native_node_);
   }
+
   void SetNativeWrapper(AXPlatformNodeCocoa* native_node) {
     return native_node_.reset(native_node);
   }
 
  protected:
+  AXPlatformNodeMac();
+
   void AddAttributeToList(const char* name,
                           const char* value,
                           PlatformAttributeList* attributes) override;
 
  private:
-  ~AXPlatformNodeMac() override;
-
   base::scoped_nsobject<AXPlatformNodeCocoa> native_node_;
+
+  friend AXPlatformNode* AXPlatformNode::Create(
+      AXPlatformNodeDelegate* delegate);
 };
 
 // Convenience function to determine whether an internal object role should

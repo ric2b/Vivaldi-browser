@@ -17,8 +17,8 @@ class MyApp: public wxApp
 public:
     MyApp() { m_textCtrl = NULL; m_mimeDatabase = NULL; }
 
-    bool OnInit();
-    int OnExit() { delete m_mimeDatabase; return wxApp::OnExit(); }
+    bool OnInit() wxOVERRIDE;
+    int OnExit() wxOVERRIDE { delete m_mimeDatabase; return wxApp::OnExit(); }
 
     void DoVariantDemo(wxCommandEvent& event);
     void DoByteOrderDemo(wxCommandEvent& event);
@@ -44,7 +44,7 @@ private:
     wxDECLARE_EVENT_TABLE();
 };
 
-DECLARE_APP(MyApp)
+wxDECLARE_APP(MyApp);
 
 // Define a new frame type
 class MyFrame: public wxFrame

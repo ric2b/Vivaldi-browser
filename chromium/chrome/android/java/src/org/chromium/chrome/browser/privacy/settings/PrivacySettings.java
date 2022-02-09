@@ -18,9 +18,9 @@ import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingSwitchPreference;
 import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsFragment;
 import org.chromium.chrome.browser.privacy.secure_dns.SecureDnsSettings;
 import org.chromium.chrome.browser.privacy_review.PrivacyReviewDialog;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxReferrer;
@@ -55,7 +55,7 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 public class PrivacySettings
         extends PreferenceFragmentCompat implements Preference.OnPreferenceChangeListener {
     private static final String PREF_CAN_MAKE_PAYMENT = "can_make_payment";
-    private static final String PREF_NETWORK_PREDICTIONS = "preload_pages";
+    private static final String PREF_PRELOAD_PAGES = "preload_pages";
     private static final String PREF_HTTPS_FIRST_MODE = "https_first_mode";
     private static final String PREF_SECURE_DNS = "secure_dns";
     private static final String PREF_USAGE_STATS = "usage_stats_reporting";
@@ -75,10 +75,11 @@ public class PrivacySettings
     private static final String[] NEW_PRIVACY_PREFERENCE_ORDER = {PREF_CLEAR_BROWSING_DATA,
             // Vivaldi
             PREF_CLEAR_SESSION_BROWSING_DATA, PREF_CONTEXTUAL_SEARCH, PREF_WEBRTC_BROADCAST_IP,
-            PREF_SAFE_BROWSING, PREF_CAN_MAKE_PAYMENT, PREF_NETWORK_PREDICTIONS, PREF_USAGE_STATS,
-            PREF_SECURE_DNS, PREF_DO_NOT_TRACK, PREF_PRIVACY_SANDBOX, PREF_SYNC_AND_SERVICES_LINK};
+            PREF_SAFE_BROWSING, PREF_CAN_MAKE_PAYMENT, PREF_USAGE_STATS, PREF_SECURE_DNS,
+            PREF_DO_NOT_TRACK, PREF_PRIVACY_SANDBOX, PREF_SYNC_AND_SERVICES_LINK};
 
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
+    private IncognitoLockSettings mIncognitoLockSettings;
 
     /**
      * Vivaldi
@@ -122,7 +123,10 @@ public class PrivacySettings
             });
         }
 
-        setUpIncognitoReauthPreference();
+        IncognitoReauthSettingSwitchPreference incognitoReauthPreference =
+                (IncognitoReauthSettingSwitchPreference) findPreference(PREF_INCOGNITO_LOCK);
+        mIncognitoLockSettings = new IncognitoLockSettings(incognitoReauthPreference);
+        mIncognitoLockSettings.setUpIncognitoReauthPreference(getActivity());
 
         Preference safeBrowsingPreference = findPreference(PREF_SAFE_BROWSING);
         safeBrowsingPreference.setSummary(
@@ -141,12 +145,9 @@ public class PrivacySettings
                 (ChromeSwitchPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
         canMakePaymentPref.setOnPreferenceChangeListener(this);
 
-        ChromeSwitchPreference networkPredictionPref =
-                (ChromeSwitchPreference) findPreference(PREF_NETWORK_PREDICTIONS);
-        networkPredictionPref.setChecked(
-                PrivacyPreferencesManagerImpl.getInstance().getNetworkPredictionEnabled());
-        networkPredictionPref.setOnPreferenceChangeListener(this);
-        networkPredictionPref.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
+        Preference preloadPagesPreference = findPreference(PREF_PRELOAD_PAGES);
+        preloadPagesPreference.setSummary(
+                PreloadPagesSettingsFragment.getPreloadPagesSummaryString(getContext()));
 
         ChromeSwitchPreference httpsFirstModePref =
                 (ChromeSwitchPreference) findPreference(PREF_HTTPS_FIRST_MODE);
@@ -215,50 +216,15 @@ public class PrivacySettings
                 new SpanApplier.SpanInfo("<link2>", "</link2>", servicesLink));
     }
 
-    private void setUpIncognitoReauthPreference() {
-        IncognitoReauthSettingSwitchPreference incognitoReauthPreference =
-                (IncognitoReauthSettingSwitchPreference) findPreference(PREF_INCOGNITO_LOCK);
-        if (!IncognitoReauthManager.shouldShowSetting()) {
-            incognitoReauthPreference.setVisible(false);
-            return;
-        }
-        incognitoReauthPreference.setLinkClickDelegate(() -> {
-            getActivity().startActivity(IncognitoReauthManager.getSystemLocationSettingsIntent());
-        });
-        incognitoReauthPreference.setOnPreferenceChangeListener(this);
-
-        updateIncognitoReauthPreference();
-    }
-
-    private void updateIncognitoReauthPreference() {
-        if (!IncognitoReauthManager.shouldShowSetting()) return;
-        IncognitoReauthSettingSwitchPreference incognitoReauthPreference =
-                (IncognitoReauthSettingSwitchPreference) findPreference(PREF_INCOGNITO_LOCK);
-        incognitoReauthPreference.setSummary(
-                IncognitoReauthManager.getSummaryString(getActivity()));
-        incognitoReauthPreference.setPreferenceInteractable(
-                IncognitoReauthManager.isDeviceScreenLockEnabled());
-
-        boolean lastPrefValue = UserPrefs.get(Profile.getLastUsedRegularProfile())
-                                        .getBoolean(Pref.INCOGNITO_REAUTHENTICATION_FOR_ANDROID);
-        incognitoReauthPreference.setChecked(lastPrefValue);
-    }
-
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         String key = preference.getKey();
         if (PREF_CAN_MAKE_PAYMENT.equals(key)) {
             UserPrefs.get(Profile.getLastUsedRegularProfile())
                     .setBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED, (boolean) newValue);
-        } else if (PREF_NETWORK_PREDICTIONS.equals(key)) {
-            PrivacyPreferencesManagerImpl.getInstance().setNetworkPredictionEnabled(
-                    (boolean) newValue);
         } else if (PREF_HTTPS_FIRST_MODE.equals(key)) {
             UserPrefs.get(Profile.getLastUsedRegularProfile())
                     .setBoolean(Pref.HTTPS_ONLY_MODE_ENABLED, (boolean) newValue);
-        } else if (PREF_INCOGNITO_LOCK.equals(key)) {
-            UserPrefs.get(Profile.getLastUsedRegularProfile())
-                    .setBoolean(Pref.INCOGNITO_REAUTHENTICATION_FOR_ANDROID, (boolean) newValue);
         }
         // Vivaldi
         else if (PREF_WEBRTC_BROADCAST_IP.equals(key)) {
@@ -335,7 +301,7 @@ public class PrivacySettings
         }
         } // Vivaldi
 
-        updateIncognitoReauthPreference();
+        mIncognitoLockSettings.updateIncognitoReauthPreferenceIfNeeded(getActivity());
 
         // Vivaldi
         Preference contextualPref = findPreference(PREF_CONTEXTUAL_SEARCH);
@@ -356,9 +322,7 @@ public class PrivacySettings
     private ChromeManagedPreferenceDelegate createManagedPreferenceDelegate() {
         return preference -> {
             String key = preference.getKey();
-            if (PREF_NETWORK_PREDICTIONS.equals(key)) {
-                return PrivacyPreferencesManagerImpl.getInstance().isNetworkPredictionManaged();
-            } else if (PREF_HTTPS_FIRST_MODE.equals(key)) {
+            if (PREF_HTTPS_FIRST_MODE.equals(key)) {
                 return UserPrefs.get(Profile.getLastUsedRegularProfile())
                         .isManagedPreference(Pref.HTTPS_ONLY_MODE_ENABLED);
             }

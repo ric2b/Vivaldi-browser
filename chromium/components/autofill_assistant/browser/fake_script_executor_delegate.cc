@@ -58,6 +58,10 @@ std::string FakeScriptExecutorDelegate::GetEmailAddressForAccessTokenAccount() {
   return std::string();
 }
 
+ukm::UkmRecorder* FakeScriptExecutorDelegate::GetUkmRecorder() {
+  return nullptr;
+}
+
 bool FakeScriptExecutorDelegate::EnterState(AutofillAssistantState state) {
   if (GetState() == state)
     return false;
@@ -66,8 +70,15 @@ bool FakeScriptExecutorDelegate::EnterState(AutofillAssistantState state) {
   return true;
 }
 
+AutofillAssistantState FakeScriptExecutorDelegate::GetState() {
+  return state_history_.empty() ? AutofillAssistantState::INACTIVE
+                                : state_history_.back();
+}
+
 void FakeScriptExecutorDelegate::SetTouchableElementArea(
-    const ElementAreaProto& element) {}
+    const ElementAreaProto& element_area) {
+  touchable_element_area_history_.emplace_back(element_area);
+}
 
 void FakeScriptExecutorDelegate::SetStatusMessage(const std::string& message) {
   status_message_ = message;
@@ -124,8 +135,6 @@ void FakeScriptExecutorDelegate::SetInfoBox(const InfoBox& info_box) {
 void FakeScriptExecutorDelegate::ClearInfoBox() {
   info_box_ = nullptr;
 }
-
-void FakeScriptExecutorDelegate::SetProgress(int progress) {}
 
 bool FakeScriptExecutorDelegate::SetProgressActiveStepIdentifier(
     const std::string& active_step_identifier) {
@@ -211,6 +220,10 @@ bool FakeScriptExecutorDelegate::IsNavigatingToNewDocument() {
 
 void FakeScriptExecutorDelegate::RequireUI() {
   require_ui_ = true;
+}
+
+ProcessedActionStatusDetailsProto& FakeScriptExecutorDelegate::GetLogInfo() {
+  return log_info_;
 }
 
 void FakeScriptExecutorDelegate::AddNavigationListener(

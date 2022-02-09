@@ -35,9 +35,9 @@
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
-#include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace blink {
 
@@ -266,7 +266,7 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   // element's items (see AddElementStyle). This requires a style-clean tree.
   // See Element::EnsureComputedStyle for further explanation.
   DCHECK(!owner_element.GetDocument().NeedsLayoutTreeUpdate());
-  IntRect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
+  gfx::Rect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
       owner_element.VisibleBoundsInVisualViewport(),
       owner_element.GetDocument().View());
 
@@ -316,24 +316,20 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
 
   data->Append(ChooserResourceLoader::GetPickerCommonStyleSheet());
   data->Append(ChooserResourceLoader::GetListPickerStyleSheet());
-  if (!RuntimeEnabledFeatures::ForceTallerSelectPopupEnabled())
-    PagePopupClient::AddString("@media (any-pointer:coarse) {", data);
-  int padding = static_cast<int>(roundf(4 * scale_factor));
-  int min_height = static_cast<int>(roundf(24 * scale_factor));
-  PagePopupClient::AddString(String::Format("option, optgroup {"
-                                            "padding-top: %dpx;"
-                                            "}\n"
-                                            "option {"
-                                            "padding-bottom: %dpx;"
-                                            "min-height: %dpx;"
-                                            "display: flex;"
-                                            "align-items: center;"
-                                            "}",
-                                            padding, padding, min_height),
-                             data);
-  if (!RuntimeEnabledFeatures::ForceTallerSelectPopupEnabled()) {
-    // Closes @media.
-    PagePopupClient::AddString("}", data);
+  if (taller_options_) {
+    int padding = static_cast<int>(roundf(4 * scale_factor));
+    int min_height = static_cast<int>(roundf(24 * scale_factor));
+    PagePopupClient::AddString(String::Format("option, optgroup {"
+                                              "padding-top: %dpx;"
+                                              "}\n"
+                                              "option {"
+                                              "padding-bottom: %dpx;"
+                                              "min-height: %dpx;"
+                                              "display: flex;"
+                                              "align-items: center;"
+                                              "}",
+                                              padding, padding, min_height),
+                               data);
   }
 
   PagePopupClient::AddString(
@@ -543,9 +539,10 @@ void InternalPopupMenu::SetValueAndClosePopup(int num_value,
   // We dispatch events on the owner element to match the legacy behavior.
   // Other browsers dispatch click events before and after showing the popup.
   if (owner_element_) {
-    // TODO(dtapuska): Why is this event positionless?
     WebMouseEvent event;
     event.SetFrameScale(1);
+    PhysicalRect bounding_box = owner_element_->BoundingBox();
+    event.SetPositionInWidget(bounding_box.X(), bounding_box.Y());
     Element* owner = &OwnerElement();
     if (LocalFrame* frame = owner->GetDocument().GetFrame()) {
       frame->GetEventHandler().HandleTargetedMouseEvent(
@@ -597,8 +594,10 @@ void InternalPopupMenu::Dispose() {
     chrome_client_->ClosePagePopup(popup_);
 }
 
-void InternalPopupMenu::Show() {
+void InternalPopupMenu::Show(PopupMenu::ShowEventType type) {
   DCHECK(!popup_);
+  taller_options_ = type == PopupMenu::kTouch ||
+                    RuntimeEnabledFeatures::ForceTallerSelectPopupEnabled();
   popup_ = chrome_client_->OpenPagePopup(this);
 }
 
@@ -622,7 +621,7 @@ void InternalPopupMenu::Update(bool force_update) {
     return;
   needs_update_ = false;
 
-  if (!IntRect(IntPoint(), OwnerElement().GetDocument().View()->Size())
+  if (!gfx::Rect(gfx::Point(), OwnerElement().GetDocument().View()->Size())
            .Intersects(OwnerElement().PixelSnappedBoundingBox())) {
     Hide();
     return;
@@ -648,7 +647,7 @@ void InternalPopupMenu::Update(bool force_update) {
   }
   context.FinishGroupIfNecessary();
   PagePopupClient::AddString("],\n", data.get());
-  IntRect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
+  gfx::Rect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
       owner_element_->VisibleBoundsInVisualViewport(),
       OwnerElement().GetDocument().View());
   AddProperty("anchorRectInScreen", anchor_rect_in_screen, data.get());

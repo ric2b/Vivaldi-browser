@@ -8,7 +8,6 @@
 #include <jni.h>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/macros.h"
 #include "chromecast/browser/cast_content_window.h"
 
 namespace content {
@@ -21,8 +20,7 @@ namespace chromecast {
 // CastWebContentsActivity.
 class CastContentWindowAndroid : public CastContentWindow {
  public:
-  CastContentWindowAndroid(base::WeakPtr<Delegate> delegate,
-                           mojom::CastWebViewParamsPtr params);
+  explicit CastContentWindowAndroid(mojom::CastWebViewParamsPtr params);
 
   CastContentWindowAndroid(const CastContentWindowAndroid&) = delete;
   CastContentWindowAndroid& operator=(const CastContentWindowAndroid&) = delete;

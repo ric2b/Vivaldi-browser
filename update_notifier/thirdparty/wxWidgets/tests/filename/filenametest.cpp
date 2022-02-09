@@ -12,9 +12,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/utils.h"
@@ -27,7 +24,7 @@
 
 #ifdef __WINDOWS__
     #include "wx/msw/registry.h"
-    #include <shlobj.h>
+    #include "wx/msw/wrapshl.h"
     #include "wx/msw/ole/oleutils.h"
     #include "wx/msw/private/comptr.h"
 #endif // __WINDOWS__
@@ -180,7 +177,7 @@ private:
     void TestShortcuts();
 #endif // __WINDOWS__
 
-    DECLARE_NO_COPY_CLASS(FileNameTestCase)
+    wxDECLARE_NO_COPY_CLASS(FileNameTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -355,6 +352,7 @@ void FileNameTestCase::TestNormalize()
         { "b/../bar", wxPATH_NORM_DOTS, "bar", wxPATH_UNIX },
         { "c/../../quux", wxPATH_NORM_DOTS, "../quux", wxPATH_UNIX },
         { "/c/../../quux", wxPATH_NORM_DOTS, "/quux", wxPATH_UNIX },
+        { "../../quux", wxPATH_NORM_DOTS, "../../quux", wxPATH_UNIX },
 
         // test wxPATH_NORM_TILDE: notice that ~ is only interpreted specially
         // when it is the first character in the file name
@@ -665,7 +663,7 @@ void FileNameTestCase::TestCreateTempFileName()
         if (testData[n].shouldSucceed)
         {
             errDesc += "; path is " + path.ToStdString();
-        
+
             // test the place where the temp file has been created
             wxString expected = testData[n].expectedFolder;
             expected.Replace("$SYSTEM_TEMP", wxStandardPaths::Get().GetTempDir());
@@ -688,7 +686,7 @@ void FileNameTestCase::TestGetTimes()
     wxDateTime dtAccess, dtMod, dtCreate;
     CPPUNIT_ASSERT( fn.GetTimes(&dtAccess, &dtMod, &dtCreate) );
 
-    // make sure all retrieved dates are equal to the current date&time 
+    // make sure all retrieved dates are equal to the current date&time
     // with an accuracy up to 1 minute
     CPPUNIT_ASSERT(dtCreate.IsEqualUpTo(wxDateTime::Now(), wxTimeSpan(0,1)));
     CPPUNIT_ASSERT(dtMod.IsEqualUpTo(wxDateTime::Now(), wxTimeSpan(0,1)));
@@ -729,17 +727,8 @@ void FileNameTestCase::TestExists()
     CPPUNIT_ASSERT( fn.FileExists() );
     CPPUNIT_ASSERT( !wxFileName::DirExists(fn.GetFullPath()) );
 
-    // FIXME-VC6: This compiler crashes with
-    //
-    //      fatal error C1001: INTERNAL COMPILER ERROR
-    //      (compiler file 'msc1.cpp', line 1794)
-    //
-    // when compiling calls to Exists() with parameter for some reason, just
-    // disable these tests there.
-#ifndef __VISUALC6__
     CPPUNIT_ASSERT( fn.Exists(wxFILE_EXISTS_REGULAR) );
     CPPUNIT_ASSERT( !fn.Exists(wxFILE_EXISTS_DIR) );
-#endif
     CPPUNIT_ASSERT( fn.Exists() );
 
     const wxString& tempdir = wxFileName::GetTempDir();
@@ -752,10 +741,8 @@ void FileNameTestCase::TestExists()
     CPPUNIT_ASSERT( !dirTemp.FileExists() );
     CPPUNIT_ASSERT( dirTemp.DirExists() );
 
-#ifndef __VISUALC6__
     CPPUNIT_ASSERT( dirTemp.Exists(wxFILE_EXISTS_DIR) );
     CPPUNIT_ASSERT( !dirTemp.Exists(wxFILE_EXISTS_REGULAR) );
-#endif
     CPPUNIT_ASSERT( dirTemp.Exists() );
 
 #ifdef __UNIX__
@@ -766,7 +753,7 @@ void FileNameTestCase::TestExists()
 #ifdef __LINUX__
     // These files are only guaranteed to exist under Linux.
     // No need for wxFILE_EXISTS_NO_FOLLOW here; wxFILE_EXISTS_SYMLINK implies it
-    CPPUNIT_ASSERT( wxFileName::Exists("/dev/core", wxFILE_EXISTS_SYMLINK) );
+    CPPUNIT_ASSERT( wxFileName::Exists("/proc/self", wxFILE_EXISTS_SYMLINK) );
     CPPUNIT_ASSERT( wxFileName::Exists("/dev/log", wxFILE_EXISTS_SOCKET) );
 #endif // __LINUX__
 #ifndef __VMS
@@ -838,9 +825,6 @@ void FileNameTestCase::TestSymlinks()
 
     wxFileName tmpfn(wxFileName::DirName(tmpdir));
 
-    wxDateTime dtAccessTmp, dtModTmp, dtCreateTmp;
-    CPPUNIT_ASSERT(tmpfn.GetTimes(&dtAccessTmp, &dtModTmp, &dtCreateTmp));
-
     // Create a temporary directory
 #ifdef __VMS
     wxString name = tmpdir + ".filenametestXXXXXX]";
@@ -858,24 +842,70 @@ void FileNameTestCase::TestSymlinks()
     wxFileName targetfn(wxFileName::CreateTempFileName(tempdir));
     CPPUNIT_ASSERT(targetfn.FileExists());
 
+    // Resolving a non-symlink will just return the same thing
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Non-symlink didn't resolve to the same file",
+        targetfn, targetfn.ResolveLink()
+    );
+
     // Create a symlink to that file
     wxFileName linktofile(tempdir, "linktofile");
     CPPUNIT_ASSERT_EQUAL(0, symlink(targetfn.GetFullPath().c_str(),
-                                        linktofile.GetFullPath().c_str()));
+                                    linktofile.GetFullPath().c_str()));
+
+    // Test resolving the filename to the symlink
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Failed to resolve symlink to file",
+        targetfn, linktofile.ResolveLink()
+    );
+
+    // Create a relative symlink to that file
+    wxFileName relativelinktofile(tempdir, "relativelinktofile");
+    wxString relativeFileName = "./" + targetfn.GetFullName();
+    CPPUNIT_ASSERT_EQUAL(0, symlink(relativeFileName.c_str(),
+                                    relativelinktofile.GetFullPath().c_str()));
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Failed to resolve relative symlink to absolute file path",
+        targetfn, relativelinktofile.ResolveLink()
+    );
 
     // ... and another to the temporary directory
     const wxString linktodirName(tempdir + "/linktodir");
+    wxFileName linktodirfn(linktodirName);
     wxFileName linktodir(wxFileName::DirName(linktodirName));
     CPPUNIT_ASSERT_EQUAL(0, symlink(tmpfn.GetFullPath().c_str(),
-                                        linktodirName.c_str()));
+                                    linktodirName.c_str()));
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Failed to resolve symlink to directory",
+        tmpfn, linktodirfn.ResolveLink()
+    );
 
     // And symlinks to both of those symlinks
     wxFileName linktofilelnk(tempdir, "linktofilelnk");
     CPPUNIT_ASSERT_EQUAL(0, symlink(linktofile.GetFullPath().c_str(),
                                     linktofilelnk.GetFullPath().c_str()));
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Failed to resolve symlink to file symlink",
+        targetfn, linktofilelnk.ResolveLink()
+    );
+
     wxFileName linktodirlnk(tempdir, "linktodirlnk");
     CPPUNIT_ASSERT_EQUAL(0, symlink(linktodir.GetFullPath().c_str(),
                                     linktodirlnk.GetFullPath().c_str()));
+
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Failed to resolve symlink to directory symlink",
+        tmpfn, linktodirlnk.ResolveLink()
+    );
 
     // Run the tests twice: once in the default symlink following mode and the
     // second time without following symlinks.
@@ -926,18 +956,6 @@ void FileNameTestCase::TestSymlinks()
         (
             "Getting times of a directory" + msg,
             linktodir.GetTimes(&dtAccess, &dtMod, &dtCreate)
-        );
-
-        // IsEqualTo() should be true only when dereferencing. Don't test each
-        // individually: accessing to create the link will have updated some
-        bool equal = dtCreate.IsEqualTo(dtCreateTmp) &&
-                     dtMod.IsEqualTo(dtModTmp) &&
-                     dtAccess.IsEqualTo(dtAccessTmp);
-        CPPUNIT_ASSERT_EQUAL_MESSAGE
-        (
-            "Comparing directory times" + msg,
-            deref,
-            equal
         );
 
         // Test (File|Dir)Exists()
@@ -997,6 +1015,14 @@ void FileNameTestCase::TestSymlinks()
 
     // Finally test Exists() after removing the file.
     CPPUNIT_ASSERT(wxRemoveFile(targetfn.GetFullPath()));
+
+    // Resolving a file that doesn't exist returns empty
+    CPPUNIT_ASSERT_EQUAL_MESSAGE
+    (
+        "Non-existent file didn't resolve correctly",
+        wxFileName(), targetfn.ResolveLink()
+    );
+
     // This should succeed, as the symlink still exists and
     // the default wxFILE_EXISTS_ANY implies wxFILE_EXISTS_NO_FOLLOW
     CPPUNIT_ASSERT(wxFileName(tempdir, "linktofile").Exists());
@@ -1046,10 +1072,10 @@ void CreateShortcut(const wxString& pathFile, const wxString& pathLink)
    hr = sl->QueryInterface(IID_IPersistFile, (void **)&pf);
    CPPUNIT_ASSERT( SUCCEEDED(hr) );
 
-   hr = sl->SetPath(pathFile.wx_str());
+   hr = sl->SetPath(pathFile.t_str());
    CPPUNIT_ASSERT( SUCCEEDED(hr) );
 
-   hr = pf->Save(pathLink.wx_str(), TRUE);
+   hr = pf->Save(pathLink.wc_str(), TRUE);
    CPPUNIT_ASSERT( SUCCEEDED(hr) );
 }
 
@@ -1075,3 +1101,22 @@ void FileNameTestCase::TestShortcuts()
 }
 
 #endif // __WINDOWS__
+
+#ifdef __LINUX__
+
+// Check that GetSize() works correctly for special files.
+TEST_CASE("wxFileName::GetSizeSpecial", "[filename][linux][special-file]")
+{
+    if ( IsRunningInLXC() )
+        return;
+
+    wxULongLong size = wxFileName::GetSize("/proc/kcore");
+    INFO( "size of /proc/kcore=" << size );
+    CHECK( size > 0 );
+
+    // All files in /sys are one page in size, irrespectively of the size of
+    // their actual contents.
+    CHECK( wxFileName::GetSize("/sys/power/state") == sysconf(_SC_PAGESIZE) );
+}
+
+#endif // __LINUX__

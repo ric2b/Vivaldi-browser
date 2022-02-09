@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
 #include "base/supports_user_data.h"
@@ -25,7 +26,7 @@
 #include "components/payments/core/payment_request_data_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/render_document_host_user_data.h"
+#include "content/public/browser/document_user_data.h"
 #include "content/public/browser/web_contents.h"
 
 namespace payments {
@@ -207,7 +208,7 @@ class AppFinder : public base::SupportsUserData::Data {
     owner_->RemoveUserData(this);
   }
 
-  base::SupportsUserData* owner_;
+  raw_ptr<base::SupportsUserData> owner_;
   base::WeakPtr<PaymentAppFactory::Delegate> delegate_;
   size_t number_of_pending_is_ready_to_pay_queries_ = 0;
   base::WeakPtr<AndroidAppCommunication> communication_;

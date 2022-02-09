@@ -4,7 +4,7 @@
 // Author:      Vadim Zeitlin
 // Modified by:
 // Created:     21.06.2003 (extracted from common/fontmap.cpp)
-// Copyright:   (c) 1999-2003 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 1999-2003 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -19,9 +19,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_FONTMAP
 
@@ -362,7 +359,7 @@ class wxFontMapperModule : public wxModule
 public:
     wxFontMapperModule() : wxModule() { }
 
-    virtual bool OnInit()
+    virtual bool OnInit() wxOVERRIDE
     {
         // a dummy wxFontMapperBase object could have been created during the
         // program startup before wxApp was created, we have to delete it to
@@ -376,15 +373,15 @@ public:
         return true;
     }
 
-    virtual void OnExit()
+    virtual void OnExit() wxOVERRIDE
     {
         wxFontMapperBase::Reset();
     }
 
-    DECLARE_DYNAMIC_CLASS(wxFontMapperModule)
+    wxDECLARE_DYNAMIC_CLASS(wxFontMapperModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxFontMapperModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxFontMapperModule, wxModule);
 
 
 // ============================================================================
@@ -407,8 +404,7 @@ wxFontMapperBase::wxFontMapperBase()
 wxFontMapperBase::~wxFontMapperBase()
 {
 #if wxUSE_CONFIG && wxUSE_FILECONFIG
-    if ( m_configDummy )
-        delete m_configDummy;
+    delete m_configDummy;
 #endif // wxUSE_CONFIG
 }
 
@@ -417,7 +413,7 @@ wxFontMapperBase *wxFontMapperBase::Get()
 {
     if ( !sm_instance )
     {
-        wxAppTraits *traits = wxTheApp ? wxTheApp->GetTraits() : NULL;
+        wxAppTraits *traits = wxApp::GetTraitsIfExists();
         if ( traits )
         {
             sm_instance = traits->CreateFontMapper();

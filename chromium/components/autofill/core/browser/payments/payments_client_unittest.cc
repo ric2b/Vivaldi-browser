@@ -9,11 +9,10 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -67,11 +66,6 @@ struct CardUnmaskOptions {
     return *this;
   }
 
-  CardUnmaskOptions& with_reason(AutofillClient::UnmaskCardReason r) {
-    reason = r;
-    return *this;
-  }
-
   CardUnmaskOptions& with_virtual_card() {
     virtual_card = true;
     return *this;
@@ -115,9 +109,6 @@ struct CardUnmaskOptions {
   bool virtual_card = false;
   // If true, set context_token in the request.
   bool set_context_token = true;
-  // The reason for unmasking this card.
-  AutofillClient::UnmaskCardReason reason =
-      AutofillClient::UnmaskCardReason::kAutofill;
 };
 
 }  // namespace
@@ -249,7 +240,6 @@ class PaymentsClientTest : public testing::Test {
   void StartUnmasking(CardUnmaskOptions options) {
     PaymentsClient::UnmaskRequestDetails request_details;
     request_details.billing_customer_number = 111222333444;
-    request_details.reason = options.reason;
 
     request_details.card = test::GetMaskedServerCard();
     request_details.risk_data = "some risk data";
@@ -441,14 +431,15 @@ class PaymentsClientTest : public testing::Test {
 
   AutofillClient::PaymentsRpcResult result_ =
       AutofillClient::PaymentsRpcResult::kNone;
-  payments::PaymentsClient::UnmaskDetails* unmask_details_;
+  raw_ptr<payments::PaymentsClient::UnmaskDetails> unmask_details_;
 
   // Server ID of a saved card via credit card upload save.
   std::string server_id_;
   // The OptChangeResponseDetails retrieved from an OptChangeRequest.
   PaymentsClient::OptChangeResponseDetails opt_change_response_;
   // The UnmaskResponseDetails retrieved from an UnmaskRequest.  Includes PAN.
-  PaymentsClient::UnmaskResponseDetails* unmask_response_details_ = nullptr;
+  raw_ptr<PaymentsClient::UnmaskResponseDetails> unmask_response_details_ =
+      nullptr;
   // The legal message returned from a GetDetails upload save preflight call.
   std::unique_ptr<base::Value> legal_message_;
   // A list of card BIN ranges supported by Google Payments, returned from a
@@ -858,41 +849,6 @@ TEST_F(PaymentsClientTest, UnmaskIncludesMerchantDomain) {
 
   // last_committed_url_origin was set.
   EXPECT_TRUE(GetUploadData().find("merchant_domain") != std::string::npos);
-}
-
-TEST_F(PaymentsClientTest, UnmaskLogsCvcLengthForAutofill) {
-  base::HistogramTester histogram_tester;
-  StartUnmasking(CardUnmaskOptions()
-                     .with_reason(AutofillClient::UnmaskCardReason::kAutofill)
-                     .with_cvc("1234"));
-  IssueOAuthToken();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CardUnmask.CvcLength.ForAutofill", 4, 1);
-}
-
-TEST_F(PaymentsClientTest, UnmaskLogsCvcLengthForAutofillOnlyWhenCvcAuth) {
-  base::HistogramTester histogram_tester;
-  StartUnmasking(CardUnmaskOptions()
-                     .with_reason(AutofillClient::UnmaskCardReason::kAutofill)
-                     .with_fido());
-  IssueOAuthToken();
-
-  // The CvcLength histogram should never be logged for non-Cvc auth.
-  histogram_tester.ExpectTotalCount("Autofill.CardUnmask.CvcLength.ForAutofill",
-                                    0);
-}
-
-TEST_F(PaymentsClientTest, UnmaskLogsCvcLengthForPaymentRequest) {
-  base::HistogramTester histogram_tester;
-  StartUnmasking(
-      CardUnmaskOptions()
-          .with_reason(AutofillClient::UnmaskCardReason::kPaymentRequest)
-          .with_cvc("56789"));
-  IssueOAuthToken();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.CardUnmask.CvcLength.ForPaymentRequest", 5, 1);
 }
 
 TEST_F(PaymentsClientTest, OptInSuccess) {
@@ -1336,7 +1292,7 @@ TEST_F(PaymentsClientTest, ReauthNeeded) {
     ReturnResponse(net::HTTP_UNAUTHORIZED, "");
     // No response yet.
     EXPECT_EQ(AutofillClient::PaymentsRpcResult::kNone, result_);
-    EXPECT_EQ(nullptr, unmask_response_details_);
+    EXPECT_EQ(nullptr, unmask_response_details_.get());
 
     // Second HTTP_UNAUTHORIZED causes permanent failure.
     IssueOAuthToken();
@@ -1357,7 +1313,7 @@ TEST_F(PaymentsClientTest, ReauthNeeded) {
     ReturnResponse(net::HTTP_UNAUTHORIZED, "");
     // No response yet.
     EXPECT_EQ(AutofillClient::PaymentsRpcResult::kNone, result_);
-    EXPECT_EQ(nullptr, unmask_response_details_);
+    EXPECT_EQ(nullptr, unmask_response_details_.get());
 
     // HTTP_OK after first HTTP_UNAUTHORIZED results in success.
     IssueOAuthToken();
@@ -1591,6 +1547,7 @@ TEST_F(PaymentsClientTest, SelectChallengeOptionWithSmsOtpMethod) {
 
   EXPECT_EQ(AutofillClient::PaymentsRpcResult::kSuccess, result_);
   assertIncludedInRequest("context_token");
+  assertIncludedInRequest("external_customer_id");
   assertIncludedInRequest("selected_idv_challenge_option");
   assertIncludedInRequest("sms_otp_challenge_option");
   // We should only set the challenge id. No need to send the masked phone

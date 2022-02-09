@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/components/settings/cros_settings_names.h"
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/update_engine/update_engine_client.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/external_data_manager.h"
@@ -280,63 +280,62 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
       base::Value entry_dict(base::Value::Type::DICTIONARY);
       if (entry.has_type()) {
         if (entry.has_account_id()) {
-          entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyId,
-              entry.account_id());
+          entry_dict.SetStringKey(ash::kAccountsPrefDeviceLocalAccountsKeyId,
+                                  entry.account_id());
         }
-        entry_dict.SetIntKey(chromeos::kAccountsPrefDeviceLocalAccountsKeyType,
+        entry_dict.SetIntKey(ash::kAccountsPrefDeviceLocalAccountsKeyType,
                              entry.type());
         if (entry.kiosk_app().has_app_id()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyKioskAppId,
+              ash::kAccountsPrefDeviceLocalAccountsKeyKioskAppId,
               entry.kiosk_app().app_id());
         }
         if (entry.kiosk_app().has_update_url()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
+              ash::kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
               entry.kiosk_app().update_url());
         }
         if (entry.android_kiosk_app().has_package_name()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskPackage,
+              ash::kAccountsPrefDeviceLocalAccountsKeyArcKioskPackage,
               entry.android_kiosk_app().package_name());
         }
         if (entry.android_kiosk_app().has_class_name()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskClass,
+              ash::kAccountsPrefDeviceLocalAccountsKeyArcKioskClass,
               entry.android_kiosk_app().class_name());
         }
         if (entry.android_kiosk_app().has_action()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
+              ash::kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
               entry.android_kiosk_app().action());
         }
         if (entry.android_kiosk_app().has_display_name()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName,
+              ash::kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName,
               entry.android_kiosk_app().display_name());
         }
         if (entry.web_kiosk_app().has_url()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyWebKioskUrl,
+              ash::kAccountsPrefDeviceLocalAccountsKeyWebKioskUrl,
               entry.web_kiosk_app().url());
         }
         if (entry.web_kiosk_app().has_title()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyWebKioskTitle,
+              ash::kAccountsPrefDeviceLocalAccountsKeyWebKioskTitle,
               entry.web_kiosk_app().title());
         }
         if (entry.web_kiosk_app().has_icon_url()) {
           entry_dict.SetStringKey(
-              chromeos::kAccountsPrefDeviceLocalAccountsKeyWebKioskIconUrl,
+              ash::kAccountsPrefDeviceLocalAccountsKeyWebKioskIconUrl,
               entry.web_kiosk_app().icon_url());
         }
 
       } else if (entry.has_deprecated_public_session_id()) {
         // Deprecated public session specification.
-        entry_dict.SetStringKey(chromeos::kAccountsPrefDeviceLocalAccountsKeyId,
+        entry_dict.SetStringKey(ash::kAccountsPrefDeviceLocalAccountsKeyId,
                                 entry.deprecated_public_session_id());
-        entry_dict.SetIntKey(chromeos::kAccountsPrefDeviceLocalAccountsKeyType,
+        entry_dict.SetIntKey(ash::kAccountsPrefDeviceLocalAccountsKeyType,
                              DeviceLocalAccount::TYPE_PUBLIC_SESSION);
       }
       account_list.Append(std::move(entry_dict));
@@ -601,6 +600,17 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
                     nullptr);
     }
   }
+
+  if (policy.has_kiosk_crx_manifest_update_url_ignored()) {
+    const em::BooleanPolicyProto& container(
+        policy.kiosk_crx_manifest_update_url_ignored());
+    if (container.has_value()) {
+      policies->Set(key::kKioskCRXManifestUpdateURLIgnored,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD, base::Value(container.value()),
+                    nullptr);
+    }
+  }
 }
 
 void DecodeNetworkPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -691,6 +701,16 @@ void DecodeNetworkPolicies(const em::ChromeDeviceSettingsProto& policy,
         POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
         base::Value(policy.device_debug_packet_capture_allowed().allowed()),
         nullptr);
+  }
+}
+
+void DecodeIntegerReportingPolicy(PolicyMap* policies,
+                                  const std::string& policy_path,
+                                  google::protobuf::int64 int_value) {
+  std::unique_ptr<base::Value> value = DecodeIntegerValue(int_value);
+  if (value) {
+    policies->Set(policy_path, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                  POLICY_SOURCE_CLOUD, std::move(*value), nullptr);
   }
 }
 
@@ -794,13 +814,8 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
                     base::Value(container.report_board_status()), nullptr);
     }
     if (container.has_device_status_frequency()) {
-      std::unique_ptr<base::Value> value(
-          DecodeIntegerValue(container.device_status_frequency()));
-      if (value) {
-        policies->Set(key::kReportUploadFrequency, POLICY_LEVEL_MANDATORY,
-                      POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                      std::move(*value), nullptr);
-      }
+      DecodeIntegerReportingPolicy(policies, key::kReportUploadFrequency,
+                                   container.device_status_frequency());
     }
     if (container.has_report_cpu_info()) {
       policies->Set(key::kReportDeviceCpuInfo, POLICY_LEVEL_MANDATORY,
@@ -862,6 +877,21 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                     base::Value(container.report_login_logout()), nullptr);
     }
+    if (container.has_report_network_telemetry_collection_rate_ms()) {
+      DecodeIntegerReportingPolicy(
+          policies, key::kReportDeviceNetworkTelemetryCollectionRateMs,
+          container.report_network_telemetry_collection_rate_ms());
+    }
+    if (container.has_report_network_telemetry_event_checking_rate_ms()) {
+      DecodeIntegerReportingPolicy(
+          policies, key::kReportDeviceNetworkTelemetryEventCheckingRateMs,
+          container.report_network_telemetry_event_checking_rate_ms());
+    }
+    if (container.has_report_device_audio_status_checking_rate_ms()) {
+      DecodeIntegerReportingPolicy(
+          policies, key::kReportDeviceAudioStatusCheckingRateMs,
+          container.report_device_audio_status_checking_rate_ms());
+    }
   }
 
   if (policy.has_device_heartbeat_settings()) {
@@ -873,13 +903,8 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
                     base::Value(container.heartbeat_enabled()), nullptr);
     }
     if (container.has_heartbeat_frequency()) {
-      std::unique_ptr<base::Value> value(
-          DecodeIntegerValue(container.heartbeat_frequency()));
-      if (value) {
-        policies->Set(key::kHeartbeatFrequency, POLICY_LEVEL_MANDATORY,
-                      POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                      std::move(*value), nullptr);
-      }
+      DecodeIntegerReportingPolicy(policies, key::kHeartbeatFrequency,
+                                   container.heartbeat_frequency());
     }
   }
 
@@ -1661,12 +1686,11 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
   }
 
   if (policy.has_tpm_firmware_update_settings()) {
-    policies->Set(
-        key::kTPMFirmwareUpdateSettings, POLICY_LEVEL_MANDATORY,
-        POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-        std::move(*(chromeos::tpm_firmware_update::DecodeSettingsProto(
-            policy.tpm_firmware_update_settings()))),
-        nullptr);
+    policies->Set(key::kTPMFirmwareUpdateSettings, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                  std::move(*(ash::tpm_firmware_update::DecodeSettingsProto(
+                      policy.tpm_firmware_update_settings()))),
+                  nullptr);
   }
 
   if (policy.has_device_minimum_version()) {
@@ -1760,6 +1784,17 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                       POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                       std::move(*value), nullptr);
       }
+    }
+  }
+
+  if (policy.has_chromad_to_cloud_migration_enabled()) {
+    const em::BooleanPolicyProto& container(
+        policy.chromad_to_cloud_migration_enabled());
+    if (container.has_value()) {
+      policies->Set(key::kChromadToCloudMigrationEnabled,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD, base::Value(container.value()),
+                    nullptr);
     }
   }
 
@@ -1979,6 +2014,16 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
+  if (policy.has_device_i18n_shortcuts_enabled()) {
+    const em::DeviceI18nShortcutsEnabledProto& container(
+        policy.device_i18n_shortcuts_enabled());
+    if (container.has_enabled()) {
+      policies->Set(key::kDeviceI18nShortcutsEnabled, POLICY_LEVEL_MANDATORY,
+                    POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                    base::Value(container.enabled()), nullptr);
+    }
+  }
+
   if (policy.has_device_borealis_allowed() &&
       policy.device_borealis_allowed().has_allowed()) {
     policies->Set(key::kDeviceBorealisAllowed, POLICY_LEVEL_MANDATORY,
@@ -2013,6 +2058,16 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
         policy.device_restricted_managed_guest_session_enabled());
     if (container.has_enabled()) {
       policies->Set(key::kDeviceRestrictedManagedGuestSessionEnabled,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD, base::Value(container.enabled()),
+                    nullptr);
+    }
+  }
+  if (policy.has_login_web_ui_lazy_loading()) {
+    const em::DeviceLoginScreenWebUILazyLoadingProto& container(
+        policy.login_web_ui_lazy_loading());
+    if (container.has_enabled()) {
+      policies->Set(key::kDeviceLoginScreenWebUILazyLoading,
                     POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
                     POLICY_SOURCE_CLOUD, base::Value(container.enabled()),
                     nullptr);

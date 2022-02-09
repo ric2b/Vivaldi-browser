@@ -49,10 +49,10 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {
       // TODO(igor@vivaldi.com): This method is called after the code in
       // ~WebContentsImpl() run and, since the declaration of the frame_tree_
       // field comes after the node_ field in WebContentsImpl, after the
-      // destructor for FrameTree. So current_web_contents_->GetFrameTree()
+      // destructor for FrameTree. So current_web_contents_->GetPrimaryFrameTree()
       // returns a pointer to FrameTree after its destructor is run. Figure out
       // if this is safe to call here.
-      current_web_contents_->GetFrameTree()->RemoveFrame(outernode);
+      current_web_contents_->GetPrimaryFrameTree().RemoveFrame(outernode);
     }
 
     // This is an unsupported case, but if the inner webcontents of the outer

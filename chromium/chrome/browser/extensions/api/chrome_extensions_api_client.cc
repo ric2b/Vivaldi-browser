@@ -26,7 +26,6 @@
 #include "chrome/browser/extensions/api/metrics_private/chrome_metrics_private_delegate.h"
 #include "chrome/browser/extensions/api/storage/managed_value_store_cache.h"
 #include "chrome/browser/extensions/api/storage/sync_value_store_cache.h"
-#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/system_display/display_info_provider.h"
@@ -122,9 +121,6 @@ void ChromeExtensionsAPIClient::AttachWebContentsHelpers(
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
       web_contents, std::make_unique<ChromePDFWebContentsHelperClient>());
 #endif
-
-  extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
-      web_contents);
 }
 
 bool ChromeExtensionsAPIClient::ShouldHideResponseHeader(
@@ -337,11 +333,11 @@ bool ChromeExtensionsAPIClient::ShouldAllowDetachingUsb(int vid,
   // have access to ash::CrosSettings (https://crbug.com/1219329).
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   const base::ListValue* policy_list;
-  if (ash::CrosSettings::Get()->GetList(chromeos::kUsbDetachableAllowlist,
+  if (ash::CrosSettings::Get()->GetList(ash::kUsbDetachableAllowlist,
                                         &policy_list)) {
     for (const auto& entry : policy_list->GetList()) {
-      if (entry.FindIntKey(chromeos::kUsbDetachableAllowlistKeyVid) == vid &&
-          entry.FindIntKey(chromeos::kUsbDetachableAllowlistKeyPid) == pid) {
+      if (entry.FindIntKey(ash::kUsbDetachableAllowlistKeyVid) == vid &&
+          entry.FindIntKey(ash::kUsbDetachableAllowlistKeyPid) == pid) {
         return true;
       }
     }
@@ -430,7 +426,7 @@ ChromeExtensionsAPIClient::GetNonNativeFileSystemDelegate() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 void ChromeExtensionsAPIClient::SaveImageDataToClipboard(
-    const std::vector<char>& image_data,
+    std::vector<uint8_t> image_data,
     api::clipboard::ImageType type,
     AdditionalDataItemList additional_items,
     base::OnceClosure success_callback,
@@ -438,7 +434,7 @@ void ChromeExtensionsAPIClient::SaveImageDataToClipboard(
   if (!clipboard_extension_helper_)
     clipboard_extension_helper_ = std::make_unique<ClipboardExtensionHelper>();
   clipboard_extension_helper_->DecodeAndSaveImageData(
-      image_data, type, std::move(additional_items),
+      std::move(image_data), type, std::move(additional_items),
       std::move(success_callback), std::move(error_callback));
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)

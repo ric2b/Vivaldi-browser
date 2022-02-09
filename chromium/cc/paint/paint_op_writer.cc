@@ -14,6 +14,8 @@
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_op_buffer_serializer.h"
 #include "cc/paint/paint_shader.h"
+#include "cc/paint/skottie_transfer_cache_entry.h"
+#include "cc/paint/skottie_wrapper.h"
 #include "cc/paint/transfer_cache_serialize_helper.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
@@ -21,11 +23,6 @@
 #include "third_party/skia/src/core/SkRemoteGlyphCache.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
-
-#if !defined(OS_ANDROID)
-#include "cc/paint/skottie_transfer_cache_entry.h"
-#include "cc/paint/skottie_wrapper.h"
-#endif
 
 namespace cc {
 namespace {
@@ -108,7 +105,7 @@ void PaintOpWriter::WriteSimple(const T& val) {
   if (!valid_)
     return;
 
-  reinterpret_cast<T*>(memory_)[0] = val;
+  reinterpret_cast<T*>(memory_.get())[0] = val;
 
   memory_ += size;
   remaining_bytes_ -= size;
@@ -136,7 +133,7 @@ void PaintOpWriter::WriteFlattenable(const SkFlattenable* val) {
 
 uint64_t* PaintOpWriter::WriteSize(size_t size) {
   AlignMemory(8);
-  uint64_t* memory = reinterpret_cast<uint64_t*>(memory_);
+  uint64_t* memory = reinterpret_cast<uint64_t*>(memory_.get());
   WriteSimple<uint64_t>(size);
   return memory;
 }
@@ -282,9 +279,6 @@ void PaintOpWriter::Write(const DrawImage& draw_image,
   WriteImage(decoded_draw_image);
 }
 
-// Android does not use skottie. Remove below section to keep binary size to a
-// minimum.
-#if !defined(OS_ANDROID)
 void PaintOpWriter::Write(scoped_refptr<SkottieWrapper> skottie) {
   uint32_t id = skottie->id();
   Write(id);
@@ -309,7 +303,6 @@ void PaintOpWriter::Write(scoped_refptr<SkottieWrapper> skottie) {
   memory_ += bytes_written;
   remaining_bytes_ -= bytes_written;
 }
-#endif  // !defined(OS_ANDROID)
 
 void PaintOpWriter::WriteImage(const DecodedDrawImage& decoded_draw_image) {
   if (!decoded_draw_image.mailbox().IsZero()) {
@@ -588,7 +581,7 @@ void PaintOpWriter::AlignMemory(size_t alignment) {
   DCHECK_GT(alignment, 0u);
   DCHECK_EQ(alignment & (alignment - 1), 0u);
 
-  uintptr_t memory = reinterpret_cast<uintptr_t>(memory_);
+  uintptr_t memory = reinterpret_cast<uintptr_t>(memory_.get());
   // The following is equivalent to:
   //   padding = (alignment - memory % alignment) % alignment;
   // because alignment is a power of two. This doesn't use modulo operator
@@ -608,7 +601,7 @@ void PaintOpWriter::Write(const PaintFilter* filter, const SkM44& current_ctm) {
     return;
   }
   WriteEnum(filter->type());
-  auto* crop_rect = filter->crop_rect();
+  auto* crop_rect = filter->GetCropRect();
   WriteSimple(static_cast<uint32_t>(!!crop_rect));
   if (crop_rect) {
     WriteSimple(*crop_rect);

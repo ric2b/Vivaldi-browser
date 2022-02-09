@@ -17,6 +17,7 @@
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
@@ -183,12 +184,12 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
     }
 
     std::string Debug() {
-      return base::StringPrintf("Event(%p, %s, %f)", profile_,
+      return base::StringPrintf("Event(%p, %s, %f)", profile_.get(),
                                 event_name_.c_str(), caught_.ToJsTime());
     }
 
    private:
-    Profile* profile_;
+    raw_ptr<Profile> profile_;
     std::string event_name_;
     std::string json_args_;
     base::Value args_;
@@ -256,7 +257,7 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
   base::Time last_wait_;
   std::unique_ptr<Event> waiting_for_;
   base::circular_deque<std::unique_ptr<Event>> events_;
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
 };
 
 // Object waiting for a download open event.
@@ -295,7 +296,7 @@ class DownloadOpenObserver : public download::DownloadItem::Observer {
   base::ScopedObservation<download::DownloadItem,
                           download::DownloadItem::Observer>
       open_observation_{this};
-  download::DownloadItem* item_;
+  raw_ptr<download::DownloadItem> item_;
   base::OnceClosure completion_closure_;
 };
 
@@ -630,7 +631,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
   // profile(), so pass it the on-record browser so that it always uses the
   // on-record profile to match real-life behavior.
 
-  base::Value* RunFunctionAndReturnResult(
+  std::unique_ptr<base::Value> RunFunctionAndReturnResult(
       scoped_refptr<ExtensionFunction> function,
       const std::string& args) {
     SetUpExtensionFunction(function.get());
@@ -679,19 +680,24 @@ class DownloadExtensionTest : public ExtensionApiTest {
                                !IncognitoInfo::IsSplitMode(extension_)
                            ? GURL(url::kAboutBlankURL)
                            : extension_->GetResourceURL("empty.html");
+      // Watch and wait for the navigation to take place.
+      auto observer = std::make_unique<content::TestNavigationObserver>(url);
+      observer->WatchExistingWebContents();
+      observer->StartWatchingNewWebContents();
       // Recreate the tab each time for insulation.
       content::WebContents* tab = chrome::AddSelectedTabWithURL(
           current_browser(), url, ui::PAGE_TRANSITION_LINK);
-      function->set_extension(extension_);
+      observer->WaitForNavigationFinished();
+      function->set_extension(extension_.get());
       function->SetRenderFrameHost(tab->GetMainFrame());
       function->set_source_process_id(
           tab->GetMainFrame()->GetProcess()->GetID());
     }
   }
 
-  const Extension* extension_;
-  Browser* incognito_browser_;
-  Browser* current_browser_;
+  raw_ptr<const Extension> extension_;
+  raw_ptr<Browser> incognito_browser_;
+  raw_ptr<Browser> current_browser_;
   std::unique_ptr<DownloadsEventsListener> events_listener_;
 
   std::unique_ptr<net::test_server::ControllableHttpResponse> first_download_;
@@ -764,7 +770,7 @@ class ScopedCancellingItem {
   }
   DownloadItem* get() { return item_; }
  private:
-  DownloadItem* item_;
+  raw_ptr<DownloadItem> item_;
 };
 
 // Cancels all the underlying DownloadItems when the ScopedItemVectorCanceller
@@ -792,7 +798,7 @@ class ScopedItemVectorCanceller {
   }
 
  private:
-  DownloadManager::DownloadVector* items_;
+  raw_ptr<DownloadManager::DownloadVector> items_;
 };
 
 // Writes an HTML5 file so that it can be downloaded.
@@ -943,12 +949,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest, DownloadExtensionTest_Open) {
                RunFunctionAndReturnError(
                   open_function,
                   DownloadItemIdAsArgList(download_item)).c_str());
-  // RunFunctionAndReturnError() will trigger a navigation. Wait for it to
-  // finish before showing the prompt dialog. Otherwise the dialog will get
-  // automatically closed.
-  content::TestNavigationObserver navigation_observer(
-      current_browser()->tab_strip_model()->GetActiveWebContents());
-  navigation_observer.WaitForNavigationFinished();
+  current_browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_FALSE(download_item->GetOpened());
 
   scoped_refptr<DownloadsOpenFunction> scoped_open(new DownloadsOpenFunction());
@@ -1499,8 +1500,8 @@ IN_PROC_BROWSER_TEST_F(
   // Extensions running in the incognito window should have access to both
   // items because the Test extension is in spanning mode.
   GoOffTheRecord();
-  result_value.reset(RunFunctionAndReturnResult(
-      new DownloadsSearchFunction(), "[{}]"));
+  result_value =
+      RunFunctionAndReturnResult(new DownloadsSearchFunction(), "[{}]");
   ASSERT_TRUE(result_value.get());
   ASSERT_TRUE(result_value->is_list());
   ASSERT_EQ(2UL, result_value->GetList().size());
@@ -1530,8 +1531,8 @@ IN_PROC_BROWSER_TEST_F(
   // Extensions running in the on-record window should have access only to the
   // on-record item.
   GoOnTheRecord();
-  result_value.reset(RunFunctionAndReturnResult(
-      new DownloadsSearchFunction(), "[{}]"));
+  result_value =
+      RunFunctionAndReturnResult(new DownloadsSearchFunction(), "[{}]");
   ASSERT_TRUE(result_value.get());
   ASSERT_TRUE(result_value->is_list());
   ASSERT_EQ(1UL, result_value->GetList().size());
@@ -1822,8 +1823,8 @@ class CustomResponse : public net::test_server::HttpResponse {
   }
 
  private:
-  base::OnceClosure* callback_;
-  base::TaskRunner** task_runner_;
+  raw_ptr<base::OnceClosure> callback_;
+  raw_ptr<base::TaskRunner*> task_runner_;
   bool first_request_;
 };
 
@@ -2081,9 +2082,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       "[{\"state\": \"in_progress\","
       "  \"url\": \"javascript:document.write(\\\"hello\\\");\"}]"));
 
-  result.reset(
+  result =
       RunFunctionAndReturnResult(new DownloadsDownloadFunction(),
-                                 "[{\"url\": \"javascript:return false;\"}]"));
+                                 "[{\"url\": \"javascript:return false;\"}]");
   ASSERT_TRUE(result.get());
   ASSERT_TRUE(result->is_int());
   result_id = result->GetInt();
@@ -2199,10 +2200,11 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                           "    \"current\": \"complete\"}}]",
                           result_id)));
 
-  result.reset(RunFunctionAndReturnResult(
-      new DownloadsDownloadFunction(), base::StringPrintf(
+  result = RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf(
           "[{\"url\": \"%s\",  \"conflictAction\": \"overwrite\"}]",
-          download_url.c_str())));
+          download_url.c_str()));
   ASSERT_TRUE(result.get());
   ASSERT_TRUE(result->is_int());
   result_id = result->GetInt();
@@ -3834,9 +3836,9 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 
   // Start downloading a file.
-  result.reset(RunFunctionAndReturnResult(
-      new DownloadsDownloadFunction(), base::StringPrintf(
-          "[{\"url\": \"%s\"}]", download_url.c_str())));
+  result = RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf("[{\"url\": \"%s\"}]", download_url.c_str()));
   ASSERT_TRUE(result.get());
   ASSERT_TRUE(result->is_int());
   result_id = result->GetInt();
@@ -3958,9 +3960,9 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 
   // Start downloading a file.
-  result.reset(RunFunctionAndReturnResult(
-      new DownloadsDownloadFunction(), base::StringPrintf(
-          "[{\"url\": \"%s\"}]", download_url.c_str())));
+  result = RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf("[{\"url\": \"%s\"}]", download_url.c_str()));
   ASSERT_TRUE(result.get());
   ASSERT_TRUE(result->is_int());
   result_id = result->GetInt();
@@ -4165,9 +4167,9 @@ IN_PROC_BROWSER_TEST_F(
 
   // Start an incognito download for comparison.
   GoOffTheRecord();
-  result.reset(RunFunctionAndReturnResult(
-      new DownloadsDownloadFunction(), base::StringPrintf(
-          "[{\"url\": \"%s\"}]", download_url.c_str())));
+  result = RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf("[{\"url\": \"%s\"}]", download_url.c_str()));
   ASSERT_TRUE(result.get());
   ASSERT_TRUE(result->is_int());
   result_id = result->GetInt();
@@ -4314,9 +4316,9 @@ IN_PROC_BROWSER_TEST_F(
 
   // Start an incognito download for comparison.
   GoOffTheRecord();
-  result.reset(RunFunctionAndReturnResult(
-      new DownloadsDownloadFunction(), base::StringPrintf(
-          "[{\"url\": \"%s\"}]", download_url.c_str())));
+  result = RunFunctionAndReturnResult(
+      new DownloadsDownloadFunction(),
+      base::StringPrintf("[{\"url\": \"%s\"}]", download_url.c_str()));
   ASSERT_TRUE(result.get());
   ASSERT_TRUE(result->is_int());
   result_id = result->GetInt();

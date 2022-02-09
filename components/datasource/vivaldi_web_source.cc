@@ -15,7 +15,6 @@
 namespace {
 const char kStartpageType[] = "startpage";
 const char kHtmlHeader[] = "<!DOCTYPE html>\n<html>\n<head>\n";
-const char kHtmlTitle[] = "<title>Start Page</title>\n";
 const char kHtmlStyleStart[] = "<style type=\"text/css\">\n";
 const char kHtmlStyleEnd[] = "</style>\n";
 const char kHtmlBody[] = "</head>\n<body>\n";
@@ -48,7 +47,6 @@ void VivaldiWebSource::StartDataRequest(
     // chrome://vivaldi-webui/startpage?section=bookmarks&background-color=#AABBCC
     std::vector<std::string> out;
     out.push_back(kHtmlHeader);
-    out.push_back(kHtmlTitle);
     size_t pos = data.find(kBackgroundColorCss);
     if (pos != std::string::npos) {
       color = data.substr(sizeof(kBackgroundColorCss) + pos);

@@ -229,12 +229,6 @@ PasswordFormMetricsRecorder::~PasswordFormMetricsRecorder() {
   if (submitted_form_type_ != SubmittedFormType::kUnspecified) {
     UMA_HISTOGRAM_ENUMERATION("PasswordManager.SubmittedFormType",
                               submitted_form_type_, SubmittedFormType::kCount);
-    if (!is_main_frame_secure_) {
-      UMA_HISTOGRAM_ENUMERATION("PasswordManager.SubmittedNonSecureFormType",
-                                submitted_form_type_,
-                                SubmittedFormType::kCount);
-    }
-
     ukm_entry_builder_.SetSubmission_SubmittedFormType(
         static_cast<int64_t>(submitted_form_type_));
   }
@@ -371,15 +365,6 @@ PasswordFormMetricsRecorder::~PasswordFormMetricsRecorder() {
   if (submit_result_ == SubmitResult::kPassed && js_only_input_) {
     UMA_HISTOGRAM_ENUMERATION(
         "PasswordManager.JavaScriptOnlyValueInSubmittedForm", *js_only_input_);
-  }
-
-  if (user_typed_password_on_chrome_sign_in_page_ ||
-      password_hash_saved_on_chrome_sing_in_page_) {
-    auto value = password_hash_saved_on_chrome_sing_in_page_
-                     ? ChromeSignInPageHashSaved::kHashSaved
-                     : ChromeSignInPageHashSaved::kPasswordTypedHashNotSaved;
-    UMA_HISTOGRAM_ENUMERATION("PasswordManager.ChromeSignInPageHashSaved",
-                              value);
   }
 
   ukm_entry_builder_.Record(ukm::UkmRecorder::Get());

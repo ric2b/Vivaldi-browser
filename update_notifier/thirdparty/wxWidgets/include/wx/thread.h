@@ -277,7 +277,7 @@ private:
 
         wxCritSectBuffer m_buffer;
     };
-#endif // Unix&OS2/Win32
+#endif // Unix/Win32
 
     wxDECLARE_NO_COPY_CLASS(wxCriticalSection);
 };
@@ -382,22 +382,11 @@ public:
     // on the associated mutex object before returning.
     wxCondError Broadcast();
 
-
-#if WXWIN_COMPATIBILITY_2_6
-    // deprecated version, don't use
-    wxDEPRECATED( bool Wait(unsigned long milliseconds) );
-#endif // WXWIN_COMPATIBILITY_2_6
-
 private:
     wxConditionInternal *m_internal;
 
     wxDECLARE_NO_COPY_CLASS(wxCondition);
 };
-
-#if WXWIN_COMPATIBILITY_2_6
-    inline bool wxCondition::Wait(unsigned long milliseconds)
-        { return WaitTimeout(milliseconds) == wxCOND_NO_ERROR; }
-#endif // WXWIN_COMPATIBILITY_2_6
 
 // ----------------------------------------------------------------------------
 // wxSemaphore: a counter limiting the number of threads concurrently accessing
@@ -524,8 +513,6 @@ public:
 
         // create a new thread and optionally set the stack size on
         // platforms that support that - call Run() to start it
-        // (special cased for watcom which won't accept 0 default)
-
     wxThreadError Create(unsigned int stackSize = 0);
 
         // starts execution of the thread - from the moment Run() is called
@@ -572,8 +559,6 @@ public:
     // priority
         // Sets the priority to "prio" which must be in 0..100 range (see
         // also wxPRIORITY_XXX constants).
-        //
-        // NB: the priority can only be set before the thread is created
     void SetPriority(unsigned int prio);
 
         // Get the current priority.
@@ -594,6 +579,11 @@ public:
     // identifies a thread inside a process
     wxThreadIdType GetId() const;
 
+#ifdef __WINDOWS__
+    // Get the internal OS handle
+    WXHANDLE MSWGetHandle() const;
+#endif // __WINDOWS__
+
     wxThreadKind GetKind() const
         { return m_isDetached ? wxTHREAD_DETACHED : wxTHREAD_JOINABLE; }
 
@@ -608,7 +598,7 @@ public:
 
 protected:
     // exits from the current thread - can be called only from this thread
-    void Exit(ExitCode exitcode = 0);
+    void Exit(ExitCode exitcode = NULL);
 
     // entry point for the thread - called by Run() and executes in the context
     // of this thread.
@@ -629,15 +619,15 @@ protected:
     // in the context of the thread that called Kill().
     virtual void OnKill() {}
 
+    // called when the thread exits - in the context of this thread
+    //
+    // NB: this function will not be called if the thread is Kill()ed
+    virtual void OnExit() {}
+
 private:
     // no copy ctor/assignment operator
     wxThread(const wxThread&);
     wxThread& operator=(const wxThread&);
-
-    // called when the thread exits - in the context of this thread
-    //
-    // NB: this function will not be called if the thread is Kill()ed
-    virtual void OnExit() { }
 
     friend class wxThreadInternal;
     friend class wxThreadModule;
@@ -650,7 +640,7 @@ private:
     wxThreadInternal *m_internal;
 
     // protects access to any methods of wxThreadInternal object
-    wxCriticalSection m_critsect;
+    mutable wxCriticalSection m_critsect;
 
     // true if the thread is detached, false if it is joinable
     bool m_isDetached;
@@ -659,7 +649,7 @@ private:
 // wxThreadHelperThread class
 // --------------------------
 
-class WXDLLIMPEXP_BASE wxThreadHelperThread : public wxThread
+class wxThreadHelperThread : public wxThread
 {
 public:
     // constructor only creates the C++ thread object and doesn't create (or
@@ -670,7 +660,7 @@ public:
 
 protected:
     // entry point for the thread -- calls Entry() in owner.
-    virtual void *Entry();
+    virtual void *Entry() wxOVERRIDE;
 
 private:
     // the owner of the thread
@@ -687,7 +677,7 @@ private:
 // derive from it to implement a threading background task in your class.
 // ----------------------------------------------------------------------------
 
-class WXDLLIMPEXP_BASE wxThreadHelper
+class wxThreadHelper
 {
 private:
     void KillThread()
@@ -741,7 +731,7 @@ public:
     // returns a pointer to the thread which can be used to call Run()
     wxThread *GetThread() const
     {
-        wxCriticalSectionLocker locker((wxCriticalSection&)m_critSection);
+        wxCriticalSectionLocker locker(m_critSection);
 
         wxThread* thread = m_thread;
 
@@ -751,7 +741,7 @@ public:
 protected:
     wxThread *m_thread;
     wxThreadKind m_kind;
-    wxCriticalSection m_critSection; // To guard the m_thread variable
+    mutable wxCriticalSection m_critSection; // To guard the m_thread variable
 
     friend class wxThreadHelperThread;
 };
@@ -806,9 +796,7 @@ inline void wxMutexGuiLeave() { }
 
 // macros for entering/leaving critical sections which may be used without
 // having to take them inside "#if wxUSE_THREADS"
-// (the implementation uses dummy structs to force semicolon after the macro;
-// also notice that Watcom doesn't like declaring a struct as a member so we
-// need to actually define it in wxCRIT_SECT_DECLARE_MEMBER)
+// (the implementation uses dummy structs to force semicolon after the macro)
 #define wxENTER_CRIT_SECT(cs)            do {} while (0)
 #define wxLEAVE_CRIT_SECT(cs)            do {} while (0)
 #define wxCRIT_SECT_DECLARE(cs)          struct wxDummyCS##cs
@@ -855,7 +843,7 @@ public:
 
 #if wxUSE_THREADS
 
-#if defined(__WINDOWS__) || defined(__OS2__) || defined(__EMX__) || defined(__DARWIN__)
+#if defined(__WINDOWS__) || defined(__DARWIN__)
     // unlock GUI if there are threads waiting for and lock it back when
     // there are no more of them - should be called periodically by the main
     // thread
@@ -872,7 +860,7 @@ public:
     // wxApp then should block all "dangerous" messages
     extern bool WXDLLIMPEXP_BASE wxIsWaitingForThread();
 #endif
-#endif // MSW, OS/2
+#endif // MSW, OSX
 
 #endif // wxUSE_THREADS
 

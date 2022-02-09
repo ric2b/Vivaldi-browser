@@ -13,7 +13,7 @@
     parameter - this may be changed by giving non-default flags to it, i.e. use
     @c wxCMD_LINE_OPTION_MANDATORY to require that the option is given and
     @c wxCMD_LINE_PARAM_OPTIONAL to make a parameter optional.
-    
+
     Also, @c wxCMD_LINE_PARAM_MULTIPLE may be specified if the programs accepts a
     variable number of parameters - but it only can be given for the last
     parameter in the command line description. If you use this flag, you will
@@ -30,6 +30,11 @@
     /R-). You will need to use wxCmdLineParser::FoundSwitch() to distinguish
     between the normal and negated forms of the switch. This flag is new since
     wxWidgets 2.9.2.
+
+    @c wxCMD_LINE_HIDDEN can be specified for arguments that should exist but
+    are not to be included in the output of Usage(). These could be, for
+    example, diagnostics switches that are not useful to the end user.
+    This flags is new since wxWidgets 3.1.1.
 */
 enum wxCmdLineEntryFlags
 {
@@ -38,7 +43,8 @@ enum wxCmdLineEntryFlags
     wxCMD_LINE_PARAM_MULTIPLE   = 0x04, ///< The parameter may be repeated.
     wxCMD_LINE_OPTION_HELP      = 0x08, ///< This option is a help request.
     wxCMD_LINE_NEEDS_SEPARATOR  = 0x10, ///< Must have a separator before the value.
-    wxCMD_LINE_SWITCH_NEGATABLE = 0x20  ///< This switch can be negated (e.g. /S-)
+    wxCMD_LINE_SWITCH_NEGATABLE = 0x20, ///< This switch can be negated (e.g. /S-)
+    wxCMD_LINE_HIDDEN           = 0x40  ///< This switch is not listed by Usage()
 };
 
 /**
@@ -61,17 +67,17 @@ enum wxCmdLineEntryType
 {
     /// A boolean argument of the program; e.g. @c -v to enable verbose mode.
     wxCMD_LINE_SWITCH,
-    
+
     /// An argument with an associated value; e.g. @c "-o filename" to specify
     /// an optional output filename.
     wxCMD_LINE_OPTION,
-    
+
     /// A parameter: a required program argument.
     wxCMD_LINE_PARAM,
-    
+
     /// Additional usage text. See wxCmdLineParser::AddUsageText.
     wxCMD_LINE_USAGE_TEXT,
-    
+
     wxCMD_LINE_NONE     ///< Use this to terminate the list.
 };
 
@@ -120,7 +126,7 @@ struct wxCmdLineEntryDesc
 
     /**
         The usual, short, name of the switch or the option.
-        
+
         It may contain only letters, digits and the underscores.
         This field is unused if <tt>kind == wxCMD_LINE_PARAM</tt>.
     */
@@ -129,7 +135,7 @@ struct wxCmdLineEntryDesc
     /**
         The long name for this program argument (may be empty if the option
         has no long name).
-        
+
         It may contain only letters, digits and the underscores.
         This field is unused if <tt>kind == wxCMD_LINE_PARAM</tt>.
     */
@@ -146,11 +152,174 @@ struct wxCmdLineEntryDesc
         See ::wxCmdLineParamType for more info.
     */
     wxCmdLineParamType type;
-    
+
     /**
         A combination of one or more ::wxCmdLineEntryFlags enum values.
     */
     int flags;
+};
+
+/**
+    The interface wxCmdLineArg provides information for an instance of argument
+    passed on command line.
+
+    Example of use:
+
+    @code
+    wxCmdLineParser parser;
+
+    for (wxCmdLineArgs::const_iterator itarg=parser.GetArguments().begin();
+                                       itarg!=parser.GetArguments().end();
+                                       ++itarg)
+    {
+        wxString optionName;
+        switch (itarg->GetKind())
+        {
+        case wxCMD_LINE_SWITCH:
+            if (itarg->IsNegated()) {
+            }
+            else {
+            }
+            break;
+
+        case wxCMD_LINE_OPTION:
+            // assuming that all the options have a short name
+            optionName = itarg->GetShortName();
+
+            switch (itarg->GetType()) {
+                case wxCMD_LINE_VAL_NUMBER:
+                    // do something with itarg->GetLongVal();
+                    break;
+
+                case wxCMD_LINE_VAL_DOUBLE:
+                    // do something with itarg->GetDoubleVal();
+                    break;
+
+                case wxCMD_LINE_VAL_DATE:
+                    // do something with itarg->GetDateVal();
+                    break;
+
+                case wxCMD_LINE_VAL_STRING:
+                    // do something with itarg->GetStrVal();
+                    break;
+            }
+            break;
+
+        case wxCMD_LINE_PARAM:
+            // do something with itarg->GetStrVal();
+            break;
+        }
+    }
+    @endcode
+
+    With C++11, the for loop could be written:
+    @code
+    for (const auto &arg : parser.GetArguments()) {
+        // working on arg as with *itarg above
+    }
+    @endcode
+
+    @since 3.1.0
+*/
+class wxCmdLineArg
+{
+public:
+    virtual ~wxCmdLineArg();
+
+    /**
+        Returns the command line argument value as a wxDateTime.
+
+        @note This call works only for @c wxCMD_LINE_VAL_DATE options
+    */
+    virtual const wxDateTime& GetDateVal() const = 0;
+
+    /**
+        Returns the command line argument value as a double.
+
+        @note This call works only for @c wxCMD_LINE_VAL_DOUBLE options
+    */
+    virtual double GetDoubleVal() const = 0;
+
+    /**
+        Returns the command line argument entry kind.
+
+        @note Parameters can only be retrieved as strings, with GetStrVal()
+
+        @see wxCmdLineEntryType, GetType()
+    */
+    virtual wxCmdLineEntryType GetKind() const = 0;
+
+    /**
+        Returns the command line argument value as a long.
+
+        @note This call works only for @c wxCMD_LINE_VAL_NUMBER options
+    */
+    virtual long GetLongVal() const = 0;
+
+    /**
+        Returns the command line argument long name if any.
+
+        @note This call makes sense only for options and switches
+    */
+    virtual wxString GetLongName() const = 0;
+
+    /**
+        Returns the command line argument short name if any.
+
+        @note This call makes sense only for options and switches
+    */
+    virtual wxString GetShortName() const = 0;
+
+    /**
+        Returns the command line argument value as a string.
+
+        @note This call works only for @c wxCMD_LINE_VAL_STRING options
+        and parameters
+    */
+    virtual const wxString& GetStrVal() const = 0;
+
+    /**
+        Returns the command line argument parameter type
+
+        @note This call makes sense only for options
+        (i.e. GetKind() == @c wxCMD_LINE_OPTION).
+
+        @see wxCmdLineParamType, GetKind()
+    */
+    virtual wxCmdLineParamType GetType() const = 0;
+
+    /**
+        Returns true if the switch was negated
+
+        @note This call works only for switches.
+    */
+    virtual bool IsNegated() const = 0;
+};
+
+/**
+    An ordered collection of wxCmdLineArg providing an iterator to enumerate
+    the arguments passed on command line.
+
+    @see wxCmdLineParser::GetArguments()
+
+    @since 3.1.0
+*/
+class wxCmdLineArgs
+{
+public:
+    /**
+        A bidirectional constant iterator exposing the command line arguments as
+        wxCmdLineArg references.
+    */
+    class const_iterator;
+
+    const_iterator begin() const;
+    const_iterator end() const;
+
+    /**
+        Returns the number of command line arguments in this collection.
+    */
+    size_t size() const;
 };
 
 /**
@@ -179,12 +348,12 @@ struct wxCmdLineEntryDesc
 
     In the documentation below the following terminology is used:
 
-    - @b switch: a boolean option which can be given or not, but which doesn't have 
+    - @b switch: a boolean option which can be given or not, but which doesn't have
                  any value. We use the word @e switch to distinguish
                  such boolean options from more generic options like those
                  described below. For example, @c "-v" might be a switch
                  meaning "enable verbose mode".
-    - @b option: a switch with a value associated to it. 
+    - @b option: a switch with a value associated to it.
                  For example, @c "-o filename" might be an
                  option for specifying the name of the output file.
     - @b parameter: a required program argument.
@@ -427,8 +596,8 @@ public:
     /**
         Enable or disable support for the long options.
 
-        As long options are not (yet) POSIX-compliant, this option allows to
-        disable them.
+        As long options are not (yet) POSIX-compliant, this option allows
+        disabling them.
 
         @see @ref cmdlineparser_customization and AreLongOptionsEnabled()
     */
@@ -493,6 +662,17 @@ public:
         mostly if you had used @c wxCMD_LINE_PARAM_MULTIPLE flag.
     */
     size_t GetParamCount() const;
+
+    /**
+        Returns the collection of arguments
+
+        @note The returned object just refers to the command line parser. The
+        command line parser must live longer than it.
+
+        @see wxCmdLineArgs
+        @since 3.1.0
+    */
+    wxCmdLineArgs GetArguments() const;
 
     /**
         Parse the command line, return 0 if ok, -1 if @c "-h" or @c "\--help"

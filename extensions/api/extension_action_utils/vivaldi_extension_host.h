@@ -9,7 +9,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/common/mojom/view_type.mojom.h"

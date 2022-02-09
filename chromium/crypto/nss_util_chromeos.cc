@@ -208,7 +208,7 @@ class ChromeOSTokenManager {
     state_ = (state_ == State::kTpmTokenInitialized) ? State::kTpmTokenEnabled
                                                      : State::kTpmTokenDisabled;
 
-    tpm_ready_callback_list_.Notify();
+    tpm_ready_callback_list_->Notify();
   }
 
   static void InitializeTPMTokenInThreadPool(CK_SLOT_ID token_slot_id,
@@ -226,8 +226,7 @@ class ChromeOSTokenManager {
       tpm_args->chaps_module = LoadChaps();
     }
     if (tpm_args->chaps_module) {
-      tpm_args->tpm_slot =
-          GetTPMSlotForIdInThreadPool(tpm_args->chaps_module, token_slot_id);
+      tpm_args->tpm_slot = GetChapsSlot(tpm_args->chaps_module, token_slot_id);
     }
   }
 
@@ -263,7 +262,7 @@ class ChromeOSTokenManager {
 
     if (!IsInitializationFinished()) {
       // Call back to this method when initialization is finished.
-      tpm_ready_callback_list_.AddUnsafe(
+      tpm_ready_callback_list_->AddUnsafe(
           base::BindOnce(&ChromeOSTokenManager::IsTPMTokenEnabled,
                          base::Unretained(this) /* singleton is leaky */,
                          std::move(callback)));
@@ -275,24 +274,6 @@ class ChromeOSTokenManager {
         FROM_HERE,
         base::BindOnce(std::move(callback),
                        /*is_tpm_enabled=*/(state_ == State::kTpmTokenEnabled)));
-  }
-
-  // Note that CK_SLOT_ID is an unsigned long, but cryptohome gives us the slot
-  // id as an int. This should be safe since this is only used with chaps, which
-  // we also control.
-  static ScopedPK11Slot GetTPMSlotForIdInThreadPool(SECMODModule* chaps_module,
-                                                    CK_SLOT_ID slot_id) {
-    DCHECK(chaps_module);
-
-    DVLOG(3) << "Poking chaps module.";
-    SECStatus rv = SECMOD_UpdateSlotList(chaps_module);
-    if (rv != SECSuccess)
-      PLOG(ERROR) << "SECMOD_UpdateSlotList failed: " << PORT_GetError();
-
-    PK11SlotInfo* slot = SECMOD_LookupSlot(chaps_module->moduleID, slot_id);
-    if (!slot)
-      LOG(ERROR) << "TPM slot " << slot_id << " not found.";
-    return ScopedPK11Slot(slot);
   }
 
   bool InitializeNSSForChromeOSUser(const std::string& username_hash,
@@ -431,7 +412,7 @@ class ChromeOSTokenManager {
 
     if (!IsInitializationFinished()) {
       // Call back to this method when initialization is finished.
-      tpm_ready_callback_list_.AddUnsafe(
+      tpm_ready_callback_list_->AddUnsafe(
           base::BindOnce(&ChromeOSTokenManager::GetSystemNSSKeySlot,
                          base::Unretained(this) /* singleton is leaky */,
                          std::move(callback)));
@@ -447,6 +428,24 @@ class ChromeOSTokenManager {
   }
 
   void ResetSystemSlotForTesting() { system_slot_.reset(); }
+
+  void ResetTokenManagerForTesting() {
+    // Prevent test failures when two tests in the same process use the same
+    // ChromeOSTokenManager from different threads.
+    DETACH_FROM_THREAD(thread_checker_);
+    state_ = State::kInitializationNotStarted;
+
+    // Configuring chaps_module_ here is not supported yet.
+    CHECK(!chaps_module_);
+
+    // Make sure there are no outstanding callbacks between tests.
+    // OnceClosureList doesn't provide a way to clear the callback list.
+    tpm_ready_callback_list_ = std::make_unique<base::OnceClosureList>();
+
+    chromeos_user_map_.clear();
+    ResetSystemSlotForTesting();  // IN-TEST
+    prepared_test_private_slot_.reset();
+  }
 
   void SetPrivateSoftwareSlotForChromeOSUserForTesting(ScopedPK11Slot slot) {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -484,7 +483,8 @@ class ChromeOSTokenManager {
   }
 
   State state_ = State::kInitializationNotStarted;
-  base::OnceClosureList tpm_ready_callback_list_;
+  std::unique_ptr<base::OnceClosureList> tpm_ready_callback_list_ =
+      std::make_unique<base::OnceClosureList>();
 
   SECMODModule* chaps_module_ = nullptr;
   ScopedPK11Slot system_slot_;
@@ -522,6 +522,13 @@ void ResetSystemSlotForTesting() {
     g_token_manager.Get().ResetSystemSlotForTesting();  // IN-TEST
   }
   ChromeOSTokenManagerDataForTesting::GetInstance().test_system_slot.reset();
+}
+
+void ResetTokenManagerForTesting() {
+  if (g_token_manager.IsCreated()) {
+    g_token_manager.Get().ResetTokenManagerForTesting();  // IN-TEST
+  }
+  ResetSystemSlotForTesting();  // IN-TEST
 }
 
 void IsTPMTokenEnabled(base::OnceCallback<void(bool)> callback) {

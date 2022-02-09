@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
@@ -30,8 +29,6 @@ DownloadShelfWebView::DownloadShelfWebView(Browser* browser,
   shelf_animation_.SetSlideDuration(base::Milliseconds(
       gfx::Animation::ShouldRenderRichAnimation() ? 120 : 0));
 
-  extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
-      web_contents());
   task_manager::WebContentsTags::CreateForTabContents(web_contents());
 
   DownloadShelfUI* download_shelf_ui = GetDownloadShelfUI();
@@ -47,7 +44,7 @@ gfx::Size DownloadShelfWebView::CalculatePreferredSize() const {
 }
 
 bool DownloadShelfWebView::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   // Suppress native context menu, since the web content shows one.
   return true;
@@ -63,11 +60,11 @@ void DownloadShelfWebView::OnThemeChanged() {
 
 void DownloadShelfWebView::DoShowDownload(
     DownloadUIModel::DownloadUIModelPtr download) {
-  const base::TimeTicks show_download_start_time_ticks = base::TimeTicks::Now();
+  const base::Time show_download_start_time = base::Time::Now();
   DownloadShelfUI* download_shelf_ui = GetDownloadShelfUI();
   if (download_shelf_ui) {
     download_shelf_ui->DoShowDownload(std::move(download),
-                                      show_download_start_time_ticks);
+                                      show_download_start_time);
   }
 }
 

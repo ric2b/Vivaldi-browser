@@ -28,10 +28,6 @@ following section before any other includes:
 // For compilers that support precompilation, includes "wx.h".
 #include <wx/wxprec.h>
 
-#ifdef __BORLANDC__
-#   pragma hdrstop
-#endif
-
 #ifndef WX_PRECOMP
     // Include your minimal set of headers here, or wx.h
 #   include <wx/wx.h>
@@ -44,10 +40,9 @@ The file @c "wx/wxprec.h" includes @c "wx/wx.h". Although this incantation may
 seem quirky, it is in fact the end result of a lot of experimentation, and
 several Windows compilers to use precompilation which is largely automatic for
 compilers with necessary support. Currently it is used for Visual C++
-(including embedded Visual C++), Borland C++, Open Watcom C++, Digital Mars C++
-and newer versions of GCC. Some compilers might need extra work from the
-application developer to set the build environment up as necessary for the
-support.
+(including embedded Visual C++) and newer versions of GCC. Some compilers
+might need extra work from the application developer to set the build
+environment up as necessary for the support.
 
 
 
@@ -111,11 +106,10 @@ and this must not be changed.
 On Microsoft Windows, wxWidgets has a different set of makefiles for each
 compiler, because each compiler's @c 'make' tool is slightly different. Popular
 Windows compilers that we cater for, and the corresponding makefile extensions,
-include: Microsoft Visual C++ (.vc), Borland C++ (.bcc), OpenWatcom C++ (.wat)
-and MinGW/Cygwin (.gcc). Makefiles are provided for the wxWidgets library
-itself, samples, demos, and utilities.
+include: Microsoft Visual C++ (.vc) and MinGW/Cygwin (.gcc). Makefiles are
+provided for the wxWidgets library itself, samples, demos, and utilities.
 
-On Linux, Mac and OS/2, you use the @c 'configure' command to generate the
+On Linux and macOS, you use the @c 'configure' command to generate the
 necessary makefiles. You should also use this method when building with
 MinGW/Cygwin on Windows.
 
@@ -128,7 +122,7 @@ On Windows using a compiler other than MinGW/Cygwin, you would build the
 wxWidgets library from the @c "build/msw" directory which contains the relevant
 makefiles.
 
-On Windows using MinGW/Cygwin, and on Unix, OS X and OS/2, you invoke
+On Windows using MinGW/Cygwin, and on Unix and macOS, you invoke
 'configure' (found in the top-level of the wxWidgets source hierarchy), from
 within a suitable empty directory for containing makefiles, object files and
 libraries.
@@ -137,7 +131,7 @@ For details on using makefiles, configure, and project files, please see
 @c "docs/xxx/install.txt" in your distribution, where @c "xxx" is the platform
 of interest, such as @c msw, @c gtk, @c x11, @c mac.
 
-All wxWidgets makefiles are generated using Bakefile <http://www.bakefile.org/>.
+All wxWidgets makefiles are generated using Bakefile <https://www.bakefile.org/>.
 wxWidgets also provides (in the @c "build/bakefiles/wxpresets" folder) the
 wxWidgets bakefile presets. These files allow you to create bakefiles for your
 own wxWidgets-based applications very easily.
@@ -260,7 +254,7 @@ its own run-time type information system, implemented using macros.
 
 @subsection page_multiplatform_cpp_precompiledheaders Precompiled Headers
 
-Some compilers, such as Borland C++ and Microsoft C++, support precompiled
+Some compilers, such as Microsoft C++, support precompiled
 headers. This can save a great deal of compiling time. The recommended approach
 is to precompile @c "wx.h", using this precompiled header for compiling both
 wxWidgets itself and any wxWidgets applications. For Windows compilers, two

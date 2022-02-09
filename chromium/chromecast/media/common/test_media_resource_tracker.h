@@ -7,9 +7,8 @@
 #ifndef CHROMECAST_MEDIA_COMMON_TEST_MEDIA_RESOURCE_TRACKER_H_
 #define CHROMECAST_MEDIA_COMMON_TEST_MEDIA_RESOURCE_TRACKER_H_
 
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "chromecast/media/common/media_resource_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 

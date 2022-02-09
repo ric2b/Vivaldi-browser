@@ -52,7 +52,6 @@
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
     "name": "git.rev-parse",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -65,6 +64,8 @@
       "[START_DIR]/cipd",
       "-ensure-file",
       "infra/ninja/${platform} version:1.8.2\nfuchsia/third_party/clang/${platform} integration\n@Subdir sysroot\nfuchsia/third_party/sysroot/linux git_revision:c912d089c3d46d8982fdef76a50514cca79b6132",
+      "-max-threads",
+      "0",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -115,7 +116,7 @@
       "fetch",
       "--tags",
       "https://fuchsia.googlesource.com/third_party/github.com/mjansson/rpmalloc",
-      "6bb6ca97a8d6a72d626153fd8431ef8477a21145"
+      "f4b7c52c858675f732a76bd1c73447e0fcf84b1e"
     ],
     "cwd": "[START_DIR]/rpmalloc",
     "infra_step": true,
@@ -469,7 +470,8 @@
       "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-amd64\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
-      "@@@STEP_LOG_END@json.output@@@"
+      "@@@STEP_LOG_END@json.output@@@",
+      "@@@STEP_LINK@gn/gn/linux-amd64@https://chrome-infra-packages.appspot.com/p/gn/gn/linux-amd64/+/40-chars-fake-of-the-package-instance_id@@@"
     ]
   },
   {
@@ -600,7 +602,6 @@
     ]
   },
   {
-    "jsonResult": null,
     "name": "$result"
   }
 ]

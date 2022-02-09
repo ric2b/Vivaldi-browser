@@ -18,8 +18,8 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
-#include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/fido_authentication_strike_database.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
@@ -435,7 +435,7 @@ void CreditCardFIDOAuthenticator::OnDidGetAssertion(
     if (card_->record_type() == CreditCard::VIRTUAL_CARD &&
         autofill_client_->GetLastCommittedURL().is_valid()) {
       last_committed_url_origin =
-          autofill_client_->GetLastCommittedURL().GetOrigin();
+          autofill_client_->GetLastCommittedURL().DeprecatedGetOriginAsURL();
     }
 
     full_card_request_->GetFullCardViaFIDO(

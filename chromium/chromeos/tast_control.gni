@@ -9,9 +9,6 @@
 # To disable a specific test in chrome_all_tast_tests, add it the following
 # list and cite a bug.
 tast_disabled_tests_from_chrome_all = [
-  # crbug.com/1167243
-  "login.Chrome",
-
   # crbug.com/1184931
   "health.ProbeBatteryMetrics",
 
@@ -45,8 +42,67 @@ tast_disabled_tests_from_chrome_all = [
   "quicksettings.SignInScreen.noaudio_nobattery",
   "quicksettings.SignInScreen.audio",
 
+  # crbug.com/1263234
+  "quicksettings.ManagedDeviceInfo",
+
   # b/201197372
   "crostini.AppEmacs",
+
+  # crbug.com/1273743
+  "crostini.Launcher.local_wayland_bullseye_stable",
+  "crostini.Launcher.local_wayland_buster_stable",
+  "crostini.Launcher.local_x11_bullseye_stable",
+  "crostini.Launcher.system_wayland_bullseye_stable",
+  "crostini.Launcher.system_wayland_buster_stable",
+  "crostini.Launcher.system_x11_bullseye_stable",
+  "crostini.Launcher.system_x11_buster_stable",
+
+  # crbug.com/1259127
+  "ui.TabletOperations",
+
+  # crbug.com/1257474
+  "shelf.OpenCloseSwitchApps",
+
+  # crbug.com/1239838
+  "graphics.FPS",
+
+  # crbug.com/1186991
+  "launcher.SearchBuiltInApps",
+
+  # crbug.com/1263561
+  "camera.CCAUILauncher",
+
+  # crbug.com/1263233
+  "security.SharedFilesystemState",
+
+  # https://crbug.com/1267943: Flaky.
+  "ui.DesktopControl",
+  "ui.WindowControl",
+
+  # https://crbug.com/1269876: Flaky.
+  "arc.TextToSpeech",
+
+  # https://crbug.com/1269880: Flaky.
+  "ui.ChromeCrashReporterMetrics.success_crashpad",
+
+  # https://crbug.com/1276549: Flaky.
+  "ui.ChromeCrashLoop.breakpad",
+  "ui.ChromeCrashLoop.breakpad_mock_consent",
+  "ui.ChromeCrashReporterMetrics.success_breakpad",
+  "ui.ChromeCrashReporterMetrics.miss_breakpad",
+
+  # https://crbug.com/1269075: Flaky.
+  "shelf.AutoHideSmoke.clamshell_mode",
+
+  # https://crbug.com/1269124: Flaky.
+  "quicksettings.LockScreen.no_battery",
+
+  # https://crbug.com/1271310: Flaky.
+  "quicksettings.OpenSettings",
+  "quicksettings.LockScreen",
+
+  # https://crbug.com/1273485: Flaky.
+  "printer.ProxyAdd.epson_software_collate",
 ]
 
 # To disable a specific test in lacros_all_tast_tests, add it the following

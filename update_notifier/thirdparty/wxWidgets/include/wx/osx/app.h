@@ -33,26 +33,26 @@ bool WXDLLIMPEXP_CORE wxYield();
 // a new App object to start application
 class WXDLLIMPEXP_CORE wxApp: public wxAppBase
 {
-    DECLARE_DYNAMIC_CLASS(wxApp)
+    wxDECLARE_DYNAMIC_CLASS(wxApp);
 
     wxApp();
     virtual ~wxApp();
 
-    virtual void WakeUpIdle();
+    virtual void WakeUpIdle() wxOVERRIDE;
 
-    virtual void SetPrintMode(int mode) { m_printMode = mode; }
+    virtual void SetPrintMode(int mode) wxOVERRIDE { m_printMode = mode; }
     virtual int GetPrintMode() const { return m_printMode; }
 
     // calling OnInit with an auto-release pool ready ...
-    virtual bool CallOnInit();
+    virtual bool CallOnInit() wxOVERRIDE;
 #if wxUSE_GUI
     // setting up all MacOS Specific Event-Handlers etc
-    virtual bool OnInitGui();
+    virtual bool OnInitGui() wxOVERRIDE;
 #endif // wxUSE_GUI
 
-    virtual int OnRun();
+    virtual int OnRun() wxOVERRIDE;
 
-    virtual bool ProcessIdle();
+    virtual bool ProcessIdle() wxOVERRIDE;
 
     // implementation only
     void OnIdle(wxIdleEvent& event);
@@ -67,8 +67,8 @@ public:
 
     static bool           sm_isEmbedded;
     // Implementation
-    virtual bool Initialize(int& argc, wxChar **argv);
-    virtual void CleanUp();
+    virtual bool Initialize(int& argc, wxChar **argv) wxOVERRIDE;
+    virtual void CleanUp() wxOVERRIDE;
 
     // the installed application event handler
     WXEVENTHANDLERREF    MacGetEventHandler() { return m_macEventHandler ; }
@@ -77,12 +77,12 @@ public:
     { m_macCurrentEvent = event ; m_macCurrentEventHandlerCallRef = handler ; }
 
     // adding a CFType object to be released only at the end of the current event cycle (increases the
-    // refcount of the object passed), needed in case we are in the middle of an event concering an object
+    // refcount of the object passed), needed in case we are in the middle of an event concerning an object
     // we want to delete and cannot do it immediately
     // TODO change semantics to be in line with cocoa (make autrelease NOT increase the count)
     void                  MacAddToAutorelease( void* cfrefobj );
     void                  MacReleaseAutoreleasePool();
-    
+
 public:
     static wxWindow*      s_captureWindow ;
     static long           s_lastModifiers ;
@@ -95,7 +95,7 @@ protected:
     // override for support of custom app controllers
     virtual WX_NSObject   OSXCreateAppController();
 #endif
-    
+
 private:
     virtual bool        DoInitGui();
     virtual void        DoCleanUp();
@@ -109,6 +109,7 @@ public:
     static long           s_macPreferencesMenuItemId ;
     static long           s_macExitMenuItemId ;
     static wxString       s_macHelpMenuTitleName ;
+    static wxString       s_macWindowMenuTitleName ;
 
     WXEVENTREF            MacGetCurrentEvent() { return m_macCurrentEvent ; }
 
@@ -119,15 +120,6 @@ public:
     bool    MacSendKeyUpEvent( wxWindow* focus , long keyval , long modifiers , long when , wxChar uniChar ) ;
     bool    MacSendCharEvent( wxWindow* focus , long keymessage , long modifiers , long when , wxChar uniChar ) ;
     void    MacCreateKeyEvent( wxKeyEvent& event, wxWindow* focus , long keymessage , long modifiers , long when , wxChar uniChar ) ;
-#if wxOSX_USE_CARBON
-    // we only have applescript on these
-    virtual short         MacHandleAEODoc(const WXAPPLEEVENTREF event , WXAPPLEEVENTREF reply) ;
-    virtual short         MacHandleAEGURL(const WXAPPLEEVENTREF event , WXAPPLEEVENTREF reply) ;
-    virtual short         MacHandleAEPDoc(const WXAPPLEEVENTREF event , WXAPPLEEVENTREF reply) ;
-    virtual short         MacHandleAEOApp(const WXAPPLEEVENTREF event , WXAPPLEEVENTREF reply) ;
-    virtual short         MacHandleAEQuit(const WXAPPLEEVENTREF event , WXAPPLEEVENTREF reply) ;
-    virtual short         MacHandleAERApp(const WXAPPLEEVENTREF event , WXAPPLEEVENTREF reply) ;
-#endif
     // in response of an openFiles message with Cocoa and an
     // open-document apple event
     virtual void         MacOpenFiles(const wxArrayString &fileNames) ;
@@ -144,12 +136,11 @@ public:
     // in response of a reopen-application apple event
     virtual void         MacReopenApp() ;
 
-    // Notice that this is just a placeholder and doesn't work yet!
-    //
-    // Override this to return false from a non-bundled console app in order to
-    // stay in background instead of being made a foreground application as
-    // happens by default.
+    // override this to return false from a non-bundled console app in order to stay in background ...
     virtual bool         OSXIsGUIApplication() { return true; }
+
+    // Allow the user to disable the tab bar support in the application
+    void                 OSXEnableAutomaticTabbing(bool enable);
 
 #if wxOSX_USE_COCOA_OR_IPHONE
     // immediately before the native event loop launches
@@ -167,18 +158,18 @@ private:
     wxArrayString       m_openFiles;
     wxArrayString       m_printFiles;
     wxString            m_getURL;
-    
+
 public:
     bool                OSXInitWasCalled() { return m_inited; }
     void                OSXStoreOpenFiles(const wxArrayString &files ) { m_openFiles = files ; }
     void                OSXStorePrintFiles(const wxArrayString &files ) { m_printFiles = files ; }
     void                OSXStoreOpenURL(const wxString &url ) { m_getURL = url ; }
 #endif
-    
+
     // Hide the application windows the same as the system hide command would do it.
     void MacHideApp();
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif

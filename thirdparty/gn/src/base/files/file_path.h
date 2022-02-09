@@ -110,7 +110,6 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "util/build_config.h"
 
 // Windows-style drive letter support and pathname separator characters can be
@@ -238,13 +237,13 @@ class FilePath {
   // kCurrentDirectory.  If this object already refers to the root directory,
   // returns a FilePath identifying the root directory. Please note that this
   // doesn't resolve directory navigation, e.g. the result for "../a" is "..".
-  FilePath DirName() const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath DirName() const;
 
   // Returns a FilePath corresponding to the last path component of this
   // object, either a file or a directory.  If this object already refers to
   // the root directory, returns a FilePath identifying the root directory;
   // this is the only situation in which BaseName will return an absolute path.
-  FilePath BaseName() const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath BaseName() const;
 
   // Returns ".jpg" for path "C:\pics\jojo.jpg", or an empty string if
   // the file has no extension.  If non-empty, Extension() will always start
@@ -256,7 +255,7 @@ class FilePath {
   // ASSERT(new_path == path.value());
   // NOTE: this is different from the original file_util implementation which
   // returned the extension without a leading "." ("jpg" instead of ".jpg")
-  StringType Extension() const WARN_UNUSED_RESULT;
+  [[nodiscard]] StringType Extension() const;
 
   // Returns the path's file extension, as in Extension(), but will
   // never return a double extension.
@@ -265,16 +264,16 @@ class FilePath {
   // we can rename this to Extension() and the other to something like
   // LongExtension(), defaulting to short extensions and leaving the
   // long "extensions" to logic like base::GetUniquePathNumber().
-  StringType FinalExtension() const WARN_UNUSED_RESULT;
+  [[nodiscard]] StringType FinalExtension() const;
 
   // Returns "C:\pics\jojo" for path "C:\pics\jojo.jpg"
   // NOTE: this is slightly different from the similar file_util implementation
   // which returned simply 'jojo'.
-  FilePath RemoveExtension() const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath RemoveExtension() const;
 
   // Removes the path's file extension, as in RemoveExtension(), but
   // ignores double extensions.
-  FilePath RemoveFinalExtension() const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath RemoveFinalExtension() const;
 
   // Inserts |suffix| after the file name portion of |path| but before the
   // extension.  Returns "" if BaseName() == "." or "..".
@@ -283,20 +282,19 @@ class FilePath {
   // path == "jojo.jpg"         suffix == " (1)", returns "jojo (1).jpg"
   // path == "C:\pics\jojo"     suffix == " (1)", returns "C:\pics\jojo (1)"
   // path == "C:\pics.old\jojo" suffix == " (1)", returns "C:\pics.old\jojo (1)"
-  FilePath InsertBeforeExtension(StringViewType suffix) const
-      WARN_UNUSED_RESULT;
-  FilePath InsertBeforeExtensionASCII(std::string_view suffix) const
-      WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath InsertBeforeExtension(StringViewType suffix) const;
+  [[nodiscard]] FilePath InsertBeforeExtensionASCII(
+      std::string_view suffix) const;
 
   // Adds |extension| to |file_name|. Returns the current FilePath if
   // |extension| is empty. Returns "" if BaseName() == "." or "..".
-  FilePath AddExtension(StringViewType extension) const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath AddExtension(StringViewType extension) const;
 
   // Replaces the extension of |file_name| with |extension|.  If |file_name|
   // does not have an extension, then |extension| is added.  If |extension| is
   // empty, then the extension is removed from |file_name|.
   // Returns "" if BaseName() == "." or "..".
-  FilePath ReplaceExtension(StringViewType extension) const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath ReplaceExtension(StringViewType extension) const;
 
   // Returns a FilePath by appending a separator and the supplied path
   // component to this object's path.  Append takes care to avoid adding
@@ -304,8 +302,8 @@ class FilePath {
   // If this object's path is kCurrentDirectory, a new FilePath corresponding
   // only to |component| is returned.  |component| must be a relative path;
   // it is an error to pass an absolute path.
-  FilePath Append(StringViewType component) const WARN_UNUSED_RESULT;
-  FilePath Append(const FilePath& component) const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath Append(StringViewType component) const;
+  [[nodiscard]] FilePath Append(const FilePath& component) const;
 
   // Although Windows StringType is std::u16string, since the encoding it uses
   // for paths is well defined, it can handle ASCII path components as well. Mac
@@ -313,7 +311,7 @@ class FilePath {
   // Linux, although it can use any 8-bit encoding for paths, we assume that
   // ASCII is a valid subset, regardless of the encoding, since many operating
   // system paths will always be ASCII.
-  FilePath AppendASCII(std::string_view component) const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath AppendASCII(std::string_view component) const;
 
   // Returns true if this FilePath contains an absolute path.  On Windows, an
   // absolute path begins with either a drive letter specification followed by
@@ -322,15 +320,15 @@ class FilePath {
   bool IsAbsolute() const;
 
   // Returns true if the patch ends with a path separator character.
-  bool EndsWithSeparator() const WARN_UNUSED_RESULT;
+  [[nodiscard]] bool EndsWithSeparator() const;
 
   // Returns a copy of this FilePath that ends with a trailing separator. If
   // the input path is empty, an empty FilePath will be returned.
-  FilePath AsEndingWithSeparator() const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath AsEndingWithSeparator() const;
 
   // Returns a copy of this FilePath that does not end with a trailing
   // separator.
-  FilePath StripTrailingSeparators() const WARN_UNUSED_RESULT;
+  [[nodiscard]] FilePath StripTrailingSeparators() const;
 
   // Returns true if this FilePath contains an attempt to reference a parent
   // directory (e.g. has a path component that is "..").

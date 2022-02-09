@@ -19,7 +19,6 @@
  * under a certain platform
  */
 
-#define wxOSX_USE_ATSU_TEXT 0
 #define wxHAS_OPENGL_ES
 
 #define wxOSX_USE_QUICKTIME 0
@@ -131,6 +130,8 @@
 #undef wxUSE_RICHTEXT
 #define wxUSE_RICHTEXT 0
 
+#undef wxUSE_ACTIVITYINDICATOR
+#undef wxUSE_ADDREMOVECTRL
 #undef wxUSE_ANIMATIONCTRL
 #undef wxUSE_CALENDARCTRL
 #undef wxUSE_COMBOCTRL
@@ -160,6 +161,8 @@
 #undef wxUSE_BUSYINFO
 #undef wxUSE_SEARCHCTRL
 
+#define wxUSE_ACTIVITYINDICATOR 0
+#define wxUSE_ADDREMOVECTRL 0
 #define wxUSE_ANIMATIONCTRL 0
 #define wxUSE_CALENDARCTRL 0
 #define wxUSE_COMBOCTRL 0
@@ -210,6 +213,7 @@
 #undef wxUSE_FINDREPLDLG
 #undef wxUSE_TASKBARICON
 #undef wxUSE_REARRANGECTRL
+#undef wxUSE_NATIVE_DATAVIEWCTRL
 
 #define wxUSE_LOGWINDOW 0
 #define wxUSE_LOG_DIALOG 0
@@ -232,6 +236,7 @@
 #define wxUSE_FINDREPLDLG 0
 #define wxUSE_TASKBARICON 0
 #define wxUSE_REARRANGECTRL 0
+#define wxUSE_NATIVE_DATAVIEWCTRL 0
 
 #if wxUSE_WXHTML_HELP
 #undef wxUSE_WXHTML_HELP
@@ -250,7 +255,17 @@
 
 #if wxUSE_MENUS
 #undef wxUSE_MENUS
+// we are basing our implementatino on UIMenuElement
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
+#define wxUSE_MENUS 1
+#else
 #define wxUSE_MENUS 0
+#endif
+#endif
+
+#if wxUSE_MENUBAR
+#undef wxUSE_MENUBAR
+#define wxUSE_MENUBAR 0
 #endif
 
 /*
@@ -368,6 +383,16 @@
 #undef wxUSE_WEBVIEW
 #define wxUSE_WEBVIEW 0
 #endif
+
+#if wxUSE_SECRETSTORE
+    #undef wxUSE_SECRETSTORE
+    #define wxUSE_SECRETSTORE 0
+#endif
+
+// IconRef datatype does not exist on iOS
+
+#undef wxOSX_USE_ICONREF
+#define wxOSX_USE_ICONREF 0
 
 #endif
     /* _WX_OSX_IPHONE_CHKCONF_H_ */

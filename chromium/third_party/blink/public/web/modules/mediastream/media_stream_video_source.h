@@ -9,9 +9,14 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/token.h"
+#include "build/build_config.h"
 #include "media/base/video_frame.h"
+#include "media/capture/mojom/video_capture_types.mojom-shared.h"
 #include "media/capture/video_capture_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/media/video_capture.h"
@@ -24,6 +29,7 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/web/modules/mediastream/encoded_video_frame.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/webrtc_overrides/metronome_provider.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -61,6 +67,9 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
 
   explicit MediaStreamVideoSource(
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner);
+  MediaStreamVideoSource(
+      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+      scoped_refptr<MetronomeProvider> metronome_provider);
   MediaStreamVideoSource(const MediaStreamVideoSource&) = delete;
   MediaStreamVideoSource& operator=(const MediaStreamVideoSource&) = delete;
   ~MediaStreamVideoSource() override;
@@ -167,6 +176,16 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
 
   // Returns true if encoded output can be enabled in the source.
   virtual bool SupportsEncodedOutput() const;
+
+#if !defined(OS_ANDROID)
+  // Start/stop cropping a video track.
+  // Non-empty |crop_id| sets (or changes) the crop-target.
+  // Empty |crop_id| reverts the capture to its original, uncropped state.
+  // The callback reports success/failure.
+  virtual void Crop(
+      const base::Token& crop_id,
+      base::OnceCallback<void(media::mojom::CropRequestResult)> callback);
+#endif
 
   // Notifies the source about that the number of encoded sinks have been
   // updated. Note: Can only be called if the number of encoded sinks have
@@ -300,7 +319,7 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
   // in the context of the callback. If gUM fails, the implementation will
   // simply drop the references to the blink source and track which will lead
   // to this object being deleted.
-  void FinalizeAddPendingTracks();
+  void FinalizeAddPendingTracks(mojom::MediaStreamRequestResult result);
 
   // Actually adds |track| to this source, provided the source has started.
   void FinalizeAddTrack(MediaStreamVideoTrack* track,
@@ -346,6 +365,7 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
   // for both at the same time.
   RestartCallback restart_callback_;
 
+  const scoped_refptr<MetronomeProvider> metronome_provider_;
   // |track_adapter_| delivers video frames to the tracks on the IO-thread.
   scoped_refptr<VideoTrackAdapter> track_adapter_;
 

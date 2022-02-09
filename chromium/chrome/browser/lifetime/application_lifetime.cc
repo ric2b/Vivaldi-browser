@@ -25,7 +25,7 @@
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
-#include "chrome/browser/metrics/thread_watcher.h"
+#include "chrome/browser/metrics/shutdown_watcher_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/buildflags.h"
@@ -116,11 +116,12 @@ bool SetLocaleForNextStart(PrefService* local_state) {
   // If a policy mandates the login screen locale, use it.
   ash::CrosSettings* cros_settings = ash::CrosSettings::Get();
   const base::ListValue* login_screen_locales = nullptr;
-  std::string login_screen_locale;
-  if (cros_settings->GetList(chromeos::kDeviceLoginScreenLocales,
+  if (cros_settings->GetList(ash::kDeviceLoginScreenLocales,
                              &login_screen_locales) &&
       !login_screen_locales->GetList().empty() &&
-      login_screen_locales->GetString(0, &login_screen_locale)) {
+      login_screen_locales->GetList()[0].is_string()) {
+    std::string login_screen_locale =
+        login_screen_locales->GetList()[0].GetString();
     local_state->SetString(language::prefs::kApplicationLocale,
                            login_screen_locale);
     return true;
@@ -163,9 +164,10 @@ void AttemptRestartInternal(IgnoreUnloadHandlers ignore_unload_handlers) {
 
   PrefService* pref_service = g_browser_process->local_state();
   pref_service->SetBoolean(prefs::kWasRestarted, true);
+  KeepAliveRegistry::GetInstance()->SetRestarting();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::BootTimesRecorder::Get()->set_restart_requested();
+  ash::BootTimesRecorder::Get()->set_restart_requested();
 
   DCHECK(!g_send_stop_request_to_session_manager);
   // Make sure we don't send stop request to the session manager.
@@ -263,8 +265,8 @@ void CloseAllBrowsers() {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::BootTimesRecorder::Get()->AddLogoutTimeMarker(
-      "StartedClosingWindows", false);
+  ash::BootTimesRecorder::Get()->AddLogoutTimeMarker("StartedClosingWindows",
+                                                     false);
 #endif
   scoped_refptr<BrowserCloseManager> browser_close_manager =
       new BrowserCloseManager;
@@ -275,12 +277,11 @@ void CloseAllBrowsers() {
 void AttemptUserExit() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   VLOG(1) << "AttemptUserExit";
-  chromeos::BootTimesRecorder::Get()->AddLogoutTimeMarker("LogoutStarted",
-                                                          false);
+  ash::BootTimesRecorder::Get()->AddLogoutTimeMarker("LogoutStarted", false);
 
   PrefService* state = g_browser_process->local_state();
   if (state) {
-    chromeos::BootTimesRecorder::Get()->OnLogoutStarted(state);
+    ash::BootTimesRecorder::Get()->OnLogoutStarted(state);
 
     if (SetLocaleForNextStart(state)) {
       TRACE_EVENT0("shutdown", "CommitPendingWrite");
@@ -320,14 +321,7 @@ void AttemptRelaunch() {
 }
 
 #if !defined(OS_ANDROID)
-namespace {
-
-bool g_relaunch_ignore_unload_handlers_called = false;
-
-}  // namespace
-
 void RelaunchIgnoreUnloadHandlers() {
-  g_relaunch_ignore_unload_handlers_called = true;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_OTHER, "Chrome relaunch");
@@ -335,11 +329,6 @@ void RelaunchIgnoreUnloadHandlers() {
 #endif
   AttemptRestartInternal(IgnoreUnloadHandlers(true));
 }
-
-bool DidCallRelaunchIgnoreUnloadHandlers() {
-  return g_relaunch_ignore_unload_handlers_called;
-}
-
 #endif
 
 void AttemptExit() {

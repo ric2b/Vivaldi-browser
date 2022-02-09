@@ -833,7 +833,7 @@ void Parser::AssignComments(ParseNode* file) {
     }
     const Location start = node->GetRange().begin();
     while (cur_comment < static_cast<int>(line_comment_tokens_.size())) {
-      if (start.byte() >= line_comment_tokens_[cur_comment].location().byte()) {
+      if (start >= line_comment_tokens_[cur_comment].location()) {
         const_cast<ParseNode*>(node)->comments_mutable()->append_before(
             line_comment_tokens_[cur_comment]);
         ++cur_comment;
@@ -871,7 +871,7 @@ void Parser::AssignComments(ParseNode* file) {
       continue;
 
     while (cur_comment >= 0) {
-      if (end.byte() <= suffix_comment_tokens_[cur_comment].location().byte()) {
+      if (end <= suffix_comment_tokens_[cur_comment].location()) {
         const_cast<ParseNode*>(*i)->comments_mutable()->append_suffix(
             suffix_comment_tokens_[cur_comment]);
         --cur_comment;

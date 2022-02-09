@@ -7,14 +7,13 @@
 
 #include <memory>
 
-#include "base/compiler_specific.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/download/public/common/download_item.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/download_manager.h"
@@ -65,7 +64,7 @@ class CONTENT_EXPORT DragDownloadFile : public ui::DownloadFileProvider {
   State state_ = INITIALIZED;
   scoped_refptr<ui::DownloadFileObserver> observer_;
   base::RunLoop nested_loop_;
-  DragDownloadFileUI* drag_ui_ = nullptr;
+  raw_ptr<DragDownloadFileUI> drag_ui_ = nullptr;
   base::WeakPtrFactory<DragDownloadFile> weak_ptr_factory_{this};
 };
 

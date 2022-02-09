@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_TABRESTORE_H_
 #define CHROME_BROWSER_UI_BROWSER_TABRESTORE_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,7 @@ content::WebContents* AddRestoredTab(
     base::TimeTicks last_active_time,
     content::SessionStorageNamespace* storage_namespace,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     bool from_session_restore,
     const std::map<std::string, bool> page_action_overrides = {},
     const std::string& ext_data = {});
@@ -66,7 +68,8 @@ content::WebContents* AddRestoredTabFromCache(
     absl::optional<tab_groups::TabGroupId> group,
     bool select,
     bool pin,
-    const sessions::SerializedUserAgentOverride& user_agent_override);
+    const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data);
 
 // Replaces the state of the currently selected tab with the session
 // history restored from the SessionRestore and TabRestoreService systems.
@@ -78,6 +81,7 @@ content::WebContents* ReplaceRestoredTab(
     const std::string& extension_app_id,
     content::SessionStorageNamespace* session_storage_namespace,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     bool from_session_restore,
     const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data = {});

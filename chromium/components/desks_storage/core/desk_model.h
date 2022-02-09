@@ -12,9 +12,14 @@
 #include "base/guid.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "base/values.h"
 
 namespace ash {
 class DeskTemplate;
+}
+
+namespace apps {
+class AppRegistryCache;
 }
 
 namespace desks_storage {
@@ -57,6 +62,14 @@ class DeskModel {
     kFailure,
   };
 
+  // status codes for getting template Json representations.
+  enum class GetTemplateJsonStatus {
+    kOk,
+    kNotFound,
+    kInvalidUuid,
+    kFailure,
+  };
+
   DeskModel();
   DeskModel(const DeskModel&) = delete;
   DeskModel& operator=(const DeskModel&) = delete;
@@ -64,7 +77,7 @@ class DeskModel {
 
   using GetAllEntriesCallback =
       base::OnceCallback<void(GetAllEntriesStatus status,
-                              std::vector<ash::DeskTemplate*> entries)>;
+                              const std::vector<ash::DeskTemplate*>& entries)>;
   // Returns a vector of entries in the model.
   virtual void GetAllEntries(GetAllEntriesCallback callback) = 0;
 
@@ -94,6 +107,15 @@ class DeskModel {
   // to any backend error, |callback| will be called with |kFailure|.
   virtual void AddOrUpdateEntry(std::unique_ptr<ash::DeskTemplate> new_entry,
                                 AddOrUpdateEntryCallback callback) = 0;
+
+  using GetTemplateJsonCallback =
+      base::OnceCallback<void(GetTemplateJsonStatus status,
+                              const std::string& json_representation)>;
+  // Retrieves a template based on its |uuid|, if found returns a std::string
+  // containing the json representation of the template queried.
+  virtual void GetTemplateJson(const std::string& uuid,
+                               apps::AppRegistryCache* app_cache,
+                               GetTemplateJsonCallback callback);
 
   using DeleteEntryCallback =
       base::OnceCallback<void(DeleteEntryStatus status)>;
@@ -131,9 +153,24 @@ class DeskModel {
   void AddObserver(DeskModelObserver* observer);
   void RemoveObserver(DeskModelObserver* observer);
 
+  // Operations to update the preconfigured desk templates from policy
+  void SetPolicyDeskTemplates(const std::string& policyJson);
+
  protected:
   // The observers.
   base::ObserverList<DeskModelObserver>::Unchecked observers_;
+
+  // The preconfigured desk templates from policy (as opposed to user-defined)
+  std::vector<std::unique_ptr<ash::DeskTemplate>> policy_entries_;
+
+ private:
+  // Handles conversion of DeskTemplate to policy JSON after the queried
+  // DeskTemplate has been retrieved from the implemented class.
+  void HandleTemplateConversionToPolicyJson(
+      GetTemplateJsonCallback callback,
+      apps::AppRegistryCache* app_cache,
+      GetEntryByUuidStatus status,
+      std::unique_ptr<ash::DeskTemplate> entry);
 };
 
 }  // namespace desks_storage

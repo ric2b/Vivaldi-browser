@@ -20,9 +20,10 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.INCOGNITO_SWITCHER_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.INCOGNITO_TAB_COUNT_PROVIDER;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.INCOGNITO_TAB_MODEL_SELECTOR;
-import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IN_START_SURFACE_MODE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_VISIBLE;
+import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_CONTENT_DESCRIPTION;
+import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_IMAGE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.MENU_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_BUTTON_HIGHLIGHT;
@@ -61,8 +62,6 @@ class StartSurfaceToolbarViewBinder {
             view.setIdentityDiscVisibility(model.get(IDENTITY_DISC_IS_VISIBLE));
         } else if (propertyKey == INCOGNITO_STATE_PROVIDER) {
             view.setIncognitoStateProvider(model.get(INCOGNITO_STATE_PROVIDER));
-        } else if (propertyKey == IN_START_SURFACE_MODE) {
-            view.setStartSurfaceMode(model.get(IN_START_SURFACE_MODE));
         } else if (propertyKey == IS_INCOGNITO) {
             view.updateIncognito(model.get(IS_INCOGNITO));
         } else if (propertyKey == IS_VISIBLE) {
@@ -71,6 +70,10 @@ class StartSurfaceToolbarViewBinder {
             view.setShowAnimation(model.get(SHOW_ANIMATION));
         } else if (propertyKey == LOGO_IS_VISIBLE) {
             view.setLogoVisibility(model.get(LOGO_IS_VISIBLE));
+        } else if (propertyKey == LOGO_IMAGE) {
+            view.setLogoImage(model.get(LOGO_IMAGE));
+        } else if (propertyKey == LOGO_CONTENT_DESCRIPTION) {
+            view.setLogoContentDescription(model.get(LOGO_CONTENT_DESCRIPTION));
         } else if (propertyKey == MENU_IS_VISIBLE) {
             view.setMenuButtonVisibility(model.get(MENU_IS_VISIBLE));
         } else if (propertyKey == NEW_TAB_CLICK_HANDLER) {

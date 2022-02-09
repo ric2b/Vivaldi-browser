@@ -20,9 +20,12 @@ by a child template that "extends" this file.
     tools:ignore="MissingVersion">
     <!-- android:versionCode and android:versionName is set through gyp. See build/common.gypi -->
 
-    <!-- Vivaldi/Polestar -->
+    <!-- Vivaldi/Automotive -->
     {% if is_oem_automotive_build == 'true' %}
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
+    {% endif %}
+    <!-- Vivaldi/Polestar -->
+    {% if is_oem_polestar_build == 'true' %}
     <uses-feature android:name="com.polestar" android:required="true" />
     {% endif %}
 
@@ -211,7 +214,7 @@ by a child template that "extends" this file.
         android:allowAudioPlaybackCapture="false"
         android:appComponentFactory="org.chromium.chrome.browser.base.SplitCompatAppComponentFactory"
         {% block extra_application_attributes %}{% endblock %}>
-        <!-- Vivaldi/Polestar -->
+        <!-- Vivaldi/Automotive -->
         {% if is_oem_automotive_build == 'true' %}
         <meta-data
           android:name="com.android.automotive"
@@ -379,7 +382,7 @@ by a child template that "extends" this file.
         </activity-alias>
 
         <activity android:name="org.chromium.chrome.browser.media.MediaLauncherActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:excludeFromRecents="true"
             android:exported="true"
             android:enabled="false"><!-- This will be selectively enabled at runtime. -->
@@ -410,7 +413,7 @@ by a child template that "extends" this file.
              images in that case. -->
         <activity-alias android:name="org.chromium.chrome.browser.media.AudioLauncherActivity"
             android:targetActivity="org.chromium.chrome.browser.media.MediaLauncherActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:excludeFromRecents="true"
             android:exported="true"
             android:enabled="false"><!-- This will be selectively enabled at runtime. -->
@@ -425,13 +428,13 @@ by a child template that "extends" this file.
         </activity-alias>
 
         <activity android:name="org.chromium.chrome.browser.LauncherShortcutActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="false" />
 
         <activity android:name="org.chromium.chrome.browser.incognito.IncognitoTabLauncher"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:taskAffinity=""
             android:enabled="false"
             android:excludeFromRecents="true"
@@ -443,7 +446,7 @@ by a child template that "extends" this file.
         </activity>
 
         <activity android:name="org.chromium.chrome.browser.app.reengagement.ReengagementActivity"
-            android:theme="@android:style/Theme.Translucent"
+            android:theme="@style/Theme.BrowserUI.Translucent"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="false" />
@@ -576,7 +579,7 @@ by a child template that "extends" this file.
             android:autoRemoveFromRecents="true">
         </activity>
         <activity android:name="org.chromium.chrome.browser.firstrun.LightweightFirstRunActivity"
-            android:theme="@style/Theme.Chromium.AlertDialog.NoActionBar"
+            android:theme="@style/Theme.BrowserUI.AlertDialog.NoActionBar"
             android:launchMode="singleInstance"
             {{ self.first_run_activity_common() }}>
         </activity>
@@ -612,8 +615,10 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
+        <!-- Vivaldi changes-->
         <activity android:name="org.chromium.chrome.browser.settings.SettingsActivity"
             android:theme="@style/Theme.Vivaldi.Preferences"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustPan"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:label="@string/settings"
             android:exported="false">
@@ -731,7 +736,7 @@ by a child template that "extends" this file.
 
         <!-- Vivaldi -> -->
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:excludeFromRecents="true"
             android:windowSoftInputMode="stateHidden"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
@@ -781,19 +786,19 @@ by a child template that "extends" this file.
         < -->
 
         <!-- Activities for feed. -->
-        <activity android:name="org.chromium.chrome.browser.app.feedmanagement.FeedManagementActivity"
+        <activity android:name="org.chromium.chrome.browser.app.feed.feedmanagement.FeedManagementActivity"
             android:theme="@style/Theme.Chromium.Settings"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
-        <activity android:name="org.chromium.chrome.browser.app.followmanagement.FollowManagementActivity"
+        <activity android:name="org.chromium.chrome.browser.app.feed.followmanagement.FollowManagementActivity"
             android:theme="@style/Theme.Chromium.Settings"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
             <intent-filter>
-                <action android:name="org.chromium.chrome.browser.app.followmanagement.FollowManagementActivity.ACTIVATE" />
+                <action android:name="org.chromium.chrome.browser.app.feed.followmanagement.FollowManagementActivity.ACTIVATE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -852,7 +857,7 @@ by a child template that "extends" this file.
                                running.
         -->
         <activity android:name="org.chromium.chrome.browser.webapps.WebappLauncherActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:exported="true">
@@ -910,7 +915,7 @@ by a child template that "extends" this file.
         </activity>
 
         <activity android:name="org.chromium.chrome.browser.webapps.ActivateWebApkActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:exported="true">
             <intent-filter>
                 <action android:name="org.chromium.chrome.browser.webapps.ActivateWebApkActivity.ACTIVATE" />
@@ -932,7 +937,7 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.BrowserRestartActivity"
             android:launchMode="singleInstance"
             android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/Theme.BrowserUI.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
             android:process=":browser_restart_process">
         </activity>
@@ -940,13 +945,13 @@ by a child template that "extends" this file.
         <!-- This activity is to expose the print option via the generic Android share action. -->
         <activity
             android:name="org.chromium.chrome.browser.printing.PrintShareActivity"
-            android:icon="@drawable/sharing_print"
+            android:icon="@drawable/sharing_print_baseline"
             android:label="@string/print_share_activity_title"
             android:enabled="false"
             android:excludeFromRecents="true"
             android:exported="true"
             android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -965,7 +970,7 @@ by a child template that "extends" this file.
             android:excludeFromRecents="true"
             android:exported="true"
             android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -995,7 +1000,7 @@ by a child template that "extends" this file.
         <activity
             android:name="org.chromium.chrome.browser.instantapps.AuthenticatedProxyActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:noHistory="true"
             android:excludeFromRecents="true">
         </activity>
@@ -1003,7 +1008,7 @@ by a child template that "extends" this file.
         <activity
             android:name="org.chromium.chrome.browser.vr.VrCancelAnimationActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:noHistory="true"
             android:excludeFromRecents="true"
             {% if enable_vr == "true" %}
@@ -1091,7 +1096,7 @@ by a child template that "extends" this file.
         {% if is_vivaldi == 'false' %}
         <!-- Quick Action Search widget -->
         <receiver
-            android:name="org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider$QuickActionSearchWidgetProviderSmall"
+            android:name="org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider$QuickActionSearchWidgetProviderSearch"
             android:label="@string/quick_action_search_widget_title"
             android:exported="true">
             <intent-filter>
@@ -1100,18 +1105,6 @@ by a child template that "extends" this file.
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/quick_action_search_widget_small_info" />
-        </receiver>
-
-        <receiver
-            android:name="org.chromium.chrome.browser.quickactionsearchwidget.QuickActionSearchWidgetProvider$QuickActionSearchWidgetProviderMedium"
-            android:label="@string/quick_action_search_widget_title"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/quick_action_search_widget_medium_info" />
         </receiver>
 
         <receiver
@@ -1287,7 +1280,7 @@ by a child template that "extends" this file.
 
         <activity
             android:name="org.chromium.chrome.browser.notifications.NotificationIntentInterceptor$TrampolineActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:exported="false"
             android:autoRemoveFromRecents="true"
             android:excludeFromRecents="true"
@@ -1296,7 +1289,7 @@ by a child template that "extends" this file.
 
         <activity
             android:name="org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager$TrampolineActivity"
-            android:theme="@android:style/Theme.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.NoDisplay"
             android:exported="false"
             android:autoRemoveFromRecents="true"
             android:excludeFromRecents="true"

@@ -5,13 +5,13 @@
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
-import {ReimagingProvisioningPageElement} from 'chrome://shimless-rma/reimaging_provisioning_page.js';
-import {ProvisioningStep} from 'chrome://shimless-rma/shimless_rma_types.js';
+import {ReimagingProvisioningPage} from 'chrome://shimless-rma/reimaging_provisioning_page.js';
+import {ProvisioningStatus} from 'chrome://shimless-rma/shimless_rma_types.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
 import {flushTasks} from '../../test_util.js';
 
 export function reimagingProvisioningPageTest() {
-  /** @type {?ReimagingProvisioningPageElement} */
+  /** @type {?ReimagingProvisioningPage} */
   let component = null;
 
   /** @type {?FakeShimlessRmaService} */
@@ -38,7 +38,7 @@ export function reimagingProvisioningPageTest() {
   function initializeWaitForProvisioningPage() {
     assertFalse(!!component);
 
-    component = /** @type {!ReimagingProvisioningPageElement} */ (
+    component = /** @type {!ReimagingProvisioningPage} */ (
         document.createElement('reimaging-provisioning-page'));
     assertTrue(!!component);
     document.body.appendChild(component);
@@ -70,7 +70,7 @@ export function reimagingProvisioningPageTest() {
 
   test('ProvisioningInProgressDisablesNext', async () => {
     await initializeWaitForProvisioningPage();
-    service.triggerProvisioningObserver(ProvisioningStep.kInProgress, 0.5, 0);
+    service.triggerProvisioningObserver(ProvisioningStatus.kInProgress, 0.5, 0);
     await flushTasks();
 
     let savedResult;
@@ -88,10 +88,9 @@ export function reimagingProvisioningPageTest() {
   test('ProvisioningEnablesNext', async () => {
     const resolver = new PromiseResolver();
     await initializeWaitForProvisioningPage();
-    service.triggerProvisioningObserver(
-        ProvisioningStep.kProvisioningComplete, 1.0, 0);
+    service.triggerProvisioningObserver(ProvisioningStatus.kComplete, 1.0, 0);
     await flushTasks();
-    service.transitionNextState = () => {
+    service.provisioningComplete = () => {
       return resolver.promise;
     };
 

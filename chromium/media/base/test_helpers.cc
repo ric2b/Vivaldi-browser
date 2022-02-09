@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
-#include "base/macros.h"
 #include "base/notreached.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
@@ -33,6 +32,10 @@ namespace media {
 class MockCallback : public base::RefCountedThreadSafe<MockCallback> {
  public:
   MockCallback();
+
+  MockCallback(const MockCallback&) = delete;
+  MockCallback& operator=(const MockCallback&) = delete;
+
   MOCK_METHOD0(Run, void());
   MOCK_METHOD1(RunWithBool, void(bool));
   MOCK_METHOD1(RunWithStatus, void(PipelineStatus));
@@ -40,9 +43,6 @@ class MockCallback : public base::RefCountedThreadSafe<MockCallback> {
  protected:
   friend class base::RefCountedThreadSafe<MockCallback>;
   virtual ~MockCallback();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockCallback);
 };
 
 MockCallback::MockCallback() = default;

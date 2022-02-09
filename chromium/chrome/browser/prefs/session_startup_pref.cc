@@ -27,18 +27,21 @@ int TypeToPrefValue(SessionStartupPref::Type type) {
   switch (type) {
     case SessionStartupPref::VIVALDI_HOMEPAGE:
       return SessionStartupPref::kPrefValueVivaldiHomepage;
-    case SessionStartupPref::LAST: return SessionStartupPref::kPrefValueLast;
-    case SessionStartupPref::URLS: return SessionStartupPref::kPrefValueURLs;
-    default:                       return SessionStartupPref::kPrefValueNewTab;
+    case SessionStartupPref::LAST:
+      return SessionStartupPref::kPrefValueLast;
+    case SessionStartupPref::URLS:
+      return SessionStartupPref::kPrefValueURLs;
+    default:
+      return SessionStartupPref::kPrefValueNewTab;
   }
 }
 
 void URLListToPref(const base::ListValue* url_list, SessionStartupPref* pref) {
   pref->urls.clear();
-  for (size_t i = 0; i < url_list->GetList().size(); ++i) {
-    std::string url_text;
-    if (url_list->GetString(i, &url_text)) {
-      GURL fixed_url = url_formatter::FixupURL(url_text, std::string());
+  for (const base::Value& i : url_list->GetList()) {
+    const std::string* url_text = i.GetIfString();
+    if (url_text) {
+      GURL fixed_url = url_formatter::FixupURL(*url_text, std::string());
       pref->urls.push_back(fixed_url);
     }
   }
@@ -73,9 +76,8 @@ SessionStartupPref::Type SessionStartupPref::GetDefaultStartupType() {
 }
 
 // static
-void SessionStartupPref::SetStartupPref(
-    Profile* profile,
-    const SessionStartupPref& pref) {
+void SessionStartupPref::SetStartupPref(Profile* profile,
+                                        const SessionStartupPref& pref) {
   DCHECK(profile);
   SetStartupPref(profile->GetPrefs(), pref);
 }
@@ -132,7 +134,7 @@ SessionStartupPref SessionStartupPref::GetStartupPref(
 }
 
 // static
-bool SessionStartupPref::TypeIsManaged(PrefService* prefs) {
+bool SessionStartupPref::TypeIsManaged(const PrefService* prefs) {
   DCHECK(prefs);
   const PrefService::Preference* pref_restore =
       prefs->FindPreference(prefs::kRestoreOnStartup);
@@ -141,7 +143,7 @@ bool SessionStartupPref::TypeIsManaged(PrefService* prefs) {
 }
 
 // static
-bool SessionStartupPref::URLsAreManaged(PrefService* prefs) {
+bool SessionStartupPref::URLsAreManaged(const PrefService* prefs) {
   DCHECK(prefs);
   const PrefService::Preference* pref_urls =
       prefs->FindPreference(prefs::kURLsToRestoreOnStartup);
@@ -150,7 +152,7 @@ bool SessionStartupPref::URLsAreManaged(PrefService* prefs) {
 }
 
 // static
-bool SessionStartupPref::TypeHasRecommendedValue(PrefService* prefs) {
+bool SessionStartupPref::TypeHasRecommendedValue(const PrefService* prefs) {
   DCHECK(prefs);
   const PrefService::Preference* pref_restore =
       prefs->FindPreference(prefs::kRestoreOnStartup);
@@ -170,13 +172,14 @@ bool SessionStartupPref::TypeIsDefault(const PrefService* prefs) {
 // static
 SessionStartupPref::Type SessionStartupPref::PrefValueToType(int pref_value) {
   switch (pref_value) {
-    case kPrefValueLast:     return SessionStartupPref::LAST;
-    case kPrefValueURLs:     return SessionStartupPref::URLS;
-    case kPrefValueVivaldiSpeeddial:
-      return SessionStartupPref::DEFAULT;
     case kPrefValueVivaldiHomepage:
       return SessionStartupPref::VIVALDI_HOMEPAGE;
-    default:                 return SessionStartupPref::DEFAULT;
+    case kPrefValueLast:
+      return SessionStartupPref::LAST;
+    case kPrefValueURLs:
+      return SessionStartupPref::URLS;
+    default:
+      return SessionStartupPref::DEFAULT;
   }
 }
 
@@ -185,4 +188,12 @@ SessionStartupPref::SessionStartupPref(Type type) : type(type) {}
 SessionStartupPref::SessionStartupPref(const SessionStartupPref& other) =
     default;
 
-SessionStartupPref::~SessionStartupPref() {}
+SessionStartupPref::~SessionStartupPref() = default;
+
+bool SessionStartupPref::ShouldRestoreLastSession() const {
+  return type == LAST;
+}
+
+bool SessionStartupPref::ShouldOpenUrls() const {
+  return type == URLS;
+}

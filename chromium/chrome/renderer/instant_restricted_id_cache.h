@@ -12,9 +12,8 @@
 #include <vector>
 
 #include "base/check_op.h"
-#include "base/containers/mru_cache.h"
+#include "base/containers/lru_cache.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "chrome/common/search/instant_types.h"
 
 // In InstantExtended, iframes are used to display objects which can only be
@@ -79,7 +78,7 @@ class InstantRestrictedIDCache {
   FRIEND_TEST_ALL_PREFIXES(InstantRestrictedIDCacheTest,
                            AddItemsWithRestrictedID);
 
-  typedef base::MRUCache<InstantRestrictedID, T> CacheImpl;
+  typedef base::LRUCache<InstantRestrictedID, T> CacheImpl;
 
   mutable CacheImpl cache_;
   typename CacheImpl::reverse_iterator last_add_start_;

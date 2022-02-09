@@ -66,7 +66,7 @@ void VivaldiTranslateLanguageList::StartUpdateTimer() {
   // an updated list again.
   if (!update_timer_.IsRunning()) {
     update_timer_.Start(
-        FROM_HERE, base::TimeDelta::FromHours(kCheckIntervalHours),
+        FROM_HERE, base::Hours(kCheckIntervalHours),
         base::BindOnce(&VivaldiTranslateLanguageList::StartDownload,
                        weak_factory_.GetWeakPtr()));
   }
@@ -124,7 +124,7 @@ bool VivaldiTranslateLanguageList::ShouldUpdate() {
   if (last_update.is_null()) {
     return true;
   }
-  if ((last_update + base::TimeDelta::FromHours(kLanguageListUpdateInterval)) <
+  if ((last_update + base::Hours(kLanguageListUpdateInterval)) <
       base::Time::Now()) {
     return true;
   }

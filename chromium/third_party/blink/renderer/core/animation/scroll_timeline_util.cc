@@ -20,7 +20,7 @@ scoped_refptr<CompositorScrollTimeline> ToCompositorScrollTimeline(
     return nullptr;
 
   auto* scroll_timeline = To<ScrollTimeline>(timeline);
-  Node* scroll_source = scroll_timeline->ResolvedScrollSource();
+  Node* scroll_source = scroll_timeline->ResolvedSource();
   absl::optional<CompositorElementId> element_id =
       GetCompositorScrollElementId(scroll_source);
 
@@ -52,9 +52,9 @@ CompositorScrollTimeline::ScrollDirection ConvertOrientation(
     ScrollTimeline::ScrollDirection orientation,
     const ComputedStyle* style) {
   // Easy cases; physical is always physical.
-  if (orientation == ScrollTimeline::Horizontal)
+  if (orientation == ScrollTimeline::kHorizontal)
     return CompositorScrollTimeline::ScrollRight;
-  if (orientation == ScrollTimeline::Vertical)
+  if (orientation == ScrollTimeline::kVertical)
     return CompositorScrollTimeline::ScrollDown;
 
   // Harder cases; first work out which axis is which, and then for each check
@@ -69,7 +69,7 @@ CompositorScrollTimeline::ScrollDirection ConvertOrientation(
   // direction: ltr;
   bool is_ltr_direction = style ? style->IsLeftToRightDirection() : true;
 
-  if (orientation == ScrollTimeline::Block) {
+  if (orientation == ScrollTimeline::kBlock) {
     if (is_horizontal_writing_mode) {
       // For horizontal writing mode, block is vertical. The starting edge is
       // always the top.
@@ -81,7 +81,7 @@ CompositorScrollTimeline::ScrollDirection ConvertOrientation(
                                          : CompositorScrollTimeline::ScrollLeft;
   }
 
-  DCHECK_EQ(orientation, ScrollTimeline::Inline);
+  DCHECK_EQ(orientation, ScrollTimeline::kInline);
   if (is_horizontal_writing_mode) {
     // For horizontal writing mode, inline is horizontal. The starting edge
     // depends on the directionality.

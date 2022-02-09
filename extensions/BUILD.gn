@@ -46,7 +46,7 @@ static_library("extensions_client") {
 grit("resources") {
   source = "vivaldi_extension_resources.grd"
   output_dir = "$root_gen_dir/vivaldi"
-  resource_ids = "//vivaldi/extensions/gritsettings/resource_ids"
+  resource_ids = "//vivaldi/app/gritsettings/resource_ids"
   outputs = [
     "grit/vivaldi_extension_resources.h",
     "vivaldi_extension_resources.pak",

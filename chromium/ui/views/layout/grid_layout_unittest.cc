@@ -9,12 +9,15 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/border.h"
 #include "ui/views/view.h"
 
 namespace views {
+
+namespace {
 
 void ExpectViewBoundsEquals(int x, int y, int w, int h, const View* view) {
   EXPECT_EQ(x, view->x());
@@ -101,6 +104,8 @@ class FlexibleView : public View {
   int circumference_;
 };
 
+}  // namespace
+
 class GridLayoutTest : public testing::Test {
  public:
   GridLayoutTest() : host_(std::make_unique<View>()) {
@@ -116,7 +121,7 @@ class GridLayoutTest : public testing::Test {
 
  private:
   std::unique_ptr<View> host_;
-  GridLayout* layout_;
+  raw_ptr<GridLayout> layout_;
 };
 
 class GridLayoutAlignmentTest : public testing::Test {
@@ -145,7 +150,7 @@ class GridLayoutAlignmentTest : public testing::Test {
 
  private:
   std::unique_ptr<View> host_;
-  GridLayout* layout_;
+  raw_ptr<GridLayout> layout_;
 };
 
 TEST_F(GridLayoutAlignmentTest, Fill) {
@@ -523,8 +528,15 @@ TEST_F(GridLayoutTest, RowSpanWithPaddingRow) {
                  GridLayout::ColumnSize::kFixed, 10, 10);
 
   layout()->StartRow(0, 0);
-  layout()->AddView(CreateSizedView(gfx::Size(10, 10)), 1, 2);
+  auto* v1 = layout()->AddView(CreateSizedView(gfx::Size(10, 10)), 1, 2);
   layout()->AddPaddingRow(0, 10);
+
+  gfx::Size pref = GetPreferredSize();
+  EXPECT_EQ(gfx::Size(10, 10), pref);
+
+  host()->SetBounds(0, 0, 10, 20);
+  layout()->Layout(host());
+  ExpectViewBoundsEquals(0, 0, 10, 10, v1);
 }
 
 TEST_F(GridLayoutTest, RowSpan) {

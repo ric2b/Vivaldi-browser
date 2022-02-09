@@ -17,6 +17,17 @@ enum class WaylandWindowSnapDirection {
   kSecondary,
 };
 
+enum class WaylandOrientationLockType {
+  kAny,
+  kNatural,
+  kPortrait,
+  kLandscape,
+  kPortraitPrimary,
+  kLandscapePrimary,
+  kPortraitSecondary,
+  kLandscapeSecondary,
+};
+
 class COMPONENT_EXPORT(PLATFORM_WINDOW) WaylandExtension {
  public:
   // Starts a window dragging session for the owning platform window, if
@@ -31,8 +42,10 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) WaylandExtension {
   virtual void SetImmersiveFullscreenStatus(bool status) = 0;
 
   // Signals the underneath platform to shows a preview for the given window
-  // snap direction.
-  virtual void ShowSnapPreview(WaylandWindowSnapDirection snap) = 0;
+  // snap direction. `allow_haptic_feedback` indicates if it should send haptic
+  // feedback.
+  virtual void ShowSnapPreview(WaylandWindowSnapDirection snap,
+                               bool allow_haptic_feedback) = 0;
 
   // Requests the underneath platform to snap the window in the given direction,
   // if not WaylandWindowSnapDirection::kNone, otherwise cancels the window
@@ -51,6 +64,13 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) WaylandExtension {
   // Whether or not the underlying platform supports native pointer locking.
   virtual bool SupportsPointerLock() = 0;
   virtual void LockPointer(bool enabled) = 0;
+
+  // Lock and unlock the window rotation.
+  virtual void Lock(WaylandOrientationLockType lock_Type) = 0;
+  virtual void Unlock() = 0;
+
+  // Retrieve current layout state.
+  virtual bool GetTabletMode() = 0;
 
  protected:
   virtual ~WaylandExtension();

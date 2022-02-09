@@ -40,6 +40,8 @@
 #include "net/test/test_with_task_environment.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/scheme_host_port.h"
 
 namespace net {
 
@@ -61,7 +63,9 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
       : WithTaskEnvironment(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     // Used a mock HostResolver that does not have a cache.
-    session_deps_.host_resolver = std::make_unique<MockHostResolver>();
+    session_deps_.host_resolver = std::make_unique<MockHostResolver>(
+        /*default_result=*/MockHostResolverBase::RuleResolver::
+            GetLocalhostResult());
 
     network_quality_estimator_ =
         std::make_unique<TestNetworkQualityEstimator>();
@@ -768,13 +772,13 @@ TEST_P(HttpProxyConnectJobTest, HaveAuth) {
   // Prepopulate auth cache.
   const std::u16string kFoo(u"foo");
   const std::u16string kBar(u"bar");
-  GURL proxy_url(GetParam() == HTTP
-                     ? (std::string("http://") + kHttpProxyHost)
-                     : (std::string("https://") + kHttpsProxyHost));
+  url::SchemeHostPort proxy_scheme_host_port(
+      GetParam() == HTTP ? GURL(std::string("http://") + kHttpProxyHost)
+                         : GURL(std::string("https://") + kHttpsProxyHost));
   session_->http_auth_cache()->Add(
-      proxy_url, HttpAuth::AUTH_PROXY, "MyRealm1", HttpAuth::AUTH_SCHEME_BASIC,
-      NetworkIsolationKey(), "Basic realm=MyRealm1",
-      AuthCredentials(kFoo, kBar), "/");
+      proxy_scheme_host_port, HttpAuth::AUTH_PROXY, "MyRealm1",
+      HttpAuth::AUTH_SCHEME_BASIC, NetworkIsolationKey(),
+      "Basic realm=MyRealm1", AuthCredentials(kFoo, kBar), "/");
 
   for (IoMode io_mode : {SYNCHRONOUS, ASYNC}) {
     SCOPED_TRACE(io_mode);
@@ -1651,11 +1655,7 @@ TEST_P(HttpProxyConnectJobTest, ConnectionTimeoutMin) {
   // Test against a large value.
   EXPECT_GE(base::Minutes(10), GetNestedConnectionTimeout());
 
-#if (defined(OS_ANDROID) || defined(OS_IOS))
   EXPECT_EQ(base::Seconds(8), GetNestedConnectionTimeout());
-#else
-  EXPECT_EQ(base::Seconds(30), GetNestedConnectionTimeout());
-#endif
 }
 
 TEST_P(HttpProxyConnectJobTest, ConnectionTimeoutMax) {
@@ -1668,11 +1668,7 @@ TEST_P(HttpProxyConnectJobTest, ConnectionTimeoutMax) {
   // Test against a large value.
   EXPECT_GE(base::Minutes(10), GetNestedConnectionTimeout());
 
-#if (defined(OS_ANDROID) || defined(OS_IOS))
   EXPECT_EQ(base::Seconds(30), GetNestedConnectionTimeout());
-#else
-  EXPECT_EQ(base::Seconds(60), GetNestedConnectionTimeout());
-#endif
 }
 
 // Tests the connection timeout values when the field trial parameters are

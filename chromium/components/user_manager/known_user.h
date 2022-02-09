@@ -120,15 +120,6 @@ class USER_MANAGER_EXPORT KnownUser final {
                          const std::string& id,
                          const AccountType& account_type);
 
-  // Returns true if |subsystem| data was migrated to GaiaId for the
-  // |account_id|.
-  bool GetGaiaIdMigrationStatus(const AccountId& account_id,
-                                const std::string& subsystem);
-
-  // Marks |subsystem| migrated to GaiaId for the |account_id|.
-  void SetGaiaIdMigrationStatusDone(const AccountId& account_id,
-                                    const std::string& subsystem);
-
   // Saves |account_id| into known users. Tries to commit the change on disk.
   // Use only if account_id is not yet in the known user list. Important if
   // Chrome crashes shortly after starting a session. Cryptohome should be able
@@ -219,11 +210,11 @@ class USER_MANAGER_EXPORT KnownUser final {
   void SetAccountManager(const AccountId& account_id,
                          const std::string& manager);
   bool GetAccountManager(const AccountId& account_id, std::string* manager);
-  void SetUserLastLoginInputMethod(const AccountId& account_id,
-                                   const std::string& input_method);
+  void SetUserLastLoginInputMethodId(const AccountId& account_id,
+                                     const std::string& input_method_id);
 
-  bool GetUserLastInputMethod(const AccountId& account_id,
-                              std::string* input_method);
+  bool GetUserLastInputMethodId(const AccountId& account_id,
+                                std::string* input_method_id);
 
   // Exposes the user's PIN length in local state for PIN auto submit.
   void SetUserPinLength(const AccountId& account_id, int pin_length);
@@ -393,19 +384,6 @@ AccountId USER_MANAGER_EXPORT GetAccountId(const std::string& user_email,
                                            const std::string& id,
                                            const AccountType& account_type);
 
-// Returns true if |subsystem| data was migrated to GaiaId for the |account_id|.
-// TODO(https://crbug.com/1150434): Deprecated, use
-// KnownUser::GetGaiaIdMigrationStatus instead.
-bool USER_MANAGER_EXPORT GetGaiaIdMigrationStatus(const AccountId& account_id,
-                                                  const std::string& subsystem);
-
-// Marks |subsystem| migrated to GaiaId for the |account_id|.
-// TODO(https://crbug.com/1150434): Deprecated, use
-// KnownUser::SetGaiaIdMigrationStatusDone instead.
-void USER_MANAGER_EXPORT
-SetGaiaIdMigrationStatusDone(const AccountId& account_id,
-                             const std::string& subsystem);
-
 // Saves |account_id| into known users. Tries to commit the change on disk. Use
 // only if account_id is not yet in the known user list. Important if Chrome
 // crashes shortly after starting a session. Cryptohome should be able to find
@@ -564,15 +542,15 @@ void USER_MANAGER_EXPORT SetAccountManager(const AccountId& account_id,
 bool USER_MANAGER_EXPORT GetAccountManager(const AccountId& account_id,
                                            std::string* manager);
 // TODO(https://crbug.com/1150434): Deprecated, use
-// KnownUser::SetUserLastLoginInputMethod instead.
+// KnownUser::SetUserLastLoginInputMethodId instead.
 void USER_MANAGER_EXPORT
-SetUserLastLoginInputMethod(const AccountId& account_id,
-                            const std::string& input_method);
+SetUserLastLoginInputMethodId(const AccountId& account_id,
+                              const std::string& input_method_id);
 
 // TODO(https://crbug.com/1150434): Deprecated, use
-// KnownUser::GetUserLastInputMethod instead.
-bool USER_MANAGER_EXPORT GetUserLastInputMethod(const AccountId& account_id,
-                                                std::string* input_method);
+// KnownUser::GetUserLastInputMethodId instead.
+bool USER_MANAGER_EXPORT GetUserLastInputMethodId(const AccountId& account_id,
+                                                  std::string* input_method_id);
 
 // Exposes the user's PIN length in local state for PIN auto submit.
 // TODO(https://crbug.com/1150434): Deprecated, use KnownUser::SetUserPinLength

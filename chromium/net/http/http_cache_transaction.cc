@@ -25,10 +25,10 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/power_monitor/power_monitor.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"  // For HexEncode.
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"  // For LowerCaseEqualsASCII.
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/trace_event/trace_event.h"
@@ -192,7 +192,8 @@ HttpCache::Transaction::Transaction(RequestPriority priority, HttpCache* cache)
       moved_network_transaction_to_writers_(false),
       websocket_handshake_stream_base_create_helper_(nullptr),
       in_do_loop_(false) {
-  TRACE_EVENT0("io", "HttpCacheTransaction::Transaction");
+  TRACE_EVENT1("io", "HttpCacheTransaction::Transaction", "priority",
+               RequestPriorityToString(priority));
   static_assert(HttpCache::Transaction::kNumValidationHeaders ==
                     base::size(kValidationHeaders),
                 "invalid number of validation headers");
@@ -240,6 +241,7 @@ int HttpCache::Transaction::Start(const HttpRequestInfo* request,
                                   const NetLogWithSource& net_log) {
   DCHECK(request);
   DCHECK(!callback.is_null());
+  TRACE_EVENT1("io", "HttpCacheTransaction::Start", "url", request->url);
 
   // Ensure that we only have one asynchronous call at a time.
   DCHECK(callback_.is_null());
@@ -1893,8 +1895,7 @@ int HttpCache::Transaction::DoUpdateCachedResponse() {
     response_.vary_data = new_vary_data;
   }
 
-  if (response_.headers->HasHeaderValue("cache-control", "no-store") ||
-      ShouldDisableCaching(response_.headers.get())) {
+  if (ShouldDisableCaching(*response_.headers)) {
     if (!entry_->doomed) {
       int ret = cache_->DoomEntry(cache_key_, nullptr);
       DCHECK_EQ(OK, ret);
@@ -2036,8 +2037,7 @@ int HttpCache::Transaction::DoTruncateCachedData() {
   TransitionToState(STATE_TRUNCATE_CACHED_DATA_COMPLETE);
   if (!entry_)
     return OK;
-  if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_DATA);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_DATA);
   // Truncate the stream.
   return WriteToEntry(kResponseContentIndex, 0, nullptr, 0, io_callback_);
 }
@@ -2045,10 +2045,8 @@ int HttpCache::Transaction::DoTruncateCachedData() {
 int HttpCache::Transaction::DoTruncateCachedDataComplete(int result) {
   TRACE_EVENT0("io", "HttpCacheTransaction::DoInitEntry");
   if (entry_) {
-    if (net_log_.IsCapturing()) {
-      net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_DATA,
-                                        result);
-    }
+    net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_DATA,
+                                      result);
   }
 
   TransitionToState(STATE_PARTIAL_HEADERS_RECEIVED);
@@ -2255,8 +2253,7 @@ int HttpCache::Transaction::DoCacheReadData() {
   DCHECK(entry_);
   TransitionToState(STATE_CACHE_READ_DATA_COMPLETE);
 
-  if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_DATA);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_DATA);
   if (partial_) {
     return partial_->CacheRead(entry_->disk_entry, read_buf_.get(),
                                read_buf_len_, io_callback_);
@@ -2269,10 +2266,8 @@ int HttpCache::Transaction::DoCacheReadData() {
 
 int HttpCache::Transaction::DoCacheReadDataComplete(int result) {
   TRACE_EVENT0("io", "HttpCacheTransaction::DoCacheReadDataComplete");
-  if (net_log_.IsCapturing()) {
-    net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_DATA,
-                                      result);
-  }
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_DATA,
+                                    result);
 
   if (!cache_.get()) {
     TransitionToState(STATE_NONE);
@@ -3099,28 +3094,25 @@ int HttpCache::Transaction::WriteResponseInfoToEntry(
   if (!entry_)
     return OK;
 
-  if (net_log_.IsCapturing())
-    net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_INFO);
+  net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_INFO);
 
-  // Do not cache no-store content.  Do not cache content with cert errors
-  // either.  This is to prevent not reporting net errors when loading a
-  // resource from the cache.  When we load a page over HTTPS with a cert error
-  // we show an SSL blocking page.  If the user clicks proceed we reload the
-  // resource ignoring the errors.  The loaded resource is then cached.  If that
-  // resource is subsequently loaded from the cache, no net error is reported
-  // (even though the cert status contains the actual errors) and no SSL
-  // blocking page is shown.  An alternative would be to reverse-map the cert
-  // status to a net error and replay the net error.
-  if ((response.headers->HasHeaderValue("cache-control", "no-store")) ||
-      IsCertStatusError(response.ssl_info.cert_status) ||
-      ShouldDisableCaching(response.headers.get())) {
+  // Do not cache content with cert errors. This is to prevent not reporting net
+  // errors when loading a resource from the cache.  When we load a page over
+  // HTTPS with a cert error we show an SSL blocking page.  If the user clicks
+  // proceed we reload the resource ignoring the errors.  The loaded resource is
+  // then cached.  If that resource is subsequently loaded from the cache, no
+  // net error is reported (even though the cert status contains the actual
+  // errors) and no SSL blocking page is shown.  An alternative would be to
+  // reverse-map the cert status to a net error and replay the net error.
+  if (IsCertStatusError(response.ssl_info.cert_status) ||
+      ShouldDisableCaching(*response.headers)) {
     if (partial_)
       partial_->FixResponseHeaders(response_.headers.get(), true);
 
     bool stopped = StopCachingImpl(false);
     DCHECK(stopped);
-    if (net_log_.IsCapturing())
-      net_log_.EndEvent(NetLogEventType::HTTP_CACHE_WRITE_INFO);
+    net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_INFO,
+                                      OK);
     return OK;
   }
 
@@ -3151,10 +3143,8 @@ int HttpCache::Transaction::WriteResponseInfoToEntry(
 int HttpCache::Transaction::OnWriteResponseInfoToEntryComplete(int result) {
   if (!entry_)
     return OK;
-  if (net_log_.IsCapturing()) {
-    net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_INFO,
-                                      result);
-  }
+  net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_INFO,
+                                    result);
 
   if (result != io_buf_len_) {
     DLOG(ERROR) << "failed to write response info to cache";
@@ -3595,7 +3585,12 @@ void HttpCache::Transaction::TransitionToState(State state) {
 }
 
 bool HttpCache::Transaction::ShouldDisableCaching(
-    const HttpResponseHeaders* headers) const {
+    const HttpResponseHeaders& headers) const {
+  // Do not cache no-store content.
+  if (headers.HasHeaderValue("cache-control", "no-store")) {
+    return true;
+  }
+
   bool disable_caching = false;
   if (base::FeatureList::IsEnabled(
           features::kTurnOffStreamingMediaCachingAlways) ||
@@ -3611,8 +3606,8 @@ bool HttpCache::Transaction::ShouldDisableCaching(
     static constexpr int kMaxContentSize = 4096 * 4;
     std::string mime_type;
     base::CompareCase insensitive_ascii = base::CompareCase::INSENSITIVE_ASCII;
-    if (headers->GetContentLength() > kMaxContentSize &&
-        headers->response_code() != 304 && headers->GetMimeType(&mime_type) &&
+    if (headers.GetContentLength() > kMaxContentSize &&
+        headers.response_code() != 304 && headers.GetMimeType(&mime_type) &&
         (base::StartsWith(mime_type, "video", insensitive_ascii) ||
          base::StartsWith(mime_type, "audio", insensitive_ascii))) {
       disable_caching = true;

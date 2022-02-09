@@ -45,7 +45,7 @@
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/core/xlink_names.h"
 #include "third_party/blink/renderer/core/xml/parser/xml_document_parser.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
@@ -561,13 +561,13 @@ bool SVGUseElement::SelfHasRelativeLengths() const {
          height_->CurrentValue()->IsRelative();
 }
 
-FloatRect SVGUseElement::GetBBox() {
+gfx::RectF SVGUseElement::GetBBox() {
   DCHECK(GetLayoutObject());
   auto& transformable_container =
       To<LayoutSVGTransformableContainer>(*GetLayoutObject());
   // Don't apply the additional translation if the oBB is invalid.
   if (!transformable_container.IsObjectBoundingBoxValid())
-    return FloatRect();
+    return gfx::RectF();
 
   // TODO(fs): Preferably this would just use objectBoundingBox() (and hence
   // don't need to override SVGGraphicsElement::getBBox at all) and be
@@ -575,8 +575,8 @@ FloatRect SVGUseElement::GetBBox() {
   // additional quirks. The problem stems from including the additional
   // translation directly on the LayoutObject corresponding to the
   // SVGUseElement.
-  FloatRect bbox = transformable_container.ObjectBoundingBox();
-  bbox.Move(transformable_container.AdditionalTranslation());
+  gfx::RectF bbox = transformable_container.ObjectBoundingBox();
+  bbox.Offset(transformable_container.AdditionalTranslation());
   return bbox;
 }
 

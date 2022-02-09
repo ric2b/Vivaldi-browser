@@ -12,7 +12,6 @@
 
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
-#include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/unguessable_token.h"
@@ -199,9 +198,14 @@ class CrostiniManager : public KeyedService,
 
   struct RestartOptions {
     bool start_vm_only = false;
-    // These two options only affect new containers.
+    bool stop_after_lxd_available = false;
+    // Paths to share with VM on startup.
+    std::vector<base::FilePath> share_paths;
+    // These four options only affect new containers.
     absl::optional<std::string> container_username;
     absl::optional<int64_t> disk_size_bytes;
+    absl::optional<std::string> image_server_url;
+    absl::optional<std::string> image_alias;
 
     RestartOptions();
     ~RestartOptions();
@@ -305,6 +309,8 @@ class CrostiniManager : public KeyedService,
   // CiceroneClient::CreateLxdContainer. |callback| is called immediately if the
   // arguments are bad, or once the container has been created.
   void CreateLxdContainer(ContainerId container_id,
+                          absl::optional<std::string> opt_image_server_url,
+                          absl::optional<std::string> opt_image_alias,
                           CrostiniResultCallback callback);
 
   // Checks the arguments for deleting an Lxd container via
@@ -500,12 +506,12 @@ class CrostiniManager : public KeyedService,
       UpgradeContainerProgressObserver* observer);
 
   // Add/remove vm shutdown observers.
-  void AddVmShutdownObserver(chromeos::VmShutdownObserver* observer);
-  void RemoveVmShutdownObserver(chromeos::VmShutdownObserver* observer);
+  void AddVmShutdownObserver(ash::VmShutdownObserver* observer);
+  void RemoveVmShutdownObserver(ash::VmShutdownObserver* observer);
 
   // Add/remove vm starting observers.
-  void AddVmStartingObserver(chromeos::VmStartingObserver* observer);
-  void RemoveVmStartingObserver(chromeos::VmStartingObserver* observer);
+  void AddVmStartingObserver(ash::VmStartingObserver* observer);
+  void RemoveVmStartingObserver(ash::VmStartingObserver* observer);
 
   // AnomalyDetectorClient::Observer:
   void OnGuestFileCorruption(
@@ -625,7 +631,6 @@ class CrostiniManager : public KeyedService,
   bool IsContainerUpgradeable(const ContainerId& container_id) const;
   bool ShouldPromptContainerUpgrade(const ContainerId& container_id) const;
   void UpgradePromptShown(const ContainerId& container_id);
-  void EnsureVmRunning(const ContainerId& key, CrostiniResultCallback callback);
   bool IsUncleanStartup() const;
   void SetUncleanStartupForTesting(bool is_unclean_startup);
   void RemoveUncleanSshfsMounts();
@@ -889,8 +894,8 @@ class CrostiniManager : public KeyedService,
   base::ObserverList<UpgradeContainerProgressObserver>::Unchecked
       upgrade_container_progress_observers_;
 
-  base::ObserverList<chromeos::VmShutdownObserver> vm_shutdown_observers_;
-  base::ObserverList<chromeos::VmStartingObserver> vm_starting_observers_;
+  base::ObserverList<ash::VmShutdownObserver> vm_shutdown_observers_;
+  base::ObserverList<ash::VmStartingObserver> vm_starting_observers_;
 
   // Only one restarter flow is actually running for a given container, other
   // restarters will just have their callback called when the running restarter

@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_FSWATCHER
 
@@ -23,11 +20,31 @@
 #include <sys/types.h>
 #include <sys/event.h>
 
+#ifdef __NetBSD__
+    #include <sys/param.h>
+#endif
+
 #include "wx/dynarray.h"
 #include "wx/evtloop.h"
 #include "wx/evtloopsrc.h"
 
 #include "wx/private/fswatcher.h"
+
+namespace
+{
+
+// NetBSD was different until version 10 (or almost), as it used intptr_t as
+// type of kevent struct udata field, instead of "void*" as all the other
+// platforms using kqueue, so accommodate it by adding an extra cast.
+#if defined(__NetBSD__) && (__NetBSD_Version__ <= 999001400)
+    inline intptr_t ToUdata(void* d) { return reinterpret_cast<intptr_t>(d); }
+    inline void* FromUdata(intptr_t d) { return reinterpret_cast<void*>(d); }
+#else
+    inline void* ToUdata(void* d) { return d; }
+    inline void* FromUdata(void* d) { return d; }
+#endif
+
+} // anonymous namespace
 
 // ============================================================================
 // wxFSWSourceHandler helper class
@@ -45,9 +62,9 @@ public:
         m_service(service)
     {  }
 
-    virtual void OnReadWaiting();
-    virtual void OnWriteWaiting();
-    virtual void OnExceptionWaiting();
+    virtual void OnReadWaiting() wxOVERRIDE;
+    virtual void OnWriteWaiting() wxOVERRIDE;
+    virtual void OnExceptionWaiting() wxOVERRIDE;
 
 protected:
     wxFSWatcherImplKqueue* m_service;
@@ -82,7 +99,7 @@ public:
         delete m_handler;
     }
 
-    bool Init()
+    bool Init() wxOVERRIDE
     {
         wxCHECK_MSG( !IsOk(), false,
                      "Kqueue appears to be already initialized" );
@@ -99,7 +116,7 @@ public:
         }
 
         // create source
-        m_source = loop->AddSourceForFD(m_kfd, m_handler, wxEVENT_SOURCE_INPUT);
+        m_source = wxEventLoopBase::AddSourceForFD(m_kfd, m_handler, wxEVENT_SOURCE_INPUT);
 
         return m_source != NULL;
     }
@@ -117,7 +134,7 @@ public:
         wxDELETE(m_source);
     }
 
-    virtual bool DoAdd(wxSharedPtr<wxFSWatchEntryKq> watch)
+    virtual bool DoAdd(wxSharedPtr<wxFSWatchEntryKq> watch) wxOVERRIDE
     {
         wxCHECK_MSG( IsOk(), false,
                     "Kqueue not initialized or invalid kqueue descriptor" );
@@ -126,7 +143,7 @@ public:
         int action = EV_ADD | EV_ENABLE | EV_CLEAR | EV_ERROR;
         int flags = Watcher2NativeFlags(watch->GetFlags());
         EV_SET( &event, watch->GetFileDescriptor(), EVFILT_VNODE, action,
-                flags, 0, watch.get() );
+                flags, 0, ToUdata(watch.get()) );
 
         // TODO more error conditions according to man
         // TODO best deal with the error here
@@ -140,7 +157,7 @@ public:
         return true;
     }
 
-    virtual bool DoRemove(wxSharedPtr<wxFSWatchEntryKq> watch)
+    virtual bool DoRemove(wxSharedPtr<wxFSWatchEntryKq> watch) wxOVERRIDE
     {
         wxCHECK_MSG( IsOk(), false,
                     "Kqueue not initialized or invalid kqueue descriptor" );
@@ -157,7 +174,7 @@ public:
         return true;
     }
 
-    virtual bool RemoveAll()
+    virtual bool RemoveAll() wxOVERRIDE
     {
         wxFSWatchEntries::iterator it = m_watches.begin();
         for ( ; it != m_watches.end(); ++it )
@@ -277,14 +294,16 @@ protected:
 
     void ProcessNativeEvent(const struct kevent& e)
     {
-        wxASSERT_MSG(e.udata, "Null user data associated with kevent!");
+        void* const udata = FromUdata(e.udata);
 
-        wxLogTrace(wxTRACE_FSWATCHER, "Event: ident=%d, filter=%d, flags=%u, "
-                   "fflags=%u, data=%d, user_data=%p",
-                   e.ident, e.filter, e.flags, e.fflags, e.data, e.udata);
+        wxASSERT_MSG(udata, "Null user data associated with kevent!");
+
+        wxLogTrace(wxTRACE_FSWATCHER, "Event: ident=%llu, filter=%d, flags=%u, "
+                   "fflags=%u, data=%lld, user_data=%lp",
+                   e.ident, e.filter, e.flags, e.fflags, e.data, udata);
 
         // for ease of use
-        wxFSWatchEntryKq& w = *(static_cast<wxFSWatchEntry*>(e.udata));
+        wxFSWatchEntryKq& w = *(static_cast<wxFSWatchEntry*>(udata));
         int nflags = e.fflags;
 
         // clear ignored flags

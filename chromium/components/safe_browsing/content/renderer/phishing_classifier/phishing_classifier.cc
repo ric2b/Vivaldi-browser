@@ -14,8 +14,8 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -288,7 +288,9 @@ void PhishingClassifier::VisualExtractionFinished(bool success) {
       *bitmap_, std::move(verdict),
       base::BindOnce(&PhishingClassifier::OnVisualTargetsMatched,
                      weak_factory_.GetWeakPtr()));
-#elif BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+// TODO(crbug/1278502): This is disabled as a temporary measure due to crashes.
+#elif BUILDFLAG(BUILD_WITH_TFLITE_LIB) && !defined(OS_CHROMEOS) && \
+    !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
   scorer_->ApplyVisualTfLiteModel(
       *bitmap_, base::BindOnce(&PhishingClassifier::OnVisualTfLiteModelDone,
                                weak_factory_.GetWeakPtr(), std::move(verdict)));
@@ -306,7 +308,9 @@ void PhishingClassifier::OnVisualTargetsMatched(
   base::UmaHistogramTimes("SBClientPhishing.VisualComparisonTime",
                           base::TimeTicks::Now() - visual_matching_start_);
 
-#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+// TODO(crbug/1278502): This is disabled as a temporary measure due to crashes.
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB) && !defined(OS_CHROMEOS) && \
+    !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
   scorer_->ApplyVisualTfLiteModel(
       *bitmap_, base::BindOnce(&PhishingClassifier::OnVisualTfLiteModelDone,
                                weak_factory_.GetWeakPtr(), std::move(verdict)));

@@ -11,7 +11,6 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
 #include "contact/contact_type.h"
 #include "contact/postaladdress_type.h"
 #include "sql/statement.h"

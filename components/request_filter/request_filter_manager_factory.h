@@ -3,7 +3,6 @@
 #ifndef COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_MANAGER_FACTORY_H_
 #define COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_MANAGER_FACTORY_H_
 
-#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 

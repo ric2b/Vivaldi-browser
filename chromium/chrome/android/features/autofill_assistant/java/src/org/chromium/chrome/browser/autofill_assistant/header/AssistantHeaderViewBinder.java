@@ -23,12 +23,12 @@ import org.chromium.chrome.browser.autofill_assistant.AssistantTextUtils;
 import org.chromium.chrome.browser.autofill_assistant.AutofillAssistantPreferenceFragment;
 import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantChipAdapter;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
-import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.util.AccessibilityUtil;
 import org.chromium.ui.widget.ViewRectProvider;
 
 /**
@@ -42,6 +42,12 @@ class AssistantHeaderViewBinder
     /** The amount of space to put between the top of the sheet and the bottom of the bubble.*/
     private static final int TEXT_BUBBLE_PIXELS_ABOVE_SHEET = 4;
 
+    private final AccessibilityUtil mAccessibilityUtil;
+
+    public AssistantHeaderViewBinder(AccessibilityUtil accessibilityUtil) {
+        mAccessibilityUtil = accessibilityUtil;
+    }
+
     /**
      * A wrapper class that holds the different views of the header.
      */
@@ -50,7 +56,6 @@ class AssistantHeaderViewBinder
         final AnimatedPoodle mPoodle;
         final ViewGroup mHeader;
         final TextView mStatusMessage;
-        final AnimatedProgressBar mProgressBar;
         final AssistantStepProgressBar mStepProgressBar;
         final ImageView mTtsButton;
         final View mProfileIconView;
@@ -67,7 +72,6 @@ class AssistantHeaderViewBinder
             mPoodle = poodle;
             mHeader = headerView;
             mStatusMessage = headerView.findViewById(R.id.status_message);
-            mProgressBar = new AnimatedProgressBar(headerView.findViewById(R.id.progress_bar));
             mStepProgressBar =
                     new AssistantStepProgressBar(headerView.findViewById(R.id.step_progress_bar));
             mTtsButton = (ImageView) headerView.findViewById(R.id.tts_button);
@@ -82,7 +86,6 @@ class AssistantHeaderViewBinder
         }
 
         void disableAnimations(boolean disable) {
-            mProgressBar.disableAnimations(disable);
             mStepProgressBar.disableAnimations(disable);
             // Hiding the animated poodle seems to be the easiest way to disable its animation since
             // {@link LogoView#setAnimationEnabled(boolean)} is private.
@@ -91,14 +94,8 @@ class AssistantHeaderViewBinder
                     .setSupportsChangeAnimations(!disable);
         }
 
-        void updateProgressBarVisibility(boolean visible, boolean useStepProgressBar) {
-            if (visible && !useStepProgressBar) {
-                mProgressBar.show();
-            } else {
-                mProgressBar.hide();
-            }
-
-            mStepProgressBar.setVisible(visible && useStepProgressBar);
+        void updateProgressBarVisibility(boolean visible) {
+            mStepProgressBar.setVisible(visible);
         }
     }
 
@@ -114,8 +111,6 @@ class AssistantHeaderViewBinder
         } else if (AssistantHeaderModel.PROFILE_ICON_MENU_SEND_FEEDBACK_MESSAGE == propertyKey) {
             view.mProfileIconMenuSendFeedbackMessage.setTitle(
                     model.get(AssistantHeaderModel.PROFILE_ICON_MENU_SEND_FEEDBACK_MESSAGE));
-        } else if (AssistantHeaderModel.PROGRESS == propertyKey) {
-            view.mProgressBar.setProgress(model.get(AssistantHeaderModel.PROGRESS));
         } else if (AssistantHeaderModel.PROGRESS_ACTIVE_STEP == propertyKey) {
             int activeStep = model.get(AssistantHeaderModel.PROGRESS_ACTIVE_STEP);
             if (activeStep >= 0) {
@@ -123,10 +118,8 @@ class AssistantHeaderViewBinder
             }
         } else if (AssistantHeaderModel.PROGRESS_BAR_ERROR == propertyKey) {
             view.mStepProgressBar.setError(model.get(AssistantHeaderModel.PROGRESS_BAR_ERROR));
-        } else if (AssistantHeaderModel.PROGRESS_VISIBLE == propertyKey
-                || AssistantHeaderModel.USE_STEP_PROGRESS_BAR == propertyKey) {
-            view.updateProgressBarVisibility(model.get(AssistantHeaderModel.PROGRESS_VISIBLE),
-                    model.get(AssistantHeaderModel.USE_STEP_PROGRESS_BAR));
+        } else if (AssistantHeaderModel.PROGRESS_VISIBLE == propertyKey) {
+            view.updateProgressBarVisibility(model.get(AssistantHeaderModel.PROGRESS_VISIBLE));
         } else if (AssistantHeaderModel.STEP_PROGRESS_BAR_ICONS == propertyKey) {
             view.mStepProgressBar.setSteps(model.get(AssistantHeaderModel.STEP_PROGRESS_BAR_ICONS));
             view.mStepProgressBar.disableAnimations(
@@ -214,7 +207,7 @@ class AssistantHeaderViewBinder
                 /*context = */ view.mContext, /*rootView = */ poodle, /*contentString = */ message,
                 /*accessibilityString = */ message, /*showArrow = */ true,
                 /*anchorRectProvider = */ anchorRectProvider,
-                ChromeAccessibilityUtil.get().isAccessibilityEnabled());
+                mAccessibilityUtil.isAccessibilityEnabled());
         view.mTextBubble.setDismissOnTouchInteraction(true);
         view.mTextBubble.show();
     }
@@ -238,13 +231,17 @@ class AssistantHeaderViewBinder
     private void setTtsButtonState(ViewHolder view, @AssistantTtsButtonState int state) {
         switch (state) {
             case AssistantTtsButtonState.DEFAULT:
-            case AssistantTtsButtonState.PLAYING:
                 view.mTtsButton.setImageResource(R.drawable.ic_volume_on_white_24dp);
                 view.mTtsButton.setTag(AssistantTagsForTesting.TTS_ENABLED_ICON_TAG);
+                break;
+            case AssistantTtsButtonState.PLAYING:
+                view.mTtsButton.setImageResource(R.drawable.ic_volume_on_white_24dp);
+                view.mTtsButton.setTag(AssistantTagsForTesting.TTS_PLAYING_ICON_TAG);
                 break;
             case AssistantTtsButtonState.DISABLED:
                 view.mTtsButton.setImageResource(R.drawable.ic_volume_off_white_24dp);
                 view.mTtsButton.setTag(AssistantTagsForTesting.TTS_DISABLED_ICON_TAG);
+                break;
         }
     }
 }

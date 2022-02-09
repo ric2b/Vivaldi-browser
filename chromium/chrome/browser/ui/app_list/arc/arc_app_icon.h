@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/base/layout.h"
 #include "ui/gfx/image/image.h"
@@ -231,7 +230,7 @@ class ArcAppIcon {
       const base::FilePath& foreground_path,
       const base::FilePath& background_path);
   void DecodeImage(
-      const std::string& unsafe_icon_data,
+      std::string unsafe_icon_data,
       const ArcAppIconDescriptor& descriptor,
       bool resize_allowed,
       bool retain_padding,

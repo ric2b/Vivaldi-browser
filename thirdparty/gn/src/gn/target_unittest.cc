@@ -511,6 +511,54 @@ TEST_F(TargetTest, VisibilityFails) {
   ASSERT_FALSE(a.OnResolved(&err));
 }
 
+// Test config visibility failure cases.
+TEST_F(TargetTest, VisibilityConfigFails) {
+  TestWithScope setup;
+  Err err;
+
+  Label config_label(SourceDir("//a/"), "config");
+  Config config(setup.settings(), config_label);
+  config.visibility().SetPrivate(config.label().dir());
+  ASSERT_TRUE(config.OnResolved(&err));
+
+  // Make a target using configs. This should fail.
+  TestTarget a(setup, "//app:a", Target::EXECUTABLE);
+  a.configs().push_back(LabelConfigPair(&config));
+  ASSERT_FALSE(a.OnResolved(&err));
+
+  // A target using public_configs should also fail.
+  TestTarget b(setup, "//app:b", Target::EXECUTABLE);
+  b.public_configs().push_back(LabelConfigPair(&config));
+  ASSERT_FALSE(b.OnResolved(&err));
+
+  // A target using all_dependent_configs should fail as well.
+  TestTarget c(setup, "//app:c", Target::EXECUTABLE);
+  c.all_dependent_configs().push_back(LabelConfigPair(&config));
+  ASSERT_FALSE(c.OnResolved(&err));
+}
+
+// Test Config -> Group -> A where the config is group is visible from A but
+// the config isn't, and the config is visible from the group.
+TEST_F(TargetTest, VisibilityConfigGroup) {
+  TestWithScope setup;
+  Err err;
+
+  Label config_label(SourceDir("//a/"), "config");
+  Config config(setup.settings(), config_label);
+  config.visibility().SetPrivate(config.label().dir());
+  ASSERT_TRUE(config.OnResolved(&err));
+
+  // Make a target using the config in the same directory.
+  TestTarget a(setup, "//a:a", Target::GROUP);
+  a.public_configs().push_back(LabelConfigPair(&config));
+  ASSERT_TRUE(a.OnResolved(&err));
+
+  // A target depending on a should be okay.
+  TestTarget b(setup, "//app:b", Target::EXECUTABLE);
+  b.private_deps().push_back(LabelTargetPair(&a));
+  ASSERT_TRUE(b.OnResolved(&err));
+}
+
 // Test visibility with a single data_dep.
 TEST_F(TargetTest, VisibilityDatadeps) {
   TestWithScope setup;
@@ -824,6 +872,36 @@ TEST_F(TargetTest, GetOutputFilesForSource_Binary) {
                                              &computed_outputs, &err));
   ASSERT_EQ(1u, computed_outputs.size());
   EXPECT_EQ("//out/Debug/obj/a/a.stamp", computed_outputs[0].value());
+}
+
+TEST_F(TargetTest, CheckStampFileName) {
+  TestWithScope setup;
+
+  Toolchain toolchain(setup.settings(), Label(SourceDir("//tc/"), "tc"));
+
+  std::unique_ptr<Tool> tool = Tool::CreateTool(CTool::kCToolCxx);
+  CTool* cxx = tool->AsC();
+  cxx->set_outputs(SubstitutionList::MakeForTest("{{source_file_part}}.o"));
+  toolchain.SetTool(std::move(tool));
+
+  Target target(setup.settings(), Label(SourceDir("//a/"), "a"));
+  target.set_output_type(Target::SOURCE_SET);
+  target.SetToolchain(&toolchain);
+
+  // Change the output artifact name on purpose.
+  target.set_output_name("b");
+
+  Err err;
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  // Test GetOutputsAsSourceFiles(). Since this is a source set it should give a
+  // stamp file.
+  std::vector<SourceFile> computed_outputs;
+  EXPECT_TRUE(target.GetOutputsAsSourceFiles(LocationRange(), true,
+                                             &computed_outputs, &err));
+  ASSERT_EQ(1u, computed_outputs.size());
+  EXPECT_EQ("//out/Debug/obj/a/a.stamp", computed_outputs[0].value())
+    << "was instead: " << computed_outputs[0].value();
 }
 
 // Tests Target::GetOutputFilesForSource for action_foreach targets (these, like
@@ -1325,7 +1403,7 @@ TEST(TargetTest, CollectMetadataNoRecurse) {
 
   Err err;
   std::vector<Value> result;
-  std::set<const Target*> targets;
+  TargetSet targets;
   one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
                   &err);
   EXPECT_FALSE(err.has_error());
@@ -1366,7 +1444,54 @@ TEST(TargetTest, CollectMetadataWithRecurse) {
 
   Err err;
   std::vector<Value> result;
-  std::set<const Target*> targets;
+  TargetSet targets;
+  one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
+                  &err);
+  EXPECT_FALSE(err.has_error());
+
+  std::vector<Value> expected;
+  expected.push_back(Value(nullptr, "bar"));
+  expected.push_back(Value(nullptr, "foo"));
+  expected.push_back(Value(nullptr, true));
+  EXPECT_EQ(result, expected);
+}
+
+TEST(TargetTest, CollectMetadataWithRecurseHole) {
+  TestWithScope setup;
+
+  TestTarget one(setup, "//foo:one", Target::SOURCE_SET);
+  Value a_expected(nullptr, Value::LIST);
+  a_expected.list_value().push_back(Value(nullptr, "foo"));
+  one.metadata().contents().insert(
+      std::pair<std::string_view, Value>("a", a_expected));
+
+  Value b_expected(nullptr, Value::LIST);
+  b_expected.list_value().push_back(Value(nullptr, true));
+  one.metadata().contents().insert(
+      std::pair<std::string_view, Value>("b", b_expected));
+
+  // Target two does not have metadata but depends on three
+  // which does.
+  TestTarget two(setup, "//foo:two", Target::SOURCE_SET);
+
+  TestTarget three(setup, "//foo:three", Target::SOURCE_SET);
+  Value a_3_expected(nullptr, Value::LIST);
+  a_3_expected.list_value().push_back(Value(nullptr, "bar"));
+  three.metadata().contents().insert(
+      std::pair<std::string_view, Value>("a", a_3_expected));
+
+  one.public_deps().push_back(LabelTargetPair(&two));
+  two.public_deps().push_back(LabelTargetPair(&three));
+
+  std::vector<std::string> data_keys;
+  data_keys.push_back("a");
+  data_keys.push_back("b");
+
+  std::vector<std::string> walk_keys;
+
+  Err err;
+  std::vector<Value> result;
+  TargetSet targets;
   one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
                   &err);
   EXPECT_FALSE(err.has_error());
@@ -1415,7 +1540,7 @@ TEST(TargetTest, CollectMetadataWithBarrier) {
 
   Err err;
   std::vector<Value> result;
-  std::set<const Target*> targets;
+  TargetSet targets;
   one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
                   &err);
   EXPECT_FALSE(err.has_error()) << err.message();
@@ -1448,7 +1573,7 @@ TEST(TargetTest, CollectMetadataWithError) {
 
   Err err;
   std::vector<Value> result;
-  std::set<const Target*> targets;
+  TargetSet targets;
   one.GetMetadata(data_keys, walk_keys, SourceDir(), false, &result, &targets,
                   &err);
   EXPECT_TRUE(err.has_error());

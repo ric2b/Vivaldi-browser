@@ -12,30 +12,12 @@
 
 namespace blink {
 
-class GraphicsLayer;
-
-// Information of a composited layer that is created during compositing update
-// in pre-CompositeAfterPaint. In CompositeAfterPaint, this is expected to
-// contain all paint chunks, as if we created one root layer that needs to be
-// future layerized.
-struct PreCompositedLayerInfo {
-  // For now this is used only when graphics_layer == nullptr. This will also
-  // contain the paint chunks for the graphics layer when we unify
-  // PaintController for pre-CAP and CAP.
-  PaintChunkSubset chunks;
-  // If this is not nullptr, we should use the composited layer created by the
-  // GraphicsLayer. Otherwise we should layerize |chunks|. A GraphicsLayer with
-  // ShouldCreateLayersAfterPaint() == true should set this field to nullptr.
-  const GraphicsLayer* graphics_layer = nullptr;
-};
-
 // A pending layer is a collection of paint chunks that will end up in the same
 // cc::Layer.
 class PLATFORM_EXPORT PendingLayer {
  public:
   enum CompositingType {
     kScrollHitTestLayer,
-    kPreCompositedLayer,
     kForeignLayer,
     kScrollbarLayer,
     kOverlap,
@@ -43,7 +25,6 @@ class PLATFORM_EXPORT PendingLayer {
   };
 
   PendingLayer(const PaintChunkSubset&, const PaintChunkIterator&);
-  explicit PendingLayer(const PreCompositedLayerInfo&);
 
   // Returns the offset/bounds for the final cc::Layer, rounded if needed.
   gfx::Vector2dF LayerOffset() const;
@@ -67,7 +48,6 @@ class PLATFORM_EXPORT PendingLayer {
   PaintPropertyChangeType ChangeOfDecompositedTransforms() const {
     return change_of_decomposited_transforms_;
   }
-  const GraphicsLayer* GetGraphicsLayer() const { return graphics_layer_; }
   CompositingType GetCompositingType() const { return compositing_type_; }
 
   void SetCompositingType(CompositingType new_type) {
@@ -129,9 +109,9 @@ class PLATFORM_EXPORT PendingLayer {
   PendingLayer(const PaintChunkSubset&,
                const PaintChunk& first_chunk,
                wtf_size_t first_chunk_index_in_paint_artifact);
-  FloatRect VisualRectForOverlapTesting(
+  gfx::RectF VisualRectForOverlapTesting(
       const PropertyTreeState& ancestor_state) const;
-  FloatRect MapRectKnownToBeOpaque(const PropertyTreeState&) const;
+  gfx::RectF MapRectKnownToBeOpaque(const PropertyTreeState&) const;
   bool MergeInternal(const PendingLayer& guest,
                      const PropertyTreeState& guest_state,
                      bool prefers_lcd_text,
@@ -150,7 +130,6 @@ class PLATFORM_EXPORT PendingLayer {
   gfx::Vector2dF offset_of_decomposited_transforms_;
   PaintPropertyChangeType change_of_decomposited_transforms_ =
       PaintPropertyChangeType::kUnchanged;
-  const GraphicsLayer* graphics_layer_ = nullptr;
   CompositingType compositing_type_;
 };
 }  // namespace blink

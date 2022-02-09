@@ -21,8 +21,8 @@ class WXDLLIMPEXP_XRC wxListCtrlXmlHandler : public wxXmlResourceHandler
 {
 public:
     wxListCtrlXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
 private:
     // handlers for wxListCtrl itself and its listcol and listitem children
@@ -37,7 +37,7 @@ private:
     // which is wxIMAGE_LIST_NORMAL or small if it is wxIMAGE_LIST_SMALL)
     long GetImageIndex(wxListCtrl *listctrl, int which);
 
-    DECLARE_DYNAMIC_CLASS(wxListCtrlXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxListCtrlXmlHandler);
 };
 
 #endif // wxUSE_XRC && wxUSE_LISTCTRL

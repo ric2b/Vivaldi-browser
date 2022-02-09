@@ -25,14 +25,14 @@ public:
                     const wxPoint& pos = wxDefaultPosition,
                     const wxSize& size = wxDefaultSize,
                     long style = 0,
-                    const wxString& name = wxStaticBitmapNameStr );
+                    const wxString& name = wxASCII_STR(wxStaticBitmapNameStr) );
     bool Create( wxWindow *parent,
                  wxWindowID id,
                  const wxBitmap& label,
                  const wxPoint& pos = wxDefaultPosition,
                  const wxSize& size = wxDefaultSize,
                  long style = 0,
-                 const wxString& name = wxStaticBitmapNameStr);
+                 const wxString& name = wxASCII_STR(wxStaticBitmapNameStr));
 
     virtual void SetIcon(const wxIcon& icon) { SetBitmap( icon ); }
     virtual void SetBitmap( const wxBitmap& bitmap );
@@ -52,7 +52,7 @@ public:
 private:
     wxBitmap   m_bitmap;
 
-    DECLARE_DYNAMIC_CLASS(wxStaticBitmap)
+    wxDECLARE_DYNAMIC_CLASS(wxStaticBitmap);
 };
 
 #endif // __GTKSTATICBITMAPH__

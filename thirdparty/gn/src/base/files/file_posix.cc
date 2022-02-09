@@ -25,7 +25,8 @@ static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
 namespace {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ANDROID) && __ANDROID_API__ < 21
+    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ZOS) || \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
 int CallFstat(int fd, stat_wrapper_t* sb) {
   return fstat(fd, sb);
 }
@@ -93,7 +94,7 @@ void File::Info::FromStat(const stat_wrapper_t& stat_info) {
   int64_t last_accessed_nsec = stat_info.st_atimespec.tv_nsec;
   time_t creation_time_sec = stat_info.st_ctimespec.tv_sec;
   int64_t creation_time_nsec = stat_info.st_ctimespec.tv_nsec;
-#elif defined(OS_AIX)
+#elif defined(OS_AIX) || defined(OS_ZOS)
   time_t last_modified_sec = stat_info.st_mtime;
   int64_t last_modified_nsec = 0;
   time_t last_accessed_sec = stat_info.st_atime;
@@ -329,7 +330,6 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   DCHECK(!IsValid());
 
   int open_flags = 0;
-  created_ = false;
 
   if (flags & FLAG_CREATE_ALWAYS) {
     DCHECK(!open_flags);
@@ -348,11 +348,11 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
     open_flags |= O_RDWR;
   } else if (flags & FLAG_WRITE) {
     open_flags |= O_WRONLY;
-  } else if (!(flags & FLAG_READ)) {
+  } else if (flags & FLAG_READ) {
+    open_flags |= O_RDONLY;
+  } else {
     NOTREACHED();
   }
-
-  static_assert(O_RDONLY == 0, "O_RDONLY must equal zero");
 
   int mode = S_IRUSR | S_IWUSR;
   int descriptor = HANDLE_EINTR(open(path.value().c_str(), open_flags, mode));
@@ -361,9 +361,6 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
     error_details_ = File::GetLastFileError();
     return;
   }
-
-  if (flags & FLAG_CREATE_ALWAYS)
-    created_ = true;
 
   error_details_ = FILE_OK;
   file_.reset(descriptor);

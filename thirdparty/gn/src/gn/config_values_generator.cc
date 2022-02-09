@@ -62,7 +62,7 @@ void GetFrameworksList(Scope* scope,
     std::string_view framework_name = GetFrameworkName(framework);
     if (framework_name.empty()) {
       *err = Err(*value,
-                 "This frameworks value is wrong."
+                 "This frameworks value is wrong. "
                  "All listed frameworks names must not include any\n"
                  "path component and have \".framework\" extension.");
       return;
@@ -150,7 +150,7 @@ void ConfigValuesGenerator::Run() {
     const std::string& pch_string = precompiled_header_value->string_value();
     if (base::StartsWith(pch_string, "//", base::CompareCase::SENSITIVE)) {
       *err_ = Err(
-          *precompiled_header_value, "This precompiled_header value is wrong.",
+          *precompiled_header_value, "This precompiled_header value is wrong. ",
           "You need to specify a string that the compiler will match against\n"
           "the #include lines rather than a GN-style file name.\n");
       return;

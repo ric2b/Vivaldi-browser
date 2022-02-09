@@ -50,7 +50,8 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
         /*
         RadioButtonGroupThemePreference radioButtonGroupThemePreference =
                 (RadioButtonGroupThemePreference) findPreference(PREF_UI_THEME_PREF);
-        mWebContentsDarkModeEnabled = WebContentsDarkModeController.isGlobalUserSettingsEnabled();
+        mWebContentsDarkModeEnabled = WebContentsDarkModeController.isGlobalUserSettingsEnabled(
+                Profile.getLastUsedRegularProfile());
         radioButtonGroupThemePreference.initialize(
                 NightModeUtils.getThemeSetting(), mWebContentsDarkModeEnabled);
 
@@ -62,7 +63,7 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
                     mWebContentsDarkModeEnabled =
                             radioButtonGroupThemePreference.isDarkenWebsitesEnabled();
                     WebContentsDarkModeController.setGlobalUserSettings(
-                            mWebContentsDarkModeEnabled);
+                            Profile.getLastUsedRegularProfile(), mWebContentsDarkModeEnabled);
                 }
             }
             int theme = (int) newValue;
@@ -102,10 +103,13 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
             // webpages.
             darkWebPagesSwitch.setKey(KEY_DARK_MODE_FOR_WEBPAGES);
             darkWebPagesSwitch.setChecked(
-                    WebContentsDarkModeController.isGlobalUserSettingsEnabled());
+                    WebContentsDarkModeController.isGlobalUserSettingsEnabled(
+                            Profile.getLastUsedRegularProfile()));
             darkWebPagesSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-                SharedPreferencesManager.getInstance().writeBoolean(KEY_DARK_MODE_FOR_WEBPAGES, true);
-                WebContentsDarkModeController.setGlobalUserSettings((boolean) newValue);
+                SharedPreferencesManager.getInstance().writeBoolean(KEY_DARK_MODE_FOR_WEBPAGES,
+                        true);
+                WebContentsDarkModeController.setGlobalUserSettings(
+                        Profile.getLastUsedRegularProfile(), (boolean) newValue);
                 return true;
             });
             getPreferenceScreen().addPreference(darkWebPagesSwitch);

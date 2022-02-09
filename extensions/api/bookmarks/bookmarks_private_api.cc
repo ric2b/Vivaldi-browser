@@ -47,8 +47,7 @@ namespace {
 
 // Give Chromium little pause to write bookmark file before checking for unused
 // data urls to minimize disk IO spikes.
-constexpr base::TimeDelta kDataUrlGCSTrashDelay =
-    base::TimeDelta::FromMilliseconds(100);
+constexpr base::TimeDelta kDataUrlGCSTrashDelay = base::Milliseconds(100);
 
 }  // namespace
 

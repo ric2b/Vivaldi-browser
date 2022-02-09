@@ -7,8 +7,6 @@
 
 #include <errno.h>
 
-#include "base/macros.h"
-
 namespace base {
 
 // Simple scoper that saves the current value of errno, resets it to 0, and on
@@ -24,7 +22,8 @@ class ScopedClearErrno {
  private:
   const int old_errno_;
 
-  DISALLOW_COPY_AND_ASSIGN(ScopedClearErrno);
+  ScopedClearErrno(const ScopedClearErrno&) = delete;
+  ScopedClearErrno& operator=(const ScopedClearErrno&) = delete;
 };
 
 }  // namespace base

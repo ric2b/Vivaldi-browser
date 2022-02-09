@@ -14,9 +14,11 @@
 #include "content/public/browser/document_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/mojom/interest_group/ad_auction_service.mojom.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom-forward.h"
+#include "third_party/blink/public/mojom/parakeet/ad_request.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -45,11 +47,17 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   void UpdateAdInterestGroups() override;
   void RunAdAuction(blink::mojom::AuctionAdConfigPtr config,
                     RunAdAuctionCallback callback) override;
+  void CreateAdRequest(blink::mojom::AdRequestConfigPtr config,
+                       CreateAdRequestCallback callback) override;
+  void FinalizeAd(const std::string& ads_guid,
+                  blink::mojom::AuctionAdConfigPtr config,
+                  FinalizeAdCallback callback) override;
 
   // AuctionRunner::Delegate implementation:
   network::mojom::URLLoaderFactory* GetFrameURLLoaderFactory() override;
   network::mojom::URLLoaderFactory* GetTrustedURLLoaderFactory() override;
   RenderFrameHostImpl* GetFrame() override;
+  network::mojom::ClientSecurityStatePtr GetClientSecurityState() override;
 
   using DocumentService::origin;
   using DocumentService::render_frame_host;

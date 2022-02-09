@@ -19,13 +19,15 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
+#include "base/ignore_result.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -161,8 +163,8 @@ class TestIDBFactory : public IndexedDBFactoryImpl {
   }
 
  private:
-  storage::mojom::BlobStorageContext* blob_storage_context_;
-  storage::mojom::FileSystemAccessContext* file_system_access_context_;
+  raw_ptr<storage::mojom::BlobStorageContext> blob_storage_context_;
+  raw_ptr<storage::mojom::FileSystemAccessContext> file_system_access_context_;
 };
 
 struct BlobWrite {
@@ -295,6 +297,10 @@ class IndexedDBBackingStoreTest : public testing::Test {
             base::MakeRefCounted<storage::MockQuotaManagerProxy>(
                 nullptr,
                 base::ThreadTaskRunnerHandle::Get())) {}
+
+  IndexedDBBackingStoreTest(const IndexedDBBackingStoreTest&) = delete;
+  IndexedDBBackingStoreTest& operator=(const IndexedDBBackingStoreTest&) =
+      delete;
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -453,10 +459,10 @@ class IndexedDBBackingStoreTest : public testing::Test {
   scoped_refptr<storage::MockQuotaManagerProxy> quota_manager_proxy_;
   scoped_refptr<IndexedDBContextImpl> idb_context_;
   std::unique_ptr<TestIDBFactory> idb_factory_;
-  DisjointRangeLockManager* lock_manager_;
+  raw_ptr<DisjointRangeLockManager> lock_manager_;
 
   IndexedDBStorageKeyStateHandle storage_key_state_handle_;
-  TestableIndexedDBBackingStore* backing_store_ = nullptr;
+  raw_ptr<TestableIndexedDBBackingStore> backing_store_ = nullptr;
   IndexedDBDataLossInfo data_loss_info_;
 
   // Sample keys and values that are consistent.
@@ -464,9 +470,6 @@ class IndexedDBBackingStoreTest : public testing::Test {
   IndexedDBKey key2_;
   IndexedDBValue value1_;
   IndexedDBValue value2_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(IndexedDBBackingStoreTest);
 };
 
 enum class ExternalObjectTestType {
@@ -480,6 +483,11 @@ class IndexedDBBackingStoreTestWithExternalObjects
       public IndexedDBBackingStoreTest {
  public:
   IndexedDBBackingStoreTestWithExternalObjects() = default;
+
+  IndexedDBBackingStoreTestWithExternalObjects(
+      const IndexedDBBackingStoreTestWithExternalObjects&) = delete;
+  IndexedDBBackingStoreTestWithExternalObjects& operator=(
+      const IndexedDBBackingStoreTestWithExternalObjects&) = delete;
 
   virtual ExternalObjectTestType TestType() { return GetParam(); }
 
@@ -756,8 +764,6 @@ class IndexedDBBackingStoreTestWithExternalObjects
   std::vector<IndexedDBExternalObject> external_objects_;
 
   std::vector<std::string> blob_remote_uuids_;
-
-  DISALLOW_COPY_AND_ASSIGN(IndexedDBBackingStoreTestWithExternalObjects);
 };
 
 INSTANTIATE_TEST_SUITE_P(

@@ -16,7 +16,6 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -548,6 +547,9 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
  public:
   static gin::WrapperInfo kWrapperInfo;
 
+  EventSenderBindings(const EventSenderBindings&) = delete;
+  EventSenderBindings& operator=(const EventSenderBindings&) = delete;
+
   static void Install(base::WeakPtr<EventSender> sender,
                       WebFrameTestProxy* frame);
 
@@ -659,8 +661,6 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
 
   base::WeakPtr<EventSender> sender_;
   blink::WebLocalFrame* const frame_;
-
-  DISALLOW_COPY_AND_ASSIGN(EventSenderBindings);
 };
 
 gin::WrapperInfo EventSenderBindings::kWrapperInfo = {gin::kEmbedderNativeGin};

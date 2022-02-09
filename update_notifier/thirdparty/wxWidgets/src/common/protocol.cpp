@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_PROTOCOL
 
@@ -34,7 +31,7 @@
 // wxProtoInfo
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_CLASS(wxProtoInfo, wxObject)
+wxIMPLEMENT_CLASS(wxProtoInfo, wxObject);
 
 wxProtoInfo::wxProtoInfo(const wxChar *name, const wxChar *serv,
                          const bool need_host1, wxClassInfo *info)
@@ -57,17 +54,15 @@ wxProtoInfo::wxProtoInfo(const wxChar *name, const wxChar *serv,
 // ----------------------------------------------------------------------------
 
 #if wxUSE_SOCKETS
-IMPLEMENT_ABSTRACT_CLASS(wxProtocol, wxSocketClient)
+wxIMPLEMENT_ABSTRACT_CLASS(wxProtocol, wxSocketClient);
 #else
-IMPLEMENT_ABSTRACT_CLASS(wxProtocol, wxObject)
+wxIMPLEMENT_ABSTRACT_CLASS(wxProtocol, wxObject);
 #endif
 
 wxProtocol::wxProtocol()
 #if wxUSE_SOCKETS
     // Only use non blocking sockets if we can dispatch events.
-    : wxSocketClient((wxIsMainThread() && wxApp::IsMainLoopRunning()
-                        ? wxSOCKET_NONE
-                        : wxSOCKET_BLOCK) | wxSOCKET_WAITALL)
+    : wxSocketClient(wxSocketClient::GetBlockingFlagIfNeeded() | wxSOCKET_WAITALL)
 #endif
 {
     m_lastError = wxPROTO_NOERR;
@@ -118,6 +113,11 @@ wxProtocolError wxProtocol::ReadLine(wxSocketBase *sock, wxString& result)
     static const int LINE_BUF = 4095;
 
     result.clear();
+
+    // Although we're supposed to get 7-bit ASCII from the server, some FTP
+    // servers are known to send 8-bit data, so we try to decode it in
+    // any way that works as this is more useful than just throwing it away.
+    wxWhateverWorksConv conv;
 
     wxCharBuffer buf(LINE_BUF);
     char *pBuf = buf.data();
@@ -170,7 +170,7 @@ wxProtocolError wxProtocol::ReadLine(wxSocketBase *sock, wxString& result)
             return wxPROTO_NETERR;
 
         pBuf[nRead] = '\0';
-        result += wxString::FromAscii(pBuf);
+        result += conv.cMB2WX(pBuf);
 
         if ( eol )
         {

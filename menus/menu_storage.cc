@@ -16,20 +16,18 @@
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
-#include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+
+#include "components/datasource/resource_reader.h"
 #include "menus/menu_codec.h"
 #include "menus/menu_model.h"
 #include "menus/menu_node.h"
 #include "menus/menu_upgrade.h"
-#include "prefs/vivaldi_browser_prefs_util.h"
 
 namespace menus {
 
-const base::FilePath::CharType kVivaldiResourcesFolder[] =
-    FILE_PATH_LITERAL("vivaldi");
 const base::FilePath::CharType kMenuFolder[] = FILE_PATH_LITERAL("menus");
 const base::FilePath::CharType kMainMenuFileName[] =
     FILE_PATH_LITERAL("mainmenu.json");
@@ -133,19 +131,11 @@ void OnLoad(const base::FilePath& profile_file,
   bool exists;
   const base::FilePath* file;
 
-  // Set up the bundled path here as GetDeveloperFilePath() calls code that
-  // should not be used in the UI thread. We will use a developer version of
-  // this file if appropriate (non official build and using load-and-launch-app)
-  // to simplify testing and general workflow. Note that if there is a proper
-  // file present in the profile it will overrule this bundled file
-  // regardless of type.
-  base::FilePath bundled_file;
-  if (!vivaldi::GetDeveloperFilePath(filename, &bundled_file)) {
-    base::PathService::Get(chrome::DIR_RESOURCES, &bundled_file);
-    bundled_file = bundled_file.Append(kVivaldiResourcesFolder)
-                       .Append(kMenuFolder)
-                       .Append(filename);
-  }
+  // Set up the bundled path here as GetResourceDirectory() calls code
+  // that should not be used in the UI thread.
+  base::FilePath bundled_file = ResourceReader::GetResourceDirectory()
+                                    .Append(kMenuFolder)
+                                    .Append(filename);
 
   if (details->force_bundle()) {
     // Revert to default while running.
@@ -279,7 +269,7 @@ MenuStorage::MenuStorage(content::BrowserContext* context,
     : model_(model),
       writer_(context->GetPath().Append(GetFileName(model)),
               sequenced_task_runner,
-              base::TimeDelta::FromMilliseconds(kSaveDelayMS)),
+              base::Milliseconds(kSaveDelayMS)),
       weak_factory_(this) {
   sequenced_task_runner_ = sequenced_task_runner;
   sequenced_task_runner_->PostTask(FROM_HERE,

@@ -13,6 +13,9 @@
 [submodule "chrome/installer/mac/third_party/xz/xz"]
 	path = chrome/installer/mac/third_party/xz/xz
 	url = ../deps/xz.git
+[submodule "docs/website"]
+	path = docs/website
+	url = ../../website.git
 [submodule "media/cdm/api"]
 	path = media/cdm/api
 	url = ../cdm.git
@@ -28,6 +31,9 @@
 [submodule "third_party/cast_core/public/src"]
 	path = third_party/cast_core/public/src
 	url = ../../cast_core/public.git
+[submodule "third_party/catapult"]
+	path = third_party/catapult
+	url = ../../catapult.git
 [submodule "third_party/ced/src"]
 	path = third_party/ced/src
 	url = ../../external/github.com/google/compact_enc_det.git
@@ -214,6 +220,9 @@
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
+[submodule "third_party/rust/serde_jsonrc/v0_1/crate"]
+	path = third_party/rust/serde_jsonrc/v0_1/crate
+	url = ../../external/github.com/serde-rs/json.git
 [submodule "third_party/ruy/src"]
 	path = third_party/ruy/src
 	url = ../../external/github.com/google/ruy.git
@@ -295,9 +304,3 @@
 [submodule "third_party/vulkan-deps"]
 	path = third_party/vulkan-deps
 	url = ../../vulkan-deps.git
-[submodule "third_party/catapult"]
-	path = third_party/catapult
-	url = ../../catapult.git
-[submodule "third_party/distributed_point_functions/src"]
-	path = third_party/distributed_point_functions/src
-	url = ../../external/github.com/google/distributed_point_functions.git

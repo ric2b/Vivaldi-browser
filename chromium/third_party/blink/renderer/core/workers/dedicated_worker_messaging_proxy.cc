@@ -61,7 +61,9 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
     RejectCoepUnsafeNone reject_coep_unsafe_none,
     const blink::DedicatedWorkerToken& token,
     mojo::PendingRemote<mojom::blink::DedicatedWorkerHost>
-        dedicated_worker_host) {
+        dedicated_worker_host,
+    mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
+        back_forward_cache_controller_host) {
   DCHECK(IsParentContextThread());
   if (AskedToTerminate()) {
     // Worker.terminate() could be called from JS before the thread was
@@ -69,8 +71,10 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
     return;
   }
 
-  // |dedicated_worker_host| must be stored before InitializeWorkerThread.
+  // These must be stored before InitializeWorkerThread.
   pending_dedicated_worker_host_ = std::move(dedicated_worker_host);
+  pending_back_forward_cache_controller_host_ =
+      std::move(back_forward_cache_controller_host);
   InitializeWorkerThread(
       std::move(creation_params),
       CreateBackingThreadStartupData(GetExecutionContext()->GetIsolate()),
@@ -147,12 +151,12 @@ void DedicatedWorkerMessagingProxy::DidFailToFetchScript() {
   worker_object_->DispatchErrorEventForScriptFetchFailure();
 }
 
-void DedicatedWorkerMessagingProxy::Freeze() {
+void DedicatedWorkerMessagingProxy::Freeze(bool is_in_back_forward_cache) {
   DCHECK(IsParentContextThread());
   auto* worker_thread = GetWorkerThread();
   if (AskedToTerminate() || !worker_thread)
     return;
-  worker_thread->Freeze();
+  worker_thread->Freeze(is_in_back_forward_cache);
 }
 
 void DedicatedWorkerMessagingProxy::Resume() {
@@ -270,7 +274,8 @@ DedicatedWorkerMessagingProxy::CreateWorkerThread() {
   DCHECK(pending_dedicated_worker_host_);
   return std::make_unique<DedicatedWorkerThread>(
       GetExecutionContext(), WorkerObjectProxy(),
-      std::move(pending_dedicated_worker_host_));
+      std::move(pending_dedicated_worker_host_),
+      std::move(pending_back_forward_cache_controller_host_));
 }
 
 }  // namespace blink

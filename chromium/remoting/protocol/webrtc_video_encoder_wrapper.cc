@@ -11,10 +11,10 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_post_task.h"
 #include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/bind_post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -320,10 +320,7 @@ void WebrtcVideoEncoderWrapper::SetRates(
 void WebrtcVideoEncoderWrapper::OnRttUpdate(int64_t rtt_ms) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  main_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&VideoChannelStateObserver::OnRttUpdate,
-                                video_channel_state_observer_,
-                                base::Milliseconds(rtt_ms)));
+  rtt_estimate_ = base::Milliseconds(rtt_ms);
 }
 
 webrtc::VideoEncoder::EncoderInfo WebrtcVideoEncoderWrapper::GetEncoderInfo()
@@ -420,6 +417,8 @@ void WebrtcVideoEncoderWrapper::OnFrameEncoded(
     // |frame_stats_| to non-null.
     DCHECK(frame_stats_);
     frame_stats_->encode_ended_time = base::TimeTicks::Now();
+    frame_stats_->rtt_estimate = rtt_estimate_;
+    frame_stats_->bandwidth_estimate_kbps = bitrate_kbps_;
     frame->stats = std::move(frame_stats_);
   }
 
@@ -439,13 +438,13 @@ void WebrtcVideoEncoderWrapper::OnFrameEncoded(
   }
 
   if (!frame || frame->data.empty()) {
-    SetTopOffActive(false);
+    top_off_active_ = false;
     NotifyFrameDropped();
     return;
   }
 
   // Top-off until the best quantizer value is reached.
-  SetTopOffActive(frame->quantizer > kMinQuantizer);
+  top_off_active_ = (frame->quantizer > kMinQuantizer);
 
   // Non-null, because WebRTC registers a callback before calling Encode().
   DCHECK(encoded_callback_);
@@ -467,17 +466,6 @@ void WebrtcVideoEncoderWrapper::NotifyFrameDropped() {
   DCHECK(encoded_callback_);
   encoded_callback_->OnDroppedFrame(
       webrtc::EncodedImageCallback::DropReason::kDroppedByEncoder);
-}
-
-void WebrtcVideoEncoderWrapper::SetTopOffActive(bool active) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (top_off_active_ != active) {
-    top_off_active_ = active;
-    main_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&VideoChannelStateObserver::OnTopOffActive,
-                                  video_channel_state_observer_, active));
-  }
 }
 
 bool WebrtcVideoEncoderWrapper::ShouldDropQualityForLargeFrame(

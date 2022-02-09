@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_css_style_declaration.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_set_return_value_for_core.h"
+#include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -139,8 +140,6 @@ void SetupIDLObservableArrayBackingListTemplate(
     const WrapperTypeInfo* wrapper_type_info,
     v8::Local<v8::ObjectTemplate> instance_template,
     v8::Local<v8::FunctionTemplate> interface_template) {
-  // TODO(crbug.com/1201744): Make the backing list object has
-  // %Array.prototype%.
   interface_template->SetClassName(
       V8AtomicString(isolate, wrapper_type_info->interface_name));
 
@@ -201,7 +200,7 @@ void ReportInvalidEnumSetToAttribute(v8::Isolate* isolate,
 bool IsEsIterableObject(v8::Isolate* isolate,
                         v8::Local<v8::Value> value,
                         ExceptionState& exception_state) {
-  // https://heycam.github.io/webidl/#es-overloads
+  // https://webidl.spec.whatwg.org/#es-overloads
   // step 9. Otherwise: if Type(V) is Object and ...
   if (!value->IsObject())
     return false;
@@ -301,7 +300,7 @@ void InstallUnscopablePropertyNames(
     v8::Local<v8::Object> prototype_object,
     base::span<const char* const> property_name_table) {
   // 3.6.3. Interface prototype object
-  // https://heycam.github.io/webidl/#interface-prototype-object
+  // https://webidl.spec.whatwg.org/#interface-prototype-object
   // step 8. If interface has any member declared with the [Unscopable]
   //   extended attribute, then:
   // step 8.1. Let unscopableObject be the result of performing

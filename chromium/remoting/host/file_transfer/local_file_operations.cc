@@ -13,10 +13,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "remoting/base/result.h"
@@ -415,13 +415,14 @@ void LocalFileWriter::CreateTempFile(Callback callback,
 
   temp_filepath_ = std::move(temp_filepath);
 
-  // FLAG_SHARE_DELETE allows the file to be marked as deleted on Windows while
-  // the handle is still open. (Other OS's allow this by default.) This allows
-  // Cancel to clean up the temporary file even if there are writes pending.
+  // FLAG_WIN_SHARE_DELETE allows the file to be marked as deleted on Windows
+  // while the handle is still open. (Other OS's allow this by default.) This
+  // allows Cancel to clean up the temporary file even if there are writes
+  // pending.
   file_proxy_->CreateOrOpen(
       temp_filepath_,
       base::File::FLAG_CREATE | base::File::FLAG_WRITE |
-          base::File::FLAG_SHARE_DELETE,
+          base::File::FLAG_WIN_SHARE_DELETE,
       base::BindOnce(&LocalFileWriter::OnCreateResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }

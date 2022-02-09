@@ -10,7 +10,6 @@
 #include <algorithm>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 
 namespace base {
 
@@ -114,7 +113,7 @@ class ScopedGeneric {
   // Release the object. The return value is the current object held by this
   // object. After this operation, this object will hold a null value, and
   // will not own the object any more.
-  element_type release() WARN_UNUSED_RESULT {
+  [[nodiscard]] element_type release() {
     element_type old_generic = data_.generic;
     data_.generic = traits_type::InvalidValue();
     return old_generic;
@@ -122,7 +121,7 @@ class ScopedGeneric {
 
   // Returns a raw pointer to the object storage, to allow the scoper to be used
   // to receive and manage out-parameter values. Implies reset().
-  element_type* receive() WARN_UNUSED_RESULT {
+  [[nodiscard]] element_type* receive() {
     reset();
     return &data_.generic;
   }
@@ -161,7 +160,8 @@ class ScopedGeneric {
 
   Data data_;
 
-  DISALLOW_COPY_AND_ASSIGN(ScopedGeneric);
+  ScopedGeneric(const ScopedGeneric&) = delete;
+  ScopedGeneric& operator=(const ScopedGeneric&) = delete;
 };
 
 template <class T, class Traits>

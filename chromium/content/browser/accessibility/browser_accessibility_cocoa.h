@@ -134,19 +134,10 @@ id AXTextMarkerRangeFrom(id anchor_text_marker, id focus_text_marker);
 // Internally-used property.
 @property(nonatomic, readonly) NSPoint origin;
 
-@property(nonatomic, readonly) NSString* accessKey;
-@property(nonatomic, readonly) NSNumber* ariaAtomic;
-@property(nonatomic, readonly) NSNumber* ariaBusy;
-@property(nonatomic, readonly) NSString* ariaLive;
-@property(nonatomic, readonly) NSNumber* ariaPosInSet;
-@property(nonatomic, readonly) NSString* ariaRelevant;
-@property(nonatomic, readonly) NSNumber* ariaSetSize;
 @property(nonatomic, readonly) NSArray* children;
 @property(nonatomic, readonly) NSArray* columns;
-@property(nonatomic, readonly) NSArray* columnHeaders;
 @property(nonatomic, readonly) NSValue* columnIndexRange;
 @property(nonatomic, readonly) NSString* descriptionForAccessibility;
-@property(nonatomic, readonly) NSArray* detailsElements;
 @property(nonatomic, readonly) NSNumber* disclosing;
 @property(nonatomic, readonly) id disclosedByRow;
 @property(nonatomic, readonly) NSNumber* disclosureLevel;
@@ -170,7 +161,6 @@ id AXTextMarkerRangeFrom(id anchor_text_marker, id focus_text_marker);
 @property(nonatomic, readonly) NSNumber* index;
 @property(nonatomic, readonly) NSNumber* treeItemRowIndex;
 @property(nonatomic, readonly) NSNumber* insertionPointLineNumber;
-@property(nonatomic, readonly) NSString* invalid;
 @property(nonatomic, readonly) NSNumber* isMultiSelectable;
 @property(nonatomic, readonly) NSNumber* loaded;
 @property(nonatomic, readonly) NSNumber* loadingProgress;
@@ -180,11 +170,9 @@ id AXTextMarkerRangeFrom(id anchor_text_marker, id focus_text_marker);
 @property(nonatomic, readonly) NSString* orientation;
 @property(nonatomic, readonly) id parent;
 @property(nonatomic, readonly) NSValue* position;
-@property(nonatomic, readonly) NSNumber* required;
 // A string indicating the role of this object as far as accessibility
 // is concerned.
 @property(nonatomic, readonly) NSString* role;
-@property(nonatomic, readonly) NSString* roleDescription;
 @property(nonatomic, readonly) NSArray* rowHeaders;
 @property(nonatomic, readonly) NSValue* rowIndexRange;
 @property(nonatomic, readonly) NSArray* rows;
@@ -206,7 +194,6 @@ id AXTextMarkerRangeFrom(id anchor_text_marker, id focus_text_marker);
 @property(nonatomic, readonly) NSArray* tabs;
 @property(nonatomic, readonly) NSString* title;
 @property(nonatomic, readonly) id titleUIElement;
-@property(nonatomic, readonly) NSURL* url;
 @property(nonatomic, readonly) NSString* value;
 @property(nonatomic, readonly) NSString* valueDescription;
 @property(nonatomic, readonly) NSValue* visibleCharacterRange;

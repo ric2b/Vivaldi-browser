@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
@@ -155,7 +156,7 @@ class ContentIndexTest : public InProcessBrowserTest,
   }
 
   std::map<std::string, OfflineItem> offline_items_;
-  ContentIndexProviderImpl* provider_;
+  raw_ptr<ContentIndexProviderImpl> provider_;
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   base::OnceClosure wait_for_tab_change_;
 };
@@ -182,6 +183,17 @@ IN_PROC_BROWSER_TEST_F(ContentIndexTest, OfflineItemObserversReceiveEvents) {
 
   // Expect the description to have been updated.
   EXPECT_NE(description1, offline_items().at("my-id-1").description);
+}
+
+IN_PROC_BROWSER_TEST_F(ContentIndexTest, OfflineItemIframe) {
+  RunScript("AddContentForFrame('my-id-frame')");
+  base::RunLoop().RunUntilIdle();
+
+  // Not a top-level context, provider should ignore the entry.
+  EXPECT_TRUE(offline_items().empty());
+
+  // We should still be able to use the Content Index API against it though.
+  EXPECT_EQ("my-id-frame", RunScript("GetIdsForFrame()"));
 }
 
 IN_PROC_BROWSER_TEST_F(ContentIndexTest, ContextAPI) {

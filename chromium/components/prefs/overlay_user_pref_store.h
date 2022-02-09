@@ -10,7 +10,6 @@
 #include <map>
 #include <string>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "components/prefs/persistent_pref_store.h"
@@ -63,7 +62,6 @@ class COMPONENTS_PREFS_EXPORT OverlayUserPrefStore
   void ReadPrefsAsync(ReadErrorDelegate* delegate) override;
   void CommitPendingWrite(base::OnceClosure reply_callback,
                           base::OnceClosure synchronous_done_callback) override;
-  void CommitPendingWriteSynchronously() override;
   void SchedulePendingLossyWrites() override;
   void ReportValueChanged(const std::string& key, uint32_t flags) override;
 

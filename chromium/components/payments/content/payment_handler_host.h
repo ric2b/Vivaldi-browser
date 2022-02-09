@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -51,8 +50,6 @@ class PaymentHandlerHost : public mojom::PaymentHandlerHost {
     virtual bool ChangeShippingAddress(
         mojom::PaymentAddressPtr shipping_address) = 0;
   };
-
-  static const char kWebContentsUserDataKey[];
 
   // The |delegate| cannot be null and must outlive this object. Typically this
   // is accomplished by the |delegate| owning this object. The |web_contents| is

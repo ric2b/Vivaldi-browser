@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/api/idle/idle_api_constants.h"
@@ -41,7 +42,7 @@ class DefaultEventDelegate : public IdleManager::EventDelegate {
   void UnregisterObserver(EventRouter::Observer* observer) override;
 
  private:
-  content::BrowserContext* const context_;
+  const raw_ptr<content::BrowserContext> context_;
 };
 
 DefaultEventDelegate::DefaultEventDelegate(content::BrowserContext* context)
@@ -178,6 +179,13 @@ ui::IdleState IdleManager::QueryState(int threshold) {
 void IdleManager::SetThreshold(const std::string& extension_id, int threshold) {
   DCHECK(thread_checker_.CalledOnValidThread());
   GetMonitor(extension_id)->threshold = threshold;
+}
+
+int IdleManager::GetThresholdForTest(const std::string& extension_id) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  auto it = monitors_.find(extension_id);
+
+  return it == monitors_.end() ? kDefaultIdleThreshold : it->second.threshold;
 }
 
 base::TimeDelta IdleManager::GetAutoLockDelay() const {

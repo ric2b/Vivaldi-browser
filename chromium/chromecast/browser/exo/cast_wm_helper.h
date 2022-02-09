@@ -9,7 +9,6 @@
 #include <map>
 #include <vector>
 
-#include "base/macros.h"
 #include "components/exo/vsync_timing_manager.h"
 #include "components/exo/wm_helper.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -100,8 +99,6 @@ class CastWMHelper : public WMHelper, public VSyncTimingManager::Delegate {
   double GetDefaultDeviceScaleFactor() const override;
   double GetDeviceScaleFactorForWindow(aura::Window* window) const override;
   void SetDefaultScaleCancellation(bool default_scale_cancellation) override;
-  void SetImeBlocked(aura::Window* window, bool ime_blocked) override;
-  bool IsImeBlocked(aura::Window* window) const override;
 
   LifetimeManager* GetLifetimeManager() override;
   aura::client::CaptureClient* GetCaptureClient() override;

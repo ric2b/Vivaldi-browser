@@ -87,7 +87,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
-import org.chromium.chrome.browser.bookmarks.ReadingListFeatures;
+import org.chromium.chrome.browser.bookmarks.PowerBookmarkUtils;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
@@ -122,7 +122,6 @@ import org.chromium.chrome.browser.gsa.GSAAccountChangeListener;
 import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
-import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
 import org.chromium.chrome.browser.init.StartupTabPreloader;
@@ -142,19 +141,22 @@ import org.chromium.chrome.browser.night_mode.WebContentsDarkModeMessageControll
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorController;
-import org.chromium.chrome.browser.omaha.UpdateInfoBarController;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
+import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.printing.PrintShareActivity;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateImpl;
 import org.chromium.chrome.browser.share.ShareDelegateSupplier;
 import org.chromium.chrome.browser.share.ShareRegistrationCoordinator;
+import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceFactory;
+import org.chromium.chrome.browser.subscriptions.SubscriptionsManager;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.tab.AccessibilityVisibilityHandler;
 import org.chromium.chrome.browser.tab.RequestDesktopUtils;
@@ -186,15 +188,13 @@ import org.chromium.chrome.browser.ui.TabObscuringHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
-import org.chromium.chrome.browser.ui.messages.infobar.SimpleConfirmInfoBarBuilder;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManagerProvider;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.browser.vr.ArDelegateProvider;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.webapps.PwaBottomSheetController;
-import org.chromium.chrome.browser.webapps.PwaBottomSheetControllerProvider;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -206,10 +206,10 @@ import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
-import org.chromium.components.page_info.PageInfoController;
 import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.components.policy.CombinedPolicyProvider;
 import org.chromium.components.policy.CombinedPolicyProvider.PolicyChangeListener;
@@ -220,7 +220,10 @@ import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.components.webapps.AddToHomescreenCoordinator;
 import org.chromium.components.webapps.InstallTrigger;
+import org.chromium.components.webapps.bottomsheet.PwaBottomSheetController;
+import org.chromium.components.webapps.bottomsheet.PwaBottomSheetControllerProvider;
 import org.chromium.components.webxr.ArDelegate;
+import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.ScreenOrientationProvider;
 import org.chromium.content_public.browser.SelectionPopupController;
@@ -399,6 +402,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     // {@link onPictureInPictureModeChanged} from the platform.  This might disagree with the value
     // returned by {@link isInPictureInPictureMode}.
     private boolean mLastPictureInPictureModeForTesting;
+    private SubscriptionsManager mSubscriptionsManager;
 
     protected ChromeActivity() {
         mIntentHandler = new IntentHandler(this, createIntentHandlerDelegate());
@@ -426,13 +430,19 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
     @Override
     public boolean onIntentCallbackNotFoundError(String error) {
-        Tab tab = mActivityTabProvider.get();
-        if (tab != null) {
-            SimpleConfirmInfoBarBuilder.create(tab.getWebContents(),
-                    InfoBarIdentifier.WINDOW_ERROR_INFOBAR_DELEGATE_ANDROID, error, false);
-            return true;
+        createWindowErrorSnackbar(error, mSnackbarManager);
+        return true;
+    }
+
+    @VisibleForTesting
+    public static void createWindowErrorSnackbar(String error, SnackbarManager snackbarManager) {
+        if (snackbarManager != null) {
+            Snackbar snackbar = Snackbar.make(
+                    error, null, Snackbar.TYPE_NOTIFICATION, Snackbar.UMA_WINDOW_ERROR);
+            snackbar.setSingleLine(false);
+            snackbar.setDuration(SnackbarManager.DEFAULT_SNACKBAR_DURATION_LONG_MS);
+            snackbarManager.showSnackbar(snackbar);
         }
-        return false;
     }
 
     @Override
@@ -516,7 +526,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 getFullscreenManager(), mCompositorViewHolderSupplier,
                 getTabContentManagerSupplier(), getOverviewModeBehaviorSupplier(),
                 this::getSnackbarManager, getActivityType(), this::isInOverviewMode,
-                this::isWarmOnResume, /* appMenuDelegate= */ this,
+                this::shouldShowOverviewPageOnStart, this::isWarmOnResume,
+                /* appMenuDelegate= */ this,
                 /* statusBarColorProvider= */ this, getIntentRequestTracker(),
                 mTabReparentingControllerSupplier, false);
         // clang-format on
@@ -845,10 +856,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                         public void run() {
                             if (mBookmarkBridgeSupplier.get() != null &&
                                     mBookmarkBridgeSupplier.get().getUserBookmarkIdForTab(tab)
-                                            > 0) {
+                                            != null) {
                                 BookmarkBridge.BookmarkItem item = model.getBookmarkById(
-                                        new BookmarkId(mBookmarkBridgeSupplier.get().
-                                                getUserBookmarkIdForTab(tab), BookmarkType.NORMAL));
+                                        new BookmarkId(mBookmarkBridgeSupplier.get()
+                                                .getUserBookmarkIdForTab(tab).getId(),
+                                                BookmarkType.NORMAL));
                                 if (SpeedDialUtils.thumbnailsEnabled() &&
                                         model.isInsideSpeedDialFolder(item.getId())) {
                                     captureThumbnailForSpeedDial(model, item);
@@ -874,7 +886,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     protected StartupTabPreloader getStartupTabPreloader() {
         if (mStartupTabPreloader == null) {
             mStartupTabPreloader = new StartupTabPreloader(this::getIntent,
-                    getLifecycleDispatcher(), getWindowAndroid(), this, mIntentHandler);
+                    getLifecycleDispatcher(), getWindowAndroid(), this, mIntentHandler,
+                    getActivityTabStartupMetricsTracker());
         }
         return mStartupTabPreloader;
     }
@@ -1007,7 +1020,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Override
     public void onStartWithNative() {
         assert mNativeInitialized : "onStartWithNative was called before native was initialized.";
-
         super.onStartWithNative();
         UpdateMenuItemHelper.getInstance().onStart();
         ChromeActivitySessionTracker.getInstance().onStartWithNative();
@@ -1154,8 +1166,33 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
     @Override
     public void onResumeWithNative() {
-        super.onResumeWithNative();
-        markSessionResume();
+        // TODO(b/182286787): Clean-up once fixed session resume order is verified.
+        final boolean useFixedUmaSessionResumeOrder =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.FIXED_UMA_SESSION_RESUME_ORDER);
+        if (useFixedUmaSessionResumeOrder) {
+            // First, update the activity type in order to have it properly captured in
+            // markSessionResume; stage the activity type value such that it can be picked up when
+            // the new UMA record is opened as a part of the subsequent session resume.
+            //
+            // TODO(b/182286787): Move this inside markSessionResume, plumb through to UMA session
+            // resumption.
+            ChromeSessionState.setActivityType(getActivityType());
+
+            // Close the current UMA record and start a new UMA one.
+            markSessionResume();
+
+            // Inform the actity lifecycle observers. Among other things, the observers record
+            // metrics pertaining to the "resumed" activity. This needs to happens after
+            // markSessionResume has closed the old UMA record, pertaining to the previous
+            // (backgrounded) activity, and opened a new one pertaining to the "resumed" activity.
+            super.onResumeWithNative();
+        } else {
+            super.onResumeWithNative();
+            markSessionResume();
+        }
+
+        // Resume the ChromeActivity...
+
         RecordUserAction.record("MobileComeToForeground");
         getLaunchCauseMetrics().recordLaunchCause();
 
@@ -1164,11 +1201,15 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             WebContents webContents = tab.getWebContents();
             LaunchMetrics.commitLaunchMetrics(webContents);
 
-            // For picture-in-picture mode
+            // For picture-in-picture mode / auto-darken web contents.
             if (webContents != null) webContents.notifyRendererPreferenceUpdate();
         }
 
-        ChromeSessionState.setActivityType(getActivityType());
+        // TODO(b/182286787): Remove once fixed session resume order is verified.
+        if (!useFixedUmaSessionResumeOrder) {
+            ChromeSessionState.setActivityType(getActivityType());
+        }
+
         ChromeSessionState.setIsInMultiWindowMode(
                 MultiWindowUtils.getInstance().isInMultiWindowMode(this));
 
@@ -1326,11 +1367,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      */
     @CallSuper
     protected void initDeferredStartupForActivity() {
-        DeferredStartupHandler.getInstance().addDeferredTask(() -> {
-            if (isActivityFinishingOrDestroyed()) return;
-            UpdateInfoBarController.createInstance(ChromeActivity.this);
-        });
-
         final String simpleName = getClass().getSimpleName();
         DeferredStartupHandler.getInstance().addDeferredTask(() -> {
             if (isActivityFinishingOrDestroyed()) return;
@@ -1407,9 +1443,18 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Override
     public void onStart() {
         // Sometimes mCompositorViewHolder is null, see crbug.com/1057613.
-        if (AsyncTabParamsManagerSingleton.getInstance().hasParamsWithTabToReparent()
-                && mCompositorViewHolderSupplier.hasValue()) {
-            mCompositorViewHolderSupplier.get().prepareForTabReparenting();
+        if (AsyncTabParamsManagerSingleton.getInstance().hasParamsWithTabToReparent()) {
+            // TODO(https://crbug.com/1252526): Remove logging once root cause of bug is identified
+            //  & fixed.
+            Log.i(TAG,
+                    "#onStart, num async tabs: "
+                            + AsyncTabParamsManagerSingleton.getInstance()
+                                      .getAsyncTabParams()
+                                      .size());
+
+            if (mCompositorViewHolderSupplier.hasValue()) {
+                mCompositorViewHolderSupplier.get().prepareForTabReparenting();
+            }
         }
         super.onStart();
 
@@ -1742,6 +1787,9 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 }
             };
             display.addObserver(mDisplayAndroidObserver);
+
+            CommerceSubscriptionsServiceFactory factory = new CommerceSubscriptionsServiceFactory();
+            mSubscriptionsManager = factory.getForLastUsedProfile().getSubscriptionsManager();
         }
 
         // Make sure the user is reporting into one of the feed spinner groups, so that we can
@@ -1802,6 +1850,13 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         return false;
     }
 
+    /**
+     * Returns whether grid Tab switcher or the Start surface should be shown at startup.
+     */
+    public boolean shouldShowOverviewPageOnStart() {
+        return false;
+    }
+
     @CallSuper
     @Override
     public boolean canShowAppMenu() {
@@ -1853,9 +1908,23 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      * @param tabToBookmark The tab that needs to be bookmarked.
      */
     public void addOrEditBookmark(final Tab tabToBookmark) {
-        TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
-                .notifyEvent(EventConstants.APP_MENU_BOOKMARK_STAR_ICON_PRESSED);
-        addOrEditBookmark(tabToBookmark, BookmarkType.NORMAL);
+        addOrEditBookmark(tabToBookmark, BookmarkType.NORMAL, /*fromExplicitTrackUi=*/false);
+    }
+
+    /**
+     * Add the specified tab to bookmarks or allows to edit the bookmark if the specified tab is
+     * already bookmarked. If a new bookmark is added, a snackbar will be shown.
+     *
+     * @param tabToBookmark The tab that needs to be bookmarked.
+     * @param fromExplicitTrackUi Whether the addOrEditAction was taken from an explicit tracking
+     *         UI.
+     */
+    public void addOrEditBookmark(final Tab tabToBookmark, boolean fromExplicitTrackUi) {
+        if (!fromExplicitTrackUi) {
+            TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
+                    .notifyEvent(EventConstants.APP_MENU_BOOKMARK_STAR_ICON_PRESSED);
+        }
+        addOrEditBookmark(tabToBookmark, BookmarkType.NORMAL, fromExplicitTrackUi);
     }
 
     /**
@@ -1865,10 +1934,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      * @param tabToAdd The tab that to add to the Reading List.
      */
     public void addToReadingList(final Tab tabToAdd) {
-        addOrEditBookmark(tabToAdd, BookmarkType.READING_LIST);
+        addOrEditBookmark(tabToAdd, BookmarkType.READING_LIST, /*fromExplicitTrackUi=*/false);
     }
 
-    private void addOrEditBookmark(final Tab tabToBookmark, @BookmarkType int bookmarkType) {
+    private void addOrEditBookmark(
+            final Tab tabToBookmark, @BookmarkType int bookmarkType, boolean fromExplicitTrackUi) {
         if (tabToBookmark == null || tabToBookmark.isFrozen()) {
             return;
         }
@@ -1888,34 +1958,23 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 return;
             }
 
-            // TODO(crbug.com/1150559): Make getUserBookmarkIdForTab return BookmarkItem instead,
-            // currently it's a sync call that doesn't check loading states, and only checks the
-            // bookmark backend and managed bookmarks.
-            BookmarkItem currentBookmarkItem = null;
-            if (ReadingListFeatures.isReadingListEnabled()) {
-                currentBookmarkItem =
-                        bookmarkModel.getReadingListItem(tabToBookmark.getOriginalUrl());
+            BookmarkId bookmarkId = bookmarkModel.getUserBookmarkIdForTab(tabToBookmark);
+            if (ReadingListUtils.maybeTypeSwapAndShowSaveFlow(this,
+                        mRootUiCoordinator.getBottomSheetController(), bookmarkModel, bookmarkId,
+                        bookmarkType)) {
+                return;
             }
 
-            if (currentBookmarkItem == null) {
-                // Note we get user bookmark ID over just a bookmark ID here: Managed bookmarks
-                // can't be edited. If the current URL is only bookmarked by managed bookmarks, this
-                // will return INVALID_ID.
-                // TODO(bauerb): This does not take partner bookmarks into account.
-                final long bookmarkId = bridge.getUserBookmarkIdForTab(tabToBookmark);
-                if (bookmarkId != BookmarkId.INVALID_ID) {
-                    currentBookmarkItem =
-                            bookmarkModel.getBookmarkById(new BookmarkId(bookmarkId, bookmarkType));
-                }
-            }
-
-            onBookmarkModelLoaded(tabToBookmark, currentBookmarkItem, bookmarkModel, bookmarkType);
+            BookmarkItem currentBookmarkItem =
+                    bookmarkId == null ? null : bookmarkModel.getBookmarkById(bookmarkId);
+            onBookmarkModelLoaded(tabToBookmark, currentBookmarkItem, bookmarkModel, bookmarkType,
+                    fromExplicitTrackUi);
         });
     }
 
     private void onBookmarkModelLoaded(final Tab tabToBookmark,
             @Nullable final BookmarkItem currentBookmarkItem, final BookmarkModel bookmarkModel,
-            @BookmarkType int bookmarkType) {
+            @BookmarkType int bookmarkType, boolean fromExplicitTrackUi) {
         // The BookmarkModel will be destroyed by BookmarkUtils#addOrEditBookmark() when
         // done.
         BookmarkUtils.addOrEditBookmark(currentBookmarkItem, bookmarkModel, tabToBookmark,
@@ -1934,7 +1993,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                         }
                     }
                     bookmarkModel.destroy();
-                });
+                }, fromExplicitTrackUi);
     }
 
     /** Vivaldi **/
@@ -2407,9 +2466,20 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 TabLaunchType.FROM_LINK, getActivityTab());
     }
 
+    /** Opens the chrome://management page on a new tab. */
+    private void openChromeManagementPage() {
+        Tab currentTab = getActivityTab();
+        TabCreator tabCreator = getTabCreator(currentTab != null && currentTab.isIncognito());
+        if (tabCreator == null) return;
+
+        tabCreator.createNewTab(
+                new LoadUrlParams(UrlConstants.MANAGEMENT_URL, PageTransition.AUTO_TOPLEVEL),
+                TabLaunchType.FROM_CHROME_UI, getActivityTab());
+    }
+
     /**
      * @return The {@link MenuOrKeyboardActionController} for registering menu or keyboard action
-     *         handler for this activity.
+     *     handler for this activity.
      */
     public MenuOrKeyboardActionController getMenuOrKeyboardActionController() {
         return this;
@@ -2428,8 +2498,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     /**
      * Handles menu item selection and keyboard shortcuts.
      *
-     * @param id The ID of the selected menu item (defined in main_menu.xml) or
-     *           keyboard shortcut (defined in values.xml).
+     * @param id The ID of the selected menu item (defined in main_menu.xml) or keyboard shortcut
+     *     (defined in values.xml).
      * @param fromMenu Whether this was triggered from the menu.
      * @return Whether the action was handled.
      */
@@ -2500,7 +2570,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             return false;
         }
 
-        if (id == R.id.bookmark_this_page_id) {
+        if (id == R.id.bookmark_this_page_id || id == R.id.add_bookmark_menu_id
+                || id == R.id.edit_bookmark_menu_id) {
             addOrEditBookmark(currentTab);
             RecordUserAction.record("MobileMenuAddToBookmarks");
             return true;
@@ -2509,6 +2580,43 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         if (id == R.id.add_to_reading_list_menu_id) {
             addToReadingList(currentTab);
             RecordUserAction.record("MobileMenuAddToReadingList");
+            return true;
+        }
+
+        if (id == R.id.delete_from_reading_list_menu_id) {
+            ReadingListUtils.deleteFromReadingList(mSnackbarManager, /*activity=*/this, currentTab);
+            RecordUserAction.record("MobileMenuDeleteFromReadingList");
+            return true;
+        }
+
+        if (id == R.id.enable_price_tracking_menu_id) {
+            // TODO(crbug.com/1268976): Extract this code into a one-liner.
+            BookmarkId bookmarkId =
+                    mBookmarkBridgeSupplier.get().getUserBookmarkIdForTab(currentTab);
+            if (bookmarkId == null) {
+                addOrEditBookmark(currentTab, /* fromExplicitTrackUi=*/true);
+            } else {
+                // In the case where the bookmark exists, re-show the save flow with price-tracking
+                // enabled.
+                BookmarkUtils.showSaveFlow(/*activity=*/this,
+                        mRootUiCoordinator.getBottomSheetController(), /*fromExplicitTrackUi=*/true,
+                        bookmarkId, /*wasBookmarkMoved=*/false);
+            }
+            RecordUserAction.record("MobileMenuEnablePriceTracking");
+            TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
+                    .notifyEvent(EventConstants.SHOPPING_LIST_PRICE_TRACK_FROM_MENU);
+            return true;
+        }
+
+        if (id == R.id.disable_price_tracking_menu_id) {
+            // TODO(crbug.com/1266881): Add event here to support IPH.
+            // TODO(crbug.com/1268976): Extract this code into a one-liner.
+            BookmarkId bookmarkId =
+                    mBookmarkBridgeSupplier.get().getUserBookmarkIdForTab(currentTab);
+            PowerBookmarkUtils.setPriceTrackingEnabledWithSnackbars(mSubscriptionsManager,
+                    mBookmarkBridgeSupplier.get(), bookmarkId,
+                    /*enabled=*/false, mSnackbarManager, getResources(), (status) -> {});
+            RecordUserAction.record("MobileMenuDisablePriceTracking");
             return true;
         }
 
@@ -2533,8 +2641,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             ChromePageInfo pageInfo = new ChromePageInfo(getModalDialogManagerSupplier(), null,
                     OpenedFromSource.MENU,
                     () -> mRootUiCoordinator.getMerchantTrustSignalsCoordinatorSupplier().get());
-            pageInfo.show(currentTab, PageInfoController.NO_HIGHLIGHTED_PERMISSION,
-                    /*fromStoreIcon=*/false);
+            pageInfo.show(currentTab, ChromePageInfoHighlight.noHighlight());
             return true;
         }
 
@@ -2554,14 +2661,12 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         if (id == R.id.add_to_homescreen_id) {
             RecordUserAction.record("MobileMenuAddToHomescreen");
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_INSTALL_USE_BOTTOMSHEET)) {
-                PwaBottomSheetController controller =
-                        PwaBottomSheetControllerProvider.from(getWindowAndroid());
-                if (controller != null
-                        && controller.requestOrExpandBottomSheetInstaller(
-                                currentTab.getWebContents(), InstallTrigger.MENU)) {
-                    return true;
-                }
+            PwaBottomSheetController controller =
+                    PwaBottomSheetControllerProvider.from(getWindowAndroid());
+            if (controller != null
+                    && controller.requestOrExpandBottomSheetInstaller(
+                            currentTab.getWebContents(), InstallTrigger.MENU)) {
+                return true;
             }
             AddToHomescreenCoordinator.showForAppMenu(this, getWindowAndroid(),
                     getModalDialogManager(), currentTab.getWebContents(), mMenuItemData);
@@ -2592,7 +2697,15 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             boolean usingDesktopUserAgent =
                     currentTab.getWebContents().getNavigationController().getUseDesktopUserAgent();
             usingDesktopUserAgent = !usingDesktopUserAgent;
-            TabUtils.switchUserAgent(currentTab, usingDesktopUserAgent, /* forcedByUser */ true);
+            if (ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
+                Profile profile = getCurrentTabModel().getProfile();
+                RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(
+                        profile, currentTab.getUrl(), usingDesktopUserAgent);
+                currentTab.reload();
+            } else {
+                TabUtils.switchUserAgent(
+                        currentTab, usingDesktopUserAgent, /* forcedByUser */ true);
+            }
             RequestDesktopUtils.recordUserChangeUserAgent(usingDesktopUserAgent, getActivityTab());
             return true;
         }
@@ -2653,6 +2766,13 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
         if (id == R.id.launch_game_menu_id) {
             VivaldiUtils.loadVivaldiGame(currentTab);
+            return true;
+        }
+
+        if (id == R.id.managed_by_menu_id) {
+            assert ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_MANAGEMENT_PAGE);
+
+            openChromeManagementPage();
             return true;
         }
 

@@ -41,7 +41,7 @@ TEST(AdBlockRuleParserTest, ParseMetadata) {
   EXPECT_EQ(GURL("http://www.wtfpl.net/"), parse_result.metadata.license);
   EXPECT_EQ("Test filter", parse_result.metadata.title);
   EXPECT_EQ(13u, parse_result.metadata.version);
-  EXPECT_EQ(base::TimeDelta::FromDays(2), parse_result.metadata.expires);
+  EXPECT_EQ(base::Days(2), parse_result.metadata.expires);
 
   EXPECT_EQ(0u, parse_result.request_filter_rules.size());
 }

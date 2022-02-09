@@ -73,6 +73,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/gfx/geometry/point_conversions.h"
 
 namespace blink {
 
@@ -221,8 +222,8 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
 
   {
     ScrollPaintPropertyNode::State state;
-    state.container_rect = gfx::Rect(IntRect(IntPoint(), size_));
-    state.contents_size = gfx::Size(ContentsSize());
+    state.container_rect = gfx::Rect(size_);
+    state.contents_size = ContentsSize();
 
     state.user_scrollable_horizontal =
         UserInputScrollable(kHorizontalScrollbar);
@@ -266,9 +267,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
   }
 
   {
-    ScrollOffset scroll_position = GetScrollOffset();
-    TransformPaintPropertyNode::State state{
-        gfx::Vector2dF(-scroll_position.Width(), -scroll_position.Height())};
+    TransformPaintPropertyNode::State state{-GetScrollOffset()};
     state.scroll = scroll_node_;
     state.direct_compositing_reasons = CompositingReason::kViewport;
     if (!scroll_translation_node_) {
@@ -397,12 +396,12 @@ void VisualViewport::EnqueueResizeEvent() {
     document->EnqueueVisualViewportResizeEvent();
 }
 
-void VisualViewport::SetSize(const IntSize& size) {
+void VisualViewport::SetSize(const gfx::Size& size) {
   if (size_ == size)
     return;
 
-  TRACE_EVENT2("blink", "VisualViewport::setSize", "width", size.Width(),
-               "height", size.Height());
+  TRACE_EVENT2("blink", "VisualViewport::setSize", "width", size.width(),
+               "height", size.height());
   size_ = size;
   needs_paint_property_update_ = true;
 
@@ -424,7 +423,7 @@ void VisualViewport::SetSize(const IntSize& size) {
 }
 
 void VisualViewport::Reset() {
-  SetScaleAndLocation(1, is_pinch_gesture_active_, FloatPoint());
+  SetScaleAndLocation(1, is_pinch_gesture_active_, gfx::PointF());
 }
 
 void VisualViewport::MainFrameDidChangeSize() {
@@ -432,43 +431,44 @@ void VisualViewport::MainFrameDidChangeSize() {
 
   // In unit tests we may not have initialized the layer tree.
   if (scroll_layer_)
-    scroll_layer_->SetBounds(gfx::Size(ContentsSize()));
+    scroll_layer_->SetBounds(ContentsSize());
 
   needs_paint_property_update_ = true;
   ClampToBoundaries();
 }
 
-FloatRect VisualViewport::VisibleRect(
+gfx::RectF VisualViewport::VisibleRect(
     IncludeScrollbarsInRect scrollbar_inclusion) const {
   FloatSize visible_size(size_);
 
   if (scrollbar_inclusion == kExcludeScrollbars)
     visible_size = FloatSize(ExcludeScrollbars(size_));
 
-  visible_size.Expand(0, browser_controls_adjustment_);
+  visible_size.Enlarge(0, browser_controls_adjustment_);
   visible_size.Scale(1 / scale_);
 
-  return FloatRect(FloatPoint(GetScrollOffset()), visible_size);
+  return gfx::RectF(ScrollPosition(), ToGfxSizeF(visible_size));
 }
 
-FloatPoint VisualViewport::ViewportCSSPixelsToRootFrame(
-    const FloatPoint& point) const {
+gfx::PointF VisualViewport::ViewportCSSPixelsToRootFrame(
+    const gfx::PointF& point) const {
   // Note, this is in CSS Pixels so we don't apply scale.
-  FloatPoint point_in_root_frame = point;
-  point_in_root_frame.Move(GetScrollOffset());
+  gfx::PointF point_in_root_frame = point;
+  point_in_root_frame += GetScrollOffset();
   return point_in_root_frame;
 }
 
-void VisualViewport::SetLocation(const FloatPoint& new_location) {
+void VisualViewport::SetLocation(const gfx::PointF& new_location) {
   SetScaleAndLocation(scale_, is_pinch_gesture_active_, new_location);
 }
 
 void VisualViewport::Move(const ScrollOffset& delta) {
-  SetLocation(FloatPoint(offset_ + delta));
+  SetLocation(gfx::PointAtOffsetFromOrigin(offset_ + delta));
 }
 
 void VisualViewport::SetScale(float scale) {
-  SetScaleAndLocation(scale, is_pinch_gesture_active_, FloatPoint(offset_));
+  SetScaleAndLocation(scale, is_pinch_gesture_active_,
+                      gfx::PointAtOffsetFromOrigin(offset_));
 }
 
 double VisualViewport::OffsetLeft() const {
@@ -477,7 +477,7 @@ double VisualViewport::OffsetLeft() const {
 
   UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
 
-  return VisibleRect().X() / LocalMainFrame()->PageZoomFactor();
+  return VisibleRect().x() / LocalMainFrame()->PageZoomFactor();
 }
 
 double VisualViewport::OffsetTop() const {
@@ -486,7 +486,7 @@ double VisualViewport::OffsetTop() const {
 
   UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
 
-  return VisibleRect().Y() / LocalMainFrame()->PageZoomFactor();
+  return VisibleRect().y() / LocalMainFrame()->PageZoomFactor();
 }
 
 double VisualViewport::Width() const {
@@ -505,7 +505,7 @@ double VisualViewport::ScaleForVisualViewport() const {
 
 void VisualViewport::SetScaleAndLocation(float scale,
                                          bool is_pinch_gesture_active,
-                                         const FloatPoint& location) {
+                                         const gfx::PointF& location) {
   if (DidSetScaleOrLocation(scale, is_pinch_gesture_active, location)) {
     NotifyRootFrameViewport();
     Document* document = LocalMainFrame()->GetDocument();
@@ -520,7 +520,7 @@ double VisualViewport::VisibleWidthCSSPx() const {
     return 0;
 
   float zoom = LocalMainFrame()->PageZoomFactor();
-  float width_css_px = VisibleRect().Width() / zoom;
+  float width_css_px = VisibleRect().width() / zoom;
   return width_css_px;
 }
 
@@ -529,13 +529,13 @@ double VisualViewport::VisibleHeightCSSPx() const {
     return 0;
 
   float zoom = LocalMainFrame()->PageZoomFactor();
-  float height_css_px = VisibleRect().Height() / zoom;
+  float height_css_px = VisibleRect().height() / zoom;
   return height_css_px;
 }
 
 bool VisualViewport::DidSetScaleOrLocation(float scale,
                                            bool is_pinch_gesture_active,
-                                           const FloatPoint& location) {
+                                           const gfx::PointF& location) {
   if (!LocalMainFrame()) {
     is_pinch_gesture_active_ = is_pinch_gesture_active;
     // The VisualViewport for a remote mainframe must always be 1.0 or else
@@ -566,15 +566,14 @@ bool VisualViewport::DidSetScaleOrLocation(float scale,
   if (notify_page_scale_factor_changed)
     GetPage().GetChromeClient().PageScaleFactorChanged();
 
-  ScrollOffset clamped_offset = ClampScrollOffset(ToScrollOffset(location));
+  ScrollOffset clamped_offset = ClampScrollOffset(location.OffsetFromOrigin());
 
   // TODO(bokan): If the offset is invalid, we might end up in an infinite
   // recursion as we reenter this function on clamping. It would be cleaner to
   // avoid reentrancy but for now just prevent the stack overflow.
   // crbug.com/702771.
-  if (std::isnan(clamped_offset.Width()) ||
-      std::isnan(clamped_offset.Height()) ||
-      std::isinf(clamped_offset.Width()) || std::isinf(clamped_offset.Height()))
+  if (std::isnan(clamped_offset.x()) || std::isnan(clamped_offset.y()) ||
+      std::isinf(clamped_offset.x()) || std::isinf(clamped_offset.y()))
     return false;
 
   if (clamped_offset != offset_) {
@@ -624,8 +623,8 @@ void VisualViewport::CreateLayers() {
 
   // TODO(crbug.com/1015625): Avoid scroll_layer_.
   scroll_layer_ = cc::Layer::Create();
-  scroll_layer_->SetScrollable(gfx::Size(size_));
-  scroll_layer_->SetBounds(gfx::Size(ContentsSize()));
+  scroll_layer_->SetScrollable(size_);
+  scroll_layer_->SetBounds(ContentsSize());
   scroll_layer_->SetElementId(GetScrollElementId());
 
   InitializeScrollbars();
@@ -697,10 +696,10 @@ void VisualViewport::UpdateScrollbarLayer(ScrollbarOrientation orientation) {
 
   scrollbar_layer->SetBounds(
       orientation == kHorizontalScrollbar
-          ? gfx::Size(size_.Width() - ScrollbarThickness(),
+          ? gfx::Size(size_.width() - ScrollbarThickness(),
                       ScrollbarThickness())
           : gfx::Size(ScrollbarThickness(),
-                      size_.Height() - ScrollbarThickness()));
+                      size_.height() - ScrollbarThickness()));
 }
 
 bool VisualViewport::VisualViewportSuppliesScrollbars() const {
@@ -781,18 +780,18 @@ PhysicalRect VisualViewport::ScrollIntoView(
 }
 
 int VisualViewport::ScrollSize(ScrollbarOrientation orientation) const {
-  IntSize scroll_dimensions =
+  gfx::Vector2d scroll_dimensions =
       MaximumScrollOffsetInt() - MinimumScrollOffsetInt();
-  return (orientation == kHorizontalScrollbar) ? scroll_dimensions.Width()
-                                               : scroll_dimensions.Height();
+  return (orientation == kHorizontalScrollbar) ? scroll_dimensions.x()
+                                               : scroll_dimensions.y();
 }
 
-IntSize VisualViewport::MinimumScrollOffsetInt() const {
-  return IntSize();
+gfx::Vector2d VisualViewport::MinimumScrollOffsetInt() const {
+  return gfx::Vector2d();
 }
 
-IntSize VisualViewport::MaximumScrollOffsetInt() const {
-  return FlooredIntSize(MaximumScrollOffset());
+gfx::Vector2d VisualViewport::MaximumScrollOffsetInt() const {
+  return gfx::ToFlooredVector2d(MaximumScrollOffset());
 }
 
 ScrollOffset VisualViewport::MaximumScrollOffset() const {
@@ -806,42 +805,43 @@ ScrollOffset VisualViewport::MaximumScrollOffset() const {
   if (browser_controls_adjustment_) {
     float min_scale =
         GetPage().GetPageScaleConstraintsSet().FinalConstraints().minimum_scale;
-    frame_view_size.Expand(0, browser_controls_adjustment_ / min_scale);
+    frame_view_size.Enlarge(0, browser_controls_adjustment_ / min_scale);
   }
 
   frame_view_size.Scale(scale_);
-  frame_view_size = FloatSize(FlooredIntSize(frame_view_size));
+  frame_view_size = FloatSize(ToFlooredSize(frame_view_size));
 
   FloatSize viewport_size(size_);
-  viewport_size.Expand(0, ceilf(browser_controls_adjustment_));
+  viewport_size.Enlarge(0, ceilf(browser_controls_adjustment_));
 
   FloatSize max_position = frame_view_size - viewport_size;
   max_position.Scale(1 / scale_);
-  return ScrollOffset(max_position);
+  return ScrollOffset(ToGfxVector2dF(max_position));
 }
 
-IntPoint VisualViewport::ClampDocumentOffsetAtScale(const IntPoint& offset,
-                                                    float scale) {
+gfx::Point VisualViewport::ClampDocumentOffsetAtScale(const gfx::Point& offset,
+                                                      float scale) {
   if (!LocalMainFrame() || !LocalMainFrame()->View())
-    return IntPoint();
+    return gfx::Point();
 
   LocalFrameView* view = LocalMainFrame()->View();
 
   FloatSize scaled_size(ExcludeScrollbars(size_));
   scaled_size.Scale(1 / scale);
 
-  IntSize visual_viewport_max =
-      FlooredIntSize(FloatSize(ContentsSize()) - scaled_size);
-  IntSize max =
-      view->LayoutViewport()->MaximumScrollOffsetInt() + visual_viewport_max;
-  IntSize min =
+  gfx::Size visual_viewport_max =
+      ToFlooredSize(FloatSize(ContentsSize()) - scaled_size);
+  gfx::Vector2d max =
+      view->LayoutViewport()->MaximumScrollOffsetInt() +
+      gfx::Vector2d(visual_viewport_max.width(), visual_viewport_max.height());
+  gfx::Vector2d min =
       view->LayoutViewport()
           ->MinimumScrollOffsetInt();  // VisualViewportMin should be (0, 0)
 
-  IntSize clamped = ToIntSize(offset);
-  clamped = clamped.ShrunkTo(max);
-  clamped = clamped.ExpandedTo(min);
-  return IntPoint(clamped);
+  gfx::Point clamped = offset;
+  clamped.SetToMin(gfx::PointAtOffsetFromOrigin(max));
+  clamped.SetToMax(gfx::PointAtOffsetFromOrigin(min));
+  return clamped;
 }
 
 void VisualViewport::SetBrowserControlsAdjustment(float adjustment) {
@@ -870,17 +870,17 @@ bool VisualViewport::UserInputScrollable(ScrollbarOrientation) const {
   return true;
 }
 
-IntSize VisualViewport::ContentsSize() const {
+gfx::Size VisualViewport::ContentsSize() const {
   LocalFrame* frame = LocalMainFrame();
   if (!frame || !frame->View())
-    return IntSize();
+    return gfx::Size();
 
   return frame->View()->Size();
 }
 
-IntRect VisualViewport::VisibleContentRect(
+gfx::Rect VisualViewport::VisibleContentRect(
     IncludeScrollbarsInRect scrollbar_inclusion) const {
-  return EnclosingIntRect(VisibleRect(scrollbar_inclusion));
+  return ToEnclosingRect(VisibleRect(scrollbar_inclusion));
 }
 
 scoped_refptr<base::SingleThreadTaskRunner> VisualViewport::GetTimerTaskRunner()
@@ -899,7 +899,7 @@ mojom::blink::ColorScheme VisualViewport::UsedColorScheme() const {
 void VisualViewport::UpdateScrollOffset(const ScrollOffset& position,
                                         mojom::blink::ScrollType scroll_type) {
   if (!DidSetScaleOrLocation(scale_, is_pinch_gesture_active_,
-                             FloatPoint(position))) {
+                             gfx::PointAtOffsetFromOrigin(position))) {
     return;
   }
   if (IsExplicitScrollType(scroll_type))
@@ -931,11 +931,11 @@ LocalFrame* VisualViewport::LocalMainFrame() const {
              : nullptr;
 }
 
-IntSize VisualViewport::ExcludeScrollbars(const IntSize& size) const {
-  IntSize excluded_size = size;
+gfx::Size VisualViewport::ExcludeScrollbars(const gfx::Size& size) const {
+  gfx::Size excluded_size = size;
   if (RootFrameViewport* root_frame_viewport = GetRootFrameViewport()) {
-    excluded_size.Expand(-root_frame_viewport->VerticalScrollbarWidth(),
-                         -root_frame_viewport->HorizontalScrollbarHeight());
+    excluded_size.Enlarge(-root_frame_viewport->VerticalScrollbarWidth(),
+                          -root_frame_viewport->HorizontalScrollbarHeight());
   }
   return excluded_size;
 }
@@ -946,65 +946,65 @@ bool VisualViewport::ScheduleAnimation() {
 }
 
 void VisualViewport::ClampToBoundaries() {
-  SetLocation(FloatPoint(offset_));
+  SetLocation(gfx::PointAtOffsetFromOrigin(offset_));
 }
 
 FloatRect VisualViewport::ViewportToRootFrame(
     const FloatRect& rect_in_viewport) const {
   FloatRect rect_in_root_frame = rect_in_viewport;
   rect_in_root_frame.Scale(1 / Scale());
-  rect_in_root_frame.Move(GetScrollOffset());
+  rect_in_root_frame.Offset(GetScrollOffset());
   return rect_in_root_frame;
 }
 
-IntRect VisualViewport::ViewportToRootFrame(
-    const IntRect& rect_in_viewport) const {
+gfx::Rect VisualViewport::ViewportToRootFrame(
+    const gfx::Rect& rect_in_viewport) const {
   // FIXME: How to snap to pixels?
-  return EnclosingIntRect(ViewportToRootFrame(FloatRect(rect_in_viewport)));
+  return ToEnclosingRect(ViewportToRootFrame(FloatRect(rect_in_viewport)));
 }
 
 FloatRect VisualViewport::RootFrameToViewport(
     const FloatRect& rect_in_root_frame) const {
   FloatRect rect_in_viewport = rect_in_root_frame;
-  rect_in_viewport.Move(-GetScrollOffset());
+  rect_in_viewport.Offset(-GetScrollOffset());
   rect_in_viewport.Scale(Scale());
   return rect_in_viewport;
 }
 
-IntRect VisualViewport::RootFrameToViewport(
-    const IntRect& rect_in_root_frame) const {
+gfx::Rect VisualViewport::RootFrameToViewport(
+    const gfx::Rect& rect_in_root_frame) const {
   // FIXME: How to snap to pixels?
-  return EnclosingIntRect(RootFrameToViewport(FloatRect(rect_in_root_frame)));
+  return ToEnclosingRect(RootFrameToViewport(FloatRect(rect_in_root_frame)));
 }
 
-FloatPoint VisualViewport::ViewportToRootFrame(
-    const FloatPoint& point_in_viewport) const {
-  FloatPoint point_in_root_frame = point_in_viewport;
-  point_in_root_frame.Scale(1 / Scale(), 1 / Scale());
-  point_in_root_frame.Move(GetScrollOffset());
+gfx::PointF VisualViewport::ViewportToRootFrame(
+    const gfx::PointF& point_in_viewport) const {
+  gfx::PointF point_in_root_frame = point_in_viewport;
+  point_in_root_frame.Scale(1 / Scale());
+  point_in_root_frame += GetScrollOffset();
   return point_in_root_frame;
 }
 
-FloatPoint VisualViewport::RootFrameToViewport(
-    const FloatPoint& point_in_root_frame) const {
-  FloatPoint point_in_viewport = point_in_root_frame;
-  point_in_viewport.Move(-GetScrollOffset());
-  point_in_viewport.Scale(Scale(), Scale());
+gfx::PointF VisualViewport::RootFrameToViewport(
+    const gfx::PointF& point_in_root_frame) const {
+  gfx::PointF point_in_viewport = point_in_root_frame;
+  point_in_viewport -= GetScrollOffset();
+  point_in_viewport.Scale(Scale());
   return point_in_viewport;
 }
 
-IntPoint VisualViewport::ViewportToRootFrame(
-    const IntPoint& point_in_viewport) const {
+gfx::Point VisualViewport::ViewportToRootFrame(
+    const gfx::Point& point_in_viewport) const {
   // FIXME: How to snap to pixels?
-  return FlooredIntPoint(
-      FloatPoint(ViewportToRootFrame(FloatPoint(point_in_viewport))));
+  return gfx::ToFlooredPoint(
+      ViewportToRootFrame(gfx::PointF(point_in_viewport)));
 }
 
-IntPoint VisualViewport::RootFrameToViewport(
-    const IntPoint& point_in_root_frame) const {
+gfx::Point VisualViewport::RootFrameToViewport(
+    const gfx::Point& point_in_root_frame) const {
   // FIXME: How to snap to pixels?
-  return FlooredIntPoint(
-      FloatPoint(RootFrameToViewport(FloatPoint(point_in_root_frame))));
+  return gfx::ToFlooredPoint(
+      RootFrameToViewport(gfx::PointF(point_in_root_frame)));
 }
 
 void VisualViewport::StartTrackingPinchStats() {
@@ -1063,7 +1063,7 @@ bool VisualViewport::ShouldDisableDesktopWorkarounds() const {
   const PageScaleConstraints& constraints =
       GetPage().GetPageScaleConstraintsSet().PageDefinedConstraints();
 
-  return LocalMainFrame()->View()->GetLayoutSize().Width() == size_.Width() ||
+  return LocalMainFrame()->View()->GetLayoutSize().width() == size_.width() ||
          (constraints.minimum_scale == constraints.maximum_scale &&
           constraints.minimum_scale != -1);
 }
@@ -1100,11 +1100,11 @@ PaintArtifactCompositor* VisualViewport::GetPaintArtifactCompositor() const {
 
 std::unique_ptr<TracedValue> VisualViewport::ViewportToTracedValue() const {
   auto value = std::make_unique<TracedValue>();
-  IntRect viewport = VisibleContentRect();
-  value->SetInteger("x", ClampTo<int>(roundf(viewport.X())));
-  value->SetInteger("y", ClampTo<int>(roundf(viewport.Y())));
-  value->SetInteger("width", ClampTo<int>(roundf(viewport.Width())));
-  value->SetInteger("height", ClampTo<int>(roundf(viewport.Height())));
+  gfx::Rect viewport = VisibleContentRect();
+  value->SetInteger("x", ClampTo<int>(roundf(viewport.x())));
+  value->SetInteger("y", ClampTo<int>(roundf(viewport.y())));
+  value->SetInteger("width", ClampTo<int>(roundf(viewport.width())));
+  value->SetInteger("height", ClampTo<int>(roundf(viewport.height())));
   value->SetString("frameID",
                    IdentifiersFactory::FrameId(GetPage().MainFrame()));
   return value;
@@ -1133,7 +1133,7 @@ void VisualViewport::Paint(GraphicsContext& context) const {
                             "Inner Viewport Scroll Layer")));
     RecordForeignLayer(context, *debug_name_client,
                        DisplayItem::kForeignLayerViewportScroll, scroll_layer_,
-                       IntPoint(), &state);
+                       gfx::Point(), &state);
   }
 
   if (scrollbar_layer_horizontal_) {
@@ -1145,7 +1145,7 @@ void VisualViewport::Paint(GraphicsContext& context) const {
     RecordForeignLayer(context, *debug_name_client,
                        DisplayItem::kForeignLayerViewportScrollbar,
                        scrollbar_layer_horizontal_,
-                       IntPoint(0, size_.Height() - ScrollbarThickness()),
+                       gfx::Point(0, size_.height() - ScrollbarThickness()),
                        &state);
   }
 
@@ -1158,7 +1158,7 @@ void VisualViewport::Paint(GraphicsContext& context) const {
     RecordForeignLayer(
         context, *debug_name_client,
         DisplayItem::kForeignLayerViewportScrollbar, scrollbar_layer_vertical_,
-        IntPoint(size_.Width() - ScrollbarThickness(), 0), &state);
+        gfx::Point(size_.width() - ScrollbarThickness(), 0), &state);
   }
 }
 

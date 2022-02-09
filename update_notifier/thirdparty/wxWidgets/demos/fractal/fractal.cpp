@@ -28,9 +28,6 @@ hack doesn't fix.
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef  WX_PRECOMP
   #include "wx/wx.h"
@@ -54,10 +51,10 @@ static wxMenuBar *menuBar = NULL;
 class MyApp: public wxApp
 {
 public:
-    bool OnInit();
+    bool OnInit() wxOVERRIDE;
 };
 
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 // Define a new frame type
 class MyFrame: public wxFrame
@@ -68,7 +65,7 @@ public:
     void OnCloseWindow(wxCloseEvent& event);
     void OnExit(wxCommandEvent& event);
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 // Define a new canvas which can receive some events
@@ -85,7 +82,7 @@ private:
     wxBrush WaterBrush;
     int Sealevel;
 
-DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 // `Main program' equivalent, creating windows and returning main app frame
@@ -112,10 +109,10 @@ bool MyApp::OnInit()
   return true;
 }
 
-BEGIN_EVENT_TABLE(MyFrame, wxFrame)
+wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
   EVT_CLOSE(MyFrame::OnCloseWindow)
   EVT_MENU(wxID_EXIT, MyFrame::OnExit)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // My frame constructor
 MyFrame::MyFrame(wxFrame *frame, const wxString& title, const wxPoint& pos, const wxSize& size):
@@ -140,25 +137,25 @@ void MyFrame::OnCloseWindow(wxCloseEvent& WXUNUSED(event))
     destroyed = true;
 }
 
-BEGIN_EVENT_TABLE(MyCanvas, wxWindow)
+wxBEGIN_EVENT_TABLE(MyCanvas, wxWindow)
   EVT_PAINT(MyCanvas::OnPaint)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // Define a constructor for my canvas
 MyCanvas::MyCanvas(wxFrame *frame):
  wxWindow(frame, wxID_ANY)
 {
     wxColour wxCol1(255,255,255);
-    SnowPen = wxPen(wxCol1, 2, wxSOLID);
+    SnowPen = wxPen(wxCol1, 2);
 
     wxColour wxCol2(128,0,0);
-    MtnPen = wxPen(wxCol2, 1, wxSOLID);
+    MtnPen = wxPen(wxCol2);
 
     wxColour wxCol3(0,128,0);
-    GreenPen = wxPen(wxCol3, 1, wxSOLID);
+    GreenPen = wxPen(wxCol3);
 
     wxColour wxCol4(0,0,128);
-    WaterBrush = wxBrush(wxCol4, wxSOLID);
+    WaterBrush = wxBrush(wxCol4);
 }
 
 void MyCanvas::OnPaint(wxPaintEvent& WXUNUSED(event))

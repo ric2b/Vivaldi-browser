@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -40,8 +39,15 @@
 
 #include "tiffio.h"
 
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 #ifndef HAVE_GETOPT
-extern int getopt(int, char**, char*);
+extern int getopt(int argc, char * const argv[], const char *optstring);
 #endif
 
 static	int stopondiff = 1;
@@ -52,7 +58,7 @@ static	uint16 sampleformat = SAMPLEFORMAT_UINT;
 static	uint32 imagewidth;
 static	uint32 imagelength;
 
-static	void usage(void);
+static	void usage(int code);
 static	int tiffcmp(TIFF*, TIFF*);
 static	int cmptags(TIFF*, TIFF*);
 static	int ContigCompare(int, uint32, unsigned char*, unsigned char*, tsize_t);
@@ -62,15 +68,23 @@ static	void PrintFloatDiff(uint32, int, uint32, double, double);
 
 static	void leof(const char*, uint32, int);
 
+/*
+ * exit with status :
+ * 0    No differences were found.
+ * 1    Differences were found.
+ * >1   An error occurred.
+ */
 int
 main(int argc, char* argv[])
 {
 	TIFF *tif1, *tif2;
 	int c, dirnum;
+#if !HAVE_DECL_OPTARG
 	extern int optind;
 	extern char* optarg;
+#endif
 
-	while ((c = getopt(argc, argv, "ltz:")) != -1)
+	while ((c = getopt(argc, argv, "ltz:h")) != -1)
 		switch (c) {
 		case 'l':
 			stopondiff = 0;
@@ -81,18 +95,20 @@ main(int argc, char* argv[])
 		case 't':
 			stoponfirsttag = 0;
 			break;
+		case 'h':
+			usage(EXIT_SUCCESS);
 		case '?':
-			usage();
+			usage(2);
 			/*NOTREACHED*/
 		}
 	if (argc - optind < 2)
-		usage();
+		usage(2);
 	tif1 = TIFFOpen(argv[optind], "r");
 	if (tif1 == NULL)
-		return (-1);
+		return (2);
 	tif2 = TIFFOpen(argv[optind+1], "r");
 	if (tif2 == NULL)
-		return (-2);
+		return (2);
 	dirnum = 0;
 	while (tiffcmp(tif1, tif2)) {
 		if (!TIFFReadDirectory(tif1)) {
@@ -114,7 +130,7 @@ main(int argc, char* argv[])
 	return (0);
 }
 
-char* stuff[] = {
+static const char* stuff[] = {
 "usage: tiffcmp [options] file1 file2",
 "where options are:",
 " -l		list each byte of image data that differs between the files",
@@ -124,16 +140,15 @@ NULL
 };
 
 static void
-usage(void)
+usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+        fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
-	exit(-1);
+		fprintf(out, "%s\n", stuff[i]);
+	exit(code);
 }
 
 #define	checkEOF(tif, row, sample) { \
@@ -176,7 +191,7 @@ tiffcmp(TIFF* tif1, TIFF* tif2)
 	buf2 = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(tif2));
 	if (buf1 == NULL || buf2 == NULL) {
 		fprintf(stderr, "No space for scanline buffers\n");
-		exit(-1);
+		exit(2);
 	}
 	if (config1 != config2 && bitspersample != 8 && samplesperpixel > 1) {
 		fprintf(stderr,
@@ -259,6 +274,7 @@ bad1:
 static int
 cmptags(TIFF* tif1, TIFF* tif2)
 {
+	uint16 compression1, compression2;
 	CmpLongField(TIFFTAG_SUBFILETYPE,	"SubFileType");
 	CmpLongField(TIFFTAG_IMAGEWIDTH,	"ImageWidth");
 	CmpLongField(TIFFTAG_IMAGELENGTH,	"ImageLength");
@@ -275,8 +291,20 @@ cmptags(TIFF* tif1, TIFF* tif2)
 	CmpShortField(TIFFTAG_SAMPLEFORMAT,	"SampleFormat");
 	CmpFloatField(TIFFTAG_XRESOLUTION,	"XResolution");
 	CmpFloatField(TIFFTAG_YRESOLUTION,	"YResolution");
-	CmpLongField(TIFFTAG_GROUP3OPTIONS,	"Group3Options");
-	CmpLongField(TIFFTAG_GROUP4OPTIONS,	"Group4Options");
+	if( TIFFGetField(tif1, TIFFTAG_COMPRESSION, &compression1) &&
+		compression1 == COMPRESSION_CCITTFAX3 &&
+		TIFFGetField(tif2, TIFFTAG_COMPRESSION, &compression2) &&
+		compression2 == COMPRESSION_CCITTFAX3 )
+	{
+		CmpLongField(TIFFTAG_GROUP3OPTIONS,	"Group3Options");
+	}
+	if( TIFFGetField(tif1, TIFFTAG_COMPRESSION, &compression1) &&
+		compression1 == COMPRESSION_CCITTFAX4 &&
+		TIFFGetField(tif2, TIFFTAG_COMPRESSION, &compression2) &&
+		compression2 == COMPRESSION_CCITTFAX4 )
+	{
+		CmpLongField(TIFFTAG_GROUP4OPTIONS,	"Group4Options");
+	}
 	CmpShortField(TIFFTAG_RESOLUTIONUNIT,	"ResolutionUnit");
 	CmpShortField(TIFFTAG_PLANARCONFIG,	"PlanarConfiguration");
 	CmpLongField(TIFFTAG_ROWSPERSTRIP,	"RowsPerStrip");
@@ -422,7 +450,8 @@ PrintIntDiff(uint32 row, int sample, uint32 pix, uint32 w1, uint32 w2)
 	    {
 		int32 mask1, mask2, s;
 
-		mask1 =  ~((-1) << bitspersample);
+        /* mask1 should have the n lowest bits set, where n == bitspersample */
+        mask1 = ((int32)1 << bitspersample) - 1;
 		s = (8 - bitspersample);
 		mask2 = mask1 << s;
 		for (; mask2 && pix < imagewidth;

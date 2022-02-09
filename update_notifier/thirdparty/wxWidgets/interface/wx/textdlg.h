@@ -8,7 +8,7 @@
 /**
     Default text dialog style.
 */
-#define wxTextEntryDialogStyle (wxOK | wxCANCEL | wxCENTRE | wxWS_EX_VALIDATE_RECURSIVELY)
+#define wxTextEntryDialogStyle (wxOK | wxCANCEL | wxCENTRE)
 
 /// Default text dialog caption.
 const char wxGetTextFromUserPromptStr[] = "Input Text";
@@ -109,9 +109,10 @@ public:
             The default value, which may be the empty string.
         @param style
             A dialog style, specifying the buttons (wxOK, wxCANCEL)
-            and an optional wxCENTRE style. Additionally, wxTextCtrl styles
-            (such as @c wxTE_PASSWORD or @c wxTE_MULTILINE) may be specified
-            here.
+            and an optional wxCENTRE style. Additionally, most wxTextCtrl
+            styles (such as @c wxTE_PASSWORD or @c wxTE_MULTILINE) may be
+            specified here, but @c wxTE_READONLY may not be used, as it doesn't
+            make sense for this dialog, used for text input.
         @param pos
             Dialog position.
 
@@ -172,6 +173,20 @@ public:
         Sets the default text value.
     */
     void SetValue(const wxString& value);
+
+    /**
+        Convert all text entered into the text control used by the dialog to upper case.
+
+        Call this method to ensure that all text entered into the text control
+        used by the dialog is converted on the fly to upper case. If the text
+        control is not empty, its existing contents is also converted to upper
+        case.
+
+        @see wxTextEntry::ForceUpper()
+
+        @since 3.1.0
+     */
+    void ForceUpper();
 
     /**
         Shows the dialog, returning wxID_OK if the user pressed OK, and wxID_CANCEL

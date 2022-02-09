@@ -45,7 +45,6 @@
 #include "net/cookies/canonical_cookie.h"
 
 #include <limits>
-#include <sstream>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -759,7 +758,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::FromStorage(
       creation, expiration, last_access, secure, httponly, same_site, priority,
       same_party, partition_key, source_scheme, source_port));
 
-  if (cc->IsCanonical()) {
+  if (cc->IsCanonicalForFromStorage()) {
     // This will help capture the number of times a cookie is canonical but does
     // not have a valid name+value size length
     bool valid_cookie_name_value_pair =
@@ -1077,11 +1076,6 @@ CookieAccessResult CanonicalCookie::IncludeForRequestURL(
     }
   }
 
-  if (status.ShouldRecordDowngradeMetrics()) {
-    UMA_HISTOGRAM_ENUMERATION("Cookie.SameSiteContextDowngradeRequest",
-                              status.GetBreakingDowngradeMetricsEnumValue(url));
-  }
-
   if (status.HasWarningReason(
           CookieInclusionStatus::
               WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION)) {
@@ -1153,10 +1147,6 @@ CookieAccessResult CanonicalCookie::IsSetPermittedInContext(
         << "SetCookie() rejecting insecure cookie with SameSite=None.";
     access_result.status.AddExclusionReason(
         CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE);
-  }
-  // Log whether a SameSite=None cookie is Secure or not.
-  if (SameSite() == CookieSameSite::NO_RESTRICTION) {
-    UMA_HISTOGRAM_BOOLEAN("Cookie.SameSiteNoneIsSecure", IsSecure());
   }
 
   // For LEGACY cookies we should always return the schemeless context,
@@ -1328,15 +1318,19 @@ bool CanonicalCookie::PartialCompare(const CanonicalCookie& other) const {
 }
 
 bool CanonicalCookie::IsCanonical() const {
-  // Not checking domain or path against ParsedCookie as it may have
-  // come purely from the URL. Also, don't call IsValidCookieNameValuePair()
-  // here because we don't want to enforce the size checks on names or values
-  // that may have been reconstituted from the cookie store.
   // TODO(crbug.com/1244172) Eventually we should check the size of name+value,
   // assuming we collect metrics and determine that a low percentage of cookies
   // would fail this check. Note that we still don't want to enforce length
   // checks on domain or path for the reason stated above.
 
+  return IsCanonicalForFromStorage();
+}
+
+bool CanonicalCookie::IsCanonicalForFromStorage() const {
+  // Not checking domain or path against ParsedCookie as it may have
+  // come purely from the URL. Also, don't call IsValidCookieNameValuePair()
+  // here because we don't want to enforce the size checks on names or values
+  // that may have been reconstituted from the cookie store.
   if (ParsedCookie::ParseTokenString(name_) != name_ ||
       !ParsedCookie::ValueMatchesParsedValue(value_)) {
     return false;
@@ -1440,13 +1434,8 @@ void CanonicalCookie::RecordCookiePrefixMetrics(
     CanonicalCookie::CookiePrefix prefix,
     bool is_cookie_valid) {
   const char kCookiePrefixHistogram[] = "Cookie.CookiePrefix";
-  const char kCookiePrefixBlockedHistogram[] = "Cookie.CookiePrefixBlocked";
   UMA_HISTOGRAM_ENUMERATION(kCookiePrefixHistogram, prefix,
                             CanonicalCookie::COOKIE_PREFIX_LAST);
-  if (!is_cookie_valid) {
-    UMA_HISTOGRAM_ENUMERATION(kCookiePrefixBlockedHistogram, prefix,
-                              CanonicalCookie::COOKIE_PREFIX_LAST);
-  }
 }
 
 // Returns true if the cookie does not violate any constraints imposed

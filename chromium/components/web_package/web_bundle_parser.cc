@@ -197,7 +197,7 @@ class InputReader {
     auto bytes = ReadBytes(sizeof(T));
     if (!bytes)
       return false;
-    base::ReadBigEndian(reinterpret_cast<const char*>(bytes->data()), out);
+    base::ReadBigEndian(bytes->data(), out);
     return true;
   }
 
@@ -293,12 +293,14 @@ GURL ParseExchangeURL(base::StringPiece str, const GURL& base_url) {
   if (url.has_ref() || url.has_username() || url.has_password())
     return GURL();
 
-  // For now, we allow only http:, https: and urn:uuid URLs in Web Bundles.
+  // For now, we allow only http:, https:, urn:uuid and uuid-in-package: URLs in
+  // Web Bundles.
   // TODO(crbug.com/966753): Revisit this once
   // https://github.com/WICG/webpackage/issues/468 is resolved.
-  if (!url.SchemeIsHTTPOrHTTPS() && !IsValidUrnUuidURL(url))
+  if (!url.SchemeIsHTTPOrHTTPS() && !IsValidUrnUuidURL(url) &&
+      !IsValidUuidInPackageURL(url)) {
     return GURL();
-
+  }
   return url;
 }
 
@@ -591,6 +593,9 @@ class WebBundleParser::MetadataParser
     if (bundle_version_is_b1_) {
       DCHECK(!primary_url_.is_empty());
       metadata_->primary_url = primary_url_;
+      metadata_->version = mojom::BundleFormatVersion::kB1;
+    } else {
+      metadata_->version = mojom::BundleFormatVersion::kB2;
     }
 
     ReadMetadataSections(section_offsets_.begin());

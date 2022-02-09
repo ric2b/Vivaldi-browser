@@ -1,4 +1,3 @@
-
 /*
  * Windows CE platform tiffconf.wince.h
  * Created by Mateusz Loskot (mateusz@loskot.net)
@@ -25,15 +24,6 @@
 
 #ifndef _TIFFCONF_
 #define _TIFFCONF_
-
-/* Define to 1 if the system has the type `int16'. */
-/* #undef HAVE_INT16 */
-
-/* Define to 1 if the system has the type `int32'. */
-/* #undef HAVE_INT32 */
-
-/* Define to 1 if the system has the type `int8'. */
-/* #undef HAVE_INT8 */
 
 /* The size of a `int', as computed by sizeof. */
 #define SIZEOF_INT 4

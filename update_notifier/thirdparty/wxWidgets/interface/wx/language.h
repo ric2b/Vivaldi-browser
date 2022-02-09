@@ -16,7 +16,7 @@
 */
 enum wxLanguage
 {
-    /// User's default/preffered language as got from OS.
+    /// User's default/preferred language as got from OS.
     wxLANGUAGE_DEFAULT,
 
     /// Unknown language, returned if wxLocale::GetSystemLanguage fails.
@@ -63,7 +63,6 @@ enum wxLanguage
     wxLANGUAGE_BRETON,
     wxLANGUAGE_BULGARIAN,
     wxLANGUAGE_BURMESE,
-    wxLANGUAGE_CAMBODIAN,
     wxLANGUAGE_CATALAN,
     wxLANGUAGE_CHINESE,
     wxLANGUAGE_CHINESE_SIMPLIFIED,
@@ -88,6 +87,7 @@ enum wxLanguage
     wxLANGUAGE_ENGLISH_CARIBBEAN,
     wxLANGUAGE_ENGLISH_DENMARK,
     wxLANGUAGE_ENGLISH_EIRE,
+    wxLANGUAGE_ENGLISH_ISRAEL,
     wxLANGUAGE_ENGLISH_JAMAICA,
     wxLANGUAGE_ENGLISH_NEW_ZEALAND,
     wxLANGUAGE_ENGLISH_PHILIPPINES,
@@ -134,11 +134,13 @@ enum wxLanguage
     wxLANGUAGE_ITALIAN_SWISS,
     wxLANGUAGE_JAPANESE,
     wxLANGUAGE_JAVANESE,
+    wxLANGUAGE_KABYLE,
     wxLANGUAGE_KANNADA,
     wxLANGUAGE_KASHMIRI,
     wxLANGUAGE_KASHMIRI_INDIA,
     wxLANGUAGE_KAZAKH,
     wxLANGUAGE_KERNEWEK,
+    wxLANGUAGE_KHMER,
     wxLANGUAGE_KINYARWANDA,
     wxLANGUAGE_KIRGHIZ,
     wxLANGUAGE_KIRUNDI,
@@ -254,10 +256,13 @@ enum wxLanguage
     wxLANGUAGE_YORUBA,
     wxLANGUAGE_ZHUANG,
     wxLANGUAGE_ZULU,
-    wxLANGUAGE_KABYLE,
 
     /// For custom, user-defined languages.
-    wxLANGUAGE_USER_DEFINED
+    wxLANGUAGE_USER_DEFINED,
+
+
+    /// Obsolete synonym.
+    wxLANGUAGE_CAMBODIAN = wxLANGUAGE_KHMER
 };
 
 // --- --- --- generated code ends here --- --- ---

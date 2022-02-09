@@ -15,7 +15,7 @@ import {URLVisit} from './history_clusters.mojom-webui.js';
 
 /**
  * @fileoverview This file provides a custom element displaying a top visit
- * within a Cluster. A top visit is a featured, i.e., visible, visit with an
+ * within a cluster. A top visit is a featured, i.e., visible, visit with an
  * optional set of related visits which are not visible by default.
  */
 
@@ -37,6 +37,14 @@ class TopVisitElement extends PolymerElement {
   static get properties() {
     return {
       /**
+       * The index of the cluster this visit belongs to.
+       */
+      clusterIndex: {
+        type: Number,
+        value: -1,  // Initialized to an invalid value.
+      },
+
+      /**
        * The top visit to display
        */
       visit: Object,
@@ -57,14 +65,6 @@ class TopVisitElement extends PolymerElement {
         type: Boolean,
         computed: `computeHasHiddenRelatedVisits_(hiddenRelatedVisits_)`,
         reflectToAttribute: true,
-      },
-
-      /**
-       * Whether there are related visits.
-       */
-      hasRelatedVisits_: {
-        type: Boolean,
-        computed: 'computeHasRelatedVisits_(visit.relatedVisits.*)',
       },
 
       /**
@@ -92,7 +92,6 @@ class TopVisitElement extends PolymerElement {
   visit: URLVisit;
   private expanded_: boolean;
   private hiddenRelatedVisits_: Array<URLVisit>;
-  private relatedVisits_: Array<URLVisit>;
 
   //============================================================================
   // Event handlers
@@ -133,10 +132,6 @@ class TopVisitElement extends PolymerElement {
 
   private computeHasHiddenRelatedVisits_(): boolean {
     return this.hiddenRelatedVisits_.length > 0;
-  }
-
-  private computeHasRelatedVisits_(): boolean {
-    return this.visit.relatedVisits.length > 0;
   }
 
   private computeHiddenRelatedVisits_(): Array<URLVisit> {

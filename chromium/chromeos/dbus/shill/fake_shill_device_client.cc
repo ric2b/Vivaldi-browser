@@ -15,8 +15,8 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
@@ -340,8 +340,6 @@ void FakeShillDeviceClient::AddDevice(const std::string& device_path,
   properties->SetKey(shill::kDBusServiceProperty,
                      base::Value(modemmanager::kModemManager1ServiceName));
   if (type == shill::kTypeCellular) {
-    properties->SetKey(shill::kCellularAllowRoamingProperty,
-                       base::Value(false));
     properties->SetKey(shill::kCellularPolicyAllowRoamingProperty,
                        base::Value(false));
   }

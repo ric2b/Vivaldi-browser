@@ -11,9 +11,10 @@
 
 #include "base/callback.h"
 #include "base/containers/span.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -51,7 +52,7 @@ class AuctionV8DevToolsSession : public blink::mojom::DevToolsSession,
   //
   AuctionV8DevToolsSession(
       AuctionV8Helper* v8_helper,
-      scoped_refptr<DebugCommandQueue> debug_command_queue,
+      DebugCommandQueue* debug_command_queue,
       int context_group_id,
       const std::string& session_id,
       bool client_expects_binary_responses,
@@ -63,7 +64,15 @@ class AuctionV8DevToolsSession : public blink::mojom::DevToolsSession,
   AuctionV8DevToolsSession& operator=(const AuctionV8DevToolsSession&) = delete;
   ~AuctionV8DevToolsSession() override;
 
+  // Creates a callback that will ask V8 to exit a debugger pause and abort
+  // further execution. Bound to a weak pointer.
+  base::OnceClosure MakeAbortPauseCallback();
+
   int context_group_id() const { return context_group_id_; }
+
+  // If an instrumentation breakpoint named `name` has been set, asks V8 for
+  // execution to be paused at next statement.
+  void MaybeTriggerInstrumentationBreakpoint(const std::string& name);
 
   // Invoked from IOSession via DebugCommandQueue.
   void DispatchProtocolCommandFromIO(int32_t call_id,
@@ -97,6 +106,9 @@ class AuctionV8DevToolsSession : public blink::mojom::DevToolsSession,
 
  private:
   class IOSession;
+  class BreakpointHandler;
+
+  void AbortDebuggerPause();
 
   void SendProtocolResponseImpl(int call_id, std::vector<uint8_t> message);
   void SendNotificationImpl(std::vector<uint8_t> message);
@@ -104,14 +116,16 @@ class AuctionV8DevToolsSession : public blink::mojom::DevToolsSession,
   blink::mojom::DevToolsMessagePtr FinalizeMessage(
       std::vector<uint8_t> message) const;
 
-  AuctionV8Helper* const v8_helper_;  // owns agent owns this.
-  scoped_refptr<DebugCommandQueue> debug_command_queue_;
+  const raw_ptr<AuctionV8Helper> v8_helper_;  // owns agent owns this.
+  const raw_ptr<DebugCommandQueue>
+      debug_command_queue_;  // owned by `v8_helper`.
   const int context_group_id_;
   const std::string session_id_;
   const bool client_expects_binary_responses_;
   mojo::AssociatedRemote<blink::mojom::DevToolsSessionHost> host_;
   SessionDestroyedCallback on_delete_callback_;
   std::unique_ptr<v8_inspector::V8InspectorSession> v8_session_;
+  std::unique_ptr<BreakpointHandler> breakpoint_handler_;
   crdtp::UberDispatcher fallback_dispatcher_{this};
   SEQUENCE_CHECKER(v8_sequence_checker_);
   base::WeakPtrFactory<AuctionV8DevToolsSession> weak_ptr_factory_{this};

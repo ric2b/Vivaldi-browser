@@ -173,6 +173,8 @@ vivaldi::sync::DataType ToVivaldiSyncDataType(
       return vivaldi::sync::DataType::DATA_TYPE_EXTENSIONS;
     case syncer::UserSelectableType::kNotes:
       return vivaldi::sync::DataType::DATA_TYPE_NOTES;
+    case syncer::UserSelectableType::kReadingList:
+      return vivaldi::sync::DataType::DATA_TYPE_READING_LIST;
     default:
       NOTREACHED();
       return vivaldi::sync::DataType::DATA_TYPE_NONE;
@@ -196,6 +198,8 @@ absl::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
       return syncer::UserSelectableType::kExtensions;
     case vivaldi::sync::DataType::DATA_TYPE_NOTES:
       return syncer::UserSelectableType::kNotes;
+    case vivaldi::sync::DataType::DATA_TYPE_READING_LIST:
+      return syncer::UserSelectableType::kReadingList;
     default:
       NOTREACHED();
       return absl::nullopt;
@@ -318,11 +322,9 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
     // Skip the model types that don't make sense for us to synchronize.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kApps ||
-        // Syncing typedUrls already syncsø sessions anyway. For now we group
+        // Syncing typedUrls already syncs sessions anyway. For now we group
         // both in our UI
         data_type == syncer::UserSelectableType::kTabs ||
-        // Chromium only supports reading lists on iOS.
-        data_type == syncer::UserSelectableType::kReadingList ||
         // Wifi configuration is only used in ChromeOS.
         data_type == syncer::UserSelectableType::kWifiConfigurations) {
       continue;

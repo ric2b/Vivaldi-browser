@@ -12,9 +12,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/event.h"
 
@@ -32,17 +29,12 @@ class MyEvent : public wxEvent
 public:
     MyEvent() : wxEvent(0, MyEventType) { }
 
-    virtual wxEvent *Clone() const { return new MyEvent; }
+    virtual wxEvent *Clone() const wxOVERRIDE { return new MyEvent; }
 };
 
 typedef void (wxEvtHandler::*MyEventFunction)(MyEvent&);
-#ifndef wxHAS_EVENT_BIND
-    #define MyEventHandler(func) wxEVENT_HANDLER_CAST(MyEventFunction, func)
-#else
-    #define MyEventHandler(func) &func
-#endif
 #define EVT_MYEVENT(func) \
-    wx__DECLARE_EVT0(MyEventType, MyEventHandler(func))
+    wx__DECLARE_EVT0(MyEventType, &func)
 
 class AnotherEvent : public wxEvent
 {
@@ -109,6 +101,9 @@ public:
     void OnEvent(wxEvent&) { g_called.method = true; }
     void OnAnotherEvent(AnotherEvent&);
     void OnIdle(wxIdleEvent&) { g_called.method = true; }
+
+    void OnOverloadedHandler(wxIdleEvent&) { }
+    void OnOverloadedHandler(wxThreadEvent&) { }
 };
 
 // we can also handle events in classes not deriving from wxEvtHandler
@@ -127,86 +122,43 @@ public:
     void OnEvent(wxEvent&) { g_called.method = true; }
     void OnAnotherEvent(AnotherEvent&);
     void OnIdle(wxIdleEvent&) { g_called.method = true; }
+#ifdef wxHAS_NOEXCEPT
+    void OnIdleNoExcept(wxIdleEvent&) noexcept { }
+#endif
 
 private:
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
-BEGIN_EVENT_TABLE(MyClassWithEventTable, wxEvtHandler)
+// Avoid gcc warning about some of the functions defined by the expansion of
+// the event table macros being unused: they are indeed unused, but we still
+// want to have them to check that they compile.
+wxGCC_WARNING_SUPPRESS(unused-function)
+
+wxBEGIN_EVENT_TABLE(MyClassWithEventTable, wxEvtHandler)
     EVT_IDLE(MyClassWithEventTable::OnIdle)
 
     EVT_MYEVENT(MyClassWithEventTable::OnMyEvent)
-#ifdef wxHAS_EVENT_BIND
     EVT_MYEVENT(MyClassWithEventTable::OnEvent)
+
+#ifdef wxHAS_NOEXCEPT
+    EVT_IDLE(MyClassWithEventTable::OnIdleNoExcept)
 #endif
 
     // this shouldn't compile:
     //EVT_MYEVENT(MyClassWithEventTable::OnIdle)
     //EVT_IDLE(MyClassWithEventTable::OnAnotherEvent)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
+
+wxGCC_WARNING_RESTORE(unused-function)
 
 } // anonymous namespace
 
 
-// --------------------------------------------------------------------------
-// test class
-// --------------------------------------------------------------------------
-
-class EvtHandlerTestCase : public CppUnit::TestCase
+TEST_CASE("Event::BuiltinConnect", "[event][connect]")
 {
-public:
-    EvtHandlerTestCase() {}
-
-private:
-    CPPUNIT_TEST_SUITE( EvtHandlerTestCase );
-        CPPUNIT_TEST( BuiltinConnect );
-        CPPUNIT_TEST( LegacyConnect );
-        CPPUNIT_TEST( DisconnectWildcard );
-        CPPUNIT_TEST( AutoDisconnect );
-#ifdef wxHAS_EVENT_BIND
-        CPPUNIT_TEST( BindFunction );
-        CPPUNIT_TEST( BindStaticMethod );
-        CPPUNIT_TEST( BindFunctor );
-        CPPUNIT_TEST( BindMethod );
-        CPPUNIT_TEST( BindMethodUsingBaseEvent );
-        CPPUNIT_TEST( BindFunctionUsingBaseEvent );
-        CPPUNIT_TEST( BindNonHandler );
-        CPPUNIT_TEST( InvalidBind );
-#endif // wxHAS_EVENT_BIND
-    CPPUNIT_TEST_SUITE_END();
-
-    void BuiltinConnect();
-    void LegacyConnect();
-    void DisconnectWildcard();
-    void AutoDisconnect();
-#ifdef wxHAS_EVENT_BIND
-    void BindFunction();
-    void BindStaticMethod();
-    void BindFunctor();
-    void BindMethod();
-    void BindMethodUsingBaseEvent();
-    void BindFunctionUsingBaseEvent();
-    void BindNonHandler();
-    void InvalidBind();
-#endif // wxHAS_EVENT_BIND
-
-
-    // these member variables exceptionally don't use "m_" prefix because
-    // they're used so many times
     MyHandler handler;
-    MyEvent e;
 
-    DECLARE_NO_COPY_CLASS(EvtHandlerTestCase)
-};
-
-// register in the unnamed registry so that these tests are run by default
-CPPUNIT_TEST_SUITE_REGISTRATION( EvtHandlerTestCase );
-
-// also include in its own registry so that these tests can be run alone
-CPPUNIT_TEST_SUITE_NAMED_REGISTRATION( EvtHandlerTestCase, "EvtHandlerTestCase" );
-
-void EvtHandlerTestCase::BuiltinConnect()
-{
     handler.Connect(wxEVT_IDLE, wxIdleEventHandler(MyHandler::OnIdle));
     handler.Disconnect(wxEVT_IDLE, wxIdleEventHandler(MyHandler::OnIdle));
 
@@ -218,7 +170,6 @@ void EvtHandlerTestCase::BuiltinConnect()
     handler.Connect(wxEVT_IDLE, (wxObjectEventFunction)(wxEventFunction)&MyHandler::OnIdle);
     handler.Disconnect(wxEVT_IDLE, (wxObjectEventFunction)(wxEventFunction)&MyHandler::OnIdle);
 
-#ifdef wxHAS_EVENT_BIND
     handler.Bind(wxEVT_IDLE, GlobalOnIdle);
     handler.Unbind(wxEVT_IDLE, GlobalOnIdle);
 
@@ -231,11 +182,12 @@ void EvtHandlerTestCase::BuiltinConnect()
 
     handler.Bind(wxEVT_IDLE, &MyHandler::StaticOnIdle);
     handler.Unbind(wxEVT_IDLE, &MyHandler::StaticOnIdle);
-#endif // wxHAS_EVENT_BIND
 }
 
-void EvtHandlerTestCase::LegacyConnect()
+TEST_CASE("Event::LegacyConnect", "[event][connect]")
 {
+    MyHandler handler;
+
     handler.Connect( LegacyEventType, (wxObjectEventFunction)&MyHandler::OnEvent );
     handler.Connect( 0, LegacyEventType, (wxObjectEventFunction)&MyHandler::OnEvent );
     handler.Connect( 0, 0, LegacyEventType, (wxObjectEventFunction)&MyHandler::OnEvent );
@@ -254,44 +206,55 @@ void EvtHandlerTestCase::LegacyConnect()
     handler.Disconnect( 0, 0, LegacyEventType, (wxObjectEventFunction)&MyHandler::OnEvent, NULL, &handler );
 }
 
-void EvtHandlerTestCase::DisconnectWildcard()
+TEST_CASE("Event::ConnectOverloaded", "[event][connect]")
 {
+    MyHandler handler;
+
+    handler.Connect(wxEVT_IDLE, wxIdleEventHandler(MyHandler::OnOverloadedHandler));
+    handler.Connect(wxEVT_THREAD, wxThreadEventHandler(MyHandler::OnOverloadedHandler));
+}
+
+TEST_CASE("Event::DisconnectWildcard", "[event][connect][disconnect]")
+{
+    MyHandler handler;
+
     // should be able to disconnect a different handler using "wildcard search"
     MyHandler sink;
     wxEvtHandler source;
     source.Connect(wxEVT_IDLE, wxIdleEventHandler(MyHandler::OnIdle), NULL, &sink);
-    CPPUNIT_ASSERT(source.Disconnect(wxID_ANY, wxEVT_IDLE));
+    CHECK(source.Disconnect(wxID_ANY, wxEVT_IDLE));
     // destruction of source and sink here should properly clean up the
     // wxEventConnectionRef without crashing
 }
 
-void EvtHandlerTestCase::AutoDisconnect()
+TEST_CASE("Event::AutoDisconnect", "[event][connect][disconnect]")
 {
     wxEvtHandler source;
     {
         MyHandler sink;
         source.Connect(wxEVT_IDLE, wxIdleEventHandler(MyHandler::OnIdle), NULL, &sink);
         // mismatched event type, so nothing should be disconnected
-        CPPUNIT_ASSERT(!source.Disconnect(wxEVT_THREAD, wxIdleEventHandler(MyHandler::OnIdle), NULL, &sink));
+        CHECK(!source.Disconnect(wxEVT_THREAD, wxIdleEventHandler(MyHandler::OnIdle), NULL, &sink));
     }
     // destruction of sink should have automatically disconnected it, so
     // there should be nothing to disconnect anymore
-    CPPUNIT_ASSERT(!source.Disconnect(wxID_ANY, wxEVT_IDLE));
+    CHECK(!source.Disconnect(wxID_ANY, wxEVT_IDLE));
 }
 
-#ifdef wxHAS_EVENT_BIND
-
-void EvtHandlerTestCase::BindFunction()
+TEST_CASE("Event::BindFunction", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // function tests
     handler.Bind( MyEventType, GlobalOnMyEvent );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.function );
+    CHECK( g_called.function );
     handler.Unbind( MyEventType, GlobalOnMyEvent );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.function ); // check that it was disconnected
+    CHECK( !g_called.function ); // check that it was disconnected
 
     handler.Bind( MyEventType, GlobalOnMyEvent, 0 );
     handler.Unbind( MyEventType, GlobalOnMyEvent, 0 );
@@ -300,18 +263,21 @@ void EvtHandlerTestCase::BindFunction()
     handler.Unbind( MyEventType, GlobalOnMyEvent, 0, 0 );
 }
 
-void EvtHandlerTestCase::BindStaticMethod()
+TEST_CASE("Event::BindStaticMethod", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // static method tests (this is same as functions but still test it just in
     // case we hit some strange compiler bugs)
     handler.Bind( MyEventType, &MyHandler::StaticOnMyEvent );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.smethod );
+    CHECK( g_called.smethod );
     handler.Unbind( MyEventType, &MyHandler::StaticOnMyEvent );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.smethod );
+    CHECK( !g_called.smethod );
 
     handler.Bind( MyEventType, &MyHandler::StaticOnMyEvent, 0 );
     handler.Unbind( MyEventType, &MyHandler::StaticOnMyEvent, 0 );
@@ -320,19 +286,22 @@ void EvtHandlerTestCase::BindStaticMethod()
     handler.Unbind( MyEventType, &MyHandler::StaticOnMyEvent, 0, 0 );
 }
 
-void EvtHandlerTestCase::BindFunctor()
+TEST_CASE("Event::BindFunctor", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // generalized functor tests
     MyFunctor functor;
 
     handler.Bind( MyEventType, functor );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.functor );
+    CHECK( g_called.functor );
     handler.Unbind( MyEventType, functor );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.functor );
+    CHECK( !g_called.functor );
 
     handler.Bind( MyEventType, functor, 0 );
     handler.Unbind( MyEventType, functor, 0 );
@@ -345,26 +314,29 @@ void EvtHandlerTestCase::BindFunctor()
     // not work
     MyFunctor func;
     handler.Bind( MyEventType, MyFunctor() );
-    CPPUNIT_ASSERT( !handler.Unbind( MyEventType, func ));
+    CHECK( !handler.Unbind( MyEventType, func ));
 
     handler.Bind( MyEventType, MyFunctor(), 0 );
-    CPPUNIT_ASSERT( !handler.Unbind( MyEventType, func, 0 ));
+    CHECK( !handler.Unbind( MyEventType, func, 0 ));
 
     handler.Bind( MyEventType, MyFunctor(), 0, 0 );
-    CPPUNIT_ASSERT( !handler.Unbind( MyEventType, func, 0, 0 ));
+    CHECK( !handler.Unbind( MyEventType, func, 0, 0 ));
 }
 
-void EvtHandlerTestCase::BindMethod()
+TEST_CASE("Event::BindMethod", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // class method tests
     handler.Bind( MyEventType, &MyHandler::OnMyEvent, &handler );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.method );
+    CHECK( g_called.method );
     handler.Unbind( MyEventType, &MyHandler::OnMyEvent, &handler );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.method );
+    CHECK( !g_called.method );
 
     handler.Bind( MyEventType, &MyHandler::OnMyEvent, &handler, 0 );
     handler.Unbind( MyEventType, &MyHandler::OnMyEvent, &handler, 0 );
@@ -373,19 +345,22 @@ void EvtHandlerTestCase::BindMethod()
     handler.Unbind( MyEventType, &MyHandler::OnMyEvent, &handler, 0, 0 );
 }
 
-void EvtHandlerTestCase::BindMethodUsingBaseEvent()
+TEST_CASE("Event::BindMethodUsingBaseEvent", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // test connecting a method taking just wxEvent and not MyEvent: this
     // should work too if we don't need any MyEvent-specific information in the
     // handler
     handler.Bind( MyEventType, &MyHandler::OnEvent, &handler );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.method );
+    CHECK( g_called.method );
     handler.Unbind( MyEventType, &MyHandler::OnEvent, &handler );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.method );
+    CHECK( !g_called.method );
 
     handler.Bind( MyEventType, &MyHandler::OnEvent, &handler, 0 );
     handler.Unbind( MyEventType, &MyHandler::OnEvent, &handler, 0 );
@@ -395,19 +370,22 @@ void EvtHandlerTestCase::BindMethodUsingBaseEvent()
 }
 
 
-void EvtHandlerTestCase::BindFunctionUsingBaseEvent()
+TEST_CASE("Event::BindFunctionUsingBaseEvent", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // test connecting a function taking just wxEvent and not MyEvent: this
     // should work too if we don't need any MyEvent-specific information in the
     // handler
     handler.Bind( MyEventType, GlobalOnEvent );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.function );
+    CHECK( g_called.function );
     handler.Unbind( MyEventType, GlobalOnEvent );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.function );
+    CHECK( !g_called.function );
 
     handler.Bind( MyEventType, GlobalOnEvent, 0 );
     handler.Unbind( MyEventType, GlobalOnEvent, 0 );
@@ -418,22 +396,25 @@ void EvtHandlerTestCase::BindFunctionUsingBaseEvent()
 
 
 
-void EvtHandlerTestCase::BindNonHandler()
+TEST_CASE("Event::BindNonHandler", "[event][bind]")
 {
+    MyHandler handler;
+    MyEvent e;
+
     // class method tests for class not derived from wxEvtHandler
     MySink sink;
 
     handler.Bind( MyEventType, &MySink::OnMyEvent, &sink );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( g_called.method );
+    CHECK( g_called.method );
     handler.Unbind( MyEventType, &MySink::OnMyEvent, &sink );
     g_called.Reset();
     handler.ProcessEvent(e);
-    CPPUNIT_ASSERT( !g_called.method );
+    CHECK( !g_called.method );
 }
 
-void EvtHandlerTestCase::InvalidBind()
+TEST_CASE("Event::InvalidBind", "[event][bind]")
 {
     // these calls shouldn't compile but we unfortunately can't check this
     // automatically, you need to uncomment them manually and test that
@@ -475,4 +456,82 @@ void EvtHandlerTestCase::InvalidBind()
 #endif
 }
 
-#endif // wxHAS_EVENT_BIND
+// Helpers for UnbindFromHandler() test, have to be declared outside of the
+// function in C++98.
+struct Handler1
+{
+    void OnDontCall(MyEvent&)
+    {
+        // Although this handler is bound, the second one below is bound
+        // later and so will be called first and will disconnect this one
+        // before it has a chance to be called.
+        FAIL("shouldn't be called");
+    }
+};
+
+class Handler2
+{
+public:
+    Handler2(MyHandler& handler, Handler1& h1)
+        : m_handler(handler),
+          m_h1(h1)
+    {
+    }
+
+    void OnUnbind(MyEvent& e)
+    {
+        m_handler.Unbind(MyEventType, &Handler1::OnDontCall, &m_h1);
+
+        // Check that the now disconnected first handler is not executed.
+        e.Skip();
+    }
+
+private:
+    MyHandler& m_handler;
+    Handler1& m_h1;
+
+    wxDECLARE_NO_COPY_CLASS(Handler2);
+};
+
+TEST_CASE("Event::UnbindFromHandler", "[event][bind][unbind]")
+{
+    MyHandler handler;
+    MyEvent e;
+
+    Handler1 h1;
+    handler.Bind(MyEventType, &Handler1::OnDontCall, &h1);
+
+    Handler2 h2(handler, h1);
+    handler.Bind(MyEventType, &Handler2::OnUnbind, &h2);
+
+    handler.ProcessEvent(e);
+}
+
+// This is a compilation-time-only test: just check that a class inheriting
+// from wxEvtHandler non-publicly can use Bind() with its method, this used to
+// result in compilation errors.
+// Note that this test will work only on C++11 compilers, so we test this only
+// for such compilers.
+#if __cplusplus >= 201103 || wxCHECK_VISUALC_VERSION(14)
+class HandlerNonPublic : protected wxEvtHandler
+{
+public:
+    HandlerNonPublic()
+    {
+        Bind(wxEVT_IDLE, &HandlerNonPublic::OnIdle, this);
+    }
+
+    void OnIdle(wxIdleEvent&) { }
+};
+#endif // C++11
+
+// Another compilation-time-only test, but this one checking that these event
+// objects can't be created from outside of the library.
+#ifdef TEST_INVALID_EVENT_CREATION
+
+void TestEventCreation()
+{
+    wxPaintEvent eventPaint;
+}
+
+#endif // TEST_INVALID_EVENT_CREATION

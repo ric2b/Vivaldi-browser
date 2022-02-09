@@ -20,14 +20,15 @@ class MockProjectorController : public ash::ProjectorController {
   // ProjectorController:
   MOCK_METHOD1(StartProjectorSession, void(const std::string& storageDir));
   MOCK_METHOD1(SetClient, void(ash::ProjectorClient* client));
-  MOCK_METHOD1(OnSpeechRecognitionAvailable, void(bool available));
+  MOCK_METHOD1(OnSpeechRecognitionAvailabilityChanged,
+               void(SpeechRecognitionAvailability availability));
   MOCK_METHOD1(OnTranscription,
                void(const media::SpeechRecognitionResult& result));
   MOCK_METHOD0(OnTranscriptionError, void());
   MOCK_METHOD1(SetProjectorToolsVisible, void(bool is_visible));
   MOCK_CONST_METHOD0(IsEligible, bool());
   MOCK_CONST_METHOD0(CanStartNewSession, bool());
-  MOCK_METHOD1(OnToolSet, void(const chromeos::AnnotatorTool& tool));
+  MOCK_METHOD1(OnToolSet, void(const AnnotatorTool& tool));
   MOCK_METHOD2(OnUndoRedoAvailabilityChanged,
                void(bool undo_available, bool redo_available));
 };

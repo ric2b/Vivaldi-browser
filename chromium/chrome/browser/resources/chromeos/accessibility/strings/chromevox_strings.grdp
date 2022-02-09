@@ -1255,6 +1255,9 @@
   <message desc="Describes an element with the ARIA attribute aria-invalid=grammar." name="IDS_CHROMEVOX_ARIA_INVALID_GRAMMAR">
     Grammatical mistake detected
   </message>
+  <message desc="Describes a spoken hint when aria-invalid=grammar." name="IDS_CHROMEVOX_HINT_INVALID_GRAMMAR">
+    grammar error
+  </message>
   <message desc="Shown on a braille display as a suffix to text fields that are marked as containing a grammatical mistake. When translating, stick to lowercase." name="IDS_CHROMEVOX_ARIA_INVALID_GRAMMAR_BRL">
     grammatical mistake
   </message>
@@ -1262,6 +1265,9 @@
     Spelling mistake detected
   </message>
   <message desc="Shown on a braille display as a suffix to text fields that are marked as containing a misspelling. When translating, stick to lowercase." name="IDS_CHROMEVOX_ARIA_INVALID_SPELLING_BRL">
+    misspelled
+  </message>
+  <message desc="Describes a spoken hint when aria-invalid=spelling." name="IDS_CHROMEVOX_HINT_INVALID_SPELLING">
     misspelled
   </message>
   <message desc="Describes an element with the ARIA attribute aria-multiline=true." name="IDS_CHROMEVOX_ARIA_MULTILINE_TRUE">
@@ -1507,6 +1513,9 @@
   <message desc="Further describes a list-like element with a number of items. e.g. This will be combined with other messages to produce: List with 3 items." name="IDS_CHROMEVOX_LIST_WITH_ITEMS">
     {COUNT, plural, =1{with # item} other{with # items}}
   </message>
+  <message desc="Further describes the level of nesting of a list-like element on the last item. e.g. This will be combined with other messages to produce: List end nested level 2." name="IDS_CHROMEVOX_LIST_NESTED_LEVEL">
+    {COUNT, plural, =1{} other{nested level #}}
+  </message>
   <!-- TODO(crbug.com/999781): This should not need ICU msg format. Fix where the message is used. -->  <message desc="Further describes a list-like element with a number of items in braille." name="IDS_CHROMEVOX_LIST_WITH_ITEMS_BRL">
     {COUNT, plural, =1{+#} other{+#}}
   </message>
@@ -1689,6 +1698,15 @@
   </message>
   <message desc="The description of the next similar item command." name="IDS_CHROMEVOX_NEXT_SIMILAR_ITEM">
     Next similar item
+  </message>
+  <message desc="The description of the previous invalid command." name="IDS_CHROMEVOX_PREVIOUS_INVALID_ITEM">
+    Previous invalid item
+  </message>
+  <message desc="The description of the next invalid item command." name="IDS_CHROMEVOX_NEXT_INVALID_ITEM">
+    Next invalid item
+  </message>
+  <message desc="Spoken if the user attempts to jump to the previous or next invalid item when none exists." name="IDS_CHROMEVOX_NO_INVALID_ITEM">
+    No invalid item
   </message>
   <message desc="Describes nodes or anything describing them as a landmark." name="IDS_CHROMEVOX_ROLE_LANDMARK">
     Landmark
@@ -1873,6 +1891,12 @@
   <message desc="BULLET (•) character description." name="IDS_CHROMEVOX_BULLET">
     {COUNT, plural, =1 {bullet}other {# bullets}}
   </message>
+  <message desc="Second level bullet (◦) character description." name="IDS_CHROMEVOX_WHITE_BULLET">
+    {COUNT, plural, =1 {white bullet}other {# white bullets}}
+  </message>
+  <message desc="Third level bullet (■) character description." name="IDS_CHROMEVOX_SQUARE_BULLET">
+    {COUNT, plural, =1 {square bullet}other {# square bullets}}
+  </message>
   <message desc="Describes the braille click command. Displayed in the options page." name="IDS_CHROMEVOX_BRAILLE_ROUTING">
     Click the item under routing key <ph name="ROUTING_KEY_NUMBER">$1</ph>
   </message>
@@ -1989,6 +2013,9 @@
   <message desc="Title of the button that opens up the ChromeVox menus." name="IDS_CHROMEVOX_MENUS_TITLE">
     ChromeVox Menus
   </message>
+  <message desc="Title of the button that opens up the ChromeVox menus." name="IDS_CHROMEVOX_MENUS_COLLAPSE_TITLE">
+    ChromeVox Menus collapse
+  </message>
   <message desc="Title of the button that opens up ChromeVox options." name="IDS_CHROMEVOX_OPTIONS">
     ChromeVox Options
   </message>
@@ -1997,6 +2024,9 @@
   </message>
   <message desc="Text in parentheses to be appended next to a tab that's currently active." name="IDS_CHROMEVOX_ACTIVE_TAB">
     (active)
+  </message>
+  <message desc="Title displayed in the panel for the touch gestures menu." name="IDS_CHROMEVOX_PANEL_MENU_TOUCHGESTURES">
+    Touch Gestures
   </message>
   <message desc="Title displayed in the panel for the jump menu." name="IDS_CHROMEVOX_PANEL_MENU_JUMP">
     Jump

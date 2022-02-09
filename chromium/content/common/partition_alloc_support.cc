@@ -8,8 +8,9 @@
 
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/buildflags.h"
+#include "base/allocator/partition_alloc_features.h"
+#include "base/allocator/partition_alloc_support.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
-#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/starscan/pcscan.h"
 #include "base/allocator/partition_allocator/starscan/pcscan_scheduling.h"
 #include "base/allocator/partition_allocator/starscan/stack/stack.h"
@@ -17,7 +18,10 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/location.h"
+#include "base/memory/nonscannable_memory.h"
 #include "base/no_destructor.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 
@@ -55,6 +59,25 @@ void SetProcessNameForPCScan(const std::string& process_type) {
   }
 }
 
+bool IsPCScanEnabled(const std::string& process_type) {
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
+  DCHECK(base::FeatureList::GetInstance());
+  bool enabled =
+      base::FeatureList::IsEnabled(base::features::kPartitionAllocPCScan);
+  // No specified process type means this is the Browser process.
+  if (process_type.empty()) {
+    enabled = enabled || base::FeatureList::IsEnabled(
+                             base::features::kPartitionAllocPCScanBrowserOnly);
+  } else if (process_type == switches::kRendererProcess) {
+    enabled = enabled || base::FeatureList::IsEnabled(
+                             base::features::kPartitionAllocPCScanRendererOnly);
+  }
+  return enabled;
+#else  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
+  return false;
+#endif
+}
+
 bool EnablePCScanForMallocPartitionsIfNeeded() {
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
   using Config = base::internal::PCScan::InitConfig;
@@ -62,6 +85,7 @@ bool EnablePCScanForMallocPartitionsIfNeeded() {
   if (base::FeatureList::IsEnabled(base::features::kPartitionAllocPCScan)) {
     base::allocator::EnablePCScan({Config::WantedWriteProtectionMode::kEnabled,
                                    Config::SafepointMode::kEnabled});
+    base::allocator::RegisterPCScanStatsReporter();
     return true;
   }
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
@@ -83,6 +107,7 @@ bool EnablePCScanForMallocPartitionsInBrowserProcessIfNeeded() {
         << "DCScan is currently only supported on Linux based systems";
 #endif
     base::allocator::EnablePCScan({wp_mode, Config::SafepointMode::kEnabled});
+    base::allocator::RegisterPCScanStatsReporter();
     return true;
   }
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
@@ -104,6 +129,7 @@ bool EnablePCScanForMallocPartitionsInRendererProcessIfNeeded() {
         << "DCScan is currently only supported on Linux based systems";
 #endif
     base::allocator::EnablePCScan({wp_mode, Config::SafepointMode::kDisabled});
+    base::allocator::RegisterPCScanStatsReporter();
     return true;
   }
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
@@ -208,38 +234,103 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
   CHECK(base::FeatureList::GetInstance());
 
   bool enable_brp = false;
+  bool split_main_partition = false;
+  ALLOW_UNUSED_LOCAL(split_main_partition);
+  bool use_dedicated_aligned_partition = false;
+  ALLOW_UNUSED_LOCAL(use_dedicated_aligned_partition);
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
+  bool process_affected_by_brp_flag = false;
   if (base::FeatureList::IsEnabled(
           base::features::kPartitionAllocBackupRefPtr)) {
     // No specified process type means this is the Browser process.
-    enable_brp = process_type.empty();
-    if (base::features::kBackupRefPtrEnabledProcessesParam.Get() ==
-        base::features::BackupRefPtrEnabledProcesses::kBrowserAndRenderer) {
-      enable_brp |= process_type == switches::kRendererProcess;
+    switch (base::features::kBackupRefPtrEnabledProcessesParam.Get()) {
+      case base::features::BackupRefPtrEnabledProcesses::kBrowserOnly:
+        process_affected_by_brp_flag = process_type.empty();
+        break;
+      case base::features::BackupRefPtrEnabledProcesses::kBrowserAndRenderer:
+        process_affected_by_brp_flag =
+            process_type.empty() ||
+            (process_type == switches::kRendererProcess);
+        break;
+      case base::features::BackupRefPtrEnabledProcesses::kNonRenderer:
+        process_affected_by_brp_flag =
+            (process_type != switches::kRendererProcess);
+        break;
+      case base::features::BackupRefPtrEnabledProcesses::kAllProcesses:
+        process_affected_by_brp_flag = true;
+        break;
     }
   }
-  base::allocator::ConfigurePartitionBackupRefPtrSupport(enable_brp);
-#endif
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-  base::allocator::ReconfigurePartitionAllocLazyCommit();
+  if (process_affected_by_brp_flag) {
+    switch (base::features::kBackupRefPtrModeParam.Get()) {
+      case base::features::BackupRefPtrMode::kDisabled:
+        // Do nothing. Equivalent to !IsEnabled(kPartitionAllocBackupRefPtr).
+        break;
+
+      case base::features::BackupRefPtrMode::kEnabled:
+        enable_brp = true;
+        split_main_partition = true;
+#if !BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+        // AlignedAlloc relies on natural alignment offered by the allocator
+        // (see the comment inside PartitionRoot::AlignedAllocFlags). Any extras
+        // in front of the allocation will mess up that alignment. Such extras
+        // are used when BackupRefPtr is on, in which case, we need a separate
+        // partition, dedicated to handle only aligned allocations, where those
+        // extras are disabled. However, if the "previous slot" variant is used,
+        // no dedicated partition is needed, as the extras won't interfere with
+        // the alignment requirements.
+        use_dedicated_aligned_partition = true;
+#endif
+        break;
+
+      case base::features::BackupRefPtrMode::kDisabledButSplitPartitions2Way:
+        split_main_partition = true;
+        break;
+
+      case base::features::BackupRefPtrMode::kDisabledButSplitPartitions3Way:
+        split_main_partition = true;
+        use_dedicated_aligned_partition = true;
+        break;
+    }
+  }
+#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+
+  base::allocator::ReconfigurePartitionAllocLazyCommit(
+      base::FeatureList::IsEnabled(base::features::kPartitionAllocLazyCommit));
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
-  // Don't enable PCScan if BRP is enabled.
-  if (enable_brp)
-    return;
+  // If BRP is not enabled, check if any of PCScan flags is enabled.
+  bool enable_scan = !enable_brp && IsPCScanEnabled(process_type);
 
-  bool scan_enabled = EnablePCScanForMallocPartitionsIfNeeded();
-  // No specified process type means this is the Browser process.
-  if (process_type.empty()) {
-    scan_enabled = scan_enabled ||
-                   EnablePCScanForMallocPartitionsInBrowserProcessIfNeeded();
-  }
-  if (process_type == switches::kRendererProcess) {
-    scan_enabled = scan_enabled ||
-                   EnablePCScanForMallocPartitionsInRendererProcessIfNeeded();
-  }
-  if (scan_enabled) {
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  const bool enable_thread_cache_on_v8_partition =
+      enable_scan && process_type == switches::kRendererProcess;
+  base::allocator::ConfigurePartitions(
+      base::allocator::EnableBrp(enable_brp),
+      base::allocator::SplitMainPartition(split_main_partition),
+      base::allocator::UseDedicatedAlignedPartition(
+          use_dedicated_aligned_partition),
+      base::allocator::ThreadCacheOnNonQuarantinablePartition(
+          enable_thread_cache_on_v8_partition));
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+
+  if (enable_scan) {
+    // Even though we already know the PCScan should be enabled, we go through
+    // the logic of querying Finch (in the callees) again, to determine, which
+    // function should be called to enable PCScan.
+    bool scan_enabled = EnablePCScanForMallocPartitionsIfNeeded();
+    // No specified process type means this is the Browser process.
+    if (process_type.empty()) {
+      scan_enabled = scan_enabled ||
+                     EnablePCScanForMallocPartitionsInBrowserProcessIfNeeded();
+    }
+    if (process_type == switches::kRendererProcess) {
+      scan_enabled = scan_enabled ||
+                     EnablePCScanForMallocPartitionsInRendererProcessIfNeeded();
+    }
+    DCHECK(scan_enabled);
     if (base::FeatureList::IsEnabled(
             base::features::kPartitionAllocPCScanStackScanning)) {
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
@@ -259,6 +350,14 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
           base::internal::PCScan::ClearType::kEager);
     }
     SetProcessNameForPCScan(process_type);
+
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+    if (enable_thread_cache_on_v8_partition) {
+      base::internal::NonQuarantinableAllocator::Instance()
+          .root()
+          ->EnableThreadCacheIfSupported();
+    }
+#endif
   }
 }
 
@@ -285,13 +384,12 @@ void PartitionAllocSupport::ReconfigureAfterTaskRunnerInit(
   // initialized later.
   DCHECK(process_type != switches::kZygoteProcess);
 
-  auto& registry = base::internal::ThreadCacheRegistry::Instance();
-  registry.StartPeriodicPurge();
+  base::allocator::StartThreadCachePeriodicPurge();
 
 #if defined(OS_ANDROID)
   // Lower thread cache limits to avoid stranding too much memory in the caches.
   if (base::SysInfo::IsLowEndDevice()) {
-    registry.SetThreadCacheMultiplier(
+    base::internal::ThreadCacheRegistry::Instance().SetThreadCacheMultiplier(
         base::internal::ThreadCache::kDefaultMultiplier / 2.);
   }
 #endif  // defined(OS_ANDROID)
@@ -333,8 +431,7 @@ void PartitionAllocSupport::ReconfigureAfterTaskRunnerInit(
   }
 
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-  base::PartitionAllocMemoryReclaimer::Instance()->Start(
-      base::ThreadTaskRunnerHandle::Get());
+  base::allocator::StartMemoryReclaimer(base::ThreadTaskRunnerHandle::Get());
 #endif
 }
 
@@ -363,10 +460,23 @@ void PartitionAllocSupport::OnBackgrounded() {
 
   // Performance matters less for background renderers, don't pay the memory
   // cost.
-  //
-  // TODO(lizeb): Consider forcing a one-off thread cache purge.
   base::internal::ThreadCache::SetLargestCachedSize(
       base::internal::ThreadCacheLimits::kDefaultSizeThreshold);
+
+  // In renderers, memory reclaim uses the "idle time" task runner to run
+  // periodic reclaim. This does not always run when the renderer is idle, and
+  // in particular after the renderer gets backgrounded. As a result, empty slot
+  // spans are potentially never decommitted. To mitigate that, run a one-off
+  // reclaim a few seconds later. Even if the renderer comes back to foreground
+  // in the meantime, the worst case is a few more system calls.
+  //
+  // TODO(lizeb): Remove once/if the behavior of idle tasks changes.
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::BindOnce([]() {
+        base::PartitionAllocMemoryReclaimer::Instance()->ReclaimAll();
+      }),
+      base::Seconds(10));
+
 #endif  // defined(PA_THREAD_CACHE_SUPPORTED) &&
         // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 }

@@ -3,7 +3,8 @@
 #ifndef RENDERER_BLINK_VIVALDI_RENDER_FRAME_BLINK_PROXY_H_
 #define RENDERER_BLINK_VIVALDI_RENDER_FRAME_BLINK_PROXY_H_
 
-#include "base/macros.h"
+#include <stdint.h>
+
 #include "third_party/blink/renderer/core/core_export.h"
 
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom-blink-forward.h"
@@ -34,10 +35,9 @@ class CORE_EXPORT VivaldiRenderFrameBlinkProxy {
   static void SendMediaElementAddedEvent(blink::WebMediaPlayer* player);
 
   static void DidChangeLoadProgressExtended(blink::LocalFrame* local_frame,
-                                            double load_progress,
-                                            double loaded_bytes,
-                                            int loaded_elements,
-                                            int total_elements);
+                                            int64_t loaded_bytes_delta,
+                                            int loaded_resource_delta,
+                                            int total_resource_delta);
 
   virtual vivaldi::mojom::blink::VivaldiFrameHostService* GetFrameHostService(
       blink::WebLocalFrame* web_frame) = 0;

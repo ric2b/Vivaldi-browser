@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/component_export.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -65,7 +65,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieManager
   void GetCookieList(
       const GURL& url,
       const net::CookieOptions& cookie_options,
-      const net::CookiePartitionKeychain& cookie_partition_keychain,
+      const net::CookiePartitionKeyCollection& cookie_partition_key_collection,
       GetCookieListCallback callback) override;
   void SetCanonicalCookie(const net::CanonicalCookie& cookie,
                           const GURL& source_url,
@@ -117,6 +117,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieManager
   // State associated with a CookieChangeListener.
   struct ListenerRegistration {
     ListenerRegistration();
+
+    ListenerRegistration(const ListenerRegistration&) = delete;
+    ListenerRegistration& operator=(const ListenerRegistration&) = delete;
+
     ~ListenerRegistration();
 
     // Translates a CookieStore change callback to a CookieChangeListener call.
@@ -127,14 +131,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CookieManager
 
     // The observer receiving change notifications.
     mojo::Remote<mojom::CookieChangeListener> listener;
-
-    DISALLOW_COPY_AND_ASSIGN(ListenerRegistration);
   };
 
   // Handles connection errors on change listener pipes.
   void RemoveChangeListener(ListenerRegistration* registration);
 
-  net::CookieStore* const cookie_store_;
+  const raw_ptr<net::CookieStore> cookie_store_;
   scoped_refptr<SessionCleanupCookieStore> session_cleanup_cookie_store_;
   mojo::ReceiverSet<mojom::CookieManager> receivers_;
   std::vector<std::unique_ptr<ListenerRegistration>> listener_registrations_;

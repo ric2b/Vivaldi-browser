@@ -8,7 +8,6 @@
 
 #include "base/base64url.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
@@ -17,6 +16,7 @@
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/browser/db/safebrowsing.pb.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/safe_browsing/core/common/utils.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -190,7 +190,7 @@ void V4UpdateProtocolManager::ScheduleNextUpdateWithBackoff(bool back_off) {
 // back off after a certain number of errors.
 base::TimeDelta V4UpdateProtocolManager::GetNextUpdateInterval(bool back_off) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(next_update_interval_ > base::TimeDelta());
+  DCHECK(next_update_interval_.is_positive());
 
   base::TimeDelta next = next_update_interval_;
   if (back_off) {
@@ -348,8 +348,7 @@ void V4UpdateProtocolManager::IssueUpdateRequest() {
   GetUpdateUrlAndHeaders(req_base64, &resource_request->url,
                          &resource_request->headers);
   resource_request->load_flags = net::LOAD_DISABLE_CACHE;
-  if (base::FeatureList::IsEnabled(kSafeBrowsingRemoveCookies))
-    resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   std::unique_ptr<network::SimpleURLLoader> loader =
       network::SimpleURLLoader::Create(std::move(resource_request),
                                        traffic_annotation);
@@ -392,8 +391,8 @@ void V4UpdateProtocolManager::OnURLLoaderCompleteInternal(
   timeout_timer_.Stop();
 
   last_response_code_ = response_code;
-  V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
-      "SafeBrowsing.V4Update.Network.Result", net_error, last_response_code_);
+  RecordHttpResponseOrErrorCode("SafeBrowsing.V4Update.Network.Result",
+                                net_error, last_response_code_);
 
   last_response_time_ = Time::Now();
 

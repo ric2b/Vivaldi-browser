@@ -20,6 +20,8 @@
     grid-template-columns: var(--row-icon-width) var(--row-icon-width) auto;
     height: var(--row-height);
     line-height: var(--row-height);
+    padding-block-end: 0;
+    padding-block-start: 0;
     padding-inline-start: var(--row-padding-inline-start);
     text-align: start;
     width: 100%;
@@ -177,14 +179,17 @@
     <div id="children" role="group">
       <template is="dom-repeat" items="[[folder.children]]" initial-count="20">
         <template is="dom-if" if="[[!item.url]]" restamp>
-          <bookmark-folder folder="[[item]]"
+          <bookmark-folder
+              id="bookmark-[[item.id]]"
+              folder="[[item]]"
               depth="[[childDepth_]]"
               open-folders="[[openFolders]]">
           </bookmark-folder>
         </template>
 
         <template is="dom-if" if="[[item.url]]" restamp>
-          <button role="treeitem" class="bookmark row"
+          <button
+              id="bookmark-[[item.id]]" role="treeitem" class="bookmark row"
               draggable="true" data-bookmark="[[item]]"
               on-click="onBookmarkClick_"
               on-auxclick="onBookmarkAuxClick_"

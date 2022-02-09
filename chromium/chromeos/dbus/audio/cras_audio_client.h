@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "chromeos/dbus/audio/audio_node.h"
 #include "chromeos/dbus/audio/volume_state.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -84,6 +83,9 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
 
   // Returns the global instance if initialized. May return null.
   static CrasAudioClient* Get();
+
+  CrasAudioClient(const CrasAudioClient&) = delete;
+  CrasAudioClient& operator=(const CrasAudioClient&) = delete;
 
   // Adds and removes the observer.
   virtual void AddObserver(Observer* observer) = 0;
@@ -235,9 +237,6 @@ class COMPONENT_EXPORT(DBUS_AUDIO) CrasAudioClient {
 
   CrasAudioClient();
   virtual ~CrasAudioClient();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(CrasAudioClient);
 };
 
 }  // namespace chromeos

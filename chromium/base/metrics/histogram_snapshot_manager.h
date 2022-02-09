@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_base.h"
 
 namespace base {
@@ -37,12 +37,11 @@ class BASE_EXPORT HistogramSnapshotManager final {
 
   ~HistogramSnapshotManager();
 
-  // Snapshot all histograms, and ask |histogram_flattener_| to record the
+  // Snapshots all histograms and asks |histogram_flattener_| to record the
   // delta. |flags_to_set| is used to set flags for each histogram.
-  // |required_flags| is used to select histograms to be recorded.
-  // Only histograms that have all the flags specified by the argument will be
-  // chosen. If all histograms should be recorded, set it to
-  // |Histogram::kNoFlags|.
+  // |required_flags| is used to select which histograms to record. Only
+  // histograms with all of the required flags are selected. If all histograms
+  // should be recorded, use |Histogram::kNoFlags| as the required flag.
   void PrepareDeltas(const std::vector<HistogramBase*>& histograms,
                      HistogramBase::Flags flags_to_set,
                      HistogramBase::Flags required_flags);
@@ -74,7 +73,7 @@ class BASE_EXPORT HistogramSnapshotManager final {
 
   // |histogram_flattener_| handles the logistics of recording the histogram
   // deltas.
-  HistogramFlattener* const histogram_flattener_;  // Weak.
+  const raw_ptr<HistogramFlattener> histogram_flattener_;  // Weak.
 
   // For histograms, track what has been previously seen, indexed
   // by the hash of the histogram name.

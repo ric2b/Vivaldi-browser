@@ -41,9 +41,13 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/policy/handlers/system_features_disable_list_policy_handler.h"
-#include "components/policy/core/common/policy_pref_names.h"
+#include "ash/constants/ash_features.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
+#include "components/policy/core/common/policy_pref_names.h"
+#endif  // defined(OS_CHROMEOS)
 
 using sync_preferences::TestingPrefServiceSyncable;
 
@@ -247,7 +251,8 @@ class WebAppPolicyManagerTest : public ChromeRenderViewHostTestHarness,
     if (GetParam() == TestParam::kLacrosEnabled) {
       scoped_feature_list_.InitAndEnableFeature(features::kWebAppsCrosapi);
     } else if (GetParam() == TestParam::kLacrosDisabled) {
-      scoped_feature_list_.InitAndDisableFeature(features::kWebAppsCrosapi);
+      scoped_feature_list_.InitWithFeatures(
+          {}, {features::kWebAppsCrosapi, chromeos::features::kLacrosPrimary});
     }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     ChromeRenderViewHostTestHarness::SetUp();
@@ -269,8 +274,7 @@ class WebAppPolicyManagerTest : public ChromeRenderViewHostTestHarness,
         nullptr, nullptr);
     externally_managed_app_manager().SetHandleInstallRequestCallback(
         base::BindLambdaForTesting(
-            [this](const ExternalInstallOptions& install_options)
-                -> ExternallyManagedAppManager::InstallResult {
+            [this](const ExternalInstallOptions& install_options) {
               const GURL& install_url = install_options.install_url;
               if (!app_registrar().GetAppById(GenerateAppId(
                       /*manifest_id=*/absl::nullopt, install_url))) {
@@ -285,7 +289,8 @@ class WebAppPolicyManagerTest : public ChromeRenderViewHostTestHarness,
                     GenerateAppId(/*manifest_id=*/absl::nullopt, install_url),
                     install_source);
               }
-              return {.code = install_result_code_};
+              return ExternallyManagedAppManager::InstallResult(
+                  install_result_code_);
             }));
     externally_managed_app_manager().SetHandleUninstallRequestCallback(
         base::BindLambdaForTesting(
@@ -917,7 +922,7 @@ TEST_P(WebAppPolicyManagerTest, InstallResultHistogram) {
   }
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 TEST_P(WebAppPolicyManagerTest, DisableWebApps) {
   policy_manager().Start();
   base::RunLoop().RunUntilIdle();
@@ -949,7 +954,7 @@ TEST_P(WebAppPolicyManagerTest, DisableWebApps) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(policy_manager().IsDisabledAppsModeHidden());
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // defined(OS_CHROMEOS)
 
 TEST_P(WebAppPolicyManagerTest, WebAppSettingsDynamicRefresh) {
   if (ShouldSkipPWASpecificTest())

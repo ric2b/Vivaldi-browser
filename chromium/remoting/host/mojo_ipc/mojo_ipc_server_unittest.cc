@@ -11,12 +11,14 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/no_destructor.h"
+#include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -81,7 +83,8 @@ class MojoIpcServerTest : public testing::Test, public test::mojom::Echo {
 
   mojo::NamedPlatformChannel::ServerName test_server_name_;
 
-  base::test::TaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::MainThreadType::IO};
 
   // Run loops that wait for MojoIpcServerBase::ObserverForTesting methods to
   // be called.
@@ -128,6 +131,7 @@ void MojoIpcServerTest::EchoString(const std::string& input,
 
   std::move(callback).Run(input);
   last_echo_string_receiver_id_ = ipc_server_->current_receiver();
+  ASSERT_EQ(base::GetCurrentProcId(), ipc_server_->current_peer_pid());
 }
 
 void MojoIpcServerTest::OnInvitationSent() {
@@ -198,11 +202,46 @@ TEST_F(MojoIpcServerTest, CloseReceiver_RemoteDisconnected) {
   mojo::IsolatedConnection client_connection;
   auto echo_remote = ConnectAndCreateEchoRemote(client_connection);
   SendEchoAndVerifyResponse(echo_remote);
+  ASSERT_EQ(1u, ipc_server_->GetNumberOfActiveConnectionsForTesting());
 
   base::RunLoop disconnect_run_loop;
   echo_remote.set_disconnect_handler(disconnect_run_loop.QuitClosure());
   ipc_server_->Close(last_echo_string_receiver_id_);
   disconnect_run_loop.Run();
+  ASSERT_EQ(0u, ipc_server_->GetNumberOfActiveConnectionsForTesting());
+}
+
+TEST_F(MojoIpcServerTest, CloseNonexistentReceiver_NoCrash) {
+  ASSERT_EQ(0u, ipc_server_->GetNumberOfActiveConnectionsForTesting());
+  ipc_server_->Close(1u);
+  ASSERT_EQ(0u, ipc_server_->GetNumberOfActiveConnectionsForTesting());
+}
+
+TEST_F(MojoIpcServerTest, RemoteDisconnected_ConnectionRemoved) {
+  mojo::IsolatedConnection client_connection;
+  auto echo_remote = ConnectAndCreateEchoRemote(client_connection);
+  SendEchoAndVerifyResponse(echo_remote);
+  ASSERT_EQ(1u, ipc_server_->GetNumberOfActiveConnectionsForTesting());
+
+  base::RunLoop disconnect_run_loop;
+  ipc_server_->set_disconnect_handler(disconnect_run_loop.QuitClosure());
+  echo_remote.reset();
+  disconnect_run_loop.Run();
+  ASSERT_EQ(0u, ipc_server_->GetNumberOfActiveConnectionsForTesting());
+}
+
+TEST_F(MojoIpcServerTest, RemoteDisconnectedBeforeBound_NewInvitationIsSent) {
+  mojo::IsolatedConnection client_connection;
+  auto handle = client_connection.Connect(ConnectToTestServer());
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindLambdaForTesting([&]() { handle.reset(); }));
+  WaitForInvitationSent();
+}
+
+TEST_F(MojoIpcServerTest, RemoteConnectsAndHangs_NewInvitationIsSent) {
+  mojo::IsolatedConnection client_connection;
+  auto handle = client_connection.Connect(ConnectToTestServer());
+  WaitForInvitationSent();
 }
 
 TEST_F(MojoIpcServerTest, ParallelIpcs) {

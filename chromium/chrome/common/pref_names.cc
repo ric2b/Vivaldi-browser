@@ -273,7 +273,6 @@ const char kWebKitSerifFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_SERIF;
 const char kWebKitSansSerifFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_SANSERIF;
 const char kWebKitCursiveFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_CURSIVE;
 const char kWebKitFantasyFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_FANTASY;
-const char kWebKitPictographFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_PICTOGRAPH;
 const char kWebKitStandardFontFamilyArabic[] =
     "webkit.webprefs.fonts.standard.Arab";
 #if defined(OS_WIN)
@@ -366,8 +365,6 @@ const char kWebKitSansSerifFontFamily[] =
     "webkit.webprefs.fonts.sansserif.Zyyy";
 const char kWebKitCursiveFontFamily[] = "webkit.webprefs.fonts.cursive.Zyyy";
 const char kWebKitFantasyFontFamily[] = "webkit.webprefs.fonts.fantasy.Zyyy";
-const char kWebKitPictographFontFamily[] =
-    "webkit.webprefs.fonts.pictograph.Zyyy";
 const char kWebKitDefaultFontSize[] = "webkit.webprefs.default_font_size";
 const char kWebKitDefaultFixedFontSize[] =
     "webkit.webprefs.default_fixed_font_size";
@@ -531,6 +528,14 @@ const char kTouchpadAcceleration[] = "settings.touchpad.acceleration";
 // disabled only simple linear scaling is applied based on sensitivity.
 const char kTouchpadScrollAcceleration[] =
     "settings.touchpad.scroll_acceleration";
+
+// A boolean pref set to true if touchpad haptic feedback is enabled.
+const char kTouchpadHapticFeedback[] = "settings.touchpad.haptic_feedback";
+
+// A integer pref for the touchpad haptic click sensitivity ranging from Soft
+// feedback to Firm feedback [1, 3, 5].
+const char kTouchpadHapticClickSensitivity[] =
+    "settings.touchpad.haptic_click_sensitivity";
 
 // A integer pref for the touchpad sensitivity.
 const char kMouseSensitivity[] = "settings.mouse.sensitivity2";
@@ -775,6 +780,26 @@ const char kHatsSurveyCycleEndTimestamp[] = "hats_survey_cycle_end_timestamp";
 // survey cycle (general survey).
 const char kHatsDeviceIsSelected[] = "hats_device_is_selected";
 
+// An int64 pref. This is the timestamp that indicates the end of the Stability
+// survey
+const char kHatsStabilitySurveyCycleEndTs[] =
+    "hats_stability_cycle_end_timestamp";
+
+// A boolean pref. Indicates if the device is selected for the HaTS Stability
+// survey
+const char kHatsStabilityDeviceIsSelected[] =
+    "hats_stability_device_is_selected";
+
+// An int64 pref. This is the timestamp that indicates the end of the HaTS
+// Performance survey
+const char kHatsPerformanceSurveyCycleEndTs[] =
+    "hats_performance_cycle_end_timestamp";
+
+// A boolean pref. Indicates if the device is selected for the HaTS Performance
+// survey
+const char kHatsPerformanceDeviceIsSelected[] =
+    "hats_performance_device_is_selected";
+
 // An int64 pref. This is the timestamp that indicates the end of the Onboarding
 // Experience survey
 const char kHatsOnboardingSurveyCycleEndTs[] =
@@ -802,6 +827,15 @@ const char kHatsSmartLockSurveyCycleEndTs[] =
 // Experience survey
 const char kHatsSmartLockDeviceIsSelected[] =
     "hats_smartlock_device_is_selected";
+
+// An int64 pref. This is the timestamp that indicates the end of the most
+// recent ARC Games survey cycle.
+const char kHatsArcGamesSurveyCycleEndTs[] =
+    "hats_arc_games_cycle_end_timestamp";
+
+// A boolean pref. Indicates if the device is selected for the ARC Games survey
+const char kHatsArcGamesDeviceIsSelected[] =
+    "hats_arc_games_device_is_selected";
 
 // A boolean pref. Indicates if we've already shown a notification to inform the
 // current user about the quick unlock feature.
@@ -1611,6 +1645,10 @@ const char kQuietNotificationPermissionPromoWasShown[] =
 const char kSuppressDifferentOriginSubframeJSDialogs[] =
     "suppress_different_origin_subframe_js_dialogs";
 
+// Enum indicating if the user agent reduction feature should be forced enabled
+// or disabled. Defaults to blink::features::kReduceUserAgent field trial.
+const char kUserAgentReduction[] = "user_agent_reduction";
+
 // *************** LOCAL STATE ***************
 // These are attached to the machine/installation
 
@@ -1985,10 +2023,6 @@ const char kWebAppsAppAgnosticIphState[] = "web_apps.app_agnostic_iph_state";
 const char kWebAppsLastPreinstallSynchronizeVersion[] =
     "web_apps.last_preinstall_synchronize_version";
 
-// A list of all apps that have been migrated to web apps.
-const char kWebAppsMigratedPreinstalledApps[] =
-    "web_apps.migrated_default_apps";
-
 // A list of migrated features for migrating default chrome apps.
 const char kWebAppsDidMigrateDefaultChromeApps[] =
     "web_apps.did_migrate_default_chrome_apps";
@@ -2191,9 +2225,6 @@ const char kHSTSPolicyBypassList[] = "hsts.policy.upgrade_bypass_list";
 // If false, disable post-quantum key agreement in TLS connections.
 const char kCECPQ2Enabled[] = "ssl.cecpq2_enabled";
 
-// Boolean that specifies whether 3DES cipher suites are enabled in TLS.
-const char kTripleDESEnabled[] = "ssl.3des_enabled";
-
 // Boolean that specifies whether the built-in asynchronous DNS client is used.
 const char kBuiltInDnsClientEnabled[] = "async_dns.enabled";
 
@@ -2359,9 +2390,6 @@ const char kDeviceEnrollmentCanExit[] = "enrollment.can_exit";
 // Directory devices only.
 const char kDeviceDMToken[] = "device_dm_token";
 
-// How many times HID detection OOBE dialog was shown.
-const char kTimesHIDDialogShown[] = "HIDDialog.shown_how_many_times";
-
 // Dictionary of per-user last input method (used at login screen). Note that
 // the pref name is UsersLRUInputMethods for compatibility with previous
 // versions.
@@ -2398,8 +2426,16 @@ const char kHelpAppShouldShowParentalControl[] =
 // the OOBE.
 const char kHelpAppTabletModeDuringOobe[] = "help_app.tablet_mode_during_oobe";
 
-// List of usernames that used certificates pushed by policy before.
-// This is used to prevent these users from joining multiprofile sessions.
+// This pref is used in two contexts:
+// In Profile prefs, it is a bool pref which encodes whether the Profile has
+// used a policy-provided trusted CA certificate. This is used to display the
+// "enterprise icon" security indicator in the URL bar.
+//
+// Legacy usage: In Local State prefs, it is a list of usernames encoding the
+// same thing for the Profile associated with the user name.
+//
+// There is code migrating from the legacy Local State pref to the Profile pref
+// in policy_cert_service_factory.cc::MigrateLocalPrefIntoProfilePref .
 const char kUsedPolicyCertificates[] = "policy.used_policy_certificates";
 
 // A dictionary containing server-provided device state pulled form the cloud
@@ -2511,10 +2547,6 @@ const char kChromeOsReleaseChannel[] = "cros.system.releaseChannel";
 const char kPerformanceTracingEnabled[] =
     "feedback.performance_tracing_enabled";
 
-// Boolean indicating whether tabstrip uses stacked layout (on touch devices).
-// Defaults to false.
-const char kTabStripStackedLayout[] = "tab-strip-stacked-layout";
-
 // Indicates that factory reset was requested from options page or reset screen.
 const char kFactoryResetRequested[] = "FactoryResetRequested";
 
@@ -2588,6 +2620,13 @@ const char kMacRestoreLocationPermissionsExperimentCount[] =
     "mac_restore_location_permissions_experiment_count";
 #endif  // defined(OS_MAC)
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// Boolean indicating whether the Enrollment ID (EID) has already been uploaded
+// to DM Server. Only used on Chromad devices. If this pref is true, the device
+// is ready for the remote migration to cloud management.
+const char kEnrollmentIdUploadedOnChromad[] = "chromad.enrollment_id_uploaded";
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 // *************** SERVICE PREFS ***************
 // These are attached to the service process.
 
@@ -2658,26 +2697,6 @@ const char kHardwareAccelerationModeEnabled[] =
 const char kHardwareAccelerationModePrevious[] =
     "hardware_acceleration_mode_previous";
 
-// List of protocol handlers.
-const char kRegisteredProtocolHandlers[] =
-    "custom_handlers.registered_protocol_handlers";
-
-// List of protocol handlers the user has requested not to be asked about again.
-const char kIgnoredProtocolHandlers[] =
-    "custom_handlers.ignored_protocol_handlers";
-
-// List of protocol handlers registered by policy.
-const char kPolicyRegisteredProtocolHandlers[] =
-    "custom_handlers.policy.registered_protocol_handlers";
-
-// List of protocol handlers the policy has requested to be ignored.
-const char kPolicyIgnoredProtocolHandlers[] =
-    "custom_handlers.policy.ignored_protocol_handlers";
-
-// Whether user-specified handlers for protocols and content types can be
-// specified.
-const char kCustomHandlersEnabled[] = "custom_handlers.enabled";
-
 // Integer that specifies the policy refresh rate for device-policy in
 // milliseconds. Not all values are meaningful, so it is clamped to a sane range
 // by the cloud policy subsystem.
@@ -2731,6 +2750,7 @@ const char kRLZBrand[] = "rlz.brand";
 const char kRLZDisabled[] = "rlz.disabled";
 // Keeps local state of app list while sync service is not available.
 const char kAppListLocalState[] = "app_list.local_state";
+const char kAppListPreferredOrder[] = "app_list.preferred_order";
 #endif
 
 // An integer that is incremented whenever changes are made to app shortcuts.
@@ -2892,10 +2912,6 @@ const char kLatestVersionWhenClickedUpdateMenuItem[] =
 const char kCommerceMerchantViewerMessagesShownTime[] =
     "commerce_merchant_viewer_messages_shown_time";
 #endif
-
-// Policy that indicates the state of updates for the binary components.
-const char kComponentUpdatesEnabled[] =
-    "component_updates.component_updates_enabled";
 
 #if defined(OS_ANDROID)
 // Whether the search geolocation disclosure has been dismissed by the user.
@@ -3142,7 +3158,7 @@ const char kSignedHTTPExchangeEnabled[] = "web_package.signed_exchange.enabled";
 // TODO(https://crbug.com/1003101): Remove this in Chrome 88.
 const char kAllowSyncXHRInPageDismissal[] = "allow_sync_xhr_in_page_dismissal";
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 // Enum that specifies client certificate management permissions for user. It
 // can have one of the following values.
 // 0: Users can manage all certificates.
@@ -3227,11 +3243,6 @@ const char kMediaFeedsSafeSearchEnabled[] = "media_feeds_safe_search_enabled";
 
 // This pref enables automated selection of Media Feeds to fetch.
 const char kMediaFeedsAutoSelectEnabled[] = "media_feeds_auto_select_enabled";
-
-// This pref reenables AppCache temporarily during its deprecation process.
-// In particular, this sets the AppcacheRequireOriginTrial feature to false.
-// TODO(enne): Remove this once AppCache has been removed.
-const char kAppCacheForceEnabled[] = "app_cache_force_enabled";
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Boolean pref indicating whether the notification informing the user that
@@ -3362,5 +3373,16 @@ const char kLastWhatsNewVersion[] = "browser.last_whats_new_version";
 // if supported.
 const char kLensRegionSearchEnabled[] = "policy.lens_region_search_enabled";
 #endif
+
+// A boolean indicating whether the Privacy Review Welcome Card should be shown.
+const char kPrivacyReviewShowWelcomeCard[] = "privacy_review.show_welcome_card";
+
+// A boolean indicating whether the Privacy guide feature has been viewed.
+const char kPrivacyGuideViewed[] = "privacy_guide.viewed";
+
+// A boolean indicating support of "CORS non-wildcard request header name".
+// https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
+const char kCorsNonWildcardRequestHeadersSupport[] =
+    "cors_non_wildcard_request_headers_support";
 
 }  // namespace prefs

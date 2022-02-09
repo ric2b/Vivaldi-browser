@@ -19,6 +19,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import org.chromium.base.Callback;
@@ -51,6 +52,9 @@ import java.util.concurrent.TimeoutException;
 public class TabbedPaintPreviewTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    // Tell R8 not to break the ability to mock the class.
+    @Mock
+    private PaintPreviewTabService mUnused;
 
     private static final String TEST_URL = "/chrome/test/data/android/about.html";
 
@@ -335,7 +339,7 @@ public class TabbedPaintPreviewTest {
                 parcel.setDataPosition(0);
                 UnguessableToken token = UnguessableToken.CREATOR.createFromParcel(parcel);
                 compositorListener.onCompositorReady(token, new UnguessableToken[] {token},
-                        new int[] {500, 500}, new int[] {0, 0}, new int[] {0}, null, null, 0);
+                        new int[] {500, 500}, new int[] {0, 0}, new int[] {0}, null, null, 0f, 0);
             }, 250);
         }
 

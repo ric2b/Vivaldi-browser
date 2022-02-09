@@ -1,6 +1,7 @@
 # This is reserved for people that are comfortably with buildbot recipes
 # and understand the implications of changing these files.
 
+bsheedy@chromium.org
 dpranke@google.com
 kbr@chromium.org
 martiniss@chromium.org
@@ -20,3 +21,5 @@ per-file run_chromedriver_tests.py=johnchen@chromium.org
 
 per-file run_variations_smoke_tests.py=liaoyuke@chromium.org
 per-file run_variations_smoke_tests.py=wuwang@chromium.org
+per-file variations_seed_access_helper.py=liaoyuke@chromium.org
+per-file variations_seed_access_helper.py=wuwang@chromium.org

@@ -114,7 +114,7 @@
     ],
     "properties": {
       "MAX_SESSION_RESULTS": {
-        "value": 25,
+        "value": 100,
         "description": "The maximum number of $(ref:sessions.Session) that will be included in a requested list."
       }
     }

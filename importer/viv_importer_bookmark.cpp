@@ -37,7 +37,7 @@ class OperaBookmarkReader : public OperaAdrFileReader {
                    std::u16string* item_name = NULL);
 
   const std::vector<ImportedBookmarkEntry>& Bookmarks() const {
-    return bookmarks;
+    return bookmarks_;
   }
 
  protected:
@@ -45,20 +45,20 @@ class OperaBookmarkReader : public OperaAdrFileReader {
                    const base::DictionaryValue& entries) override;
 
  private:
-  std::vector<std::u16string> current_folder;
-  std::vector<ImportedBookmarkEntry> bookmarks;
+  std::vector<std::u16string> current_folder_;
+  std::vector<ImportedBookmarkEntry> bookmarks_;
 };
 
 void OperaBookmarkReader::HandleEntry(const std::string& category,
                                       const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
     std::u16string foldername;
-    AddBookmark(current_folder, entries, true, &foldername);
-    current_folder.push_back(foldername);
+    AddBookmark(current_folder_, entries, true, &foldername);
+    current_folder_.push_back(foldername);
   } else if (base::LowerCaseEqualsASCII(category, "url")) {
-    AddBookmark(current_folder, entries, false);
+    AddBookmark(current_folder_, entries, false);
   } else if (category == "-") {
-    current_folder.pop_back();
+    current_folder_.pop_back();
   }
 }
 
@@ -104,7 +104,7 @@ void OperaBookmarkReader::AddBookmark(
   entry.url = GURL(url);
   entry.creation_time = base::Time::FromTimeT(created_time);
 
-  bookmarks.push_back(entry);
+  bookmarks_.push_back(entry);
 }
 
 bool OperaImporter::ImportBookMarks(std::string* error) {

@@ -31,16 +31,16 @@ CopyingTexture2DWrapper::~CopyingTexture2DWrapper() = default;
 
 // Copy path doesn't need to acquire keyed mutex until calling
 // VideoProcessorBlt.
-Status CopyingTexture2DWrapper::AcquireKeyedMutexIfNeeded() {
-  return OkStatus();
+D3D11Status CopyingTexture2DWrapper::AcquireKeyedMutexIfNeeded() {
+  return D3D11Status::Codes::kOk;
 }
 
-Status CopyingTexture2DWrapper::ProcessTexture(
+D3D11Status CopyingTexture2DWrapper::ProcessTexture(
     const gfx::ColorSpace& input_color_space,
     MailboxHolderArray* mailbox_dest,
     gfx::ColorSpace* output_color_space) {
   // Acquire keyed mutex for VideoProcessorBlt ops.
-  Status status = output_texture_wrapper_->AcquireKeyedMutexIfNeeded();
+  D3D11Status status = output_texture_wrapper_->AcquireKeyedMutexIfNeeded();
   if (!status.is_ok()) {
     return status;
   }
@@ -52,7 +52,8 @@ Status CopyingTexture2DWrapper::ProcessTexture(
   HRESULT hr = video_processor_->CreateVideoProcessorOutputView(
       output_texture_.Get(), &output_view_desc, &output_view);
   if (!SUCCEEDED(hr)) {
-    return Status(StatusCode::kCreateVideoProcessorOutputViewFailed)
+    return D3D11Status(
+               D3D11Status::Codes::kCreateVideoProcessorOutputViewFailed)
         .AddCause(HresultToStatus(hr));
   }
 
@@ -64,7 +65,7 @@ Status CopyingTexture2DWrapper::ProcessTexture(
   hr = video_processor_->CreateVideoProcessorInputView(
       texture_.Get(), &input_view_desc, &input_view);
   if (!SUCCEEDED(hr)) {
-    return Status(StatusCode::kCreateVideoProcessorInputViewFailed)
+    return D3D11Status(D3D11Status::Codes::kCreateVideoProcessorInputViewFailed)
         .AddCause(HresultToStatus(hr));
   }
 
@@ -82,7 +83,21 @@ Status CopyingTexture2DWrapper::ProcessTexture(
   if (!previous_input_color_space_ ||
       *previous_input_color_space_ != input_color_space) {
     previous_input_color_space_ = input_color_space;
-    video_processor_->SetStreamColorSpace(input_color_space);
+
+    // The VideoProcessor doesn't support tone mapping of HLG content, so treat
+    // treat it as gamma 2.2 since HLG is designed to look okay that way.
+    auto adjusted_color_space = input_color_space;
+    if (!video_processor_->supports_tone_mapping() &&
+        input_color_space.GetTransferID() ==
+            gfx::ColorSpace::TransferID::ARIB_STD_B67 &&
+        !copy_color_space.IsHDR()) {
+      adjusted_color_space = gfx::ColorSpace(
+          input_color_space.GetPrimaryID(),
+          gfx::ColorSpace::TransferID::GAMMA22, input_color_space.GetMatrixID(),
+          input_color_space.GetRangeID());
+    }
+
+    video_processor_->SetStreamColorSpace(adjusted_color_space);
     video_processor_->SetOutputColorSpace(copy_color_space);
   }
 
@@ -91,7 +106,7 @@ Status CopyingTexture2DWrapper::ProcessTexture(
                                            1,  // stream_count
                                            &streams);
   if (!SUCCEEDED(hr)) {
-    return Status(StatusCode::kVideoProcessorBltFailed)
+    return D3D11Status(D3D11Status::Codes::kVideoProcessorBltFailed)
         .AddCause(HresultToStatus(hr));
   }
 
@@ -99,7 +114,7 @@ Status CopyingTexture2DWrapper::ProcessTexture(
                                                  output_color_space);
 }
 
-Status CopyingTexture2DWrapper::Init(
+D3D11Status CopyingTexture2DWrapper::Init(
     scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
     GetCommandBufferHelperCB get_helper_cb,
     ComD3D11Texture2D texture,

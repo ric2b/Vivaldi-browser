@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
@@ -22,6 +21,9 @@ class PowerManagerObserver
   explicit PowerManagerObserver(
       const BatteryStatusService::BatteryUpdateCallback& callback)
       : callback_(callback), currently_listening_(false) {}
+
+  PowerManagerObserver(const PowerManagerObserver&) = delete;
+  PowerManagerObserver& operator=(const PowerManagerObserver&) = delete;
 
   // Starts listening for updates.
   void Start() {
@@ -115,8 +117,6 @@ class PowerManagerObserver
 
   BatteryStatusService::BatteryUpdateCallback callback_;
   bool currently_listening_;
-
-  DISALLOW_COPY_AND_ASSIGN(PowerManagerObserver);
 };
 
 class BatteryStatusManagerChromeOS

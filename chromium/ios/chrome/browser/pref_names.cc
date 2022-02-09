@@ -106,6 +106,10 @@ const char kNTPContentSuggestionsEnabled[] =
 // Boolean that is true when Suggest support is enabled.
 const char kSearchSuggestEnabled[] = "search.suggest_enabled";
 
+// Boolean indicating if displaying price drops for shopping URLs on Tabs
+// in the Tab Switching UI is enabled.
+const char kTrackPricesOnTabsEnabled[] = "track_prices_on_tabs.enabled";
+
 // An integer set to one of the NetworkPredictionSetting enum values indicating
 // network prediction settings.
 const char kNetworkPredictionSetting[] =
@@ -133,10 +137,6 @@ const char kSigninShouldPromptForSigninAgain[] =
 // reset to zero when the user signs in (using the web sign-in dialog).
 const char kSigninWebSignDismissalCount[] =
     "ios.signin.web_signin_dismissal_count";
-
-// Integer to count the number of times the MICE web sign-in is displayed.
-const char kSigninBottomSheetShownCount[] =
-    "ios.signin.bottom_sheet_shown_count";
 
 // Dictionary which stores the zoom levels the user has changed. The zoom levels
 // are unique for a given (iOS Dynamic Type, website domain) pair. Thus, the

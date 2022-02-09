@@ -8,7 +8,7 @@
 #include "base/barrier_closure.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -60,8 +60,8 @@ class LevelDBLock {
   }
 
  private:
-  leveldb::Env* env_ = nullptr;
-  leveldb::FileLock* lock_ = nullptr;
+  raw_ptr<leveldb::Env> env_ = nullptr;
+  raw_ptr<leveldb::FileLock> lock_ = nullptr;
 };
 
 std::unique_ptr<LevelDBLock> LockForTesting(const base::FilePath& file_name) {
@@ -216,6 +216,9 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
         idb_context_(idb_context),
         storage_key_(storage_key) {}
 
+  ForceCloseDBCallbacks(const ForceCloseDBCallbacks&) = delete;
+  ForceCloseDBCallbacks& operator=(const ForceCloseDBCallbacks&) = delete;
+
   void OnSuccess() override {}
   void OnSuccess(std::unique_ptr<IndexedDBConnection> connection,
                  const IndexedDBDatabaseMetadata& metadata) override {
@@ -232,7 +235,6 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
   scoped_refptr<IndexedDBContextImpl> idb_context_;
   blink::StorageKey storage_key_;
   std::unique_ptr<IndexedDBConnection> connection_;
-  DISALLOW_COPY_AND_ASSIGN(ForceCloseDBCallbacks);
 };
 
 TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {

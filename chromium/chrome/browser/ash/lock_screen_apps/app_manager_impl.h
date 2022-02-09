@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
@@ -33,7 +32,7 @@ class LockScreenProfileCreator;
 
 // The default implementation of lock_screen_apps::AppManager.
 class AppManagerImpl : public AppManager,
-                       public chromeos::NoteTakingHelper::Observer,
+                       public ash::NoteTakingHelper::Observer,
                        public extensions::ExtensionRegistryObserver {
  public:
   explicit AppManagerImpl(const base::TickClock* tick_clock);
@@ -62,7 +61,7 @@ class AppManagerImpl : public AppManager,
                               const extensions::Extension* extension,
                               extensions::UninstallReason reason) override;
 
-  // chromeos::NoteTakingHelper::Observer:
+  // ash::NoteTakingHelper::Observer:
   void OnAvailableNoteTakingAppsUpdated() override;
   void OnPreferredNoteTakingAppUpdated(Profile* profile) override;
 
@@ -174,8 +173,8 @@ class AppManagerImpl : public AppManager,
                           extensions::ExtensionRegistryObserver>
       lock_screen_profile_extensions_observation_{this};
 
-  base::ScopedObservation<chromeos::NoteTakingHelper,
-                          chromeos::NoteTakingHelper::Observer>
+  base::ScopedObservation<ash::NoteTakingHelper,
+                          ash::NoteTakingHelper::Observer>
       note_taking_helper_observation_{this};
 
   // To be called when the lock screen app availability changes.

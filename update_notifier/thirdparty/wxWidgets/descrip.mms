@@ -2,7 +2,7 @@
 #                                                                            *
 # Make file for VMS                                                          *
 # Author : J.Jansen (joukj@hrem.nano.tudelft.nl)                             *
-# Date : 27 August 2013                                                      *
+# Date : 6 January 2021                                                      *
 #                                                                            *
 #*****************************************************************************
 .first
@@ -98,8 +98,6 @@ gtk : [.include.wx]setup.h
 	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1)
 	set default [-.console]
 	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1)
-	set default [-.controls]
-	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1)
 	set default [-.dataview]
 	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1)
 	set default [-.debugrpt]
@@ -159,7 +157,10 @@ gtk : [.include.wx]setup.h
 	set default [-.widgets]
 	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1)
 	set default [--.tests]
-	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1)/ignore=warning
+	if (f$getsyi("ARCH_NAME") .eqs. "IA64" ) then\
+	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1,ITANIUM=1)/ignore=warning
+	if (f$getsyi("ARCH_NAME") .eqs. "Alpha" ) then\
+	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK__=1,ALPHA=1)/ignore=warning
 	set default [-]
 
 gtk2 : [.include.wx]setup.h
@@ -207,8 +208,6 @@ gtk2 : [.include.wx]setup.h
 	set default [-.caret]
 #	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK2__=1)
 	set default [-.config]
-#	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK2__=1)
-	set default [-.controls]
 #	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK2__=1)
 	set default [-.dialogs]
 #	$(MMS)$(MMSQUALIFIERS)/macro=(__WXGTK2__=1)
@@ -284,8 +283,6 @@ x11 : [.include.wx]setup.h
 	set default [-.caret]
 #	$(MMS)$(MMSQUALIFIERS)/macro=(__WXX11__=1,__WXUNIVERSAL__=1)
 	set default [-.config]
-#	$(MMS)$(MMSQUALIFIERS)/macro=(__WXX11__=1,__WXUNIVERSAL__=1)
-	set default [-.controls]
 #	$(MMS)$(MMSQUALIFIERS)/macro=(__WXX11__=1,__WXUNIVERSAL__=1)
 	set default [-.dialogs]
 #	$(MMS)$(MMSQUALIFIERS)/macro=(__WXX11__=1,__WXUNIVERSAL__=1)

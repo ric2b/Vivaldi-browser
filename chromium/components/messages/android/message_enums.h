@@ -40,6 +40,8 @@ enum class DismissReason {
   ACTIVITY_DESTROYED = 7,
   // A message was dismissed due to the destruction of the corresponding scopes.
   SCOPE_DESTROYED = 8,
+  // A message was dismissed explicitly in feature code.
+  DISMISSED_BY_FEATURE = 9,
 
   // Insert new values before this line.
   COUNT
@@ -93,6 +95,9 @@ enum class MessageIdentifier {
   INSTALLABLE_AMBIENT_BADGE = 20,
   AUTO_DARK_WEB_CONTENTS = 21,
   TEST_MESSAGE = 22,
+  TAILORED_SECURITY_ENABLED = 23,
+  VR_SERVICES_UPGRADE = 24,
+  TAILORED_SECURITY_DISABLED = 25,
 
   // Insert new values before this line.
   COUNT

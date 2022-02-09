@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_ASH_POLICY_DLP_DLP_CONTENT_MANAGER_TEST_HELPER_H_
 #define CHROME_BROWSER_ASH_POLICY_DLP_DLP_CONTENT_MANAGER_TEST_HELPER_H_
 
+#include <memory>
 #include "base/time/time.h"
 #include "chrome/browser/ash/policy/dlp/dlp_content_manager.h"
-#include "chrome/browser/ash/policy/dlp/dlp_content_restriction_set.h"
-
-class GURL;
+#include "chrome/browser/chromeos/policy/dlp/dlp_confidential_contents.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_content_restriction_set.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 
 namespace content {
 class WebContents;
@@ -20,7 +21,7 @@ namespace policy {
 class DlpReportingManager;
 
 // This class is an interface to DlpContentManager and is used in tests to
-// access some of it's private methods.
+// access some of its private methods.
 class DlpContentManagerTestHelper {
  public:
   DlpContentManagerTestHelper();
@@ -33,9 +34,17 @@ class DlpContentManagerTestHelper {
 
   void DestroyWebContents(content::WebContents* web_contents);
 
-  base::TimeDelta GetPrivacyScreenOffDelay() const;
+  void SetWarnNotifierForTesting(std::unique_ptr<DlpWarnNotifier> notifier);
 
-  DlpContentRestrictionSet GetRestrictionSetForURL(const GURL& url) const;
+  void ResetWarnNotifierForTesting();
+
+  bool HasContentCachedForRestriction(
+      content::WebContents* web_contents,
+      DlpRulesManager::Restriction restriction) const;
+
+  bool HasAnyContentCached() const;
+
+  base::TimeDelta GetPrivacyScreenOffDelay() const;
 
   DlpContentManager* GetContentManager() const;
   DlpReportingManager* GetReportingManager() const;

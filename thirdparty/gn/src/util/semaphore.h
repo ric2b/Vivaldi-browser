@@ -8,13 +8,14 @@
 #ifndef UTIL_SEMAPHORE_H_
 #define UTIL_SEMAPHORE_H_
 
-#include "base/macros.h"
 #include "util/build_config.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
 #elif defined(OS_MACOSX)
 #include <dispatch/dispatch.h>
+#elif defined(OS_ZOS)
+#include "zos-semaphore.h"
 #elif defined(OS_POSIX)
 #include <semaphore.h>
 #else
@@ -47,7 +48,8 @@ class Semaphore {
  private:
   NativeHandle native_handle_;
 
-  DISALLOW_COPY_AND_ASSIGN(Semaphore);
+  Semaphore(const Semaphore&) = delete;
+  Semaphore& operator=(const Semaphore&) = delete;
 };
 
 #endif  // UTIL_SEMAPHORE_H_

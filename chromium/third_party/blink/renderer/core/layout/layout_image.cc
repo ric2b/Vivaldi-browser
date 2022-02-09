@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "ui/gfx/geometry/size_conversions.h"
 
 namespace blink {
 
@@ -126,8 +127,14 @@ void LayoutImage::ImageChanged(WrappedImagePtr new_image,
 
   // If error occurred, image marker should be replaced by a LayoutText.
   // NotifyOfSubtreeChange to make list item updating its marker content.
-  if (IsListMarkerImage() && image_resource_->ErrorOccurred())
-    NotifyOfSubtreeChange();
+  if (IsListMarkerImage() && image_resource_->ErrorOccurred()) {
+    LayoutObject* item = this;
+    while (item->IsAnonymous())
+      item = item->Parent();
+    DCHECK(item);
+    if (item->NotifyOfSubtreeChange())
+      item->GetNode()->MarkAncestorsWithChildNeedsStyleRecalc();
+  }
 
   // Per the spec, we let the server-sent header override srcset/other sources
   // of dpr.
@@ -142,7 +149,7 @@ void LayoutImage::ImageChanged(WrappedImagePtr new_image,
   if (!did_increment_visually_non_empty_pixel_count_) {
     // At a zoom level of 1 the image is guaranteed to have an integer size.
     View()->GetFrameView()->IncrementVisuallyNonEmptyPixelCount(
-        FlooredIntSize(ImageSizeOverriddenByIntrinsicSize(1.0f)));
+        gfx::ToFlooredSize(ImageSizeOverriddenByIntrinsicSize(1.0f)));
     did_increment_visually_non_empty_pixel_count_ = true;
   }
 
@@ -317,19 +324,19 @@ bool LayoutImage::HasOverriddenIntrinsicSize() const {
   return image_element && image_element->IsDefaultIntrinsicSize();
 }
 
-FloatSize LayoutImage::ImageSizeOverriddenByIntrinsicSize(
+gfx::SizeF LayoutImage::ImageSizeOverriddenByIntrinsicSize(
     float multiplier) const {
   NOT_DESTROYED();
   if (!HasOverriddenIntrinsicSize())
     return image_resource_->ImageSize(multiplier);
 
-  FloatSize overridden_intrinsic_size(kDefaultWidth, kDefaultHeight);
+  gfx::SizeF overridden_intrinsic_size(kDefaultWidth, kDefaultHeight);
   if (multiplier != 1) {
     overridden_intrinsic_size.Scale(multiplier);
-    if (overridden_intrinsic_size.Width() < 1.0f)
-      overridden_intrinsic_size.SetWidth(1.0f);
-    if (overridden_intrinsic_size.Height() < 1.0f)
-      overridden_intrinsic_size.SetHeight(1.0f);
+    if (overridden_intrinsic_size.width() < 1.0f)
+      overridden_intrinsic_size.set_width(1.0f);
+    if (overridden_intrinsic_size.height() < 1.0f)
+      overridden_intrinsic_size.set_height(1.0f);
   }
 
   return overridden_intrinsic_size;
@@ -341,7 +348,7 @@ bool LayoutImage::OverrideIntrinsicSizingInfo(
   if (!HasOverriddenIntrinsicSize())
     return false;
 
-  FloatSize overridden_intrinsic_size(kDefaultWidth, kDefaultHeight);
+  gfx::SizeF overridden_intrinsic_size(kDefaultWidth, kDefaultHeight);
   intrinsic_sizing_info.size = overridden_intrinsic_size;
   intrinsic_sizing_info.aspect_ratio = intrinsic_sizing_info.size;
   if (!IsHorizontalWritingMode())
@@ -369,10 +376,10 @@ void LayoutImage::ComputeIntrinsicSizingInfo(
       if (aspect_ratio.GetType() == EAspectRatioType::kRatio ||
           (aspect_ratio.GetType() == EAspectRatioType::kAutoAndRatio &&
            intrinsic_sizing_info.aspect_ratio.IsEmpty())) {
-        intrinsic_sizing_info.aspect_ratio.SetWidth(
-            aspect_ratio.GetRatio().Width());
-        intrinsic_sizing_info.aspect_ratio.SetHeight(
-            aspect_ratio.GetRatio().Height());
+        intrinsic_sizing_info.aspect_ratio.set_width(
+            aspect_ratio.GetRatio().width());
+        intrinsic_sizing_info.aspect_ratio.set_height(
+            aspect_ratio.GetRatio().height());
       }
 
       if (!IsHorizontalWritingMode())
@@ -388,18 +395,18 @@ void LayoutImage::ComputeIntrinsicSizingInfo(
         !image_resource_->HasIntrinsicSize() && !IsListMarkerImage()) {
       if (HasOverrideContainingBlockContentLogicalWidth() &&
           HasOverrideContainingBlockContentLogicalHeight()) {
-        intrinsic_sizing_info.size.SetWidth(
+        intrinsic_sizing_info.size.set_width(
             OverrideContainingBlockContentLogicalWidth().ToFloat());
-        intrinsic_sizing_info.size.SetHeight(
+        intrinsic_sizing_info.size.set_height(
             OverrideContainingBlockContentLogicalHeight().ToFloat());
       } else {
         LayoutObject* containing_block =
             IsOutOfFlowPositioned() ? Container() : ContainingBlock();
         if (containing_block->IsBox()) {
           auto* box = To<LayoutBox>(containing_block);
-          intrinsic_sizing_info.size.SetWidth(
+          intrinsic_sizing_info.size.set_width(
               box->AvailableLogicalWidth().ToFloat());
-          intrinsic_sizing_info.size.SetHeight(
+          intrinsic_sizing_info.size.set_height(
               box->AvailableLogicalHeight(kIncludeMarginBorderPadding)
                   .ToFloat());
         }
@@ -412,7 +419,7 @@ void LayoutImage::ComputeIntrinsicSizingInfo(
   // aspect ratio that a failed poster image load should not override.
   if (image_resource_ && image_resource_->ErrorOccurred() &&
       !IsA<LayoutVideo>(this)) {
-    intrinsic_sizing_info.aspect_ratio = FloatSize(1, 1);
+    intrinsic_sizing_info.aspect_ratio = gfx::SizeF(1, 1);
     return;
   }
 }

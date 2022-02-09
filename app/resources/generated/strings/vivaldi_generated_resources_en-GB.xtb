@@ -333,7 +333,6 @@
 <translation id="6892812721183419409">Open Link as <ph name="USER" /></translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revoke file access</translation>
-<translation id="6916590542764765824">Manage Extensions</translation>
 <translation id="6945221475159498467">Select</translation>
 <translation id="6955446738988643816">Inspect Popup</translation>
 <translation id="6970856801391541997">Print Specific Pages</translation>
@@ -401,7 +400,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8032244173881942855">Unable to cast tab.</translation>
 <translation id="8071432093239591881">Print as image</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8137559199583651773">Manage extensions</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Download is in progress} other {Downloads are in progress}}</translation>
 <translation id="8230134520748321204">Save password for <ph name="ORIGIN" />?</translation>
@@ -454,6 +452,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" added</translation>
 <translation id="9218430445555521422">Set as default</translation>
 <translation id="93766956588638423">Repair extension</translation>
+<translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Landscape</translation>
 <translation id="994289308992179865">&amp;Loop</translation>
 <translation id="998747458861718449">I&amp;nspect</translation>

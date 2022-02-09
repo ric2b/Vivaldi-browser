@@ -8,6 +8,7 @@ All/PinSetupScreenTest.*
 All/EnrollmentScreenDynamicTPMTest.*
 All/EphemeralUserOobeTest.*
 All/GestureNavigationScreenTest.*
+All/ManagedUserTosOnboardingResumeTest.*
 All/MergeSessionTest.*
 All/MergeSessionTimeoutTest.*
 All/OobeGuestButtonPolicy.*
@@ -48,7 +49,10 @@ DemoSetupArcSupportedTest.*
 DemoSetupArcUnsupportedTest.*
 DemoSetupFRETest.*
 DemoSetupProgressStepsTest.*
+DemoSetupRegionCodeNotExistTest.*
 DemoSetupTestBase.*
+DemoSetupVariantCountryCodeRegionTest.*
+DemoSetupVirtualSetRegionCodeTest.*
 DeviceDisablingBeforeLoginHostCreated.*
 DeviceDisablingTest.*
 DeviceIDTest.*
@@ -91,7 +95,7 @@ LoginUIShelfVisibilityTest.*
 MarketingOptInDefaultContries/MarketingOptInScreenTest.*
 MarketingOptInDoubleOptInCountriesContries/MarketingOptInScreenTest.*
 MarketingOptInExtendedContries/MarketingOptInScreenTest.*
-MarketingOptInScreenTestDisabled.*
+MarketingOptInExtendedCountries/MarketingTestCountryCodes.*
 NetworkErrorScreenTest.*
 NoOobeTestApiTest.*
 OAuth2Test.*
@@ -105,8 +109,10 @@ OobeSpokenFeedbackTest.*
 OobeTest.*
 OobeTestApiRemoraRequisitionTest.*
 OobeTestApiTest.*
+OobeTestApiWizardControllerTest.*
 OobeZeroTouchInteractiveUITest.*
 OsInstallScreenTest.*
+OsTrialScreenTest.*
 PackagedLicenseScreenTest.*
 ParentalHandoffScreenBrowserTest.*
 ParentalHandoffScreenChildBrowserTest.*

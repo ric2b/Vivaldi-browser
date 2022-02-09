@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/image_fetcher/image_decoder_impl.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
@@ -33,7 +34,7 @@ class ImageDecoderImpl::DecodeImageRequest
 
   void OnDecodeImageFailed() override;
 
-  ImageDecoderImpl* decoder_;
+  raw_ptr<ImageDecoderImpl> decoder_;
 
   // The callback to call after the request completed.
   image_fetcher::ImageDecodedCallback callback_;
@@ -72,9 +73,7 @@ void ImageDecoderImpl::DecodeImage(
       new DecodeImageRequest(this, std::move(callback)));
 
   ::ImageDecoder::StartWithOptions(
-      decode_image_request.get(),
-      std::vector<uint8_t>(image_data.begin(), image_data.end()),
-      ::ImageDecoder::DEFAULT_CODEC,
+      decode_image_request.get(), image_data, ::ImageDecoder::DEFAULT_CODEC,
       /*shrink_to_fit=*/false, desired_image_frame_size);
 
   decode_image_requests_.push_back(std::move(decode_image_request));

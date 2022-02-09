@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/streams/underlying_sink_base.h"
 #include "third_party/blink/renderer/core/streams/underlying_source_base.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
+#include "third_party/blink/renderer/core/streams/writable_stream_default_controller.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/modules/webtransport/bidirectional_stream.h"
 #include "third_party/blink/renderer/modules/webtransport/datagram_duplex_stream.h"
@@ -44,6 +45,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/unique_identifier.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -670,7 +672,8 @@ WebTransport* WebTransport::Create(ScriptState* script_state,
                                    ExceptionState& exception_state) {
   DVLOG(1) << "WebTransport::Create() url=" << url;
   DCHECK(options);
-  ExecutionContext::From(script_state)->CountUse(WebFeature::kWebTransport);
+  UseCounter::Count(ExecutionContext::From(script_state),
+                    WebFeature::kWebTransport);
   auto* transport =
       MakeGarbageCollected<WebTransport>(PassKey(), script_state, url);
   transport->Init(url, *options, exception_state);
@@ -699,7 +702,8 @@ ScriptPromise WebTransport::createUnidirectionalStream(
     ExceptionState& exception_state) {
   DVLOG(1) << "WebTransport::createUnidirectionalStream() this=" << this;
 
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportStreamApis);
   if (!transport_remote_.is_bound()) {
     // TODO(ricea): Should we wait if we're still connecting?
     exception_state.ThrowDOMException(DOMExceptionCode::kNetworkError,
@@ -727,7 +731,8 @@ ScriptPromise WebTransport::createUnidirectionalStream(
 }
 
 ReadableStream* WebTransport::incomingUnidirectionalStreams() {
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportStreamApis);
   return received_streams_;
 }
 
@@ -736,20 +741,14 @@ ScriptPromise WebTransport::createBidirectionalStream(
     ExceptionState& exception_state) {
   DVLOG(1) << "WebTransport::createBidirectionalStream() this=" << this;
 
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportStreamApis);
   if (!transport_remote_.is_bound()) {
     // TODO(ricea): We should wait if we are still connecting.
     exception_state.ThrowDOMException(DOMExceptionCode::kNetworkError,
                                       "No connection.");
     return ScriptPromise();
   }
-
-  MojoCreateDataPipeOptions options;
-  options.struct_size = sizeof(MojoCreateDataPipeOptions);
-  options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
-  options.element_num_bytes = 1;
-  // TODO(ricea): Find an appropriate value for capacity_num_bytes.
-  options.capacity_num_bytes = 0;
 
   mojo::ScopedDataPipeProducerHandle outgoing_producer;
   mojo::ScopedDataPipeConsumerHandle outgoing_consumer;
@@ -777,22 +776,26 @@ ScriptPromise WebTransport::createBidirectionalStream(
 }
 
 ReadableStream* WebTransport::incomingBidirectionalStreams() {
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportStreamApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportStreamApis);
   return received_bidirectional_streams_;
 }
 
 DatagramDuplexStream* WebTransport::datagrams() {
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportDatagramApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportDatagramApis);
   return datagrams_;
 }
 
 WritableStream* WebTransport::datagramWritable() {
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportDatagramApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportDatagramApis);
   return outgoing_datagrams_;
 }
 
 ReadableStream* WebTransport::datagramReadable() {
-  GetExecutionContext()->CountUse(WebFeature::kQuicTransportDatagramApis);
+  UseCounter::Count(GetExecutionContext(),
+                    WebFeature::kQuicTransportDatagramApis);
   return received_datagrams_;
 }
 

@@ -214,9 +214,9 @@ void VivaldiFrameServiceImpl::GetSpatialNavigationRects(
   for (auto& element : spatnav_elements) {
     gfx::Rect rect = element.BoundsInViewport();
     if (element.IsLink()) {
-      blink::IntRect r = vivaldi::FindImageElementRect(element);
+      gfx::Rect r = vivaldi::FindImageElementRect(element);
       if (!r.IsEmpty()) {
-        rect.SetRect(r.X(), r.Y(), r.Width(), r.Height());
+        rect = r;
       }
     }
     rect = vivaldi::RevertDeviceScaling(rect, scale);
@@ -382,13 +382,8 @@ void VivaldiFrameServiceImpl::RequestThumbnailForFrame(
       break;
 
     SkBitmap bitmap;
-    blink::IntRect rect;
-    rect.SetX(rect_arg.x());
-    rect.SetY(rect_arg.y());
-    rect.SetWidth(rect_arg.width());
-    rect.SetHeight(rect_arg.height());
 
-    if (!VivaldiSnapshotPage(local_frame, full_page, rect, &bitmap))
+    if (!VivaldiSnapshotPage(local_frame, full_page, rect_arg, &bitmap))
       break;
 
     if (!target_size.IsEmpty()) {

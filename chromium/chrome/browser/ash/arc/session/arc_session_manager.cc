@@ -7,6 +7,18 @@
 #include <string>
 #include <utility>
 
+#include "ash/components/arc/arc_features.h"
+#include "ash/components/arc/arc_prefs.h"
+#include "ash/components/arc/arc_util.h"
+#include "ash/components/arc/metrics/arc_metrics_constants.h"
+#include "ash/components/arc/metrics/arc_metrics_service.h"
+#include "ash/components/arc/metrics/stability_metrics_manager.h"
+#include "ash/components/arc/session/arc_data_remover.h"
+#include "ash/components/arc/session/arc_dlc_installer.h"
+#include "ash/components/arc/session/arc_instance_mode.h"
+#include "ash/components/arc/session/arc_management_transition.h"
+#include "ash/components/arc/session/arc_session.h"
+#include "ash/components/arc/session/arc_session_runner.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -17,9 +29,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
+#include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/arc/arc_demo_mode_delegate_impl.h"
@@ -54,17 +66,6 @@
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/account_id/account_id.h"
-#include "components/arc/arc_features.h"
-#include "components/arc/arc_prefs.h"
-#include "components/arc/arc_util.h"
-#include "components/arc/metrics/arc_metrics_constants.h"
-#include "components/arc/metrics/arc_metrics_service.h"
-#include "components/arc/metrics/stability_metrics_manager.h"
-#include "components/arc/session/arc_data_remover.h"
-#include "components/arc/session/arc_instance_mode.h"
-#include "components/arc/session/arc_management_transition.h"
-#include "components/arc/session/arc_session.h"
-#include "components/arc/session/arc_session_runner.h"
 #include "components/exo/wm_helper_chromeos.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
@@ -466,6 +467,14 @@ ArcSessionManager::ExpansionResult ReadSaltInternal() {
   return ArcSessionManager::ExpansionResult{salt, true};
 }
 
+// Checks whether ARC DLCs needs to be installed/uninstalled. Currently,
+// "houdini-rvc-dlc" is the only enabled DLC, so we only need to check
+// for the presence of kEnableHoudiniDlc flag in the command line.
+bool IsDlcRequired() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kEnableHoudiniDlc);
+}
+
 }  // namespace
 
 // This class is used to track statuses on OptIn flow. It is created in case ARC
@@ -544,10 +553,12 @@ ArcSessionManager::ArcSessionManager(
     chromeos::SessionManagerClient::Get()->AddObserver(this);
   ResetStabilityMetrics();
   chromeos::ConciergeClient::Get()->AddVmObserver(this);
+  arc_dlc_installer_ = std::make_unique<ArcDlcInstaller>();
 }
 
 ArcSessionManager::~ArcSessionManager() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  arc_dlc_installer_.reset();
 
   chromeos::ConciergeClient::Get()->RemoveVmObserver(this);
 
@@ -624,6 +635,9 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
     observer.OnArcSessionStopped(reason);
 
   MaybeStartArcDataRemoval();
+
+  if (!enable_requested_ && IsDlcRequired())
+    arc_dlc_installer_->RequestDisable();
 }
 
 void ArcSessionManager::OnSessionRestarting() {
@@ -1001,6 +1015,8 @@ void ArcSessionManager::RequestEnable() {
 
   VLOG(1) << "ARC opt-in. Starting ARC session.";
 
+  if (IsDlcRequired())
+    arc_dlc_installer_->RequestEnable();
   // |directly_started_| flag must be preserved during the internal ARC restart.
   // So set it only when ARC is externally requested to start.
   directly_started_ = RequestEnableImpl();

@@ -13,8 +13,8 @@
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/format_macros.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,6 +27,7 @@
 #include "net/base/proxy_server.h"
 #include "net/base/proxy_string_util.h"
 #include "net/base/test_completion_callback.h"
+#include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/log/test_net_log.h"
@@ -147,7 +148,8 @@ class ConfiguredProxyResolutionServiceTest : public ::testing::Test,
 
  private:
   NeverPollPolicy never_poll_policy_;
-  const ConfiguredProxyResolutionService::PacPollPolicy* previous_policy_;
+  raw_ptr<const ConfiguredProxyResolutionService::PacPollPolicy>
+      previous_policy_;
 };
 
 const char kValidPacScript1[] = "pac-script-v1-FindProxyForURL";
@@ -371,11 +373,11 @@ TEST_F(ConfiguredProxyResolutionServiceTest, Direct) {
 
   ProxyInfo info;
   TestCompletionCallback callback;
-  RecordingBoundTestNetLog log;
+  RecordingNetLogObserver net_log_observer;
   std::unique_ptr<ProxyResolutionRequest> request;
-  int rv =
-      service.ResolveProxy(url, std::string(), NetworkIsolationKey(), &info,
-                           callback.callback(), &request, log.bound());
+  int rv = service.ResolveProxy(url, std::string(), NetworkIsolationKey(),
+                                &info, callback.callback(), &request,
+                                NetLogWithSource::Make(NetLogSourceType::NONE));
   EXPECT_THAT(rv, IsOk());
   EXPECT_TRUE(factory->pending_requests().empty());
 
@@ -384,7 +386,7 @@ TEST_F(ConfiguredProxyResolutionServiceTest, Direct) {
   EXPECT_TRUE(info.proxy_resolve_end_time().is_null());
 
   // Check the NetLog was filled correctly.
-  auto entries = log.GetEntries();
+  auto entries = net_log_observer.GetEntries();
 
   EXPECT_EQ(3u, entries.size());
   EXPECT_TRUE(LogContainsBeginEvent(entries, 0,
@@ -411,14 +413,15 @@ TEST_F(ConfiguredProxyResolutionServiceTest, OnResolveProxyCallbackAddProxy) {
 
   ProxyInfo info;
   TestCompletionCallback callback;
-  RecordingBoundTestNetLog log;
+  NetLogWithSource net_log_with_source =
+      NetLogWithSource::Make(NetLogSourceType::NONE);
 
   // First, warm up the ConfiguredProxyResolutionService and fake an error to
   // mark the first server as bad.
   std::unique_ptr<ProxyResolutionRequest> request;
   int rv =
       service.ResolveProxy(url, std::string(), NetworkIsolationKey(), &info,
-                           callback.callback(), &request, log.bound());
+                           callback.callback(), &request, net_log_with_source);
   EXPECT_THAT(rv, IsOk());
   EXPECT_EQ("badproxy:8080", ProxyServerToProxyUri(info.proxy_server()));
 
@@ -431,7 +434,7 @@ TEST_F(ConfiguredProxyResolutionServiceTest, OnResolveProxyCallbackAddProxy) {
   TestResolveProxyDelegate delegate;
   service.SetProxyDelegate(&delegate);
   rv = service.ResolveProxy(url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_EQ(1, delegate.num_resolve_proxy_called());
   EXPECT_THAT(delegate.proxy_retry_info(), ElementsAre(Key("badproxy:8080")));
   EXPECT_EQ(delegate.method(), "GET");
@@ -443,20 +446,20 @@ TEST_F(ConfiguredProxyResolutionServiceTest, OnResolveProxyCallbackAddProxy) {
 
   // Callback should interpose:
   rv = service.ResolveProxy(url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_FALSE(info.is_direct());
   EXPECT_EQ(info.proxy_server().host_port_pair().host(), "delegate_proxy.com");
   delegate.set_add_proxy(false);
 
   // Check non-bypassed URL:
   rv = service.ResolveProxy(url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_FALSE(info.is_direct());
   EXPECT_EQ(info.proxy_server().host_port_pair().host(), "foopy1");
 
   // Check bypassed URL:
   rv = service.ResolveProxy(bypass_url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_TRUE(info.is_direct());
 }
 
@@ -479,13 +482,14 @@ TEST_F(ConfiguredProxyResolutionServiceTest,
 
   ProxyInfo info;
   TestCompletionCallback callback;
-  RecordingBoundTestNetLog log;
+  NetLogWithSource net_log_with_source =
+      NetLogWithSource::Make(NetLogSourceType::NONE);
 
   // First, warm up the ConfiguredProxyResolutionService.
   std::unique_ptr<ProxyResolutionRequest> request;
   int rv =
       service.ResolveProxy(url, std::string(), NetworkIsolationKey(), &info,
-                           callback.callback(), &request, log.bound());
+                           callback.callback(), &request, net_log_with_source);
   EXPECT_THAT(rv, IsOk());
 
   TestResolveProxyDelegate delegate;
@@ -494,19 +498,19 @@ TEST_F(ConfiguredProxyResolutionServiceTest,
 
   // Callback should interpose:
   rv = service.ResolveProxy(url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_TRUE(info.is_direct());
   delegate.set_remove_proxy(false);
 
   // Check non-bypassed URL:
   rv = service.ResolveProxy(url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_FALSE(info.is_direct());
   EXPECT_EQ(info.proxy_server().host_port_pair().host(), "foopy1");
 
   // Check bypassed URL:
   rv = service.ResolveProxy(bypass_url, "GET", NetworkIsolationKey(), &info,
-                            callback.callback(), &request, log.bound());
+                            callback.callback(), &request, net_log_with_source);
   EXPECT_TRUE(info.is_direct());
 }
 
@@ -534,7 +538,7 @@ class DeletingCallback : public TestCompletionCallbackBase {
     SetResult(result);
   }
 
-  std::unique_ptr<T>* deletee_;
+  raw_ptr<std::unique_ptr<T>> deletee_;
 };
 
 template <typename T>
@@ -793,7 +797,6 @@ TEST_F(ConfiguredProxyResolutionServiceTest, ProxyServiceDeletedBeforeRequest) {
   ProxyInfo info;
   TestCompletionCallback callback;
   std::unique_ptr<ProxyResolutionRequest> request;
-  RecordingBoundTestNetLog log;
 
   int rv;
   {
@@ -801,7 +804,8 @@ TEST_F(ConfiguredProxyResolutionServiceTest, ProxyServiceDeletedBeforeRequest) {
                                              base::WrapUnique(factory), nullptr,
                                              /*quick_check_enabled=*/true);
     rv = service.ResolveProxy(url, std::string(), NetworkIsolationKey(), &info,
-                              callback.callback(), &request, log.bound());
+                              callback.callback(), &request,
+                              NetLogWithSource::Make(NetLogSourceType::NONE));
     EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
     EXPECT_EQ(LOAD_STATE_RESOLVING_PROXY_FOR_URL, request->GetLoadState());
@@ -886,11 +890,11 @@ TEST_F(ConfiguredProxyResolutionServiceTest, PAC) {
   ProxyInfo info;
   TestCompletionCallback callback;
   std::unique_ptr<ProxyResolutionRequest> request;
-  RecordingBoundTestNetLog log;
+  RecordingNetLogObserver net_log_observer;
 
-  int rv =
-      service.ResolveProxy(url, std::string(), NetworkIsolationKey(), &info,
-                           callback.callback(), &request, log.bound());
+  int rv = service.ResolveProxy(url, std::string(), NetworkIsolationKey(),
+                                &info, callback.callback(), &request,
+                                NetLogWithSource::Make(NetLogSourceType::NONE));
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   EXPECT_EQ(LOAD_STATE_RESOLVING_PROXY_FOR_URL, request->GetLoadState());
@@ -916,7 +920,7 @@ TEST_F(ConfiguredProxyResolutionServiceTest, PAC) {
   EXPECT_LE(info.proxy_resolve_start_time(), info.proxy_resolve_end_time());
 
   // Check the NetLog was filled correctly.
-  auto entries = log.GetEntries();
+  auto entries = net_log_observer.GetEntries();
 
   EXPECT_EQ(5u, entries.size());
   EXPECT_TRUE(LogContainsBeginEvent(entries, 0,
@@ -2495,10 +2499,11 @@ TEST_F(ConfiguredProxyResolutionServiceTest, CancelWhilePACFetching) {
   ProxyInfo info1;
   TestCompletionCallback callback1;
   std::unique_ptr<ProxyResolutionRequest> request1;
-  RecordingBoundTestNetLog log1;
+  RecordingNetLogObserver net_log_observer;
   int rv = service.ResolveProxy(GURL("http://request1"), std::string(),
                                 NetworkIsolationKey(), &info1,
-                                callback1.callback(), &request1, log1.bound());
+                                callback1.callback(), &request1,
+                                NetLogWithSource::Make(NetLogSourceType::NONE));
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   // The first request should have triggered download of PAC script.
@@ -2554,7 +2559,7 @@ TEST_F(ConfiguredProxyResolutionServiceTest, CancelWhilePACFetching) {
   EXPECT_FALSE(callback1.have_result());  // Cancelled.
   EXPECT_FALSE(callback2.have_result());  // Cancelled.
 
-  auto entries1 = log1.GetEntries();
+  auto entries1 = net_log_observer.GetEntries();
 
   // Check the NetLog for request 1 (which was cancelled) got filled properly.
   EXPECT_EQ(4u, entries1.size());
@@ -3010,10 +3015,11 @@ TEST_F(ConfiguredProxyResolutionServiceTest, NetworkChangeTriggersPacRefetch) {
   MockAsyncProxyResolverFactory* factory =
       new MockAsyncProxyResolverFactory(true);
 
-  RecordingTestNetLog log;
+  RecordingNetLogObserver observer;
 
   ConfiguredProxyResolutionService service(base::WrapUnique(config_service),
-                                           base::WrapUnique(factory), &log,
+                                           base::WrapUnique(factory),
+                                           net::NetLog::Get(),
                                            /*quick_check_enabled=*/true);
 
   MockPacFileFetcher* fetcher = new MockPacFileFetcher;
@@ -3110,7 +3116,7 @@ TEST_F(ConfiguredProxyResolutionServiceTest, NetworkChangeTriggersPacRefetch) {
   // Check that the expected events were output to the log stream. In particular
   // PROXY_CONFIG_CHANGED should have only been emitted once (for the initial
   // setup), and NOT a second time when the IP address changed.
-  auto entries = log.GetEntries();
+  auto entries = observer.GetEntries();
 
   EXPECT_TRUE(LogContainsEntryWithType(entries, 0,
                                        NetLogEventType::PROXY_CONFIG_CHANGED));
@@ -3931,7 +3937,7 @@ class SanitizeUrlHelper {
     factory = new MockAsyncProxyResolverFactory(false);
 
     service_ = std::make_unique<ConfiguredProxyResolutionService>(
-        std::move(config_service), base::WrapUnique(factory), nullptr,
+        std::move(config_service), base::WrapUnique(factory.get()), nullptr,
         /*quick_check_enabled=*/true);
 
     // Do an initial request to initialize the service (configure the PAC
@@ -3989,7 +3995,7 @@ class SanitizeUrlHelper {
 
  private:
   MockAsyncProxyResolver resolver;
-  MockAsyncProxyResolverFactory* factory;
+  raw_ptr<MockAsyncProxyResolverFactory> factory;
   std::unique_ptr<ConfiguredProxyResolutionService> service_;
 };
 

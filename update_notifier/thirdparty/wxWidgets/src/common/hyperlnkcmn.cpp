@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_HYPERLINKCTRL
 
@@ -76,9 +73,9 @@ wxFLAGS_MEMBER(wxHL_ALIGN_RIGHT)
 wxFLAGS_MEMBER(wxHL_ALIGN_CENTRE)
 wxEND_FLAGS( wxHyperlinkStyle )
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI( wxHyperlinkCtrl, wxControl, "wx/hyperlink.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI( wxHyperlinkCtrl, wxControl, "wx/hyperlink.h");
 
-IMPLEMENT_DYNAMIC_CLASS(wxHyperlinkEvent, wxCommandEvent)
+wxIMPLEMENT_DYNAMIC_CLASS(wxHyperlinkEvent, wxCommandEvent);
 wxDEFINE_EVENT( wxEVT_HYPERLINK, wxHyperlinkEvent );
 
 wxBEGIN_PROPERTIES_TABLE(wxHyperlinkCtrl)
@@ -127,13 +124,13 @@ wxHyperlinkCtrlBase::CheckParams(const wxString& label,
 
 void wxHyperlinkCtrlBase::SendEvent()
 {
-    wxString url = GetURL();
+    const wxString& url = GetURL();
     wxHyperlinkEvent linkEvent(this, GetId(), url);
     if (!GetEventHandler()->ProcessEvent(linkEvent))     // was the event skipped ?
     {
         if (!wxLaunchDefaultBrowser(url))
         {
-            wxLogWarning(wxT("Could not launch the default browser with url '%s' !"), url.c_str());
+            wxLogWarning(_("Failed to open URL \"%s\" in the default browser"), url);
         }
     }
 }

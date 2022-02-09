@@ -76,11 +76,11 @@ class WXDLLIMPEXP_FWD_HTML wxHtmlHelpController;
 
 class WXDLLIMPEXP_HTML wxHtmlHelpWindow : public wxWindow
 {
-    DECLARE_DYNAMIC_CLASS(wxHtmlHelpWindow)
+    wxDECLARE_DYNAMIC_CLASS(wxHtmlHelpWindow);
 
 public:
     wxHtmlHelpWindow(wxHtmlHelpData* data = NULL) { Init(data); }
-    wxHtmlHelpWindow(wxWindow* parent, wxWindowID wxWindowID,
+    wxHtmlHelpWindow(wxWindow* parent, wxWindowID id,
                     const wxPoint& pos = wxDefaultPosition,
                     const wxSize& size = wxDefaultSize,
                     int style = wxTAB_TRAVERSAL|wxNO_BORDER,
@@ -108,7 +108,7 @@ public:
 
     // Alternative version that works with numeric ID.
     // (uses extension to MS format, <param name="ID" value=id>, see docs)
-    bool Display(const int id);
+    bool Display(int id);
 
     // Displays help window and focuses contents.
     bool DisplayContents();
@@ -261,7 +261,7 @@ private:
     void DisplayIndexItem(const wxHtmlHelpMergedIndexItem *it);
     wxHtmlHelpMergedIndex *m_mergedIndex;
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
     wxDECLARE_NO_COPY_CLASS(wxHtmlHelpWindow);
 };
 

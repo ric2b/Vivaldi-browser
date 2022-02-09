@@ -10,8 +10,9 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
+#include "base/fuchsia/process_lifecycle.h"
 #include "content/public/browser/browser_main_parts.h"
+#include "content/public/common/main_function_params.h"
 #include "fuchsia/engine/browser/context_impl.h"
 #include "fuchsia/engine/browser/web_engine_browser_context.h"
 #include "fuchsia/engine/web_engine_export.h"
@@ -26,7 +27,6 @@ class Screen;
 
 namespace content {
 class ContentBrowserClient;
-struct MainFunctionParams;
 }
 
 namespace cr_fuchsia {
@@ -44,7 +44,7 @@ class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
     : public content::BrowserMainParts {
  public:
   WebEngineBrowserMainParts(content::ContentBrowserClient* browser_client,
-                            const content::MainFunctionParams& parameters);
+                            content::MainFunctionParams parameters);
   ~WebEngineBrowserMainParts() override;
 
   WebEngineBrowserMainParts(const WebEngineBrowserMainParts&) = delete;
@@ -81,8 +81,14 @@ class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
   // Notified if the system timezone, language, settings change.
   void OnIntlProfileChanged(const fuchsia::intl::Profile& profile);
 
+  // Quits the main loop and gracefully shuts down the instance.
+  void BeginGracefulShutdown();
+
   content::ContentBrowserClient* const browser_client_;
-  const content::MainFunctionParams& parameters_;
+  content::MainFunctionParams parameters_;
+
+  // Used to gracefully teardown in response to requests from the ELF runner.
+  std::unique_ptr<base::ProcessLifecycle> lifecycle_;
 
   std::unique_ptr<display::Screen> screen_;
 
@@ -104,7 +110,6 @@ class WEB_ENGINE_EXPORT WebEngineBrowserMainParts
   // Used to respond to changes to the system's current locale.
   std::unique_ptr<base::FuchsiaIntlProfileWatcher> intl_profile_watcher_;
 
-  bool run_message_loop_ = true;
   base::OnceClosure quit_closure_;
 };
 

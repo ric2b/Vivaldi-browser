@@ -107,6 +107,7 @@
 <translation id="4744603770635761495">Camiño ao executábel</translation>
 <translation id="4750917950439032686">A súa información (por exemplo, contrasinais ou números de tarxetas de crédito) é privada cando se envía a este sitio.</translation>
 <translation id="4764776831041365478">É posible que a página web <ph name="URL" /> estea temporalmente inactiva ou que fose trasladada definitivamente a outra dirección.</translation>
+<translation id="483241715238664915">Habilitar avisos</translation>
 <translation id="4943872375798546930">Sen resultados</translation>
 <translation id="5023310440958281426">Comproba as políticas do administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
@@ -158,6 +159,7 @@
 <translation id="6897140037006041989">Axente de usuario</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este sitio contén programas maliciosos</translation>
+<translation id="7096937462164235847">Non se verificou a identidade deste sitio web.</translation>
 <translation id="7108819624672055576">Permitido por unha extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> desde <ph name="DOMAIN" /></translation>
@@ -202,7 +204,7 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> tardou moito tempo en responder.</translation>
 <translation id="8503813439785031346">Nome de usuario</translation>
 <translation id="8703575177326907206">A túa conexión a <ph name="DOMAIN" /> non está encriptada.</translation>
-<translation id="8740359287975076522">Non se puido atopar a&lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Estase diagnosticando o problema.</translation>
+<translation id="8740359287975076522">Non se atopou <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;o enderezo DNS&lt;/abbr&gt;. Estase diagnosticando o problema.</translation>
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir á configuración do sitio</translation>
@@ -212,6 +214,7 @@
 <translation id="9039213469156557790">Ademais, esta páxina inclúe outros recursos non seguros. Mentres transitan, estes poden ser vistos por outros e un atacante pode modificalos para cambiar o comportamento da páxina.</translation>
 <translation id="9062620674789239642">É posible que se movese, editase ou eliminase.</translation>
 <translation id="9069693763241529744">Bloqueado por unha extensión</translation>
+<translation id="9073799351042754113">Escolliches desactivar os avisos de seguranza para este sitio web.</translation>
 <translation id="910924428752220542">Contrasinais de Vivaldi</translation>
 <translation id="9169664750068251925">Bloquear sempre para este sitio</translation>
 <translation id="9180553614777056266">Bloqueador de anuncios</translation>

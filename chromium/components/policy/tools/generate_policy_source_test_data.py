@@ -14,12 +14,15 @@ syntax = "proto2";
 
 package enterprise_management;
 
+option go_package="chromium/policy/enterprise_management_proto";
+
 import "policy_common_definitions%(full_runtime_suffix)s.proto";
 message CloudPolicySettings {
   optional StringPolicyProto ExampleStringPolicy = 3;
   optional BooleanPolicyProto ExampleBoolPolicy = 4;
   optional BooleanPolicyProto ExampleBoolMergeMetapolicy = 5;
   optional BooleanPolicyProto ExampleBoolPrecedenceMetapolicy = 6;
+  optional BooleanPolicyProto CloudOnlyPolicy = 7;
 }
 '''
 
@@ -29,6 +32,8 @@ syntax = "proto2";
 %(full_runtime_comment)soption optimize_for = LITE_RUNTIME;
 
 package enterprise_management;
+
+option go_package="chromium/policy/enterprise_management_proto";
 
 // For StringList and PolicyOptions.
 import "policy_common_definitions%(full_runtime_suffix)s.proto";
@@ -75,6 +80,16 @@ message ExampleBoolPrecedenceMetapolicyProto {
   optional bool ExampleBoolPrecedenceMetapolicy = 2;
 }
 
+// CloudOnlyPolicy caption
+//
+// CloudOnlyPolicy desc
+//
+// Supported on: android, chrome_os
+message CloudOnlyPolicyProto {
+  optional PolicyOptions policy_options = 1;
+  optional bool CloudOnlyPolicy = 2;
+}
+
 // --------------------------------------------------
 // Big wrapper PB containing the above groups.
 
@@ -83,6 +98,7 @@ message ChromeSettingsProto {
   optional ExampleBoolPolicyProto ExampleBoolPolicy = 4;
   optional ExampleBoolMergeMetapolicyProto ExampleBoolMergeMetapolicy = 5;
   optional ExampleBoolPrecedenceMetapolicyProto ExampleBoolPrecedenceMetapolicy = 6;
+  optional CloudOnlyPolicyProto CloudOnlyPolicy = 7;
 }
 """
 
@@ -139,6 +155,7 @@ extern const char kExampleStringPolicy[];
 extern const char kExampleBoolPolicy[];
 extern const char kExampleBoolMergeMetapolicy[];
 extern const char kExampleBoolPrecedenceMetapolicy[];
+extern const char kCloudOnlyPolicy[];
 
 }  // namespace key
 
@@ -254,6 +271,8 @@ const __attribute__((unused)) PolicyDetails kChromePolicyDetails[] = {
   { false,        false,    false,              3,                     0, {  } },
   // ExampleBoolPrecedenceMetapolicy
   { false,        false,    false,              4,                     0, {  } },
+  // CloudOnlyPolicy
+  { false,        false,    false,              5,                     0, {  } },
 };
 
 const internal::SchemaNode kSchemas[] = {
@@ -265,6 +284,7 @@ const internal::SchemaNode kSchemas[] = {
 
 const internal::PropertyNode kPropertyNodes[] = {
 //  Property                                                             Schema
+  { key::kCloudOnlyPolicy,                                                1 },
   { key::kExampleBoolMergeMetapolicy,                                     1 },
   { key::kExampleBoolPolicy,                                              1 },
   { key::kExampleBoolPrecedenceMetapolicy,                                1 },
@@ -273,7 +293,7 @@ const internal::PropertyNode kPropertyNodes[] = {
 
 const internal::PropertiesNode kProperties[] = {
 //  Begin    End  PatternEnd  RequiredBegin  RequiredEnd  Additional Properties
-  {     0,     4,     4,     0,          0,    -1 },  // root node
+  {     0,     5,     5,     0,          0,    -1 },  // root node
 };
 
 const internal::SchemaData* GetChromeSchemaData() {
@@ -319,7 +339,7 @@ const PolicyDetails* GetChromePolicyDetails(const std::string& policy) {
   // First index in kPropertyNodes of the Chrome policies.
   static const int begin_index = 0;
   // One-past-the-end of the Chrome policies in kPropertyNodes.
-  static const int end_index = 4;
+  static const int end_index = 5;
   const internal::PropertyNode* begin =
      kPropertyNodes + begin_index;
   const internal::PropertyNode* end = kPropertyNodes + end_index;
@@ -348,6 +368,7 @@ const char kExampleStringPolicy[] = "ExampleStringPolicy";
 const char kExampleBoolPolicy[] = "ExampleBoolPolicy";
 const char kExampleBoolMergeMetapolicy[] = "ExampleBoolMergeMetapolicy";
 const char kExampleBoolPrecedenceMetapolicy[] = "ExampleBoolPrecedenceMetapolicy";
+const char kCloudOnlyPolicy[] = "CloudOnlyPolicy";
 
 }  // namespace key
 
@@ -391,6 +412,10 @@ const BooleanPolicyAccess kBooleanPolicyAccess[] = {
    false,
    &em::CloudPolicySettings::has_exampleboolprecedencemetapolicy,
    &em::CloudPolicySettings::exampleboolprecedencemetapolicy},
+  {key::kCloudOnlyPolicy,
+   false,
+   &em::CloudPolicySettings::has_cloudonlypolicy,
+   &em::CloudPolicySettings::cloudonlypolicy},
   {nullptr, false, nullptr, nullptr},
 };
 
@@ -444,6 +469,7 @@ extern const char kExampleStringPolicy[];
 extern const char kExampleBoolPolicy[];
 extern const char kExampleBoolMergeMetapolicy[];
 extern const char kExampleBoolPrecedenceMetapolicy[];
+extern const char kCloudOnlyPolicy[];
 
 }  // namespace key
 
@@ -509,6 +535,7 @@ const char kExampleStringPolicy[] = "ExampleStringPolicy";
 const char kExampleBoolPolicy[] = "ExampleBoolPolicy";
 const char kExampleBoolMergeMetapolicy[] = "ExampleBoolMergeMetapolicy";
 const char kExampleBoolPrecedenceMetapolicy[] = "ExampleBoolPrecedenceMetapolicy";
+const char kCloudOnlyPolicy[] = "CloudOnlyPolicy";
 
 }  // namespace key
 
@@ -526,6 +553,9 @@ constexpr BooleanPolicyAccess kBooleanPolicyAccess[] = {
   {key::kExampleBoolPrecedenceMetapolicy,
    false,
    &em::CloudPolicySettings::mutable_exampleboolprecedencemetapolicy},
+  {key::kCloudOnlyPolicy,
+   false,
+   &em::CloudPolicySettings::mutable_cloudonlypolicy},
   {nullptr, false, nullptr},
 };
 
@@ -546,3 +576,32 @@ constexpr StringListPolicyAccess kStringListPolicyAccess[] = {
 
 }  // namespace policy
 '''
+
+EXPECTED_APP_RESTRICTIONS_XML = '''
+<restrictions xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <restriction
+        android:key="ExampleStringPolicy"
+        android:title="@string/ExampleStringPolicyTitle"
+        android:description="@string/ExampleStringPolicyDesc"
+        android:restrictionType="string"/>
+
+    <restriction
+        android:key="ExampleBoolPolicy"
+        android:title="@string/ExampleBoolPolicyTitle"
+        android:description="@string/ExampleBoolPolicyDesc"
+        android:restrictionType="bool"/>
+
+    <restriction
+        android:key="ExampleBoolMergeMetapolicy"
+        android:title="@string/ExampleBoolMergeMetapolicyTitle"
+        android:description="@string/ExampleBoolMergeMetapolicyDesc"
+        android:restrictionType="bool"/>
+
+    <restriction
+        android:key="ExampleBoolPrecedenceMetapolicy"
+        android:title="@string/ExampleBoolPrecedenceMetapolicyTitle"
+        android:description="@string/ExampleBoolPrecedenceMetapolicyDesc"
+        android:restrictionType="bool"/>
+
+</restrictions>'''

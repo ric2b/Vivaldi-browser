@@ -77,7 +77,7 @@
         "description": "User selectable data types that we support",
         "type" : "string",
         "enum" : [ "bookmarks", "preferences", "passwords", "autofill",
-          "typed_urls", "extensions", "notes" ]
+          "typed_urls", "extensions", "notes", "reading_list" ]
       },
       {
         "id": "DataTypeSelection",

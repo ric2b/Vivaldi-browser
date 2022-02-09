@@ -292,6 +292,7 @@ enum APIPermissionID {
   kPageActions,
   kPipPrivate,
   kPrefs,
+  kReadingListPrivate,
   kRuntimePrivate,
   kSavedPasswords,
   kSessionsPrivate,

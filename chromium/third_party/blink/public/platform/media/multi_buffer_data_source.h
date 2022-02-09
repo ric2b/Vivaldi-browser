@@ -137,7 +137,7 @@ class BLINK_PLATFORM_EXPORT MultiBufferDataSource : public media::DataSource {
 
   bool cancel_on_defer_for_testing() const { return cancel_on_defer_; }
 
-  const std::string& mime_type() const { return mime_type_; }
+  const std::string& mime_type() const { return url_data_->mime_type(); }
 
  protected:
   void OnRedirected(const scoped_refptr<UrlData>& new_destination);
@@ -212,8 +212,6 @@ class BLINK_PLATFORM_EXPORT MultiBufferDataSource : public media::DataSource {
   // location here, and when SeekTask() is called, it picks the best
   // position and then clears it out.
   std::vector<int64_t> seek_positions_;
-
-  std::string mime_type_;
 
   // This value will be true if this data source can only support streaming.
   // i.e. range request is not supported.

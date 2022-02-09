@@ -12,7 +12,7 @@
 
 #include "base/callback.h"
 #include "base/containers/circular_deque.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/background_fetch/background_fetch_data_manager_observer.h"
 #include "content/browser/background_fetch/background_fetch_event_dispatcher.h"
@@ -69,7 +69,8 @@ class CONTENT_EXPORT BackgroundFetchScheduler
       blink::mojom::BackgroundFetchOptionsPtr options,
       const SkBitmap& icon,
       int num_requests,
-      bool start_paused) override;
+      bool start_paused,
+      net::IsolationInfo isolation_info) override;
   void OnRegistrationLoadedAtStartup(
       const BackgroundFetchRegistrationId& registration_id,
       const blink::mojom::BackgroundFetchRegistrationData& registration_data,
@@ -78,7 +79,8 @@ class CONTENT_EXPORT BackgroundFetchScheduler
       int num_completed_requests,
       int num_requests,
       std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
-          active_fetch_requests) override;
+          active_fetch_requests,
+      absl::optional<net::IsolationInfo> isolation_info) override;
   void OnServiceWorkerDatabaseCorrupted(
       int64_t service_worker_registration_id) override;
   void OnRegistrationQueried(
@@ -124,7 +126,8 @@ class CONTENT_EXPORT BackgroundFetchScheduler
       int num_requests,
       std::vector<scoped_refptr<BackgroundFetchRequestInfo>>
           active_fetch_requests,
-      bool start_paused);
+      bool start_paused,
+      absl::optional<net::IsolationInfo> isolation_info);
 
   void DidStartRequest(const BackgroundFetchRegistrationId& registration_id,
                        const BackgroundFetchRequestInfo* request_info);
@@ -161,10 +164,10 @@ class CONTENT_EXPORT BackgroundFetchScheduler
       std::map<std::string, std::string> metadata = {});
 
   // Owned by BackgroundFetchContext.
-  BackgroundFetchDataManager* data_manager_;
-  BackgroundFetchRegistrationNotifier* registration_notifier_;
-  BackgroundFetchDelegateProxy* delegate_proxy_;
-  DevToolsBackgroundServicesContextImpl* devtools_context_;
+  raw_ptr<BackgroundFetchDataManager> data_manager_;
+  raw_ptr<BackgroundFetchRegistrationNotifier> registration_notifier_;
+  raw_ptr<BackgroundFetchDelegateProxy> delegate_proxy_;
+  raw_ptr<DevToolsBackgroundServicesContextImpl> devtools_context_;
 
   BackgroundFetchEventDispatcher event_dispatcher_;
 

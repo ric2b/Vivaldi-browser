@@ -21,7 +21,7 @@ class WXDLLIMPEXP_CORE wxMessageDialog : public wxMessageDialogBase
 public:
     wxMessageDialog(wxWindow *parent,
                     const wxString& message,
-                    const wxString& caption = wxMessageBoxCaptionStr,
+                    const wxString& caption = wxASCII_STR(wxMessageBoxCaptionStr),
                     long style = wxOK | wxCENTRE,
                     const wxPoint& WXUNUSED(pos) = wxDefaultPosition)
         : wxMessageDialogBase(parent, message, caption, style)
@@ -37,7 +37,7 @@ public:
 protected:
     long        m_result;
 
-    DECLARE_DYNAMIC_CLASS(wxMessageDialog)
+    wxDECLARE_DYNAMIC_CLASS(wxMessageDialog);
 };
 
 #endif // _WX_MSGBOXDLG_H_

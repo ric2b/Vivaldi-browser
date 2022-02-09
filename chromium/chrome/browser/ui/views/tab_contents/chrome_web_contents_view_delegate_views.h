@@ -7,8 +7,7 @@
 
 #include <memory>
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 
@@ -45,14 +44,15 @@ class ChromeWebContentsViewDelegateViews
   void ResetStoredFocus() override;
   bool Focus() override;
   bool TakeFocus(bool reverse) override;
-  void ShowContextMenu(content::RenderFrameHost* render_frame_host,
+  void ShowContextMenu(content::RenderFrameHost& render_frame_host,
                        const content::ContextMenuParams& params) override;
+  void ExecuteCommandForTesting(int command_id, int event_flags) override;
   void OnPerformDrop(const content::DropData& drop_data,
                      DropCompletionCallback callback) override;
 
   // Overridden from ContextMenuDelegate.
   std::unique_ptr<RenderViewContextMenuBase> BuildMenu(
-      content::WebContents* web_contents,
+      content::RenderFrameHost& render_frame_host,
       const content::ContextMenuParams& params) override;
   void ShowMenu(std::unique_ptr<RenderViewContextMenuBase> menu) override;
 
@@ -64,7 +64,7 @@ class ChromeWebContentsViewDelegateViews
   // The chrome specific delegate that receives events from WebDragDest.
   std::unique_ptr<content::WebDragDestDelegate> bookmark_handler_;
 
-  content::WebContents* web_contents_;
+  raw_ptr<content::WebContents> web_contents_;
 
   ChromeWebContentsViewFocusHelper* GetFocusHelper() const;
 };

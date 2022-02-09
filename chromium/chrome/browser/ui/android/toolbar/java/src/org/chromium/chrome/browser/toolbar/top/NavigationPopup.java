@@ -128,7 +128,8 @@ public class NavigationPopup implements AdapterView.OnItemClickListener {
         if (!shouldUseIncognitoResources()) {
             mHistory.addEntry(new NavigationEntry(FULL_HISTORY_ENTRY_INDEX,
                     new GURL(UrlConstants.HISTORY_URL), GURL.emptyGURL(), GURL.emptyGURL(),
-                    GURL.emptyGURL(), resources.getString(R.string.show_full_history), null, 0, 0));
+                    GURL.emptyGURL(), resources.getString(R.string.show_full_history), null, 0, 0,
+                    /*isInitialEntry=*/false));
         }
 
         mAdapter = new NavigationAdapter();
@@ -327,7 +328,7 @@ public class NavigationPopup implements AdapterView.OnItemClickListener {
             if (entry.getIndex() == FULL_HISTORY_ENTRY_INDEX) {
                 ApiCompatibilityUtils.setImageTintList(viewHolder.mImageView,
                         AppCompatResources.getColorStateList(
-                                mContext, R.color.default_icon_color_blue));
+                                mContext, R.color.default_icon_color_accent1_tint_list));
             } else {
                 ApiCompatibilityUtils.setImageTintList(viewHolder.mImageView, null);
             }

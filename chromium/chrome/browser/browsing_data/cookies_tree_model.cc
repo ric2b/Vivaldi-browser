@@ -30,7 +30,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/browsing_data/content/appcache_helper.h"
 #include "components/browsing_data/content/cache_storage_helper.h"
 #include "components/browsing_data/content/cookie_helper.h"
 #include "components/browsing_data/content/database_helper.h"
@@ -49,6 +48,7 @@
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_util.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -149,7 +149,6 @@ bool TypeIsProtected(CookieTreeNode::DetailedInfo::NodeType type) {
     case CookieTreeNode::DetailedInfo::TYPE_DATABASE:
     case CookieTreeNode::DetailedInfo::TYPE_LOCAL_STORAGE:
     case CookieTreeNode::DetailedInfo::TYPE_SESSION_STORAGE:
-    case CookieTreeNode::DetailedInfo::TYPE_APPCACHE:
     case CookieTreeNode::DetailedInfo::TYPE_INDEXED_DB:
     case CookieTreeNode::DetailedInfo::TYPE_FILE_SYSTEM:
     case CookieTreeNode::DetailedInfo::TYPE_SERVICE_WORKER:
@@ -179,6 +178,19 @@ LocalDataContainer* GetLocalDataContainerForNode(CookieTreeNode* node) {
   CHECK_EQ(host->GetDetailedInfo().node_type,
            CookieTreeNode::DetailedInfo::TYPE_HOST);
   return node->GetModel()->data_container();
+}
+
+bool IsHttps(net::CookieSourceScheme cookie_source_scheme) {
+  switch (cookie_source_scheme) {
+    case net::CookieSourceScheme::kSecure:
+      return true;
+    case net::CookieSourceScheme::kNonSecure:
+      return false;
+    case net::CookieSourceScheme::kUnset:
+      // Older cookies don't have a source scheme. Associate them with https
+      // since the majority of pageloads are https.
+      return true;
+  }
 }
 
 }  // namespace
@@ -234,14 +246,6 @@ CookieTreeNode::DetailedInfo& CookieTreeNode::DetailedInfo::InitSessionStorage(
   return *this;
 }
 
-CookieTreeNode::DetailedInfo& CookieTreeNode::DetailedInfo::InitAppCache(
-    const content::StorageUsageInfo* storage_usage_info) {
-  Init(TYPE_APPCACHE);
-  usage_info = storage_usage_info;
-  origin = usage_info->origin;
-  return *this;
-}
-
 CookieTreeNode::DetailedInfo& CookieTreeNode::DetailedInfo::InitIndexedDB(
     const content::StorageUsageInfo* storage_usage_info) {
   Init(TYPE_INDEXED_DB);
@@ -277,7 +281,8 @@ CookieTreeNode::DetailedInfo& CookieTreeNode::DetailedInfo::InitSharedWorker(
     const browsing_data::SharedWorkerHelper::SharedWorkerInfo* shared_worker) {
   Init(TYPE_SHARED_WORKER);
   shared_worker_info = shared_worker;
-  origin = url::Origin::Create(shared_worker_info->worker.GetOrigin());
+  origin = url::Origin::Create(
+      shared_worker_info->worker.DeprecatedGetOriginAsURL());
   return *this;
 }
 
@@ -373,46 +378,6 @@ class CookieTreeCookieNode : public CookieTreeNode {
   // |cookie_| is expected to remain valid as long as the CookieTreeCookieNode
   // is valid.
   std::list<net::CanonicalCookie>::iterator cookie_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-// CookieTreeAppCacheNode
-
-class CookieTreeAppCacheNode : public CookieTreeNode {
- public:
-  friend class CookieTreeAppCachesNode;
-
-  // |appcache_info| should remain valid at least as long as the
-  // CookieTreeAppCacheNode is valid.
-  explicit CookieTreeAppCacheNode(
-      std::list<content::StorageUsageInfo>::iterator usage_info)
-      : CookieTreeNode(base::UTF8ToUTF16(usage_info->origin.Serialize())),
-        usage_info_(usage_info) {}
-
-  CookieTreeAppCacheNode(const CookieTreeAppCacheNode&) = delete;
-  CookieTreeAppCacheNode& operator=(const CookieTreeAppCacheNode&) = delete;
-
-  ~CookieTreeAppCacheNode() override = default;
-
-  void DeleteStoredObjects() override {
-    LocalDataContainer* container = GetLocalDataContainerForNode(this);
-
-    if (container) {
-      container->appcache_helper_->DeleteAppCaches(usage_info_->origin);
-      container->appcache_info_list_.erase(usage_info_);
-    }
-  }
-  DetailedInfo GetDetailedInfo() const override {
-    return DetailedInfo().InitAppCache(&*usage_info_);
-  }
-
-  int64_t InclusiveSize() const override {
-    return usage_info_->total_size_bytes;
-  }
-
- private:
-  // |usage_info_| is expected to remain valid as long as this node is valid.
-  std::list<content::StorageUsageInfo>::iterator usage_info_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -957,29 +922,6 @@ class CookieTreeCollectionNode : public CookieTreeNode {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// CookieTreeAppCachesNode
-
-class CookieTreeAppCachesNode : public CookieTreeCollectionNode {
- public:
-  CookieTreeAppCachesNode()
-      : CookieTreeCollectionNode(
-            l10n_util::GetStringUTF16(IDS_COOKIES_APPLICATION_CACHES)) {}
-
-  CookieTreeAppCachesNode(const CookieTreeAppCachesNode&) = delete;
-  CookieTreeAppCachesNode& operator=(const CookieTreeAppCachesNode&) = delete;
-
-  ~CookieTreeAppCachesNode() override = default;
-
-  DetailedInfo GetDetailedInfo() const override {
-    return DetailedInfo().Init(DetailedInfo::TYPE_APPCACHES);
-  }
-
-  void AddAppCacheNode(std::unique_ptr<CookieTreeAppCacheNode> child) {
-    AddChildSortedByTitle(std::move(child));
-  }
-};
-
-///////////////////////////////////////////////////////////////////////////////
 // CookieTreeDatabasesNode
 
 class CookieTreeDatabasesNode : public CookieTreeCollectionNode {
@@ -1266,15 +1208,6 @@ CookieTreeSessionStoragesNode*
   return session_storages_child_;
 }
 
-CookieTreeAppCachesNode* CookieTreeHostNode::GetOrCreateAppCachesNode() {
-  if (appcaches_child_)
-    return appcaches_child_;
-  auto appcaches_node = std::make_unique<CookieTreeAppCachesNode>();
-  appcaches_child_ = appcaches_node.get();
-  AddChildSortedByTitle(std::move(appcaches_node));
-  return appcaches_child_;
-}
-
 CookieTreeIndexedDBsNode* CookieTreeHostNode::GetOrCreateIndexedDBsNode() {
   if (indexed_dbs_child_)
     return indexed_dbs_child_;
@@ -1457,7 +1390,6 @@ int CookiesTreeModel::GetIconIndex(ui::TreeModelNode* node) {
     case CookieTreeNode::DetailedInfo::TYPE_DATABASE:
     case CookieTreeNode::DetailedInfo::TYPE_LOCAL_STORAGE:
     case CookieTreeNode::DetailedInfo::TYPE_SESSION_STORAGE:
-    case CookieTreeNode::DetailedInfo::TYPE_APPCACHE:
     case CookieTreeNode::DetailedInfo::TYPE_INDEXED_DB:
     case CookieTreeNode::DetailedInfo::TYPE_FILE_SYSTEM:
     case CookieTreeNode::DetailedInfo::TYPE_SERVICE_WORKER:
@@ -1504,7 +1436,6 @@ void CookiesTreeModel::UpdateSearchResults(const std::u16string& filter) {
   PopulateDatabaseInfoWithFilter(data_container(), &notifier, filter);
   PopulateLocalStorageInfoWithFilter(data_container(), &notifier, filter);
   PopulateSessionStorageInfoWithFilter(data_container(), &notifier, filter);
-  PopulateAppCacheInfoWithFilter(data_container(), &notifier, filter);
   PopulateIndexedDBInfoWithFilter(data_container(), &notifier, filter);
   PopulateFileSystemInfoWithFilter(data_container(), &notifier, filter);
   PopulateQuotaInfoWithFilter(data_container(), &notifier, filter);
@@ -1541,11 +1472,6 @@ void CookiesTreeModel::RemoveCookiesTreeObserver(Observer* observer) {
   cookies_observer_list_.RemoveObserver(observer);
   // Call super so that TreeNodeModel doesn't have dead pointers.
   ui::TreeNodeModel<CookieTreeNode>::RemoveObserver(observer);
-}
-
-void CookiesTreeModel::PopulateAppCacheInfo(LocalDataContainer* container) {
-  ScopedBatchUpdateNotifier notifier(this, GetRoot());
-  PopulateAppCacheInfoWithFilter(container, &notifier, std::u16string());
 }
 
 void CookiesTreeModel::PopulateCookieInfo(LocalDataContainer* container) {
@@ -1608,30 +1534,6 @@ void CookiesTreeModel::PopulateMediaLicenseInfo(LocalDataContainer* container) {
   PopulateMediaLicenseInfoWithFilter(container, &notifier, std::u16string());
 }
 
-void CookiesTreeModel::PopulateAppCacheInfoWithFilter(
-    LocalDataContainer* container,
-    ScopedBatchUpdateNotifier* notifier,
-    const std::u16string& filter) {
-  CookieTreeRootNode* root = static_cast<CookieTreeRootNode*>(GetRoot());
-
-  if (container->appcache_info_list_.empty())
-    return;
-
-  notifier->StartBatchUpdate();
-  for (auto it = container->appcache_info_list_.begin();
-       it != container->appcache_info_list_.end(); ++it) {
-    const GURL url = it->origin.GetURL();
-    if (filter.empty() || (CookieTreeHostNode::TitleForUrl(url).find(filter) !=
-                           std::u16string::npos)) {
-      CookieTreeHostNode* host_node = root->GetOrCreateHostNode(url);
-      CookieTreeAppCachesNode* appcaches_node =
-          host_node->GetOrCreateAppCachesNode();
-      appcaches_node->AddAppCacheNode(
-          std::make_unique<CookieTreeAppCacheNode>(it));
-    }
-  }
-}
-
 void CookiesTreeModel::PopulateCookieInfoWithFilter(
     LocalDataContainer* container,
     ScopedBatchUpdateNotifier* notifier,
@@ -1641,14 +1543,10 @@ void CookiesTreeModel::PopulateCookieInfoWithFilter(
   notifier->StartBatchUpdate();
   for (auto it = container->cookie_list_.begin();
        it != container->cookie_list_.end(); ++it) {
-    // Cookies ignore schemes, so group all HTTP and HTTPS cookies together.
-    // TODO(crbug.com/1031721): This will not be true when Scheme-Bound Cookies
-    // is implemented. Investigate whether passing it->SourceScheme() instead of
-    // false is appropriate here.
     GURL source = (it->Domain() == ".")
                       ? GURL("http://./")
                       : net::cookie_util::CookieOriginToURL(
-                            it->Domain(), false /* is_https */);
+                            it->Domain(), IsHttps(it->SourceScheme()));
 
     if (filter.empty() || (CookieTreeHostNode::TitleForUrl(source).find(
                                filter) != std::u16string::npos)) {
@@ -1989,8 +1887,6 @@ std::unique_ptr<CookiesTreeModel> CookiesTreeModel::CreateForProfile(
       base::MakeRefCounted<browsing_data::DatabaseHelper>(profile),
       base::MakeRefCounted<browsing_data::LocalStorageHelper>(profile),
       /*session_storage_helper=*/nullptr,
-      base::MakeRefCounted<browsing_data::AppCacheHelper>(
-          storage_partition->GetAppCacheService()),
       base::MakeRefCounted<browsing_data::IndexedDBHelper>(storage_partition),
       base::MakeRefCounted<browsing_data::FileSystemHelper>(
           file_system_context,

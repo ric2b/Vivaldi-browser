@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">&amp;Sprogindstillinger</translation>
 <translation id="150411034776756821">Fjern <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Denne udvidelse har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
+<translation id="1552752544932680961">Administrer udvidelse</translation>
 <translation id="15662109988763471">Den valgte printer er ikke tilgængelig eller ikke installeret korrekt. Tjek din printer, eller vælg en anden printer.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Åbn link med...</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">Scriptcache</translation>
 <translation id="6169666352732958425">Skrivebordet kunne ikke castes.</translation>
 <translation id="6196854373336333322">Udvidelsen <ph name="EXTENSION_NAME" /> har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du foretager dig på nettet. Hvis du ikke er sikker på, hvorfor denne ændring er sket, er den sandsynligvis uønsket.</translation>
+<translation id="6200151268994853226">Administrer udvidelse</translation>
 <translation id="6206311232642889873">Kop&amp;ier billede</translation>
 <translation id="6239558157302047471">Genindlæs &amp;ramme</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -333,7 +335,6 @@
 <translation id="6892812721183419409">Åbn linket som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Baggrundsapp: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Tilbagekald filadgang</translation>
-<translation id="6916590542764765824">Administrer udvidelser</translation>
 <translation id="6945221475159498467">Vælg</translation>
 <translation id="6955446738988643816">Undersøg popup-vindue</translation>
 <translation id="6970856801391541997">Udskriv bestemte sider</translation>
@@ -401,7 +402,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8032244173881942855">Fanen kunne ikke castes.</translation>
 <translation id="8071432093239591881">Udskriv i billedformat</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8137559199583651773">Administrer udvidelser</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
          =1 {Download er i gang} other {Downloads er i gang}}</translation>
 <translation id="8230134520748321204">Vil du gemme adgangskoden til <ph name="ORIGIN" />?</translation>

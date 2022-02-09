@@ -22,7 +22,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
@@ -70,7 +70,7 @@ class SecurityKeyAuthHandlerPosix : public SecurityKeyAuthHandler {
   ~SecurityKeyAuthHandlerPosix() override;
 
  private:
-  typedef std::map<int, std::unique_ptr<SecurityKeySocket>> ActiveSockets;
+  using ActiveSockets = std::map<int, std::unique_ptr<SecurityKeySocket>>;
 
   // SecurityKeyAuthHandler interface.
   void CreateSecurityKeyConnection() override;

@@ -11,9 +11,11 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -23,6 +25,10 @@ namespace mojom {
 class URLLoaderFactory;
 }  // namespace mojom
 }  // namespace network
+
+namespace content {
+class WebContents;
+}  // namespace content
 
 namespace webapps {
 
@@ -53,12 +59,14 @@ class WebApkIconHasher {
   // any image cannot not be downloaded in time (e.g. 404 HTTP error code).
   static void DownloadAndComputeMurmur2Hash(
       network::mojom::URLLoaderFactory* url_loader_factory,
+      base::WeakPtr<content::WebContents> web_contents,
       const url::Origin& request_initiator,
       const std::set<GURL>& icon_urls,
       Murmur2HashMultipleCallback callback);
 
   static void DownloadAndComputeMurmur2HashWithTimeout(
       network::mojom::URLLoaderFactory* url_loader_factory,
+      base::WeakPtr<content::WebContents> web_contents,
       const url::Origin& request_initiator,
       const GURL& icon_url,
       int timeout_ms,
@@ -66,13 +74,23 @@ class WebApkIconHasher {
 
  private:
   WebApkIconHasher(network::mojom::URLLoaderFactory* url_loader_factory,
+                   base::WeakPtr<content::WebContents> web_contents,
                    const url::Origin& request_initiator,
                    const GURL& icon_url,
                    int timeout_ms,
                    Murmur2HashCallback callback);
   ~WebApkIconHasher();
 
-  void OnSimpleLoaderComplete(std::unique_ptr<std::string> response_body);
+  void OnSimpleLoaderComplete(base::WeakPtr<content::WebContents> web_contents,
+                              int timeout_ms,
+                              std::unique_ptr<std::string> response_body);
+
+  void OnImageDownloaded(std::unique_ptr<std::string> response_body,
+                         int id,
+                         int http_status_code,
+                         const GURL& url,
+                         const std::vector<SkBitmap>& bitmaps,
+                         const std::vector<gfx::Size>& sizes);
 
   // Called if downloading the icon takes too long.
   void OnDownloadTimedOut();
@@ -87,6 +105,8 @@ class WebApkIconHasher {
 
   // Fails WebApkIconHasher if the download takes too long.
   base::OneShotTimer download_timeout_timer_;
+
+  base::WeakPtrFactory<WebApkIconHasher> weak_ptr_factory_{this};
 };
 
 }  // namespace webapps

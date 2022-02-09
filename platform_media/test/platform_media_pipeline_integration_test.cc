@@ -268,7 +268,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
             StartVivaldi("vivaldi-bear_truncated.mp4"));
 
   Play();
-  WaitUntilCurrentTimeIsAfter(base::TimeDelta::FromMicroseconds(1066666));
+  WaitUntilCurrentTimeIsAfter(base::Microseconds(1066666));
   ASSERT_TRUE(ended_ || pipeline_status_ != PipelineStatus::PIPELINE_OK);
 }
 
@@ -373,7 +373,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
             StartVivaldi("vivaldi-nonzero-start-time.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
-  ASSERT_EQ(base::TimeDelta::FromMicroseconds(390000),
+  ASSERT_EQ(base::Microseconds(390000),
             demuxer_->GetStartTime());
 }
 

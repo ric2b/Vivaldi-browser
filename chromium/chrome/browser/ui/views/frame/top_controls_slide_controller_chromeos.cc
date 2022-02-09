@@ -180,7 +180,8 @@ class TopControlsSlideTabObserver
   }
 
   // content::WebContentsObserver:
-  void RenderProcessGone(base::TerminationStatus status) override {
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override {
     // There is no renderer to communicate with, so just ensure top-chrome
     // is shown. Also the render may have crashed before resetting the gesture
     // in progress bit.
@@ -583,10 +584,6 @@ void TopControlsSlideControllerChromeOS::UpdateBrowserControlsStateShown(
   if (!web_contents)
     return;
 
-  content::RenderFrameHost* main_frame = web_contents->GetMainFrame();
-  if (!main_frame)
-    return;
-
   // If the omnibox is focused, then the top controls should be constrained to
   // remain fully shown until the omnibox is blurred.
   const cc::BrowserControlsState constraints_state =
@@ -596,8 +593,8 @@ void TopControlsSlideControllerChromeOS::UpdateBrowserControlsStateShown(
 
   const cc::BrowserControlsState current_state =
       cc::BrowserControlsState::kShown;
-  main_frame->UpdateBrowserControlsState(constraints_state, current_state,
-                                         animate);
+  web_contents->UpdateBrowserControlsState(constraints_state, current_state,
+                                           animate);
 }
 
 bool TopControlsSlideControllerChromeOS::CanEnable(

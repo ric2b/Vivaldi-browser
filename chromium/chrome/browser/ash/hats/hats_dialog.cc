@@ -256,10 +256,10 @@ bool HatsDialog::ShouldShowDialogTitle() const {
 }
 
 bool HatsDialog::ShouldShowCloseButton() const {
-  return false;
+  return true;
 }
 
-bool HatsDialog::HandleContextMenu(content::RenderFrameHost* render_frame_host,
+bool HatsDialog::HandleContextMenu(content::RenderFrameHost& render_frame_host,
                                    const content::ContextMenuParams& params) {
   // Disable context menu
   return true;

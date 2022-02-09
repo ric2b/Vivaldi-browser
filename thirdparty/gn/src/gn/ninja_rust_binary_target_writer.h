@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_RUST_BINARY_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_RUST_BINARY_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/ninja_binary_target_writer.h"
 #include "gn/rust_tool.h"
 
@@ -32,11 +31,14 @@ class NinjaRustBinaryTargetWriter : public NinjaBinaryTargetWriter {
   // Write a ninja variable `sources` that contains all sources and input files.
   void WriteSourcesAndInputs();
   void WriteEdition();
-  void AppendSourcesAndInputsToImplicitDeps(UniqueVector<OutputFile>* deps) const;
+  void AppendSourcesAndInputsToImplicitDeps(
+      UniqueVector<OutputFile>* deps) const;
 
   const RustTool* tool_;
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaRustBinaryTargetWriter);
+  NinjaRustBinaryTargetWriter(const NinjaRustBinaryTargetWriter&) = delete;
+  NinjaRustBinaryTargetWriter& operator=(const NinjaRustBinaryTargetWriter&) =
+      delete;
 };
 
 #endif  // TOOLS_GN_NINJA_RUST_BINARY_TARGET_WRITER_H_

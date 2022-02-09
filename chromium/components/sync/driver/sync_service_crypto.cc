@@ -11,13 +11,13 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/engine/nigori/nigori.h"
 #include "components/sync/engine/sync_string_conversions.h"
-#include "components/sync/nigori/nigori.h"
 
 namespace syncer {
 
@@ -72,6 +72,11 @@ class EmptyTrustedVaultClient : public TrustedVaultClient {
     // Never invoked by SyncServiceCrypto.
     NOTREACHED();
   }
+
+  void ClearDataForAccount(const CoreAccountInfo& account_info) override {
+    // Never invoked by SyncServiceCrypto.
+    NOTREACHED();
+  }
 };
 
 // A SyncEncryptionHandler::Observer implementation that simply posts all calls
@@ -115,13 +120,12 @@ class SyncEncryptionObserverProxy : public SyncEncryptionHandler::Observer {
             observer_));
   }
 
-  void OnBootstrapTokenUpdated(const std::string& bootstrap_token,
-                               BootstrapTokenType type) override {
+  void OnBootstrapTokenUpdated(const std::string& bootstrap_token) override {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(
             &SyncEncryptionHandler::Observer::OnBootstrapTokenUpdated,
-            observer_, bootstrap_token, type));
+            observer_, bootstrap_token));
   }
 
   void OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
@@ -166,26 +170,15 @@ TrustedVaultClient* ResoveNullClient(TrustedVaultClient* client) {
   return empty_client.get();
 }
 
-// Checks if |passphrase| can be used to decrypt the given pending keys. Returns
+// Checks if |nigori| can be used to decrypt the given pending keys. Returns
 // true if decryption was successful. Returns false otherwise. Must be called
 // with non-empty pending keys cache.
-bool CheckPassphraseAgainstPendingKeys(
-    const sync_pb::EncryptedData& pending_keys,
-    const KeyDerivationParams& key_derivation_params,
-    const std::string& passphrase) {
+bool CheckNigoriAgainstPendingKeys(const Nigori& nigori,
+                                   const sync_pb::EncryptedData& pending_keys) {
   DCHECK(pending_keys.has_blob());
-  DCHECK(!passphrase.empty());
-  if (key_derivation_params.method() == KeyDerivationMethod::UNSUPPORTED) {
-    DLOG(ERROR) << "Cannot derive keys using an unsupported key derivation "
-                   "method. Rejecting passphrase.";
-    return false;
-  }
 
-  std::unique_ptr<Nigori> nigori =
-      Nigori::CreateByDerivation(key_derivation_params, passphrase);
-  DCHECK(nigori);
   std::string plaintext;
-  bool decrypt_result = nigori->Decrypt(pending_keys.blob(), &plaintext);
+  bool decrypt_result = nigori.Decrypt(pending_keys.blob(), &plaintext);
   DVLOG_IF(1, !decrypt_result) << "Passphrase failed to decrypt pending keys.";
   return decrypt_result;
 }
@@ -312,18 +305,27 @@ bool SyncServiceCrypto::SetDecryptionPassphrase(const std::string& passphrase) {
               KeyDerivationMethod::PBKDF2_HMAC_SHA1_1003);
   }
 
+  if (state_.passphrase_key_derivation_params.method() ==
+      KeyDerivationMethod::UNSUPPORTED) {
+    DLOG(ERROR) << "Cannot derive keys using an unsupported key derivation "
+                   "method. Rejecting passphrase.";
+    return false;
+  }
+
+  std::unique_ptr<Nigori> nigori = Nigori::CreateByDerivation(
+      state_.passphrase_key_derivation_params, passphrase);
+  DCHECK(nigori);
+
   // Check the passphrase that was provided against our local cache of the
   // cryptographer's pending keys (which we cached during a previous
   // OnPassphraseRequired() event). If this was unsuccessful, the UI layer can
   // immediately call OnPassphraseRequired() again without showing the user a
   // spinner.
-  if (!CheckPassphraseAgainstPendingKeys(
-          state_.cached_pending_keys, state_.passphrase_key_derivation_params,
-          passphrase)) {
+  if (!CheckNigoriAgainstPendingKeys(*nigori, state_.cached_pending_keys)) {
     return false;
   }
 
-  state_.engine->SetDecryptionPassphrase(passphrase);
+  state_.engine->SetExplicitPassphraseDecryptionKey(std::move(nigori));
 
   // Since we were able to decrypt the cached pending keys with the passphrase
   // provided, we immediately alert the UI layer that the passphrase was
@@ -332,8 +334,9 @@ bool SyncServiceCrypto::SetDecryptionPassphrase(const std::string& passphrase) {
   // unnecessary prompt for a passphrase.
   // Note: It is not guaranteed that the passphrase will be accepted by the
   // syncer thread, since we could receive a new nigori node while the task is
-  // pending. This scenario is a valid race, and SetDecryptionPassphrase() can
-  // trigger a new OnPassphraseRequired() if it needs to.
+  // pending. This scenario is a valid race, and
+  // SetExplicitPassphraseDecryptionKey() can trigger a new
+  // OnPassphraseRequired() if it needs to.
   OnPassphraseAccepted();
   return true;
 }
@@ -504,15 +507,10 @@ void SyncServiceCrypto::OnTrustedVaultKeyAccepted() {
 }
 
 void SyncServiceCrypto::OnBootstrapTokenUpdated(
-    const std::string& bootstrap_token,
-    BootstrapTokenType type) {
+    const std::string& bootstrap_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(state_.engine);
-  if (type == PASSPHRASE_BOOTSTRAP_TOKEN) {
-    delegate_->EncryptionBootstrapTokenChanged(bootstrap_token);
-  } else {
-    state_.engine->SetKeystoreEncryptionBootstrapToken(bootstrap_token);
-  }
+  delegate_->EncryptionBootstrapTokenChanged(bootstrap_token);
 }
 
 void SyncServiceCrypto::OnEncryptedTypesChanged(ModelTypeSet encrypted_types,

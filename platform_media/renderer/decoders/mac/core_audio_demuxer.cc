@@ -12,10 +12,9 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/filters/blocking_url_protocol.h"
@@ -188,7 +187,7 @@ void CoreAudioDemuxer::OnSelectedVideoTrackChanged(
 }
 
 void CoreAudioDemuxer::SetAudioDuration(int64_t duration) {
-  host_->SetDuration(base::TimeDelta::FromMilliseconds(duration));
+  host_->SetDuration(base::Milliseconds(duration));
 }
 
 void CoreAudioDemuxer::ReadDataSourceWithCallback(DataSource::ReadCB read_cb) {

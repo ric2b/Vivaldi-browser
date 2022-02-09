@@ -11,13 +11,16 @@
 
 #include "base/callback.h"
 #include "base/callback_forward.h"
+#include "base/compiler_specific.h"
 #include "base/debug/crash_logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/prerender/prerender_host.h"
@@ -40,6 +43,7 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_type.h"
 #include "content/public/browser/peak_gpu_memory_tracker.h"
+#include "content/public/browser/prerender_trigger_type.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -79,9 +83,12 @@ class ResourceRequestBody;
 struct URLLoaderCompletionStatus;
 }  // namespace network
 
+namespace ui {
+class CompositorLock;
+}  // namespace ui
+
 namespace content {
 
-class AppCacheNavigationHandle;
 class CrossOriginEmbedderPolicyReporter;
 class WebBundleHandleTracker;
 class WebBundleNavigationInfo;
@@ -93,6 +100,7 @@ class NavigationUIData;
 class NavigatorDelegate;
 class PrefetchedSignedExchangeCache;
 class ServiceWorkerMainResourceHandle;
+class SiteInfo;
 struct SubresourceLoaderParams;
 
 // The primary implementation of NavigationHandle.
@@ -128,6 +136,11 @@ class CONTENT_EXPORT NavigationRequest
     // The navigation is visible to embedders (via NavigationHandle). Wait for
     // the NavigationThrottles to finish running the WillStartRequest event.
     // This is potentially asynchronous.
+    // For navigations that have already committed synchronously in the renderer
+    // (see |is_synchronous_renderer_commit_|), this will synchronously proceed
+    // to DID_COMMIT directly without any waiting (or the navigation might not
+    // commit in certain cases, and be cleared in this state). All other
+    // navigations can only reach DID_COMMIT from READY_TO_COMMIT.
     WILL_START_REQUEST,
 
     // The request is being redirected. Wait for the NavigationThrottles to
@@ -234,7 +247,7 @@ class CONTENT_EXPORT NavigationRequest
       const ui::PageTransition& transition,
       bool should_replace_current_entry,
       const std::string& method,
-      const NavigationGesture& gesture,
+      bool has_transient_activation,
       bool is_overriding_user_agent,
       const std::vector<GURL>& redirects,
       const GURL& original_url,
@@ -277,12 +290,14 @@ class CONTENT_EXPORT NavigationRequest
   bool IsInPrimaryMainFrame() const override;
   bool IsInPrerenderedMainFrame() override;
   bool IsPrerenderedPageActivation() override;
+  NavigatingFrameType GetNavigatingFrameType() const override;
   bool IsRendererInitiated() override;
   bool IsSameOrigin() override;
   bool WasServerRedirect() override;
   const std::vector<GURL>& GetRedirectChain() override;
   int GetFrameTreeNodeId() override;
   RenderFrameHostImpl* GetParentFrame() override;
+  RenderFrameHostImpl* GetParentFrameOrOuterDocument() override;
   base::TimeTicks NavigationStart() override;
   base::TimeTicks NavigationInputStart() override;
   const NavigationHandleTiming& GetNavigationHandleTiming() override;
@@ -351,10 +366,12 @@ class CONTENT_EXPORT NavigationRequest
   void SetSilentlyIgnoreErrors() override;
   network::mojom::WebSandboxFlags SandboxFlagsToCommit() override;
   bool IsWaitingToCommit() override;
-  bool WasEarlyHintsPreloadLinkHeaderReceived() override;
+  bool WasResourceHintsReceived() override;
   bool IsPdf() override;
   void WriteIntoTrace(perfetto::TracedValue context) override;
   bool SetNavigationTimeout(base::TimeDelta timeout) override;
+  PrerenderTriggerType GetPrerenderTriggerType() override;
+  std::string GetPrerenderEmbedderHistogramSuffix() override;
 
   void RegisterCommitDeferringConditionForTesting(
       std::unique_ptr<CommitDeferringCondition> condition);
@@ -596,12 +613,6 @@ class CONTENT_EXPORT NavigationRequest
   // navigation being committed (e.g. canceled navigations).
   virtual bool DidEncounterError() const;
 
-  std::unique_ptr<AppCacheNavigationHandle> TakeAppCacheHandle();
-
-  AppCacheNavigationHandle* appcache_handle() const {
-    return appcache_handle_.get();
-  }
-
   void set_complete_callback_for_testing(
       ThrottleChecksFinishedCallback callback) {
     complete_callback_for_testing_ = std::move(callback);
@@ -637,7 +648,7 @@ class CONTENT_EXPORT NavigationRequest
   }
 
   network::mojom::RequestDestination request_destination() const {
-    return begin_params_->request_destination;
+    return common_params_->request_destination;
   }
 
   blink::mojom::MixedContentContextType mixed_content_context_type() const {
@@ -876,6 +887,11 @@ class CONTENT_EXPORT NavigationRequest
     return prerender_frame_tree_node_id_.value();
   }
 
+  const absl::optional<FencedFrameURLMapping::PendingAdComponentsMap>&
+  pending_ad_components_map() const {
+    return pending_ad_components_map_;
+  }
+
   void RenderFallbackContentForObjectTag();
 
   // Returns the vector of web features used during the navigation, whose
@@ -901,6 +917,15 @@ class CONTENT_EXPORT NavigationRequest
     url::debug::ScopedOriginCrashKey initiator_origin_;
     base::debug::ScopedCrashKeyString url_;
   };
+
+  // Prerender2:
+  void set_prerender_trigger_type(PrerenderTriggerType type) {
+    DCHECK(!prerender_trigger_type_.has_value());
+    prerender_trigger_type_ = type;
+  }
+  void set_prerender_embedder_histogram_suffix(const std::string& suffix) {
+    prerender_embedder_histogram_suffix_ = suffix;
+  }
 
  private:
   friend class NavigationRequestTest;
@@ -961,10 +986,14 @@ class CONTENT_EXPORT NavigationRequest
   // origin-isolation.
   bool IsOptInIsolationRequested();
 
+  // Returns whether this navigation request should use an origin-keyed
+  // agent cluster (but not an origin-keyed process).
+  bool IsIsolationImplied();
+
   // The Origin-Agent-Cluster end result is determined early in the lifecycle of
   // a NavigationRequest, but used late. In particular, we want to trigger use
   // counters and console warnings once navigation has committed.
-  void DetermineOriginAgentClusterEndResult(bool is_requested);
+  void DetermineOriginAgentClusterEndResult();
   void ProcessOriginAgentClusterEndResult();
 
   // NavigationURLLoaderDelegate implementation.
@@ -1118,11 +1147,6 @@ class CONTENT_EXPORT NavigationRequest
     ALLOW_REQUEST,
     BLOCK_REQUEST,
   };
-
-  // Block subresources requests that target "legacy" protocol (like "ftp") when
-  // the main document is not served from a "legacy" protocol.
-  LegacyProtocolInSubresourceCheckResult CheckLegacyProtocolInSubresource()
-      const;
 
   // Block about:srcdoc navigation that aren't expected to happen. For instance,
   // main frame navigations or about:srcdoc#foo.
@@ -1401,9 +1425,11 @@ class CONTENT_EXPORT NavigationRequest
   // or not. Called when the navigation just started.
   bool ShouldReplaceCurrentEntryForSameUrlNavigation() const;
 
-  // Whether this navigation happens on the initial empty document, and thus
-  // should replace the current entry.  Called when the navigation just started.
-  bool ShouldReplaceCurrentEntryForNavigationFromInitialEmptyDocument() const;
+  // Whether this navigation happens on the initial empty document or initial
+  // NavigationEntry, and thus should replace the current entry. Called when the
+  // navigation just started.
+  bool ShouldReplaceCurrentEntryForNavigationFromInitialEmptyDocumentOrEntry()
+      const;
 
   // Whether a failed navigation should replace the current entry or not. Called
   // when an error page is about to be committed.
@@ -1437,7 +1463,7 @@ class CONTENT_EXPORT NavigationRequest
   const bool is_synchronous_renderer_commit_;
 
   // Invariant: At least one of |loader_| or |render_frame_host_| is null.
-  RenderFrameHostImpl* render_frame_host_ = nullptr;
+  raw_ptr<RenderFrameHostImpl> render_frame_host_ = nullptr;
 
   // Initialized on creation of the NavigationRequest. Sent to the renderer when
   // the navigation is ready to commit.
@@ -1454,8 +1480,6 @@ class CONTENT_EXPORT NavigationRequest
   // Note: |commit_params_->is_browser_initiated| and |common_params_| may be
   // mutated by ContentBrowserClient::OverrideNavigationParams at construction
   // time (i.e. before we actually kick off the navigation).
-  // |commit_params_->is_browser_initiated| will always be true for history
-  // navigations, even if they began in the renderer using the history API.
   blink::mojom::CommonNavigationParamsPtr common_params_;
   blink::mojom::BeginNavigationParamsPtr begin_params_;
   blink::mojom::CommitNavigationParamsPtr commit_params_;
@@ -1552,7 +1576,7 @@ class CONTENT_EXPORT NavigationRequest
   base::OnceClosure on_start_checks_complete_closure_;
 
   // Used in the network service world to pass the subressource loader params
-  // to the renderer. Used by AppCache and ServiceWorker, and
+  // to the renderer. Used by ServiceWorker and
   // SignedExchangeSubresourcePrefetch.
   absl::optional<SubresourceLoaderParams> subresource_loader_params_;
 
@@ -1650,10 +1674,8 @@ class CONTENT_EXPORT NavigationRequest
   // The time this navigation was ready to commit.
   base::TimeTicks ready_to_commit_time_;
 
-  // Manages the lifetime of a pre-created AppCacheHost until a browser side
-  // navigation is ready to be committed, i.e we have a renderer process ready
-  // to service the navigation request.
-  std::unique_ptr<AppCacheNavigationHandle> appcache_handle_;
+  // The time WillStartRequest() was called.
+  base::TimeTicks will_start_request_time_;
 
   // Set in ReadyToCommitNavigation.
   bool is_same_process_ = true;
@@ -1829,7 +1851,7 @@ class CONTENT_EXPORT NavigationRequest
 
   // True when at least one preload Link header was received via an Early Hints
   // response. This is set only for a main frame navigation.
-  bool was_early_hints_preload_link_header_received_ = false;
+  bool was_resource_hints_received_ = false;
 
   // Observers listening to cookie access notifications for the network requests
   // made by this navigation.
@@ -1908,6 +1930,25 @@ class CONTENT_EXPORT NavigationRequest
 
   // Indicates that this navigation is for PDF content in a renderer.
   bool is_pdf_ = false;
+
+  // If this navigation is a load in a fenced frame of a URN URL that resulted
+  // from an interest group auction, this contains the ad component URLs
+  // associated with that auction's winning bid, and the corresponding URNs that
+  // will be mapped to them.
+  absl::optional<FencedFrameURLMapping::PendingAdComponentsMap>
+      pending_ad_components_map_;
+
+  // Prerender2:
+  // The type to trigger prerendering. The value is valid only when Prerender2
+  // is enabled.
+  absl::optional<PrerenderTriggerType> prerender_trigger_type_;
+  // The suffix of a prerender embedder. This value is valid only when
+  // PrerenderTriggerType is kEmbedder. Only used for metrics.
+  std::string prerender_embedder_histogram_suffix_;
+
+  // Prevents the compositor from requesting main frame updates early in
+  // navigation.
+  std::unique_ptr<ui::CompositorLock> compositor_lock_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_{this};
 };

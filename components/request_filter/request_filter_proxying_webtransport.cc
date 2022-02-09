@@ -6,7 +6,9 @@
 
 #include "components/request_filter/request_filter_proxying_webtransport.h"
 
+#include "base/memory/raw_ptr.h"
 #include "components/request_filter/filtered_request_info.h"
+#include "content/public/browser/render_process_host.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/public/mojom/web_transport.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -46,6 +48,7 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
       FilteredRequestInfo params,
       CreateCallback create_callback)
       : handshake_client_(std::move(handshake_client)),
+        request_handler_(request_handler),
         proxies_(proxies),
         browser_context_(browser_context),
         info_(std::move(params)),
@@ -217,11 +220,11 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
 
  private:
   mojo::PendingRemote<WebTransportHandshakeClient> handshake_client_;
-  RequestFilterManager::RequestHandler* request_handler_;
+  const raw_ptr<RequestFilterManager::RequestHandler> request_handler_;
   // Weak reference to the ProxySet. This is safe as `proxies_` owns this
   // object.
   RequestFilterManager::ProxySet& proxies_;
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
   FilteredRequestInfo info_;
   net::HttpRequestHeaders request_headers_;
   GURL redirect_url_;
@@ -238,25 +241,27 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
 }  // namespace
 
 void StartWebRequestProxyingWebTransport(
-    content::BrowserContext* browser_context,
-    int process_id,
-    int frame_id,
-    const url::Origin& frame_origin,
+    content::RenderProcessHost& render_process_host,
+    int frame_routing_id,
     const GURL& url,
+    const url::Origin& initiator_origin,
     mojo::PendingRemote<WebTransportHandshakeClient> handshake_client,
     int64_t request_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::ProxySet& proxies,
     content::ContentBrowserClient::WillCreateWebTransportCallback callback) {
+  content::BrowserContext* browser_context =
+      render_process_host.GetBrowserContext();
   // Filling ResourceRequest fields required to create WebRequestInfoInitParams.
   network::ResourceRequest request;
   request.method = net::HttpRequestHeaders::kConnectMethod;
   request.url = url;
-  request.request_initiator = frame_origin;
+  request.request_initiator = initiator_origin;
 
+  const int process_id = render_process_host.GetID();
   FilteredRequestInfo params = FilteredRequestInfo(
-      request_id, process_id, frame_id, /*view_routing_id=*/MSG_ROUTING_NONE,
-      request,
+      request_id, process_id, frame_routing_id,
+      /*view_routing_id=*/MSG_ROUTING_NONE, request,
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
       /*is_async=*/true, /*is_webtransport=*/true,
       /*navigation_id=*/absl::nullopt);

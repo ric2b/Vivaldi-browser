@@ -422,6 +422,12 @@ export class FileManager extends EventTarget {
      * @private {?FakeEntry}
      */
     this.recentEntry_ = null;
+
+    /**
+     * Whether or not we are running in guest mode.
+     * @private {boolean}
+     */
+    this.guestMode_ = false;
   }
 
   /**
@@ -585,6 +591,13 @@ export class FileManager extends EventTarget {
   }
 
   /**
+   * @return {boolean} If the app is running in the guest mode.
+   */
+  get guestMode() {
+    return this.guestMode_;
+  }
+
+  /**
    * Launch a new File Manager app.
    * @param {!FilesAppState=} appState App state.
    */
@@ -612,6 +625,23 @@ export class FileManager extends EventTarget {
     this.appStateController_ = new AppStateController(this.dialogType);
     await this.appStateController_.loadInitialViewOptions();
     metrics.recordInterval('Load.InitSettings');
+  }
+
+  /**
+   * Updates guestMode_ field based on what the result of the util.isInGuestMode
+   * helper function. It errs on the side of not-in-guestmode, if the util
+   * function fails. The worse this causes are extra notifications.
+   */
+  async setGuestMode_() {
+    try {
+      const guest = await util.isInGuestMode();
+      if (guest !== null) {
+        this.guestMode_ = guest;
+      }
+    } catch (error) {
+      console.error(error);
+      // Leave this.guestMode_ as its initial value.
+    }
   }
 
   /**
@@ -680,8 +710,8 @@ export class FileManager extends EventTarget {
         util.queryDecoratedElement('#file-context-menu', Menu));
     this.toolbarController_ = new ToolbarController(
         this.ui_.toolbar, this.ui_.dialogNavigationList, this.ui_.listContainer,
-        assert(this.ui_.locationLine), this.selectionHandler_,
-        this.directoryModel_, this.volumeManager_, this.fileOperationManager_,
+        this.selectionHandler_, this.directoryModel_, this.volumeManager_,
+        this.fileOperationManager_,
         /** @type {!A11yAnnounce} */ (this.ui_));
     this.actionsController_ = new ActionsController(
         this.volumeManager_, assert(this.metadataModel_), this.directoryModel_,
@@ -754,7 +784,8 @@ export class FileManager extends EventTarget {
     this.ui_.decorateFilesMenuItems();
     this.ui_.selectionMenuButton.hidden = false;
 
-    await Promise.all([fileListPromise, currentDirectoryPromise]);
+    await Promise.all(
+        [fileListPromise, currentDirectoryPromise, this.setGuestMode_()]);
   }
 
   /**
@@ -773,7 +804,7 @@ export class FileManager extends EventTarget {
         this.ui_.showConfirmationDialog.bind(this.ui_), this.progressCenter,
         assert(this.fileOperationManager_), assert(this.metadataModel_),
         assert(this.directoryModel_), assert(this.volumeManager_),
-        assert(this.selectionHandler_));
+        assert(this.selectionHandler_), this.ui_.toast);
   }
 
   /**
@@ -1504,8 +1535,8 @@ export class FileManager extends EventTarget {
           });
         } catch (error2) {
           // Failed to resolve as either file or directory.
-          console.error(error1.stack || error1);
-          console.error(error2.stack || error2);
+          console.warn(error1.stack || error1);
+          console.warn(error2.stack || error2);
         }
       }
     }

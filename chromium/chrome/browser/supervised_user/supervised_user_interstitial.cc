@@ -21,6 +21,7 @@
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/web_approvals_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -84,7 +85,8 @@ class TabCloser : public content::WebContentsUserData<TabCloser> {
  private:
   friend class content::WebContentsUserData<TabCloser>;
 
-  explicit TabCloser(WebContents* web_contents) : web_contents_(web_contents) {
+  explicit TabCloser(WebContents* web_contents)
+      : content::WebContentsUserData<TabCloser>(*web_contents) {
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE, base::BindOnce(&TabCloser::CloseTabImpl,
                                   weak_ptr_factory_.GetWeakPtr()));
@@ -93,21 +95,20 @@ class TabCloser : public content::WebContentsUserData<TabCloser> {
   void CloseTabImpl() {
     // On Android, FindBrowserWithWebContents and TabStripModel don't exist.
 #if !defined(OS_ANDROID)
-    Browser* browser = chrome::FindBrowserWithWebContents(web_contents_);
+    Browser* browser = chrome::FindBrowserWithWebContents(&GetWebContents());
     DCHECK(browser);
     TabStripModel* tab_strip = browser->tab_strip_model();
     DCHECK_NE(TabStripModel::kNoTab,
-              tab_strip->GetIndexOfWebContents(web_contents_));
+              tab_strip->GetIndexOfWebContents(&GetWebContents()));
     if (tab_strip->count() <= 1) {
       // Don't close the last tab in the window.
-      web_contents_->RemoveUserData(UserDataKey());
+      GetWebContents().RemoveUserData(UserDataKey());
       return;
     }
 #endif
-    web_contents_->Close();
+    GetWebContents().Close();
   }
 
-  WebContents* web_contents_;
   base::WeakPtrFactory<TabCloser> weak_ptr_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
@@ -133,7 +134,7 @@ void CleanUpInfoBar(content::WebContents* web_contents) {
       details.previous_main_frame_url =
           controller.GetLastCommittedEntry()->GetURL();
     }
-    details.type = content::NAVIGATION_TYPE_NEW_ENTRY;
+    details.type = content::NAVIGATION_TYPE_MAIN_FRAME_NEW_ENTRY;
     for (int i = manager->infobar_count() - 1; i >= 0; --i) {
       infobars::InfoBar* infobar = manager->infobar_at(i);
       if (infobar->delegate()->ShouldExpire(
@@ -200,7 +201,8 @@ std::string SupervisedUserInterstitial::GetHTMLContents(
   std::string profile_image_url2 = profile->GetPrefs()->GetString(
       prefs::kSupervisedUserSecondCustodianProfileImageURL);
 
-  bool allow_access_requests = supervised_user_service->AccessRequestsEnabled();
+  bool allow_access_requests = supervised_user_service->web_approvals_manager()
+                                   .AreRemoteApprovalRequestsEnabled();
 
   return supervised_user_error_page::BuildHtml(
       allow_access_requests, profile_image_url, profile_image_url2, custodian,
@@ -219,8 +221,8 @@ void SupervisedUserInterstitial::GoBack() {
   OnInterstitialDone();
 }
 
-void SupervisedUserInterstitial::RequestPermission(
-    base::OnceCallback<void(bool)> RequestCallback) {
+void SupervisedUserInterstitial::RequestUrlAccessRemote(
+    base::OnceCallback<void(bool)> callback) {
   UMA_HISTOGRAM_ENUMERATION("ManagedMode.BlockingInterstitialCommand",
                             ACCESS_REQUEST, HISTOGRAM_BOUNDING_VALUE);
 
@@ -235,8 +237,18 @@ void SupervisedUserInterstitial::RequestPermission(
 
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile_);
-  supervised_user_service->AddURLAccessRequest(url_,
-                                               std::move(RequestCallback));
+  supervised_user_service->web_approvals_manager().RequestRemoteApproval(
+      url_, std::move(callback));
+}
+
+void SupervisedUserInterstitial::RequestUrlAccessLocal(
+    base::OnceCallback<void(bool)> callback) {
+  // TODO(b/195461480): Log metrics.
+
+  SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForProfile(profile_);
+  supervised_user_service->web_approvals_manager().RequestLocalApproval(
+      url_, std::move(callback));
 }
 
 void SupervisedUserInterstitial::ShowFeedback() {

@@ -24,6 +24,7 @@
 #include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/common/surfaces/video_capture_target.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_bundle_impl.h"
@@ -154,7 +155,7 @@ void CompositorFrameSinkSupport::SetBeginFrameSource(
     added_frame_observer_ = false;
   }
 
-  auto* old_source = begin_frame_source_;
+  auto* old_source = begin_frame_source_.get();
   begin_frame_source_ = begin_frame_source;
 
   FrameSinkBundleImpl* bundle = nullptr;
@@ -216,6 +217,11 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
     if (surface_animation_manager_.NeedsBeginFrame())
       UpdateNeedsBeginFramesInternal();
   }
+
+  // The directives above generate TransferableResources which are required to
+  // replaced shared elements with the corresponding cached snapshots. This step
+  // must be done after processing directives above.
+  surface_animation_manager_.ReplaceSharedElementResources(surface);
 
   // If surface animation manager needs a frame, then we should interpolate
   // here. Note that we also interpolate in OnBeginFrame. The reason for two
@@ -299,6 +305,11 @@ void CompositorFrameSinkSupport::OnSurfaceAggregatedDamage(
 
 bool CompositorFrameSinkSupport::IsVideoCaptureStarted() {
   return number_clients_capturing_ > 0;
+}
+
+base::flat_set<base::PlatformThreadId>
+CompositorFrameSinkSupport::GetThreadIds() {
+  return thread_ids_;
 }
 
 void CompositorFrameSinkSupport::OnSurfaceDestroyed(Surface* surface) {
@@ -427,6 +438,15 @@ void CompositorFrameSinkSupport::InitializeCompositorFrameSinkType(
     return;
   }
   frame_sink_type_ = type;
+}
+
+void CompositorFrameSinkSupport::SetThreadIds(
+    bool from_untrusted_client,
+    base::flat_set<base::PlatformThreadId> unverified_thread_ids) {
+  if (!from_untrusted_client ||
+      frame_sink_manager_->VerifySandboxedThreadIds(unverified_thread_ids)) {
+    thread_ids_ = unverified_thread_ids;
+  }
 }
 
 base::TimeDelta CompositorFrameSinkSupport::GetPreferredFrameInterval(
@@ -903,6 +923,10 @@ void CompositorFrameSinkSupport::UpdateNeedsBeginFramesInternal() {
   }
 }
 
+const FrameSinkId& CompositorFrameSinkSupport::GetFrameSinkId() const {
+  return frame_sink_id_;
+}
+
 void CompositorFrameSinkSupport::AttachCaptureClient(
     CapturableFrameSink::Client* client) {
   DCHECK(!base::Contains(capture_clients_, client));
@@ -936,8 +960,8 @@ void CompositorFrameSinkSupport::OnClientCaptureStopped() {
   }
 }
 
-gfx::Size CompositorFrameSinkSupport::GetCopyOutputRequestSize(
-    SubtreeCaptureId subtree_id) const {
+gfx::Rect CompositorFrameSinkSupport::GetCopyOutputRequestRegion(
+    const VideoCaptureSubTarget& sub_target) const {
   if (!last_activated_surface_id_.is_valid()) {
     return {};
   }
@@ -949,22 +973,31 @@ gfx::Size CompositorFrameSinkSupport::GetCopyOutputRequestSize(
     return {};
   }
 
-  // If a subtree is not specified, use the size of the root (last)
-  // render pass instead.
-  const CompositorFrame& frame = current_surface->GetActiveFrame();
-  if (!subtree_id.is_valid()) {
-    return frame.size_in_pixels();
+  // We will either have a subtree ID or a region capture crop_id, but not both.
+  if (absl::holds_alternative<RegionCaptureCropId>(sub_target)) {
+    return GetCaptureBounds(absl::get<RegionCaptureCropId>(sub_target));
   }
 
-  for (auto& render_pass : frame.render_pass_list) {
-    if (render_pass->subtree_capture_id == subtree_id) {
-      return !render_pass->subtree_size.IsEmpty()
-                 ? render_pass->subtree_size
-                 : render_pass->output_rect.size();
+  // We can exit early if there is no subtree, otherwise we need to
+  // intersect the bounds.
+  const CompositorFrame& frame = current_surface->GetActiveFrame();
+  if (!absl::holds_alternative<SubtreeCaptureId>(sub_target)) {
+    return gfx::Rect(frame.size_in_pixels());
+  }
+
+  // Now we know we don't have a crop_id and we do have a subtree ID.
+  for (const auto& render_pass : frame.render_pass_list) {
+    if (render_pass->subtree_capture_id ==
+        absl::get<SubtreeCaptureId>(sub_target)) {
+      return render_pass->subtree_size.IsEmpty()
+                 ? render_pass->output_rect
+                 : gfx::Rect(render_pass->subtree_size);
     }
   }
 
   // No target exists and no CopyOutputRequest will be added.
+  // If we reach here, it means we only want to capture a subtree but
+  // were unable to find it in a render pass--so don't capture anything.
   return {};
 }
 
@@ -1025,6 +1058,27 @@ int64_t CompositorFrameSinkSupport::ComputeTraceId() {
   return (client << 48) | (sink << 32) | trace_sequence_;
 }
 
+gfx::Rect CompositorFrameSinkSupport::GetCaptureBounds(
+    const RegionCaptureCropId& crop_id) const {
+  DCHECK(!crop_id.is_zero());
+  // We don't know what frame contains the bounds associated with |crop_id|,
+  // so we do have to iterate through each surface.
+  for (const SurfaceId& id : surface_manager_->GetCreatedSurfaceIds()) {
+    Surface* surface = surface_manager_->GetSurfaceForId(id);
+    if (!surface->HasActiveFrame()) {
+      continue;
+    }
+
+    const RegionCaptureBounds& bounds =
+        surface->GetActiveFrameMetadata().capture_bounds;
+    const auto it = bounds.bounds().find(crop_id);
+    if (it != bounds.bounds().end()) {
+      return it->second;
+    }
+  }
+  return {};
+}
+
 bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
     base::TimeTicks frame_time) {
   // We should throttle OnBeginFrame() if it has been less than
@@ -1032,9 +1086,9 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   // requested to update at such rate.
   const bool should_throttle_as_requested =
       ShouldThrottleBeginFrameAsRequested(frame_time);
-  // We might throttle this OnBeginFrame() if it's been less than a second since
-  // the last one was sent, either because clients are unresponsive or have
-  // submitted too many undrawn frames.
+  // We might throttle this OnBeginFrame() if it's been less than a second
+  // since the last one was sent, either because clients are unresponsive or
+  // have submitted too many undrawn frames.
   const bool can_throttle_if_unresponsive_or_excessive =
       frame_time - last_frame_time_ < base::Seconds(1);
 
@@ -1068,8 +1122,8 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
     return true;
   }
 
-  // We should never throttle BeginFrames if there is another client waiting for
-  // this client to submit a frame.
+  // We should never throttle BeginFrames if there is another client waiting
+  // for this client to submit a frame.
   if (surface_manager_->HasBlockedEmbedder(frame_sink_id_)) {
     RecordShouldSendBeginFrame("SendBlockedEmbedded");
     return true;
@@ -1115,14 +1169,6 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   return true;
 }
 
-bool CompositorFrameSinkSupport::IsEvicted(
-    const LocalSurfaceId& local_surface_id) const {
-  return local_surface_id.embed_token() ==
-             last_evicted_local_surface_id_.embed_token() &&
-         local_surface_id.parent_sequence_number() <=
-             last_evicted_local_surface_id_.parent_sequence_number();
-}
-
 void CompositorFrameSinkSupport::CheckPendingSurfaces() {
   if (pending_surfaces_.empty())
     return;
@@ -1134,7 +1180,7 @@ void CompositorFrameSinkSupport::CheckPendingSurfaces() {
 
 bool CompositorFrameSinkSupport::ShouldThrottleBeginFrameAsRequested(
     base::TimeTicks frame_time) {
-  return begin_frame_interval_ > base::TimeDelta() &&
+  return begin_frame_interval_.is_positive() &&
          (frame_time - last_frame_time_) < begin_frame_interval_;
 }
 
@@ -1142,6 +1188,14 @@ void CompositorFrameSinkSupport::OnCompositorFrameTransitionDirectiveProcessed(
     uint32_t sequence_id) {
   if (client_)
     client_->OnCompositorFrameTransitionDirectiveProcessed(sequence_id);
+}
+
+bool CompositorFrameSinkSupport::IsEvicted(
+    const LocalSurfaceId& local_surface_id) const {
+  return local_surface_id.embed_token() ==
+             last_evicted_local_surface_id_.embed_token() &&
+         local_surface_id.parent_sequence_number() <=
+             last_evicted_local_surface_id_.parent_sequence_number();
 }
 
 void CompositorFrameSinkSupport::DestroySelf() {

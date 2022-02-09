@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/users/affiliation.h"
@@ -22,18 +21,18 @@
 class PrefRegistrySimple;
 class PrefService;
 
-namespace enterprise_management {
-class PolicyData;
-}
-
-namespace chromeos {
-
-class InstallAttributes;
-
+namespace ash {
 namespace attestation {
 class AttestationFlow;
-}
+}  // namespace attestation
+}  // namespace ash
 
+namespace enterprise_management {
+class PolicyData;
+}  // namespace enterprise_management
+
+namespace chromeos {
+class InstallAttributes;
 }  // namespace chromeos
 
 namespace policy {
@@ -105,15 +104,9 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   // Returns the enterprise enrollment domain if device is managed.
   std::string GetEnterpriseEnrollmentDomain() const;
 
-  // Custom enterprise display domain used in UI if specified, otherwise
-  // defaults to enterprise enrollment domain. The policy needs to be loaded
-  // before the custom display domain can be used.
-  std::string GetEnterpriseDisplayDomain() const;
-
   // Returns the manager of the domain for use in UI if specified, otherwise the
   // enterprise display domain.
-  // TODO(crbug.com/1081272): refactor localization hints for all strings that
-  // depend on this method
+  // The policy needs to be loaded before the display manager can be used.
   std::string GetEnterpriseDomainManager() const;
 
   // Returns the SSO profile id for the managing OU of this device. Currently
@@ -215,13 +208,13 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   // attestation flow is needed for testing.
   // TODO(crbug.com/1235325): Remove AttestationFlow completely from the
   // connector and a fake one directly to |EnterpriseEnrollmentHelperImpl|.
-  chromeos::attestation::AttestationFlow* GetAttestationFlow() const {
+  ash::attestation::AttestationFlow* GetAttestationFlow() const {
     return attestation_flow_.get();
   }
 
   // Sets the attestation flow for testing.
   void SetAttestationFlowForTesting(
-      std::unique_ptr<chromeos::attestation::AttestationFlow> attestation_flow);
+      std::unique_ptr<ash::attestation::AttestationFlow> attestation_flow);
 
   // Returns device's market segment.
   MarketSegment GetEnterpriseMarketSegment() const;
@@ -340,7 +333,7 @@ class BrowserPolicyConnectorAsh : public ChromeBrowserPolicyConnector,
   // needed for testing.
   // TODO(crbug.com/1235325): Remove AttestationFlow completely from the
   // connector and a fake one directly to |EnterpriseEnrollmentHelperImpl|.
-  std::unique_ptr<chromeos::attestation::AttestationFlow> attestation_flow_;
+  std::unique_ptr<ash::attestation::AttestationFlow> attestation_flow_;
 
   base::WeakPtrFactory<BrowserPolicyConnectorAsh> weak_ptr_factory_{this};
 };

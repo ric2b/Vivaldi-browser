@@ -11,7 +11,7 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/defaults.h"
@@ -273,17 +273,17 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   bool GetAvailableRangeForTest(const SessionID& tab_id,
                                 std::pair<int, int>* range);
 
- private:
-  friend class SessionServiceBaseTestHelper;
-  friend class SessionServiceTestHelper;
-
   // Sets whether commands are saved. If false, SessionCommands are effectively
   // dropped (deleted). This is intended for use after a crash to ensure no
   // commands are written before the user acknowledges/restores the crash.
   void SetSavingEnabled(bool enabled);
 
+ private:
+  friend class SessionServiceBaseTestHelper;
+  friend class SessionServiceTestHelper;
+
   // This is always non-null.
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
 
   // Whether to use delayed save. Set to false when constructed with a FilePath
   // (which should only be used for testing).

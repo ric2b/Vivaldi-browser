@@ -6,9 +6,10 @@
 #define MEDIA_GPU_CHROMEOS_DMABUF_VIDEO_FRAME_POOL_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "media/base/status.h"
 #include "media/base/video_frame.h"
+#include "media/gpu/chromeos/chromeos_status.h"
 #include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/chromeos/gpu_buffer_layout.h"
 #include "media/gpu/media_gpu_export.h"
@@ -16,7 +17,14 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
+namespace gpu {
+class GpuMemoryBufferFactory;
+}  // namespace gpu
+
 namespace media {
+
+// Forward declare for use in AsPlatformVideoFramePool.
+class PlatformVideoFramePool;
 
 // Interface for allocating and managing DMA-buf VideoFrame. The client should
 // set a task runner first, and guarantee both GetFrame() and the destructor are
@@ -26,6 +34,16 @@ namespace media {
 class MEDIA_GPU_EXPORT DmabufVideoFramePool {
  public:
   using DmabufId = const std::vector<base::ScopedFD>*;
+
+  using CreateFrameCB =
+      base::RepeatingCallback<CroStatus::Or<scoped_refptr<VideoFrame>>(
+          gpu::GpuMemoryBufferFactory*,
+          VideoPixelFormat,
+          const gfx::Size&,
+          const gfx::Rect&,
+          const gfx::Size&,
+          bool,
+          base::TimeDelta)>;
 
   // Get the identifier of Dmabuf-backed |frame|. Calling this method with the
   // frames backed by the same Dmabuf should return the same result.
@@ -40,17 +58,22 @@ class MEDIA_GPU_EXPORT DmabufVideoFramePool {
   virtual void set_parent_task_runner(
       scoped_refptr<base::SequencedTaskRunner> parent_task_runner);
 
+  // Allows downcasting to an implementation of DmabufVideoFramePool safely
+  // since it has custom behavior that VaapiVideoDecoder needs to take
+  // advantage of.
+  virtual PlatformVideoFramePool* AsPlatformVideoFramePool();
+
   // Sets the parameters of allocating frames and the maximum number of frames
   // which can be allocated.
-  // Returns a valid GpuBufferLayout if the initialization is successful.
-  // Returns StatusCode::kAborted if the initialization process is aborted.
-  // Returns StatusCode::kInvalidArgument if any other error occurs.
-  virtual StatusOr<GpuBufferLayout> Initialize(const Fourcc& fourcc,
-                                               const gfx::Size& coded_size,
-                                               const gfx::Rect& visible_rect,
-                                               const gfx::Size& natural_size,
-                                               size_t max_num_frames,
-                                               bool use_protected) = 0;
+  // Returns a valid GpuBufferLayout if the initialization is successful,
+  // otherwise returns any given error from the set of CroStatus::Codes.
+  virtual CroStatus::Or<GpuBufferLayout> Initialize(
+      const Fourcc& fourcc,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      size_t max_num_frames,
+      bool use_protected) = 0;
 
   // Returns a frame from the pool with the layout that is returned by the
   // previous Initialize() method and zero timestamp. Returns nullptr if the

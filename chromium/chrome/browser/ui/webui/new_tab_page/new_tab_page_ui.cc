@@ -308,6 +308,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "modulesRedesignedEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpModulesRedesigned));
+  source->AddBoolean(
+      "modulesRedesignedLayoutEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpModulesRedesignedLayout));
 
   RealboxHandler::SetupWebUIDataSource(source);
 
@@ -315,17 +318,10 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       source, base::make_span(kNewTabPageResources, kNewTabPageResourcesSize),
       IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_HTML);
 
-  // Allows creating <script> and inlining as well as network requests to
-  // support inlining the OneGoogleBar.
-  // TODO(crbug.com/1076506): remove when changing to iframed OneGoogleBar.
-  // Needs to happen after |webui::SetupWebUIDataSource()| since also overrides
-  // script-src.
-  source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test "
-      "'self' 'unsafe-inline' https:;");
-  // Allow embedding of iframes from the One Google Bar and
+  // Allow embedding of iframes for the doodle and
   // chrome-untrusted://new-tab-page for other external content and resources.
+  // NOTE: Use caution when overriding content security policies as that cean
+  // lead to subtle security bugs such as https://crbug.com/1251541.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ChildSrc,
       base::StringPrintf("child-src https: %s %s;",
@@ -399,9 +395,9 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
   // Load time data is cached across page reloads. Listen for theme changes so
   // that theme info is up-to-date when reloading.
   native_theme_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
-  theme_service_observation_.Observe(theme_service_);
+  theme_service_observation_.Observe(theme_service_.get());
   ntp_custom_background_service_observation_.Observe(
-      ntp_custom_background_service_);
+      ntp_custom_background_service_.get());
 
   // Populates the load time data with basic info.
   OnThemeChanged();
@@ -415,7 +411,8 @@ NewTabPageUI::~NewTabPageUI() = default;
 
 // static
 bool NewTabPageUI::IsNewTabPageOrigin(const GURL& url) {
-  return url.GetOrigin() == GURL(chrome::kChromeUINewTabPageURL).GetOrigin();
+  return url.DeprecatedGetOriginAsURL() ==
+         GURL(chrome::kChromeUINewTabPageURL).DeprecatedGetOriginAsURL();
 }
 
 // static

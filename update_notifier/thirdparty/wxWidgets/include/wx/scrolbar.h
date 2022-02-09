@@ -38,7 +38,7 @@ public:
                 const wxSize& size = wxDefaultSize,
                 long style = wxSB_HORIZONTAL,
                 const wxValidator& validator = wxDefaultValidator,
-                const wxString& name = wxScrollBarNameStr);
+                const wxString& name = wxASCII_STR(wxScrollBarNameStr));
     */
 
     // accessors
@@ -53,7 +53,7 @@ public:
     virtual void SetThumbPosition(int viewStart) = 0;
     virtual void SetScrollbar(int position, int thumbSize,
                               int range, int pageSize,
-                              bool refresh = true) = 0;
+                              bool refresh = true) wxOVERRIDE = 0;
 
     // implementation-only
     bool IsNeeded() const { return GetRange() > GetThumbSize(); }
@@ -74,10 +74,8 @@ private:
     #include "wx/gtk1/scrolbar.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/scrolbar.h"
-#elif defined(__WXCOCOA__)
-    #include "wx/cocoa/scrolbar.h"
-#elif defined(__WXPM__)
-    #include "wx/os2/scrolbar.h"
+#elif defined(__WXQT__)
+    #include "wx/qt/scrolbar.h"
 #endif
 
 #endif // wxUSE_SCROLLBAR

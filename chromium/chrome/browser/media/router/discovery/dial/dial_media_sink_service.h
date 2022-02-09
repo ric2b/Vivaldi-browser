@@ -8,11 +8,10 @@
 #include <memory>
 
 #include "base/callback_list.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/media_router/common/discovery/media_sink_internal.h"
 #include "components/media_router/common/discovery/media_sink_service_util.h"
 #include "components/media_router/common/mojom/logger.mojom.h"
@@ -45,6 +44,8 @@ class DialMediaSinkService {
   // discovered sinks has been updated.
   // Marked virtual for tests.
   virtual void Start(const OnSinksDiscoveredCallback& sink_discovery_cb);
+
+  virtual void OnUserGesture();
 
   // Returns a raw pointer to |impl_|. This method is only valid to call after
   // |Start()| has been called. Always returns non-null.

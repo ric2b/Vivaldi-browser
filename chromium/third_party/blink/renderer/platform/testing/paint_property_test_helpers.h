@@ -164,7 +164,7 @@ CreateAnimatingBackdropFilterEffect(
 inline scoped_refptr<ClipPaintPropertyNode> CreateClip(
     const ClipPaintPropertyNodeOrAlias& parent,
     const TransformPaintPropertyNodeOrAlias& local_transform_space,
-    const FloatRect& layout_clip_rect,
+    const gfx::RectF& layout_clip_rect,
     const FloatRoundedRect& paint_clip_rect) {
   ClipPaintPropertyNode::State state(&local_transform_space, layout_clip_rect,
                                      paint_clip_rect);
@@ -179,7 +179,7 @@ inline scoped_refptr<ClipPaintPropertyNode> CreateClip(
 }
 
 inline void UpdateClip(ClipPaintPropertyNode& clip,
-                       const FloatRect& layout_clip_rect,
+                       const gfx::RectF& layout_clip_rect,
                        const FloatRoundedRect& paint_clip_rect) {
   clip.Update(*clip.Parent(),
               ClipPaintPropertyNode::State(&clip.LocalTransformSpace(),
@@ -299,7 +299,7 @@ inline RefCountedPropertyTreeState CreateScrollTranslationState(
                                container_rect, contents_size,
                                compositing_reasons),
       *CreateClip(parent_state.Clip(), parent_state.Transform(),
-                  FloatRoundedRect(IntRect(container_rect))),
+                  FloatRoundedRect(container_rect)),
       e0()));
 }
 

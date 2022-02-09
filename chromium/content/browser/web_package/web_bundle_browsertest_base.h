@@ -6,10 +6,11 @@
 #define CONTENT_BROWSER_WEB_PACKAGE_WEB_BUNDLE_BROWSERTEST_BASE_H_
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
-#include "components/web_package/test_support/web_bundle_builder.h"
+#include "components/web_package/web_bundle_builder.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -77,7 +78,7 @@ class DownloadObserver : public DownloadManager::Observer {
                          download::DownloadItem* item) override;
 
  private:
-  DownloadManager* manager_;
+  raw_ptr<DownloadManager> manager_;
   base::RunLoop run_loop_;
   GURL url_;
 };
@@ -108,7 +109,7 @@ class MockParser final : public web_package::mojom::WebBundleParser {
                      uint64_t response_length,
                      ParseResponseCallback callback) override;
 
-  MockParserFactory* factory_;
+  raw_ptr<MockParserFactory> factory_;
   mojo::Receiver<web_package::mojom::WebBundleParser> receiver_;
   const Index& index_;
   const GURL primary_url_;
@@ -205,7 +206,7 @@ class WebBundleBrowserTestBase : public ContentBrowserTest {
                                     base::FilePath* file_path);
 
  private:
-  ContentBrowserClient* original_client_ = nullptr;
+  raw_ptr<ContentBrowserClient> original_client_ = nullptr;
   TestBrowserClient browser_client_;
   base::ScopedTempDir temp_dir_;
 };
@@ -242,12 +243,12 @@ FrameTreeNode* GetFirstChild(WebContents* web_contents);
 
 std::string CreateSimpleWebBundle(const GURL& primary_url);
 
-void AddHtmlFile(web_package::test::WebBundleBuilder* builder,
+void AddHtmlFile(web_package::WebBundleBuilder* builder,
                  const GURL& base_url,
                  const std::string& path,
                  const std::string& content);
 
-void AddScriptFile(web_package::test::WebBundleBuilder* builder,
+void AddScriptFile(web_package::WebBundleBuilder* builder,
                    const GURL& base_url,
                    const std::string& path,
                    const std::string& content);
@@ -313,11 +314,10 @@ std::string CreateHtmlForNavigationTest(const std::string& page_info,
 
 std::string CreateScriptForNavigationTest(const std::string& script_info);
 
-void AddHtmlAndScriptForNavigationTest(
-    web_package::test::WebBundleBuilder* builder,
-    const GURL& base_url,
-    const std::string& path,
-    const std::string& additional_html);
+void AddHtmlAndScriptForNavigationTest(web_package::WebBundleBuilder* builder,
+                                       const GURL& base_url,
+                                       const std::string& path,
+                                       const std::string& additional_html);
 
 std::string GetLoadResultForNavigationTest(const ToRenderFrameHost& adapter);
 

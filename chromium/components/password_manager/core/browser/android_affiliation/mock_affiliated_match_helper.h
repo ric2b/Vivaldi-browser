@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -20,8 +19,7 @@ namespace password_manager {
 class MockAffiliatedMatchHelper : public AffiliatedMatchHelper {
  public:
   MockAffiliatedMatchHelper();
-  MockAffiliatedMatchHelper(PasswordStoreInterface* password_store,
-                            AffiliationService* affiliation_service);
+  explicit MockAffiliatedMatchHelper(AffiliationService* affiliation_service);
 
   MockAffiliatedMatchHelper(const MockAffiliatedMatchHelper&) = delete;
   MockAffiliatedMatchHelper& operator=(const MockAffiliatedMatchHelper&) =

@@ -9,7 +9,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
 
 // TODO(rvargas): remove this with the rest of the verifier.
 #if defined(COMPILER_MSVC)
@@ -93,7 +92,8 @@ class GenericScopedHandle {
   FRIEND_TEST_ALL_PREFIXES(ScopedHandleTest, ActiveVerifierUntrackedHandle);
   Handle handle_;
 
-  DISALLOW_COPY_AND_ASSIGN(GenericScopedHandle);
+  GenericScopedHandle(const GenericScopedHandle&) = delete;
+  GenericScopedHandle& operator=(const GenericScopedHandle&) = delete;
 };
 
 #undef BASE_WIN_GET_CALLER
@@ -115,7 +115,9 @@ class HandleTraits {
   static HANDLE NullHandle() { return NULL; }
 
  private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(HandleTraits);
+  HandleTraits() = delete;
+  HandleTraits(const HandleTraits&) = delete;
+  HandleTraits& operator=(const HandleTraits&) = delete;
 };
 
 // Do-nothing verifier.
@@ -133,7 +135,9 @@ class DummyVerifierTraits {
                            const void* pc2) {}
 
  private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(DummyVerifierTraits);
+  DummyVerifierTraits() = delete;
+  DummyVerifierTraits(const DummyVerifierTraits&) = delete;
+  DummyVerifierTraits& operator=(const DummyVerifierTraits&) = delete;
 };
 
 // Performs actual run-time tracking.
@@ -151,7 +155,9 @@ class VerifierTraits {
                            const void* pc2);
 
  private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(VerifierTraits);
+  VerifierTraits() = delete;
+  VerifierTraits(const VerifierTraits&) = delete;
+  VerifierTraits& operator=(const VerifierTraits&) = delete;
 };
 
 typedef GenericScopedHandle<HandleTraits, VerifierTraits> ScopedHandle;

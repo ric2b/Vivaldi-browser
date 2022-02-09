@@ -24,19 +24,13 @@ extern const base::Feature kTestFeature;
 // Feature flag to enable Shared Highlighting (Link to Text).
 extern const base::Feature kSharedHighlightingIOS;
 
-// Feature flag that enables 'default browser' screen in FRE to suggest the
-// users to update the default browser in the Settings.app.
-extern const base::Feature kEnableFREDefaultBrowserScreen;
-
-// Feature flag for testing 'kEnableFREDefaultBrowserScreen' experiment.
+// Feature flag for testing the 'default browser' screen in FRE and different
+// experiments to suggest the users to update the default browser in the
+// Settings.app.
 extern const base::Feature kEnableFREDefaultBrowserScreenTesting;
 
 // Feature flag that enables using the FRE UI module to show first run screens.
 extern const base::Feature kEnableFREUIModuleIOS;
-
-// Feature flag that enables using the strings of the previous sync screen in
-// the current FRE.
-extern const base::Feature kOldSyncStringFRE;
 
 // TODO(crbug.com/1128242): Remove this flag after the refactoring work is
 // finished. Flag to modernize the tabstrip without disturbing the existing one.
@@ -48,11 +42,12 @@ extern const base::Feature kIncognitoBrandConsistencyForIOS;
 // Feature flag to enable revamped Incognito NTP page.
 extern const base::Feature kIncognitoNtpRevamp;
 
-// Feature flag that experiments with new location permissions user experiences.
-extern const base::Feature kLocationPermissionsPrompt;
-
 // Feature flag that experiments with the default browser fullscreen promo UI.
 extern const base::Feature kDefaultBrowserFullscreenPromoExperiment;
+
+// Feature flag that shows iOS 15 context menu, instead of tooltip popover,
+// during a location bar long press gesture.
+extern const base::Feature kIOSLocationBarUseNativeContextMenu;
 
 // Feature flag that swaps the omnibox textfield implementation.
 extern const base::Feature kIOSNewOmniboxImplementation;
@@ -80,6 +75,13 @@ extern const base::Feature kUseLensToSearchForImage;
 // Feature flag to enable promotional view for Passwords In Other Apps in
 // Settings.
 extern const base::Feature kCredentialProviderExtensionPromo;
+
+// Feature flag to enable duplicate NTP cleanup.
+extern const base::Feature kRemoveExcessNTPs;
+
+// Feature flag to enable shortened instruction to turn on Password AutoFill for
+// Chrome.
+extern const base::Feature kEnableShortenedPasswordAutoFillInstruction;
 
 // Whether the ContextMenuActionsRefresh flag is enabled.
 bool IsContextMenuActionsRefreshEnabled();

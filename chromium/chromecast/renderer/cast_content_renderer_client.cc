@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "chromecast/base/bitstream_audio_codecs.h"
 #include "chromecast/base/cast_features.h"
@@ -94,14 +95,6 @@ CastContentRendererClient::CastContentRendererClient()
       activity_url_filter_manager_(
           std::make_unique<CastActivityUrlFilterManager>()) {
 #if defined(OS_ANDROID)
-  DCHECK(::media::MediaCodecUtil::IsMediaCodecAvailable())
-      << "MediaCodec is not available!";
-  // Platform decoder support must be enabled before we set the
-  // IsCodecSupportedCB because the latter instantiates the lazy MimeUtil
-  // instance, which caches the platform decoder supported state when it is
-  // constructed.
-  ::media::EnablePlatformDecoderSupport();
-
   // Registers a custom content::AudioDeviceFactory
   cast_audio_device_factory_ =
       std::make_unique<media::CastAudioDeviceFactory>();
@@ -159,12 +152,6 @@ void CastContentRendererClient::RenderThreadStarted() {
       std::make_unique<guest_view::GuestViewContainerDispatcher>();
   thread->AddObserver(guest_view_container_dispatcher_.get());
 #endif
-}
-
-void CastContentRendererClient::WebViewCreated(blink::WebView* webview) {
-  // Disable application cache as Chromecast doesn't support off-line
-  // application running.
-  webview->GetSettings()->SetOfflineWebApplicationCacheEnabled(false);
 }
 
 void CastContentRendererClient::RenderFrameCreated(
@@ -404,6 +391,9 @@ absl::optional<::media::AudioRendererAlgorithmParameters>
 CastContentRendererClient::GetAudioRendererAlgorithmParameters(
     ::media::AudioParameters audio_parameters) {
 #if defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(kEnableCastAudioOutputDevice)) {
+    return absl::nullopt;
+  }
   ::media::AudioRendererAlgorithmParameters parameters;
   parameters.max_capacity = kAudioRendererMaxCapacity;
   parameters.starting_capacity = kAudioRendererStartingCapacity;

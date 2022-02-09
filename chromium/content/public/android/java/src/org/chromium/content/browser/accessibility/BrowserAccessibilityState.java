@@ -134,6 +134,18 @@ public class BrowserAccessibilityState {
     }
 
     @VisibleForTesting
+    public static void setFeedbackTypeMaskForTesting(int value) {
+        if (!sInitialized) updateAccessibilityServices();
+
+        sFeedbackTypeMask = value;
+
+        // Inform all listeners of this change.
+        for (Listener listener : sListeners) {
+            listener.onBrowserAccessibilityStateChanged(sScreenReader);
+        }
+    }
+
+    @VisibleForTesting
     public static void setEventTypeMaskForTesting() {
         if (!sInitialized) updateAccessibilityServices();
 
@@ -202,6 +214,8 @@ public class BrowserAccessibilityState {
         if (serviceNamesString != null && !serviceNamesString.isEmpty()) {
             String[] serviceNames = serviceNamesString.split(":");
             for (String name : serviceNames) {
+                // null or empty names can be skipped
+                if (name == null || name.isEmpty()) continue;
                 // Try to canonicalize the component name if possible.
                 ComponentName componentName = ComponentName.unflattenFromString(name);
                 if (componentName != null) {

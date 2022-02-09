@@ -17,6 +17,7 @@
 #include "base/allocator/partition_allocator/partition_stats.h"
 #include "base/allocator/partition_allocator/partition_tls.h"
 #include "base/base_export.h"
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
@@ -64,31 +65,9 @@ class ThreadCacheInspector;
 class ThreadCache;
 
 extern BASE_EXPORT PartitionTlsKey g_thread_cache_key;
-// On Windows, |thread_local| variables cannot be marked "dllexport", see
-// compiler error C2492 at
-// https://docs.microsoft.com/en-us/cpp/error-messages/compiler-errors-1/compiler-error-c2492?view=msvc-160.
-// Don't use it there.
-//
 // On Android, we have to go through emutls, since this is always a shared
 // library, so don't bother.
-//
-// On macOS and iOS with PartitionAlloc-Everywhere enabled, thread_local
-// allocates memory and it causes an infinite loop of ThreadCache::Get() ->
-// malloc_zone_malloc -> ShimMalloc -> ThreadCache::Get() -> ...
-// Exact stack trace is:
-//   libsystem_malloc.dylib`_malloc_zone_malloc
-//   libdyld.dylib`tlv_allocate_and_initialize_for_key
-//   libdyld.dylib`tlv_get_addr
-//   libbase.dylib`thread-local wrapper routine for
-//       base::internal::g_thread_cache
-//   libbase.dylib`base::internal::ThreadCache::Get()
-// where tlv_allocate_and_initialize_for_key performs memory allocation.
-//
-// Finally, we have crashes with component builds on macOS,
-// see crbug.com/1243375.
-#if !(defined(OS_WIN) && defined(COMPONENT_BUILD)) && !defined(OS_ANDROID) && \
-    !(defined(OS_APPLE) &&                                                    \
-      (BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) || defined(COMPONENT_BUILD)))
+#if defined(PA_THREAD_LOCAL_TLS) && !defined(OS_ANDROID)
 #define PA_THREAD_CACHE_FAST_TLS
 #endif
 
@@ -138,8 +117,15 @@ class BASE_EXPORT ThreadCacheRegistry {
   // a later point (during a deallocation).
   void PurgeAll();
 
-  // Starts a periodic timer on the current thread to purge all thread caches.
-  void StartPeriodicPurge();
+  typedef void (*RunAfterDelayCallback)(OnceClosure task,
+                                        base::TimeDelta delay);
+
+  // Starts purging all thread caches with the parameter:
+  // "run_after_delay_callback". The parameter: "run_after_delay_callback" takes
+  // 2 parameters: "purge_action" and "delay". ThreadCacheRegistry invokes
+  // "run_after_delay_clalback" to request the caller to execute "purge_action"
+  // after "delay" passes.
+  void StartPeriodicPurge(RunAfterDelayCallback run_afer_delay_callback);
 
   // Controls the thread cache size, by setting the multiplier to a value above
   // or below |ThreadCache::kDefaultMultiplier|.
@@ -171,6 +157,7 @@ class BASE_EXPORT ThreadCacheRegistry {
   ThreadCache* list_head_ GUARDED_BY(GetLock()) = nullptr;
   base::TimeDelta purge_interval_ = kDefaultPurgeInterval;
   bool periodic_purge_running_ = false;
+  RunAfterDelayCallback run_after_delay_callback_ = nullptr;
 
 #if defined(OS_NACL)
   // The thread cache is never used with NaCl, but its compiler doesn't
@@ -551,12 +538,12 @@ ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket, void* slot_start) {
   uintptr_t address = reinterpret_cast<uintptr_t>(slot_start);
 #endif
 
-  // We assume that the cacheline size is 64 byte, which is true on all x86_64
-  // CPUs as of 2021.
-  //
   // The pointer is always 16 bytes aligned, so its start address is always == 0
   // % 16. Its distance to the next cacheline is 64 - ((address & 63) / 16) *
   // 16.
+  static_assert(
+      kPartitionCachelineSize == 64,
+      "The computation below assumes that cache lines are 64 bytes long.");
   int distance_to_next_cacheline_in_16_bytes = 4 - ((address >> 4) & 3);
   int slot_size_remaining_in_16_bytes =
       std::min(bucket.slot_size / 16, distance_to_next_cacheline_in_16_bytes);

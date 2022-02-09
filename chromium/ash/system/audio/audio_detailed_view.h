@@ -8,12 +8,12 @@
 #include <map>
 #include <memory>
 
+#include "ash/accessibility/accessibility_observer.h"
 #include "ash/ash_export.h"
 #include "ash/components/audio/audio_device.h"
 #include "ash/system/tray/tray_detailed_view.h"
 #include "ash/system/tray/tray_toggle_button.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/view.h"
 
@@ -23,10 +23,12 @@ struct VectorIcon;
 
 namespace ash {
 class MicGainSliderController;
+class UnifiedAudioDetailedViewControllerTest;
 
 namespace tray {
 
-class ASH_EXPORT AudioDetailedView : public TrayDetailedView {
+class ASH_EXPORT AudioDetailedView : public TrayDetailedView,
+                                     public ::ash::AccessibilityObserver {
  public:
   explicit AudioDetailedView(DetailedViewDelegate* delegate);
 
@@ -45,7 +47,12 @@ class ASH_EXPORT AudioDetailedView : public TrayDetailedView {
   static void SetMapNoiseCancellationToggleCallbackForTest(
       NoiseCancellationCallback* map_noise_cancellation_toggle_callback);
 
+  // ::ash::AccessibilityObserver:
+  void OnAccessibilityStatusChanged() override;
+
  private:
+  friend class ::ash::UnifiedAudioDetailedViewControllerTest;
+
   // Helper function to add non-clickable header rows within the scrollable
   // list.
   void AddAudioSubHeader(const gfx::VectorIcon& icon, int text_id);
@@ -69,6 +76,8 @@ class ASH_EXPORT AudioDetailedView : public TrayDetailedView {
   AudioDeviceList output_devices_;
   AudioDeviceList input_devices_;
   AudioDeviceMap device_map_;
+
+  HoverHighlightView* live_caption_view_ = nullptr;
 };
 
 }  // namespace tray

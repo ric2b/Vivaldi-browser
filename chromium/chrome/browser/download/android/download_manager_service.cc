@@ -13,8 +13,8 @@
 #include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -840,7 +840,8 @@ void DownloadManagerService::CreateInterruptedDownloadForTest(
           base::Time(), false,
           std::vector<download::DownloadItem::ReceivedSlice>(),
           download::DownloadItemRerouteInfo(),
-          absl::nullopt /*download_schedule*/, nullptr));
+          absl::nullopt /*download_schedule*/, download::kInvalidRange,
+          download::kInvalidRange, nullptr));
 }
 
 void DownloadManagerService::InitializeForProfile(ProfileKey* profile_key) {

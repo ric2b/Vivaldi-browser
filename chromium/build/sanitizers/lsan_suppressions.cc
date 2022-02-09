@@ -70,6 +70,19 @@ char kLSanDefaultSuppressions[] =
     // Suppress leaks in CreateCdmInstance. https://crbug.com/961062
     "leak:media::CdmAdapter::CreateCdmInstance\n"
 
+#if defined(OS_CHROMEOS)
+    // Suppress leak in FileStream. crbug.com/1263374
+    "leak:chromeos::PipeReader::StartIO\n"
+    // Supppress AnimationObserverToHideView leak. crbug.com/1261464
+    "leak:ash::ShelfNavigationWidget::UpdateButtonVisibility\n"
+    // Suppress AnimationSequence leak. crbug.com/1265031
+    "leak:ash::LockStateController::StartPostLockAnimation\n"
+    // Suppress leak in SurfaceDrawContext. crbug.com/1265033
+    "leak:skgpu::v1::SurfaceDrawContext::drawGlyphRunListWithCache\n"
+    // Suppress leak in PagedAppsGridView. crbug.com/1276658
+    "leak:ash::PagedAppsGridView::AnimateCardifiedState\n"
+#endif
+
     // PLEASE READ ABOVE BEFORE ADDING NEW SUPPRESSIONS.
 
     // End of suppressions.

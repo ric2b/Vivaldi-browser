@@ -12,7 +12,9 @@
 #include <sstream>
 #include <utility>
 
-#include "ash/components/quick_answers/public/cpp/quick_answers_prefs.h"
+#include "ash/components/arc/arc_prefs.h"
+#include "ash/components/arc/metrics/arc_metrics_constants.h"
+#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/accelerators.h"
@@ -22,6 +24,8 @@
 #include "ash/public/cpp/autotest_ambient_api.h"
 #include "ash/public/cpp/autotest_desks_api.h"
 #include "ash/public/cpp/autotest_private_api_utils.h"
+#include "ash/public/cpp/holding_space/holding_space_model.h"
+#include "ash/public/cpp/holding_space/holding_space_prefs.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/overview_test_api.h"
@@ -53,6 +57,7 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -99,6 +104,8 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/default_pinned_apps.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
 #include "chrome/browser/ui/ash/shelf/shelf_spinner_controller.h"
@@ -121,13 +128,13 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/extensions/api/autotest_private.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/frame/default_frame_header.h"
 #include "chromeos/ui/frame/frame_header.h"
@@ -135,10 +142,9 @@
 #include "chromeos/ui/wm/desks/desks_helper.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "components/app_restore/window_properties.h"
-#include "components/arc/arc_prefs.h"
-#include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/policy/core/browser/policy_conversions.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/user_manager/user.h"
@@ -174,6 +180,7 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/throughput_tracker.h"
 #include "ui/compositor/throughput_tracker_host.h"
@@ -332,6 +339,7 @@ api::autotest_private::AppType GetAppType(apps::mojom::AppType type) {
       return api::autotest_private::AppType::APP_TYPE_BUILTIN;
     case apps::mojom::AppType::kCrostini:
       return api::autotest_private::AppType::APP_TYPE_CROSTINI;
+    case apps::mojom::AppType::kChromeApp:
     case apps::mojom::AppType::kExtension:
       return api::autotest_private::AppType::APP_TYPE_EXTENSION;
     case apps::mojom::AppType::kPluginVm:
@@ -349,12 +357,12 @@ api::autotest_private::AppType GetAppType(apps::mojom::AppType type) {
       return api::autotest_private::AppType::APP_TYPE_REMOTE;
     case apps::mojom::AppType::kBorealis:
       return api::autotest_private::AppType::APP_TYPE_BOREALIS;
-    case apps::mojom::AppType::kStandaloneBrowserExtension:
+    case apps::mojom::AppType::kStandaloneBrowserChromeApp:
       // Intentionally fall-through for now.
       // TODO(https://crbug.com/1225848): Figure out appropriate behavior for
       // Lacros-hosted chrome-apps.
       break;
-  }
+    }
   NOTREACHED();
   return api::autotest_private::AppType::APP_TYPE_NONE;
 }
@@ -831,32 +839,105 @@ bool GetDisplayIdFromOptionalArg(const std::unique_ptr<std::string>& arg,
   return true;
 }
 
-struct SmoothnessTrackerInfo {
-  absl::optional<ui::ThroughputTracker> tracker;
-  ui::ThroughputTrackerHost::ReportCallback callback;
-  bool stopping = false;
+class DisplaySmoothnessTracker {
+ public:
+  using ReportCallback = base::OnceCallback<void(
+      const cc::FrameSequenceMetrics::CustomReportData& frame_data,
+      std::vector<int>&& throughput)>;
+
+  DisplaySmoothnessTracker() = default;
+  DisplaySmoothnessTracker(const DisplaySmoothnessTracker&) = delete;
+  DisplaySmoothnessTracker& operator=(const DisplaySmoothnessTracker&) = delete;
+  ~DisplaySmoothnessTracker() = default;
+
+  // Return true if tracking is started successfully.
+  bool Start(int64_t display_id,
+             base::TimeDelta throughput_interval,
+             ui::ThroughputTrackerHost::ReportCallback callback) {
+    auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id);
+    if (!root_window)
+      return false;
+
+    DCHECK(root_window_tracker_.windows().empty());
+    root_window_tracker_.Add(root_window);
+
+    tracker_ =
+        root_window->layer()->GetCompositor()->RequestNewThroughputTracker();
+    tracker_->Start(std::move(callback));
+
+    throughtput_timer_.Start(FROM_HERE, throughput_interval, this,
+                             &DisplaySmoothnessTracker::OnThroughputTimerFired);
+
+    return true;
+  }
+
+  void Stop(ReportCallback callback) {
+    stopping_ = true;
+    throughtput_timer_.Stop();
+    callback_ = std::move(callback);
+    tracker_->Stop();
+  }
+
+  ReportCallback TakeCallback() { return std::move(callback_); }
+  std::vector<int> TakeThroughput() { return std::move(throughput_); }
+
+  bool stopping() const { return stopping_; }
+  bool has_error() const { return has_error_; }
+
+ private:
+  void OnThroughputTimerFired() {
+    auto windows = root_window_tracker_.windows();
+    if (windows.empty()) {
+      // RootWindow is gone. This could happen when display is reconfigured
+      // during the test run. Treat it as error since no meaningful smoothness
+      // data would be captured in such case.
+      LOG(ERROR) << "Unable to collect throughput because underlying "
+                    "RootWindow is gone.";
+      has_error_ = true;
+      throughtput_timer_.Stop();
+      return;
+    }
+
+    DCHECK_EQ(windows.size(), 1u);
+    auto* root_window = windows[0];
+    throughput_.push_back(
+        root_window->GetHost()->compositor()->GetAverageThroughput());
+  }
+
+  aura::WindowTracker root_window_tracker_;
+  absl::optional<ui::ThroughputTracker> tracker_;
+  ReportCallback callback_;
+  bool stopping_ = false;
+  bool has_error_ = false;
+
+  base::RepeatingTimer throughtput_timer_;
+  std::vector<int> throughput_;
 };
-using DisplaySmoothnessTrackerInfos = std::map<int64_t, SmoothnessTrackerInfo>;
-DisplaySmoothnessTrackerInfos* GetDisplaySmoothnessTrackerInfos() {
-  static base::NoDestructor<DisplaySmoothnessTrackerInfos> trackers;
+
+using DisplaySmoothnessTrackers =
+    std::map<int64_t, std::unique_ptr<DisplaySmoothnessTracker>>;
+DisplaySmoothnessTrackers* GetDisplaySmoothnessTrackers() {
+  static base::NoDestructor<DisplaySmoothnessTrackers> trackers;
   return trackers.get();
 }
 
 // Forwards frame rate data to the callback for |display_id| and resets.
 void ForwardFrameRateDataAndReset(
     int64_t display_id,
-    const cc::FrameSequenceMetrics::CustomReportData& data) {
-  auto* infos = GetDisplaySmoothnessTrackerInfos();
-  auto it = infos->find(display_id);
-  DCHECK(it != infos->end());
-  DCHECK(it->second.callback);
+    const cc::FrameSequenceMetrics::CustomReportData& frame_data) {
+  auto* trackers = GetDisplaySmoothnessTrackers();
+  auto it = trackers->find(display_id);
+  DCHECK(it != trackers->end());
+
+  auto throughput = it->second->TakeThroughput();
 
   // Moves the callback out and erases the mapping first to allow new tracking
   // for |display_id| to start before |callback| run returns.
   // See https://crbug.com/1098886.
-  auto callback = std::move(it->second.callback);
-  infos->erase(it);
-  std::move(callback).Run(data);
+  auto callback = it->second->TakeCallback();
+  DCHECK(callback);
+  trackers->erase(it);
+  std::move(callback).Run(frame_data, std::move(throughput));
 }
 
 std::string ResolutionToString(
@@ -1912,7 +1993,8 @@ AutotestPrivateGetRegisteredSystemWebAppsFunction::Run() {
     api::autotest_private::SystemApp system_app;
     web_app::SystemWebAppDelegate* delegate = type_and_info.second.get();
     system_app.internal_name = delegate->GetInternalName();
-    system_app.url = delegate->GetInstallUrl().GetOrigin().spec();
+    system_app.url =
+        delegate->GetInstallUrl().DeprecatedGetOriginAsURL().spec();
     result.push_back(std::move(system_app));
   }
 
@@ -1994,7 +2076,7 @@ ExtensionFunction::ResponseAction AutotestPrivateLaunchAppFunction::Run() {
   if (!controller)
     return RespondNow(Error("Controller not available"));
   controller->LaunchApp(ash::ShelfID(params->app_id),
-                        ash::ShelfLaunchSource::LAUNCH_FROM_UNKNOWN,
+                        ash::ShelfLaunchSource::LAUNCH_FROM_INTERNAL,
                         0, /* event_flags */
                         display::Screen::GetScreen()->GetPrimaryDisplay().id());
   return RespondNow(NoArguments());
@@ -3258,7 +3340,7 @@ AutotestPrivateGetAllInstalledAppsFunction::Run() {
   DVLOG(1) << "AutotestPrivateGetAllInstalledAppsFunction";
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
-  apps::AppServiceProxyChromeOs* proxy =
+  apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
 
   std::vector<api::autotest_private::App> installed_apps;
@@ -4624,8 +4706,7 @@ AutotestPrivateSetMetricsEnabledFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
 
   bool value;
-  if (ash::CrosSettings::Get()->GetBoolean(chromeos::kStatsReportingPref,
-                                           &value) &&
+  if (ash::CrosSettings::Get()->GetBoolean(ash::kStatsReportingPref, &value) &&
       value == target_value_) {
     VLOG(1) << "Value at target; returning early";
     return RespondNow(NoArguments());
@@ -4645,13 +4726,12 @@ AutotestPrivateSetMetricsEnabledFunction::Run() {
 
 void AutotestPrivateSetMetricsEnabledFunction::OnDeviceSettingsStored() {
   bool actual;
-  if (!ash::CrosSettings::Get()->GetBoolean(chromeos::kStatsReportingPref,
+  if (!ash::CrosSettings::Get()->GetBoolean(ash::kStatsReportingPref,
                                             &actual)) {
     NOTREACHED() << "AutotestPrivateSetMetricsEnabledFunction: "
                  << "kStatsReportingPref should be set";
-    Respond(Error(base::StrCat(
-        {"Failed to set metrics consent: ", chromeos::kStatsReportingPref,
-         " is not set."})));
+    Respond(Error(base::StrCat({"Failed to set metrics consent: ",
+                                ash::kStatsReportingPref, " is not set."})));
     return;
   }
   VLOG(1) << "AutotestPrivateSetMetricsEnabledFunction: actual: "
@@ -4661,7 +4741,7 @@ void AutotestPrivateSetMetricsEnabledFunction::OnDeviceSettingsStored() {
     Respond(NoArguments());
   } else {
     Respond(Error(base::StrCat(
-        {"Failed to set metrics consent: ", chromeos::kStatsReportingPref,
+        {"Failed to set metrics consent: ", ash::kStatsReportingPref,
          " has wrong value."})));
   }
 }
@@ -4993,24 +5073,26 @@ AutotestPrivateStartSmoothnessTrackingFunction::Run() {
         Error(base::StrCat({"Invalid display id: ", *params->display_id})));
   }
 
-  auto* infos = GetDisplaySmoothnessTrackerInfos();
-  if (infos->find(display_id) != infos->end()) {
+  auto* trackers = GetDisplaySmoothnessTrackers();
+  if (trackers->find(display_id) != trackers->end()) {
     return RespondNow(
         Error(base::StrCat({"Smoothness already tracked for display: ",
                             base::NumberToString(display_id)})));
   }
 
-  auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id);
-  if (!root_window) {
+  base::TimeDelta throughput_interval = kDefaultThroughputInterval;
+  if (params->throughput_interval_ms)
+    throughput_interval = base::Milliseconds(*params->throughput_interval_ms);
+
+  auto tracker = std::make_unique<DisplaySmoothnessTracker>();
+  if (!tracker->Start(
+          display_id, throughput_interval,
+          base::BindOnce(&ForwardFrameRateDataAndReset, display_id))) {
     return RespondNow(Error(base::StrCat(
         {"Invalid display_id; no root window found for the display id ",
          base::NumberToString(display_id)})));
   }
-
-  auto tracker =
-      root_window->layer()->GetCompositor()->RequestNewThroughputTracker();
-  tracker.Start(base::BindOnce(&ForwardFrameRateDataAndReset, display_id));
-  (*infos)[display_id].tracker = std::move(tracker);
+  (*trackers)[display_id] = std::move(tracker);
   return RespondNow(NoArguments());
 }
 
@@ -5033,21 +5115,23 @@ AutotestPrivateStopSmoothnessTrackingFunction::Run() {
         Error(base::StrCat({"Invalid display id: ", *params->display_id})));
   }
 
-  auto* infos = GetDisplaySmoothnessTrackerInfos();
-  auto it = infos->find(display_id);
-  if (it == infos->end()) {
+  auto* trackers = GetDisplaySmoothnessTrackers();
+  auto it = trackers->find(display_id);
+  if (it == trackers->end()) {
     return RespondNow(
         Error(base::StrCat({"Smoothness is not tracked for display: ",
                             base::NumberToString(display_id)})));
   }
 
-  if (it->second.stopping) {
+  if (it->second->stopping()) {
     return RespondNow(Error(
         base::StrCat({"stopSmoothnessTracking already called for display: ",
                       base::NumberToString(display_id)})));
   }
 
-  // ThroughputTracker::Stop does not invoke the report callback when
+  const bool has_error = it->second->has_error();
+
+  // DisplaySmoothnessTracker::Stop does not invoke the report callback when
   // gpu-process crashes and has no valid data to report. Start a timer to
   // handle this case.
   timeout_timer_.Start(
@@ -5055,30 +5139,36 @@ AutotestPrivateStopSmoothnessTrackingFunction::Run() {
       base::BindOnce(&AutotestPrivateStopSmoothnessTrackingFunction::OnTimeOut,
                      this, display_id));
 
-  it->second.callback = base::BindOnce(
-      &AutotestPrivateStopSmoothnessTrackingFunction::OnReportData, this);
-  it->second.stopping = true;
-  it->second.tracker->Stop();
+  it->second->Stop(base::BindOnce(
+      &AutotestPrivateStopSmoothnessTrackingFunction::OnReportData, this));
 
   // Trigger a repaint after ThroughputTracker::Stop() to generate a frame to
   // ensure the tracker report will be sent back.
   auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id);
   root_window->GetHost()->compositor()->ScheduleFullRedraw();
 
+  if (has_error) {
+    return RespondNow(Error(base::StrCat(
+        {"Error happened during smoothness collection for display: ",
+         base::NumberToString(display_id)})));
+  }
+
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
 void AutotestPrivateStopSmoothnessTrackingFunction::OnReportData(
-    const cc::FrameSequenceMetrics::CustomReportData& data) {
+    const cc::FrameSequenceMetrics::CustomReportData& frame_data,
+    std::vector<int>&& throughput) {
   if (did_respond())
     return;
 
   timeout_timer_.AbandonAndStop();
 
-  api::autotest_private::ThroughputTrackerAnimationData result_data;
-  result_data.frames_expected = data.frames_expected;
-  result_data.frames_produced = data.frames_produced;
-  result_data.jank_count = data.jank_count;
+  api::autotest_private::DisplaySmoothnessData result_data;
+  result_data.frames_expected = frame_data.frames_expected;
+  result_data.frames_produced = frame_data.frames_produced;
+  result_data.jank_count = frame_data.jank_count;
+  result_data.throughput = std::move(throughput);
 
   Respond(ArgumentList(
       api::autotest_private::StopSmoothnessTracking::Results::Create(
@@ -5091,11 +5181,11 @@ void AutotestPrivateStopSmoothnessTrackingFunction::OnTimeOut(
     return;
 
   // Clean up the non-functional tracker.
-  auto* infos = GetDisplaySmoothnessTrackerInfos();
-  auto it = infos->find(display_id);
-  if (it == infos->end())
+  auto* trackers = GetDisplaySmoothnessTrackers();
+  auto it = trackers->find(display_id);
+  if (it == trackers->end())
     return;
-  infos->erase(it);
+  trackers->erase(it);
 
   Respond(Error("Smoothness is not available"));
 }
@@ -5235,6 +5325,81 @@ AutotestPrivateStopThroughputTrackerDataCollectionFunction::Run() {
   return RespondNow(
       ArgumentList(api::autotest_private::StopThroughputTrackerDataCollection::
                        Results::Create(result_data)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateGetDisplaySmoothnessFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateGetDisplaySmoothnessFunction::
+    AutotestPrivateGetDisplaySmoothnessFunction() = default;
+
+AutotestPrivateGetDisplaySmoothnessFunction::
+    ~AutotestPrivateGetDisplaySmoothnessFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateGetDisplaySmoothnessFunction::Run() {
+  auto params(
+      api::autotest_private::GetDisplaySmoothness::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  int64_t display_id;
+  if (!GetDisplayIdFromOptionalArg(params->display_id, &display_id)) {
+    return RespondNow(
+        Error(base::StrCat({"Invalid display id: ", *params->display_id})));
+  }
+
+  auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id);
+  const uint32_t smoothness =
+      root_window->GetHost()->compositor()->GetAverageThroughput();
+  return RespondNow(
+      ArgumentList(api::autotest_private::GetDisplaySmoothness::Results::Create(
+          smoothness)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateResetHoldingSpaceFunction
+////////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateResetHoldingSpaceFunction::
+    AutotestPrivateResetHoldingSpaceFunction() = default;
+
+AutotestPrivateResetHoldingSpaceFunction::
+    ~AutotestPrivateResetHoldingSpaceFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateResetHoldingSpaceFunction::Run() {
+  auto params(api::autotest_private::ResetHoldingSpace::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  ash::HoldingSpaceKeyedService* service =
+      ash::HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(profile);
+
+  if (service == nullptr)
+    return RespondNow(Error("Failed to get `HoldingSpaceKeyedService`."));
+
+  service->RemoveAll();
+
+  PrefService* prefs = profile->GetPrefs();
+  ash::holding_space_prefs::ResetProfilePrefsForTesting(prefs);
+
+  if (!ash::holding_space_prefs::MarkTimeOfFirstAvailability(prefs)) {
+    return RespondNow(
+        Error("Failed to call `MarkTimeOfFirstAvailability()` after clearing "
+              "prefs."));
+  }
+
+  if (!params->options || !params->options->mark_time_of_first_add)
+    return RespondNow(NoArguments());
+
+  if (!ash::holding_space_prefs::MarkTimeOfFirstAdd(prefs)) {
+    return RespondNow(
+        Error("Failed to call `MarkTimeOfFirstAdd()` after clearing prefs."));
+  }
+
+  return RespondNow(NoArguments());
 }
 
 ///////////////////////////////////////////////////////////////////////////////

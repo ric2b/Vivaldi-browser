@@ -96,7 +96,8 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
                                        WebHistoryCommitType,
                                        bool is_handled_within_agent,
                                        mojom::blink::SameDocumentNavigationType,
-                                       bool is_client_redirect) override;
+                                       bool is_client_redirect,
+                                       bool is_browser_initiated) override;
   void DispatchDidOpenDocumentInputStream(const KURL& url) override;
   void DispatchDidReceiveTitle(const String&) override;
   void DispatchDidCommitLoad(
@@ -256,7 +257,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   void FocusedElementChanged(Element* element) override;
 
   void OnMainFrameIntersectionChanged(
-      const IntRect& intersection_rect) override;
+      const gfx::Rect& intersection_rect) override;
 
   void OnOverlayPopupAdDetected() override;
 

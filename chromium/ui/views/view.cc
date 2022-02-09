@@ -17,7 +17,6 @@
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/notreached.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
@@ -64,6 +63,7 @@
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/views_features.h"
 #include "ui/views/views_switches.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -213,6 +213,14 @@ View::View() {
   SetTargetHandler(this);
   if (kUseDefaultFillLayout)
     default_fill_layout_.emplace(DefaultFillLayout());
+
+  static bool capture_stack_trace =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kViewStackTraces);
+  if (capture_stack_trace) {
+    SetProperty(kViewStackTraceKey,
+                std::make_unique<base::debug::StackTrace>());
+  }
 }
 
 View::~View() {
@@ -643,7 +651,7 @@ gfx::Transform View::GetTransform() const {
     return gfx::Transform();
 
   gfx::Transform transform = layer()->transform();
-  gfx::Vector2dF scroll_offset = layer()->CurrentScrollOffset();
+  gfx::PointF scroll_offset = layer()->CurrentScrollOffset();
   // Offsets for layer-based scrolling are never negative, but the horizontal
   // scroll direction is reversed in RTL via canvas flipping.
   transform.Translate((GetMirrored() ? 1 : -1) * scroll_offset.x(),
@@ -1085,12 +1093,10 @@ void View::Paint(const PaintInfo& parent_paint_info) {
   if (!ShouldPaint())
     return;
 
-#if DCHECK_IS_ON()
   if (!has_run_accessibility_paint_checks_) {
     RunAccessibilityPaintChecks(this);
     has_run_accessibility_paint_checks_ = true;
   }
-#endif  // DCHECK_IS_ON()
 
   const gfx::Rect& parent_bounds =
       !parent() ? GetMirroredBounds() : parent()->GetMirroredBounds();
@@ -2997,7 +3003,7 @@ bool View::ProcessMousePressed(const ui::MouseEvent& event) {
                             ? GetDragOperations(event.location())
                             : 0;
   ContextMenuController* context_menu_controller =
-      event.IsRightMouseButton() ? context_menu_controller_ : nullptr;
+      event.IsRightMouseButton() ? context_menu_controller_.get() : nullptr;
   View::DragInfo* drag_info = GetDragInfo();
 
   const bool was_enabled = GetEnabled();

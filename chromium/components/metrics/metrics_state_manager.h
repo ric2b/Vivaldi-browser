@@ -11,13 +11,14 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "build/chromeos_buildflags.h"
 #include "components/metrics/clean_exit_beacon.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/cloned_install_detector.h"
 #include "components/metrics/entropy_state.h"
+#include "components/version_info/channel.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/metrics/structured/neutrino_logging.h"  // nogncheck
@@ -75,9 +76,6 @@ class MetricsStateManager final {
   // sampling, and this client isn't in the sample.
   bool IsMetricsReportingEnabled();
 
-  // Returns the install date of the application, in seconds since the epoch.
-  int64_t GetInstallDate() const;
-
   // Returns the client ID for this client, or the empty string if the user is
   // not opted in to metrics reporting.
   const std::string& client_id() const { return client_id_; }
@@ -118,23 +116,24 @@ class MetricsStateManager final {
       EntropyProviderType entropy_provider_type =
           EntropyProviderType::kDefault);
 
-  // Signals whether the session has shutdown cleanly if |update_beacon| is
-  // true. Passing `false` for |has_session_shutdown_cleanly| means that Chrome
-  // has launched and has not yet shut down safely. Passing `true` signals that
-  // Chrome has shut down safely.
+  // Signals whether the session has shutdown cleanly. Passing `false` for
+  // |has_session_shutdown_cleanly| means that Chrome has launched and has not
+  // yet shut down safely. Passing `true` signals that Chrome has shut down
+  // safely.
   //
   // Seeing a call with `false` without a matching call with `true` suggests
   // that Chrome crashed or otherwise did not shut down cleanly, e.g. maybe the
   // OS crashed.
   //
   // If |write_synchronously| is true, then |has_session_shutdown_cleanly| is
-  // written to disk synchronously; otherwise, a write is scheduled.
+  // written to disk synchronously. If false, a write is scheduled, and for
+  // clients in the Extended Variations Safe Mode experiment, a synchronous
+  // write is done, too.
   //
-  // Note: |write_synchronously| should be true only for the extended variations
-  // safe mode experiment.
+  // Note: |write_synchronously| should be true only for the Extended Variations
+  // Safe Mode experiment.
   void LogHasSessionShutdownCleanly(bool has_session_shutdown_cleanly,
-                                    bool write_synchronously = false,
-                                    bool update_beacon = true);
+                                    bool write_synchronously = false);
 
   // Forces the client ID to be generated. This is useful in case it's needed
   // before recording.
@@ -177,12 +176,17 @@ class MetricsStateManager final {
   //
   // |startup_visibility| denotes whether this session is expected to come to
   // the foreground.
+  //
+  // TODO(crbug/1241702): Remove |channel| at the end of the Extended Variations
+  // Safe Mode experiment. |channel| is used to enable the experiment on only
+  // certain channels.
   static std::unique_ptr<MetricsStateManager> Create(
       PrefService* local_state,
       EnabledStateProvider* enabled_state_provider,
       const std::wstring& backup_registry_key,
       const base::FilePath& user_data_dir,
       StartupVisibility startup_visibility = StartupVisibility::kUnknown,
+      version_info::Channel channel = version_info::Channel::UNKNOWN,
       StoreClientInfoCallback store_client_info = StoreClientInfoCallback(),
       LoadClientInfoCallback load_client_info = LoadClientInfoCallback(),
       base::StringPiece external_client_id = base::StringPiece());
@@ -253,6 +257,7 @@ class MetricsStateManager final {
                       const std::wstring& backup_registry_key,
                       const base::FilePath& user_data_dir,
                       StartupVisibility startup_visibility,
+                      version_info::Channel channel,
                       StoreClientInfoCallback store_client_info,
                       LoadClientInfoCallback load_client_info,
                       base::StringPiece external_client_id);
@@ -307,11 +312,11 @@ class MetricsStateManager final {
   static bool instance_exists_;
 
   // Weak pointer to the local state prefs store.
-  PrefService* const local_state_;
+  const raw_ptr<PrefService> local_state_;
 
   // Weak pointer to an enabled state provider. Used to know whether the user
   // has consented to reporting, and if reporting should be done.
-  EnabledStateProvider* enabled_state_provider_;
+  raw_ptr<EnabledStateProvider> enabled_state_provider_;
 
   // A callback run during client id creation so this MetricsStateManager can
   // store a backup of the newly generated ID.

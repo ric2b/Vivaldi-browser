@@ -4,7 +4,7 @@
 // Author:      Vadim Zeitlin
 // Modified by: Brad Anderson, David Warkentin
 // Created:     30.05.03
-// Copyright:   (c) 2003 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2003 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 /////////////////////////////////////////////////////////////////////////////
 
@@ -18,10 +18,6 @@
 
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
-
-#ifdef __BORLANDC__
-#pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/dc.h"
@@ -49,7 +45,7 @@ public:
         m_scrollHelper = scrollHelper;
     }
 
-    virtual bool ProcessEvent(wxEvent& event);
+    virtual bool ProcessEvent(wxEvent& event) wxOVERRIDE;
 
 private:
     wxVarScrollHelperBase *m_scrollHelper;
@@ -996,9 +992,9 @@ bool wxVarHVScrollHelper::IsVisible(size_t row, size_t column) const
 // wx[V/H/HV]ScrolledWindow implementations
 // ============================================================================
 
-IMPLEMENT_ABSTRACT_CLASS(wxVScrolledWindow, wxPanel)
-IMPLEMENT_ABSTRACT_CLASS(wxHScrolledWindow, wxPanel)
-IMPLEMENT_ABSTRACT_CLASS(wxHVScrolledWindow, wxPanel)
+wxIMPLEMENT_ABSTRACT_CLASS(wxVScrolledWindow, wxPanel);
+wxIMPLEMENT_ABSTRACT_CLASS(wxHScrolledWindow, wxPanel);
+wxIMPLEMENT_ABSTRACT_CLASS(wxHVScrolledWindow, wxPanel);
 
 
 #if WXWIN_COMPATIBILITY_2_8

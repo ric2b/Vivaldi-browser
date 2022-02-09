@@ -7,6 +7,8 @@
       "[CACHE]/macos_sdk",
       "-ensure-file",
       "infra/tools/mac_toolchain/${platform} git_revision:e9b1fe29fe21a1cd36428c43ea2aba244bd31280",
+      "-max-threads",
+      "0",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -76,7 +78,6 @@
     "name": "reset XCode"
   },
   {
-    "jsonResult": null,
     "name": "$result"
   }
 ]

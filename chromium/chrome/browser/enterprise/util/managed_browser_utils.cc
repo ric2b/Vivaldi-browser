@@ -8,12 +8,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/values.h"
-#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
@@ -34,9 +36,11 @@
 #if defined(OS_ANDROID)
 #include <jni.h>
 
+#include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "chrome/browser/enterprise/util/jni_headers/ManagedBrowserUtils_jni.h"
 #include "chrome/browser/profiles/profile_android.h"
+#include "chrome/browser/ui/managed_ui.h"
 #endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -115,24 +119,18 @@ bool CertMatchesSelectionFilters(
 
 }  // namespace
 
-bool HasBrowserPoliciesApplied(Profile* profile) {
+bool IsBrowserManaged(Profile* profile) {
   DCHECK(profile);
-  DCHECK(profile->GetProfilePolicyConnector());
 
-  // Temporarily, skip verification from the profile connector if profile is
-  // null while crbug/1253568 is under investigation. The reason to keep both
-  // the DCHECK and the condition is to avoid bad user experiences in the field
-  // until a proper solution is identified. Same for the profile connector.
-  //
-  // TODO(http://crbug.com/1253568): consider that profile should never null at
-  //                                 this point, so remove the conditions on
-  //                                 `profile` and `profile_connector` below.
-  if (profile) {
-    // This profile may have policies configured.
-    auto* profile_connector = profile->GetProfilePolicyConnector();
-    if (profile_connector && profile_connector->IsManaged())
-      return true;
+  if (base::FeatureList::IsEnabled(features::kUseManagementService)) {
+    return policy::ManagementServiceFactory::GetForProfile(profile)
+        ->IsManaged();
   }
+
+  // This profile may have policies configured.
+  auto* profile_connector = profile->GetProfilePolicyConnector();
+  if (profile_connector && profile_connector->IsManaged())
+    return true;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // This session's primary user may also have policies, and those policies may
@@ -158,7 +156,7 @@ bool HasBrowserPoliciesApplied(Profile* profile) {
   // Registry), or with machine level user cloud policies.
   auto* browser_connector = g_browser_process->browser_policy_connector();
   return browser_connector && browser_connector->HasMachineLevelPolicies();
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 std::string GetDomainFromEmail(const std::string& email) {
@@ -235,17 +233,33 @@ bool ProfileCanBeManaged(Profile* profile) {
   return entry && entry->CanBeManaged();
 }
 
-}  // namespace enterprise_util
-}  // namespace chrome
-
 #if defined(OS_ANDROID)
 
+std::string GetAccountManagerName(Profile* profile) {
+  DCHECK(profile);
+
+  // @TODO(https://crbug.com/1227786): There are some use-cases where the
+  // expected behavior of chrome://management is to show more than one domain.
+  return GetAccountManagerIdentity(profile).value_or(std::string());
+}
+
 // static
-jboolean JNI_ManagedBrowserUtils_HasBrowserPoliciesApplied(
+jboolean JNI_ManagedBrowserUtils_IsBrowserManaged(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& profile) {
-  return chrome::enterprise_util::HasBrowserPoliciesApplied(
-      ProfileAndroid::FromProfileAndroid(profile));
+  return IsBrowserManaged(ProfileAndroid::FromProfileAndroid(profile));
+}
+
+// static
+base::android::ScopedJavaLocalRef<jstring>
+JNI_ManagedBrowserUtils_GetAccountManagerName(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& profile) {
+  return base::android::ConvertUTF8ToJavaString(
+      env, GetAccountManagerName(ProfileAndroid::FromProfileAndroid(profile)));
 }
 
 #endif  // defined(OS_ANDROID)
+
+}  // namespace enterprise_util
+}  // namespace chrome

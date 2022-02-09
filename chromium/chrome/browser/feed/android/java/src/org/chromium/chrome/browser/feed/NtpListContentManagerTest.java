@@ -4,11 +4,13 @@
 
 package org.chromium.chrome.browser.feed;
 
+import static org.hamcrest.Matchers.contains;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -20,6 +22,7 @@ import android.widget.LinearLayout;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,9 +31,12 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.xsurface.ListContentManagerObserver;
+import org.chromium.chrome.browser.xsurface.LoggingParameters;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /** Unit tests for {@link NtpListContentManager}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -52,6 +58,11 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
     private boolean mItemMoved;
     private int mItemMovedCurIndex;
     private int mItemMovedNewIndex;
+    private String mObservedChanges = "";
+    private final FeedLoggingParameters mLoggingParametersA = new FeedLoggingParameters(
+            "instance-id", "A", /*loggingEnabled=*/true, /*viewActionsEnabled=*/true, null);
+    private final FeedLoggingParameters mLoggingParametersB = new FeedLoggingParameters(
+            "instance-id", "B", /*loggingEnabled=*/true, /*viewActionsEnabled=*/true, null);
 
     @Before
     public void setUp() {
@@ -226,6 +237,46 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
 
     @Test
     @SmallTest
+    public void testGetContextValuesReturnsLoggingParameters() {
+        addContents(0,
+                Arrays.asList(new NtpListContentManager.FeedContent[] {
+                        createExternalViewContent("A", mLoggingParametersA),
+                        createExternalViewContent("B", mLoggingParametersB)}));
+
+        LoggingParameters parameters1 =
+                (LoggingParameters) mManager.getContextValues(0).get(LoggingParameters.KEY);
+        LoggingParameters parameters2 =
+                (LoggingParameters) mManager.getContextValues(1).get(LoggingParameters.KEY);
+        assertEquals(parameters1, mLoggingParametersA);
+        assertEquals(parameters2, mLoggingParametersB);
+    }
+
+    @Test
+    @SmallTest
+    public void testGetContextValues_SetHandlersAfterAddingContent() {
+        addContents(0,
+                Arrays.asList(new NtpListContentManager.FeedContent[] {
+                        createExternalViewContent("A", mLoggingParametersA)}));
+        mManager.setHandlers(Map.of("HKEY1", "someHandler"));
+
+        assertEquals(Map.of("HKEY1", "someHandler", LoggingParameters.KEY, mLoggingParametersA),
+                mManager.getContextValues(0));
+    }
+
+    @Test
+    @SmallTest
+    public void testGetContextValues_SetHandlersBeforeAddingContent() {
+        mManager.setHandlers(Map.of("HKEY1", "someHandler"));
+        addContents(0,
+                Arrays.asList(new NtpListContentManager.FeedContent[] {
+                        createExternalViewContent("A", mLoggingParametersA)}));
+
+        assertEquals(Map.of("HKEY1", "someHandler", LoggingParameters.KEY, mLoggingParametersA),
+                mManager.getContextValues(0));
+    }
+
+    @Test
+    @SmallTest
     public void testGetNativeViewAfterMove() {
         View v1 = new View(mContext);
         NtpListContentManager.FeedContent c1 = createNativeViewContent(v1);
@@ -246,8 +297,183 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
         assertEquals(v1, getNativeView(t1));
     }
 
+    @Test
+    @SmallTest
+    public void testReplaceRange_Empty() {
+        boolean changed = mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {}));
+
+        assertThat(getContentKeys(), Matchers.empty());
+        assertFalse(changed);
+        assertEquals("", mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_twoWhileEmpty() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        boolean changed = mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2}));
+
+        assertThat(getContentKeys(), contains("a", "b"));
+        assertTrue(changed);
+        assertEquals("rangeInserted index=0 count=2", mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_twoInMiddle() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c3 = createExternalViewContent("c");
+        NtpListContentManager.FeedContent c4 = createExternalViewContent("d");
+        NtpListContentManager.FeedContent c5 = createExternalViewContent("e");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2, c3}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                1, 1, Arrays.asList(new NtpListContentManager.FeedContent[] {c4, c5}));
+
+        assertThat(getContentKeys(), contains("a", "d", "e", "c"));
+        assertTrue(changed);
+        assertEquals("rangeRemoved index=1 count=1"
+                        + "\nrangeInserted index=1 count=2",
+                mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_twoAtEnd() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c3 = createExternalViewContent("c");
+        NtpListContentManager.FeedContent c4 = createExternalViewContent("d");
+        NtpListContentManager.FeedContent c5 = createExternalViewContent("e");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2, c3}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                2, 1, Arrays.asList(new NtpListContentManager.FeedContent[] {c4, c5}));
+
+        assertThat(getContentKeys(), contains("a", "b", "d", "e"));
+        assertTrue(changed);
+        assertEquals("rangeRemoved index=2 count=1"
+                        + "\nrangeInserted index=2 count=2",
+                mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_twoAtStart() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c3 = createExternalViewContent("c");
+        NtpListContentManager.FeedContent c4 = createExternalViewContent("d");
+        NtpListContentManager.FeedContent c5 = createExternalViewContent("e");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2, c3}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                0, 1, Arrays.asList(new NtpListContentManager.FeedContent[] {c4, c5}));
+
+        assertThat(getContentKeys(), contains("d", "e", "b", "c"));
+        assertTrue(changed);
+        assertEquals("rangeRemoved index=0 count=1"
+                        + "\nrangeInserted index=0 count=2",
+                mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_moveFirstToLast() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c3 = createExternalViewContent("c");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2, c3}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                0, 3, Arrays.asList(new NtpListContentManager.FeedContent[] {c2, c3, c1}));
+
+        assertTrue(changed);
+        assertThat(getContentKeys(), contains("b", "c", "a"));
+        assertEquals("itemMoved from=1 to=0\nitemMoved from=2 to=1", mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_reverseOrder() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c3 = createExternalViewContent("c");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2, c3}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                0, 3, Arrays.asList(new NtpListContentManager.FeedContent[] {c3, c2, c1}));
+
+        assertTrue(changed);
+        assertThat(getContentKeys(), contains("c", "b", "a"));
+        assertEquals("itemMoved from=2 to=0\nitemMoved from=2 to=1", mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_removeAll() {
+        NtpListContentManager.FeedContent c1 = createExternalViewContent("a");
+        NtpListContentManager.FeedContent c2 = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c3 = createExternalViewContent("c");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {c1, c2, c3}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                0, 3, Arrays.asList(new NtpListContentManager.FeedContent[] {}));
+
+        assertTrue(changed);
+        assertThat(getContentKeys(), Matchers.empty());
+        assertEquals("rangeRemoved index=0 count=3", mObservedChanges);
+    }
+
+    @Test
+    @SmallTest
+    public void testReplaceRange_complexUpdate() {
+        NtpListContentManager.FeedContent a = createExternalViewContent("a");
+        NtpListContentManager.FeedContent b = createExternalViewContent("b");
+        NtpListContentManager.FeedContent c = createExternalViewContent("c");
+        NtpListContentManager.FeedContent d = createExternalViewContent("d");
+        NtpListContentManager.FeedContent e = createExternalViewContent("e");
+        NtpListContentManager.FeedContent f = createExternalViewContent("f");
+        NtpListContentManager.FeedContent g = createExternalViewContent("g");
+        NtpListContentManager.FeedContent h = createExternalViewContent("h");
+        NtpListContentManager.FeedContent i = createExternalViewContent("i");
+        mManager.replaceRange(
+                0, 0, Arrays.asList(new NtpListContentManager.FeedContent[] {a, b, c, d, e}));
+        mObservedChanges = "";
+
+        boolean changed = mManager.replaceRange(
+                0, 5, Arrays.asList(new NtpListContentManager.FeedContent[] {f, g, a, h, c, e, i}));
+
+        assertTrue(changed);
+        assertThat(getContentKeys(), contains("f", "g", "a", "h", "c", "e", "i"));
+        assertEquals("rangeRemoved index=3 count=1"
+                        + "\nrangeRemoved index=1 count=1"
+                        + "\nrangeInserted index=0 count=2"
+                        + "\nrangeInserted index=3 count=1"
+                        + "\nrangeInserted index=6 count=1",
+                mObservedChanges);
+    }
+
     @Override
     public void onItemRangeInserted(int startIndex, int count) {
+        logChange("rangeInserted index=" + String.valueOf(startIndex)
+                + " count=" + String.valueOf(count));
         mItemRangeInserted = true;
         mItemRangeInsertedStartIndex = startIndex;
         mItemRangeInsertedCount = count;
@@ -255,6 +481,8 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
 
     @Override
     public void onItemRangeRemoved(int startIndex, int count) {
+        logChange("rangeRemoved index=" + String.valueOf(startIndex)
+                + " count=" + String.valueOf(count));
         mItemRangeRemoved = true;
         mItemRangeRemovedStartIndex = startIndex;
         mItemRangeRemovedCount = count;
@@ -262,6 +490,8 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
 
     @Override
     public void onItemRangeChanged(int startIndex, int count) {
+        logChange("rangeChanged index=" + String.valueOf(startIndex)
+                + " count=" + String.valueOf(count));
         mItemRangeChanged = true;
         mItemRangeChangedStartIndex = startIndex;
         mItemRangeChangedCount = count;
@@ -269,6 +499,7 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
 
     @Override
     public void onItemMoved(int curIndex, int newIndex) {
+        logChange("itemMoved from=" + String.valueOf(curIndex) + " to=" + String.valueOf(newIndex));
         mItemMoved = true;
         mItemMovedCurIndex = curIndex;
         mItemMovedNewIndex = newIndex;
@@ -314,8 +545,20 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
         assertEquals(newIndex, mItemMovedNewIndex);
     }
 
+    private void logChange(String change) {
+        if (!mObservedChanges.isEmpty()) {
+            mObservedChanges += "\n";
+        }
+        mObservedChanges += change;
+    }
+
     private NtpListContentManager.FeedContent createExternalViewContent(String s) {
-        return new NtpListContentManager.ExternalViewContent(s, s.getBytes());
+        return createExternalViewContent(s, mLoggingParametersA);
+    }
+
+    private NtpListContentManager.FeedContent createExternalViewContent(
+            String s, FeedLoggingParameters loggingParameters) {
+        return new NtpListContentManager.ExternalViewContent(s, s.getBytes(), loggingParameters);
     }
 
     private NtpListContentManager.FeedContent createNativeViewContent(View v) {
@@ -327,5 +570,12 @@ public class NtpListContentManagerTest implements ListContentManagerObserver {
         assertNotNull(view);
         assertTrue(view instanceof FrameLayout);
         return ((FrameLayout) view).getChildAt(0);
+    }
+    private List<String> getContentKeys() {
+        List<String> result = new ArrayList<>();
+        for (NtpListContentManager.FeedContent content : mManager.getContentList()) {
+            result.add(content.getKey());
+        }
+        return result;
     }
 }

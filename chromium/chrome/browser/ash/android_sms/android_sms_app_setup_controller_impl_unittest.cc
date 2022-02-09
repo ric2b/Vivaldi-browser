@@ -14,7 +14,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
@@ -162,8 +161,7 @@ class AndroidSmsAppSetupControllerImplTest : public testing::Test {
       return url_to_pwa_map_[install_url];
     }
 
-    network::mojom::CookieManager* GetCookieManager(const GURL& app_url,
-                                                    Profile* profile) override {
+    network::mojom::CookieManager* GetCookieManager(Profile* profile) override {
       return fake_cookie_manager_;
     }
 
@@ -214,9 +212,9 @@ class AndroidSmsAppSetupControllerImplTest : public testing::Test {
         &controller().registrar(), nullptr, nullptr, nullptr, nullptr);
     fake_externally_managed_app_manager_->SetHandleInstallRequestCallback(
         base::BindLambdaForTesting(
-            [this](const web_app::ExternalInstallOptions& install_options)
-                -> web_app::ExternallyManagedAppManager::InstallResult {
-              return {.code = install_result_code_};
+            [this](const web_app::ExternalInstallOptions& install_options) {
+              return web_app::ExternallyManagedAppManager::InstallResult(
+                  install_result_code_);
             }));
 
     setup_controller_ = base::WrapUnique(new AndroidSmsAppSetupControllerImpl(

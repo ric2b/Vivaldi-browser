@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_RENDERER_CONTEXT_MENU_LINK_TO_TEXT_MENU_OBSERVER_H_
 #define CHROME_BROWSER_RENDERER_CONTEXT_MENU_LINK_TO_TEXT_MENU_OBSERVER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
 #include "content/public/browser/render_frame_host.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -35,6 +36,10 @@ class LinkToTextMenuObserver : public RenderViewContextMenuObserver {
   // calls to the remote interface during tests.
   void OverrideGeneratedSelectorForTesting(const std::string& selector);
 
+  // Used in tests for waiting and receiving generation result.
+  static void RegisterGenerationCompleteCallbackForTesting(
+      base::OnceCallback<void(const std::string& selector)> cb);
+
  private:
   explicit LinkToTextMenuObserver(RenderViewContextMenuProxy* proxy,
                                   content::RenderFrameHost* render_frame_host);
@@ -63,25 +68,28 @@ class LinkToTextMenuObserver : public RenderViewContextMenuObserver {
       const std::vector<std::string>& selectors);
 
   // Removes the highlight from the page and updates the URL.
-  void RemoveHighlight();
+  void RemoveHighlights();
 
   // Cancels link generation if we are still waiting for it.
   void Timeout();
 
-  // Returns |remote_|, binding it if not already bound.
+  // Returns |remote_|, for the frame in which the context menu was opened.
   mojo::Remote<blink::mojom::TextFragmentReceiver>& GetRemote();
 
   mojo::Remote<blink::mojom::TextFragmentReceiver> remote_;
-  RenderViewContextMenuProxy* proxy_;
+  raw_ptr<RenderViewContextMenuProxy> proxy_;
   GURL url_;
   GURL raw_url_;
-  content::RenderFrameHost* render_frame_host_;
+  raw_ptr<content::RenderFrameHost> render_frame_host_;
 
   // True when the context menu was opened with text selected.
   bool link_needs_generation_ = false;
 
   absl::optional<std::string> generated_link_;
   absl::optional<std::string> generated_selector_for_testing_;
+
+  // True when generation is completed.
+  bool is_generation_complete_ = false;
 
   base::WeakPtrFactory<LinkToTextMenuObserver> weak_ptr_factory_{this};
 };

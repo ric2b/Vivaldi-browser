@@ -13,9 +13,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifdef wxHAS_RAW_BITMAP
 
@@ -50,7 +47,7 @@ private:
 
     void RGBImage();
 
-    DECLARE_NO_COPY_CLASS(ImageRawTestCase)
+    wxDECLARE_NO_COPY_CLASS(ImageRawTestCase);
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION( ImageRawTestCase );

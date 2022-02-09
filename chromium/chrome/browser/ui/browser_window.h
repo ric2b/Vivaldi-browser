@@ -83,6 +83,7 @@ class SharingHubBubbleView;
 }  // namespace sharing_hub
 
 namespace ui {
+class ColorProvider;
 class NativeTheme;
 }
 
@@ -191,6 +192,9 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Returns the native theme associated with the frame.
   virtual ui::NativeTheme* GetNativeTheme() = 0;
+
+  // Returns the ColorProvider associated with the frame.
+  virtual const ui::ColorProvider* GetColorProvider() const = 0;
 
   // Returns the height of the browser's top controls. This height doesn't
   // change with the current shown ratio above. Renderers will call this to
@@ -335,9 +339,6 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Focuses a visible but inactive popup for accessibility.
   virtual void FocusInactivePopupForAccessibility() = 0;
-
-  // Focuses a help bubble if present.
-  virtual void FocusHelpBubble() = 0;
 
   // Moves keyboard focus to the next pane.
   virtual void RotatePaneFocus(bool forwards) = 0;
@@ -571,6 +572,12 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Shows an Incognito history disclaimer dialog.
   virtual void ShowIncognitoHistoryDisclaimerDialog() = 0;
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  virtual bool IsSideSearchPanelVisible() const = 0;
+  virtual void MaybeRestoreSideSearchStatePerWindow(
+      const std::map<std::string, std::string>& extra_data) = 0;
+#endif
 
  protected:
   friend class BrowserCloseManager;

@@ -22,15 +22,14 @@
 #include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/current_thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -41,6 +40,7 @@
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/variations/variations_ids_provider.h"
 #include "content/browser/browser_main_loop.h"
@@ -129,6 +129,10 @@
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/socket_utils_posix.h"
 #endif
+
+#if defined(OS_FUCHSIA)
+#include "ui/platform_window/fuchsia/initialize_presenter_api_view.h"
+#endif  // defined(OS_FUCHSIA)
 
 namespace content {
 namespace {
@@ -220,6 +224,11 @@ class InitialNavigationObserver : public WebContentsObserver {
   InitialNavigationObserver(WebContents* web_contents,
                             base::OnceClosure callback)
       : WebContentsObserver(web_contents), callback_(std::move(callback)) {}
+
+  InitialNavigationObserver(const InitialNavigationObserver&) = delete;
+  InitialNavigationObserver& operator=(const InitialNavigationObserver&) =
+      delete;
+
   // WebContentsObserver implementation:
   void DidStartNavigation(NavigationHandle* navigation_handle) override {
     if (callback_)
@@ -228,25 +237,11 @@ class InitialNavigationObserver : public WebContentsObserver {
 
  private:
   base::OnceClosure callback_;
-
-  DISALLOW_COPY_AND_ASSIGN(InitialNavigationObserver);
 };
 
 }  // namespace
 
 BrowserTestBase::BrowserTestBase() {
-#if defined(USE_OZONE) && defined(USE_X11)
-  // In case of the USE_OZONE + USE_X11 build, the OzonePlatform can either be
-  // enabled or disabled. However, tests may override the FeatureList that will
-  // result in unknown state for the UseOzonePlatform feature. Thus, the
-  // features::IsUsingOzonePlatform has static const initializer that won't be
-  // changed despite FeatureList being overridden. However, it requires to call
-  // this method at least once so that the value is set correctly. This place
-  // looks the most appropriate as tests haven't started to add own FeatureList
-  // yet and we still have the original value set by base::TestSuite.
-  ignore_result(features::IsUsingOzonePlatform());
-#endif
-
   CHECK(!g_instance_already_created)
       << "Each browser test should be run in a new process. If you are adding "
          "a new browser test suite that runs on Android, please add it to "
@@ -317,7 +312,7 @@ void BrowserTestBase::SetUp() {
   command_line->AppendSwitch(switches::kDomAutomationController);
 
   // It is sometimes useful when looking at browser test failures to know which
-  // GPU blacklisting decisions were made.
+  // GPU blocklist decisions were made.
   command_line->AppendSwitch(switches::kLogGpuControlListDecisions);
 
   // Make sure software compositing tests don't attempt to force hardware
@@ -394,6 +389,14 @@ void BrowserTestBase::SetUp() {
   // device or vm bots), we use hardware GL.
   if (base::SysInfo::IsRunningOnChromeOS())
     use_software_gl = false;
+#endif
+
+#if defined(OS_FUCHSIA)
+  // GPU support is not available to tests.
+  // TODO(crbug.com/1259462): Enable GPU support.
+  command_line->AppendSwitch(switches::kDisableGpu);
+
+  ui::fuchsia::IgnorePresentCallsForTest();
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -498,19 +501,6 @@ void BrowserTestBase::SetUp() {
                                                           &disabled_features);
   }
 
-#if defined(USE_X11) && defined(USE_OZONE)
-  // Append OzonePlatform to the enabled features so that the CommandLine
-  // instance has correct values, and other processes if any (GPU, for example),
-  // also use correct path.  features::IsUsingOzonePlatform() has static const
-  // initializer, which means the value of the features::IsUsingOzonePlatform()
-  // doesn't change even if tests override the FeatureList. Thus, it's correct
-  // to call it now as it is set way earlier than tests override the features.
-  //
-  // TODO(https://crbug.com/1096425): remove this as soon as use_x11 goes away.
-  if (features::IsUsingOzonePlatform())
-    enabled_features += ",UseOzonePlatform";
-#endif
-
   if (!enabled_features.empty()) {
     command_line->AppendSwitchASCII(switches::kEnableFeatures,
                                     enabled_features);
@@ -543,9 +533,8 @@ void BrowserTestBase::SetUp() {
   // FeatureList::SetInstance, which expects no instance to exist.
   base::FeatureList::ClearInstanceForTesting();
 
-  auto created_main_parts_closure = std::make_unique<CreatedMainPartsClosure>(
-      base::BindOnce(&BrowserTestBase::CreatedBrowserMainPartsImpl,
-                     base::Unretained(this)));
+  auto created_main_parts_closure = base::BindOnce(
+      &BrowserTestBase::CreatedBrowserMainPartsImpl, base::Unretained(this));
 
   // If tracing is enabled, customise the output filename based on the name of
   // the test.
@@ -578,6 +567,11 @@ void BrowserTestBase::SetUp() {
   // through the normal browser initialization paths. For Android, we must set
   // things up manually. A meager re-implementation of ContentMainRunnerImpl
   // follows.
+
+  // Unlike other platforms, android_browsertests can reuse the same process for
+  // multiple tests. Need to reset startup metrics to allow recording them
+  // again.
+  startup_metric_utils::ResetSessionForTesting();
 
   base::i18n::AllowMultipleInitializeCallsForTesting();
   base::i18n::InitializeICU();
@@ -625,7 +619,8 @@ void BrowserTestBase::SetUp() {
 
     StartBrowserThreadPool();
     BrowserTaskExecutor::PostFeatureListSetup();
-    tracing::InitTracingPostThreadPoolStartAndFeatureList();
+    tracing::InitTracingPostThreadPoolStartAndFeatureList(
+        /* enable_consumer */ true);
     InitializeBrowserMemoryInstrumentationClient();
   }
 
@@ -659,20 +654,20 @@ void BrowserTestBase::SetUp() {
     // run.
     base::RunLoop loop{base::RunLoop::Type::kNestableTasksAllowed};
 
-    auto ui_task = std::make_unique<base::OnceClosure>(
-        base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
-                       base::Unretained(this), loop.QuitClosure(),
-                       /*wait_retry_left=*/
-                       TestTimeouts::action_max_timeout()));
+    auto ui_task = base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
+                                  base::Unretained(this), loop.QuitClosure(),
+                                  /*wait_retry_left=*/
+                                  TestTimeouts::action_max_timeout());
 
     // The MainFunctionParams must out-live all the startup tasks running.
-    MainFunctionParams params(*command_line);
-    params.ui_task = ui_task.release();
-    params.created_main_parts_closure = created_main_parts_closure.release();
-    params.startup_data = startup_data.get();
+    MainFunctionParams params(command_line);
+    params.ui_task = std::move(ui_task);
+    params.created_main_parts_closure = std::move(created_main_parts_closure);
+    params.startup_data = std::move(startup_data);
     // Passing "" as the process type to indicate the browser process.
-    int exit_code = delegate->RunProcess("", params);
-    DCHECK_EQ(exit_code, 0);
+    auto exit_code = delegate->RunProcess("", std::move(params));
+    DCHECK(absl::holds_alternative<int>(exit_code));
+    DCHECK_EQ(absl::get<int>(exit_code), 0);
 
     // Waits for Java to finish initialization, then we can run the test.
     loop.Run();
@@ -704,12 +699,12 @@ void BrowserTestBase::SetUp() {
   BrowserTaskExecutor::Shutdown();
 
 #else   // defined(OS_ANDROID)
-  auto ui_task = std::make_unique<base::OnceClosure>(base::BindOnce(
-      &BrowserTestBase::ProxyRunTestOnMainThreadLoop, base::Unretained(this)));
-  GetContentMainParams()->ui_task = ui_task.release();
-  GetContentMainParams()->created_main_parts_closure =
-      created_main_parts_closure.release();
-  EXPECT_EQ(expected_exit_code_, ContentMain(*GetContentMainParams()));
+  auto ui_task = base::BindOnce(&BrowserTestBase::ProxyRunTestOnMainThreadLoop,
+                                base::Unretained(this));
+  auto params = CopyContentMainParams();
+  params.ui_task = std::move(ui_task);
+  params.created_main_parts_closure = std::move(created_main_parts_closure);
+  EXPECT_EQ(expected_exit_code_, ContentMain(std::move(params)));
 #endif  // defined(OS_ANDROID)
 
   TearDownInProcessBrowserTestFixture();
@@ -777,6 +772,14 @@ void BrowserTestBase::WaitUntilJavaIsReady(
 #endif
 
 void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
+  // Chrome bans unresponsive tasks just before starting the main message loop.
+  // Re-allow such tasks while for init / tear down
+  // (ScopedDisallowBlocking objects below ensure the test body is tested under
+  // the same blocking-ban as the regular main message loop).
+  // TODO(crbug.com/1253634): Remove this wide allowance in favor of localized
+  // allowances for init/teardown phases.
+  base::ScopedAllowUnresponsiveTasksForTesting allow_for_init;
+
 #if !defined(OS_ANDROID)
   // All FeatureList overrides should have been registered prior to browser test
   // SetUp(). Note that on Android, this scoper lives in SetUp() above.
@@ -828,15 +831,14 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 
       base::ScopedDisallowBlocking disallow_blocking;
 
-      // Since ProxyRunTestOnMainThreadLoop() replaces the main message loop, we
-      // need to invoke the OnFirstIdle() phase ourselves.
+      // Flush remaining startup tasks to make sure the
+      // BrowserMainParts::OnFirstIdle phase has occurred before entering the
+      // test body.
       base::RunLoop flush_startup_tasks;
       flush_startup_tasks.RunUntilIdle();
       // Make sure there isn't an odd caller which reached |flush_startup_tasks|
       // statically via base::RunLoop::QuitCurrent*Deprecated().
       DCHECK(!flush_startup_tasks.AnyQuitCalled());
-      if (browser_main_parts_)
-        browser_main_parts_->OnFirstIdle();
     }
 
     std::unique_ptr<InitialNavigationObserver> initial_navigation_observer;

@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "dbus/exported_object.h"
@@ -45,6 +45,12 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
     kPasskeyNotification = 3,
   };
 
+  enum class BondState {
+    kNotBonded = 0,
+    kBondingInProgress = 1,
+    kBonded = 2,
+  };
+
   class Observer : public base::CheckedObserver {
    public:
     Observer(const Observer&) = delete;
@@ -69,6 +75,18 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
                                    uint32_t cod,
                                    BluetoothSspVariant variant,
                                    uint32_t passkey) {}
+
+    // Notification sent when a bonding state changes for a remote device.
+    // TODO(b:202334519): Change status type to enum once Floss has the enum.
+    virtual void DeviceBondStateChanged(const FlossDeviceId& remote_device,
+                                        uint32_t status,
+                                        BondState bond_state) {}
+
+    // Notification sent when a remote device becomes connected.
+    virtual void AdapterDeviceConnected(const FlossDeviceId& device) {}
+
+    // Notification sent when a remote device becomes disconnected.
+    virtual void AdapterDeviceDisconnected(const FlossDeviceId& device) {}
   };
 
   // Error: No such adapter.
@@ -101,15 +119,54 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
   const std::string& GetAddress() const { return adapter_address_; }
 
   // Start a discovery session.
-  virtual void StartDiscovery(ResponseCallback callback);
+  virtual void StartDiscovery(ResponseCallback<Void> callback);
 
   // Cancel the active discovery session.
-  virtual void CancelDiscovery(ResponseCallback callback);
+  virtual void CancelDiscovery(ResponseCallback<Void> callback);
 
   // Create a bond with the given device and transport.
-  virtual void CreateBond(ResponseCallback callback,
+  virtual void CreateBond(ResponseCallback<Void> callback,
                           FlossDeviceId device,
                           BluetoothTransport transport);
+
+  // Cancel a bond process.
+  virtual void CancelBondProcess(ResponseCallback<Void> callback,
+                                 FlossDeviceId device);
+
+  // Get connection state of a device.
+  // TODO(b/202334519): Change return type to enum instead of u32
+  virtual void GetConnectionState(ResponseCallback<uint32_t> callback,
+                                  const FlossDeviceId& device);
+
+  // Get bonding state of a device.
+  virtual void GetBondState(ResponseCallback<uint32_t> callback,
+                            const FlossDeviceId& device);
+
+  // Connect to all enabled profiles.
+  virtual void ConnectAllEnabledProfiles(ResponseCallback<Void> callback,
+                                         const FlossDeviceId& device);
+
+  // Indicates whether the user approves the pairing, if accepted then a pairing
+  // should be completed on the remote device.
+  virtual void SetPairingConfirmation(ResponseCallback<Void> callback,
+                                      const FlossDeviceId& device,
+                                      bool accept);
+
+  // Indicates whether the user approves the pairing with the given pin.
+  virtual void SetPin(ResponseCallback<Void> callback,
+                      const FlossDeviceId& device,
+                      bool accept,
+                      const std::vector<uint8_t>& pin);
+
+  // Indicates whether the user approves the pairing with the given passkey.
+  virtual void SetPasskey(ResponseCallback<Void> callback,
+                          const FlossDeviceId& device,
+                          bool accept,
+                          const std::vector<uint8_t>& passkey);
+
+  // Returns bonded devices.
+  virtual void GetBondedDevices(
+      ResponseCallback<std::vector<FlossDeviceId>> callback);
 
   // Get the object path for this adapter.
   const dbus::ObjectPath* GetObjectPath() const { return &adapter_path_; }
@@ -143,6 +200,19 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
   void OnSspRequest(dbus::MethodCall* method_call,
                     dbus::ExportedObject::ResponseSender response_sender);
 
+  // Handle callback |OnBondStateChanged| on exported object path.
+  void OnBondStateChanged(dbus::MethodCall* method_call,
+                          dbus::ExportedObject::ResponseSender response_sender);
+
+  // Handle callback |OnDeviceConnected| on exported object path.
+  void OnDeviceConnected(dbus::MethodCall* method_call,
+                         dbus::ExportedObject::ResponseSender response_sender);
+
+  // Handle callback |OnDeviceDisconnected| on exported object path.
+  void OnDeviceDisconnected(
+      dbus::MethodCall* method_call,
+      dbus::ExportedObject::ResponseSender response_sender);
+
   // List of observers interested in event notifications from this client.
   base::ObserverList<Observer> observers_;
 
@@ -159,6 +229,37 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
   std::string adapter_address_;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(FlossAdapterClientTest, CallAdapterMethods);
+
+  template <typename T>
+  static void WriteDBusParam(dbus::MessageWriter* writer, const T& data);
+
+  template <typename R, typename F>
+  void CallAdapterMethod(ResponseCallback<R> callback,
+                         const char* member,
+                         F write_data);
+
+  template <typename R>
+  void CallAdapterMethod0(ResponseCallback<R> callback, const char* member);
+
+  template <typename R, typename T1>
+  void CallAdapterMethod1(ResponseCallback<R> callback,
+                          const char* member,
+                          const T1& arg1);
+
+  template <typename R, typename T1, typename T2>
+  void CallAdapterMethod2(ResponseCallback<R> callback,
+                          const char* member,
+                          const T1& arg1,
+                          const T2& arg2);
+
+  template <typename R, typename T1, typename T2, typename T3>
+  void CallAdapterMethod3(ResponseCallback<R> callback,
+                          const char* member,
+                          const T1& arg1,
+                          const T2& arg2,
+                          const T3& arg3);
+
   // Object path for exported callbacks registered against adapter interface.
   static const char kExportedCallbacksPath[];
 

@@ -42,6 +42,12 @@ class SettingsBluetoothPageElement extends SettingsBluetoothPageElementBase {
 
   static get properties() {
     return {
+      /** Preferences state. */
+      prefs: {
+        type: Object,
+        notify: true,
+      },
+
       /**
        * @private {!chromeos.bluetoothConfig.mojom.BluetoothSystemProperties}
        */
@@ -92,6 +98,19 @@ class SettingsBluetoothPageElement extends SettingsBluetoothPageElementBase {
   /** @private */
   onClosePairingDialog_() {
     this.shouldShowPairingDialog_ = false;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowPairNewDevice_() {
+    if (!this.systemProperties_) {
+      return false;
+    }
+
+    return this.systemProperties_.systemState ===
+        chromeos.bluetoothConfig.mojom.BluetoothSystemState.kEnabled;
   }
 }
 

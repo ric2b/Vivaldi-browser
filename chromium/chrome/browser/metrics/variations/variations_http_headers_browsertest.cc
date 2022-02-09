@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/containers/contains.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -26,7 +25,6 @@
 #include "chrome/browser/predictors/predictors_features.h"
 #include "chrome/browser/predictors/predictors_switches.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/identity_browser_test_base.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -86,7 +84,7 @@ class VariationHeaderSetter : public ChromeBrowserMainExtraParts {
   }
 };
 
-class VariationsHttpHeadersBrowserTest : public IdentityBrowserTestBase {
+class VariationsHttpHeadersBrowserTest : public InProcessBrowserTest {
  public:
   VariationsHttpHeadersBrowserTest()
       : https_server_(net::test_server::EmbeddedTestServer::TYPE_HTTPS) {}
@@ -99,7 +97,7 @@ class VariationsHttpHeadersBrowserTest : public IdentityBrowserTestBase {
   ~VariationsHttpHeadersBrowserTest() override = default;
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
-    IdentityBrowserTestBase::CreatedBrowserMainParts(parts);
+    InProcessBrowserTest::CreatedBrowserMainParts(parts);
     static_cast<ChromeBrowserMainParts*>(parts)->AddParts(
         std::make_unique<VariationHeaderSetter>());
   }
@@ -257,6 +255,19 @@ class VariationsHttpHeadersBrowserTest : public IdentityBrowserTestBase {
     EXPECT_EQ("hello", EvalJs(GetWebContents(),
                               base::StrCat({"fetch_from_page('",
                                             GetExampleUrl().spec(), "');"})));
+    EXPECT_FALSE(HasReceivedHeader(GetExampleUrl(), "X-Client-Data"));
+
+    // Navigate to a Google URL which causes redirects.
+    ASSERT_TRUE(
+        ui_test_utils::NavigateToURL(browser(), GetGoogleRedirectUrl1()));
+
+    // Verify redirect requests from google domains.
+    // Redirect to google domains.
+    EXPECT_TRUE(HasReceivedHeader(GetGoogleRedirectUrl1(), "X-Client-Data"));
+    EXPECT_TRUE(HasReceivedHeader(GetGoogleRedirectUrl2(), "X-Client-Data"));
+
+    // Redirect to non-google domains.
+    EXPECT_TRUE(HasReceivedHeader(GetExampleUrl(), "Host"));
     EXPECT_FALSE(HasReceivedHeader(GetExampleUrl(), "X-Client-Data"));
   }
 
@@ -772,6 +783,13 @@ IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest,
 IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest,
                        ServiceWorkerNetworkFallback) {
   ServiceWorkerTest("/service_worker/network_fallback_worker.js");
+}
+
+// Verify in an integration test that the variations header (X-Client-Data) is
+// not exposed in the service worker fetch event.
+IN_PROC_BROWSER_TEST_F(VariationsHttpHeadersBrowserTest,
+                       ServiceWorkerDoesNotSeeHeader) {
+  ServiceWorkerTest("/service_worker/fail_on_variations_header_worker.js");
 }
 
 // Verify in an integration test that the variations header (X-Client-Data) is

@@ -10,17 +10,14 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
 #endif
 
-#include <wx/propgrid/propgrid.h>
-#include <wx/propgrid/advprops.h>
-#include <wx/propgrid/manager.h>
+#include "wx/propgrid/propgrid.h"
+#include "wx/propgrid/advprops.h"
+#include "wx/propgrid/manager.h"
 
 #include "propgrid.h"
 #include "sampleprops.h"
@@ -45,13 +42,13 @@ public:
         : wxColourProperty(label, name, value)
     {
         wxPGChoices colours;
-        colours.Add(wxT("White"));
-        colours.Add(wxT("Black"));
-        colours.Add(wxT("Red"));
-        colours.Add(wxT("Green"));
-        colours.Add(wxT("Blue"));
-        colours.Add(wxT("Custom"));
-        colours.Add(wxT("None"));
+        colours.Add("White");
+        colours.Add("Black");
+        colours.Add("Red");
+        colours.Add("Green");
+        colours.Add("Blue");
+        colours.Add("Custom");
+        colours.Add("None");
         m_choices = colours;
         SetIndex(0);
         wxVariant variant;
@@ -63,7 +60,7 @@ public:
     {
     }
 
-    virtual wxColour GetColour( int index ) const
+    virtual wxColour GetColour( int index ) const wxOVERRIDE
     {
         switch (index)
         {
@@ -83,21 +80,21 @@ public:
                     return col;
                 }
                 return *wxWHITE;
-        };
+        }
         return wxColour();
     }
 
     virtual wxString ColourToString( const wxColour& col,
                                      int index,
-                                     int argFlags = 0 ) const
+                                     int argFlags = 0 ) const wxOVERRIDE
     {
         if ( index == (int)(m_choices.GetCount()-1) )
-            return wxT("");
+            return wxEmptyString;
 
         return wxColourProperty::ColourToString(col, index, argFlags);
     }
 
-    virtual int GetCustomColourIndex() const
+    virtual int GetCustomColourIndex() const wxOVERRIDE
     {
         return m_choices.GetCount()-2;
     }
@@ -106,55 +103,49 @@ public:
 
 void FormMain::AddTestProperties( wxPropertyGridPage* pg )
 {
-    pg->Append( new MyColourProperty(wxT("CustomColourProperty"), wxPG_LABEL, *wxGREEN) );
-    pg->GetProperty(wxT("CustomColourProperty"))->SetAutoUnspecified(true);
-    pg->SetPropertyEditor( wxT("CustomColourProperty"), wxPGEditor_ComboBox );
+    pg->Append( new MyColourProperty("CustomColourProperty", wxPG_LABEL, *wxGREEN) );
+    pg->GetProperty("CustomColourProperty")->SetAutoUnspecified(true);
+    pg->SetPropertyEditor( "CustomColourProperty", wxPGEditor_ComboBox );
 
-    pg->SetPropertyHelpString(wxT("CustomColourProperty"),
-        wxT("This is a MyColourProperty from the sample app. ")
-        wxT("It is built by subclassing wxColourProperty."));
+    pg->SetPropertyHelpString("CustomColourProperty",
+        "This is a MyColourProperty from the sample app. "
+        "It is built by subclassing wxColourProperty.");
 }
 
 // -----------------------------------------------------------------------
 
 void FormMain::OnDumpList( wxCommandEvent& WXUNUSED(event) )
 {
-    wxVariant values = m_pPropGridManager->GetPropertyValues(wxT("list"), wxNullProperty, wxPG_INC_ATTRIBUTES);
-    wxString text = wxT("This only tests that wxVariant related routines do not crash.");
-    wxString t;
+    wxVariant values = m_pPropGridManager->GetPropertyValues("list", wxNullProperty, wxPG_INC_ATTRIBUTES);
+    wxString text = "This only tests that wxVariant related routines do not crash.\n";
 
-    wxDialog* dlg = new wxDialog(this,-1,wxT("wxVariant Test"),
+    wxDialog* dlg = new wxDialog(this,wxID_ANY,"wxVariant Test",
         wxDefaultPosition,wxDefaultSize,wxDEFAULT_DIALOG_STYLE|wxRESIZE_BORDER);
 
-    unsigned int i;
-    for ( i = 0; i < (unsigned int)values.GetCount(); i++ )
+    for ( size_t i = 0; i < values.GetCount(); i++ )
     {
+        wxString t;
         wxVariant& v = values[i];
 
         wxString strValue = v.GetString();
 
-#if wxCHECK_VERSION(2,8,0)
-        if ( v.GetName().EndsWith(wxT("@attr")) )
-#else
-        if ( v.GetName().Right(5) == wxT("@attr") )
-#endif
+        if ( v.GetName().EndsWith("@attr") )
         {
-            text += wxString::Format(wxT("Attributes:\n"));
+            text += wxString::Format("Attributes:\n");
 
-            unsigned int n;
-            for ( n = 0; n < (unsigned int)v.GetCount(); n++ )
+            for ( size_t n = 0; n < v.GetCount(); n++ )
             {
                 wxVariant& a = v[n];
 
-                t.Printf(wxT("  atribute %i: name=\"%s\"  (type=\"%s\"  value=\"%s\")\n"),(int)n,
-                    a.GetName().c_str(),a.GetType().c_str(),a.GetString().c_str());
+                t.Printf("  attribute %i: name=\"%s\"  (type=\"%s\"  value=\"%s\")\n",(int)n,
+                    a.GetName(),a.GetType(),a.GetString());
                 text += t;
             }
         }
         else
         {
-            t.Printf(wxT("%i: name=\"%s\"  type=\"%s\"  value=\"%s\"\n"),(int)i,
-                v.GetName().c_str(),v.GetType().c_str(),strValue.c_str());
+            t.Printf("%i: name=\"%s\"  type=\"%s\"  value=\"%s\"\n",(int)i,
+                v.GetName(),v.GetType(),strValue);
             text += t;
         }
     }
@@ -163,17 +154,15 @@ void FormMain::OnDumpList( wxCommandEvent& WXUNUSED(event) )
     const int spacing = 8;
     wxBoxSizer* topsizer = new wxBoxSizer( wxVERTICAL );
     wxBoxSizer* rowsizer = new wxBoxSizer( wxHORIZONTAL );
-    wxTextCtrl* ed = new wxTextCtrl(dlg, 11, text,
+    wxTextCtrl* ed = new wxTextCtrl(dlg, wxID_ANY, text,
                                     wxDefaultPosition, wxDefaultSize,
-                                    wxTE_MULTILINE);
-    rowsizer->Add( ed, 1, wxEXPAND|wxALL, spacing );
-    topsizer->Add( rowsizer, 1, wxEXPAND, 0 );
+                                    wxTE_MULTILINE|wxTE_READONLY);
+    rowsizer->Add( ed, wxSizerFlags(1).Expand().Border(wxALL, spacing));
+    topsizer->Add( rowsizer, wxSizerFlags(1).Expand());
     rowsizer = new wxBoxSizer( wxHORIZONTAL );
-    const int butSzFlags =
-        wxALIGN_CENTRE_HORIZONTAL|wxALIGN_CENTRE_VERTICAL|wxBOTTOM|wxLEFT|wxRIGHT;
-    rowsizer->Add( new wxButton(dlg,wxID_OK,wxT("Ok")),
-        0, butSzFlags, spacing );
-    topsizer->Add( rowsizer, 0, wxALIGN_RIGHT|wxALIGN_CENTRE_VERTICAL, 0 );
+    rowsizer->Add( new wxButton(dlg,wxID_OK,"Ok"),
+        wxSizerFlags(0).CentreHorizontal().CentreVertical().Border(wxBOTTOM|wxLEFT|wxRIGHT, spacing));
+    topsizer->Add( rowsizer, wxSizerFlags().Right() );
 
     dlg->SetSizer( topsizer );
     topsizer->SetSizeHints( dlg );
@@ -189,7 +178,7 @@ class TestRunner
 {
 public:
 
-    TestRunner( const wxString& name, wxPropertyGridManager* man, wxTextCtrl* ed, wxArrayString* errorMessages )
+    TestRunner( const wxString& name, wxPropertyGridManager* man, wxTextCtrl* ed, wxVector<wxString>* errorMessages )
     {
         m_name = name;
         m_man = man;
@@ -199,8 +188,8 @@ public:
         m_preWarnings = wxPGGlobalVars->m_warnings;
 #endif
 
-        if ( name != wxT("none") )
-            Msg(name+wxT("\n"));
+        if ( name != "none" )
+            Msg(name+"\n");
     }
 
     ~TestRunner()
@@ -209,7 +198,7 @@ public:
         int warningsOccurred = wxPGGlobalVars->m_warnings - m_preWarnings;
         if ( warningsOccurred )
         {
-            wxString s = wxString::Format(wxT("%i warnings occurred during test '%s'"), warningsOccurred, m_name.c_str());
+            wxString s = wxString::Format("%i warnings occurred during test '%s'", warningsOccurred, m_name);
             m_errorMessages->push_back(s);
             Msg(s);
         }
@@ -221,7 +210,7 @@ public:
         if ( m_ed )
         {
             m_ed->AppendText(text);
-            m_ed->AppendText(wxT("\n"));
+            m_ed->AppendText("\n");
         }
         wxLogDebug(text);
     }
@@ -229,7 +218,7 @@ public:
 protected:
     wxPropertyGridManager* m_man;
     wxTextCtrl* m_ed;
-    wxArrayString* m_errorMessages;
+    wxVector<wxString>* m_errorMessages;
     wxString m_name;
 #ifdef __WXDEBUG__
     int m_preWarnings;
@@ -238,14 +227,14 @@ protected:
 
 
 #define RT_START_TEST(TESTNAME) \
-    TestRunner tr(wxT(#TESTNAME), pgman, ed, &errorMessages);
+    TestRunner tr(#TESTNAME, pgman, ed, &errorMessages);
 
 #define RT_MSG(S) \
     tr.Msg(S);
 
 #define RT_FAILURE() \
     { \
-        wxString s1 = wxString::Format(wxT("Test failure in tests.cpp, line %i."),__LINE__-1); \
+        wxString s1 = wxString::Format("Test failure in tests.cpp, line %i.",__LINE__-1); \
         errorMessages.push_back(s1); \
         wxLogDebug(s1); \
         failures++; \
@@ -257,10 +246,10 @@ protected:
 
 #define RT_FAILURE_MSG(MSG) \
     { \
-        wxString s1 = wxString::Format(wxT("Test failure in tests.cpp, line %i."),__LINE__-1); \
+        wxString s1 = wxString::Format("Test failure in tests.cpp, line %i.",__LINE__-1); \
         errorMessages.push_back(s1); \
         wxLogDebug(s1); \
-        wxString s2 = wxString::Format(wxT("Message: %s"),MSG); \
+        wxString s2 = wxString::Format("Message: %s",MSG); \
         errorMessages.push_back(s2); \
         wxLogDebug(s2); \
         failures++; \
@@ -272,8 +261,8 @@ protected:
         unsigned int h2_ = PROPS->GetActualVirtualHeight(); \
         if ( h1_ != h2_ ) \
         { \
-            wxString s_ = wxString::Format(wxT("VirtualHeight = %i, should be %i (%s)"), h1_, h2_, EXTRATEXT.c_str()); \
-            RT_FAILURE_MSG(s_.c_str()); \
+            wxString s_ = wxString::Format("VirtualHeight = %i, should be %i (%s)", h1_, h2_, EXTRATEXT); \
+            RT_FAILURE_MSG(s_); \
             _failed_ = true; \
         } \
         else \
@@ -282,23 +271,28 @@ protected:
         } \
     }
 
+inline bool GetRandomBooleanVal()
+{
+    return (rand() % 2) != 0;
+}
 
+extern "C"
 int gpiro_cmpfunc(const void* a, const void* b)
 {
-    const wxPGProperty* p1 = (const wxPGProperty*) a;
-    const wxPGProperty* p2 = (const wxPGProperty*) b;
+    const wxPGProperty* p1 = *static_cast<wxPGProperty* const*>(a);
+    const wxPGProperty* p2 = *static_cast<wxPGProperty* const*>(b);
     return (int) (((size_t)p1->GetClientData()) - ((size_t)p2->GetClientData()));
 }
 
-wxArrayPGProperty GetPropertiesInRandomOrder( wxPropertyGridInterface* props, int iterationFlags = wxPG_ITERATE_ALL )
+wxVector<wxPGProperty*> GetPropertiesInRandomOrder( wxPropertyGridInterface* props, int iterationFlags = wxPG_ITERATE_ALL )
 {
-    wxArrayPGProperty arr;
+    wxVector<wxPGProperty*> arr;
 
     wxPropertyGridIterator it;
 
     for ( it = props->GetIterator(iterationFlags);
           !it.AtEnd();
-          it++ )
+          ++it )
     {
         wxPGProperty* p = *it;
         size_t randomNumber = rand();
@@ -332,29 +326,29 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
     pgman->ClearSelection();
 
+    srand((unsigned int)(time(NULL) % UINT_MAX));
+
     int failures = 0;
     bool _failed_ = false;
-    wxArrayString errorMessages;
+    wxVector<wxString> errorMessages;
     wxDialog* dlg = NULL;
 
-    dlg = new wxDialog(this,-1,wxT("wxPropertyGrid Regression Tests"),
+    dlg = new wxDialog(this,wxID_ANY,"wxPropertyGrid Regression Tests",
         wxDefaultPosition,wxDefaultSize,wxDEFAULT_DIALOG_STYLE|wxRESIZE_BORDER);
 
     // multi-line text editor dialog
     const int spacing = 8;
     wxBoxSizer* topsizer = new wxBoxSizer( wxVERTICAL );
     wxBoxSizer* rowsizer = new wxBoxSizer( wxHORIZONTAL );
-    wxTextCtrl* ed = new wxTextCtrl(dlg, 11, wxEmptyString,
+    wxTextCtrl* ed = new wxTextCtrl(dlg, wxID_ANY, wxEmptyString,
                                     wxDefaultPosition, wxDefaultSize,
-                                    wxTE_MULTILINE);
-    rowsizer->Add( ed, 1, wxEXPAND|wxALL, spacing );
-    topsizer->Add( rowsizer, 1, wxEXPAND, 0 );
+                                    wxTE_MULTILINE|wxTE_READONLY);
+    rowsizer->Add( ed, wxSizerFlags(1).Expand().Border(wxALL, spacing));
+    topsizer->Add( rowsizer, wxSizerFlags(1).Expand());
     rowsizer = new wxBoxSizer( wxHORIZONTAL );
-    const int butSzFlags =
-        wxALIGN_CENTRE_HORIZONTAL|wxALIGN_CENTRE_VERTICAL|wxBOTTOM|wxLEFT|wxRIGHT;
-    rowsizer->Add( new wxButton(dlg,wxID_OK,wxT("Ok")),
-        0, butSzFlags, spacing );
-    topsizer->Add( rowsizer, 0, wxALIGN_RIGHT|wxALIGN_CENTRE_VERTICAL, 0 );
+    rowsizer->Add( new wxButton(dlg,wxID_OK,"Ok"),
+        wxSizerFlags(0).CentreHorizontal().CentreVertical().Border(wxBOTTOM|wxLEFT|wxRIGHT, spacing));
+    topsizer->Add( rowsizer, wxSizerFlags().Right() );
 
     dlg->SetSizer( topsizer );
     topsizer->SetSizeHints( dlg );
@@ -379,13 +373,13 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         {
             wxPGProperty* p = it.GetProperty();
             if ( p->IsCategory() )
-                RT_FAILURE_MSG(wxString::Format(wxT("'%s' is a category (non-private child property expected)"),p->GetLabel().c_str()).c_str())
+                RT_FAILURE_MSG(wxString::Format("'%s' is a category (non-private child property expected)",p->GetLabel()))
             else if ( p->GetParent()->HasFlag(wxPG_PROP_AGGREGATE) )
-                RT_FAILURE_MSG(wxString::Format(wxT("'%s' is a private child (non-private child property expected)"),p->GetLabel().c_str()).c_str())
+                RT_FAILURE_MSG(wxString::Format("'%s' is a private child (non-private child property expected)",p->GetLabel()))
             count++;
         }
 
-        RT_MSG(wxString::Format(wxT("GetVIterator(wxPG_ITERATE_PROPERTIES) -> %i entries"), count));
+        RT_MSG(wxString::Format("GetVIterator(wxPG_ITERATE_PROPERTIES) -> %i entries", count));
 
         count = 0;
         for ( it = pgman->GetVIterator(wxPG_ITERATE_CATEGORIES);
@@ -394,11 +388,11 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         {
             wxPGProperty* p = it.GetProperty();
             if ( !p->IsCategory() )
-                RT_FAILURE_MSG(wxString::Format(wxT("'%s' is not a category (only category was expected)"),p->GetLabel().c_str()).c_str())
+                RT_FAILURE_MSG(wxString::Format("'%s' is not a category (only category was expected)",p->GetLabel()))
             count++;
         }
 
-        RT_MSG(wxString::Format(wxT("GetVIterator(wxPG_ITERATE_CATEGORIES) -> %i entries"), count));
+        RT_MSG(wxString::Format("GetVIterator(wxPG_ITERATE_CATEGORIES) -> %i entries", count));
 
         count = 0;
         for ( it = pgman->GetVIterator(wxPG_ITERATE_PROPERTIES|wxPG_ITERATE_CATEGORIES);
@@ -407,11 +401,11 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         {
             wxPGProperty* p = it.GetProperty();
             if ( p->GetParent()->HasFlag(wxPG_PROP_AGGREGATE) )
-                RT_FAILURE_MSG(wxString::Format(wxT("'%s' is a private child (non-private child property or category expected)"),p->GetLabel().c_str()).c_str())
+                RT_FAILURE_MSG(wxString::Format("'%s' is a private child (non-private child property or category expected)",p->GetLabel()))
             count++;
         }
 
-        RT_MSG(wxString::Format(wxT("GetVIterator(wxPG_ITERATE_PROPERTIES|wxPG_ITERATE_CATEGORIES) -> %i entries"), count));
+        RT_MSG(wxString::Format("GetVIterator(wxPG_ITERATE_PROPERTIES|wxPG_ITERATE_CATEGORIES) -> %i entries", count));
 
         count = 0;
         for ( it = pgman->GetVIterator(wxPG_ITERATE_VISIBLE);
@@ -420,13 +414,13 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         {
             wxPGProperty* p = it.GetProperty();
             if ( (p->GetParent() != p->GetParentState()->DoGetRoot() && !p->GetParent()->IsExpanded()) )
-                RT_FAILURE_MSG(wxString::Format(wxT("'%s' had collapsed parent (only visible properties expected)"),p->GetLabel().c_str()).c_str())
+                RT_FAILURE_MSG(wxString::Format("'%s' had collapsed parent (only visible properties expected)",p->GetLabel()))
             else if ( p->HasFlag(wxPG_PROP_HIDDEN) )
-                RT_FAILURE_MSG(wxString::Format(wxT("'%s' was hidden (only visible properties expected)"),p->GetLabel().c_str()).c_str())
+                RT_FAILURE_MSG(wxString::Format("'%s' was hidden (only visible properties expected)",p->GetLabel()))
             count++;
         }
 
-        RT_MSG(wxString::Format(wxT("GetVIterator(wxPG_ITERATE_VISIBLE) -> %i entries"), count));
+        RT_MSG(wxString::Format("GetVIterator(wxPG_ITERATE_VISIBLE) -> %i entries", count));
     }
 
     if ( fullTest )
@@ -444,7 +438,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
             for ( it = page->GetIterator(wxPG_ITERATE_VISIBLE);
                   !it.AtEnd();
-                  it++ )
+                  ++it )
             {
                 wxPGProperty* p = *it;
                 RT_MSG(p->GetLabel());
@@ -461,24 +455,31 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         RT_START_TEST(DeleteProperty)
 
         wxPGVIterator it;
-        wxArrayPGProperty array;
+        wxVector<wxPGProperty*> array;
 
         for ( it = pgman->GetVIterator(wxPG_ITERATE_ALL&~(wxPG_IT_CHILDREN(wxPG_PROP_AGGREGATE)));
               !it.AtEnd();
               it.Next() )
             array.push_back(it.GetProperty());
 
-        wxArrayPGProperty::reverse_iterator it2;
+        wxVector<wxPGProperty*>::reverse_iterator it2;
 
-        for ( it2 = array.rbegin(); it2 != array.rend(); it2++ )
+        for ( it2 = array.rbegin(); it2 != array.rend(); ++it2 )
         {
-            wxPGProperty* p = (wxPGProperty*)*it2;
-            RT_MSG(wxString::Format(wxT("Deleting '%s' ('%s')"),p->GetLabel().c_str(),p->GetName().c_str()));
+            wxPGProperty* p = *it2;
+            RT_MSG(wxString::Format("Deleting '%s' ('%s')",p->GetLabel(),p->GetName()));
             pgman->DeleteProperty(p);
         }
 
+        // Check if grid is empty.
+        it = pgman->GetVIterator(wxPG_ITERATE_ALL&~(wxPG_IT_CHILDREN(wxPG_PROP_AGGREGATE)));
+        if ( !it.AtEnd() )
+        {
+            RT_FAILURE_MSG(wxString("Not all properties are deleted"));
+        }
+
         // Recreate grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
     }
 
@@ -498,7 +499,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         }
 
         // Recreate grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
     }
 
@@ -515,7 +516,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         wxDateTime testTime = wxDateTime::Now();
         any = testTime;
         prop->SetValue(any);
-        if ( wxANY_AS(prop->GetValue().GetAny(), wxDateTime) != testTime )
+        if ( prop->GetValue().GetAny().As<wxDateTime>() != testTime )
             RT_FAILURE();
 #endif
 
@@ -523,10 +524,10 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         int testInt = 25537983;
         any = testInt;
         prop->SetValue(any);
-        if ( wxANY_AS(prop->GetValue().GetAny(), int) != testInt )
+        if ( prop->GetValue().GetAny().As<int>() != testInt )
             RT_FAILURE();
 #ifdef wxLongLong_t
-        if ( wxANY_AS(prop->GetValue().GetAny(), wxLongLong_t) != testInt )
+        if ( prop->GetValue().GetAny().As<wxLongLong_t>() != testInt )
             RT_FAILURE();
 #endif
 
@@ -534,7 +535,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         wxString testString = "asd934jfyn3";
         any = testString;
         prop->SetValue(any);
-        if ( wxANY_AS(prop->GetValue().GetAny(), wxString) != testString )
+        if ( prop->GetValue().GetAny().As<wxString>() != testString )
             RT_FAILURE();
 
         // Test with a type generated with IMPLEMENT_VARIANT_OBJECT()
@@ -542,7 +543,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         wxColour testCol = *wxCYAN;
         any = testCol;
         prop->SetValue(any);
-        if ( wxANY_AS(prop->GetValue().GetAny(), wxColour) != testCol )
+        if ( prop->GetValue().GetAny().As<wxColour>() != testCol )
             RT_FAILURE();
 
         // Test with a type with custom wxVariantData defined by
@@ -551,7 +552,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         wxPoint testPoint(199, 199);
         any = testPoint;
         prop->SetValue(any);
-        if ( wxANY_AS(prop->GetValue().GetAny(), wxPoint) != testPoint )
+        if ( prop->GetValue().GetAny().As<wxPoint>() != testPoint )
             RT_FAILURE();
     }
 
@@ -566,13 +567,12 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
             wxVariant values = page->GetPropertyValues();
 
-            unsigned int i;
-            for ( i = 0; i < (unsigned int)values.GetCount(); i++ )
+            for (unsigned int j = 0; j < (unsigned int)values.GetCount(); j++ )
             {
-                wxVariant& v = values[i];
+                wxVariant& v = values[j];
 
-                t.Printf(wxT("%i: name=\"%s\"  type=\"%s\"\n"),(int)i,
-                    v.GetName().c_str(),v.GetType().c_str());
+                t.Printf("%i: name=\"%s\"  type=\"%s\"\n",(int)j,
+                    v.GetName(),v.GetType());
 
                 text += t;
             }
@@ -583,21 +583,21 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
     {
         RT_START_TEST(SetPropertyValue_and_GetPropertyValue)
 
-        // In this section, mixed up usage of wxT("propname") and "propname"
+        // In this section, mixed up usage of "propname" and "propname"
         // in wxPropertyGridInterface functions is intentional.
         // Purpose is to test wxPGPropArgCls ctors.
 
         //pg = (wxPropertyGrid*) NULL;
 
         wxArrayString test_arrstr_1;
-        test_arrstr_1.Add(wxT("Apple"));
-        test_arrstr_1.Add(wxT("Orange"));
-        test_arrstr_1.Add(wxT("Lemon"));
+        test_arrstr_1.Add("Apple");
+        test_arrstr_1.Add("Orange");
+        test_arrstr_1.Add("Lemon");
 
         wxArrayString test_arrstr_2;
-        test_arrstr_2.Add(wxT("Potato"));
-        test_arrstr_2.Add(wxT("Cabbage"));
-        test_arrstr_2.Add(wxT("Cucumber"));
+        test_arrstr_2.Add("Potato");
+        test_arrstr_2.Add("Cabbage");
+        test_arrstr_2.Add("Cucumber");
 
         wxArrayInt test_arrint_1;
         test_arrint_1.Add(1);
@@ -623,107 +623,119 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 #define FLAG_TEST_SET1 (wxCAPTION|wxCLOSE_BOX|wxSYSTEM_MENU|wxRESIZE_BORDER)
 #define FLAG_TEST_SET2 (wxSTAY_ON_TOP|wxCAPTION|wxICONIZE|wxSYSTEM_MENU)
 
-        pgman->SetPropertyValue(wxT("StringProperty"),wxT("Text1"));
-        pgman->SetPropertyValue(wxT("IntProperty"),1024);
-        pgman->SetPropertyValue(wxT("FloatProperty"),1024.0000000001);
-        pgman->SetPropertyValue(wxT("BoolProperty"),FALSE);
-        pgman->SetPropertyValue(wxT("EnumProperty"),120);
-        pgman->SetPropertyValue(wxT("ArrayStringProperty"),test_arrstr_1);
+        pgman->SetPropertyValue("StringProperty","Text1");
+        pgman->SetPropertyValue("IntProperty",1024);
+        pgman->SetPropertyValue("FloatProperty",1024.0000000001);
+        pgman->SetPropertyValue("BoolProperty",false);
+        pgman->SetPropertyValue("EnumProperty",120);
+        pgman->SetPropertyValue("ArrayStringProperty",test_arrstr_1);
         wxColour emptyCol;
-        pgman->SetPropertyValue(wxT("ColourProperty"),emptyCol);
-        pgman->SetPropertyValue(wxT("ColourProperty"),(wxObject*)wxBLACK);
-        pgman->SetPropertyValue(wxT("Size"),WXVARIANT(wxSize(150,150)));
-        pgman->SetPropertyValue(wxT("Position"),WXVARIANT(wxPoint(150,150)));
-        pgman->SetPropertyValue(wxT("MultiChoiceProperty"),test_arrint_1);
+        pgman->SetPropertyValue("ColourProperty",emptyCol);
+        pgman->SetPropertyValue("ColourProperty", const_cast<wxObject*>(static_cast<const wxObject*>(wxBLACK)));
+        pgman->SetPropertyValue("Size",WXVARIANT(wxSize(150,150)));
+        pgman->SetPropertyValue("Position",WXVARIANT(wxPoint(150,150)));
+        pgman->SetPropertyValue("MultiChoiceProperty",test_arrint_1);
 #if wxUSE_DATETIME
-        pgman->SetPropertyValue(wxT("DateProperty"),dt1);
+        pgman->SetPropertyValue("DateProperty",dt1);
 #endif
 
         pgman->SelectPage(2);
         pg = pgman->GetGrid();
 
-        if ( pg->GetPropertyValueAsString(wxT("StringProperty")) != wxT("Text1") )
+        if ( pg->GetPropertyValueAsString("StringProperty") != "Text1" )
             RT_FAILURE();
-        if ( pg->GetPropertyValueAsInt(wxT("IntProperty")) != 1024 )
+        if ( pg->GetPropertyValueAsInt("IntProperty") != 1024 )
             RT_FAILURE();
-        if ( pg->GetPropertyValueAsDouble(wxT("FloatProperty")) != 1024.0000000001 )
+        if ( pg->GetPropertyValueAsDouble("FloatProperty") != 1024.0000000001 )
             RT_FAILURE();
-        if ( pg->GetPropertyValueAsBool(wxT("BoolProperty")) != FALSE )
+        if ( pg->GetPropertyValueAsBool("BoolProperty") != false )
             RT_FAILURE();
-        if ( pg->GetPropertyValueAsLong(wxT("EnumProperty")) != 120 )
+        if ( pg->GetPropertyValueAsLong("EnumProperty") != 120 )
             RT_FAILURE();
-        if ( pg->GetPropertyValueAsArrayString(wxT("ArrayStringProperty")) != test_arrstr_1 )
+        if ( pg->GetPropertyValueAsArrayString("ArrayStringProperty") != test_arrstr_1 )
             RT_FAILURE();
         wxColour col;
-        col << pgman->GetPropertyValue(wxT("ColourProperty"));
+        col << pgman->GetPropertyValue("ColourProperty");
         if ( col != *wxBLACK )
             RT_FAILURE();
-        wxVariant varSize(pg->GetPropertyValue(wxT("Size")));
+        wxVariant varSize(pg->GetPropertyValue("Size"));
         if ( wxSizeRefFromVariant(varSize) != wxSize(150,150) )
             RT_FAILURE();
-        wxVariant varPos(pg->GetPropertyValue(wxT("Position")));
+        wxVariant varPos(pg->GetPropertyValue("Position"));
         if ( wxPointRefFromVariant(varPos) != wxPoint(150,150) )
             RT_FAILURE();
-        if ( !(pg->GetPropertyValueAsArrayInt(wxT("MultiChoiceProperty")) == test_arrint_1) )
+        if ( !(pg->GetPropertyValueAsArrayInt("MultiChoiceProperty") == test_arrint_1) )
             RT_FAILURE();
 #if wxUSE_DATETIME
-        if ( !(pg->GetPropertyValueAsDateTime(wxT("DateProperty")) == dt1) )
+        if ( !(pg->GetPropertyValueAsDateTime("DateProperty") == dt1) )
             RT_FAILURE();
 #endif
 
-        pgman->SetPropertyValue(wxT("IntProperty"),wxLL(10000000000));
-        if ( pg->GetPropertyValueAsLongLong(wxT("IntProperty")) != wxLL(10000000000) )
+#if wxUSE_LONGLONG && defined(wxLongLong_t)
+        pgman->SetPropertyValue("IntProperty",wxLL(10000000000));
+        if ( pg->GetPropertyValueAsLongLong("IntProperty") != wxLL(10000000000) )
             RT_FAILURE();
+#else
+        pgman->SetPropertyValue("IntProperty",1000000000);
+        if ( pg->GetPropertyValueAsLong("IntProperty") != 1000000000 )
+            RT_FAILURE();
+#endif
 
-        pg->SetPropertyValue(wxT("StringProperty"),wxT("Text2"));
-        pg->SetPropertyValue(wxT("IntProperty"),512);
-        pg->SetPropertyValue(wxT("FloatProperty"),512.0);
-        pg->SetPropertyValue(wxT("BoolProperty"),TRUE);
-        pg->SetPropertyValue(wxT("EnumProperty"),80);
-        pg->SetPropertyValue(wxT("ArrayStringProperty"),test_arrstr_2);
-        pg->SetPropertyValue(wxT("ColourProperty"),(wxObject*)wxWHITE);
-        pg->SetPropertyValue(wxT("Size"),WXVARIANT(wxSize(300,300)));
-        pg->SetPropertyValue(wxT("Position"),WXVARIANT(wxPoint(300,300)));
-        pg->SetPropertyValue(wxT("MultiChoiceProperty"),test_arrint_2);
+        pg->SetPropertyValue("StringProperty","Text2");
+        pg->SetPropertyValue("IntProperty",512);
+        pg->SetPropertyValue("FloatProperty",512.0);
+        pg->SetPropertyValue("BoolProperty",true);
+        pg->SetPropertyValue("EnumProperty",80);
+        pg->SetPropertyValue("ArrayStringProperty",test_arrstr_2);
+        pg->SetPropertyValue("ColourProperty", const_cast<wxObject*>(static_cast<const wxObject*>(wxWHITE)));
+        pg->SetPropertyValue("Size",WXVARIANT(wxSize(300,300)));
+        pg->SetPropertyValue("Position",WXVARIANT(wxPoint(300,300)));
+        pg->SetPropertyValue("MultiChoiceProperty",test_arrint_2);
 #if wxUSE_DATETIME
-        pg->SetPropertyValue(wxT("DateProperty"),dt2);
+        pg->SetPropertyValue("DateProperty",dt2);
 #endif
 
         //pg = (wxPropertyGrid*) NULL;
 
         pgman->SelectPage(0);
 
-        if ( pgman->GetPropertyValueAsString(wxT("StringProperty")) != wxT("Text2") )
+        if ( pgman->GetPropertyValueAsString("StringProperty") != "Text2" )
             RT_FAILURE();
-        if ( pgman->GetPropertyValueAsInt(wxT("IntProperty")) != 512 )
+        if ( pgman->GetPropertyValueAsInt("IntProperty") != 512 )
             RT_FAILURE();
-        if ( pgman->GetPropertyValueAsDouble(wxT("FloatProperty")) != 512.0 )
+        if ( pgman->GetPropertyValueAsDouble("FloatProperty") != 512.0 )
             RT_FAILURE();
-        if ( pgman->GetPropertyValueAsBool(wxT("BoolProperty")) != TRUE )
+        if ( pgman->GetPropertyValueAsBool("BoolProperty") != true )
             RT_FAILURE();
-        if ( pgman->GetPropertyValueAsLong(wxT("EnumProperty")) != 80 )
+        if ( pgman->GetPropertyValueAsLong("EnumProperty") != 80 )
             RT_FAILURE();
-        if ( pgman->GetPropertyValueAsArrayString(wxT("ArrayStringProperty")) != test_arrstr_2 )
+        if ( pgman->GetPropertyValueAsArrayString("ArrayStringProperty") != test_arrstr_2 )
             RT_FAILURE();
-        col << pgman->GetPropertyValue(wxT("ColourProperty"));
+        col << pgman->GetPropertyValue("ColourProperty");
         if ( col != *wxWHITE )
             RT_FAILURE();
-        varSize = pgman->GetPropertyValue(wxT("Size"));
+        varSize = pgman->GetPropertyValue("Size");
         if ( wxSizeRefFromVariant(varSize) != wxSize(300,300) )
             RT_FAILURE();
-        varPos = pgman->GetPropertyValue(wxT("Position"));
+        varPos = pgman->GetPropertyValue("Position");
         if ( wxPointRefFromVariant(varPos) != wxPoint(300,300) )
             RT_FAILURE();
-        if ( !(pgman->GetPropertyValueAsArrayInt(wxT("MultiChoiceProperty")) == test_arrint_2) )
+        if ( !(pgman->GetPropertyValueAsArrayInt("MultiChoiceProperty") == test_arrint_2) )
             RT_FAILURE();
 #if wxUSE_DATETIME
-        if ( !(pgman->GetPropertyValueAsDateTime(wxT("DateProperty")) == dt2) )
+        if ( !(pgman->GetPropertyValueAsDateTime("DateProperty") == dt2) )
             RT_FAILURE();
 #endif
 
-        pgman->SetPropertyValue(wxT("IntProperty"),wxLL(-80000000000));
-        if ( pgman->GetPropertyValueAsLongLong(wxT("IntProperty")) != wxLL(-80000000000) )
+#if wxUSE_LONGLONG && defined(wxLongLong_t)
+        pgman->SetPropertyValue("IntProperty",wxLL(-80000000000));
+        if ( pgman->GetPropertyValueAsLongLong("IntProperty") != wxLL(-80000000000) )
             RT_FAILURE();
+#else
+        pgman->SetPropertyValue("IntProperty",-1000000000);
+        if ( pgman->GetPropertyValueAsLong("IntProperty") != -1000000000 )
+            RT_FAILURE();
+#endif
 
         // Make sure children of composite parent get updated as well
         // Original string value: "Lamborghini Diablo SV; 5707; [300; 3.9; 8.6] 300000; Not Convertible"
@@ -735,26 +747,22 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
         if ( pgman->GetPropertyValueAsString("Car.Model") != "Lamborghini Diablo XYZ" )
         {
-            wxLogDebug("Did not match: Car.Model=%s", pgman->GetPropertyValueAsString("Car.Model").c_str());
-            RT_FAILURE();
+            RT_FAILURE_MSG(wxString::Format("Did not match: Car.Model=%s", pgman->GetPropertyValueAsString("Car.Model")));
         }
 
         if ( pgman->GetPropertyValueAsInt("Car.Speeds.Max. Speed (mph)") != 100 )
         {
-            wxLogDebug("Did not match: Car.Speeds.Max. Speed (mph)=%s", pgman->GetPropertyValueAsString("Car.Speeds.Max. Speed (mph)").c_str());
-            RT_FAILURE();
+            RT_FAILURE_MSG(wxString::Format("Did not match: Car.Speeds.Max. Speed (mph)=%s", pgman->GetPropertyValueAsString("Car.Speeds.Max. Speed (mph)")));
         }
 
         if ( pgman->GetPropertyValueAsInt("Car.Price ($)") != 3000002 )
         {
-            wxLogDebug("Did not match: Car.Price ($)=%s", pgman->GetPropertyValueAsString("Car.Price ($)").c_str());
-            RT_FAILURE();
+            RT_FAILURE_MSG(wxString::Format(wxS("Did not match: Car.Price ($)=%s"), pgman->GetPropertyValueAsString(wxS("Car.Price ($)"))));
         }
 
         if ( !pgman->GetPropertyValueAsBool("Car.Convertible") )
         {
-            wxLogDebug("Did not match: Car.Convertible=%s", pgman->GetPropertyValueAsString("Car.Convertible").c_str());
-            RT_FAILURE();
+            RT_FAILURE_MSG(wxString::Format("Did not match: Car.Convertible=%s", pgman->GetPropertyValueAsString("Car.Convertible")));
         }
 
         // SetPropertyValueString for special cases such as wxColour
@@ -781,18 +789,18 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         RT_START_TEST(SetPropertyValueUnspecified)
 
         // Null variant setter tests
-        pgman->SetPropertyValueUnspecified(wxT("StringProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("IntProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("FloatProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("BoolProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("EnumProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("ArrayStringProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("ColourProperty"));
-        pgman->SetPropertyValueUnspecified(wxT("Size"));
-        pgman->SetPropertyValueUnspecified(wxT("Position"));
-        pgman->SetPropertyValueUnspecified(wxT("MultiChoiceProperty"));
+        pgman->SetPropertyValueUnspecified("StringProperty");
+        pgman->SetPropertyValueUnspecified("IntProperty");
+        pgman->SetPropertyValueUnspecified("FloatProperty");
+        pgman->SetPropertyValueUnspecified("BoolProperty");
+        pgman->SetPropertyValueUnspecified("EnumProperty");
+        pgman->SetPropertyValueUnspecified("ArrayStringProperty");
+        pgman->SetPropertyValueUnspecified("ColourProperty");
+        pgman->SetPropertyValueUnspecified("Size");
+        pgman->SetPropertyValueUnspecified("Position");
+        pgman->SetPropertyValueUnspecified("MultiChoiceProperty");
 #if wxUSE_DATETIME
-        pgman->SetPropertyValueUnspecified(wxT("DateProperty"));
+        pgman->SetPropertyValueUnspecified("DateProperty");
 #endif
     }
 
@@ -801,15 +809,15 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         // Test multiple selection
         RT_START_TEST(MULTIPLE_SELECTION)
         if ( !(pgman->GetExtraStyle() & wxPG_EX_MULTIPLE_SELECTION) )
-            CreateGrid( -1, wxPG_EX_MULTIPLE_SELECTION);
+            ReplaceGrid( -1, wxPG_EX_MULTIPLE_SELECTION);
         pgman = m_pPropGridManager;
 
-        wxPropertyGrid* pg = pgman->GetGrid();
+        pg = pgman->GetGrid();
 
-        wxPGProperty* prop1 = pg->GetProperty(wxT("Label"));
-        wxPGProperty* prop2 = pg->GetProperty(wxT("Cell Text Colour"));
-        wxPGProperty* prop3 = pg->GetProperty(wxT("Height"));
-        wxPGProperty* catProp = pg->GetProperty(wxT("Appearance"));
+        wxPGProperty* prop1 = pg->GetProperty("Label");
+        wxPGProperty* prop2 = pg->GetProperty("Cell Text Colour");
+        wxPGProperty* prop3 = pg->GetProperty("Height");
+        wxPGProperty* catProp = pg->GetProperty("Appearance");
 
         RT_ASSERT( prop1 && prop2 && prop3 );
 
@@ -855,42 +863,239 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
     {
         //
+        // Test retrieving main parent of the property
+        RT_START_TEST(GetMainParent)
+        pgman = m_pPropGridManager;
+
+        // Simple properties
+        wxPGProperty* prop = pgman->GetProperty("DateProperty");
+        wxPGProperty* parent = prop->GetMainParent();
+        RT_ASSERT(parent->GetName() == "DateProperty");
+
+        prop = pgman->GetProperty("Label");
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent->GetName() == "Label");
+
+        // Properties with children
+        prop = pgman->GetProperty("Font");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "Font");
+
+        prop = pgman->GetProperty("Font.Style");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "Font");
+
+        prop = pgman->GetProperty("Car");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "Car");
+
+        prop = pgman->GetProperty("Car.Model");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "Car");
+
+        prop = pgman->GetProperty("Car.Speeds");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "Car");
+
+        prop = pgman->GetProperty("3D Object.Triangle 3.A");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "3D Object");
+
+        prop = pgman->GetProperty("3D Object.Triangle 3.A.Z");
+        RT_ASSERT(prop);
+        parent = prop->GetMainParent();
+        RT_ASSERT(parent);
+        RT_ASSERT(parent->GetName() == "3D Object");
+    }
+
+    {
+        //
         // Test label editing
         RT_START_TEST(LABEL_EDITING)
 
-        wxPropertyGrid* pg = pgman->GetGrid();
+        pg = pgman->GetGrid();
 
         // Just mostly test that these won't crash
         pg->MakeColumnEditable(0, true);
         pg->MakeColumnEditable(2, true);
         pg->MakeColumnEditable(0, false);
         pg->MakeColumnEditable(2, false);
-        pg->SelectProperty(wxT("Height"));
+        pg->SelectProperty("Height");
         pg->BeginLabelEdit(0);
         pg->BeginLabelEdit(0);
         pg->EndLabelEdit(0);
         pg->EndLabelEdit(0);
 
         // Recreate grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
     }
 
     {
         RT_START_TEST(Attributes)
 
-        wxPGProperty* prop = pgman->GetProperty(wxT("StringProperty"));
-        prop->SetAttribute(wxT("Dummy Attribute"), (long)15);
+        wxPGProperty* prop = pgman->GetProperty("StringProperty");
+        prop->SetAttribute("Dummy Attribute", 15L);
 
-        if ( prop->GetAttribute(wxT("Dummy Attribute")).GetLong() != 15 )
+        if ( prop->GetAttribute("Dummy Attribute").GetLong() != 15L )
             RT_FAILURE();
 
-        prop->SetAttribute(wxT("Dummy Attribute"), wxVariant());
+        prop->SetAttribute("Dummy Attribute", wxVariant());
 
-        if ( !prop->GetAttribute(wxT("Dummy Attribute")).IsNull() )
+        if ( !prop->GetAttribute("Dummy Attribute").IsNull() )
             RT_FAILURE();
     }
 
+    {
+        RT_START_TEST(Attributes with PGManager)
+
+        const long val = 25;
+        pgman->SetPropertyAttribute("IntProperty", "Dummy Attribute", val);
+        if ( pgman->GetPropertyAttribute("IntProperty", "Dummy Attribute").GetLong() != val )
+            RT_FAILURE();
+
+        pgman->SetPropertyAttribute("IntProperty", "Dummy Attribute", wxVariant());
+        if ( !pgman->GetPropertyAttribute("IntProperty", "Dummy Attribute").IsNull() )
+            RT_FAILURE();
+    }
+
+    {
+        RT_START_TEST(Getting list of attributes)
+
+        wxPGProperty* prop = pgman->GetProperty("Height");
+        const wxPGAttributeStorage& attrs1 = prop->GetAttributes();
+        if ( attrs1.GetCount() < 1 )
+            RT_FAILURE();
+
+        const wxPGAttributeStorage& attrs2 = pgman->GetPropertyAttributes("Height");
+        if ( attrs2.GetCount() != attrs1.GetCount() )
+            RT_FAILURE();
+
+        // Compare both lists
+        wxVariant val1;
+        wxVariant val2;
+        wxPGAttributeStorage::const_iterator it = attrs1.StartIteration();
+        while ( attrs1.GetNext(it, val1) )
+        {
+            val2 = attrs2.FindValue(val1.GetName());
+            if ( val1 != val2 )
+                RT_FAILURE();
+        }
+    }
+
+    {
+        RT_START_TEST(Copying list of attributes)
+
+        wxPGAttributeStorage attrs1(pgman->GetPropertyAttributes("Height"));
+        if ( attrs1.GetCount() < 1 )
+            RT_FAILURE();
+
+        wxPGAttributeStorage attrs2;
+        attrs2 = attrs1;
+        if ( attrs2.GetCount() != attrs1.GetCount() )
+            RT_FAILURE();
+
+        // Compare both lists
+        wxVariant val1;
+        wxVariant val2;
+        wxPGAttributeStorage::const_iterator it = attrs1.StartIteration();
+        while ( attrs1.GetNext(it, val1) )
+        {
+            val2 = attrs2.FindValue(val1.GetName());
+            if ( val1 != val2 )
+                RT_FAILURE();
+        }
+    }
+
+    {
+        RT_START_TEST(MaxLength)
+
+        wxPGProperty* prop1 = pgman->GetProperty("StringProperty");
+        if ( !prop1->SetMaxLength(10) )
+            RT_FAILURE();
+        if ( prop1->GetMaxLength() != 10 )
+            RT_FAILURE();
+
+        if ( !prop1->SetMaxLength(-1) )
+            RT_FAILURE();
+        if ( prop1->GetMaxLength() != 0 )
+            RT_FAILURE();
+
+        wxPGProperty* prop2 = pgman->GetProperty("LongStringProp");
+        if ( !prop2->SetMaxLength(20) )
+            RT_FAILURE();
+        if ( prop2->GetMaxLength() != 20 )
+            RT_FAILURE();
+
+        wxPGProperty* prop3 = pgman->GetProperty("IntProperty");
+        if ( !prop3->SetMaxLength(30) )
+            RT_FAILURE();
+        if ( prop3->GetMaxLength() != 30 )
+            RT_FAILURE();
+
+        wxPGProperty* prop4 = pgman->GetProperty("ArrayStringProperty");
+        if ( !prop4->SetMaxLength(40) )
+            RT_FAILURE();
+        if ( prop4->GetMaxLength() != 40 )
+            RT_FAILURE();
+
+        wxPGProperty* prop5 = pgman->GetProperty("EnumProperty");
+        if ( prop5->SetMaxLength(50) )
+            RT_FAILURE();
+
+        wxPGProperty* prop6 = pgman->GetProperty("BoolProperty");
+        if ( prop6->SetMaxLength(60) )
+            RT_FAILURE();
+    }
+
+    {
+        RT_START_TEST(MaxLength with PG)
+        pgman->SelectPage(2);
+        pg = pgman->GetGrid();
+
+        wxPGProperty* prop1 = pgman->GetProperty("StringProperty");
+        if ( !pg->SetPropertyMaxLength("StringProperty", 110) )
+            RT_FAILURE();
+        if ( prop1->GetMaxLength() != 110 )
+            RT_FAILURE();
+
+        if ( !pg->SetPropertyMaxLength("StringProperty", -1) )
+            RT_FAILURE();
+        if ( prop1->GetMaxLength() != 0 )
+            RT_FAILURE();
+
+        wxPGProperty* prop2 = pgman->GetProperty("LongStringProp");
+        if ( !pg->SetPropertyMaxLength("LongStringProp", 120) )
+            RT_FAILURE();
+        if ( prop2->GetMaxLength() != 120 )
+            RT_FAILURE();
+
+        wxPGProperty* prop3 = pgman->GetProperty("FloatProperty");
+        if ( !pg->SetPropertyMaxLength("FloatProperty", 130) )
+            RT_FAILURE();
+        if ( prop3->GetMaxLength() != 130 )
+            RT_FAILURE();
+
+        if ( pg->SetPropertyMaxLength("ColourProperty", 140) )
+            RT_FAILURE();
+
+        if ( pg->SetPropertyMaxLength("BoolProperty", 150) )
+            RT_FAILURE();
+    }
+
+#if WXWIN_COMPATIBILITY_3_0
     {
         RT_START_TEST(DoubleToString)
 
@@ -900,10 +1105,10 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         wxString s;
 
         if ( wxPropertyGrid::DoubleToString(s, 123.123, 2, true) !=
-                wxString::Format("123%s12", sep.c_str()) )
+                wxString::Format("123%s12", sep) )
             RT_FAILURE();
         if ( wxPropertyGrid::DoubleToString(s, -123.123, 4, false) !=
-                wxString::Format("-123%s1230", sep.c_str()) )
+                wxString::Format("-123%s1230", sep) )
             RT_FAILURE();
         if ( wxPropertyGrid::DoubleToString(s, -0.02, 1, false) !=
                 wxString::Format("0%s0", sep) )
@@ -911,6 +1116,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         if ( wxPropertyGrid::DoubleToString(s, -0.000123, 3, true) != "0" )
             RT_FAILURE();
     }
+#endif
 
     {
         wxPropertyGridPage* page1;
@@ -924,11 +1130,11 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
             RT_START_TEST(GetPropertyValues)
 
             page1 = pgman->GetPage(0);
-            pg1_values = page1->GetPropertyValues(wxT("Page1"),NULL,wxPG_KEEP_STRUCTURE);
+            pg1_values = page1->GetPropertyValues("Page1",NULL,wxPG_KEEP_STRUCTURE);
             page2 = pgman->GetPage(1);
-            pg2_values = page2->GetPropertyValues(wxT("Page2"),NULL,wxPG_KEEP_STRUCTURE);
+            pg2_values = page2->GetPropertyValues("Page2",NULL,wxPG_KEEP_STRUCTURE);
             page3 = pgman->GetPage(2);
-            pg3_values = page3->GetPropertyValues(wxT("Page3"),NULL,wxPG_KEEP_STRUCTURE);
+            pg3_values = page3->GetPropertyValues("Page3",NULL,wxPG_KEEP_STRUCTURE);
         }
 
         {
@@ -940,7 +1146,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         }
     }
 
-    if ( !(pgman->GetWindowStyleFlag()&wxPG_HIDE_CATEGORIES) )
+    if ( !pgman->HasFlag(wxPG_HIDE_CATEGORIES) )
     {
         RT_START_TEST(Collapse_and_GetFirstCategory_and_GetNextCategory)
 
@@ -952,7 +1158,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
             for ( it = page->GetIterator( wxPG_ITERATE_CATEGORIES );
                   !it.AtEnd();
-                  it++ )
+                  ++it )
             {
                 wxPGProperty* p = *it;
 
@@ -961,7 +1167,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
                 page->Collapse( p );
 
-                t.Printf(wxT("Collapsing: %s\n"),page->GetPropertyLabel(p).c_str());
+                t.Printf("Collapsing: %s\n",page->GetPropertyLabel(p));
                 ed->AppendText(t);
             }
         }
@@ -981,7 +1187,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         }
     }
 
-    //if ( !(pgman->GetWindowStyleFlag()&wxPG_HIDE_CATEGORIES) )
+    //if ( !pgman->HasFlag(wxPG_HIDE_CATEGORIES) )
     {
         RT_START_TEST(Expand_and_GetFirstCategory_and_GetNextCategory)
 
@@ -993,7 +1199,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
             for ( it = page->GetIterator( wxPG_ITERATE_CATEGORIES );
                   !it.AtEnd();
-                  it++ )
+                  ++it )
             {
                 wxPGProperty* p = *it;
 
@@ -1002,7 +1208,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
                 page->Expand( p );
 
-                t.Printf(wxT("Expand: %s\n"),page->GetPropertyLabel(p).c_str());
+                t.Printf("Expand: %s\n",page->GetPropertyLabel(p));
                 ed->AppendText(t);
             }
         }
@@ -1011,22 +1217,22 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
     {
         RT_START_TEST(Choice_Manipulation)
 
-        wxPGProperty* enumProp = pgman->GetProperty(wxT("EnumProperty"));
+        wxPGProperty* enumProp = pgman->GetProperty("EnumProperty");
 
         pgman->SelectPage(2);
         pgman->SelectProperty(enumProp);
         wxASSERT(pgman->GetGrid()->GetSelection() == enumProp);
 
         const wxPGChoices& choices = enumProp->GetChoices();
-        int ind = enumProp->InsertChoice(wxT("New Choice"), choices.GetCount()/2);
+        int ind = enumProp->InsertChoice("New Choice", choices.GetCount()/2);
         enumProp->DeleteChoice(ind);
 
         // Recreate the original grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
     }
 
-    //if ( !(pgman->GetWindowStyleFlag()&wxPG_HIDE_CATEGORIES) )
+    //if ( !pgman->HasFlag(wxPG_HIDE_CATEGORIES) )
     {
         RT_START_TEST(RandomCollapse)
 
@@ -1035,7 +1241,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
         for ( i=0; i<3; i++ )
         {
-            wxArrayPtrVoid arr;
+            wxVector<wxPGProperty*> arr;
 
             wxPropertyGridPage* page = pgman->GetPage(i);
 
@@ -1043,20 +1249,18 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
             for ( it = page->GetIterator( wxPG_ITERATE_CATEGORIES );
                   !it.AtEnd();
-                  it++ )
+                  ++it )
             {
-                arr.Add((void*)*it);
+                arr.push_back(*it);
             }
 
-            if ( arr.GetCount() )
+            if ( !arr.empty() )
             {
-                size_t n;
+                pgman->Collapse( arr[0] );
 
-                pgman->Collapse( (wxPGProperty*)arr.Item(0) );
-
-                for ( n=arr.GetCount()-1; n>0; n-- )
+                for ( size_t n=arr.size()-1; n>0; n-- )
                 {
-                    pgman->Collapse( (wxPGProperty*)arr.Item(n) );
+                    pgman->Collapse( arr[n] );
                 }
             }
 
@@ -1065,7 +1269,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
     {
         RT_START_TEST(EnsureVisible)
-        pgman->EnsureVisible(wxT("Cell Colour"));
+        pgman->EnsureVisible("Cell Colour");
     }
 
     {
@@ -1096,40 +1300,40 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
         // Make sure indexes are as supposed
 
-        p = pgman->GetProperty(wxT("User Name"));
+        p = pgman->GetProperty("User Name");
         if ( p->GetIndexInParent() != 3 )
             RT_FAILURE();
 
-        p = pgman->GetProperty(wxT("User Id"));
+        p = pgman->GetProperty("User Id");
         if ( p->GetIndexInParent() != 2 )
             RT_FAILURE();
 
-        p = pgman->GetProperty(wxT("User Home"));
+        p = pgman->GetProperty("User Home");
         if ( p->GetIndexInParent() != 1 )
             RT_FAILURE();
 
-        p = pgman->GetProperty(wxT("Operating System"));
+        p = pgman->GetProperty("Operating System");
         if ( p->GetIndexInParent() != 0 )
             RT_FAILURE();
 
         pgman->GetGrid()->SetSortFunction(MyPropertySortFunction);
 
-        pgman->GetGrid()->SortChildren(wxT("Environment"));
+        pgman->GetGrid()->SortChildren("Environment");
 
         // Make sure indexes have been reversed
-        p = pgman->GetProperty(wxT("User Name"));
+        p = pgman->GetProperty("User Name");
         if ( p->GetIndexInParent() != 0 )
             RT_FAILURE();
 
-        p = pgman->GetProperty(wxT("User Id"));
+        p = pgman->GetProperty("User Id");
         if ( p->GetIndexInParent() != 1 )
             RT_FAILURE();
 
-        p = pgman->GetProperty(wxT("User Home"));
+        p = pgman->GetProperty("User Home");
         if ( p->GetIndexInParent() != 2 )
             RT_FAILURE();
 
-        p = pgman->GetProperty(wxT("Operating System"));
+        p = pgman->GetProperty("Operating System");
         if ( p->GetIndexInParent() != 3 )
             RT_FAILURE();
     }
@@ -1137,7 +1341,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
     {
         RT_START_TEST(SetPropertyBackgroundColour)
         wxCommandEvent evt;
-        evt.SetInt(1); // IsChecked() will return TRUE.
+        evt.SetInt(1); // IsChecked() will return true.
         evt.SetId(ID_COLOURSCHEME4);
         OnCatColours(evt);
         OnColourScheme(evt);
@@ -1157,7 +1361,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
             RT_FAILURE();
 
         // Recreate the original grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
 
         // Grid clear
@@ -1168,59 +1372,46 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
             RT_FAILURE();
 
         // Recreate the original grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
     }
 
-    /*{
-        // TODO: This test fails.
+    {
         RT_START_TEST(SetSplitterPosition)
-
-        InitPanel();
 
         const int trySplitterPos = 50;
 
         int style = wxPG_AUTO_SORT;  // wxPG_SPLITTER_AUTO_CENTER;
-        pgman = m_pPropGridManager =
-            new wxPropertyGridManager(m_panel, wxID_ANY,
-                                      wxDefaultPosition,
-                                      wxDefaultSize,
-                                      style );
+        ReplaceGrid(style, -1);
+        pgman = m_pPropGridManager;
 
-        PopulateGrid();
         pgman->SetSplitterPosition(trySplitterPos);
 
         if ( pgman->GetGrid()->GetSplitterPosition() != trySplitterPos )
-            RT_FAILURE_MSG(wxString::Format(wxT("Splitter position was %i (should have been %i)"),(int)pgman->GetGrid()->GetSplitterPosition(),trySplitterPos).c_str());
+            RT_FAILURE_MSG(wxString::Format("Splitter position was %i (should have been %i)",(int)pgman->GetGrid()->GetSplitterPosition(),trySplitterPos));
 
-        m_topSizer->Add( m_pPropGridManager, 1, wxEXPAND );
-        FinalizePanel();
+        wxSize origSz = GetSize();
 
-        wxSize sz = GetSize();
-        wxSize origSz = sz;
-        sz.x += 5;
-        sz.y += 5;
+        wxSize sz = origSz;
+        sz.IncBy(5, 5);
+        SetSize(sz);
 
         if ( pgman->GetGrid()->GetSplitterPosition() != trySplitterPos )
-            RT_FAILURE_MSG(wxString::Format(wxT("Splitter position was %i (should have been %i)"),(int)pgman->GetGrid()->GetSplitterPosition(),trySplitterPos).c_str());
+            RT_FAILURE_MSG(wxString::Format("Splitter position was %i (should have been %i)",(int)pgman->GetGrid()->GetSplitterPosition(),trySplitterPos));
 
         SetSize(origSz);
 
         // Recreate the original grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
-    }*/
+    }
 
     {
         RT_START_TEST(HideProperty)
 
         wxPropertyGridPage* page = pgman->GetPage(0);
 
-        srand(0x1234);
-
-        wxArrayPGProperty arr1;
-
-        arr1 = GetPropertiesInRandomOrder(page);
+        wxVector<wxPGProperty*> arr1 = GetPropertiesInRandomOrder(page);
 
         if ( !_failed_ )
         {
@@ -1229,7 +1420,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
                 wxPGProperty* p = arr1[i];
                 page->HideProperty(p, true);
 
-                wxString s = wxString::Format(wxT("HideProperty(%i, %s)"), (int)i, p->GetLabel().c_str());
+                wxString s = wxString::Format("HideProperty(%i, %s)", (int)i, p->GetLabel());
                 RT_VALIDATE_VIRTUAL_HEIGHT(page, s)
                 if ( _failed_ )
                     break;
@@ -1238,14 +1429,14 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
         if ( !_failed_ )
         {
-            wxArrayPGProperty arr2 = GetPropertiesInRandomOrder(page);
+            wxVector<wxPGProperty*> arr2 = GetPropertiesInRandomOrder(page);
 
             for ( i=0; i<arr2.size(); i++ )
             {
                 wxPGProperty* p = arr2[i];
                 page->HideProperty(p, false);
 
-                wxString s = wxString::Format(wxT("ShowProperty(%i, %s)"), (int)i, p->GetLabel().c_str());
+                wxString s = wxString::Format("ShowProperty(%i, %s)", (int)i, p->GetLabel());
                 RT_VALIDATE_VIRTUAL_HEIGHT(page, s)
                 if ( _failed_ )
                     break;
@@ -1263,7 +1454,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
                 wxPGProperty* p = arr1[i];
                 page->HideProperty(p, true);
 
-                wxString s = wxString::Format(wxT("HideProperty(%i, %s)"), (int)i, p->GetLabel().c_str());
+                wxString s = wxString::Format("HideProperty(%i, %s)", (int)i, p->GetLabel());
                 RT_VALIDATE_VIRTUAL_HEIGHT(page, s)
                 if ( _failed_ )
                     break;
@@ -1272,14 +1463,14 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
         if ( !_failed_ )
         {
-            wxArrayPGProperty arr2 = GetPropertiesInRandomOrder(page);
+            wxVector<wxPGProperty*> arr2 = GetPropertiesInRandomOrder(page);
 
             for ( i=0; i<arr2.size(); i++ )
             {
                 wxPGProperty* p = arr2[i];
                 page->HideProperty(p, false);
 
-                wxString s = wxString::Format(wxT("ShowProperty(%i, %s)"), (int)i, p->GetLabel().c_str());
+                wxString s = wxString::Format("ShowProperty(%i, %s)", (int)i, p->GetLabel());
                 RT_VALIDATE_VIRTUAL_HEIGHT(page, s)
                 if ( _failed_ )
                     break;
@@ -1298,7 +1489,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
                 wxPGProperty* p = arr1[i];
                 page->HideProperty(p, true);
 
-                wxString s = wxString::Format(wxT("HideProperty(%i, %s)"), (int)i, p->GetLabel().c_str());
+                wxString s = wxString::Format("HideProperty(%i, %s)", (int)i, p->GetLabel());
                 RT_VALIDATE_VIRTUAL_HEIGHT(page, s)
                 if ( _failed_ )
                     break;
@@ -1307,14 +1498,14 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
         if ( !_failed_ )
         {
-            wxArrayPGProperty arr2 = GetPropertiesInRandomOrder(page);
+            wxVector<wxPGProperty*> arr2 = GetPropertiesInRandomOrder(page);
 
             for ( i=0; i<arr2.size(); i++ )
             {
                 wxPGProperty* p = arr2[i];
                 page->HideProperty(p, false);
 
-                wxString s = wxString::Format(wxT("ShowProperty(%i, %s)"), (int)i, p->GetLabel().c_str());
+                wxString s = wxString::Format("ShowProperty(%i, %s)", (int)i, p->GetLabel());
                 RT_VALIDATE_VIRTUAL_HEIGHT(page, s)
                 if ( _failed_ )
                     break;
@@ -1322,8 +1513,247 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         }
 
         // Recreate the original grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
+    }
+
+    {
+        RT_START_TEST(SetFlagsAsString and GetFlagsAsString)
+
+        // Select the most error prone page as visible.
+        pgman->SelectPage(1);
+
+        for ( i = 0; i < 3; i++ )
+        {
+            wxPropertyGridPage* page = pgman->GetPage(i);
+
+            wxPropertyGridIterator it;
+            for ( it = page->GetIterator(wxPG_ITERATE_VISIBLE);
+                  !it.AtEnd();
+                  ++it )
+            {
+                wxPGProperty *p = *it;
+
+                // Save initial flags
+                wxPGProperty::FlagType oldFlags = 0;
+                if( p->HasFlag(wxPG_PROP_COLLAPSED) )
+                {
+                    oldFlags |= wxPG_PROP_COLLAPSED;
+                }
+                if( p->HasFlag(wxPG_PROP_DISABLED) )
+                {
+                    oldFlags |= wxPG_PROP_DISABLED;
+                }
+                if( p->HasFlag(wxPG_PROP_HIDDEN) )
+                {
+                    oldFlags |= wxPG_PROP_HIDDEN;
+                }
+                if( p->HasFlag(wxPG_PROP_NOEDITOR) )
+                {
+                    oldFlags |= wxPG_PROP_NOEDITOR;
+                }
+
+                wxString flags;
+
+                if ( p->IsCategory() )
+                {
+                    if ( GetRandomBooleanVal() )
+                    {
+                        if ( !flags.empty() )
+                        {
+                            flags.append("|");
+                        }
+                        flags.append("COLLAPSED");
+                    }
+                }
+
+                if (GetRandomBooleanVal() )
+                {
+                    if ( !flags.empty() )
+                    {
+                        flags.append("|");
+                    }
+                    flags.append("DISABLED");
+                }
+
+                if ( GetRandomBooleanVal() )
+                {
+                    if ( !flags.empty() )
+                    {
+                        flags.append("|");
+                    }
+                    flags.append("HIDDEN");
+                }
+
+                // Set flags
+                p->SetFlagsFromString(flags);
+
+                // Verify if flags have been properly set
+                if ( flags.Find("COLLAPSED") != wxNOT_FOUND &&
+                     !p->HasFlag(wxPG_PROP_COLLAPSED) )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Error setting flag from string 'COLLAPSED' for property '%s'",
+                        p->GetName()));
+                }
+                if ( flags.Find("COLLAPSED") == wxNOT_FOUND &&
+                     p->HasFlag(wxPG_PROP_COLLAPSED) )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Error resetting flag from string 'COLLAPSED'for property '%s'",
+                        p->GetName()));
+                }
+                if ( flags.Find("DISABLED") != wxNOT_FOUND &&
+                     !p->HasFlag(wxPG_PROP_DISABLED) )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Error setting flag from string 'DISABLED' for property '%s'",
+                        p->GetName()));
+                }
+                if ( flags.Find("DISABLED") == wxNOT_FOUND &&
+                     p->HasFlag(wxPG_PROP_DISABLED) )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Error resetting flag from string 'DISABLED' for property '%s'",
+                        p->GetName()));
+                }
+                if ( flags.Find("HIDDEN") != wxNOT_FOUND &&
+                     !p->HasFlag(wxPG_PROP_HIDDEN) )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Error setting flag from string 'HIDDEN' for property '%s'",
+                        p->GetName()));
+                }
+                if ( flags.Find("HIDDEN") == wxNOT_FOUND &&
+                     p->HasFlag(wxPG_PROP_HIDDEN) )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Error resetting flag from string 'HIDDEN' for property '%s'",
+                        p->GetName()));
+                }
+
+                // Get individual flags
+                bool ok;
+
+                flags = p->GetFlagsAsString(wxPG_PROP_COLLAPSED);
+                if ( p->HasFlag(wxPG_PROP_COLLAPSED) )
+                {
+                    ok = (flags == "COLLAPSED");
+                }
+                else
+                {
+                    ok = flags.empty();
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_COLLAPSED flag for property '%s'",
+                        p->GetName()));
+                }
+
+                flags = p->GetFlagsAsString(wxPG_PROP_DISABLED);
+                if ( p->HasFlag(wxPG_PROP_DISABLED) )
+                {
+                    ok = (flags == "DISABLED");
+                }
+                else
+                {
+                    ok = flags.empty();
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_DISABLED flag for property '%s'",
+                        p->GetName()));
+                }
+
+                flags = p->GetFlagsAsString(wxPG_PROP_HIDDEN);
+                if ( p->HasFlag(wxPG_PROP_HIDDEN) )
+                {
+                    ok = (flags == "HIDDEN");
+                }
+                else
+                {
+                    ok = flags.empty();
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_HIDDEN flag for property '%s'",
+                        p->GetName()));
+                }
+
+                flags = p->GetFlagsAsString(wxPG_PROP_NOEDITOR);
+                if ( p->HasFlag(wxPG_PROP_NOEDITOR) )
+                {
+                    ok = (flags == "NOEDITOR");
+                }
+                else
+                {
+                    ok = flags.empty();
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_NOEDITOR flag for property '%s'",
+                        p->GetName()));
+                }
+
+                // Get all flags
+                flags = p->GetFlagsAsString(wxPG_STRING_STORED_FLAGS);
+                if ( p->HasFlag(wxPG_PROP_COLLAPSED) )
+                {
+                    ok = (flags.Find("COLLAPSED") != wxNOT_FOUND);
+                }
+                else
+                {
+                    ok = (flags.Find("COLLAPSED") == wxNOT_FOUND);
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_COLLAPSED flag for property '%s'",
+                        p->GetName()));
+                }
+
+                if ( p->HasFlag(wxPG_PROP_DISABLED) )
+                {
+                    ok = (flags.Find("DISABLED") != wxNOT_FOUND);
+                }
+                else
+                {
+                    ok = (flags.Find("DISABLED") == wxNOT_FOUND);
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_DISBALED flag for property '%s'",
+                        p->GetName()));
+                }
+
+                if ( p->HasFlag(wxPG_PROP_HIDDEN) )
+                {
+                    ok = (flags.Find("HIDDEN") != wxNOT_FOUND);
+                }
+                else
+                {
+                    ok = (flags.Find("HIDDEN") == wxNOT_FOUND);
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_HIDDEN flag for property '%s'",
+                        p->GetName()));
+                }
+
+                if ( p->HasFlag(wxPG_PROP_NOEDITOR) )
+                {
+                    ok = (flags.Find("NOEDITOR") != wxNOT_FOUND);
+                }
+                else
+                {
+                    ok = (flags.Find("NOEDITOR") == wxNOT_FOUND);
+                }
+                if ( !ok )
+                {
+                    RT_FAILURE_MSG(wxString::Format("Invalid string for wxPG_PROP_NOEDITOR flag for property '%s'",
+                        p->GetName()));
+                }
+
+                // Restore original flags
+                p->ChangeFlag(wxPG_PROP_COLLAPSED, (oldFlags & wxPG_PROP_COLLAPSED) != 0);
+                p->ChangeFlag(wxPG_PROP_DISABLED, (oldFlags & wxPG_PROP_DISABLED) != 0);
+                p->ChangeFlag(wxPG_PROP_HIDDEN, (oldFlags & wxPG_PROP_HIDDEN) != 0);
+                p->ChangeFlag(wxPG_PROP_NOEDITOR, (oldFlags & wxPG_PROP_NOEDITOR) != 0);
+            }
+        }
     }
 
     if ( fullTest )
@@ -1331,12 +1761,11 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         RT_START_TEST(MultipleColumns)
 
         // Test with multiple columns
-        // FIXME: Does not display changes.
+        ReplaceGrid( -1, -1 );
+        pgman = m_pPropGridManager;
         for ( i=3; i<12; i+=2 )
         {
-            RT_MSG(wxString::Format(wxT("%i columns"),(int)i));
-            CreateGrid( -1, -1 );
-            pgman = m_pPropGridManager;
+            RT_MSG(wxString::Format("%i columns",(int)i));
             pgman->SetColumnCount(i);
             Refresh();
             Update();
@@ -1354,8 +1783,8 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         for ( i=4; i<16; i++ )
         {
             int flag = 1<<i;
-            RT_MSG(wxString::Format(wxT("Style: 0x%X"),flag));
-            CreateGrid( flag, -1 );
+            RT_MSG(wxString::Format("Style: 0x%X",flag));
+            ReplaceGrid( flag, -1 );
             pgman = m_pPropGridManager;
             Update();
             wxMilliSleep(500);
@@ -1366,15 +1795,15 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
         for ( i=12; i<27; i++ )
         {
             int flag = 1<<i;
-            RT_MSG(wxString::Format(wxT("ExStyle: 0x%X"),flag));
-            CreateGrid( -1, flag );
+            RT_MSG(wxString::Format("ExStyle: 0x%X",flag));
+            ReplaceGrid( -1, flag );
             pgman = m_pPropGridManager;
             Update();
             wxMilliSleep(500);
         }
 
         // Recreate the original grid
-        CreateGrid( -1, -1 );
+        ReplaceGrid( -1, -1 );
         pgman = m_pPropGridManager;
     }
 
@@ -1382,7 +1811,7 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 
     bool retVal;
 
-    if ( failures || errorMessages.size() )
+    if ( failures || !errorMessages.empty() )
     {
         retVal = false;
 
@@ -1390,19 +1819,19 @@ bool FormMain::RunTests( bool fullTest, bool interactive )
 #ifdef __WXDEBUG__
         if ( failures )
 #endif
-            s = wxString::Format(wxT("%i tests failed!!!"), failures);
+            s = wxString::Format("%i tests failed!!!", failures);
 #ifdef __WXDEBUG__
         else
-            s = wxString::Format(wxT("All tests were successful, but there were %i warnings!"), wxPGGlobalVars->m_warnings);
+            s = wxString::Format("All tests were successful, but there were %i warnings!", wxPGGlobalVars->m_warnings);
 #endif
         RT_MSG(s)
         for ( i=0; i<errorMessages.size(); i++ )
             RT_MSG(errorMessages[i])
-        wxMessageBox(s, wxT("Some Tests Failed"));
+        wxMessageBox(s, "Some Tests Failed");
     }
     else
     {
-        RT_MSG(wxT("All tests successfull"))
+        RT_MSG("All tests successful")
         retVal = true;
 
         if ( !interactive )

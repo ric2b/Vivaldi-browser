@@ -6,7 +6,6 @@
 #define SERVICES_NETWORK_PUBLIC_CPP_SELF_DELETING_URL_LOADER_FACTORY_H_
 
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -20,6 +19,11 @@ namespace network {
 // which should be owned by the set of its receivers.
 class COMPONENT_EXPORT(NETWORK_CPP) SelfDeletingURLLoaderFactory
     : public mojom::URLLoaderFactory {
+ public:
+  SelfDeletingURLLoaderFactory(const SelfDeletingURLLoaderFactory&) = delete;
+  SelfDeletingURLLoaderFactory& operator=(const SelfDeletingURLLoaderFactory&) =
+      delete;
+
  protected:
   // Constructs SelfDeletingURLLoaderFactory object that will self-delete
   // once all receivers disconnect (including |factory_receiver| below as well
@@ -51,8 +55,6 @@ class COMPONENT_EXPORT(NETWORK_CPP) SelfDeletingURLLoaderFactory
   void OnDisconnect();
 
   mojo::ReceiverSet<mojom::URLLoaderFactory> receivers_;
-
-  DISALLOW_COPY_AND_ASSIGN(SelfDeletingURLLoaderFactory);
 };
 
 }  // namespace network

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/macros.h"
+#include "base/feature_list.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -325,9 +325,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   EXPECT_EQ(passwords_helper::GetAllLogins(account_store).size(), 1u);
 }
 
-// The unconsented primary account isn't supported on ChromeOS (see
-// IdentityManager::ComputeUnconsentedPrimaryAccountInfo()) so Sync won't start
-// up for a secondary account.
+// The unconsented primary account isn't supported on ChromeOS.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
                        StoresDataForSecondaryAccountInAccountDB) {
@@ -335,8 +333,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
 
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
-  // Setup Sync for a secondary account (i.e. in transport mode).
-  secondary_account_helper::SignInSecondaryAccount(
+  // Setup Sync without consent (i.e. in transport mode).
+  secondary_account_helper::SignInUnconsentedAccount(
       GetProfile(0), &test_url_loader_factory_, "user@email.com");
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
@@ -361,9 +359,18 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
 
 // ChromeOS does not support signing out of a primary account.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
+
 // Sanity check: The profile database should *not* get cleared on signout.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// On Lacros, signout is not supported with Mirror account consistency.
+// TODO(https://crbug.com/1260291): Enable this test once signout is supported.
+#define MAYBE_DoesNotClearProfileDBOnSignout \
+  DISABLED_DoesNotClearProfileDBOnSignout
+#else
+#define MAYBE_DoesNotClearProfileDBOnSignout DoesNotClearProfileDBOnSignout
+#endif
 IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
-                       DoesNotClearProfileDBOnSignout) {
+                       MAYBE_DoesNotClearProfileDBOnSignout) {
   AddTestPasswordToFakeServer();
 
   // Sign in and enable Sync.
@@ -384,10 +391,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
-// The unconsented primary account isn't supported on ChromeOS (see
-// IdentityManager::ComputeUnconsentedPrimaryAccountInfo()) so Sync won't start
-// up for a secondary account.
-// Signing out on Lacros is not possible,
+// The unconsented primary account isn't supported on ChromeOS so Sync won't
+// start up for an unconsented account.
+// Signing out on Lacros is not possible.
 #if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
                        ClearsAccountDBOnSignout) {
@@ -395,8 +401,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
 
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
-  // Setup Sync for a secondary account (i.e. in transport mode).
-  AccountInfo account_info = secondary_account_helper::SignInSecondaryAccount(
+  // Setup Sync without consent (i.e. in transport mode).
+  AccountInfo account_info = secondary_account_helper::SignInUnconsentedAccount(
       GetProfile(0), &test_url_loader_factory_, "user@email.com");
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
@@ -412,7 +418,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_EQ(passwords_helper::GetAllLogins(account_store).size(), 1u);
 
   // Sign out again.
-  secondary_account_helper::SignOutSecondaryAccount(
+  secondary_account_helper::SignOutAccount(
       GetProfile(0), &test_url_loader_factory_, account_info.account_id);
 
   // Make sure the password is gone from the store.
@@ -477,9 +483,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   EXPECT_EQ(passwords_helper::GetAllLogins(account_store).size(), 1u);
 }
 
-// The unconsented primary account isn't supported on ChromeOS (see
-// IdentityManager::ComputeUnconsentedPrimaryAccountInfo()) so Sync won't start
-// up for a secondary account.
+// The unconsented primary account isn't supported on ChromeOS so Sync won't
+// start up for an unconsented account.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
                        SwitchesStoresOnMakingAccountPrimary) {
@@ -487,8 +492,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
 
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
-  // Setup Sync for a secondary account (i.e. in transport mode).
-  AccountInfo account_info = secondary_account_helper::SignInSecondaryAccount(
+  // Setup Sync for an unconsented account (i.e. in transport mode).
+  AccountInfo account_info = secondary_account_helper::SignInUnconsentedAccount(
       GetProfile(0), &test_url_loader_factory_, "user@email.com");
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
@@ -503,8 +508,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
       passwords_helper::GetAccountPasswordStoreInterface(0);
   ASSERT_EQ(passwords_helper::GetAllLogins(account_store).size(), 1u);
 
-  // Make the account primary and turn on Sync-the-feature.
-  secondary_account_helper::MakeAccountPrimary(GetProfile(0), "user@email.com");
+  // Turn on Sync-the-feature.
+  secondary_account_helper::GrantSyncConsent(GetProfile(0), "user@email.com");
   GetSyncService(0)->GetUserSettings()->SetSyncRequested(true);
   GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
       kSetSourceFromTest);
@@ -518,6 +523,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   EXPECT_EQ(passwords_helper::GetAllLogins(profile_store).size(), 1u);
   EXPECT_EQ(passwords_helper::GetAllLogins(account_store).size(), 0u);
 
+// On Lacros, signout is not supported with Mirror account consistency.
+// TODO(https://crbug.com/1260291): Enable this part of the test once signout is
+// supported.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
   // Clear the primary account to put Sync into transport mode again.
   // Note: Clearing the primary account without also signing out isn't exposed
   // to the user, so this shouldn't happen. Still best to cover it here.
@@ -535,6 +544,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   // cleared when Sync gets disabled.
   EXPECT_EQ(passwords_helper::GetAllLogins(profile_store).size(), 1u);
   EXPECT_EQ(passwords_helper::GetAllLogins(account_store).size(), 1u);
+#endif
 }
 
 // Regression test for crbug.com/1076378.
@@ -544,8 +554,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
 
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
-  // Setup Sync for a secondary account (i.e. in transport mode).
-  AccountInfo account_info = secondary_account_helper::SignInSecondaryAccount(
+  // Setup Sync for an unconsented account (i.e. in transport mode).
+  AccountInfo account_info = secondary_account_helper::SignInUnconsentedAccount(
       GetProfile(0), &test_url_loader_factory_, "user@email.com");
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
@@ -554,8 +564,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   // passwords data type should *not* be active.
   ASSERT_FALSE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
 
-  // Make the account primary and turn on Sync-the-feature.
-  secondary_account_helper::MakeAccountPrimary(GetProfile(0), "user@email.com");
+  // Turn on Sync-the-feature.
+  secondary_account_helper::GrantSyncConsent(GetProfile(0), "user@email.com");
   GetSyncService(0)->GetUserSettings()->SetSyncRequested(true);
   GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
       kSetSourceFromTest);

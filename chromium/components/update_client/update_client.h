@@ -284,6 +284,15 @@ struct CrxComponent {
   // the CRX is installed.
   base::Version version;
 
+  // Optional. This additional parameter ("ap") is sent to the server, which
+  // often uses it to distinguish between variants of the software that were
+  // chosen at install time.
+  std::string ap;
+
+  // If nonempty, the brand is an uppercase 4-letter string that describes the
+  // flavor, branding, or provenance of the software.
+  std::string brand;
+
   std::string fingerprint;  // Optional.
   std::string name;         // Optional.
 
@@ -307,11 +316,8 @@ struct CrxComponent {
   crx_file::VerifierFormat crx_format_requirement =
       crx_file::VerifierFormat::CRX3_WITH_PUBLISHER_PROOF;
 
-  // True if the component allows enabling or disabling updates by group policy.
-  // This member should be set to |false| for data, non-binary components, such
-  // as CRLSet, Supervised User Whitelists, STH Set, Origin Trials, and File
-  // Type Policies.
-  bool supports_group_policy_enable_component_updates = false;
+  // True if and only if this item may be updated.
+  bool updates_enabled = true;
 
   // Reasons why this component/extension is disabled.
   std::vector<int> disabled_reasons;
@@ -339,6 +345,10 @@ struct CrxComponent {
   // An indicator sent to the server to advise whether it may perform a version
   // downgrade of this item.
   bool rollback_allowed = false;
+
+  // An indicator sent to the server to advise whether it may perform an
+  // over-install on this item.
+  bool same_version_update_allowed = false;
 };
 
 // Called when a non-blocking call of UpdateClient completes.
@@ -457,22 +467,19 @@ class UpdateClient : public base::RefCountedThreadSafe<UpdateClient> {
                       bool is_foreground,
                       Callback callback) = 0;
 
-  // Sends an uninstall ping for the CRX identified by |id| and |version|. The
-  // |reason| parameter is defined by the caller. The current implementation of
-  // this function only sends a best-effort, fire-and-forget ping. It has no
-  // other side effects regarding installs or updates done through an instance
-  // of this class.
-  virtual void SendUninstallPing(const std::string& id,
-                                 const base::Version& version,
+  // Sends an uninstall ping for `crx_component`. `reason` is sent to the server
+  // to indicate the cause of the uninstallation. The current implementation of
+  // this function only sends a best-effort ping. It has no other side effects
+  // regarding installs or updates done through an instance of this class.
+  virtual void SendUninstallPing(const CrxComponent& crx_component,
                                  int reason,
                                  Callback callback) = 0;
 
-  // Sends a registration ping for the CRX identified by |id| and |version|.
-  // The current implementation of this function only sends a best-effort,
-  // fire-and-forget ping. It has no other side effects regarding installs or
-  // updates done through an instance of this class.
-  virtual void SendRegistrationPing(const std::string& id,
-                                    const base::Version& version,
+  // Sends a registration ping for `crx_component`. The current implementation
+  // of this function only sends a best-effort ping. It has no other side
+  // effects regarding installs or updates done through an instance of this
+  // class.
+  virtual void SendRegistrationPing(const CrxComponent& crx_component,
                                     Callback callback) = 0;
 
   // Returns status details about a CRX update. The function returns true in

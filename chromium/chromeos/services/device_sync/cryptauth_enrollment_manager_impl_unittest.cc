@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/test/gmock_move_support.h"
@@ -153,6 +152,12 @@ class TestCryptAuthEnrollmentManager : public CryptAuthEnrollmentManagerImpl {
 class DeviceSyncCryptAuthEnrollmentManagerImplTest
     : public testing::Test,
       public CryptAuthEnrollmentManager::Observer {
+ public:
+  DeviceSyncCryptAuthEnrollmentManagerImplTest(
+      const DeviceSyncCryptAuthEnrollmentManagerImplTest&) = delete;
+  DeviceSyncCryptAuthEnrollmentManagerImplTest& operator=(
+      const DeviceSyncCryptAuthEnrollmentManagerImplTest&) = delete;
+
  protected:
   DeviceSyncCryptAuthEnrollmentManagerImplTest()
       : public_key_(kUserPublicKey),
@@ -259,8 +264,6 @@ class DeviceSyncCryptAuthEnrollmentManagerImplTest
   FakeCryptAuthGCMManager gcm_manager_;
 
   TestCryptAuthEnrollmentManager enrollment_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceSyncCryptAuthEnrollmentManagerImplTest);
 };
 
 TEST_F(DeviceSyncCryptAuthEnrollmentManagerImplTest, RegisterPrefs) {

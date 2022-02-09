@@ -4,7 +4,7 @@
 
 (async function() {
   TestRunner.addResult(`Tests that the cache storage list live updates.\n`);
-  await TestRunner.loadModule('console'); await TestRunner.loadTestModule('application_test_runner');
+  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('application_test_runner');
     // Note: every test that uses a storage API must manually clean-up state from previous tests.
   await ApplicationTestRunner.resetState();
 
@@ -12,7 +12,7 @@
 
   var cacheStorageModel = TestRunner.mainTarget.model(SDK.ServiceWorkerCacheModel);
   cacheStorageModel.enable();
-  cacheStorageModel.throttler._timeout = 0;
+  cacheStorageModel.setThrottlerSchedulesAsSoonAsPossibleForTest();
 
   await ApplicationTestRunner.clearAllCaches();
   await ApplicationTestRunner.dumpCacheTree();

@@ -8,6 +8,7 @@
 #include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_switches.h"
 #include "ui/gl/gl_features.h"
+#include "ui/gl/gl_surface_egl.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/android_image_reader_compat.h"
@@ -218,10 +219,11 @@ const base::Feature kEnableDrDc{"EnableDrDc",
 // before gpu service is enabled by default.
 const base::Feature kWebGPUService{"WebGPUService",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
-// Enable raw draw for tiles.
-const base::Feature kRawDraw{"RawDraw", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
+
+const base::FeatureParam<std::string> kVulkanBlockListByHardware{
+    &kVulkan, "BlockListByHardware", "mt*"};
 
 const base::FeatureParam<std::string> kVulkanBlockListByBrand{
     &kVulkan, "BlockListByBrand", "HONOR"};
@@ -291,6 +293,8 @@ bool IsUsingVulkan() {
 
   // Check block list against build info.
   const auto* build_info = base::android::BuildInfo::GetInstance();
+  if (IsDeviceBlocked(build_info->hardware(), kVulkanBlockListByHardware.Get()))
+    return false;
   if (IsDeviceBlocked(build_info->brand(), kVulkanBlockListByBrand.Get()))
     return false;
   if (IsDeviceBlocked(build_info->device(), kVulkanBlockListByDevice.Get()))
@@ -333,10 +337,6 @@ bool IsDrDcEnabled() {
   if (!IsAImageReaderEnabled())
     return false;
 
-  // Currently not supported when passthrough command decoder is enabled.
-  if (UsePassthroughCommandDecoder())
-    return false;
-
   return base::FeatureList::IsEnabled(kEnableDrDc);
 #else
   return false;
@@ -373,10 +373,6 @@ bool IsANGLEValidationEnabled() {
   }
 
   return base::FeatureList::IsEnabled(kDefaultEnableANGLEValidation);
-}
-
-bool IsUsingRawDraw() {
-  return base::FeatureList::IsEnabled(kRawDraw);
 }
 
 #if defined(OS_ANDROID)

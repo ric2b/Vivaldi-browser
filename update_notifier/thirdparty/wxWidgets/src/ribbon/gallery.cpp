@@ -10,9 +10,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_RIBBON
 
@@ -33,8 +30,8 @@ wxDEFINE_EVENT(wxEVT_RIBBONGALLERY_HOVER_CHANGED, wxRibbonGalleryEvent);
 wxDEFINE_EVENT(wxEVT_RIBBONGALLERY_SELECTED, wxRibbonGalleryEvent);
 wxDEFINE_EVENT(wxEVT_RIBBONGALLERY_CLICKED, wxRibbonGalleryEvent);
 
-IMPLEMENT_DYNAMIC_CLASS(wxRibbonGalleryEvent, wxCommandEvent)
-IMPLEMENT_CLASS(wxRibbonGallery, wxRibbonControl)
+wxIMPLEMENT_DYNAMIC_CLASS(wxRibbonGalleryEvent, wxCommandEvent);
+wxIMPLEMENT_CLASS(wxRibbonGallery, wxRibbonControl);
 
 class wxRibbonGalleryItem
 {
@@ -69,7 +66,7 @@ protected:
     bool m_is_visible;
 };
 
-BEGIN_EVENT_TABLE(wxRibbonGallery, wxRibbonControl)
+wxBEGIN_EVENT_TABLE(wxRibbonGallery, wxRibbonControl)
     EVT_ENTER_WINDOW(wxRibbonGallery::OnMouseEnter)
     EVT_ERASE_BACKGROUND(wxRibbonGallery::OnEraseBackground)
     EVT_LEAVE_WINDOW(wxRibbonGallery::OnMouseLeave)
@@ -79,7 +76,7 @@ BEGIN_EVENT_TABLE(wxRibbonGallery, wxRibbonControl)
     EVT_MOTION(wxRibbonGallery::OnMouseMove)
     EVT_PAINT(wxRibbonGallery::OnPaint)
     EVT_SIZE(wxRibbonGallery::OnSize)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 wxRibbonGallery::wxRibbonGallery()
 {
@@ -135,7 +132,7 @@ void wxRibbonGallery::CommonInit(long WXUNUSED(style))
     m_extension_button_state = wxRIBBON_GALLERY_BUTTON_NORMAL;
     m_hovered = false;
 
-    SetBackgroundStyle(wxBG_STYLE_CUSTOM);
+    SetBackgroundStyle(wxBG_STYLE_PAINT);
 }
 
 void wxRibbonGallery::OnMouseEnter(wxMouseEvent& evt)
@@ -541,12 +538,12 @@ wxRibbonGalleryItem* wxRibbonGallery::Append(const wxBitmap& bitmap, int id)
     wxASSERT(bitmap.IsOk());
     if(m_items.IsEmpty())
     {
-        m_bitmap_size = bitmap.GetSize();
+        m_bitmap_size = bitmap.GetScaledSize();
         CalculateMinSize();
     }
     else
     {
-        wxASSERT(bitmap.GetSize() == m_bitmap_size);
+        wxASSERT(bitmap.GetScaledSize() == m_bitmap_size);
     }
 
     wxRibbonGalleryItem *item = new wxRibbonGalleryItem;

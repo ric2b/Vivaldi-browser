@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 
+#include <memory>
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/cxx17_backports.h"
@@ -78,7 +79,6 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser,
       extensions_controls_(
           base::FeatureList::IsEnabled(features::kExtensionsMenuAccessControl)
               ? new ExtensionsToolbarControls(
-                    browser,
                     std::make_unique<ExtensionsToolbarButton>(
                         browser,
                         this,
@@ -92,7 +92,7 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser,
   // The container shouldn't show unless / until we have extensions available.
   SetVisible(false);
 
-  model_observation_.Observe(model_);
+  model_observation_.Observe(model_.get());
 
   const views::FlexSpecification hide_icon_flex_specification =
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,
@@ -158,6 +158,8 @@ ExtensionsToolbarContainer::~ExtensionsToolbarContainer() {
 
 void ExtensionsToolbarContainer::UpdateAllIcons() {
   GetExtensionsButton()->UpdateIcon();
+  UpdateControlsVisibility();
+
   for (const auto& action : actions_)
     action->UpdateState();
 }
@@ -166,7 +168,7 @@ void ExtensionsToolbarContainer::UpdateAllIcons() {
 // redesigned menu and toolbar with access control is released.
 ExtensionsToolbarButton* ExtensionsToolbarContainer::GetExtensionsButton()
     const {
-  return extensions_button_ ? extensions_button_
+  return extensions_button_ ? extensions_button_.get()
                             : extensions_controls_->extensions_button();
 }
 
@@ -194,7 +196,7 @@ ExtensionsToolbarContainer::GetAnchoredWidgetForExtensionForTesting(
                            [extension_id](const auto& info) {
                              return info.extension_id == extension_id;
                            });
-  return iter == anchored_widgets_.end() ? nullptr : iter->widget;
+  return iter == anchored_widgets_.end() ? nullptr : iter->widget.get();
 }
 
 bool ExtensionsToolbarContainer::ShouldForceVisibility(
@@ -461,6 +463,8 @@ void ExtensionsToolbarContainer::OnToolbarActionAdded(
   if (display_mode_ != DisplayMode::kAutoHide)
     UpdateContainerVisibility();
 
+  UpdateControlsVisibility();
+
   drop_weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
@@ -486,6 +490,7 @@ void ExtensionsToolbarContainer::OnToolbarActionRemoved(
   icons_.erase(action_id);
 
   UpdateContainerVisibilityAfterAnimation();
+  UpdateControlsVisibility();
 
   drop_weak_ptr_factory_.InvalidateWeakPtrs();
 }
@@ -495,6 +500,8 @@ void ExtensionsToolbarContainer::OnToolbarActionUpdated(
   ToolbarActionViewController* action = GetActionForId(action_id);
   if (action)
     action->UpdateState();
+
+  UpdateControlsVisibility();
 }
 
 void ExtensionsToolbarContainer::OnToolbarModelInitialized() {
@@ -505,6 +512,8 @@ void ExtensionsToolbarContainer::OnToolbarPinnedActionsChanged() {
   for (const auto& it : icons_)
     UpdateIconVisibility(it.first);
   ReorderViews();
+
+  drop_weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 void ExtensionsToolbarContainer::ReorderViews() {
@@ -613,7 +622,11 @@ bool ExtensionsToolbarContainer::CanStartDragForView(View* sender,
                          [this, sender](const std::string& action_id) {
                            return GetViewForId(action_id) == sender;
                          });
-  return it != model_->pinned_action_ids().cend();
+  if (it == model_->pinned_action_ids().cend())
+    return false;
+
+  // TODO(crbug.com/1275586): Force-pinned extensions are not draggable.
+  return !model_->IsActionForcePinned(*it);
 }
 
 bool ExtensionsToolbarContainer::GetDropFormats(
@@ -640,6 +653,12 @@ int ExtensionsToolbarContainer::OnDragUpdated(
   BrowserActionDragData data;
   if (!data.Read(event.data()))
     return ui::DragDropTypes::DRAG_NONE;
+
+  // Check if there is an extension for the dragged icon (e.g. an extension can
+  // be de deleted while dragging its icon).
+  if (!GetActionForId(data.id()))
+    return ui::DragDropTypes::DRAG_NONE;
+
   size_t before_icon = 0;
   // Figure out where to display the icon during dragging transition.
 
@@ -670,6 +689,9 @@ int ExtensionsToolbarContainer::OnDragUpdated(
 }
 
 void ExtensionsToolbarContainer::OnDragExited() {
+  if (!drop_info_)
+    return;
+
   const ToolbarActionsModel::ActionId dragged_extension_id =
       drop_info_->action_id;
   drop_info_.reset();
@@ -743,7 +765,13 @@ void ExtensionsToolbarContainer::SetExtensionIconVisibility(
                          [this, id](const std::string& action_id) {
                            return GetViewForId(action_id) == GetViewForId(id);
                          });
+  if (it == model_->pinned_action_ids().cend())
+    return;
+
   ToolbarActionView* extension_view = GetViewForId(*it);
+  if (!extension_view)
+    return;
+
   extension_view->SetImageModel(
       views::Button::STATE_NORMAL,
       visible ? ui::ImageModel::FromImageSkia(GetExtensionIcon(extension_view))
@@ -824,6 +852,15 @@ void ExtensionsToolbarContainer::DragDropCleanup(
   GetAnimatingLayoutManager()->PostOrQueueAction(base::BindOnce(
       &ExtensionsToolbarContainer::SetExtensionIconVisibility,
       weak_ptr_factory_.GetWeakPtr(), dragged_extension_id, true));
+}
+
+void ExtensionsToolbarContainer::UpdateControlsVisibility() {
+  if (!extensions_controls_)
+    return;
+
+  extensions_controls_->UpdateSiteAccessButtonVisibility(
+      ExtensionActionViewController::AnyActionHasCurrentSiteAccess(
+          actions_, GetCurrentWebContents()));
 }
 
 BEGIN_METADATA(ExtensionsToolbarContainer, ToolbarIconContainerView)

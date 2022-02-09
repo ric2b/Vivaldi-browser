@@ -28,6 +28,8 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
@@ -166,8 +168,9 @@ public class ToolbarTablet extends ToolbarLayout
                 getContext(), R.drawable.btn_close, R.color.default_icon_color_tint_list);
         reloadIcon.addLevel(stopLevel, stopLevel, stopLevelDrawable);
         mReloadButton.setImageDrawable(reloadIcon);
-        mShowTabStack = ChromeAccessibilityUtil.get().isAccessibilityEnabled()
-                && isAccessibilityTabSwitcherPreferenceEnabled();
+        mShowTabStack = (ChromeAccessibilityUtil.get().isAccessibilityEnabled()
+                                && isAccessibilityTabSwitcherPreferenceEnabled())
+                || isGridTabSwitcherEnabled();
 
         mAccessibilitySwitcherButton = findViewById(R.id.tab_switcher_button);
         updateSwitcherButtonVisibility(mShowTabStack);
@@ -519,7 +522,8 @@ public class ToolbarTablet extends ToolbarLayout
         if (isBookmarked) {
             mBookmarkButton.setImageResource(R.drawable.btn_star_filled);
             ApiCompatibilityUtils.setImageTintList(mBookmarkButton,
-                    AppCompatResources.getColorStateList(getContext(), R.color.blue_mode_tint));
+                    AppCompatResources.getColorStateList(
+                            getContext(), R.color.default_icon_color_accent1_tint_list));
             mBookmarkButton.setContentDescription(getContext().getString(R.string.edit_bookmark));
         } else {
             mBookmarkButton.setImageResource(R.drawable.btn_star);
@@ -589,7 +593,8 @@ public class ToolbarTablet extends ToolbarLayout
 
     @Override
     void onAccessibilityStatusChanged(boolean enabled) {
-        mShowTabStack = enabled && isAccessibilityTabSwitcherPreferenceEnabled();
+        mShowTabStack = (enabled && isAccessibilityTabSwitcherPreferenceEnabled())
+                || isGridTabSwitcherEnabled();
         updateSwitcherButtonVisibility(mShowTabStack);
     }
 
@@ -806,6 +811,10 @@ public class ToolbarTablet extends ToolbarLayout
     private boolean isAccessibilityTabSwitcherPreferenceEnabled() {
         return SharedPreferencesManager.getInstance().readBoolean(
                 ChromePreferenceKeys.ACCESSIBILITY_TAB_SWITCHER, true);
+    }
+
+    private boolean isGridTabSwitcherEnabled() {
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS);
     }
 
     // Vivaldi

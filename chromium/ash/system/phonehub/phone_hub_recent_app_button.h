@@ -6,7 +6,7 @@
 #define ASH_SYSTEM_PHONEHUB_PHONE_HUB_RECENT_APP_BUTTON_H_
 
 #include "ash/ash_export.h"
-#include "chromeos/components/phonehub/recent_apps_interaction_handler.h"
+#include "ash/components/phonehub/recent_apps_interaction_handler.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/button/image_button.h"
@@ -18,7 +18,9 @@ namespace ash {
 // same application.
 class ASH_EXPORT PhoneHubRecentAppButton : public views::ImageButton {
  public:
-  PhoneHubRecentAppButton(const gfx::Image& icon, PressedCallback callback);
+  PhoneHubRecentAppButton(const gfx::Image& icon,
+                          const std::u16string& visible_app_name,
+                          PressedCallback callback);
   ~PhoneHubRecentAppButton() override;
   PhoneHubRecentAppButton(PhoneHubRecentAppButton&) = delete;
   PhoneHubRecentAppButton operator=(PhoneHubRecentAppButton&) = delete;

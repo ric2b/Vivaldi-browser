@@ -80,6 +80,8 @@ class BLINK_PLATFORM_EXPORT UrlData : public base::RefCounted<UrlData> {
 
   bool has_access_control() const { return has_access_control_; }
 
+  const std::string& mime_type() const { return mime_type_; }
+
   // Are HTTP range requests supported?
   bool range_supported() const { return range_supported_; }
 
@@ -136,6 +138,7 @@ class BLINK_PLATFORM_EXPORT UrlData : public base::RefCounted<UrlData> {
   void set_etag(const std::string& etag);
   void set_is_cors_cross_origin(bool is_cors_cross_origin);
   void set_has_access_control();
+  void set_mime_type(std::string mime_type);
 
   // A redirect has occurred (or we've found a better UrlData for the same
   // resource).
@@ -163,9 +166,6 @@ class BLINK_PLATFORM_EXPORT UrlData : public base::RefCounted<UrlData> {
   void AddBytesRead(int64_t b) { bytes_read_from_cache_ += b; }
   int64_t BytesReadFromCache() const { return bytes_read_from_cache_; }
 
-  const std::string& mime_type() const { return mime_type_; }
-  void set_mime_type(std::string mime_type);
-
  protected:
   UrlData(const GURL& url,
           CorsMode cors_mode,
@@ -186,14 +186,17 @@ class BLINK_PLATFORM_EXPORT UrlData : public base::RefCounted<UrlData> {
   // the same url.
   const GURL url_;
 
-  // Origin of the data, should only be different from the url_.GetOrigin()
-  // when service workers are involved.
+  // Origin of the data, should only be different from the
+  // url_.DeprecatedGetOriginAsURL() when service workers are involved.
   GURL data_origin_;
   bool have_data_origin_;
 
   // Cross-origin access mode.
   const CorsMode cors_mode_;
   bool has_access_control_;
+
+  // Mime type category (stashed for UMA / metrics).
+  std::string mime_type_;
 
   UrlIndex* const url_index_;
 
@@ -234,8 +237,6 @@ class BLINK_PLATFORM_EXPORT UrlData : public base::RefCounted<UrlData> {
   std::vector<RedirectCB> redirect_callbacks_;
 
   THREAD_CHECKER(thread_checker_);
-
-  std::string mime_type_;
 };
 
 // The UrlIndex lets you look up UrlData instances by url.

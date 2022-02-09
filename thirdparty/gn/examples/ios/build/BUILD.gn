@@ -82,7 +82,21 @@ if (current_os == "ios" || current_os == "mac") {
                           ],
                           "json")
 
+  _lib_swift_dir = "${_sdk_info.toolchain_path}/usr/lib/swift"
+  if (current_os == "ios") {
+    if (_sdk_info.is_simulator) {
+      _system_lib_swift_dir = "$_lib_swift_dir/iphonesimulator"
+    } else {
+      _system_lib_swift_dir = "$_lib_swift_dir/iphoneos"
+    }
+  } else {
+    _system_lib_swift_dir = "$_lib_swift_dir/macosx"
+  }
+
   config("swift_libdir") {
-    lib_dirs = [ "${_sdk_info.sdk_path}/usr/lib/swift" ]
+    lib_dirs = [
+      "${_sdk_info.sdk_path}/usr/lib/swift",
+      _system_lib_swift_dir,
+    ]
   }
 }

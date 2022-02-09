@@ -242,6 +242,10 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_MENU_GROUP_TABS" desc="Menu item for grouping tabs. [CHAR_LIMIT=27]">
         Stack tabs
       </message>
+      <!-- New Tab Page strings -->
+      <message name="IDS_NEW_INCOGNITO_TAB_TITLE" desc="Title in tab strip when opening a new private tab.">
+        New Private tab
+      </message>
     </messages>
   </release>
 </grit>

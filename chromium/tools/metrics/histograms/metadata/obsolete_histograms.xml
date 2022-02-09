@@ -19,10 +19,10 @@ to leave the histogram in its existing file in one of the metadata
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please send CLs to someone randomly chosen from the OWNERS file in this
+directory. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only). As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -5846,42 +5846,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     code. Used to determine if the blacklist is working as intended during
     startup (since the blacklist runs before crash reporting is set up). This
     only occurs on Windows.
-  </summary>
-</histogram>
-
-<histogram name="Blink.Binding.CreateV8ContextForMainFrame"
-    units="microseconds" expires_after="2019-04-16">
-  <obsolete>
-    Removed as of 04/2019 with the removal of field trial experiment settings.
-  </obsolete>
-  <owner>peria@chromium.org</owner>
-  <summary>
-    Time spent to create a v8::Context instance during a page loading in the
-    main-frame window.
-
-    Warning: This metric may include reports from clients with low-resolution
-    clocks (i.e. on Windows, ref. |TimeTicks::IsHighResolution()|). Such reports
-    will cause this metric to have an abnormal distribution. When considering
-    revising this histogram, see UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES for the
-    solution.
-  </summary>
-</histogram>
-
-<histogram name="Blink.Binding.CreateV8ContextForNonMainFrame"
-    units="microseconds" expires_after="2019-04-16">
-  <obsolete>
-    Removed as of 04/2019 with the removal of field trial experiment settings.
-  </obsolete>
-  <owner>peria@chromium.org</owner>
-  <summary>
-    Time spent to create a v8::Context instance during a page loading in a
-    non-main-frame window, e.g. iframe.
-
-    Warning: This metric may include reports from clients with low-resolution
-    clocks (i.e. on Windows, ref. |TimeTicks::IsHighResolution()|). Such reports
-    will cause this metric to have an abnormal distribution. When considering
-    revising this histogram, see UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES for the
-    solution.
   </summary>
 </histogram>
 
@@ -30965,25 +30929,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram base="true" name="Media.EME.addKey" enum="MediaKeyException"
-    expires_after="2018-01-04">
-  <obsolete>
-    Removed 02/2016 with removal of prefixed EME.
-  </obsolete>
-  <owner>xhwang@chromium.org</owner>
-  <owner>media-dev@chromium.org</owner>
-  <summary>addKey result</summary>
-</histogram>
-
-<histogram base="true" name="Media.EME.cancelKeyRequest"
-    enum="MediaKeyException" expires_after="2018-01-04">
-  <obsolete>
-    Removed 02/2016 with removal of prefixed EME.
-  </obsolete>
-  <owner>xhwang@chromium.org</owner>
-  <summary>cancelKeyRequest result.</summary>
-</histogram>
-
 <histogram name="Media.EME.CdmFileIO.ReadTime" units="ms" expires_after="M84">
   <obsolete>
     Removed 08/2019, replaced with Media.EME.CdmFileIO.TimeTo.ReadFile.
@@ -30998,36 +30943,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </obsolete>
   <owner>media-dev@chromium.org</owner>
   <summary>The actual time spent by the CDM writing a file.</summary>
-</histogram>
-
-<histogram base="true" name="Media.EME.generateKeyRequest"
-    enum="MediaKeyException" expires_after="2018-01-04">
-  <obsolete>
-    Removed 02/2016 with removal of prefixed EME.
-  </obsolete>
-  <owner>xhwang@chromium.org</owner>
-  <owner>media-dev@chromium.org</owner>
-  <summary>generateKeyRequest result.</summary>
-</histogram>
-
-<histogram base="true" name="Media.EME.KeyAdded" units="units"
-    expires_after="2018-01-04">
-  <obsolete>
-    Removed 02/2016 with removal of prefixed EME.
-  </obsolete>
-  <owner>xhwang@chromium.org</owner>
-  <owner>media-dev@chromium.org</owner>
-  <summary>KeyAdded event count.</summary>
-</histogram>
-
-<histogram base="true" name="Media.EME.KeyError" enum="MediaKeyError"
-    expires_after="2018-01-04">
-  <obsolete>
-    Removed 02/2016 with removal of prefixed EME.
-  </obsolete>
-  <owner>xhwang@chromium.org</owner>
-  <owner>media-dev@chromium.org</owner>
-  <summary>KeyError event count.</summary>
 </histogram>
 
 <histogram name="Media.EME.KeySystemSupport.Widevine"
@@ -31050,6 +30965,60 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>xhwang@chromium.org</owner>
   <owner>media-dev@chromium.org</owner>
   <summary>EME NeedKey event count.</summary>
+</histogram>
+
+<histogram name="Media.EME.{KeySystem}.addKey" enum="MediaKeyException"
+    expires_after="2018-01-04">
+  <obsolete>
+    Removed 02/2016 with removal of prefixed EME.
+  </obsolete>
+  <owner>xhwang@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>addKey result</summary>
+  <token key="KeySystem" variants="KeySystem"/>
+</histogram>
+
+<histogram name="Media.EME.{KeySystem}.cancelKeyRequest"
+    enum="MediaKeyException" expires_after="2018-01-04">
+  <obsolete>
+    Removed 02/2016 with removal of prefixed EME.
+  </obsolete>
+  <owner>xhwang@chromium.org</owner>
+  <summary>cancelKeyRequest result.</summary>
+  <token key="KeySystem" variants="KeySystem"/>
+</histogram>
+
+<histogram name="Media.EME.{KeySystem}.generateKeyRequest"
+    enum="MediaKeyException" expires_after="2018-01-04">
+  <obsolete>
+    Removed 02/2016 with removal of prefixed EME.
+  </obsolete>
+  <owner>xhwang@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>generateKeyRequest result.</summary>
+  <token key="KeySystem" variants="KeySystem"/>
+</histogram>
+
+<histogram name="Media.EME.{KeySystem}.KeyAdded" units="units"
+    expires_after="2018-01-04">
+  <obsolete>
+    Removed 02/2016 with removal of prefixed EME.
+  </obsolete>
+  <owner>xhwang@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>KeyAdded event count.</summary>
+  <token key="KeySystem" variants="KeySystem"/>
+</histogram>
+
+<histogram name="Media.EME.{KeySystem}.KeyError" enum="MediaKeyError"
+    expires_after="2018-01-04">
+  <obsolete>
+    Removed 02/2016 with removal of prefixed EME.
+  </obsolete>
+  <owner>xhwang@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>KeyError event count.</summary>
+  <token key="KeySystem" variants="KeySystem"/>
 </histogram>
 
 <histogram name="Media.Engagement.Clear" enum="MediaEngagementClearReason"
@@ -56961,20 +56930,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Platform.MemoryBandwidth.ReadWrite" units="MB/s"
-    expires_after="M85">
-  <obsolete>
-    Removed 09/2020 due to lack of usage.
-  </obsolete>
-  <owner>hajimehoshi@chromium.org</owner>
-  <owner>kouhei@chromium.org</owner>
-  <owner>cast-analytics@google.com</owner>
-  <summary>
-    Peak memory bandwith (read and write) usage during the last sample interval.
-    The sample interval may vary from seconds to several minutes.
-  </summary>
-</histogram>
-
 <histogram name="Platform.MountEncrypted.EncryptedFsType"
     enum="MountEncryptedEncryptedFsType" expires_after="M85">
   <obsolete>
@@ -64094,18 +64049,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Renderer4.pixelCountOpaque" units="NormalizedPixels"
-    expires_after="2019-02-14">
-  <obsolete>
-    Removed at an unknown time. No longer used in code.
-  </obsolete>
-  <owner>wiltzius@chromium.org</owner>
-  <summary>
-    Number of pixels known to be opaque, recorded as 10 times the percentage of
-    the viewport that these pixels cover.
-  </summary>
-</histogram>
-
 <histogram name="Renderer4.pixelCountPainted" units="NormalizedPixels"
     expires_after="2019-02-14">
   <obsolete>
@@ -64116,18 +64059,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Number of pixels painted by WebKit into main memory, recorded as 10 times
     the percentage of the viewport that these pixels cover. This is collected
     once per commit from WebKit to the compositor.
-  </summary>
-</histogram>
-
-<histogram name="Renderer4.pixelCountTranslucent" units="NormalizedPixels"
-    expires_after="2019-02-14">
-  <obsolete>
-    Removed at an unknown time. No longer used in code.
-  </obsolete>
-  <owner>wiltzius@chromium.org</owner>
-  <summary>
-    Number of pixels not known to be opaque opaque, recorded as 10 times the
-    percentage of the viewport that these pixels cover.
   </summary>
 </histogram>
 

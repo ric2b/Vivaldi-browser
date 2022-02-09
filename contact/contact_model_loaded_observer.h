@@ -10,7 +10,6 @@
 #define CONTACT_CONTACT_MODEL_LOADED_OBSERVER_H_
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "contact/contact_model_observer.h"
 #include "contact/contact_service.h"
 

@@ -14,17 +14,17 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/message_loop/message_pump_for_io.h"
 #include "base/task/current_thread.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
+#include "ui/ozone/platform/drm/gpu/hardware_display_plane.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager_legacy.h"
 
@@ -616,6 +616,17 @@ bool DrmDevice::DropMaster() {
   TRACE_EVENT1("drm", "DrmDevice::DropMaster", "path", device_path_.value());
   DCHECK(file_.IsValid());
   return (drmDropMaster(file_.GetPlatformFile()) == 0);
+}
+
+void DrmDevice::AsValueInto(base::trace_event::TracedValue* value) const {
+  value->SetString("device_path", device_path_.value());
+  {
+    auto scoped_array = value->BeginArrayScoped("planes");
+    for (const auto& plane : plane_manager_->planes()) {
+      auto scoped_dict = value->AppendDictionaryScoped();
+      plane->AsValueInto(value);
+    }
+  }
 }
 
 bool DrmDevice::SetGammaRamp(

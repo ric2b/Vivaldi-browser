@@ -58,8 +58,8 @@ constexpr uint32_t kDndActionWindowDrag =
 
 class WaylandWindowDragController::ExtendedDragSource {
  public:
-  ExtendedDragSource(const WaylandConnection& connection,
-                     wl_data_source* source) {
+  ExtendedDragSource(WaylandConnection& connection, wl_data_source* source)
+      : connection_(connection) {
     DCHECK(connection.extended_drag_v1());
     uint32_t options = ZCR_EXTENDED_DRAG_V1_OPTIONS_ALLOW_SWALLOW |
                        ZCR_EXTENDED_DRAG_V1_OPTIONS_ALLOW_DROP_NO_TARGET |
@@ -74,10 +74,12 @@ class WaylandWindowDragController::ExtendedDragSource {
     auto* surface = window ? window->root_surface()->surface() : nullptr;
     zcr_extended_drag_source_v1_drag(source_.get(), surface, offset.x(),
                                      offset.y());
+    connection_.ScheduleFlush();
   }
 
  private:
   wl::Object<zcr_extended_drag_source_v1> source_;
+  WaylandConnection& connection_;
 };
 
 WaylandWindowDragController::WaylandWindowDragController(
@@ -102,7 +104,7 @@ bool WaylandWindowDragController::StartDragSession() {
   if (state_ != State::kIdle)
     return true;
 
-  origin_window_ = window_manager_->GetCurrentFocusedWindow();
+  origin_window_ = window_manager_->GetCurrentPointerOrTouchFocusedWindow();
   if (!origin_window_) {
     LOG(ERROR) << "Failed to get origin window.";
     return false;
@@ -115,7 +117,7 @@ bool WaylandWindowDragController::StartDragSession() {
     return false;
   }
 
-  VLOG(1) << "Starting DND session.";
+  DVLOG(1) << "Starting DND session.";
   state_ = State::kAttached;
   drag_source_ = serial->type == wl::SerialType::kTouchPress
                      ? DragSource::kTouch
@@ -169,13 +171,14 @@ void WaylandWindowDragController::StopDragging() {
   if (state_ != State::kDetached)
     return;
 
-  VLOG(1) << "End drag loop requested. state=" << state_;
+  DVLOG(1) << "End drag loop requested. state=" << state_;
 
   // This function is supposed to be called to indicate that the window was just
   // snapped into a tab strip. So switch to |kAttached| state, store the focused
   // window as the pointer grabber and ask to quit the nested loop.
   state_ = State::kAttaching;
-  pointer_grab_owner_ = window_manager_->GetCurrentFocusedWindow();
+  pointer_grab_owner_ =
+      window_manager_->GetCurrentPointerOrTouchFocusedWindow();
   DCHECK(pointer_grab_owner_);
   QuitLoop();
 }
@@ -194,7 +197,7 @@ void WaylandWindowDragController::OnDragOffer(
   DCHECK(offer);
   DCHECK(!data_offer_);
 
-  VLOG(1) << "OnOffer. mime_types=" << offer->mime_types().size();
+  DVLOG(1) << "OnOffer. mime_types=" << offer->mime_types().size();
   data_offer_ = std::move(offer);
 }
 
@@ -217,7 +220,7 @@ void WaylandWindowDragController::OnDragEnter(WaylandWindow* window,
   else
     touch_delegate_->OnTouchFocusChanged(window);
 
-  VLOG(1) << "OnEnter. widget=" << window->GetWidget();
+  DVLOG(1) << "OnEnter. widget=" << window->GetWidget();
 
   // TODO(crbug.com/1102946): Exo does not support custom mime types. In this
   // case, |data_offer_| will hold an empty mime_types list and, at this point,
@@ -236,7 +239,7 @@ void WaylandWindowDragController::OnDragEnter(WaylandWindow* window,
 
 void WaylandWindowDragController::OnDragMotion(const gfx::PointF& location) {
   DCHECK_GE(state_, State::kAttached);
-  VLOG(2) << "OnMotion. location=" << location.ToString();
+  DVLOG(2) << "OnMotion. location=" << location.ToString();
 
   // Motion events are not expected to be dispatched while waiting for the drag
   // loop to exit, ie: kAttaching transitional state. See crbug.com/1169446.
@@ -277,7 +280,7 @@ void WaylandWindowDragController::OnDragLeave() {
   if (!data_offer_)
     return;
 
-  VLOG(1) << "OnLeave";
+  DVLOG(1) << "OnLeave";
   data_offer_.reset();
 
   // As Wayland clients are only aware of surface-local coordinates and there is
@@ -295,7 +298,7 @@ void WaylandWindowDragController::OnDragLeave() {
 
 void WaylandWindowDragController::OnDragDrop() {
   DCHECK_GE(state_, State::kAttached);
-  VLOG(1) << "Dropped. state=" << state_;
+  DVLOG(1) << "Dropped. state=" << state_;
 
   DCHECK(data_offer_);
   data_offer_->FinishOffer();
@@ -310,7 +313,7 @@ void WaylandWindowDragController::OnDataSourceFinish(bool completed) {
   DCHECK_GE(state_, State::kAttached);
   DCHECK(data_source_);
 
-  VLOG(1) << "Drop received. state=" << state_;
+  DVLOG(1) << "Drop received. state=" << state_;
 
   // Release DND objects.
   data_offer_.reset();
@@ -381,9 +384,9 @@ void WaylandWindowDragController::OnToplevelWindowCreated(
   DCHECK(window);
   auto origin = window->GetBounds().origin();
   gfx::Vector2d offset = gfx::ToFlooredPoint(pointer_location_) - origin;
-  VLOG(1) << "Toplevel window created (detached)."
-          << " widget=" << window->GetWidget()
-          << " calculated_offset=" << offset.ToString();
+  DVLOG(1) << "Toplevel window created (detached)."
+           << " widget=" << window->GetWidget()
+           << " calculated_offset=" << offset.ToString();
 
   SetDraggedWindow(window, offset);
 }
@@ -391,6 +394,11 @@ void WaylandWindowDragController::OnToplevelWindowCreated(
 void WaylandWindowDragController::OnWindowRemoved(WaylandWindow* window) {
   DCHECK_NE(state_, State::kIdle);
   DCHECK_NE(window, dragged_window_);
+  DVLOG(1) << "Window being destroyed. widget=" << window->GetWidget();
+
+  if (window == pointer_grab_owner_)
+    pointer_grab_owner_ = nullptr;
+
   if (window == origin_window_)
     origin_surface_ = origin_window_->TakeWaylandSurface();
 }
@@ -425,18 +433,27 @@ void WaylandWindowDragController::HandleMotionEvent(LocatedEvent* event) {
 // about to finish.
 void WaylandWindowDragController::HandleDropAndResetState() {
   DCHECK_EQ(state_, State::kDropped);
-  DCHECK(pointer_grab_owner_);
-  VLOG(1) << "Notifying drop. window=" << pointer_grab_owner_;
+  DVLOG(1) << "Notifying drop. window=" << pointer_grab_owner_;
+
+  // StopDragging() may get called in response to bogus input events, eg:
+  // wl_pointer.button release, which would imply in multiple calls to this
+  // function for a single drop event. That results in ILL_ILLOPN crashes in
+  // below code, because |drag_source_| is null after the first call to this
+  // function. So, early out here in that case.
+  // TODO(crbug.com/1280981): Revert this once Exo-side issue gets solved.
+  if (!drag_source_.has_value())
+    return;
 
   if (*drag_source_ == DragSource::kMouse) {
-    EventFlags pointer_button = EF_LEFT_MOUSE_BUTTON;
-    pointer_delegate_->OnPointerButtonEvent(ET_MOUSE_RELEASED, pointer_button,
-                                            pointer_grab_owner_);
+    if (pointer_grab_owner_) {
+      pointer_delegate_->OnPointerButtonEvent(
+          ET_MOUSE_RELEASED, EF_LEFT_MOUSE_BUTTON, pointer_grab_owner_);
+    }
   } else {
-    base::TimeTicks timestamp = base::TimeTicks::Now();
     auto touch_pointer_ids = touch_delegate_->GetActiveTouchPointIds();
     DCHECK_EQ(touch_pointer_ids.size(), 1u);
-    touch_delegate_->OnTouchReleaseEvent(timestamp, touch_pointer_ids[0]);
+    touch_delegate_->OnTouchReleaseEvent(base::TimeTicks::Now(),
+                                         touch_pointer_ids[0]);
   }
 
   pointer_grab_owner_ = nullptr;
@@ -448,8 +465,8 @@ void WaylandWindowDragController::RunLoop() {
   DCHECK_EQ(state_, State::kDetached);
   DCHECK(dragged_window_);
 
-  VLOG(1) << "Starting drag loop. widget=" << dragged_window_->GetWidget()
-          << " offset=" << drag_offset_.ToString();
+  DVLOG(1) << "Starting drag loop. widget=" << dragged_window_->GetWidget()
+           << " offset=" << drag_offset_.ToString();
 
   auto old_dispatcher = std::move(nested_dispatcher_);
   nested_dispatcher_ =
@@ -466,7 +483,7 @@ void WaylandWindowDragController::RunLoop() {
 
   nested_dispatcher_ = std::move(old_dispatcher);
 
-  VLOG(1) << "Quitting drag loop " << state_;
+  DVLOG(1) << "Quitting drag loop " << state_;
 }
 
 void WaylandWindowDragController::QuitLoop() {

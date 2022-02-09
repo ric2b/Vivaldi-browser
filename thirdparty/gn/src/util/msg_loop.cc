@@ -8,7 +8,13 @@
 
 namespace {
 
+#if !defined(OS_ZOS)
 thread_local MsgLoop* g_current;
+#else
+// TODO(gabylb) - zos: thread_local not yet supported, use zoslib's impl'n:
+__tlssim<MsgLoop*> __g_current_impl(nullptr);
+#define g_current (*__g_current_impl.access())
+#endif
 }
 
 MsgLoop::MsgLoop() {

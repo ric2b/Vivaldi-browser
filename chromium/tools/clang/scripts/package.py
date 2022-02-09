@@ -235,7 +235,7 @@ def main():
 
   shutil.rmtree(pdir, ignore_errors=True)
 
-  # Copy a whitelist of files to the directory we're going to tar up.
+  # Copy a list of files to the directory we're going to tar up.
   # This supports the same patterns that the fnmatch module understands.
   # '$V' is replaced by RELEASE_VERSION further down.
   exe_ext = '.exe' if sys.platform == 'win32' else ''
@@ -266,6 +266,9 @@ def main():
       # Include libclang_rt.builtins.a for Fuchsia targets.
       'lib/clang/$V/lib/aarch64-unknown-fuchsia/libclang_rt.builtins.a',
       'lib/clang/$V/lib/x86_64-unknown-fuchsia/libclang_rt.builtins.a',
+
+      # Add llvm-readobj (symlinked from llvm-readelf) for extracting SONAMEs.
+      'bin/llvm-readobj',
     ])
     if not args.build_mac_arm:
       # TODO(thakis): Figure out why this doesn't build in --build-mac-arm
@@ -297,6 +300,8 @@ def main():
     ])
   elif sys.platform.startswith('linux'):
     want.extend([
+        # pylint: disable=line-too-long
+
         # Copy the stdlibc++.so.6 we linked the binaries against.
         'lib/libstdc++.so.6',
 
@@ -307,14 +312,14 @@ def main():
         'bin/llvm-nm',
 
         # AddressSanitizer C runtime (pure C won't link with *_cxx).
-        'lib/clang/$V/lib/linux/libclang_rt.asan-i386.a',
-        'lib/clang/$V/lib/linux/libclang_rt.asan-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.asan-x86_64.a.syms',
+        'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.asan.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.a.syms',
 
         # AddressSanitizer C++ runtime.
-        'lib/clang/$V/lib/linux/libclang_rt.asan_cxx-i386.a',
-        'lib/clang/$V/lib/linux/libclang_rt.asan_cxx-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.asan_cxx-x86_64.a.syms',
+        'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.asan_cxx.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan_cxx.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.asan_cxx.a.syms',
 
         # AddressSanitizer Android runtime.
         'lib/clang/$V/lib/linux/libclang_rt.asan-aarch64-android.so',
@@ -331,46 +336,46 @@ def main():
         'lib/clang/$V/lib/linux/libclang_rt.hwasan-aarch64-android.so',
 
         # MemorySanitizer C runtime (pure C won't link with *_cxx).
-        'lib/clang/$V/lib/linux/libclang_rt.msan-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.msan-x86_64.a.syms',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.msan.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.msan.a.syms',
 
         # MemorySanitizer C++ runtime.
-        'lib/clang/$V/lib/linux/libclang_rt.msan_cxx-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.msan_cxx-x86_64.a.syms',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.msan_cxx.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.msan_cxx.a.syms',
 
         # Profile runtime (used by profiler and code coverage).
-        'lib/clang/$V/lib/linux/libclang_rt.profile-i386.a',
+        'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.profile.a',
         'lib/clang/$V/lib/linux/libclang_rt.profile-i686-android.a',
-        'lib/clang/$V/lib/linux/libclang_rt.profile-x86_64.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.profile.a',
         'lib/clang/$V/lib/linux/libclang_rt.profile-aarch64-android.a',
         'lib/clang/$V/lib/linux/libclang_rt.profile-arm-android.a',
 
         # ThreadSanitizer C runtime (pure C won't link with *_cxx).
-        'lib/clang/$V/lib/linux/libclang_rt.tsan-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.tsan-x86_64.a.syms',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.tsan.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.tsan.a.syms',
 
         # ThreadSanitizer C++ runtime.
-        'lib/clang/$V/lib/linux/libclang_rt.tsan_cxx-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.tsan_cxx-x86_64.a.syms',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.tsan_cxx.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.tsan_cxx.a.syms',
 
         # UndefinedBehaviorSanitizer C runtime (pure C won't link with *_cxx).
-        'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone-i386.a',
-        'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone-x86_64.a.syms',
+        'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.ubsan_standalone.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.ubsan_standalone.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.ubsan_standalone.a.syms',
 
         # UndefinedBehaviorSanitizer C++ runtime.
-        'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone_cxx-i386.a',
-        'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone_cxx-x86_64.a',
-        'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone_cxx-x86_64.a.syms',
+        'lib/clang/$V/lib/i386-unknown-linux-gnu/libclang_rt.ubsan_standalone_cxx.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.ubsan_standalone_cxx.a',
+        'lib/clang/$V/lib/x86_64-unknown-linux-gnu/libclang_rt.ubsan_standalone_cxx.a.syms',
 
         # UndefinedBehaviorSanitizer Android runtime, needed for CFI.
-        # pylint: disable=line-too-long
         'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone-aarch64-android.so',
-        # pylint: enable=line-too-long
         'lib/clang/$V/lib/linux/libclang_rt.ubsan_standalone-arm-android.so',
 
         # Ignorelist for MemorySanitizer (used on Linux only).
         'lib/clang/$V/share/msan_*list.txt',
+
+        # pylint: enable=line-too-long
     ])
   elif sys.platform == 'win32':
     want.extend([
@@ -401,7 +406,24 @@ def main():
       'lib/clang/$V/lib/windows/clang_rt.ubsan_standalone_cxx-x86_64.lib',
     ])
 
-  # Check all non-glob wanted files exist on disk.
+  # reclient is a tool for executing programs remotely. When uploading the
+  # binary to be executed, it needs to know which other files the binary depends
+  # on. This can include shared libraries, as well as other dependencies not
+  # explicitly mentioned in the source code (those would be found by reclient's
+  # include scanner) such as sanitizer ignore lists.
+  reclient_inputs = {
+      'clang': [
+        'lib/clang/$V/share/asan_*list.txt',
+        'lib/clang/$V/share/cfi_*list.txt',
+      ],
+      'lld': [
+      ],
+  }
+  if sys.platform.startswith('linux'):
+    reclient_inputs['clang'].append('lib/libstdc++.so.6')
+    reclient_inputs['lld'].append('lib/libstdc++.so.6')
+
+  # Check that all non-glob wanted files exist on disk.
   want = [w.replace('$V', RELEASE_VERSION) for w in want]
   for w in want:
     if '*' in w: continue
@@ -409,9 +431,21 @@ def main():
     print('wanted file "%s" but it did not exist' % w, file=sys.stderr)
     return 1
 
+  # Check that all reclient inputs are in the package.
+  for tool in reclient_inputs:
+    reclient_inputs[tool] = [i.replace('$V', RELEASE_VERSION)
+                             for i in reclient_inputs[tool]]
+    missing = set(reclient_inputs[tool]) - set(want)
+    if missing:
+      print('reclient inputs not part of package: ', missing, file=sys.stderr)
+      return 1
+
+  reclient_input_strings = {t: '' for t in reclient_inputs}
+
   # TODO(thakis): Try walking over want and copying the files in there instead
   # of walking the directory and doing fnmatch() against want.
   for root, dirs, files in os.walk(LLVM_RELEASE_DIR):
+    dirs.sort()  # Walk dirs in sorted order.
     # root: third_party/llvm-build/Release+Asserts/lib/..., rel_root: lib/...
     rel_root = root[len(LLVM_RELEASE_DIR)+1:]
     rel_files = [os.path.join(rel_root, f) for f in files]
@@ -420,7 +454,7 @@ def main():
     if wanted_files:
       # Guaranteed to not yet exist at this point:
       os.makedirs(os.path.join(pdir, rel_root))
-    for f in wanted_files:
+    for f in sorted(wanted_files):
       src = os.path.join(LLVM_RELEASE_DIR, f)
       dest = os.path.join(pdir, f)
       shutil.copy(src, dest)
@@ -430,6 +464,18 @@ def main():
       elif (sys.platform.startswith('linux') and
             os.path.splitext(f)[1] in ['.so', '.a']):
         subprocess.call([EU_STRIP, '-g', dest])
+      # If this is an reclient input, add it to the inputs file(s).
+      for tool, inputs in reclient_inputs.items():
+        if any(fnmatch.fnmatch(f, i) for i in inputs):
+          rel_input = os.path.relpath(dest, os.path.join(pdir, 'bin'))
+          reclient_input_strings[tool] += ('%s\n' % rel_input)
+
+  # Write the reclient inputs files.
+  for tool, string in reclient_input_strings.items():
+    filename = os.path.join(pdir, 'bin', '%s_remote_toolchain_inputs' % tool)
+    print('%s:\n%s' % (filename, string))
+    with open(filename, 'w') as f:
+      f.write(string)
 
   # Set up symlinks.
   if sys.platform != 'win32':
@@ -439,6 +485,7 @@ def main():
     os.symlink('lld', os.path.join(pdir, 'bin', 'ld64.lld'))
     os.symlink('lld', os.path.join(pdir, 'bin', 'lld-link'))
     os.symlink('lld', os.path.join(pdir, 'bin', 'wasm-ld'))
+    os.symlink('llvm-readobj', os.path.join(pdir, 'bin', 'llvm-readelf'))
 
   if sys.platform.startswith('linux'):
     os.symlink('llvm-objcopy', os.path.join(pdir, 'bin', 'llvm-strip'))
@@ -476,7 +523,7 @@ def main():
   os.makedirs(os.path.join(objdumpdir, 'bin'))
   for filename in [
       'llvm-bcanalyzer', 'llvm-cxxfilt', 'llvm-dwarfdump', 'llvm-nm',
-      'llvm-objdump', 'llvm-readobj'
+      'llvm-objdump'
   ]:
     shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', filename + exe_ext),
                 os.path.join(objdumpdir, 'bin'))
@@ -487,7 +534,6 @@ def main():
     f.write('\n')
   if sys.platform != 'win32':
     os.symlink('llvm-objdump', os.path.join(objdumpdir, 'bin', 'llvm-otool'))
-    os.symlink('llvm-readobj', os.path.join(objdumpdir, 'bin', 'llvm-readelf'))
   PackageInArchive(objdumpdir, objdumpdir + '.tgz')
   MaybeUpload(args.upload, objdumpdir + '.tgz', gcs_platform)
 

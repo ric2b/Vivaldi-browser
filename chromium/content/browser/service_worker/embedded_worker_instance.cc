@@ -11,7 +11,6 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/trace_event/trace_event.h"
@@ -286,6 +285,10 @@ void EmbeddedWorkerInstance::Start(
   // crash reports agree. Consider also checking for
   // rph->IsInitializedAndNotDead().
   CHECK(rph);
+
+  GetContentClient()->browser()->WillStartServiceWorker(
+      process_manager->browser_context(), params->script_url, rph);
+
   rph->BindReceiver(client_.BindNewPipeAndPassReceiver());
   client_.set_disconnect_handler(
       base::BindOnce(&EmbeddedWorkerInstance::Detach, base::Unretained(this)));
@@ -308,8 +311,10 @@ void EmbeddedWorkerInstance::Start(
           reporting_observer_remote;
       owner_version_->set_reporting_observer_receiver(
           reporting_observer_remote.InitWithNewPipeAndPassReceiver());
-      auto reporter = std::make_unique<CrossOriginEmbedderPolicyReporter>(
-          rph->GetStoragePartition(), params->script_url,
+      auto* storage_partition =
+          static_cast<StoragePartitionImpl*>(rph->GetStoragePartition());
+      coep_reporter_ = std::make_unique<CrossOriginEmbedderPolicyReporter>(
+          storage_partition->GetWeakPtr(), params->script_url,
           owner_version_->cross_origin_embedder_policy()->reporting_endpoint,
           owner_version_->cross_origin_embedder_policy()
               ->report_only_reporting_endpoint,
@@ -319,9 +324,7 @@ void EmbeddedWorkerInstance::Start(
           // ServiceWorkers used in iframes.
           net::NetworkIsolationKey::ToDoUseTopFrameOriginAsWell(
               url::Origin::Create(params->script_url)));
-      reporter->BindObserver(std::move(reporting_observer_remote));
-      mojo::MakeSelfOwnedReceiver(std::move(reporter),
-                                  coep_reporter_.BindNewPipeAndPassReceiver());
+      coep_reporter_->BindObserver(std::move(reporting_observer_remote));
 
       coep_reporter_->Clone(
           coep_reporter_for_devtools.InitWithNewPipeAndPassReceiver());
@@ -869,8 +872,10 @@ EmbeddedWorkerInstance::CreateFactoryBundles() {
     owner_version_->set_reporting_observer_receiver(
         reporting_observer_remote.InitWithNewPipeAndPassReceiver());
 
-    auto reporter = std::make_unique<CrossOriginEmbedderPolicyReporter>(
-        rph->GetStoragePartition(), owner_version_->script_url(),
+    auto* storage_partition =
+        static_cast<StoragePartitionImpl*>(rph->GetStoragePartition());
+    coep_reporter_ = std::make_unique<CrossOriginEmbedderPolicyReporter>(
+        storage_partition->GetWeakPtr(), owner_version_->script_url(),
         owner_version_->cross_origin_embedder_policy()->reporting_endpoint,
         owner_version_->cross_origin_embedder_policy()
             ->report_only_reporting_endpoint,
@@ -880,9 +885,7 @@ EmbeddedWorkerInstance::CreateFactoryBundles() {
         // used in iframes.
         net::NetworkIsolationKey::ToDoUseTopFrameOriginAsWell(
             url::Origin::Create(owner_version_->script_url())));
-    reporter->BindObserver(std::move(reporting_observer_remote));
-    mojo::MakeSelfOwnedReceiver(std::move(reporter),
-                                coep_reporter_.BindNewPipeAndPassReceiver());
+    coep_reporter_->BindObserver(std::move(reporting_observer_remote));
     coep_reporter_->Clone(
         coep_reporter_for_devtools.InitWithNewPipeAndPassReceiver());
     coep_reporter_->Clone(

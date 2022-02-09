@@ -115,7 +115,7 @@ ExtensionFunction::ResponseAction SessionsPrivateSaveOpenTabsFunction::Run() {
       // for us to get a handle to a browser that is about to be removed. If
       // the tab count is 0 or the window is NULL, the browser is about to be
       // deleted, so we ignore it.
-      if (service.ShouldTrackWindow(browser, profile) &&
+      if (service.ShouldTrackWindow(browser) &&
           browser->tab_strip_model()->count() && browser->window()) {
         if (save_window_id == 0 ||
             (save_window_id && browser->session_id().id() == save_window_id)) {

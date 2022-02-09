@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "chromeos/services/secure_channel/authenticated_channel.h"
 #include "chromeos/services/secure_channel/file_transfer_update_callback.h"
 #include "chromeos/services/secure_channel/public/mojom/secure_channel_types.mojom.h"
@@ -44,6 +43,9 @@ class AuthenticatedChannelImpl : public AuthenticatedChannel,
    private:
     static Factory* test_factory_;
   };
+
+  AuthenticatedChannelImpl(const AuthenticatedChannelImpl&) = delete;
+  AuthenticatedChannelImpl& operator=(const AuthenticatedChannelImpl&) = delete;
 
   ~AuthenticatedChannelImpl() override;
 
@@ -84,8 +86,6 @@ class AuthenticatedChannelImpl : public AuthenticatedChannel,
       connection_creation_details_;
   std::unique_ptr<SecureChannel> secure_channel_;
   std::unordered_map<int, base::OnceClosure> sequence_number_to_callback_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(AuthenticatedChannelImpl);
 };
 
 }  // namespace secure_channel

@@ -85,7 +85,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   apps::AppLaunchParams params(
       extension->name(), apps::mojom::LaunchContainer::kLaunchContainerNone,
       WindowOpenDisposition::NEW_WINDOW,
-      apps::mojom::AppLaunchSource::kSourceExtensionsPage);
+      apps::mojom::LaunchSource::kFromChromeInternal);
   params.command_line = command_line;
   params.current_directory = cur_dir;
 

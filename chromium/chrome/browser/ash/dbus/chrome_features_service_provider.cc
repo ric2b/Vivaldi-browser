@@ -10,10 +10,13 @@
 #include <string>
 #include <utility>
 
+#include "ash/components/arc/arc_features.h"
+#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/metrics/field_trial.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
@@ -22,15 +25,22 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_features.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/tpm/install_attributes.h"
-#include "components/arc/arc_features.h"
 #include "components/prefs/pref_service.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace {
+
+// A prefix to apply to all features which Chrome OS platform-side code wishes
+// to check.
+// This prefix must *only* be applied to features on the platform side, and no
+// |base::Feature|s should be defined with this prefix.
+// A presubmit will enforce that no |base::Feature|s will be defined with this
+// prefix.
+// TODO(https://crbug.com/1263068): Add the aforementioned presubmit.
+constexpr char kCrOSLateBootFeaturePrefix[] = "CrOSLateBoot";
 
 void SendResponse(dbus::MethodCall* method_call,
                   dbus::ExportedObject::ResponseSender response_sender,
@@ -70,7 +80,9 @@ Profile* GetSenderProfile(
 
 namespace ash {
 
-ChromeFeaturesServiceProvider::ChromeFeaturesServiceProvider() {}
+ChromeFeaturesServiceProvider::ChromeFeaturesServiceProvider(
+    std::unique_ptr<base::FeatureList::Accessor> feature_list_accessor)
+    : feature_list_accessor_(std::move(feature_list_accessor)) {}
 
 ChromeFeaturesServiceProvider::~ChromeFeaturesServiceProvider() = default;
 
@@ -185,16 +197,33 @@ void ChromeFeaturesServiceProvider::IsFeatureEnabled(
                    [&feature_name](const base::Feature* feature) -> bool {
                      return feature_name == feature->name;
                    });
-  if (it == std::end(kFeatureLookup)) {
-    LOG(ERROR) << "Unexpected feature name.";
+  if (it != std::end(kFeatureLookup)) {
+    SendResponse(method_call, std::move(response_sender),
+                 base::FeatureList::IsEnabled(**it));
+    return;
+  }
+  // Not on our list. Potentially look up by name instead.
+  // Only search for arbitrary trial names that begin with the appropriate
+  // prefix, since looking up a feature by name will not be able to get the
+  // default value associated with any `base::Feature` defined in the code
+  // base.
+  // Separately, a presubmit will enforce that no `base::Feature` definition
+  // has a name starting with this prefix.
+  // TODO(https://crbug.com/1263068): Add the aforementioned presubmit.
+  base::FeatureList::OverrideState state =
+      base::FeatureList::OVERRIDE_USE_DEFAULT;
+  if (feature_name.find(kCrOSLateBootFeaturePrefix) == 0) {
+    state = feature_list_accessor_->GetOverrideStateByFeatureName(feature_name);
+  }
+  if (state == base::FeatureList::OVERRIDE_USE_DEFAULT) {
+    LOG(ERROR) << "Unexpected feature name '" << feature_name << "'";
     std::move(response_sender)
         .Run(dbus::ErrorResponse::FromMethodCall(
             method_call, DBUS_ERROR_INVALID_ARGS, "Unexpected feature name."));
     return;
   }
-
   SendResponse(method_call, std::move(response_sender),
-               base::FeatureList::IsEnabled(**it));
+               state == base::FeatureList::OVERRIDE_ENABLE_FEATURE);
 }
 
 void ChromeFeaturesServiceProvider::IsCrostiniEnabled(
@@ -271,9 +300,8 @@ void ChromeFeaturesServiceProvider::IsPeripheralDataAccessEnabled(
             prefs::kLocalStateDevicePeripheralDataAccessEnabled);
   } else {
     // Consumer devices use the CrosSetting pref.
-    CrosSettings::Get()->GetBoolean(
-        chromeos::kDevicePeripheralDataAccessEnabled,
-        &peripheral_data_access_enabled);
+    CrosSettings::Get()->GetBoolean(kDevicePeripheralDataAccessEnabled,
+                                    &peripheral_data_access_enabled);
   }
   SendResponse(method_call, std::move(response_sender),
                peripheral_data_access_enabled);

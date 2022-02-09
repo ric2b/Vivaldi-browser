@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -49,6 +49,7 @@
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/scoped_display_for_new_windows.h"
@@ -108,9 +109,9 @@ class EnableViaDialogFlow : public ExtensionEnableFlowDelegate {
 
   void ExtensionEnableFlowAborted(bool user_initiated) override { delete this; }
 
-  ExtensionService* service_;
-  ExtensionRegistry* registry_;
-  Profile* profile_;
+  raw_ptr<ExtensionService> service_;
+  raw_ptr<ExtensionRegistry> registry_;
+  raw_ptr<Profile> profile_;
   std::string extension_id_;
   base::OnceClosure callback_;
   std::unique_ptr<ExtensionEnableFlow> flow_;
@@ -131,7 +132,7 @@ bool IsAllowedToOverrideURL(const extensions::Extension* extension,
   if (extension->web_extent().MatchesURL(override_url))
     return true;
 
-  if (override_url.GetOrigin() == extension->url())
+  if (override_url.DeprecatedGetOriginAsURL() == extension->url())
     return true;
 
   return false;
@@ -201,7 +202,11 @@ WebContents* OpenApplicationTab(Profile* profile,
   WebContents* contents = NULL;
   if (!browser) {
     // No browser for this profile, need to open a new one.
-    //
+    if (Browser::GetCreationStatusForProfile(profile) !=
+        Browser::CreationStatus::kOk) {
+      return contents;
+    }
+
     // TODO(erg): AppLaunchParams should pass user_gesture from the extension
     // system to here.
     browser = Browser::Create(
@@ -290,17 +295,25 @@ WebContents* OpenEnabledApplication(Profile* profile,
     // LaunchPlatformAppWithCommandLineAndLaunchId should be called to handle
     // the command line. If |launch_files| is set without |command_line|, that
     // means launching the app with files, so call
-    // LaunchPlatformAppWithFilePaths to forward |launch_files| to the app.
+    // LaunchPlatformAppWithFile{Handler,Paths} to forward |launch_files| to the
+    // app.
     if (params.command_line.GetArgs().empty() && !params.launch_files.empty()) {
-      apps::LaunchPlatformAppWithFilePaths(profile, extension,
-                                           params.launch_files);
+      if (params.intent && params.intent->activity_name) {
+        apps::LaunchPlatformAppWithFileHandler(
+            profile, extension, params.intent->activity_name.value(),
+            params.launch_files);
+      } else {
+        apps::LaunchPlatformAppWithFilePaths(profile, extension,
+                                             params.launch_files);
+      }
       return nullptr;
     }
 
     apps::LaunchPlatformAppWithCommandLineAndLaunchId(
         profile, extension, params.launch_id, params.command_line,
-        params.current_directory, params.source);
-    return NULL;
+        params.current_directory,
+        apps::GetAppLaunchSource(params.launch_source));
+    return nullptr;
   }
 
   UMA_HISTOGRAM_ENUMERATION("Extensions.HostedAppLaunchContainer",
@@ -459,7 +472,7 @@ WebContents* OpenAppShortcutWindow(Profile* profile, const GURL& url) {
       std::string(),  // this is a URL app. No app id.
       extensions::LaunchContainer::kLaunchContainerWindow,
       WindowOpenDisposition::NEW_WINDOW,
-      extensions::AppLaunchSource::kSourceCommandLine);
+      apps::mojom::LaunchSource::kFromCommandLine);
   launch_params.override_url = url;
 
   WebContents* tab = OpenApplicationWindow(profile, launch_params, url);

@@ -16,6 +16,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "net/base/mime_util.h"
+#include "net/http/http_byte_range.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
@@ -129,18 +130,18 @@ namespace cors {
 
 namespace header_names {
 
-constexpr char kAccessControlAllowCredentials[] =
+const char kAccessControlAllowCredentials[] =
     "Access-Control-Allow-Credentials";
-constexpr char kAccessControlAllowExternal[] = "Access-Control-Allow-External";
-constexpr char kAccessControlAllowHeaders[] = "Access-Control-Allow-Headers";
-constexpr char kAccessControlAllowMethods[] = "Access-Control-Allow-Methods";
-constexpr char kAccessControlAllowOrigin[] = "Access-Control-Allow-Origin";
-constexpr char kAccessControlMaxAge[] = "Access-Control-Max-Age";
-constexpr char kAccessControlRequestExternal[] =
-    "Access-Control-Request-External";
-constexpr char kAccessControlRequestHeaders[] =
-    "Access-Control-Request-Headers";
-constexpr char kAccessControlRequestMethod[] = "Access-Control-Request-Method";
+const char kAccessControlAllowHeaders[] = "Access-Control-Allow-Headers";
+const char kAccessControlAllowMethods[] = "Access-Control-Allow-Methods";
+const char kAccessControlAllowOrigin[] = "Access-Control-Allow-Origin";
+const char kAccessControlAllowPrivateNetwork[] =
+    "Access-Control-Allow-Private-Network";
+const char kAccessControlMaxAge[] = "Access-Control-Max-Age";
+const char kAccessControlRequestHeaders[] = "Access-Control-Request-Headers";
+const char kAccessControlRequestMethod[] = "Access-Control-Request-Method";
+const char kAccessControlRequestPrivateNetwork[] =
+    "Access-Control-Request-Private-Network";
 
 }  // namespace header_names
 
@@ -364,7 +365,17 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
       "sec-ch-dpr",
       "sec-ch-width",
       "sec-ch-viewport-width",
+
+      // Simple range values are safelisted.
+      // https://fetch.spec.whatwg.org/#simple-range-header-value
+      "range",
+
+      // The `Sec-CH-UA-Full-Version-List` provide server information about the
+      // full version for each brand in its brands list.
+      // https://wicg.github.io/ua-client-hints/#sec-ch-ua-full-version-list
+      "sec-ch-ua-full-version-list",
   });
+
   if (!base::Contains(safe_names, lower_name))
     return false;
 
@@ -396,6 +407,27 @@ bool IsCorsSafelistedHeader(const std::string& name, const std::string& value) {
 
   if (lower_name == "content-type")
     return IsCorsSafelistedLowerCaseContentType(lower_value);
+
+  if (lower_name == "range") {
+    // A 'simple' range value is of the following form: 'bytes=\d+-(\d+)?'.
+    // We can use the regular range header parser with the following caveats:
+    // - No space characters or trailing commas
+    // - Only one range is provided
+    // - No suffix (bytes=-x) ranges
+
+    if (std::any_of(lower_value.begin(), lower_value.end(), [](char c) {
+          return net::HttpUtil::IsLWS(c) || c == ',';
+        })) {
+      return false;
+    }
+
+    std::vector<net::HttpByteRange> ranges;
+    if (!net::HttpUtil::ParseRangeHeader(lower_value, &ranges))
+      return false;
+    if (ranges.size() != 1 || ranges[0].IsSuffixByteRange())
+      return false;
+    return true;
+  }
 
   return true;
 }

@@ -9,7 +9,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/fake_single_thread_task_runner.h"
 #include "media/cast/net/pacing/paced_sender.h"
@@ -38,6 +37,9 @@ class TestRtpPacketTransport : public PacketTransport {
         expected_number_of_packets_(0),
         expected_packet_id_(0),
         expected_frame_id_(FrameId::first() + 1) {}
+
+  TestRtpPacketTransport(const TestRtpPacketTransport&) = delete;
+  TestRtpPacketTransport& operator=(const TestRtpPacketTransport&) = delete;
 
   void VerifyRtpHeader(const RtpCastHeader& rtp_header) {
     VerifyCommonRtpHeader(rtp_header);
@@ -104,12 +106,13 @@ class TestRtpPacketTransport : public PacketTransport {
   int expected_packet_id_;
   FrameId expected_frame_id_;
   RtpTimeTicks expected_rtp_timestamp_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestRtpPacketTransport);
 };
 
 class RtpPacketizerTest : public ::testing::Test {
+ public:
+  RtpPacketizerTest(const RtpPacketizerTest&) = delete;
+  RtpPacketizerTest& operator=(const RtpPacketizerTest&) = delete;
+
  protected:
   RtpPacketizerTest()
       : task_runner_(new FakeSingleThreadTaskRunner(&testing_clock_)) {
@@ -147,9 +150,6 @@ class RtpPacketizerTest : public ::testing::Test {
   std::unique_ptr<TestRtpPacketTransport> transport_;
   std::unique_ptr<PacedSender> pacer_;
   std::unique_ptr<RtpPacketizer> rtp_packetizer_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RtpPacketizerTest);
 };
 
 TEST_F(RtpPacketizerTest, SendStandardPackets) {

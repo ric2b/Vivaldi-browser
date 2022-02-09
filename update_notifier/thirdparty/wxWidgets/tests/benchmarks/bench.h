@@ -11,6 +11,7 @@
 #define _WX_TESTS_BENCHMARKS_BENCH_H_
 
 #include "wx/cpp.h"
+#include "wx/crt.h"
 #include "wx/defs.h"
 
 namespace Bench
@@ -73,7 +74,7 @@ private:
     // pointer to the next object in the linked list or NULL
     Function * const m_next;
 
-    DECLARE_NO_COPY_CLASS(Function)
+    wxDECLARE_NO_COPY_CLASS(Function);
 };
 
 /**

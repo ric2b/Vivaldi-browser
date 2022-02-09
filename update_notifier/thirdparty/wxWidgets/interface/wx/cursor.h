@@ -138,12 +138,12 @@ public:
               (to load a cursor from a .ico icon file) and @c wxBITMAP_TYPE_ANI
               (to load a cursor from a .ani icon file).
             - under MacOS, it defaults to @c wxBITMAP_TYPE_MACCURSOR_RESOURCE;
-              when specifying a string resource name, first the color cursors 'crsr' 
-              and then the black/white cursors 'CURS' in the resource chain are scanned 
-              through. Note that resource forks are deprecated on OS X so this
+              when specifying a string resource name, first the color cursors 'crsr'
+              and then the black/white cursors 'CURS' in the resource chain are scanned
+              through. Note that resource forks are deprecated on macOS so this
               is only available for legacy reasons and should not be used in
               new code.
-            - under GTK, it defaults to @c wxBITMAP_TYPE_XPM. 
+            - under GTK, it defaults to @c wxBITMAP_TYPE_XPM.
               See the wxCursor(const wxImage& image) ctor for more info.
             - under X11, it defaults to @c wxBITMAP_TYPE_XPM.
             - under Motif, it defaults to @c wxBITMAP_TYPE_XBM.
@@ -213,6 +213,19 @@ public:
         Returns @true if cursor data is present.
     */
     virtual bool IsOk() const;
+
+    /**
+        Returns the coordinates of the cursor hot spot.
+
+        The hot spot is the point at which the mouse is actually considered to
+        be when this cursor is used.
+
+        This method is currently only implemented in wxMSW and wxGTK2+ and
+        simply returns ::wxDefaultPosition in the other ports.
+
+        @since 3.1.0
+     */
+    wxPoint GetHotSpot() const;
 
     /**
         Assignment operator, using @ref overview_refcount "reference counting".

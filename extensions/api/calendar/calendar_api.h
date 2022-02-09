@@ -42,6 +42,7 @@ class CalendarEventRouter : public CalendarModelObserver {
 
   void OnIcsFileOpened(std::string path);
   void OnWebcalUrlOpened(GURL url);
+  void OnMailtoOpened(GURL mailto);
 
  private:
   // Helper to actually dispatch an event to extension listeners.

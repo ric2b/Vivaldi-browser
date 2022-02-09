@@ -13,7 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/check_op.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -46,7 +46,6 @@ class RenderProcessHost;
 class ServiceWorkerContentSettingsProxyImpl;
 class ServiceWorkerContextCore;
 class ServiceWorkerVersion;
-class CrossOriginEmbedderPolicyReporter;
 
 namespace service_worker_new_script_loader_unittest {
 class ServiceWorkerNewScriptLoaderTest;
@@ -326,7 +325,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   void BindCacheStorageInternal();
 
   base::WeakPtr<ServiceWorkerContextCore> context_;
-  ServiceWorkerVersion* owner_version_;
+  raw_ptr<ServiceWorkerVersion> owner_version_;
 
   // Unique within a ServiceWorkerContextCore.
   const int embedded_worker_id_;
@@ -389,8 +388,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // COEP Reporter connected to the URLLoaderFactories that handles subresource
   // requests initiated from the service worker. The impl lives on the UI
   // thread, and |coep_reporter_| has the ownership of the impl instance.
-  mojo::Remote<network::mojom::CrossOriginEmbedderPolicyReporter>
-      coep_reporter_;
+  std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter_;
 
   // A unique identifier for this service worker instance. This is unique across
   // the browser process, but not persistent across service worker restarts.

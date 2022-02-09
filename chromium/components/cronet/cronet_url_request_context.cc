@@ -22,11 +22,11 @@
 #include "base/files/scoped_file.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -96,7 +96,7 @@ class NetLogWithNetworkChangeEvents {
   }
 
  private:
-  net::NetLog* net_log_;
+  raw_ptr<net::NetLog> net_log_;
   // LoggingNetworkChangeObserver logs network change events to a NetLog.
   // This class bundles one LoggingNetworkChangeObserver with one NetLog,
   // so network change event are logged just once in the NetLog.
@@ -163,7 +163,7 @@ CronetURLRequestContext::CronetURLRequestContext(
 
 CronetURLRequestContext::~CronetURLRequestContext() {
   DCHECK(!GetNetworkTaskRunner()->BelongsToCurrentThread());
-  GetNetworkTaskRunner()->DeleteSoon(FROM_HERE, network_tasks_);
+  GetNetworkTaskRunner()->DeleteSoon(FROM_HERE, network_tasks_.get());
 }
 
 CronetURLRequestContext::NetworkTasks::NetworkTasks(
@@ -432,7 +432,7 @@ void CronetURLRequestContext::NetworkTasks::Initialize(
   if (context_->reporting_service()) {
     for (const auto& preloaded_header : config->preloaded_report_to_headers) {
       context_->reporting_service()->ProcessReportToHeader(
-          preloaded_header.origin.GetURL(), net::NetworkIsolationKey(),
+          preloaded_header.origin, net::NetworkIsolationKey(),
           preloaded_header.value);
     }
   }
@@ -487,7 +487,7 @@ class CronetURLRequestContext::ContextGetter
   ~ContextGetter() override { DCHECK(cronet_context_->IsOnNetworkThread()); }
 
   // CronetURLRequestContext associated with this ContextGetter.
-  CronetURLRequestContext* const cronet_context_;
+  const raw_ptr<CronetURLRequestContext> cronet_context_;
 };
 
 net::URLRequestContextGetter*

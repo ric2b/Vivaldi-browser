@@ -9,7 +9,6 @@
 
 #include "base/check.h"
 #include "base/debug/gdi_debug_util_win.h"
-#include "base/macros.h"
 #include "base/win/scoped_handle.h"
 
 namespace base {
@@ -53,14 +52,15 @@ class CreateDCTraits {
  public:
   typedef HDC Handle;
 
+  CreateDCTraits() = delete;
+  CreateDCTraits(const CreateDCTraits&) = delete;
+  CreateDCTraits& operator=(const CreateDCTraits&) = delete;
+
   static bool CloseHandle(HDC handle) { return ::DeleteDC(handle) != FALSE; }
 
   static bool IsHandleValid(HDC handle) { return handle != NULL; }
 
   static HDC NullHandle() { return NULL; }
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(CreateDCTraits);
 };
 
 typedef GenericScopedHandle<CreateDCTraits, DummyVerifierTraits> ScopedCreateDC;

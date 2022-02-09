@@ -6,12 +6,12 @@
 #define UI_OZONE_PLATFORM_FLATLAND_FLATLAND_SYSMEM_BUFFER_MANAGER_H_
 
 #include <fuchsia/sysmem/cpp/fidl.h>
+#include <fuchsia/ui/composition/cpp/fidl.h>
 #include <vulkan/vulkan_core.h>
 
 #include <unordered_map>
 
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/unguessable_token.h"
@@ -34,8 +34,10 @@ class FlatlandSysmemBufferManager {
   FlatlandSysmemBufferManager& operator=(const FlatlandSysmemBufferManager&) =
       delete;
 
-  // Initializes the buffer manager with a connection to the sysmem service.
-  void Initialize(fuchsia::sysmem::AllocatorHandle allocator);
+  // Initializes the buffer manager with a connection to the Sysmem service and
+  // Flatland Allocator.
+  void Initialize(fuchsia::sysmem::AllocatorHandle sysmem_allocator,
+                  fuchsia::ui::composition::AllocatorHandle flatland_allocator);
 
   // Disconnects from the sysmem service. After disconnecting, it's safe to call
   // Initialize() again.
@@ -55,8 +57,7 @@ class FlatlandSysmemBufferManager {
                                        gfx::Size size,
                                        gfx::BufferFormat format,
                                        gfx::BufferUsage usage,
-                                       size_t min_buffer_count,
-                                       bool register_with_image_pipe);
+                                       size_t min_buffer_count);
 
   scoped_refptr<FlatlandSysmemBufferCollection> GetCollectionById(
       gfx::SysmemBufferCollectionId id);
@@ -66,7 +67,8 @@ class FlatlandSysmemBufferManager {
   void OnCollectionDestroyed(gfx::SysmemBufferCollectionId id);
 
   FlatlandSurfaceFactory* const flatland_surface_factory_;
-  fuchsia::sysmem::AllocatorSyncPtr allocator_;
+  fuchsia::sysmem::AllocatorSyncPtr sysmem_allocator_;
+  fuchsia::ui::composition::AllocatorPtr flatland_allocator_;
 
   base::small_map<std::unordered_map<gfx::SysmemBufferCollectionId,
                                      FlatlandSysmemBufferCollection*,

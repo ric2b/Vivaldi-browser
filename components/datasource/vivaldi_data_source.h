@@ -6,7 +6,6 @@
 #include <memory>
 #include <string>
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/url_data_source.h"

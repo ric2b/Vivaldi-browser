@@ -16,12 +16,12 @@
 
 class WXDLLIMPEXP_XRC wxComboCtrlXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxComboCtrlXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxComboCtrlXmlHandler);
 
 public:
     wxComboCtrlXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
 private:
 };

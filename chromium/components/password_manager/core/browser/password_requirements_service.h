@@ -8,8 +8,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/containers/mru_cache.h"
-#include "base/macros.h"
+#include "base/containers/lru_cache.h"
 #include "components/autofill/core/browser/proto/password_requirements.pb.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -77,8 +76,8 @@ class PasswordRequirementsService : public KeyedService {
 
   using FullSignature =
       std::pair<autofill::FormSignature, autofill::FieldSignature>;
-  base::MRUCache<GURL, autofill::PasswordRequirementsSpec> specs_for_domains_;
-  base::MRUCache<FullSignature, autofill::PasswordRequirementsSpec>
+  base::LRUCache<GURL, autofill::PasswordRequirementsSpec> specs_for_domains_;
+  base::LRUCache<FullSignature, autofill::PasswordRequirementsSpec>
       specs_for_signatures_;
   // May be a nullptr.
   std::unique_ptr<autofill::PasswordRequirementsSpecFetcher> fetcher_;

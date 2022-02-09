@@ -50,13 +50,9 @@ constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
 constexpr FrameSinkId kAnotherArbitraryFrameSinkId(2, 2);
 
 const base::UnguessableToken kArbitraryToken =
-    base::UnguessableToken::Deserialize(1, 2);
+    base::UnguessableToken::CreateForTesting(1, 2);
 const base::UnguessableToken kAnotherArbitraryToken =
-    base::UnguessableToken::Deserialize(2, 2);
-const base::UnguessableToken kArbitrarySourceId1 =
-    base::UnguessableToken::Deserialize(0xdead, 0xbeef);
-const base::UnguessableToken kArbitrarySourceId2 =
-    base::UnguessableToken::Deserialize(0xdead, 0xbee0);
+    base::UnguessableToken::CreateForTesting(2, 2);
 
 // Matches a SurfaceInfo for |surface_id|.
 MATCHER_P(SurfaceInfoWithId, surface_id, "") {
@@ -101,7 +97,7 @@ class MockFrameSinkManagerClient : public mojom::FrameSinkManagerClient {
 class CompositorFrameSinkSupportTest : public testing::Test {
  public:
   CompositorFrameSinkSupportTest()
-      : manager_(&shared_bitmap_manager_),
+      : manager_(FrameSinkManagerImpl::InitParams(&shared_bitmap_manager_)),
         begin_frame_source_(0.f, false),
         local_surface_id_(3, kArbitraryToken),
         frame_sync_token_(GenTestSyncToken(4)),
@@ -248,7 +244,7 @@ class CompositorFrameSinkSupportTest : public testing::Test {
   std::unique_ptr<base::SimpleTestTickClock> now_src_;
   ServerSharedBitmapManager shared_bitmap_manager_;
   FrameSinkManagerImpl manager_;
-  MockFrameSinkManagerClient frame_sink_manager_client_;
+  testing::NiceMock<MockFrameSinkManagerClient> frame_sink_manager_client_;
   FakeCompositorFrameSinkClient fake_support_client_;
   FakeExternalBeginFrameSource begin_frame_source_;
   std::unique_ptr<CompositorFrameSinkSupport> support_;
@@ -865,6 +861,9 @@ TEST_F(CompositorFrameSinkSupportTest, CopyRequestOnSubtree) {
 }
 
 TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
+  const base::UnguessableToken source_id1 = base::UnguessableToken::Create();
+  const base::UnguessableToken source_id2 = base::UnguessableToken::Create();
+
   const SurfaceId surface_id(support_->frame_sink_id(), local_surface_id_);
 
   {
@@ -884,7 +883,7 @@ TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
       CopyOutputRequest::ResultDestination::kSystemMemory,
       base::BindOnce(&CopyRequestTestCallback, &called1,
                      called1_run_loop.QuitClosure()));
-  request->set_source(kArbitrarySourceId1);
+  request->set_source(source_id1);
 
   support_->RequestCopyOfOutput(
       {local_surface_id_, SubtreeCaptureId(), std::move(request)});
@@ -898,7 +897,7 @@ TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
       CopyOutputRequest::ResultDestination::kSystemMemory,
       base::BindOnce(&CopyRequestTestCallback, &called2,
                      called2_run_loop.QuitClosure()));
-  request->set_source(kArbitrarySourceId2);
+  request->set_source(source_id2);
 
   support_->RequestCopyOfOutput(
       {local_surface_id_, SubtreeCaptureId(), std::move(request)});
@@ -914,7 +913,7 @@ TEST_F(CompositorFrameSinkSupportTest, DuplicateCopyRequest) {
       CopyOutputRequest::ResultDestination::kSystemMemory,
       base::BindOnce(&CopyRequestTestCallback, &called3,
                      called3_run_loop.QuitClosure()));
-  request->set_source(kArbitrarySourceId1);
+  request->set_source(source_id1);
 
   support_->RequestCopyOfOutput(
       {local_surface_id_, SubtreeCaptureId(), std::move(request)});
@@ -1631,17 +1630,18 @@ TEST_F(CompositorFrameSinkSupportTest, ForceFullFrameToActivateSurface) {
   begin_frame_source.TestOnBeginFrame(args_animate_only);
 }
 
-TEST_F(CompositorFrameSinkSupportTest, GetCopyOutputRequestSize) {
+TEST_F(CompositorFrameSinkSupportTest, GetCopyOutputRequestRegion) {
   // No surface with active frame.
-  EXPECT_EQ((gfx::Size{}),
-            support_->GetCopyOutputRequestSize(SubtreeCaptureId{}));
+  EXPECT_EQ((gfx::Rect{}),
+            support_->GetCopyOutputRequestRegion(VideoCaptureSubTarget()));
 
   // Surface with active frame but no capture identifier.
-  ResourceId first_frame_ids[] = {ResourceId(1), ResourceId(2), ResourceId(3)};
+  ResourceId first_frame_ids[] = {ResourceId(1), ResourceId(2), ResourceId(3),
+                                  ResourceId(4), ResourceId(5)};
   SubmitCompositorFrameWithResources(first_frame_ids,
                                      base::size(first_frame_ids));
-  EXPECT_EQ((gfx::Size{20, 20}),
-            support_->GetCopyOutputRequestSize(SubtreeCaptureId{}));
+  EXPECT_EQ((gfx::Rect{0, 0, 20, 20}),
+            (support_->GetCopyOutputRequestRegion(VideoCaptureSubTarget())));
 
   // Render pass with subtree size.
   const SurfaceId surface_id(support_->frame_sink_id(), local_surface_id_);
@@ -1655,15 +1655,12 @@ TEST_F(CompositorFrameSinkSupportTest, GetCopyOutputRequestSize) {
   frame.render_pass_list.front()->subtree_capture_id = kSubtreeId1;
   frame.render_pass_list.front()->subtree_size = gfx::Size{13, 37};
   support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
-  EXPECT_EQ(surface_observer_.last_created_surface_id().local_surface_id(),
-            local_surface_id_);
+  // The subtree size should be cropped by the size of the surface (20x20).
+  EXPECT_EQ((gfx::Rect{0, 0, 13, 37}),
+            support_->GetCopyOutputRequestRegion(kSubtreeId1));
 
-  EXPECT_EQ((gfx::Size{13, 37}),
-            support_->GetCopyOutputRequestSize(kSubtreeId1));
-
-  // Render pass but no subtree size.
+  // Render pass but no subtree size, just a frame size in pixels.
   constexpr SubtreeCaptureId kSubtreeId2(7);
-
   auto frame_with_output_size =
       CompositorFrameBuilder()
           .AddDefaultRenderPass()
@@ -1673,14 +1670,44 @@ TEST_F(CompositorFrameSinkSupportTest, GetCopyOutputRequestSize) {
   frame_with_output_size.render_pass_list.front()->subtree_capture_id =
       kSubtreeId2;
   frame_with_output_size.render_pass_list.front()->output_rect =
-      gfx::Rect{0, 0, 640, 480};
+      gfx::Rect{0, 0, 15, 15};
   support_->SubmitCompositorFrame(local_surface_id_,
                                   std::move(frame_with_output_size));
-  EXPECT_EQ(surface_observer_.last_created_surface_id().local_surface_id(),
-            local_surface_id_);
+  EXPECT_EQ((gfx::Rect{0, 0, 15, 15}),
+            support_->GetCopyOutputRequestRegion(kSubtreeId2));
 
-  EXPECT_EQ((gfx::Size{640, 480}),
-            support_->GetCopyOutputRequestSize(kSubtreeId2));
+  // Render pass with capture bounds.
+  const auto crop_id = RegionCaptureCropId::CreateRandom();
+  auto frame_with_crop_id =
+      CompositorFrameBuilder()
+          .AddDefaultRenderPass()
+          .AddDefaultRenderPass()
+          .SetReferencedSurfaces({SurfaceRange(surface_id)})
+          .Build();
+  frame_with_crop_id.render_pass_list.front()->output_rect =
+      gfx::Rect{0, 0, 20, 20};
+  support_->SubmitCompositorFrame(local_surface_id_,
+                                  std::move(frame_with_crop_id));
+
+  // No capture bounds are set, so we shouldn't capture anything.
+  EXPECT_EQ((gfx::Rect{}), support_->GetCopyOutputRequestRegion(crop_id));
+
+  // After setting capture bounds, we should be able to crop to it.
+  auto frame_with_crop_id_and_bounds =
+      CompositorFrameBuilder()
+          .AddDefaultRenderPass()
+          .AddDefaultRenderPass()
+          .SetReferencedSurfaces({SurfaceRange(surface_id)})
+          .Build();
+  frame_with_crop_id_and_bounds.render_pass_list.front()->output_rect =
+      gfx::Rect{0, 0, 20, 20};
+  frame_with_crop_id_and_bounds.metadata.capture_bounds =
+      RegionCaptureBounds{{{crop_id, gfx::Rect{0, 0, 13, 13}}}};
+  support_->SubmitCompositorFrame(local_surface_id_,
+                                  std::move(frame_with_crop_id_and_bounds));
+
+  EXPECT_EQ((gfx::Rect{0, 0, 13, 13}),
+            support_->GetCopyOutputRequestRegion(crop_id));
 }
 
 }  // namespace viz

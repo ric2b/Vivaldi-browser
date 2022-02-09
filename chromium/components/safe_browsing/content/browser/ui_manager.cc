@@ -6,14 +6,12 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/safe_browsing_blocking_page.h"
-#include "components/safe_browsing/content/browser/safe_browsing_subresource_tab_helper.h"
 #include "components/safe_browsing/content/browser/threat_details.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/browser/ping_manager.h"
@@ -325,15 +323,10 @@ BaseBlockingPage* SafeBrowsingUIManager::CreateBlockingPageForSubresource(
     content::WebContents* contents,
     const GURL& blocked_url,
     const UnsafeResource& unsafe_resource) {
-  SafeBrowsingSubresourceTabHelper::CreateForWebContents(contents, this);
-  // This blocking page is only used to retrieve the HTML for the page, so we
-  // set |should_trigger_reporting| to false. Reports for subresources are
-  // triggered when creating the blocking page that gets associated in
-  // SafeBrowsingSubresourceTabHelper.
   SafeBrowsingBlockingPage* blocking_page =
       blocking_page_factory_->CreateSafeBrowsingPage(
           this, contents, blocked_url, {unsafe_resource},
-          /*should_trigger_reporting=*/false);
+          /*should_trigger_reporting=*/true);
 
   // Report that we showed an interstitial.
   ForwardSecurityInterstitialShownExtensionEventToEmbedder(

@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -31,6 +30,13 @@ namespace protocol_request {
 
 struct HW {
   uint32_t physmemory = 0;  // Physical memory rounded down to the closest GB.
+  bool sse = false;
+  bool sse2 = false;
+  bool sse3 = false;
+  bool sse41 = false;
+  bool sse42 = false;
+  bool ssse3 = false;
+  bool avx = false;
 };
 
 struct OS {
@@ -70,6 +76,7 @@ struct UpdateCheck {
   bool is_update_disabled = false;
   std::string target_version_prefix;
   bool rollback_allowed = false;
+  bool same_version_update_allowed = false;
 };
 
 // didrun element. The element is named "ping" for legacy reasons.
@@ -101,6 +108,7 @@ struct App {
 
   std::string app_id;
   std::string version;
+  std::string ap;
   base::flat_map<std::string, std::string> installer_attributes;
   std::string lang;
   std::string brand_code;

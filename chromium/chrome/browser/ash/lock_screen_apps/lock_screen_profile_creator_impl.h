@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_ASH_LOCK_SCREEN_APPS_LOCK_SCREEN_PROFILE_CREATOR_IMPL_H_
 #define CHROME_BROWSER_ASH_LOCK_SCREEN_APPS_LOCK_SCREEN_PROFILE_CREATOR_IMPL_H_
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/lock_screen_apps/lock_screen_profile_creator.h"
@@ -23,9 +22,8 @@ namespace lock_screen_apps {
 // When initialized, it starts observing lock screen note taking availabiltiy.
 // If/when a note taking app enaled on the lock screen is detected,
 // |LockScreenProfileCreatorImpl| will start async lock screen profile creation.
-class LockScreenProfileCreatorImpl
-    : public LockScreenProfileCreator,
-      public chromeos::NoteTakingHelper::Observer {
+class LockScreenProfileCreatorImpl : public LockScreenProfileCreator,
+                                     public ash::NoteTakingHelper::Observer {
  public:
   // |primary_profile| - the primary profile - i.e. the profile which should be
   //     used to determine lock screen note taking availability.
@@ -38,7 +36,7 @@ class LockScreenProfileCreatorImpl
 
   ~LockScreenProfileCreatorImpl() override;
 
-  // chromeos::NoteTakingHelper::Observer:
+  // ash::NoteTakingHelper::Observer:
   void OnAvailableNoteTakingAppsUpdated() override;
   void OnPreferredNoteTakingAppUpdated(Profile* profile) override;
 
@@ -65,8 +63,8 @@ class LockScreenProfileCreatorImpl
   Profile* const primary_profile_;
   const base::TickClock* tick_clock_;
 
-  base::ScopedObservation<chromeos::NoteTakingHelper,
-                          chromeos::NoteTakingHelper::Observer>
+  base::ScopedObservation<ash::NoteTakingHelper,
+                          ash::NoteTakingHelper::Observer>
       note_taking_helper_observation_{this};
 
   base::WeakPtrFactory<LockScreenProfileCreatorImpl> weak_ptr_factory_{this};

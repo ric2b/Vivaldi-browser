@@ -11,6 +11,7 @@
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
+#include "base/token.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/mojom/video_capture.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -70,7 +71,8 @@ class MockVideoCaptureImpl : public VideoCaptureImpl,
     // For every Start(), expect a corresponding Stop() call.
     EXPECT_CALL(*this, Stop(_));
     // Simulate device started.
-    OnStateChanged(media::mojom::VideoCaptureState::STARTED);
+    OnStateChanged(media::mojom::blink::VideoCaptureResult::NewState(
+        media::mojom::VideoCaptureState::STARTED));
   }
 
   MOCK_METHOD1(Stop, void(const base::UnguessableToken&));

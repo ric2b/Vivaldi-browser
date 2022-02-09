@@ -10,7 +10,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -62,6 +61,9 @@ class FindTrackingDelegate : public WebContentsDelegate {
   explicit FindTrackingDelegate(const std::string& search)
       : search_(search), matches_(-1) {}
 
+  FindTrackingDelegate(const FindTrackingDelegate&) = delete;
+  FindTrackingDelegate& operator=(const FindTrackingDelegate&) = delete;
+
   // Returns number of results.
   int Wait(WebContents* web_contents) {
     WebContentsDelegate* old_delegate = web_contents->GetDelegate();
@@ -98,8 +100,6 @@ class FindTrackingDelegate : public WebContentsDelegate {
   std::string search_;
   int matches_;
   base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(FindTrackingDelegate);
 };
 
 // static
@@ -156,6 +156,11 @@ class RespondAndDisconnectMockWriter
       public base::RefCountedThreadSafe<RespondAndDisconnectMockWriter> {
  public:
   RespondAndDisconnectMockWriter() {}
+
+  RespondAndDisconnectMockWriter(const RespondAndDisconnectMockWriter&) =
+      delete;
+  RespondAndDisconnectMockWriter& operator=(
+      const RespondAndDisconnectMockWriter&) = delete;
 
   void SerializeAsMHTML(mojom::SerializeAsMHTMLParamsPtr params,
                         SerializeAsMHTMLCallback callback) override {
@@ -269,8 +274,6 @@ class RespondAndDisconnectMockWriter
   friend base::RefCountedThreadSafe<RespondAndDisconnectMockWriter>;
 
   ~RespondAndDisconnectMockWriter() override = default;
-
-  DISALLOW_COPY_AND_ASSIGN(RespondAndDisconnectMockWriter);
 };
 
 }  // namespace
@@ -677,6 +680,11 @@ class MHTMLGenerationSitePerProcessTest : public MHTMLGenerationTest {
  public:
   MHTMLGenerationSitePerProcessTest() {}
 
+  MHTMLGenerationSitePerProcessTest(const MHTMLGenerationSitePerProcessTest&) =
+      delete;
+  MHTMLGenerationSitePerProcessTest& operator=(
+      const MHTMLGenerationSitePerProcessTest&) = delete;
+
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     MHTMLGenerationTest::SetUpCommandLine(command_line);
@@ -691,9 +699,6 @@ class MHTMLGenerationSitePerProcessTest : public MHTMLGenerationTest {
 
     MHTMLGenerationTest::SetUpOnMainThread();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MHTMLGenerationSitePerProcessTest);
 };
 
 // Test for crbug.com/538766.

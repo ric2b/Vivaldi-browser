@@ -295,23 +295,12 @@ buildflag_header("buildflags") {
 
   # BackupRefPtr(BRP) build flags.
   _use_backup_ref_ptr = use_backup_ref_ptr && use_partition_alloc && !is_nacl
-  _use_backup_ref_ptr_fake =
-      use_backup_ref_ptr_fake && use_partition_alloc && !is_nacl
   _put_ref_count_in_previous_slot =
       put_ref_count_in_previous_slot && _use_backup_ref_ptr
   _never_remove_from_brp_pool_from_blocklist =
       never_remove_from_brp_pool_blocklist && _use_backup_ref_ptr
   _enable_backup_ref_ptr_slow_checks =
       enable_backup_ref_ptr_slow_checks && _use_backup_ref_ptr
-
-  # AlignedAlloc relies on natural alignment offered by the allocator (see the
-  # comment inside PartitionRoot::AlignedAllocFlags). Any extras in front of the
-  # allocation will mess up that alignment. Such extras are used when
-  # BackupRefPtr is on (unless the "previous slot" variant is used). In this
-  # case, we have to create a separate, smaller partition, dedicated to handle
-  # only aligned allocations, where those extras are disabled.
-  _use_dedicated_partition_for_aligned_alloc_upon_enabling_brp =
-      _use_backup_ref_ptr && !_put_ref_count_in_previous_slot
 
   flags = [
     "USE_ALLOCATOR_SHIM=$use_allocator_shim",
@@ -320,12 +309,23 @@ buildflag_header("buildflags") {
     "USE_PARTITION_ALLOC_AS_MALLOC=$_use_partition_alloc_as_malloc",
 
     "USE_BACKUP_REF_PTR=$_use_backup_ref_ptr",
-    "USE_BACKUP_REF_PTR_FAKE=$_use_backup_ref_ptr_fake",
     "ENABLE_BACKUP_REF_PTR_SLOW_CHECKS=$_enable_backup_ref_ptr_slow_checks",
     "PUT_REF_COUNT_IN_PREVIOUS_SLOT=$_put_ref_count_in_previous_slot",
     "NEVER_REMOVE_FROM_BRP_POOL_BLOCKLIST=$_never_remove_from_brp_pool_from_blocklist",
-    "USE_DEDICATED_PARTITION_FOR_ALIGNED_ALLOC_UPON_ENABLING_BRP=$_use_dedicated_partition_for_aligned_alloc_upon_enabling_brp",
+
+    "USE_FAKE_BINARY_EXPERIMENT=$use_fake_binary_experiment",
   ]
+}
+
+if (is_apple) {
+  source_set("early_zone_registration_mac") {
+    sources = [
+      "early_zone_registration_mac.cc",
+      "early_zone_registration_mac.h",
+    ]
+
+    deps = [ ":buildflags" ]
+  }
 }
 
 # Used to shim malloc symbols on Android. see //base/allocator/README.md.

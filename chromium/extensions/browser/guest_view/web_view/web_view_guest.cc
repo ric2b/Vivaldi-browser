@@ -65,7 +65,6 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "ipc/ipc_message_macros.h"
-#include "net/base/escape.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "third_party/blink/public/common/logging/logging_utils.h"
@@ -81,7 +80,6 @@
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -104,7 +102,6 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "ui/devtools/devtools_connector.h"
-#include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using vivaldi::IsVivaldiApp;
@@ -125,17 +122,10 @@ namespace extensions {
 
 namespace {
 
-// Strings used to encode blob url fallback mode in site URLs.
-constexpr char kNoFallback[] = "nofallback";
-constexpr char kInMemoryFallback[] = "inmemoryfallback";
-constexpr char kOnDiskFallback[] = "ondiskfallback";
-
 // Returns storage partition removal mask from web_view clearData mask. Note
 // that storage partition mask is a subset of webview's data removal mask.
 uint32_t GetStoragePartitionRemovalMask(uint32_t web_view_removal_mask) {
   uint32_t mask = 0;
-  if (web_view_removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_APPCACHE)
-    mask |= StoragePartition::REMOVE_DATA_MASK_APPCACHE;
   if (web_view_removal_mask &
       (webview::WEB_VIEW_REMOVE_DATA_MASK_COOKIES |
        webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES |
@@ -209,9 +199,10 @@ static std::string TerminationStatusToString(base::TerminationStatus status) {
   return "unknown";
 }
 
-std::string GetStoragePartitionIdFromSiteURL(const GURL& site_url) {
-  const std::string& partition_id = site_url.query();
-  bool persist_storage = site_url.path().find("persist") != std::string::npos;
+std::string GetStoragePartitionIdFromPartitionConfig(
+    const content::StoragePartitionConfig& storage_partition_config) {
+  const auto& partition_id = storage_partition_config.partition_name();
+  bool persist_storage = !storage_partition_config.in_memory();
   return (persist_storage ? webview::kPersistPrefix : "") + partition_id;
 }
 
@@ -257,6 +248,13 @@ using WebViewKey = std::pair<int, int>;
 using WebViewKeyToIDMap = std::map<WebViewKey, int>;
 static base::LazyInstance<WebViewKeyToIDMap>::DestructorAtExit
     web_view_key_to_id_map = LAZY_INSTANCE_INITIALIZER;
+
+bool IsInWebViewMainFrame(content::NavigationHandle* navigation_handle) {
+  // TODO(1261928): Due to the use of inner WebContents, a WebView's main frame
+  // is considered primary. This will no longer be the case once we migrate
+  // guest views to MPArch.
+  return navigation_handle->IsInPrimaryMainFrame();
+}
 
 }  // namespace
 
@@ -307,87 +305,6 @@ GuestViewBase* WebViewGuest::Create(WebContents* owner_web_contents) {
 }
 
 // static
-bool WebViewGuest::GetGuestPartitionConfigForSite(
-    content::BrowserContext* browser_context,
-    const GURL& site,
-    content::StoragePartitionConfig* storage_partition_config) {
-  if (!site.SchemeIs(content::kGuestScheme))
-    return false;
-
-  // The partition name is user supplied value, which we have encoded when the
-  // URL was created, so it needs to be decoded. Since it was created via
-  // EscapeQueryParamValue(), it should have no path separators or control codes
-  // when unescaped, but safest to check for that and fail if it does.
-  std::string partition_name;
-  if (!net::UnescapeBinaryURLComponentSafe(site.query_piece(),
-                                           true /* fail_on_path_separators */,
-                                           &partition_name)) {
-    return false;
-  }
-
-  // Since guest URLs are only used for packaged apps, there must be an app
-  // id in the URL.
-  CHECK(site.has_host());
-  // Since persistence is optional, the path must either be empty or the
-  // literal string.
-  bool in_memory = (site.path() != "/persist");
-
-  *storage_partition_config = content::StoragePartitionConfig::Create(
-      browser_context, site.host(), partition_name, in_memory);
-  // A <webview> inside a chrome app needs to be able to resolve Blob URLs that
-  // were created by the chrome app. The chrome app has the same
-  // partition_domain but empty partition_name. Setting this flag on the
-  // partition config causes it to be used as fallback for the purpose of
-  // resolving blob URLs.
-
-  // Default to having the fallback partition on disk, as that matches most
-  // closely what we would have done before fallback behavior started being
-  // encoded in the site URL.
-  content::StoragePartitionConfig::FallbackMode fallback_mode =
-      content::StoragePartitionConfig::FallbackMode::kFallbackPartitionOnDisk;
-  if (site.ref() == kNoFallback) {
-    fallback_mode = content::StoragePartitionConfig::FallbackMode::kNone;
-  } else if (site.ref() == kInMemoryFallback) {
-    fallback_mode = content::StoragePartitionConfig::FallbackMode::
-        kFallbackPartitionInMemory;
-  } else if (site.ref() == kOnDiskFallback) {
-    fallback_mode =
-        content::StoragePartitionConfig::FallbackMode::kFallbackPartitionOnDisk;
-  }
-
-  storage_partition_config->set_fallback_to_partition_domain_for_blob_urls(
-      fallback_mode);
-  return true;
-}
-
-// static
-GURL WebViewGuest::GetSiteForGuestPartitionConfig(
-    const content::StoragePartitionConfig& storage_partition_config) {
-  std::string url_encoded_partition = net::EscapeQueryParamValue(
-      storage_partition_config.partition_name(), false);
-  const char* fallback = "";
-  switch (
-      storage_partition_config.fallback_to_partition_domain_for_blob_urls()) {
-    case content::StoragePartitionConfig::FallbackMode::kNone:
-      fallback = kNoFallback;
-      break;
-    case content::StoragePartitionConfig::FallbackMode::
-        kFallbackPartitionOnDisk:
-      fallback = kOnDiskFallback;
-      break;
-    case content::StoragePartitionConfig::FallbackMode::
-        kFallbackPartitionInMemory:
-      fallback = kInMemoryFallback;
-      break;
-  }
-  return GURL(
-      base::StringPrintf("%s://%s/%s?%s#%s", content::kGuestScheme,
-                         storage_partition_config.partition_domain().c_str(),
-                         storage_partition_config.in_memory() ? "" : "persist",
-                         url_encoded_partition.c_str(), fallback));
-}
-
-// static
 std::string WebViewGuest::GetPartitionID(
     RenderProcessHost* render_process_host) {
   WebViewRendererState* renderer_state = WebViewRendererState::GetInstance();
@@ -426,6 +343,13 @@ int WebViewGuest::GetOrGenerateRulesRegistryID(
 
 void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
                                      WebContentsCreatedCallback callback) {
+  // Break the path completely for Vivaldi. We break from the start if something
+  // changes here. Go look in
+  // ./extensions/api/guest_view/vivaldi_web_view_guest.cpp
+  if (IsVivaldiRunning()) {
+    return VivaldiCreateWebContents(create_params, std::move(callback));
+  }
+
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetMainFrame()->GetProcess();
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
@@ -466,236 +390,26 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     }
   }
 
-  GURL guest_site;
-  std::string new_url;
-  if (IsVivaldiApp(owner_host())) {
-    if (create_params.GetString(webview::kNewURL, &new_url)) {
-      guest_site = GURL(new_url);
-    } else {
-      // NOTE(espen@vivaldi.com): This is a workaround for web panels. We can
-      // not use GetSiteForGuestPartitionConfig() as that will prevent loading
-      // local files later (VB-40707).
-      // In NavigationRequest::OnStartChecksComplete() we use the Starting Site
-      // Instance which is the same site as set here. Navigating from
-      // chrome-guest://mpognobbkildjkofajifpdfhcoklimli/?" which
-      // GetSiteForGuestPartitionConfig() returns fails for local file urls.
-      guest_site = GURL("file:///");
-    }
-  } else {
-    guest_site = GetSiteForGuestPartitionConfig(partition_config);
-  }
-  content::BrowserContext* context = owner_web_contents()->GetBrowserContext();
-
   // If we already have a webview tag in the same app using the same storage
   // partition, we should use the same SiteInstance so the existing tag and
   // the new tag can script each other.
-  auto* guest_view_manager = GuestViewManager::FromBrowserContext(context);
+  auto* guest_view_manager =
+      GuestViewManager::FromBrowserContext(browser_context());
   scoped_refptr<content::SiteInstance> guest_site_instance =
-      guest_view_manager->GetGuestSiteInstance(guest_site);
+      guest_view_manager->GetGuestSiteInstance(partition_config);
   if (!guest_site_instance) {
     // Create the SiteInstance in a new BrowsingInstance, which will ensure
     // that webview tags are also not allowed to send messages across
     // different partitions.
-    guest_site_instance =
-        content::SiteInstance::CreateForURL(context, guest_site);
+    guest_site_instance = content::SiteInstance::CreateForGuest(
+        browser_context(), partition_config);
   }
-  WebContents::CreateParams params(context, std::move(guest_site_instance));
+  WebContents::CreateParams params(browser_context(),
+                                   std::move(guest_site_instance));
   params.guest_delegate = this;
-
-  WebContents* new_contents = nullptr;
-
-  Profile* profile = Profile::FromBrowserContext(context);
-  int tab_id;
-  if (create_params.GetInteger("tab_id", &tab_id)) {
-    // If we created the WebContents through CreateNewWindow and created this
-    // guest with InitWithWebContents we cannot delete the tabstrip contents,
-    // and we don't need to recreate the webcontents either. Just use the
-    // WebContents owned by the tab-strip.
-    content::WebContents* tabstrip_contents = NULL;
-    bool include_incognito = true;
-    Browser* browser;
-    int tab_index;
-
-    if (extensions::ExtensionTabUtil::GetTabById(
-            tab_id, profile, include_incognito, &browser, NULL,
-            &tabstrip_contents, &tab_index)) {
-      new_contents = tabstrip_contents;
-      content::WebContentsImpl* contentsimpl =
-          static_cast<content::WebContentsImpl*>(new_contents);
-
-      content::BrowserPluginGuest::CreateInWebContents(contentsimpl, this);
-      contentsimpl->GetBrowserPluginGuest()->Init();
-
-      contentsimpl->GetBrowserPluginGuest()->set_allow_blocked_by_client();
-
-      // Set the owners blobregistry as fallback when accessing blob-urls.
-      // VB-72847.
-      StoragePartition* partition =
-          contentsimpl->GetBrowserContext()->GetStoragePartition(
-              contentsimpl->GetSiteInstance());
-
-      StoragePartition* owner_partition =
-          Profile::FromBrowserContext(owner_web_contents()->GetBrowserContext())
-              ->GetStoragePartition(owner_web_contents()->GetSiteInstance());
-
-      static_cast<content::StoragePartitionImpl*>(partition)
-          ->UpdateBlobRegistryWithParentAsFallback(
-              static_cast<content::StoragePartitionImpl*>(owner_partition));
-
-      // Fire a WebContentsCreated event informing the client that script-
-      // injection can be done.
-      auto args = std::make_unique<base::DictionaryValue>();
-      DispatchEventToView(std::make_unique<GuestViewEvent>(
-          webview::kEventWebContentsCreated, std::move(args)));
-
-    } else {
-      // NOTE(jarle): Get the |new_contents| using the original Chromium way.
-      // This makes Chrome apps work again, ref. VB-22908.
-
-      // If we already have a webview tag in the same app using the same storage
-      // partition, we should use the same SiteInstance so the existing tag and
-      // the new tag can script each other.
-      auto* guest_view_manager = GuestViewManager::FromBrowserContext(context);
-      scoped_refptr<content::SiteInstance> guest_site_instance =
-          guest_view_manager->GetGuestSiteInstance(guest_site);
-      if (!guest_site_instance) {
-        // Create the SiteInstance in a new BrowsingInstance, which will ensure
-        // that webview tags are also not allowed to send messages across
-        // different partitions.
-        guest_site_instance =
-            content::SiteInstance::CreateForURL(context, guest_site);
-      }
-      WebContents::CreateParams params(context, std::move(guest_site_instance));
-      params.guest_delegate = this;
-      new_contents = WebContents::Create(params).release();
-    }
-  } else if (create_params.GetInteger("inspect_tab_id", &tab_id)) {
-    // We want to attach this guest view to the already existing WebContents
-    // currently used for DevTools.
-    if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != tab_id) {
-      content::WebContents* inspected_contents =
-        ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          tab_id, Profile::FromBrowserContext(context));
-      if (inspected_contents) {
-        // NOTE(david@vivaldi.com): This returns always the |main_web_contents_|
-        // which is required when the dev tools window is undocked.
-        content::WebContents* devtools_contents =
-          DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
-              inspected_contents);
-        if (devtools_contents == nullptr) {
-          // This can happen when going between docked and undocked.
-          DevToolsWindow::InspectElement(inspected_contents->GetMainFrame(), 0,
-                                         0);
-          devtools_contents =
-              DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
-                  inspected_contents);
-        }
-        // NOTE(david@vivaldi.com): Each docking state has it's own dedicated
-        // webview now (VB-42802). We need to make sure that we attach this
-        // guest view either to the already existing |toolbox_web_contents_|
-        // wich is required for undocked dev tools or to the
-        // |main_web_contents_| when docked. Each guest view will be reattached
-        // after docking state was changed.
-        std::string paramstr;
-        DevToolsWindow* devWindow =
-            DevToolsWindow::GetInstanceForInspectedWebContents(
-                inspected_contents);
-        if (create_params.GetString("name", &paramstr) &&
-            !paramstr.find("vivaldi-devtools")) {
-          DevToolsContentsResizingStrategy strategy;
-          devtools_contents = DevToolsWindow::GetInTabWebContents(
-              inspected_contents, &strategy);
-        }
-        DCHECK(devtools_contents);
-        if (!devtools_contents) {
-          // TODO(tomas@vivaldi.com): Band-aid for VB-48293
-          return;
-        }
-        content::WebContentsImpl* contents =
-          static_cast<content::WebContentsImpl*>(devtools_contents);
-
-        DevtoolsConnectorAPI* api =
-          DevtoolsConnectorAPI::GetFactoryInstance()->Get(
-            Profile::FromBrowserContext(context));
-        DCHECK(api);
-
-        connector_item_ =
-            base::WrapRefCounted<extensions::DevtoolsConnectorItem>(
-                api->GetOrCreateDevtoolsConnectorItem(tab_id));
-        DCHECK(connector_item_.get());
-        connector_item_->set_guest_delegate(this);
-        connector_item_->set_devtools_delegate(devWindow);
-
-        content::BrowserPluginGuest::CreateInWebContents(contents, this);
-        contents->GetBrowserPluginGuest()->Init();
-
-        new_contents = contents;
-        inspecting_tab_id_ = tab_id;
-        SetAttachParams(create_params);
-      }
-    }
-  } else {
-    std::string window_id;
-    if (create_params.GetString(webview::kWindowID, &window_id)) {
-      int windowId = atoi(window_id.c_str());
-      BrowserList* list = BrowserList::GetInstance();
-      for (size_t i = 0; i < list->size(); i++) {
-        if (list->get(i)->session_id().id() == windowId) {
-          context = list->get(i)->profile();
-          std::string src_string;
-          if (create_params.GetString("src", &src_string)) {
-            guest_site = GURL(src_string);
-          }
-          break;
-        }
-      }
-    }
-    if (profile->IsOffTheRecord()) {
-      // If storage_partition_id is set to a extension id, this is
-      // an extension popup.
-      ExtensionRegistry* registry = ExtensionRegistry::Get(context);
-      const Extension* extension = registry->GetExtensionById(
-        storage_partition_id, extensions::ExtensionRegistry::EVERYTHING);
-      if (extension && ! IncognitoInfo::IsSplitMode(extension)) {
-        // If it's not split-mode, we need to use the original
-        // profile.  See CreateViewHostForIncognito.
-        context = profile->GetOriginalProfile();
-      }
-    }
-
-  WebContents::CreateParams params = GetWebContentsCreateParams(
-      context, guest_site, IsVivaldiApp(owner_host()));
   // TODO(erikchen): Fix ownership semantics for guest views.
   // https://crbug.com/832879.
-  new_contents = WebContents::Create(params).release();
-
-    if (IsVivaldiRunning()) {
-      std::string view_name;
-      if (create_params.GetString("vivaldi_view_type", &view_name)) {
-        if (view_name == "extension_popup") {
-          // 1. Create an ExtensionFrameHelper for the viewtype.
-          // 2. take a WebContents as parameter.
-          std::string src_string;
-          if (create_params.GetString("src", &src_string)) {
-            GURL popup_url = guest_site = GURL(src_string);
-            extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
-                context, popup_url, mojom::ViewType::kExtensionPopup,
-                new_contents);
-          }
-        }
-      }
-      task_manager::WebContentsTags::CreateForTabContents(new_contents);
-    }
-  }
-  DCHECK(new_contents);
-  if (owner_web_contents()->IsAudioMuted()) {
-    // NOTE(pettern@vivaldi.com): If the owner is muted it means the webcontents
-    // of the AppWindow has been muted due to thumbnail capturing, so we also
-    // mute the webview webcontents.
-    chrome::SetTabAudioMuted(
-        new_contents, true, TabMutedReason::EXTENSION,
-        LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id);
-  }
+  WebContents* new_contents = WebContents::Create(params).release();
 
   // Grant access to the origin of the embedder to the guest process. This
   // allows blob: and filesystem: URLs with the embedder origin to be created
@@ -972,10 +686,10 @@ ZoomController::ZoomMode WebViewGuest::GetZoomMode() {
 }
 
 bool WebViewGuest::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   return web_view_guest_delegate_ &&
-         web_view_guest_delegate_->HandleContextMenu(params);
+         web_view_guest_delegate_->HandleContextMenu(render_frame_host, params);
 }
 
 bool WebViewGuest::HandleKeyboardEvent(
@@ -1009,11 +723,10 @@ void WebViewGuest::CreateNewGuestWebViewWindow(
   GuestViewManager* guest_manager =
       GuestViewManager::FromBrowserContext(browser_context());
   // Set the attach params to use the same partition as the opener.
-  // We pull the partition information from the site's URL, which is of the
-  // form guest://site/{persist}?{partition_name}.
-  const GURL& site_url = web_contents()->GetSiteInstance()->GetSiteURL();
+  const auto storage_partition_config =
+      web_contents()->GetSiteInstance()->GetStoragePartitionConfig();
   const std::string storage_partition_id =
-      GetStoragePartitionIdFromSiteURL(site_url);
+      GetStoragePartitionIdFromPartitionConfig(storage_partition_config);
   base::DictionaryValue create_params;
   create_params.SetString(webview::kStoragePartitionId, storage_partition_id);
   // gisli@vivaldi.com:  Add the url so we can create the right site instance
@@ -1211,8 +924,8 @@ void WebViewGuest::DidFinishNavigation(
       int error_code = navigation_handle->GetNetErrorCode();
       if (error_code == net::OK)
         error_code = net::ERR_BLOCKED_BY_CLIENT;
-      LoadAbort(navigation_handle->IsInMainFrame(), navigation_handle->GetURL(),
-                error_code);
+      LoadAbort(IsInWebViewMainFrame(navigation_handle),
+                navigation_handle->GetURL(), error_code);
     }
     // Originally, on failed navigations the webview we would fire a loadabort
     // (for the failed navigation) and a loadcommit (for the error page).
@@ -1220,10 +933,7 @@ void WebViewGuest::DidFinishNavigation(
       return;
   }
 
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
-  if (navigation_handle->IsInPrimaryMainFrame() && pending_zoom_factor_) {
+  if (IsInWebViewMainFrame(navigation_handle) && pending_zoom_factor_) {
     // Handle a pending zoom if one exists.
     SetZoom(pending_zoom_factor_);
     pending_zoom_factor_ = 0.0;
@@ -1233,7 +943,8 @@ void WebViewGuest::DidFinishNavigation(
   args->SetString(guest_view::kUrl, navigation_handle->GetURL().spec());
   args->SetString(webview::kInternalVisibleUrl,
                   web_contents()->GetVisibleURL().spec());
-  args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
+  args->SetBoolean(guest_view::kIsTopLevel,
+                   IsInWebViewMainFrame(navigation_handle));
   args->SetString(webview::kInternalBaseURLForDataURL,
                   web_contents()
                       ->GetController()
@@ -1256,6 +967,9 @@ void WebViewGuest::LoadProgressChanged(double progress) {
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, web_contents()->GetURL().spec());
   args->SetDoubleKey(webview::kProgress, progress);
+
+  VivaldiSetLoadProgressEventExtraArgs(*args);
+
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventLoadProgress, std::move(args)));
 }
@@ -1270,10 +984,7 @@ void WebViewGuest::DocumentOnLoadCompletedInMainFrame(
 void WebViewGuest::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   WebViewGuest* opener = GetOpener();
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
-  if (opener && navigation_handle->IsInPrimaryMainFrame()) {
+  if (opener && IsInWebViewMainFrame(navigation_handle)) {
     auto it = opener->pending_new_windows_.find(this);
     if (it != opener->pending_new_windows_.end()) {
       NewWindowInfo& info = it->second;
@@ -1287,7 +998,8 @@ void WebViewGuest::DidStartNavigation(
 
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, navigation_handle->GetURL().spec());
-  args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
+  args->SetBoolean(guest_view::kIsTopLevel,
+                   IsInWebViewMainFrame(navigation_handle));
   DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadStart,
                                                        std::move(args)));
 }
@@ -1295,7 +1007,8 @@ void WebViewGuest::DidStartNavigation(
 void WebViewGuest::DidRedirectNavigation(
     content::NavigationHandle* navigation_handle) {
   auto args = std::make_unique<base::DictionaryValue>();
-  args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
+  args->SetBoolean(guest_view::kIsTopLevel,
+                   IsInWebViewMainFrame(navigation_handle));
   args->SetString(webview::kNewURL, navigation_handle->GetURL().spec());
   auto redirect_chain = navigation_handle->GetRedirectChain();
   DCHECK_GE(redirect_chain.size(), 2u);
@@ -1305,7 +1018,8 @@ void WebViewGuest::DidRedirectNavigation(
       webview::kEventLoadRedirect, std::move(args)));
 }
 
-void WebViewGuest::RenderProcessGone(base::TerminationStatus status) {
+void WebViewGuest::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
   // Cancel all find sessions in progress.
   find_helper_.CancelAllFindSessions();
 
@@ -1321,7 +1035,11 @@ void WebViewGuest::UserAgentOverrideSet(
     const blink::UserAgentOverride& ua_override) {
   content::NavigationController& controller = web_contents()->GetController();
   content::NavigationEntry* entry = controller.GetVisibleEntry();
-  if (!entry)
+  // If we're on the initial NavigationEntry and no navigation had committed,
+  // return early. This preserves legacy behavior when the initial
+  // NavigationEntry used to not exist (which might still happen if the
+  // InitialNavigationEntry is disabled).
+  if (!entry || controller.IsInitialNavigation())
     return;
   entry->SetIsOverridingUserAgent(!ua_override.ua_string_override.empty());
   web_contents()->GetController().Reload(content::ReloadType::NORMAL, false);
@@ -1384,16 +1102,14 @@ void WebViewGuest::ReportFrameNameChange(const std::string& name) {
 }
 
 void WebViewGuest::PushWebViewStateToIOThread() {
-  const GURL& site_url = web_contents()->GetSiteInstance()->GetSiteURL();
-  content::StoragePartitionConfig storage_partition_config =
-      content::StoragePartitionConfig::CreateDefault(browser_context());
-  if (!GetGuestPartitionConfigForSite(browser_context(), site_url,
-                                      &storage_partition_config)) {
+  if (!web_contents()->GetSiteInstance()->IsGuest()) {
     // Vivaldi - geir: This check started kicking in when we started swithcing
     // instances for the guest view (VB-2455) - see VB-2539 for a TODO
     //NOTREACHED();
     return;
   }
+  auto storage_partition_config =
+      web_contents()->GetSiteInstance()->GetStoragePartitionConfig();
 
   WebViewRendererState::WebViewInfo web_view_info;
   web_view_info.embedder_process_id =
@@ -1601,7 +1317,8 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
     SetAllowScaling(*allow_scaling);
 
   // Check for a pending zoom from before the first navigation.
-  params.GetDouble(webview::kInitialZoomFactor, &pending_zoom_factor_);
+  pending_zoom_factor_ = params.FindDoubleKey(webview::kInitialZoomFactor)
+                             .value_or(pending_zoom_factor_);
 
   bool is_pending_new_window = false;
   WebViewGuest* opener = GetOpener();
@@ -1912,7 +1629,8 @@ void WebViewGuest::EnterFullscreenModeForTab(
     const blink::mojom::FullscreenOptions& options) {
   // Ask the embedder for permission.
   base::DictionaryValue request_info;
-  const GURL& origin = requesting_frame->GetLastCommittedURL().GetOrigin();
+  const GURL& origin =
+      requesting_frame->GetLastCommittedURL().DeprecatedGetOriginAsURL();
   request_info.SetString(webview::kOrigin, origin.spec());
   web_view_permission_helper_->RequestPermission(
       WEB_VIEW_PERMISSION_TYPE_FULLSCREEN, request_info,
@@ -2091,8 +1809,10 @@ void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
   const NewWindowInfo& new_window_info = it->second;
 
   // Retrieve the opener partition info if we have it.
-  const GURL& site_url = new_contents->GetSiteInstance()->GetSiteURL();
-  std::string storage_partition_id = GetStoragePartitionIdFromSiteURL(site_url);
+  const auto storage_partition_config =
+      new_contents->GetSiteInstance()->GetStoragePartitionConfig();
+  std::string storage_partition_id =
+      GetStoragePartitionIdFromPartitionConfig(storage_partition_config);
 
   base::DictionaryValue request_info;
   request_info.SetInteger(webview::kInitialHeight, initial_bounds.height());

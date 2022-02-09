@@ -12,9 +12,12 @@ class Profile;
 
 namespace app_list {
 
-class RecurrenceRanker;
+class MrfuCache;
 
 // A ranker that groups results into categories.
+//
+// TODO(crbug.com/1199206): This is temporarily unused while being incorporated
+// into the FtrlCategoryRanker.
 class CategoryUsageRanker : public Ranker {
  public:
   explicit CategoryUsageRanker(Profile* profile);
@@ -24,16 +27,16 @@ class CategoryUsageRanker : public Ranker {
   CategoryUsageRanker& operator=(const CategoryUsageRanker&) = delete;
 
   // Ranker:
-  void Start(const std::u16string& query) override;
-  void Rank(ResultsMap& results, ProviderType provider) override;
+  void Start(const std::u16string& query,
+             ResultsMap& results,
+             CategoriesList& categories) override;
+  void UpdateCategoryRanks(const ResultsMap& results,
+                           CategoriesList& categories,
+                           ProviderType provider) override;
   void Train(const LaunchData& launch) override;
 
  private:
-  void InitializeCategoryScores();
-
-  std::unique_ptr<RecurrenceRanker> category_ranker_;
-
-  base::flat_map<Category, int> category_ranks_;
+  std::unique_ptr<MrfuCache> ranker_;
 };
 
 }  // namespace app_list

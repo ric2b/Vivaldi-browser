@@ -18,7 +18,7 @@
 // General item class
 class WXDLLIMPEXP_CORE wxControl: public wxControlBase
 {
-    DECLARE_ABSTRACT_CLASS(wxControl)
+    wxDECLARE_ABSTRACT_CLASS(wxControl);
 
 public:
     wxControl();
@@ -28,7 +28,7 @@ public:
         const wxSize &size = wxDefaultSize,
         long style = 0,
         const wxValidator& validator = wxDefaultValidator,
-        const wxString &name = wxControlNameStr )
+        const wxString &name = wxASCII_STR(wxControlNameStr) )
     {
         Create(parent, id, pos, size, style, validator, name);
     }
@@ -37,7 +37,7 @@ public:
         const wxPoint& pos = wxDefaultPosition,
         const wxSize& size = wxDefaultSize, long style = 0,
         const wxValidator& validator = wxDefaultValidator,
-        const wxString& name = wxControlNameStr);
+        const wxString& name = wxASCII_STR(wxControlNameStr));
 
     // simulates the event, returns true if the event was processed
     virtual void Command(wxCommandEvent& WXUNUSED(event)) { }
@@ -68,7 +68,7 @@ protected:
     // Motif: prevent callbacks being called while in SetValue
     bool m_inSetValue;
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif // _WX_CONTROL_H_

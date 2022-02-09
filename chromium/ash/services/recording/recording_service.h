@@ -13,12 +13,12 @@
 #include "ash/services/recording/recording_encoder_muxer.h"
 #include "ash/services/recording/video_capture_params.h"
 #include "base/bind.h"
-#include "base/bind_post_task.h"
 #include "base/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/threading/sequence_bound.h"
 #include "base/threading/thread_checker.h"
@@ -91,7 +91,7 @@ class RecordingService : public mojom::RecordingService,
 
   // viz::mojom::FrameSinkVideoConsumer:
   void OnFrameCaptured(
-      base::ReadOnlySharedMemoryRegion data,
+      media::mojom::VideoBufferHandlePtr data,
       media::mojom::VideoFrameInfoPtr info,
       const gfx::Rect& content_rect,
       mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>

@@ -7,6 +7,7 @@
 #include "base/android/jni_android.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -195,13 +196,13 @@ class MediaCodecVideoDecoderTest : public testing::TestWithParam<VideoCodec> {
     // If there is a CDM available, then we expect that MCVD will be waiting
     // for the media crypto object.
     // TODO(liberato): why does CreateJavaObjectPtr() not link?
-    if (cdm_ && cdm_->media_crypto_ready_cb) {
-      std::move(cdm_->media_crypto_ready_cb)
+    if (cdm_ && cdm_->media_crypto_ready_cb_) {
+      std::move(cdm_->media_crypto_ready_cb_)
           .Run(std::make_unique<base::android::ScopedJavaGlobalRef<jobject>>(
                    media_crypto_),
                require_secure_video_decoder_);
       // The callback is consumed, mark that we ran it so tests can verify.
-      cdm_->ran_media_crypto_ready_cb = true;
+      cdm_->ran_media_crypto_ready_cb_ = true;
       base::RunLoop().RunUntilIdle();
     }
 
@@ -282,9 +283,9 @@ class MediaCodecVideoDecoderTest : public testing::TestWithParam<VideoCodec> {
   scoped_refptr<DecoderBuffer> fake_decoder_buffer_;
   std::unique_ptr<MockDeviceInfo> device_info_;
   std::unique_ptr<FakeCodecAllocator> codec_allocator_;
-  MockAndroidVideoSurfaceChooser* surface_chooser_;
-  gpu::MockTextureOwner* texture_owner_;
-  MockVideoFrameFactory* video_frame_factory_;
+  raw_ptr<MockAndroidVideoSurfaceChooser> surface_chooser_;
+  raw_ptr<gpu::MockTextureOwner> texture_owner_;
+  raw_ptr<MockVideoFrameFactory> video_frame_factory_;
   NiceMock<base::MockCallback<VideoDecoder::DecodeCB>> decode_cb_;
   ProvideOverlayInfoCB provide_overlay_info_cb_;
   bool restart_for_transitions_;
@@ -301,7 +302,7 @@ class MediaCodecVideoDecoderTest : public testing::TestWithParam<VideoCodec> {
 
   // |mcvd_raw_| lets us call PumpCodec() even after |mcvd_| is dropped, for
   // testing the teardown path.
-  MediaCodecVideoDecoder* mcvd_raw_;
+  raw_ptr<MediaCodecVideoDecoder> mcvd_raw_;
   std::unique_ptr<VideoDecoder> mcvd_;
 };
 
@@ -837,7 +838,7 @@ TEST_P(MediaCodecVideoDecoderTest, CdmInitializationWorksForL3) {
   CreateCdm(true, false);
   InitializeWithOverlay_OneDecodePending(
       TestVideoConfig::NormalEncrypted(codec_));
-  ASSERT_TRUE(!!cdm_->ran_media_crypto_ready_cb);
+  ASSERT_TRUE(!!cdm_->ran_media_crypto_ready_cb_);
   ASSERT_EQ(surface_chooser_->current_state_.is_secure, true);
   ASSERT_EQ(surface_chooser_->current_state_.is_required, false);
   ASSERT_EQ(codec_allocator_->most_recent_config->codec_type, CodecType::kAny);
@@ -850,7 +851,7 @@ TEST_P(MediaCodecVideoDecoderTest, CdmInitializationWorksForL1) {
   CreateCdm(true, true);
   InitializeWithOverlay_OneDecodePending(
       TestVideoConfig::NormalEncrypted(codec_));
-  ASSERT_TRUE(!!cdm_->ran_media_crypto_ready_cb);
+  ASSERT_TRUE(!!cdm_->ran_media_crypto_ready_cb_);
   ASSERT_EQ(surface_chooser_->current_state_.is_secure, true);
   ASSERT_EQ(surface_chooser_->current_state_.is_required, true);
   ASSERT_EQ(codec_allocator_->most_recent_config->codec_type,
@@ -864,7 +865,7 @@ TEST_P(MediaCodecVideoDecoderTest, CdmIsSetEvenForClearStream) {
   // We use the Large config, since VPx can be rejected if it's too small, in
   // favor of software decode, since this is unencrypted.
   InitializeWithOverlay_OneDecodePending(TestVideoConfig::Large(codec_));
-  ASSERT_TRUE(!!cdm_->ran_media_crypto_ready_cb);
+  ASSERT_TRUE(!!cdm_->ran_media_crypto_ready_cb_);
   ASSERT_EQ(surface_chooser_->current_state_.is_secure, true);
   ASSERT_EQ(surface_chooser_->current_state_.is_required, false);
   ASSERT_NE(codec_allocator_->most_recent_config->codec_type,
@@ -878,8 +879,8 @@ TEST_P(MediaCodecVideoDecoderTest, NoMediaCryptoContext_ClearStream) {
   // is not available.
   CreateCdm(false, false);
   InitializeWithOverlay_OneDecodePending(TestVideoConfig::Normal(codec_));
-  ASSERT_FALSE(!!cdm_->media_crypto_ready_cb);
-  ASSERT_FALSE(!!cdm_->ran_media_crypto_ready_cb);
+  ASSERT_FALSE(!!cdm_->media_crypto_ready_cb_);
+  ASSERT_FALSE(!!cdm_->ran_media_crypto_ready_cb_);
   ASSERT_EQ(surface_chooser_->current_state_.is_secure, false);
   ASSERT_EQ(surface_chooser_->current_state_.is_required, false);
   ASSERT_NE(codec_allocator_->most_recent_config->codec_type,
@@ -990,8 +991,7 @@ static std::vector<VideoCodec> GetTestList() {
   std::vector<VideoCodec> test_codecs;
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-  if (MediaCodecUtil::IsMediaCodecAvailable())
-    test_codecs.push_back(VideoCodec::kH264);
+  test_codecs.push_back(VideoCodec::kH264);
 #endif
 
   if (MediaCodecUtil::IsVp8DecoderAvailable())
@@ -1004,10 +1004,8 @@ static std::vector<VideoCodec> GetTestList() {
 }
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-static std::vector<VideoCodec> GetH264IfAvailable() {
-  return MediaCodecUtil::IsMediaCodecAvailable()
-             ? std::vector<VideoCodec>(1, VideoCodec::kH264)
-             : std::vector<VideoCodec>();
+static std::vector<VideoCodec> GetH264() {
+  return std::vector<VideoCodec>(1, VideoCodec::kH264);
 }
 #endif
 
@@ -1038,7 +1036,7 @@ INSTANTIATE_TEST_SUITE_P(MediaCodecVideoDecoderTest,
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 INSTANTIATE_TEST_SUITE_P(MediaCodecVideoDecoderH264Test,
                          MediaCodecVideoDecoderH264Test,
-                         testing::ValuesIn(GetH264IfAvailable()));
+                         testing::ValuesIn(GetH264()));
 #endif
 
 INSTANTIATE_TEST_SUITE_P(MediaCodecVideoDecoderVp8Test,

@@ -11,10 +11,12 @@
 
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/timer/elapsed_timer.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -24,6 +26,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/common/content_features.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
@@ -52,6 +55,9 @@ class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
   OpenerDestroyedObserver(FrameTreeNode* owner, bool observing_original_opener)
       : owner_(owner), observing_original_opener_(observing_original_opener) {}
 
+  OpenerDestroyedObserver(const OpenerDestroyedObserver&) = delete;
+  OpenerDestroyedObserver& operator=(const OpenerDestroyedObserver&) = delete;
+
   // FrameTreeNode::Observer
   void OnFrameTreeNodeDestroyed(FrameTreeNode* node) override {
     if (observing_original_opener_) {
@@ -70,10 +76,8 @@ class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
   }
 
  private:
-  FrameTreeNode* owner_;
+  raw_ptr<FrameTreeNode> owner_;
   bool observing_original_opener_;
-
-  DISALLOW_COPY_AND_ASSIGN(OpenerDestroyedObserver);
 };
 
 const int FrameTreeNode::kFrameTreeNodeInvalidId = -1;
@@ -265,6 +269,36 @@ void FrameTreeNode::ResetForNavigation() {
       blink::mojom::UserActivationNotificationType::kNone);
 }
 
+RenderFrameHostImpl* FrameTreeNode::GetParentOrOuterDocument() {
+  return GetParentOrOuterDocumentHelper(/*escape_guest_view=*/false);
+}
+
+RenderFrameHostImpl* FrameTreeNode::GetParentOrOuterDocumentOrEmbedder() {
+  return GetParentOrOuterDocumentHelper(/*escape_guest_view=*/true);
+}
+
+RenderFrameHostImpl* FrameTreeNode::GetParentOrOuterDocumentHelper(
+    bool escape_guest_view) {
+  // Find the parent in the FrameTree (iframe).
+  if (parent_)
+    return parent_;
+
+  if (!escape_guest_view) {
+    // If we are not a fenced frame root nor inside a portal then return early.
+    // This code does not escape GuestViews.
+    if (!IsFencedFrameRoot() && !frame_tree_->delegate()->IsPortal())
+      return nullptr;
+  }
+
+  // Find the parent in the outer embedder (GuestView, Portal, or Fenced Frame).
+  FrameTreeNode* frame_in_embedder = render_manager()->GetOuterDelegateNode();
+  if (frame_in_embedder)
+    return frame_in_embedder->current_frame_host()->GetParent();
+
+  // No parent found.
+  return nullptr;
+}
+
 size_t FrameTreeNode::GetFrameTreeSize() const {
   if (is_collapsed())
     return 0;
@@ -319,10 +353,6 @@ void FrameTreeNode::SetOriginalOpener(FrameTreeNode* opener) {
 }
 
 void FrameTreeNode::SetCurrentURL(const GURL& url) {
-  if (!has_committed_real_load_ && !url.IsAboutBlank()) {
-    has_committed_real_load_ = true;
-    is_on_initial_empty_document_or_subsequent_empty_documents_ = false;
-  }
   current_frame_host()->SetLastCommittedUrl(url);
   blame_context_.TakeSnapshot();
 }
@@ -353,6 +383,12 @@ void FrameTreeNode::SetCollapsed(bool collapsed) {
 void FrameTreeNode::SetFrameTree(FrameTree& frame_tree) {
   DCHECK(blink::features::IsPrerender2Enabled());
   frame_tree_ = &frame_tree;
+  DCHECK(current_frame_host());
+  current_frame_host()->SetFrameTree(frame_tree);
+  RenderFrameHostImpl* speculative_frame_host =
+      render_manager_.speculative_frame_host();
+  if (speculative_frame_host)
+    speculative_frame_host->SetFrameTree(frame_tree);
 }
 
 void FrameTreeNode::SetFrameName(const std::string& name,
@@ -419,14 +455,6 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
     pending_frame_policy_.required_document_policy =
         frame_policy.required_document_policy;
   }
-}
-
-FrameTreeNode* FrameTreeNode::PreviousSibling() const {
-  return GetSibling(-1);
-}
-
-FrameTreeNode* FrameTreeNode::NextSibling() const {
-  return GetSibling(1);
 }
 
 bool FrameTreeNode::IsLoading() const {
@@ -557,13 +585,14 @@ void FrameTreeNode::ResetNavigationRequest(bool keep_state) {
   render_manager_.CleanUpNavigation();
 }
 
-void FrameTreeNode::DidStartLoading(bool to_different_document,
+void FrameTreeNode::DidStartLoading(bool should_show_loading_ui,
                                     bool was_previously_loading) {
   TRACE_EVENT2("navigation", "FrameTreeNode::DidStartLoading",
-               "frame_tree_node", frame_tree_node_id(), "to different document",
-               to_different_document);
+               "frame_tree_node", frame_tree_node_id(),
+               "should_show_loading_ui ", should_show_loading_ui);
+  base::ElapsedTimer timer;
 
-  frame_tree_->DidStartLoadingNode(*this, to_different_document,
+  frame_tree_->DidStartLoadingNode(*this, should_show_loading_ui,
                                    was_previously_loading);
 
   // Set initial load progress and update overall progress. This will notify
@@ -572,6 +601,10 @@ void FrameTreeNode::DidStartLoading(bool to_different_document,
 
   // Notify the RenderFrameHostManager of the event.
   render_manager()->OnDidStartLoading();
+  base::UmaHistogramTimes(
+      base::StrCat({"Navigation.DidStartLoading.",
+                    IsMainFrame() ? "MainFrame" : "Subframe"}),
+      timer.Elapsed());
 }
 
 void FrameTreeNode::DidStopLoading() {
@@ -734,24 +767,6 @@ void FrameTreeNode::OnSetHadStickyUserActivationBeforeNavigation(bool value) {
   replication_state_->has_received_user_gesture_before_nav = value;
 }
 
-FrameTreeNode* FrameTreeNode::GetSibling(int relative_offset) const {
-  if (!parent_ || !parent_->child_count())
-    return nullptr;
-
-  for (size_t i = 0; i < parent_->child_count(); ++i) {
-    if (parent_->child_at(i) == this) {
-      if ((relative_offset < 0 && static_cast<size_t>(-relative_offset) > i) ||
-          i + relative_offset >= parent_->child_count()) {
-        return nullptr;
-      }
-      return parent_->child_at(i + relative_offset);
-    }
-  }
-
-  NOTREACHED() << "FrameTreeNode not found in its parent's children.";
-  return nullptr;
-}
-
 bool FrameTreeNode::UpdateFramePolicyHeaders(
     network::mojom::WebSandboxFlags sandbox_flags,
     const blink::ParsedPermissionsPolicy& parsed_header) {
@@ -797,13 +812,13 @@ void FrameTreeNode::SetIsAdSubframe(bool is_ad_subframe) {
 
 void FrameTreeNode::SetInitialPopupURL(const GURL& initial_popup_url) {
   DCHECK(initial_popup_url_.is_empty());
-  DCHECK(!has_committed_real_load_);
+  DCHECK(is_on_initial_empty_document_);
   initial_popup_url_ = initial_popup_url;
 }
 
 void FrameTreeNode::SetPopupCreatorOrigin(
     const url::Origin& popup_creator_origin) {
-  DCHECK(!has_committed_real_load_);
+  DCHECK(is_on_initial_empty_document_);
   popup_creator_origin_ = popup_creator_origin;
 }
 
@@ -892,6 +907,17 @@ void FrameTreeNode::SetFencedFrameNonceIfNeeded() {
       parent_->frame_tree_node()->fenced_frame_nonce();
   DCHECK(nonce.has_value());
   fenced_frame_nonce_ = nonce;
+}
+
+bool FrameTreeNode::IsErrorPageIsolationEnabled() const {
+  // Enable error page isolation for fenced frames in both MPArch and ShadowDOM
+  // modes to address the issue with invalid urn:uuid (crbug.com/1264224).
+  //
+  // Note that `IsMainFrame()` only covers MPArch, therefore we add explicit
+  // `IsFencedFrameRoot()` check for ShadowDOM, at least until error page
+  // isolation is supported for subframes in crbug.com/1092524.
+  return SiteIsolationPolicy::IsErrorPageIsolationEnabled(IsMainFrame() ||
+                                                          IsFencedFrameRoot());
 }
 
 }  // namespace content

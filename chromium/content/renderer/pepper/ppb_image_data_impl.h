@@ -9,10 +9,8 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
-#include "content/common/content_export.h"
 #include "ppapi/c/ppb_image_data.h"
 #include "ppapi/shared_impl/ppb_image_data_shared.h"
 #include "ppapi/shared_impl/resource.h"
@@ -24,10 +22,9 @@ class TransportDIB;
 
 namespace content {
 
-class CONTENT_EXPORT PPB_ImageData_Impl
-    : public ppapi::Resource,
-      public ppapi::PPB_ImageData_Shared,
-      public ppapi::thunk::PPB_ImageData_API {
+class PPB_ImageData_Impl : public ppapi::Resource,
+                           public ppapi::PPB_ImageData_Shared,
+                           public ppapi::thunk::PPB_ImageData_API {
  public:
   // We delegate most of our implementation to a back-end class that either uses
   // a PlatformCanvas (for most trusted stuff) or bare shared memory (for use by
@@ -56,6 +53,9 @@ class CONTENT_EXPORT PPB_ImageData_Impl
   // for some internal uses of ImageData (like Graphics2D).
   PPB_ImageData_Impl(PP_Instance instance,
                      PPB_ImageData_Shared::ImageDataType type);
+
+  PPB_ImageData_Impl(const PPB_ImageData_Impl&) = delete;
+  PPB_ImageData_Impl& operator=(const PPB_ImageData_Impl&) = delete;
 
   // Constructor used for unittests. The ImageData is always allocated locally.
   struct ForTest {};
@@ -108,8 +108,6 @@ class CONTENT_EXPORT PPB_ImageData_Impl
   int width_;
   int height_;
   std::unique_ptr<Backend> backend_;
-
-  DISALLOW_COPY_AND_ASSIGN(PPB_ImageData_Impl);
 };
 
 class ImageDataPlatformBackend : public PPB_ImageData_Impl::Backend {

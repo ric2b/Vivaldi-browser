@@ -26,13 +26,10 @@ CastRuntimeService* CastRuntimeService::GetInstance() {
 }
 
 CastRuntimeServiceImpl::CastRuntimeServiceImpl(
-    content::BrowserContext* browser_context,
-    CastWindowManager* window_manager,
+    CastWebService* web_service,
     NetworkContextGetter network_context_getter)
-    : app_dispatcher_(browser_context,
-                      window_manager,
-                      this,
-                      std::move(network_context_getter)) {}
+    : web_service_(web_service),
+      app_dispatcher_(web_service, this, std::move(network_context_getter)) {}
 
 CastRuntimeServiceImpl::~CastRuntimeServiceImpl() = default;
 
@@ -61,6 +58,14 @@ std::unique_ptr<CastEventBuilder> CastRuntimeServiceImpl::CreateEventBuilder() {
 
 const std::string& CastRuntimeServiceImpl::GetAudioChannelEndpoint() {
   return app_dispatcher_.GetCastMediaServiceGrpcEndpoint();
+}
+
+CastWebService* CastRuntimeServiceImpl::GetCastWebService() {
+  return web_service_;
+}
+
+RuntimeApplication* CastRuntimeServiceImpl::GetRuntimeApplication() {
+  return app_dispatcher_.GetRuntimeApplication();
 }
 
 }  // namespace chromecast

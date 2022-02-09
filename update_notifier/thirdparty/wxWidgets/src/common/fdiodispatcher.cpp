@@ -3,7 +3,7 @@
 // Purpose:     Implementation of common wxFDIODispatcher methods
 // Author:      Vadim Zeitlin
 // Created:     2007-05-13
-// Copyright:   (c) 2007 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2007 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -18,9 +18,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/module.h"
@@ -33,6 +30,7 @@
     #include "wx/unix/private/epolldispatcher.h"
 #endif
 
+static
 wxFDIODispatcher *gs_dispatcher = NULL;
 
 // ============================================================================
@@ -135,11 +133,11 @@ bool wxMappedFDIODispatcher::UnregisterFD(int fd)
 class wxFDIODispatcherModule : public wxModule
 {
 public:
-    virtual bool OnInit() { return true; }
-    virtual void OnExit() { wxDELETE(gs_dispatcher); }
+    virtual bool OnInit() wxOVERRIDE { return true; }
+    virtual void OnExit() wxOVERRIDE { wxDELETE(gs_dispatcher); }
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxFDIODispatcherModule)
+    wxDECLARE_DYNAMIC_CLASS(wxFDIODispatcherModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxFDIODispatcherModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxFDIODispatcherModule, wxModule);

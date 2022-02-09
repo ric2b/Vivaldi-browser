@@ -74,7 +74,6 @@
 #include <type_traits>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 
 namespace base {
@@ -325,7 +324,9 @@ class WeakPtrFactory : public internal::WeakPtrFactoryBase {
   }
 
  private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(WeakPtrFactory);
+  WeakPtrFactory() = delete;
+  WeakPtrFactory(const WeakPtrFactory&) = delete;
+  WeakPtrFactory& operator=(const WeakPtrFactory&) = delete;
 };
 
 // A class may extend from SupportsWeakPtr to let others take weak pointers to
@@ -347,7 +348,8 @@ class SupportsWeakPtr : public internal::SupportsWeakPtrBase {
 
  private:
   internal::WeakReferenceOwner weak_reference_owner_;
-  DISALLOW_COPY_AND_ASSIGN(SupportsWeakPtr);
+  SupportsWeakPtr(const SupportsWeakPtr&) = delete;
+  SupportsWeakPtr& operator=(const SupportsWeakPtr&) = delete;
 };
 
 // Helper function that uses type deduction to safely return a WeakPtr<Derived>

@@ -11,25 +11,33 @@
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
+#include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
+#include "ash/public/cpp/wallpaper/online_wallpaper_variant.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/public/cpp/wallpaper/wallpaper_info.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
+#include "ash/public/cpp/window_backdrop.h"
+#include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
+#include "ash/webui/personalization_app/mojom/personalization_app_mojom_traits.h"
+#include "ash/webui/personalization_app/proto/backdrop_wallpaper.pb.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/unguessable_token.h"
-#include "chrome/browser/ash/backdrop_wallpaper_handlers/backdrop_wallpaper_handlers.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/wallpaper/wallpaper_enumerator.h"
+#include "chrome/browser/ash/wallpaper_handlers/wallpaper_handlers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/thumbnail_loader.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/contents_web_view.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
-#include "chromeos/components/personalization_app/mojom/personalization_app.mojom.h"
-#include "chromeos/components/personalization_app/mojom/personalization_app_mojom_traits.h"
-#include "chromeos/components/personalization_app/proto/backdrop_wallpaper.pb.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -41,6 +49,8 @@
 #include "skia/ext/image_operations.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/aura/window.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
@@ -75,11 +85,23 @@ const std::string GetOnlineWallpaperKey(ash::WallpaperInfo info) {
              : base::UnguessableToken::Create().ToString();
 }
 
+const user_manager::User* GetUser(const Profile* profile) {
+  auto* profile_helper = chromeos::ProfileHelper::Get();
+  DCHECK(profile_helper);
+  const user_manager::User* user = profile_helper->GetUserByProfile(profile);
+  DCHECK(user);
+  return user;
+}
+
+AccountId GetAccountId(const Profile* profile) {
+  return GetUser(profile)->GetAccountId();
+}
+
 }  // namespace
 
 ChromePersonalizationAppUiDelegate::ChromePersonalizationAppUiDelegate(
     content::WebUI* web_ui)
-    : profile_(Profile::FromWebUI(web_ui)) {
+    : web_ui_(web_ui), profile_(Profile::FromWebUI(web_ui)) {
   content::URLDataSource::Add(profile_,
                               std::make_unique<SanitizedImageSource>(profile_));
 }
@@ -88,10 +110,37 @@ ChromePersonalizationAppUiDelegate::~ChromePersonalizationAppUiDelegate() =
     default;
 
 void ChromePersonalizationAppUiDelegate::BindInterface(
-    mojo::PendingReceiver<
-        chromeos::personalization_app::mojom::WallpaperProvider> receiver) {
+    mojo::PendingReceiver<ash::personalization_app::mojom::WallpaperProvider>
+        receiver) {
   wallpaper_receiver_.reset();
   wallpaper_receiver_.Bind(std::move(receiver));
+}
+
+void ChromePersonalizationAppUiDelegate::MakeTransparent() {
+  auto* web_contents = web_ui_->GetWebContents();
+
+  // Disable the window backdrop that creates an opaque layer in tablet mode.
+  auto* window_backdrop =
+      ash::WindowBackdrop::Get(web_contents->GetTopLevelNativeWindow());
+  window_backdrop->SetBackdropMode(
+      ash::WindowBackdrop::BackdropMode::kDisabled);
+
+  // Set transparency on the top level native window and tell the WM not to
+  // change it when window state changes.
+  aura::Window* top_level_window = web_contents->GetTopLevelNativeWindow();
+  top_level_window->SetProperty(::chromeos::kWindowManagerManagesOpacityKey,
+                                false);
+  top_level_window->SetTransparent(true);
+
+  // Set the background color to transparent.
+  web_contents->GetRenderWidgetHostView()->SetBackgroundColor(
+      SK_ColorTRANSPARENT);
+
+  // Set a background color override.
+  static_cast<ContentsWebView*>(BrowserView::GetBrowserViewForNativeWindow(
+                                    web_contents->GetTopLevelNativeWindow())
+                                    ->contents_web_view())
+      ->SetBackgroundColorOverride(SK_ColorTRANSPARENT);
 }
 
 void ChromePersonalizationAppUiDelegate::FetchCollections(
@@ -103,7 +152,7 @@ void ChromePersonalizationAppUiDelegate::FetchCollections(
   }
 
   wallpaper_collection_info_fetcher_ =
-      std::make_unique<backdrop_wallpaper_handlers::CollectionInfoFetcher>();
+      std::make_unique<wallpaper_handlers::BackdropCollectionInfoFetcher>();
 
   // base::Unretained is safe to use because |this| outlives
   // |wallpaper_collection_info_fetcher_|.
@@ -115,17 +164,41 @@ void ChromePersonalizationAppUiDelegate::FetchCollections(
 void ChromePersonalizationAppUiDelegate::FetchImagesForCollection(
     const std::string& collection_id,
     FetchImagesForCollectionCallback callback) {
-  DCHECK(!wallpaper_images_info_fetcher_)
-      << "Only one request allowed at a time";
-  wallpaper_images_info_fetcher_ =
-      std::make_unique<backdrop_wallpaper_handlers::ImageInfoFetcher>(
+  auto wallpaper_images_info_fetcher =
+      std::make_unique<wallpaper_handlers::BackdropImageInfoFetcher>(
           collection_id);
 
-  // base::Unretained is safe to use because |this| outlives
-  // |image_info_fetcher_|.
-  wallpaper_images_info_fetcher_->Start(base::BindOnce(
+  auto* wallpaper_images_info_fetcher_ptr = wallpaper_images_info_fetcher.get();
+  wallpaper_images_info_fetcher_ptr->Start(base::BindOnce(
       &ChromePersonalizationAppUiDelegate::OnFetchCollectionImages,
-      base::Unretained(this), std::move(callback)));
+      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+      std::move(wallpaper_images_info_fetcher)));
+}
+
+void ChromePersonalizationAppUiDelegate::FetchGooglePhotosCount(
+    FetchGooglePhotosCountCallback callback) {
+  if (!ash::features::IsWallpaperGooglePhotosIntegrationEnabled()) {
+    mojo::ReportBadMessage(
+        "Cannot call `FetchGooglePhotosCount()` without Google Photos "
+        "Wallpaper integration enabled.");
+    std::move(callback).Run(-1);
+    return;
+  }
+
+  pending_google_photos_count_callbacks_.push_back(std::move(callback));
+  if (google_photos_count_fetcher_) {
+    // Photo count fetching already started. No need to start again.
+    return;
+  }
+
+  google_photos_count_fetcher_ =
+      std::make_unique<wallpaper_handlers::GooglePhotosCountFetcher>();
+
+  // base::Unretained is safe to use because |this| outlives
+  // |google_photos_count_fetcher_|.
+  google_photos_count_fetcher_->Start(base::BindOnce(
+      &ChromePersonalizationAppUiDelegate::OnFetchGooglePhotosCount,
+      base::Unretained(this)));
 }
 
 void ChromePersonalizationAppUiDelegate::GetLocalImages(
@@ -160,7 +233,7 @@ void ChromePersonalizationAppUiDelegate::GetLocalImageThumbnail(
 }
 
 void ChromePersonalizationAppUiDelegate::SetWallpaperObserver(
-    mojo::PendingRemote<chromeos::personalization_app::mojom::WallpaperObserver>
+    mojo::PendingRemote<ash::personalization_app::mojom::WallpaperObserver>
         observer) {
   // May already be bound if user refreshes page.
   wallpaper_observer_remote_.reset();
@@ -215,7 +288,7 @@ void ChromePersonalizationAppUiDelegate::OnWallpaperChanged() {
           file_name.RemoveExtension().value()};
 
       NotifyWallpaperChanged(
-          chromeos::personalization_app::mojom::CurrentWallpaper::New(
+          ash::personalization_app::mojom::CurrentWallpaper::New(
               wallpaper_data_url, std::move(attribution), info.layout,
               info.type, key));
 
@@ -227,7 +300,7 @@ void ChromePersonalizationAppUiDelegate::OnWallpaperChanged() {
     case ash::WallpaperType::kPolicy:
     case ash::WallpaperType::kThirdParty:
       NotifyWallpaperChanged(
-          chromeos::personalization_app::mojom::CurrentWallpaper::New(
+          ash::personalization_app::mojom::CurrentWallpaper::New(
               wallpaper_data_url, /*attribution=*/std::vector<std::string>(),
               info.layout, info.type,
               /*key=*/base::UnguessableToken::Create().ToString()));
@@ -238,14 +311,29 @@ void ChromePersonalizationAppUiDelegate::OnWallpaperChanged() {
   }
 }
 
+void ChromePersonalizationAppUiDelegate::OnWallpaperPreviewEnded() {
+  ChromePersonalizationAppUiDelegate::OnWallpaperChanged();
+}
+
 void ChromePersonalizationAppUiDelegate::SelectWallpaper(
     uint64_t image_asset_id,
+    bool preview_mode,
     SelectWallpaperCallback callback) {
   const auto& it = image_asset_id_map_.find(image_asset_id);
 
   if (it == image_asset_id_map_.end()) {
     mojo::ReportBadMessage("Invalid image asset_id selected");
     return;
+  }
+
+  std::vector<ash::OnlineWallpaperVariant> variants;
+  for (auto entry : image_asset_id_map_) {
+    const ImageInfo& image_info = entry.second;
+    if (image_info.unit_id == it->second.unit_id &&
+        image_info.collection_id == it->second.collection_id) {
+      variants.emplace_back(image_info.asset_id, image_info.image_url,
+                            image_info.type);
+    }
   }
 
   WallpaperControllerClientImpl* client = WallpaperControllerClientImpl::Get();
@@ -255,13 +343,17 @@ void ChromePersonalizationAppUiDelegate::SelectWallpaper(
     std::move(pending_select_wallpaper_callback_).Run(/*success=*/false);
   pending_select_wallpaper_callback_ = std::move(callback);
 
+  SetMinimizedWindowStateForPreview(preview_mode);
+
+  client->RecordWallpaperSourceUMA(ash::WallpaperType::kOnline);
+
   client->SetOnlineWallpaper(
       ash::OnlineWallpaperParams(
-          GetAccountId(), absl::make_optional(image_asset_id),
+          GetAccountId(profile_), absl::make_optional(image_asset_id),
           GURL(it->second.image_url.spec()), it->second.collection_id,
-          ash::WallpaperLayout::WALLPAPER_LAYOUT_CENTER_CROPPED,
-          /*preview_mode=*/false, /*from_user=*/true,
-          /*daily_refresh_enabled=*/false),
+          ash::WallpaperLayout::WALLPAPER_LAYOUT_CENTER_CROPPED, preview_mode,
+          /*from_user=*/true,
+          /*daily_refresh_enabled=*/false, it->second.unit_id, variants),
       base::BindOnce(
           &ChromePersonalizationAppUiDelegate::OnOnlineWallpaperSelected,
           backend_weak_ptr_factory_.GetWeakPtr()));
@@ -269,6 +361,8 @@ void ChromePersonalizationAppUiDelegate::SelectWallpaper(
 
 void ChromePersonalizationAppUiDelegate::SelectLocalImage(
     const base::FilePath& path,
+    ash::WallpaperLayout layout,
+    bool preview_mode,
     SelectLocalImageCallback callback) {
   if (local_images_.count(path) == 0) {
     mojo::ReportBadMessage("Invalid local image path selected");
@@ -278,31 +372,34 @@ void ChromePersonalizationAppUiDelegate::SelectLocalImage(
     std::move(pending_select_local_image_callback_).Run(/*success=*/false);
   pending_select_local_image_callback_ = std::move(callback);
 
+  SetMinimizedWindowStateForPreview(preview_mode);
+
+  WallpaperControllerClientImpl::Get()->RecordWallpaperSourceUMA(
+      ash::WallpaperType::kCustomized);
+
   WallpaperController::Get()->SetCustomWallpaper(
-      GetAccountId(), path,
-      ash::WallpaperLayout::WALLPAPER_LAYOUT_CENTER_CROPPED,
-      /*preview_mode=*/false,
+      GetAccountId(profile_), path, layout, preview_mode,
       base::BindOnce(&ChromePersonalizationAppUiDelegate::OnLocalImageSelected,
                      backend_weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ChromePersonalizationAppUiDelegate::SetCustomWallpaperLayout(
     ash::WallpaperLayout layout) {
-  WallpaperController::Get()->UpdateCustomWallpaperLayout(GetAccountId(),
-                                                          layout);
+  WallpaperController::Get()->UpdateCustomWallpaperLayout(
+      GetAccountId(profile_), layout);
 }
 
 void ChromePersonalizationAppUiDelegate::SetDailyRefreshCollectionId(
     const std::string& collection_id) {
-  WallpaperController::Get()->SetDailyRefreshCollectionId(GetAccountId(),
-                                                          collection_id);
+  WallpaperController::Get()->SetDailyRefreshCollectionId(
+      GetAccountId(profile_), collection_id);
 }
 
 void ChromePersonalizationAppUiDelegate::GetDailyRefreshCollectionId(
     GetDailyRefreshCollectionIdCallback callback) {
   auto* controller = WallpaperController::Get();
   std::move(callback).Run(
-      controller->GetDailyRefreshCollectionId(GetAccountId()));
+      controller->GetDailyRefreshCollectionId(GetAccountId(profile_)));
 }
 
 void ChromePersonalizationAppUiDelegate::UpdateDailyRefreshWallpaper(
@@ -312,9 +409,27 @@ void ChromePersonalizationAppUiDelegate::UpdateDailyRefreshWallpaper(
         .Run(/*success=*/false);
   pending_update_daily_refresh_wallpaper_callback_ = std::move(callback);
 
+  WallpaperControllerClientImpl::Get()->RecordWallpaperSourceUMA(
+      ash::WallpaperType::kDaily);
+
   WallpaperController::Get()->UpdateDailyRefreshWallpaper(base::BindOnce(
       &ChromePersonalizationAppUiDelegate::OnDailyRefreshWallpaperUpdated,
       backend_weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ChromePersonalizationAppUiDelegate::IsInTabletMode(
+    IsInTabletModeCallback callback) {
+  std::move(callback).Run(ash::TabletMode::IsInTabletMode());
+}
+
+void ChromePersonalizationAppUiDelegate::ConfirmPreviewWallpaper() {
+  SetMinimizedWindowStateForPreview(/*preview_mode=*/false);
+  WallpaperController::Get()->ConfirmPreviewWallpaper();
+}
+
+void ChromePersonalizationAppUiDelegate::CancelPreviewWallpaper() {
+  SetMinimizedWindowStateForPreview(/*preview_mode=*/false);
+  WallpaperController::Get()->CancelPreviewWallpaper();
 }
 
 void ChromePersonalizationAppUiDelegate::OnFetchCollections(
@@ -337,11 +452,10 @@ void ChromePersonalizationAppUiDelegate::OnFetchCollections(
 
 void ChromePersonalizationAppUiDelegate::OnFetchCollectionImages(
     FetchImagesForCollectionCallback callback,
+    std::unique_ptr<wallpaper_handlers::BackdropImageInfoFetcher> fetcher,
     bool success,
     const std::string& collection_id,
     const std::vector<backdrop::Image>& images) {
-  DCHECK(wallpaper_images_info_fetcher_);
-
   absl::optional<std::vector<backdrop::Image>> result;
   if (success && !images.empty()) {
     for (const auto& proto_image : images) {
@@ -351,12 +465,27 @@ void ChromePersonalizationAppUiDelegate::OnFetchCollectionImages(
       }
       image_asset_id_map_.insert(
           {proto_image.asset_id(),
-           {GURL(proto_image.image_url()), collection_id}});
+           ImageInfo(GURL(proto_image.image_url()), collection_id,
+                     proto_image.asset_id(), proto_image.unit_id(),
+                     proto_image.has_image_type()
+                         ? proto_image.image_type()
+                         : backdrop::Image::IMAGE_TYPE_UNKNOWN)});
     }
     result = std::move(images);
   }
   std::move(callback).Run(std::move(result));
-  wallpaper_images_info_fetcher_.reset();
+}
+
+void ChromePersonalizationAppUiDelegate::OnFetchGooglePhotosCount(
+    int64_t count) {
+  DCHECK(google_photos_count_fetcher_);
+  DCHECK(!pending_google_photos_count_callbacks_.empty());
+
+  for (auto& callback : pending_google_photos_count_callbacks_) {
+    std::move(callback).Run(count);
+  }
+  pending_google_photos_count_callbacks_.clear();
+  google_photos_count_fetcher_.reset();
 }
 
 void ChromePersonalizationAppUiDelegate::OnGetLocalImages(
@@ -403,7 +532,7 @@ void ChromePersonalizationAppUiDelegate::FindAttribution(
   DCHECK(!wallpaper_attribution_info_fetcher_);
   if (!collections.has_value() || collections->empty()) {
     NotifyWallpaperChanged(
-        chromeos::personalization_app::mojom::CurrentWallpaper::New(
+        ash::personalization_app::mojom::CurrentWallpaper::New(
             wallpaper_data_url, /*attribution=*/std::vector<std::string>(),
             info.layout, info.type, GetOnlineWallpaperKey(info)));
 
@@ -412,7 +541,7 @@ void ChromePersonalizationAppUiDelegate::FindAttribution(
 
   std::size_t current_index = 0;
   wallpaper_attribution_info_fetcher_ =
-      std::make_unique<backdrop_wallpaper_handlers::ImageInfoFetcher>(
+      std::make_unique<wallpaper_handlers::BackdropImageInfoFetcher>(
           collections->at(current_index).collection_id());
 
   wallpaper_attribution_info_fetcher_->Start(base::BindOnce(
@@ -451,7 +580,7 @@ void ChromePersonalizationAppUiDelegate::FindAttributionInCollection(
     for (const auto& attr : backend_image->attribution())
       attributions.push_back(attr.text());
     NotifyWallpaperChanged(
-        chromeos::personalization_app::mojom::CurrentWallpaper::New(
+        ash::personalization_app::mojom::CurrentWallpaper::New(
             wallpaper_data_url, attributions, info.layout, info.type,
             /*key=*/base::NumberToString(backend_image->asset_id())));
     wallpaper_attribution_info_fetcher_.reset();
@@ -462,16 +591,15 @@ void ChromePersonalizationAppUiDelegate::FindAttributionInCollection(
 
   if (current_index >= collections->size()) {
     NotifyWallpaperChanged(
-        chromeos::personalization_app::mojom::CurrentWallpaper::New(
+        ash::personalization_app::mojom::CurrentWallpaper::New(
             wallpaper_data_url, /*attribution=*/std::vector<std::string>(),
             info.layout, info.type, GetOnlineWallpaperKey(info)));
     wallpaper_attribution_info_fetcher_.reset();
     return;
   }
 
-  auto fetcher =
-      std::make_unique<backdrop_wallpaper_handlers::ImageInfoFetcher>(
-          collections->at(current_index).collection_id());
+  auto fetcher = std::make_unique<wallpaper_handlers::BackdropImageInfoFetcher>(
+      collections->at(current_index).collection_id());
   fetcher->Start(base::BindOnce(
       &ChromePersonalizationAppUiDelegate::FindAttributionInCollection,
       attribution_weak_ptr_factory_.GetWeakPtr(), info, wallpaper_data_url,
@@ -481,16 +609,18 @@ void ChromePersonalizationAppUiDelegate::FindAttributionInCollection(
   wallpaper_attribution_info_fetcher_ = std::move(fetcher);
 }
 
-AccountId ChromePersonalizationAppUiDelegate::GetAccountId() const {
-  const user_manager::User* user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
-  DCHECK(user);
-  return user->GetAccountId();
+void ChromePersonalizationAppUiDelegate::SetMinimizedWindowStateForPreview(
+    bool preview_mode) {
+  auto* wallpaper_controller = WallpaperController::Get();
+  const std::string& user_id_hash = GetUser(profile_)->username_hash();
+  if (preview_mode)
+    wallpaper_controller->MinimizeInactiveWindows(user_id_hash);
+  else
+    wallpaper_controller->RestoreMinimizedWindows(user_id_hash);
 }
 
 void ChromePersonalizationAppUiDelegate::NotifyWallpaperChanged(
-    chromeos::personalization_app::mojom::CurrentWallpaperPtr
-        current_wallpaper) {
+    ash::personalization_app::mojom::CurrentWallpaperPtr current_wallpaper) {
   DCHECK(wallpaper_observer_remote_.is_bound());
   wallpaper_observer_remote_->OnWallpaperChanged(std::move(current_wallpaper));
 }

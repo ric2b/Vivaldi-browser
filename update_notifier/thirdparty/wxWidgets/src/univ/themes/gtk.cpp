@@ -19,9 +19,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/univ/theme.h"
 
@@ -201,9 +198,9 @@ public:
 #endif // wxUSE_SCROLLBAR
 
     virtual wxSize GetCheckBitmapSize() const
-        { return wxSize(10, 10); }
+        { return wxSize(14, 14); }
     virtual wxSize GetRadioBitmapSize() const
-        { return wxSize(11, 11); }
+        { return wxSize(14, 14); }
     virtual wxCoord GetCheckItemMargin() const
         { return 2; }
 
@@ -998,48 +995,46 @@ void wxGTKRenderer::DrawRadioButtonBitmap(wxDC& dc,
                                           const wxRect& rect,
                                           int flags)
 {
-    wxCoord x = rect.x,
-            y = rect.y,
+    wxCoord y = rect.y,
             xRight = rect.GetRight(),
             yBottom = rect.GetBottom();
 
     wxCoord yMid = (y + yBottom) / 2;
+    DrawBackground(dc, wxSCHEME_COLOUR(m_scheme, CONTROL_CURRENT), rect);
 
-    // then draw the upper half
-    dc.SetPen(flags & wxCONTROL_CHECKED ? m_penDarkGrey : m_penHighlight);
-    DrawUpZag(dc, x, xRight, yMid, y);
-    DrawUpZag(dc, x + 1, xRight - 1, yMid, y + 1);
+    dc.SetPen(m_penDarkGrey);
+    dc.SetBrush(wxSCHEME_COLOUR(m_scheme, CONTROL_CURRENT)); 
+    // draw the normal border
+    dc.DrawCircle(xRight/2,yBottom/2,yMid);
+
+    wxColor checkedCol, uncheckedCol;
+    checkedCol = wxSCHEME_COLOUR(m_scheme, SHADOW_DARK);
+    uncheckedCol = wxSCHEME_COLOUR(m_scheme, SHADOW_HIGHLIGHT);
+    dc.SetBrush(flags & wxCONTROL_CHECKED ? checkedCol : uncheckedCol);
+
+    // inner dot
+    dc.DrawCircle(xRight/2,yBottom/2,yMid/2);
 
     bool drawIt = true;
-    if ( flags & wxCONTROL_CHECKED )
-        dc.SetPen(m_penBlack);
-    else if ( flags & wxCONTROL_PRESSED )
-        dc.SetPen(wxPen(wxSCHEME_COLOUR(m_scheme, CONTROL_PRESSED)));
+
+    if ( flags & wxCONTROL_PRESSED )
+        dc.SetBrush(wxSCHEME_COLOUR(m_scheme, CONTROL_PRESSED));
     else // unchecked and unpressed
         drawIt = false;
 
     if ( drawIt )
-        DrawUpZag(dc, x + 2, xRight - 2, yMid, y + 2);
+        dc.DrawCircle(xRight/2, yBottom/2, yMid/2);
 
-    // and then the lower one
-    dc.SetPen(flags & wxCONTROL_CHECKED ? m_penHighlight : m_penBlack);
-    DrawDownZag(dc, x, xRight, yMid, yBottom);
-    if ( !(flags & wxCONTROL_CHECKED) )
-        dc.SetPen(m_penDarkGrey);
-    DrawDownZag(dc, x + 1, xRight - 1, yMid, yBottom - 1);
-
-    if ( !(flags & wxCONTROL_CHECKED) )
-        drawIt = true; // with the same pen
-    else if ( flags & wxCONTROL_PRESSED )
+    if ( flags & wxCONTROL_PRESSED )
     {
-        dc.SetPen(wxPen(wxSCHEME_COLOUR(m_scheme, CONTROL_PRESSED)));
+        dc.SetBrush(wxSCHEME_COLOUR(m_scheme, CONTROL_PRESSED));
         drawIt = true;
     }
     else // checked and unpressed
         drawIt = false;
 
     if ( drawIt )
-        DrawDownZag(dc, x + 2, xRight - 2, yMid, yBottom - 2);
+        dc.DrawCircle(xRight/2, yBottom/2, yMid/2);
 }
 
 void wxGTKRenderer::DrawUpZag(wxDC& dc,

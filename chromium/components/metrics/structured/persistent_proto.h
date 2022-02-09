@@ -6,10 +6,9 @@
 #define COMPONENTS_METRICS_STRUCTURED_PERSISTENT_PROTO_H_
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 
 namespace metrics {

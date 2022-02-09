@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_DATEPICKCTRL
 
@@ -63,14 +60,14 @@ public:
     {
     }
 
-    virtual void Init()
+    virtual void Init() wxOVERRIDE
     {
     }
 
     // NB: Don't create lazily since it didn't work that way before
     //     wxComboCtrl was used, and changing behaviour would almost
     //     certainly introduce new bugs.
-    virtual bool Create(wxWindow* parent)
+    virtual bool Create(wxWindow* parent) wxOVERRIDE
     {
         if ( !wxCalendarCtrl::Create(parent, wxID_ANY, wxDefaultDateTime,
                               wxPoint(0, 0), wxDefaultSize,
@@ -86,21 +83,19 @@ public:
         if ( !tx )
             tx = m_combo;
 
-        tx->Connect(wxEVT_KILL_FOCUS,
-                    wxFocusEventHandler(wxCalendarComboPopup::OnKillTextFocus),
-                    NULL, this);
+        tx->Bind(wxEVT_KILL_FOCUS, &wxCalendarComboPopup::OnKillTextFocus, this);
 
         return true;
     }
 
     virtual wxSize GetAdjustedSize(int WXUNUSED(minWidth),
                                    int WXUNUSED(prefHeight),
-                                   int WXUNUSED(maxHeight))
+                                   int WXUNUSED(maxHeight)) wxOVERRIDE
     {
         return m_useSize;
     }
 
-    virtual wxWindow *GetControl() { return this; }
+    virtual wxWindow *GetControl() wxOVERRIDE { return this; }
 
     void SetDateValue(const wxDateTime& date)
     {
@@ -123,16 +118,41 @@ public:
         return m_combo->GetTextCtrl()->IsEmpty();
     }
 
+    // This is public because it is used by wxDatePickerCtrlGeneric itself to
+    // change the date when the text control field changes. The reason it's
+    // done there and not in this class itself is mostly historic.
+    void ChangeDateAndNotifyIfValid()
+    {
+        wxDateTime dt;
+        if ( !ParseDateTime(m_combo->GetValue(), &dt) )
+        {
+            // The user must be in the process of updating the date, don't do
+            // anything -- we'll take care of ensuring it's valid on focus loss
+            // later.
+            return;
+        }
+
+        if ( dt == GetDate() )
+        {
+            // No need to send event if the date hasn't changed.
+            return;
+        }
+
+        // We change the date immediately, as it's more consistent with the
+        // native MSW version and avoids another event on focus loss.
+        SetDate(dt);
+
+        SendDateEvent(dt);
+    }
+
+private:
     bool ParseDateTime(const wxString& s, wxDateTime* pDt)
     {
         wxASSERT(pDt);
 
-        if ( !s.empty() )
-        {
-            pDt->ParseFormat(s, m_format);
-            if ( !pDt->IsValid() )
-                return false;
-        }
+        pDt->ParseFormat(s, m_format);
+        if ( !pDt->IsValid() )
+            return false;
 
         return true;
     }
@@ -148,8 +168,6 @@ public:
         wxDateEvent event(datePicker, dt, wxEVT_DATE_CHANGED);
         datePicker->GetEventHandler()->ProcessEvent(event);
     }
-
-private:
 
     void OnCalKey(wxKeyEvent & ev)
     {
@@ -185,17 +203,33 @@ private:
                 dt = dtOld;
         }
 
-        m_combo->SetText(GetStringValueFor(dt));
-
-        if ( !dt.IsValid() && HasDPFlag(wxDP_ALLOWNONE) )
-            return;
-
-        // notify that we had to change the date after validation
-        if ( (dt.IsValid() && (!dtOld.IsValid() || dt != dtOld)) ||
-                (!dt.IsValid() && dtOld.IsValid()) )
+        if ( dt.IsValid() )
         {
+            // Set it at wxCalendarCtrl level.
             SetDate(dt);
-            SendDateEvent(dt);
+
+            // And show it in the text field.
+            m_combo->SetText(GetStringValue());
+
+            // And if the date has really changed, send an event about it.
+            if ( dt != dtOld )
+                SendDateEvent(dt);
+        }
+        else // Invalid date currently entered.
+        {
+            if ( HasDPFlag(wxDP_ALLOWNONE) )
+            {
+                // Clear the text part to indicate that the date is invalid.
+                // Would it be better to indicate this in some more clear way,
+                // e.g. maybe by using "[none]" or something like this?
+                m_combo->SetText(wxString());
+            }
+            else
+            {
+                // Restore the original value, as we can't have invalid value
+                // in this control.
+                m_combo->SetText(GetStringValue());
+            }
         }
     }
 
@@ -215,7 +249,7 @@ private:
 
         return fmt;
 #else // !wxUSE_INTL
-        return wxT("x");
+        return wxS("%x");
 #endif // wxUSE_INTL/!wxUSE_INTL
     }
 
@@ -225,9 +259,7 @@ private:
 
         if ( m_combo )
         {
-            wxArrayString allowedChars;
-            for ( wxChar c = wxT('0'); c <= wxT('9'); c++ )
-                allowedChars.Add(wxString(c, 1));
+            wxString allowedChars = wxS("0123456789");
 
             const wxChar *p2 = m_format.c_str();
             while ( *p2 )
@@ -235,12 +267,12 @@ private:
                 if ( *p2 == '%')
                     p2 += 2;
                 else
-                    allowedChars.Add(wxString(*p2++, 1));
+                    allowedChars << (*p2++); // append char
             }
 
     #if wxUSE_VALIDATORS
             wxTextValidator tv(wxFILTER_INCLUDE_CHAR_LIST);
-            tv.SetIncludes(allowedChars);
+            tv.SetCharIncludes(allowedChars);
             m_combo->SetValidator(tv);
     #endif
 
@@ -251,15 +283,15 @@ private:
         return true;
     }
 
-    virtual void SetStringValue(const wxString& s)
+    virtual void SetStringValue(const wxString& s) wxOVERRIDE
     {
         wxDateTime dt;
-        if ( !s.empty() && ParseDateTime(s, &dt) )
+        if ( ParseDateTime(s, &dt) )
             SetDate(dt);
         //else: keep the old value
     }
 
-    virtual wxString GetStringValue() const
+    virtual wxString GetStringValue() const wxOVERRIDE
     {
         return GetStringValueFor(GetDate());
     }
@@ -279,30 +311,29 @@ private:
     wxSize          m_useSize;
     wxString        m_format;
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 
-BEGIN_EVENT_TABLE(wxCalendarComboPopup, wxCalendarCtrl)
+wxBEGIN_EVENT_TABLE(wxCalendarComboPopup, wxCalendarCtrl)
     EVT_KEY_DOWN(wxCalendarComboPopup::OnCalKey)
     EVT_CALENDAR_SEL_CHANGED(wxID_ANY, wxCalendarComboPopup::OnSelChange)
     EVT_CALENDAR_PAGE_CHANGED(wxID_ANY, wxCalendarComboPopup::OnSelChange)
     EVT_CALENDAR(wxID_ANY, wxCalendarComboPopup::OnSelChange)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 
 // ============================================================================
 // wxDatePickerCtrlGeneric implementation
 // ============================================================================
 
-BEGIN_EVENT_TABLE(wxDatePickerCtrlGeneric, wxDatePickerCtrlBase)
+wxBEGIN_EVENT_TABLE(wxDatePickerCtrlGeneric, wxDatePickerCtrlBase)
     EVT_TEXT(wxID_ANY, wxDatePickerCtrlGeneric::OnText)
     EVT_SIZE(wxDatePickerCtrlGeneric::OnSize)
-    EVT_SET_FOCUS(wxDatePickerCtrlGeneric::OnFocus)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 #ifndef wxHAS_NATIVE_DATEPICKCTRL
-    IMPLEMENT_DYNAMIC_CLASS(wxDatePickerCtrl, wxControl)
+    wxIMPLEMENT_DYNAMIC_CLASS(wxDatePickerCtrl, wxControl);
 #endif
 
 // ----------------------------------------------------------------------------
@@ -378,17 +409,12 @@ bool wxDatePickerCtrlGeneric::Destroy()
 
 wxSize wxDatePickerCtrlGeneric::DoGetBestSize() const
 {
-    // A better solution would be to use a custom text control that would have
-    // the best size determined by the current date format and let m_combo take
-    // care of the best size computation, but this isn't easily possible with
-    // wxComboCtrl currently, so we compute our own best size here instead even
-    // if this means adding some extra margins to account for text control
-    // borders, space between it and the button and so on.
     wxSize size = m_combo->GetButtonSize();
 
     wxTextCtrl* const text = m_combo->GetTextCtrl();
-    size.x += text->GetTextExtent(text->GetValue()).x;
-    size.x += 2*text->GetCharWidth(); // This is the margin mentioned above.
+    int w;
+    text->GetTextExtent(text->GetValue(), &w, NULL);
+    size.x += text->GetSizeFromTextSize(w + 1).x;
 
     return size;
 }
@@ -409,7 +435,21 @@ bool
 wxDatePickerCtrlGeneric::SetDateRange(const wxDateTime& lowerdate,
                                       const wxDateTime& upperdate)
 {
-    return m_popup->SetDateRange(lowerdate, upperdate);
+    if ( !m_popup->SetDateRange(lowerdate, upperdate) )
+        return false;
+
+    // If the limits were, check that our current value lies between them and
+    // adjust it if it doesn't.
+    const wxDateTime old = GetValue();
+    if ( old.IsValid() )
+    {
+        if ( lowerdate.IsValid() && old < lowerdate )
+            SetValue(lowerdate);
+        else if ( upperdate.IsValid() && old > upperdate )
+            SetValue(upperdate);
+    }
+
+    return true;
 }
 
 
@@ -436,7 +476,7 @@ bool wxDatePickerCtrlGeneric::GetRange(wxDateTime *dt1, wxDateTime *dt2) const
 void
 wxDatePickerCtrlGeneric::SetRange(const wxDateTime &dt1, const wxDateTime &dt2)
 {
-    m_popup->SetDateRange(dt1, dt2);
+    SetDateRange(dt1, dt2);
 }
 
 wxCalendarCtrl *wxDatePickerCtrlGeneric::GetCalendar() const
@@ -464,21 +504,8 @@ void wxDatePickerCtrlGeneric::OnText(wxCommandEvent &ev)
     ev.SetId(GetId());
     GetParent()->GetEventHandler()->ProcessEvent(ev);
 
-    // We'll create an additional event if the date is valid.
-    // If the date isn't valid, the user's probably in the middle of typing
-    wxDateTime dt;
-    if ( !m_popup || !m_popup->ParseDateTime(m_combo->GetValue(), &dt) )
-        return;
-
-    m_popup->SendDateEvent(dt);
+    if ( m_popup )
+        m_popup->ChangeDateAndNotifyIfValid();
 }
-
-
-void wxDatePickerCtrlGeneric::OnFocus(wxFocusEvent& WXUNUSED(event))
-{
-    m_combo->SetFocus();
-}
-
 
 #endif // wxUSE_DATEPICKCTRL
-

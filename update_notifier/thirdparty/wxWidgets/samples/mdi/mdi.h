@@ -14,20 +14,68 @@
 class MyApp : public wxApp
 {
 public:
-    virtual bool OnInit();
+    virtual bool OnInit() wxOVERRIDE;
 };
 
-class MyCanvas : public wxScrolledWindow
+// Helper class logging menu open/close events.
+class MenuEventLogger
 {
 public:
-    MyCanvas(wxWindow *parent, const wxPoint& pos, const wxSize& size);
-    virtual void OnDraw(wxDC& dc);
+    MenuEventLogger(const char* label, wxFrame* frame)
+        : m_label(label),
+          m_frame(frame)
+    {
+    }
+
+protected:
+    void LogMenuOpenClose(wxMenuEvent& event, const char *action)
+    {
+        event.Skip();
+
+        wxString what;
+
+        wxMenu* const menu = event.GetMenu();
+        if ( menu )
+            what.Printf("Menu \"%s\"", menu->GetTitle());
+        else
+            what = "Unknown menu";
+
+        wxLogMessage(m_frame, "%s %s in %s", what, action, m_label);
+    }
+
+    void LogMenuHighlight(wxMenuEvent& event)
+    {
+        event.Skip();
+
+        wxLogMessage(m_frame, "Item %d selected in %s",
+                     event.GetMenuId(), m_label);
+    }
+
+    const wxString m_label;
+    wxFrame* const m_frame;
+
+    wxDECLARE_NO_COPY_CLASS(MenuEventLogger);
+};
+
+class MyCanvas : public wxScrolledWindow,
+                 private MenuEventLogger
+{
+public:
+    MyCanvas(wxFrame *parent, const wxPoint& pos, const wxSize& size);
+    virtual void OnDraw(wxDC& dc) wxOVERRIDE;
 
     bool IsDirty() const { return m_dirty; }
 
     void SetText(const wxString& text) { m_text = text; Refresh(); }
 
 private:
+    void OnMenuOpen(wxMenuEvent& event) { LogMenuOpenClose(event, "opened"); }
+    void OnMenuHighlight(wxMenuEvent& event) { LogMenuHighlight(event); }
+    void OnMenuClose(wxMenuEvent& event) { LogMenuOpenClose(event, "closed"); }
+
+    void OnUpdateUIDisable(wxUpdateUIEvent& event) { event.Enable(false); }
+
+    void OnMenu(wxContextMenuEvent& event);
     void OnEvent(wxMouseEvent& event);
 
     wxString m_text;
@@ -38,7 +86,8 @@ private:
 };
 
 // Define a new frame
-class MyFrame : public wxMDIParentFrame
+class MyFrame : public wxMDIParentFrame,
+                private MenuEventLogger
 {
 public:
     MyFrame();
@@ -56,6 +105,10 @@ private:
     void OnQuit(wxCommandEvent& event);
     void OnCloseAll(wxCommandEvent& event);
 
+    void OnMenuOpen(wxMenuEvent& event) { LogMenuOpenClose(event, "opened"); }
+    void OnMenuHighlight(wxMenuEvent& event) { LogMenuHighlight(event); }
+    void OnMenuClose(wxMenuEvent& event) { LogMenuOpenClose(event, "closed"); }
+
     void OnClose(wxCloseEvent& event);
 
     wxTextCtrl *m_textWindow;
@@ -63,7 +116,8 @@ private:
     wxDECLARE_EVENT_TABLE();
 };
 
-class MyChild : public wxMDIChildFrame
+class MyChild : public wxMDIChildFrame,
+                private MenuEventLogger
 {
 public:
     MyChild(wxMDIParentFrame *parent);
@@ -82,6 +136,10 @@ private:
     void OnClose(wxCommandEvent& event);
     void OnSize(wxSizeEvent& event);
     void OnMove(wxMoveEvent& event);
+    void OnMenuOpen(wxMenuEvent& event) { LogMenuOpenClose(event, "opened"); }
+    void OnMenuHighlight(wxMenuEvent& event) { LogMenuHighlight(event); }
+    void OnMenuClose(wxMenuEvent& event) { LogMenuOpenClose(event, "closed"); }
+    void OnUpdateUIDisable(wxUpdateUIEvent& event) { event.Enable(false); }
     void OnCloseWindow(wxCloseEvent& event);
 
 #if wxUSE_CLIPBOARD
@@ -121,6 +179,8 @@ enum
 {
     MDI_FULLSCREEN = 100,
     MDI_REFRESH,
+    MDI_DISABLED_FROM_CANVAS,
+    MDI_DISABLED_FROM_CHILD,
     MDI_CHANGE_TITLE,
     MDI_CHANGE_POSITION,
     MDI_CHANGE_SIZE

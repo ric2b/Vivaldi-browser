@@ -23,10 +23,10 @@ class SavedpasswordsGetListFunction
       public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.getList", SAVEDPASSWORDS_GETLIST)
-  SavedpasswordsGetListFunction() = default;
+  SavedpasswordsGetListFunction();
 
  private:
-  ~SavedpasswordsGetListFunction() override = default;
+  ~SavedpasswordsGetListFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -35,6 +35,8 @@ class SavedpasswordsGetListFunction
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
       override;
+
+  base::WeakPtrFactory<SavedpasswordsGetListFunction> weak_ptr_factory_{this};
 };
 
 class SavedpasswordsRemoveFunction
@@ -57,6 +59,8 @@ class SavedpasswordsRemoveFunction
 
   size_t id_to_remove_;
   scoped_refptr<password_manager::PasswordStoreInterface> password_store_;
+
+  base::WeakPtrFactory<SavedpasswordsRemoveFunction> weak_ptr_factory_{this};
 };
 
 class SavedpasswordsAddFunction : public ExtensionFunction {
@@ -75,10 +79,10 @@ class SavedpasswordsGetFunction
       public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.get", SAVEDPASSWORDS_GET)
-  SavedpasswordsGetFunction() = default;
+  SavedpasswordsGetFunction();
 
  private:
-  ~SavedpasswordsGetFunction() override = default;
+  ~SavedpasswordsGetFunction() override;
 
   ResponseAction Run() override;
 
@@ -87,6 +91,8 @@ class SavedpasswordsGetFunction
       override;
 
   std::string username_;
+
+  base::WeakPtrFactory<SavedpasswordsGetFunction> weak_ptr_factory_{this};
 };
 
 class SavedpasswordsDeleteFunction : public ExtensionFunction {

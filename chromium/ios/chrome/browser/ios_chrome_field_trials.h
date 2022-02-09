@@ -5,7 +5,6 @@
 #ifndef IOS_CHROME_BROWSER_IOS_CHROME_FIELD_TRIALS_H_
 #define IOS_CHROME_BROWSER_IOS_CHROME_FIELD_TRIALS_H_
 
-#include "base/macros.h"
 #include "components/variations/platform_field_trials.h"
 
 // Responsible for setting up field trials specific to iOS. Currently all
@@ -20,8 +19,8 @@ class IOSChromeFieldTrials : public variations::PlatformFieldTrials {
   ~IOSChromeFieldTrials() override {}
 
   // variations::PlatformFieldTrials:
-  void SetupFieldTrials() override;
-  void SetupFeatureControllingFieldTrials(
+  void SetUpFieldTrials() override;
+  void SetUpFeatureControllingFieldTrials(
       bool has_seed,
       const base::FieldTrial::EntropyProvider* low_entropy_provider,
       base::FeatureList* feature_list) override;

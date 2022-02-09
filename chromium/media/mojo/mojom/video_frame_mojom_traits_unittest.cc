@@ -5,7 +5,6 @@
 #include "media/mojo/mojom/video_frame_mojom_traits.h"
 
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -33,6 +32,10 @@ class VideoFrameStructTraitsTest : public testing::Test,
  public:
   VideoFrameStructTraitsTest() = default;
 
+  VideoFrameStructTraitsTest(const VideoFrameStructTraitsTest&) = delete;
+  VideoFrameStructTraitsTest& operator=(const VideoFrameStructTraitsTest&) =
+      delete;
+
  protected:
   mojo::Remote<mojom::TraitsTestService> GetTraitsTestRemote() {
     mojo::Remote<mojom::TraitsTestService> remote;
@@ -54,8 +57,6 @@ class VideoFrameStructTraitsTest : public testing::Test,
 
   base::test::TaskEnvironment task_environment_;
   mojo::ReceiverSet<TraitsTestService> traits_test_receivers_;
-
-  DISALLOW_COPY_AND_ASSIGN(VideoFrameStructTraitsTest);
 };
 
 }  // namespace

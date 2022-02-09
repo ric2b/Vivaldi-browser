@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_piece.h"
@@ -178,7 +177,7 @@ IN_PROC_BROWSER_TEST_F(
   GURL url(embedded_test_server()->GetURL(
       initial_host, "/server-redirect?" + redirect_url.spec()));
 
-  ConfigureAsSubresourceFilterOnlyURL(url.GetOrigin());
+  ConfigureAsSubresourceFilterOnlyURL(url.DeprecatedGetOriginAsURL());
   base::HistogramTester tester;
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   tester.ExpectUniqueSample(kActivationListHistogram,

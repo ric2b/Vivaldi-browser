@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 
 namespace base {
 

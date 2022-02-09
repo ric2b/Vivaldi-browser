@@ -13,7 +13,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/json/values_util.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -173,10 +172,6 @@ constexpr const char kPrefCreationFlags[] = "creation_flags";
 // A preference that indicates whether the extension was installed from the
 // Chrome Web Store.
 constexpr const char kPrefFromWebStore[] = "from_webstore";
-
-// A preference that indicates whether the extension was installed from a
-// mock App created from a bookmark.
-constexpr const char kPrefFromBookmark[] = "from_bookmark";
 
 // A preference that indicates whether the extension was installed as a
 // default app.
@@ -443,10 +438,10 @@ void ExtensionPrefs::MakePathsRelative() {
     const base::DictionaryValue* extension_dict = NULL;
     if (!i.value().GetAsDictionary(&extension_dict))
       continue;
-    int location_value;
-    if (extension_dict->GetInteger(kPrefLocation, &location_value) &&
-        Manifest::IsUnpackedLocation(
-            static_cast<ManifestLocation>(location_value))) {
+    absl::optional<int> location_value =
+        extension_dict->FindIntKey(kPrefLocation);
+    if (location_value && Manifest::IsUnpackedLocation(
+                              static_cast<ManifestLocation>(*location_value))) {
       // Unpacked extensions can have absolute paths.
       continue;
     }
@@ -602,9 +597,12 @@ bool ExtensionPrefs::ReadPrefAsInteger(const std::string& extension_id,
   DCHECK_EQ(PrefScope::kExtensionSpecific, pref.scope);
   DCHECK_EQ(PrefType::kInteger, pref.type);
   const base::DictionaryValue* ext = GetExtensionPref(extension_id);
-  if (!ext || !ext->GetInteger(pref.name, out_value))
+  if (!ext)
     return false;
-
+  absl::optional<int> value = ext->FindIntPath(pref.name);
+  if (!value)
+    return false;
+  *out_value = *value;
   return true;
 }
 
@@ -677,9 +675,14 @@ bool ExtensionPrefs::ReadPrefAsInteger(const std::string& extension_id,
                                        base::StringPiece pref_key,
                                        int* out_value) const {
   const base::DictionaryValue* ext = GetExtensionPref(extension_id);
-  if (!ext || !ext->GetInteger(pref_key, out_value))
+  if (!ext)
     return false;
 
+  absl::optional<int> value = ext->FindIntPath(pref_key);
+  if (!value)
+    return false;
+
+  *out_value = *value;
   return true;
 }
 
@@ -735,9 +738,9 @@ bool ExtensionPrefs::ReadPrefAsURLPatternSet(const std::string& extension_id,
   const base::DictionaryValue* extension = GetExtensionPref(extension_id);
   if (!extension)
     return false;
-  int location;
-  if (extension->GetInteger(kPrefLocation, &location) &&
-      static_cast<ManifestLocation>(location) == ManifestLocation::kComponent) {
+  absl::optional<int> location = extension->FindIntKey(kPrefLocation);
+  if (location && static_cast<ManifestLocation>(*location) ==
+                      ManifestLocation::kComponent) {
     valid_schemes |= URLPattern::SCHEME_CHROMEUI;
   }
 
@@ -1012,14 +1015,7 @@ void ExtensionPrefs::ClearInapplicableDisableReasonsForComponentExtension(
       disable_reason::DISABLE_RELOAD |
       disable_reason::DISABLE_UNSUPPORTED_REQUIREMENT |
       disable_reason::DISABLE_CORRUPTED | disable_reason::DISABLE_REINSTALL;
-
-  // Allow the camera app to be disabled by extension policy. This is a
-  // temporary solution until there's a dedicated policy to disable the
-  // camera, at which point this should be removed.
-  // TODO(http://crbug.com/1002935)
   int allowed_disable_reasons = kAllowDisableReasons;
-  if (component_extension_id == extension_misc::kCameraAppId)
-    allowed_disable_reasons |= disable_reason::DISABLE_BLOCKED_BY_POLICY;
 
   // Some disable reasons incorrectly cause component extensions to never
   // activate on load. See https://crbug.com/946839 for more details on why we
@@ -1309,16 +1305,19 @@ bool ExtensionPrefs::HasAllowFileAccessSetting(
 bool ExtensionPrefs::DoesExtensionHaveState(
     const std::string& id, Extension::State check_state) const {
   const base::DictionaryValue* extension = GetExtensionPref(id);
-  int state = -1;
-  if (!extension || !extension->GetInteger(kPrefState, &state))
+  if (!extension)
     return false;
 
-  if (state < 0 || state >= Extension::NUM_STATES) {
+  absl::optional<int> state = extension->FindIntKey(kPrefState);
+  if (!state)
+    return false;
+
+  if (*state < 0 || *state >= Extension::NUM_STATES) {
     LOG(ERROR) << "Bad pref 'state' for extension '" << id << "'";
     return false;
   }
 
-  return state == check_state;
+  return *state == check_state;
 }
 
 bool ExtensionPrefs::IsExternalExtensionUninstalled(
@@ -1462,11 +1461,11 @@ std::unique_ptr<ExtensionInfo> ExtensionPrefs::GetInstalledInfoHelper(
     const std::string& extension_id,
     const base::DictionaryValue* extension,
     bool include_component_extensions) const {
-  int location_value;
-  if (!extension->GetInteger(kPrefLocation, &location_value))
+  absl::optional<int> location_value = extension->FindIntKey(kPrefLocation);
+  if (!location_value)
     return nullptr;
 
-  ManifestLocation location = static_cast<ManifestLocation>(location_value);
+  ManifestLocation location = static_cast<ManifestLocation>(*location_value);
   if (location == ManifestLocation::kComponent &&
       !include_component_extensions) {
     // Component extensions are ignored by default. Component extensions may
@@ -1516,13 +1515,11 @@ std::unique_ptr<ExtensionInfo> ExtensionPrefs::GetInstalledExtensionInfo(
       !extensions->GetDictionaryWithoutPathExpansion(extension_id, &ext)) {
     return nullptr;
   }
-  int state_value;
+  absl::optional<int> state_value = ext->FindIntKey(kPrefState);
   // TODO(devlin): Remove this once all clients are updated with
   // MigrateToNewExternalUninstallPref().
-  if (ext->GetInteger(kPrefState, &state_value) &&
-      state_value == Extension::DEPRECATED_EXTERNAL_EXTENSION_UNINSTALLED) {
+  if (state_value == Extension::DEPRECATED_EXTERNAL_EXTENSION_UNINSTALLED)
     return nullptr;
-  }
 
   return GetInstalledInfoHelper(extension_id, ext,
                                 include_component_extensions);
@@ -1651,11 +1648,11 @@ ExtensionPrefs::DelayReason ExtensionPrefs::GetDelayedInstallReason(
   if (!extension_prefs->GetDictionary(kDelayedInstallInfo, &ext))
     return DELAY_REASON_NONE;
 
-  int delay_reason;
-  if (!ext->GetInteger(kDelayedInstallReason, &delay_reason))
+  absl::optional<int> delay_reason = ext->FindIntKey(kDelayedInstallReason);
+  if (!delay_reason)
     return DELAY_REASON_NONE;
 
-  return static_cast<DelayReason>(delay_reason);
+  return static_cast<DelayReason>(*delay_reason);
 }
 
 std::unique_ptr<ExtensionPrefs::ExtensionsInfo>
@@ -1686,21 +1683,11 @@ bool ExtensionPrefs::IsFromWebStore(
   return false;
 }
 
-bool ExtensionPrefs::IsFromBookmark(
-    const std::string& extension_id) const {
-  const base::DictionaryValue* dictionary = GetExtensionPref(extension_id);
-  if (dictionary)
-    return dictionary->FindBoolKey(kPrefFromBookmark).value_or(false);
-  return false;
-}
-
 int ExtensionPrefs::GetCreationFlags(const std::string& extension_id) const {
   int creation_flags = Extension::NO_FLAGS;
   if (!ReadPrefAsInteger(extension_id, kPrefCreationFlags, &creation_flags)) {
     // Since kPrefCreationFlags was added later, it will be missing for
     // previously installed extensions.
-    if (IsFromBookmark(extension_id))
-      creation_flags |= Extension::FROM_BOOKMARK;
     if (IsFromWebStore(extension_id))
       creation_flags |= Extension::FROM_WEBSTORE;
     if (WasInstalledByDefault(extension_id))
@@ -1716,7 +1703,10 @@ int ExtensionPrefs::GetDelayedInstallCreationFlags(
   int creation_flags = Extension::NO_FLAGS;
   const base::DictionaryValue* delayed_info = NULL;
   if (ReadPrefAsDictionary(extension_id, kDelayedInstallInfo, &delayed_info)) {
-    delayed_info->GetInteger(kPrefCreationFlags, &creation_flags);
+    if (absl::optional<int> flags =
+            delayed_info->FindIntKey(kPrefCreationFlags)) {
+      creation_flags = *flags;
+    }
   }
   return creation_flags;
 }
@@ -2289,19 +2279,17 @@ bool ExtensionPrefs::GetUserExtensionPrefIntoContainer(
   DCHECK(id_container_out->empty());
 
   const base::Value* user_pref_value = prefs_->GetUserPrefValue(pref);
-  const base::ListValue* user_pref_as_list;
-  if (!user_pref_value || !user_pref_value->GetAsList(&user_pref_as_list))
+  if (!user_pref_value || !user_pref_value->is_list())
     return false;
 
   std::insert_iterator<ExtensionIdContainer> insert_iterator(
       *id_container_out, id_container_out->end());
-  std::string extension_id;
-  for (const auto& entry : user_pref_as_list->GetList()) {
-    if (!entry.GetAsString(&extension_id)) {
+  for (const auto& entry : user_pref_value->GetList()) {
+    if (!entry.is_string()) {
       NOTREACHED();
       continue;
     }
-    insert_iterator = extension_id;
+    insert_iterator = entry.GetString();
   }
   return true;
 }
@@ -2331,7 +2319,6 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
                              static_cast<int>(extension->location()));
   extension_dict->SetInteger(kPrefCreationFlags, extension->creation_flags());
   extension_dict->SetBoolean(kPrefFromWebStore, extension->from_webstore());
-  extension_dict->SetBoolean(kPrefFromBookmark, extension->from_bookmark());
   extension_dict->SetBoolean(kPrefWasInstalledByDefault,
                              extension->was_installed_by_default());
   extension_dict->SetBoolean(kPrefWasInstalledByOem,
@@ -2339,10 +2326,10 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
   extension_dict->SetString(
       kPrefInstallTime, base::NumberToString(install_time.ToInternalValue()));
   if (install_flags & kInstallFlagIsBlocklistedForMalware) {
-    // Keep the acknowledged state during an update, because we wouldn't want to
-    // reset the acknowledged state if the extension was already on the
+    // Don't reset the acknowledged state during an update, because we wouldn't
+    // want to reset the acknowledged state if the extension was already on the
     // blocklist.
-    blocklist_prefs::SetSafeBrowsingExtensionBlocklistStateKeepAcknowledged(
+    blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
         extension->id(), BitMapBlocklistState::BLOCKLISTED_MALWARE, this);
   }
 
@@ -2548,11 +2535,10 @@ void ExtensionPrefs::MigrateYoutubeOffBookmarkApps() {
                                             &youtube_dictionary)) {
     return;
   }
-  int creation_flags = 0;
-  if (!youtube_dictionary->GetInteger(kPrefCreationFlags, &creation_flags) ||
-      (creation_flags & Extension::FROM_BOOKMARK) == 0) {
+  int creation_flags =
+      youtube_dictionary->FindIntKey(kPrefCreationFlags).value_or(0);
+  if ((creation_flags & Extension::FROM_BOOKMARK) == 0)
     return;
-  }
   ScopedExtensionPrefUpdate update(prefs_, extension_misc::kYoutubeAppId);
   creation_flags &= ~Extension::FROM_BOOKMARK;
   update->SetInteger(kPrefCreationFlags, creation_flags);
@@ -2691,7 +2677,7 @@ void ExtensionPrefs::MigrateOldBlocklistPrefs() {
       if (was_blocklisted) {
         // Keep the blocklist acknowledged pref unchanged as it will be updated
         // below.
-        blocklist_prefs::SetSafeBrowsingExtensionBlocklistStateKeepAcknowledged(
+        blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
             extension_id, BitMapBlocklistState::BLOCKLISTED_MALWARE, this);
       }
       // Clear the legacy pref.
@@ -2709,6 +2695,19 @@ void ExtensionPrefs::MigrateOldBlocklistPrefs() {
       // Clear the legacy pref.
       UpdateExtensionPref(extension_id, kLegacyBlocklistAcknowledgedPref,
                           nullptr);
+      legacy_pref_cleared = true;
+    }
+
+    if (HasDisableReason(
+            extension_id,
+            disable_reason::DEPRECATED_DISABLE_REMOTELY_FOR_MALWARE)) {
+      // Migrate the old value.
+      blocklist_prefs::AddOmahaBlocklistState(
+          extension_id, BitMapBlocklistState::BLOCKLISTED_MALWARE, this);
+      // Clear the legacy pref.
+      RemoveDisableReason(
+          extension_id,
+          disable_reason::DEPRECATED_DISABLE_REMOTELY_FOR_MALWARE);
       legacy_pref_cleared = true;
     }
 

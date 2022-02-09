@@ -5,7 +5,6 @@
 #ifndef BASE_TIMER_ELAPSED_TIMER_H_
 #define BASE_TIMER_ELAPSED_TIMER_H_
 
-#include "base/macros.h"
 #include "util/ticks.h"
 
 namespace base {
@@ -24,7 +23,8 @@ class ElapsedTimer {
  private:
   Ticks begin_;
 
-  DISALLOW_COPY_AND_ASSIGN(ElapsedTimer);
+  ElapsedTimer(const ElapsedTimer&) = delete;
+  ElapsedTimer& operator=(const ElapsedTimer&) = delete;
 };
 
 }  // namespace base

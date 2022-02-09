@@ -17,11 +17,11 @@ namespace {
 // Returns DIP bounds of the subsurface relative to the parent surface.
 gfx::Rect AdjustSubsurfaceBounds(const gfx::Rect& bounds_px,
                                  const gfx::Rect& parent_bounds_px,
-                                 int32_t buffer_scale) {
+                                 float buffer_scale) {
   const auto bounds_dip =
-      gfx::ScaleToEnclosingRect(bounds_px, 1.0 / buffer_scale);
+      gfx::ScaleToEnclosingRect(bounds_px, 1.0f / buffer_scale);
   const auto parent_bounds_dip =
-      gfx::ScaleToEnclosingRect(parent_bounds_px, 1.0 / buffer_scale);
+      gfx::ScaleToEnclosingRect(parent_bounds_px, 1.0f / buffer_scale);
   return wl::TranslateBoundsToParentCoordinates(bounds_dip, parent_bounds_dip);
 }
 
@@ -59,7 +59,6 @@ void WaylandSubsurface::Hide() {
     return;
 
   subsurface_.reset();
-  connection_->buffer_manager_host()->ResetSurfaceContents(wayland_surface());
 }
 
 bool WaylandSubsurface::IsVisible() const {
@@ -79,15 +78,14 @@ void WaylandSubsurface::CreateSubsurface() {
   // Subsurfaces don't need to trap input events. Its display rect is fully
   // contained in |parent_|'s. Setting input_region to empty allows |parent_| to
   // dispatch all of the input to platform window.
-  wayland_surface()->SetInputRegion({});
-
-  connection_->buffer_manager_host()->SetSurfaceConfigured(wayland_surface());
+  gfx::Rect region_px;
+  wayland_surface()->SetInputRegion(&region_px);
 }
 
 void WaylandSubsurface::ConfigureAndShowSurface(
     const gfx::Rect& bounds_px,
     const gfx::Rect& parent_bounds_px,
-    int32_t buffer_scale,
+    float buffer_scale,
     const WaylandSurface* reference_below,
     const WaylandSurface* reference_above) {
   Show();
@@ -95,8 +93,10 @@ void WaylandSubsurface::ConfigureAndShowSurface(
   // Chromium positions quads in display::Display coordinates in physical
   // pixels, but Wayland requires them to be in local surface coordinates a.k.a
   // relative to parent window.
-  auto bounds_dip_in_parent_surface =
-      AdjustSubsurfaceBounds(bounds_px, parent_bounds_px, buffer_scale);
+  auto bounds_dip_in_parent_surface = AdjustSubsurfaceBounds(
+      bounds_px, parent_bounds_px,
+      connection_->surface_submission_in_pixel_coordinates() ? 1.f
+                                                             : buffer_scale);
   wl_subsurface_set_position(subsurface_.get(),
                              bounds_dip_in_parent_surface.x(),
                              bounds_dip_in_parent_surface.y());

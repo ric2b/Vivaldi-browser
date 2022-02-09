@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "services/device/usb/usb_context.h"
-#include "base/macros.h"
 #include "base/threading/platform_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libusb/src/libusb/libusb.h"
@@ -19,9 +18,11 @@ class UsbContextTest : public testing::Test {
     explicit UsbContextForTest(PlatformUsbContext context)
         : UsbContext(context) {}
 
+    UsbContextForTest(const UsbContextForTest&) = delete;
+    UsbContextForTest& operator=(const UsbContextForTest&) = delete;
+
    private:
     ~UsbContextForTest() override {}
-    DISALLOW_COPY_AND_ASSIGN(UsbContextForTest);
   };
 };
 

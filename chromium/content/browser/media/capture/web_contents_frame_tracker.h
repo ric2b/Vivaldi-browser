@@ -7,15 +7,18 @@
 
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
@@ -87,6 +90,14 @@ class CONTENT_EXPORT WebContentsFrameTracker final
 
   void SetWebContentsAndContextFromRoutingId(const GlobalRenderFrameHostId& id);
 
+  // Start/stop cropping.
+  // Must only be called on the UI thread.
+  // Non-empty |crop_id| sets (or changes) the crop-target.
+  // Empty |crop_id| reverts the capture to its original, uncropped state.
+  // The callback reports success/failure.
+  void Crop(const base::Token& crop_id,
+            base::OnceCallback<void(media::mojom::CropRequestResult)> callback);
+
   // WebContents are retrieved on the UI thread normally, from the render IDs,
   // so this method is provided for tests to set the web contents directly.
   void SetWebContentsAndContextForTesting(WebContents* web_contents,
@@ -114,12 +125,13 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   // will be posted to the UI thread before the MouseCursorOverlayController
   // deleter task.
 #if !defined(OS_ANDROID)
-  MouseCursorOverlayController* cursor_controller_ = nullptr;
+  raw_ptr<MouseCursorOverlayController> cursor_controller_ = nullptr;
 #endif
 
   // We may not have a frame sink ID target at all times.
   std::unique_ptr<Context> context_;
-  absl::optional<viz::FrameSinkId> target_frame_sink_id_;
+  viz::FrameSinkId target_frame_sink_id_;
+  base::Token crop_id_;
   gfx::NativeView target_native_view_ = gfx::NativeView();
 
   // Indicates whether the WebContents's capturer count needs to be

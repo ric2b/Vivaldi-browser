@@ -1,5 +1,4 @@
 /******************************************************************************
- *
  * Project:  libtiff tools
  * Purpose:  Mainline for setting metadata in existing TIFF files.
  * Author:   Frank Warmerdam, warmerdam@pobox.com
@@ -28,6 +27,7 @@
  ******************************************************************************
  */
 
+#include "tif_config.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -35,23 +35,39 @@
 
 #include "tiffio.h"
 
-static char* usageMsg[] = {
+#ifdef NEED_LIBPORT
+# include "libport.h"
+#endif
+
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
+static const char* usageMsg[] = {
 "usage: tiffset [options] filename",
 "where options are:",
 " -s <tagname> [count] <value>...   set the tag value",
+" -u <tagname> to unset the tag",
 " -d <dirno> set the directory",
 " -sd <diroff> set the subdirectory",
 " -sf <tagname> <filename>  read the tag value from file (for ASCII tags only)",
+" -h  this help screen",
 NULL
 };
 
 static void
-usage(void)
+usage(int code)
 {
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
+
+	fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; usageMsg[i]; i++)
-		fprintf(stderr, "%s\n", usageMsg[i]);
-	exit(-1);
+		fprintf(out, "%s\n", usageMsg[i]);
+	exit(code);
 }
 
 static const TIFFField *
@@ -79,11 +95,11 @@ main(int argc, char* argv[])
     int  arg_index;
 
     if (argc < 2)
-        usage();
+        usage(EXIT_FAILURE);
 
     tiff = TIFFOpen(argv[argc-1], "r+");
     if (tiff == NULL)
-        return 2;
+        return EXIT_FAILURE;
 
     for( arg_index = 1; arg_index < argc-1; arg_index++ ) {
 	if (strcmp(argv[arg_index],"-d") == 0 && arg_index < argc-2) {
@@ -91,7 +107,7 @@ main(int argc, char* argv[])
 	    if( TIFFSetDirectory(tiff, atoi(argv[arg_index]) ) != 1 )
             {
                fprintf( stderr, "Failed to set directory=%s\n", argv[arg_index] );
-               return 6;
+               return EXIT_FAILURE;
             }
 	    arg_index++;
 	}
@@ -100,11 +116,26 @@ main(int argc, char* argv[])
 	    if( TIFFSetSubDirectory(tiff, atoi(argv[arg_index]) ) != 1 )
             {
                fprintf( stderr, "Failed to set sub directory=%s\n", argv[arg_index] );
-               return 7;
+               return EXIT_FAILURE;
             }
 	    arg_index++;
 	}
-        if (strcmp(argv[arg_index],"-s") == 0 && arg_index < argc-3) {
+    /* Add unset option to tiffset -- Zach Baker (niquil@niquil.net) 11/14/2012 */ 
+    if (strcmp(argv[arg_index],"-u") == 0 && arg_index < argc-2) {
+            const TIFFField *fip;
+            const char *tagname;
+            arg_index++;
+            tagname = argv[arg_index];
+            fip = GetField(tiff, tagname);
+            if (!fip)
+               return EXIT_FAILURE;
+
+            if (TIFFUnsetField(tiff, TIFFFieldTag(fip)) != 1)
+            {
+                    fprintf(stderr, "Failed to unset %s\n", TIFFFieldName(fip));
+            }
+            arg_index++;
+    } else if (strcmp(argv[arg_index],"-s") == 0 && arg_index < argc-3) {
             const TIFFField *fip;
             const char *tagname;
 
@@ -135,10 +166,10 @@ main(int argc, char* argv[])
                              "Number of tag values is not enough. "
                              "Expected %d values for %s tag, got %d\n",
                              wc, TIFFFieldName(fip), argc - arg_index);
-                    return 4;
+                    return EXIT_FAILURE;
                 }
                     
-                if (wc > 1) {
+                if (wc > 1 || TIFFFieldWriteCount(fip) == TIFF_VARIABLE) {
                         int     i, size;
                         void    *array;
 
@@ -172,6 +203,9 @@ main(int argc, char* argv[])
                                     size = 4;
                                     break;
 
+                                case TIFF_LONG8:
+                                case TIFF_SLONG8:
+                                case TIFF_IFD8:
                                 case TIFF_DOUBLE:
                                     size = 8;
                                     break;
@@ -181,7 +215,7 @@ main(int argc, char* argv[])
                         if (!array) {
                                 fprintf(stderr, "No space for %s tag\n",
                                         tagname);
-                                return 4;
+                                return EXIT_FAILURE;
                         }
 
                         switch (TIFFFieldDataType(fip)) {
@@ -208,7 +242,16 @@ main(int argc, char* argv[])
                             case TIFF_SLONG:
                             case TIFF_IFD:
                                 for (i = 0; i < wc; i++)
-                                    ((uint32 *)array)[i] = atol(argv[arg_index+i]);
+                                    ((int32 *)array)[i] = atol(argv[arg_index+i]);
+                                break;
+                            case TIFF_LONG8:
+                                for (i = 0; i < wc; i++)
+                                    ((uint64 *)array)[i] = strtoll(argv[arg_index+i], (char **)NULL, 10);
+                                break;
+                            case TIFF_SLONG8:
+                            case TIFF_IFD8:
+                                for (i = 0; i < wc; i++)
+                                    ((int64 *)array)[i] = strtoll(argv[arg_index+i], (char **)NULL, 10);
                                 break;
                             case TIFF_DOUBLE:
                                 for (i = 0; i < wc; i++)
@@ -259,6 +302,12 @@ main(int argc, char* argv[])
                                 ret = TIFFSetField(tiff, TIFFFieldTag(fip),
                                                    atol(argv[arg_index++]));
                                 break;
+                            case TIFF_LONG8:
+                            case TIFF_SLONG8:
+                            case TIFF_IFD8:
+                                ret = TIFFSetField(tiff, TIFFFieldTag(fip),
+                                                   strtoll(argv[arg_index++], (char **)NULL, 10));
+                                break;
                             case TIFF_DOUBLE:
                                 ret = TIFFSetField(tiff, TIFFFieldTag(fip),
                                                    atof(argv[arg_index++]));
@@ -283,18 +332,19 @@ main(int argc, char* argv[])
             const TIFFField *fip;
             char    *text;
             size_t  len;
+            int ret;
 
             arg_index++;
             fip = GetField(tiff, argv[arg_index]);
 
             if (!fip)
-                return 3;
+                return EXIT_FAILURE;
 
             if (TIFFFieldDataType(fip) != TIFF_ASCII) {
                 fprintf( stderr,
                          "Only ASCII tags can be set from file. "
                          "%s is not ASCII tag.\n", TIFFFieldName(fip) );
-                return 5;
+                return EXIT_FAILURE;
             }
 
             arg_index++;
@@ -305,28 +355,41 @@ main(int argc, char* argv[])
             }
 
             text = (char *) malloc(1000000);
+            if(text == NULL) {
+                fprintf( stderr,
+                         "Memory allocation error\n");
+                fclose( fp );
+                continue;
+            }
             len = fread( text, 1, 999999, fp );
             text[len] = '\0';
 
             fclose( fp );
 
-            if(TIFFSetField( tiff, TIFFFieldTag(fip), text ) != 1) {
+            if(TIFFFieldPassCount( fip )) {
+                ret = TIFFSetField( tiff, TIFFFieldTag(fip), (uint16)len, text );
+            } else {
+                ret = TIFFSetField( tiff, TIFFFieldTag(fip), text );
+            }
+            if(!ret) {
                 fprintf(stderr, "Failed to set %s from file %s\n", 
                         TIFFFieldName(fip), argv[arg_index]);
             }
 
             _TIFFfree( text );
             arg_index++;
+        } else if (strcmp(argv[arg_index],"-h") == 0 || strcmp(argv[arg_index],"--help") == 0) {
+            usage(EXIT_SUCCESS);
         } else {
             fprintf(stderr, "Unrecognised option: %s\n",
                     argv[arg_index]);
-            usage();
+            usage(EXIT_FAILURE);
         }
     }
 
     TIFFRewriteDirectory(tiff);
     TIFFClose(tiff);
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 /* vim: set ts=8 sts=8 sw=8 noet: */

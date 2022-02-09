@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_GENERATED_FILE_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_GENERATED_FILE_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/ninja_target_writer.h"
 
 // Writes a .ninja file for a group target type.
@@ -19,7 +18,10 @@ class NinjaGeneratedFileTargetWriter : public NinjaTargetWriter {
  private:
   void GenerateFile();
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaGeneratedFileTargetWriter);
+  NinjaGeneratedFileTargetWriter(const NinjaGeneratedFileTargetWriter&) =
+      delete;
+  NinjaGeneratedFileTargetWriter& operator=(
+      const NinjaGeneratedFileTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_GENERATED_FILE_TARGET_WRITER_H_

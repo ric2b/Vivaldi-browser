@@ -24,6 +24,7 @@ __wptrunner__ = {"product": "chrome",
                  "executor_kwargs": "executor_kwargs",
                  "env_extras": "env_extras",
                  "env_options": "env_options",
+                 "update_properties": "update_properties",
                  "timeout_multiplier": "get_timeout_multiplier",}
 
 def check_args(**kwargs):
@@ -81,6 +82,10 @@ def executor_kwargs(logger, test_type, test_environment, run_info_data,
     chrome_options["args"].append("--short-reporting-delay")
     # Point all .test domains to localhost for Chrome
     chrome_options["args"].append("--host-resolver-rules=MAP nonexistent.*.test ~NOTFOUND, MAP *.test 127.0.0.1")
+    # Enable Secure Payment Confirmation for Chrome. This is normally disabled
+    # on Linux as it hasn't shipped there yet, but in WPT we enable virtual
+    # authenticator devices anyway for testing and so SPC works.
+    chrome_options["args"].append("--enable-features=SecurePaymentConfirmationBrowser")
 
     # Classify `http-private`, `http-public` and https variants in the
     # appropriate IP address spaces.
@@ -117,6 +122,12 @@ def executor_kwargs(logger, test_type, test_environment, run_info_data,
         "--headless" not in chrome_options["args"]):
         chrome_options["args"].append("--headless")
 
+    # For WebTransport tests.
+    webtranport_h3_port = test_environment.config.ports.get('webtransport-h3')
+    if webtranport_h3_port is not None:
+        chrome_options["args"].append(
+            "--origin-to-force-quic-on=web-platform.test:{}".format(webtranport_h3_port[0]))
+
     executor_kwargs["capabilities"] = capabilities
 
     return executor_kwargs
@@ -129,6 +140,8 @@ def env_extras(**kwargs):
 def env_options():
     return {"server_host": "127.0.0.1"}
 
+def update_properties():
+    return (["debug", "os", "processor"], {"os": ["version"], "processor": ["bits"]})
 
 class ChromeBrowser(Browser):
     """Chrome is backed by chromedriver, which is supplied through

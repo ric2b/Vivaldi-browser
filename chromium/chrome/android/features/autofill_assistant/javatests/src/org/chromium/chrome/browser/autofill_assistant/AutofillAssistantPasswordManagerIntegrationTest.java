@@ -18,8 +18,6 @@ import static org.chromium.chrome.browser.autofill_assistant.ProtoTestUtil.toCss
 
 import androidx.test.filters.MediumTest;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.RuleChain;
@@ -28,7 +26,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
-import org.chromium.chrome.browser.autofill_assistant.proto.ChipProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.GeneratePasswordForFormFieldProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PasswordManagerValue;
 import org.chromium.chrome.browser.autofill_assistant.proto.PasswordManagerValue.CredentialType;
@@ -41,7 +38,6 @@ import org.chromium.chrome.browser.autofill_assistant.proto.TextValue;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.password_manager.PasswordChangeLauncher;
-import org.chromium.chrome.browser.password_manager.PasswordManagerClientBridgeForTesting;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -65,22 +61,6 @@ public class AutofillAssistantPasswordManagerIntegrationTest {
         return mTestRule.getWebContents();
     }
 
-    @Before
-    public void setUp() throws Exception {
-        TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> PasswordManagerClientBridgeForTesting.setLeakDialogWasShownForTesting(
-                                getWebContents(), true));
-    }
-
-    @After
-    public void tearDown() {
-        TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> PasswordManagerClientBridgeForTesting.setLeakDialogWasShownForTesting(
-                                getWebContents(), false));
-    }
-
     /**
      * Helper function to start a password change flow.
      */
@@ -91,7 +71,8 @@ public class AutofillAssistantPasswordManagerIntegrationTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
                         -> PasswordChangeLauncher.start(getWebContents().getTopLevelNativeWindow(),
-                                getWebContents().getLastCommittedUrl(), username));
+                                getWebContents().getLastCommittedUrl(), username,
+                                /*skipLogin=*/false));
     }
 
     private static TextValue buildUsernameValue() {
@@ -164,8 +145,7 @@ public class AutofillAssistantPasswordManagerIntegrationTest {
         AutofillAssistantTestScript script = new AutofillAssistantTestScript(
                 SupportedScriptProto.newBuilder()
                         .setPath("form_target_website.html")
-                        .setPresentation(PresentationProto.newBuilder().setAutostart(true).setChip(
-                                ChipProto.newBuilder().setText("Password generation")))
+                        .setPresentation(PresentationProto.newBuilder().setAutostart(true))
                         .build(),
                 list);
 

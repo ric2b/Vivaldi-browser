@@ -2,7 +2,7 @@
 /** @file LexBash.cxx
  ** Lexer for Bash.
  **/
-// Copyright 2004-2010 by Neil Hodgson <neilh@scintilla.org>
+// Copyright 2004-2012 by Neil Hodgson <neilh@scintilla.org>
 // Adapted from LexPerl by Kein-Hong Man 2004
 // The License.txt file describes the conditions under which this software may be distributed.
 
@@ -49,6 +49,17 @@ using namespace Scintilla;
 #define BASH_CMD_ARITH			4
 #define BASH_CMD_DELIM			5
 
+// state constants for nested delimiter pairs, used by
+// SCE_SH_STRING and SCE_SH_BACKTICKS processing
+#define BASH_DELIM_LITERAL		0
+#define BASH_DELIM_STRING		1
+#define BASH_DELIM_CSTRING		2
+#define BASH_DELIM_LSTRING		3
+#define BASH_DELIM_COMMAND		4
+#define BASH_DELIM_BACKTICK		5
+
+#define BASH_DELIM_STACK_MAX	7
+
 static inline int translateBashDigit(int ch) {
 	if (ch >= '0' && ch <= '9') {
 		return ch - '0';
@@ -85,7 +96,20 @@ static int opposite(int ch) {
 	return ch;
 }
 
-static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
+static int GlobScan(StyleContext &sc) {
+	// forward scan for a glob-like (...), no whitespace allowed
+	int c, sLen = 0;
+	while ((c = sc.GetRelativeCharacter(++sLen)) != 0) {
+		if (IsASpace(c)) {
+			return 0;
+		} else if (c == ')') {
+			return sLen;
+		}
+	}
+	return 0;
+}
+
+static void ColouriseBashDoc(Sci_PositionU startPos, Sci_Position length, int initStyle,
 							 WordList *keywordlists[], Accessor &styler) {
 
 	WordList &keywords = *keywordlists[0];
@@ -97,12 +121,14 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 	CharacterSet setWordStart(CharacterSet::setAlpha, "_");
 	// note that [+-] are often parts of identifiers in shell scripts
 	CharacterSet setWord(CharacterSet::setAlphaNum, "._+-");
+	CharacterSet setMetaCharacter(CharacterSet::setNone, "|&;()<> \t\r\n");
+	setMetaCharacter.Add(0);
 	CharacterSet setBashOperator(CharacterSet::setNone, "^&%()-+=|{}[]:;>,*/<?!.~@");
 	CharacterSet setSingleCharOp(CharacterSet::setNone, "rwxoRWXOezsfdlpSbctugkTBMACahGLNn");
 	CharacterSet setParam(CharacterSet::setAlphaNum, "$_");
-	CharacterSet setHereDoc(CharacterSet::setAlpha, "_\\-+!");
-	CharacterSet setHereDoc2(CharacterSet::setAlphaNum, "_-+!");
-	CharacterSet setLeftShift(CharacterSet::setDigits, "=$");
+	CharacterSet setHereDoc(CharacterSet::setAlpha, "_\\-+!%*,./:?@[]^`{}~");
+	CharacterSet setHereDoc2(CharacterSet::setAlphaNum, "_-+!%*,./:=?@[]^`{}~");
+	CharacterSet setLeftShift(CharacterSet::setDigits, "$");
 
 	class HereDocCls {	// Class to manage HERE document elements
 	public:
@@ -113,14 +139,13 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 		bool Quoted;		// true if Quote in ('\'','"','`')
 		bool Indent;		// indented delimiter (for <<-)
 		int DelimiterLength;	// strlen(Delimiter)
-		char *Delimiter;	// the Delimiter, 256: sizeof PL_tokenbuf
+		char Delimiter[HERE_DELIM_MAX];	// the Delimiter
 		HereDocCls() {
 			State = 0;
 			Quote = 0;
 			Quoted = false;
 			Indent = 0;
 			DelimiterLength = 0;
-			Delimiter = new char[HERE_DELIM_MAX];
 			Delimiter[0] = '\0';
 		}
 		void Append(int ch) {
@@ -128,7 +153,6 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 			Delimiter[DelimiterLength] = '\0';
 		}
 		~HereDocCls() {
-			delete []Delimiter;
 		}
 	};
 	HereDocCls HereDoc;
@@ -154,15 +178,65 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 	};
 	QuoteCls Quote;
 
+	class QuoteStackCls {	// Class to manage quote pairs that nest
+		public:
+		int Count;
+		int Up, Down;
+		int Style;
+		int Depth;			// levels pushed
+		int CountStack[BASH_DELIM_STACK_MAX];
+		int UpStack   [BASH_DELIM_STACK_MAX];
+		int StyleStack[BASH_DELIM_STACK_MAX];
+		QuoteStackCls() {
+			Count = 0;
+			Up    = '\0';
+			Down  = '\0';
+			Style = 0;
+			Depth = 0;
+		}
+		void Start(int u, int s) {
+			Count = 1;
+			Up    = u;
+			Down  = opposite(Up);
+			Style = s;
+		}
+		void Push(int u, int s) {
+			if (Depth >= BASH_DELIM_STACK_MAX)
+				return;
+			CountStack[Depth] = Count;
+			UpStack   [Depth] = Up;
+			StyleStack[Depth] = Style;
+			Depth++;
+			Count = 1;
+			Up    = u;
+			Down  = opposite(Up);
+			Style = s;
+		}
+		void Pop(void) {
+			if (Depth <= 0)
+				return;
+			Depth--;
+			Count = CountStack[Depth];
+			Up    = UpStack   [Depth];
+			Style = StyleStack[Depth];
+			Down  = opposite(Up);
+		}
+		~QuoteStackCls() {
+		}
+	};
+	QuoteStackCls QuoteStack;
+
 	int numBase = 0;
 	int digit;
-	unsigned int endPos = startPos + length;
+	Sci_PositionU endPos = startPos + length;
 	int cmdState = BASH_CMD_START;
 	int testExprType = 0;
 
 	// Always backtracks to the start of a line that is not a continuation
 	// of the previous line (i.e. start of a bash command segment)
-	int ln = styler.GetLine(startPos);
+	Sci_Position ln = styler.GetLine(startPos);
+	if (ln > 0 && startPos == static_cast<Sci_PositionU>(styler.LineStart(ln)))
+		ln--;
 	for (;;) {
 		startPos = styler.LineStart(ln);
 		if (ln == 0 || styler.GetLineState(ln) == BASH_CMD_START)
@@ -276,6 +350,8 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 					sc.ForwardSetState(SCE_SH_DEFAULT);
 				} else if (!setWord.Contains(sc.ch)) {
 					sc.SetState(SCE_SH_DEFAULT);
+				} else if (cmdState == BASH_CMD_ARITH && !setWordStart.Contains(sc.ch)) {
+					sc.SetState(SCE_SH_DEFAULT);
 				}
 				break;
 			case SCE_SH_NUMBER:
@@ -350,19 +426,18 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 						sc.Forward();
 						HereDoc.Quoted = true;
 						HereDoc.State = 1;
-					} else if (!HereDoc.Indent && sc.chNext == '-') {	// <<- indent case
-						HereDoc.Indent = true;
-					} else if (setHereDoc.Contains(sc.chNext)) {
+					} else if (setHereDoc.Contains(sc.chNext) ||
+					           (sc.chNext == '=' && cmdState != BASH_CMD_ARITH)) {
 						// an unquoted here-doc delimiter, no special handling
-						// TODO check what exactly bash considers part of the delim
 						HereDoc.State = 1;
 					} else if (sc.chNext == '<') {	// HERE string <<<
 						sc.Forward();
 						sc.ForwardSetState(SCE_SH_DEFAULT);
 					} else if (IsASpace(sc.chNext)) {
 						// eat whitespace
-					} else if (setLeftShift.Contains(sc.chNext)) {
-						// left shift << or <<= operator cases
+					} else if (setLeftShift.Contains(sc.chNext) ||
+					           (sc.chNext == '=' && cmdState == BASH_CMD_ARITH)) {
+						// left shift <<$var or <<= cases
 						sc.ChangeState(SCE_SH_OPERATOR);
 						sc.ForwardSetState(SCE_SH_DEFAULT);
 					} else {
@@ -370,13 +445,23 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 						HereDoc.State = 1;
 					}
 				} else if (HereDoc.State == 1) { // collect the delimiter
-					if (setHereDoc2.Contains(sc.ch) || sc.chPrev == '\\') {
+					// * if single quoted, there's no escape
+					// * if double quoted, there are \\ and \" escapes
+					if ((HereDoc.Quote == '\'' && sc.ch != HereDoc.Quote) ||
+					    (HereDoc.Quoted && sc.ch != HereDoc.Quote && sc.ch != '\\') ||
+					    (HereDoc.Quote != '\'' && sc.chPrev == '\\') ||
+					    (setHereDoc2.Contains(sc.ch))) {
 						HereDoc.Append(sc.ch);
 					} else if (HereDoc.Quoted && sc.ch == HereDoc.Quote) {	// closing quote => end of delimiter
 						sc.ForwardSetState(SCE_SH_DEFAULT);
 					} else if (sc.ch == '\\') {
-						// skip escape prefix
-					} else {
+						if (HereDoc.Quoted && sc.chNext != HereDoc.Quote && sc.chNext != '\\') {
+							// in quoted prefixes only \ and the quote eat the escape
+							HereDoc.Append(sc.ch);
+						} else {
+							// skip escape prefix
+						}
+					} else if (!HereDoc.Quoted) {
 						sc.SetState(SCE_SH_DEFAULT);
 					}
 					if (HereDoc.DelimiterLength >= HERE_DELIM_MAX - 1) {	// force blowup
@@ -390,7 +475,7 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 				if (sc.atLineStart) {
 					sc.SetState(SCE_SH_HERE_Q);
 					int prefixws = 0;
-					while (IsASpace(sc.ch) && !sc.atLineEnd) {	// whitespace prefix
+					while (sc.ch == '\t' && !sc.atLineEnd) {	// tabulation prefix
 						sc.Forward();
 						prefixws++;
 					}
@@ -401,8 +486,12 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 					}
 					char s[HERE_DELIM_MAX];
 					sc.GetCurrent(s, sizeof(s));
-					if (sc.LengthCurrent() == 0)
+					if (sc.LengthCurrent() == 0) {  // '' or "" delimiters
+						if ((prefixws == 0 || HereDoc.Indent) &&
+							HereDoc.Quoted && HereDoc.DelimiterLength == 0)
+							sc.SetState(SCE_SH_DEFAULT);
 						break;
+					}
 					if (s[strlen(s) - 1] == '\r')
 						s[strlen(s) - 1] = '\0';
 					if (strcmp(HereDoc.Delimiter, s) == 0) {
@@ -424,9 +513,56 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 					}
 				}
 				break;
-			case SCE_SH_STRING:	// delimited styles
+			case SCE_SH_STRING:	// delimited styles, can nest
 			case SCE_SH_BACKTICKS:
-			case SCE_SH_PARAM:
+				if (sc.ch == '\\' && QuoteStack.Up != '\\') {
+					if (QuoteStack.Style != BASH_DELIM_LITERAL)
+						sc.Forward();
+				} else if (sc.ch == QuoteStack.Down) {
+					QuoteStack.Count--;
+					if (QuoteStack.Count == 0) {
+						if (QuoteStack.Depth > 0) {
+							QuoteStack.Pop();
+						} else
+							sc.ForwardSetState(SCE_SH_DEFAULT);
+					}
+				} else if (sc.ch == QuoteStack.Up) {
+					QuoteStack.Count++;
+				} else {
+					if (QuoteStack.Style == BASH_DELIM_STRING ||
+						QuoteStack.Style == BASH_DELIM_LSTRING
+					) {	// do nesting for "string", $"locale-string"
+						if (sc.ch == '`') {
+							QuoteStack.Push(sc.ch, BASH_DELIM_BACKTICK);
+						} else if (sc.ch == '$' && sc.chNext == '(') {
+							sc.Forward();
+							QuoteStack.Push(sc.ch, BASH_DELIM_COMMAND);
+						}
+					} else if (QuoteStack.Style == BASH_DELIM_COMMAND ||
+							   QuoteStack.Style == BASH_DELIM_BACKTICK
+					) {	// do nesting for $(command), `command`
+						if (sc.ch == '\'') {
+							QuoteStack.Push(sc.ch, BASH_DELIM_LITERAL);
+						} else if (sc.ch == '\"') {
+							QuoteStack.Push(sc.ch, BASH_DELIM_STRING);
+						} else if (sc.ch == '`') {
+							QuoteStack.Push(sc.ch, BASH_DELIM_BACKTICK);
+						} else if (sc.ch == '$') {
+							if (sc.chNext == '\'') {
+								sc.Forward();
+								QuoteStack.Push(sc.ch, BASH_DELIM_CSTRING);
+							} else if (sc.chNext == '\"') {
+								sc.Forward();
+								QuoteStack.Push(sc.ch, BASH_DELIM_LSTRING);
+							} else if (sc.chNext == '(') {
+								sc.Forward();
+								QuoteStack.Push(sc.ch, BASH_DELIM_COMMAND);
+							}
+						}
+					}
+				}
+				break;
+			case SCE_SH_PARAM: // ${parameter}
 				if (sc.ch == '\\' && Quote.Up != '\\') {
 					sc.Forward();
 				} else if (sc.ch == Quote.Down) {
@@ -456,13 +592,21 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 			HereDoc.State = 2;
 			if (HereDoc.Quoted) {
 				if (sc.state == SCE_SH_HERE_DELIM) {
-					// Missing quote at end of string! We are stricter than bash.
-					// Colour here-doc anyway while marking this bit as an error.
+					// Missing quote at end of string! Syntax error in bash 4.3
+					// Mark this bit as an error, do not colour any here-doc
 					sc.ChangeState(SCE_SH_ERROR);
+					sc.SetState(SCE_SH_DEFAULT);
+				} else {
+					// HereDoc.Quote always == '\''
+					sc.SetState(SCE_SH_HERE_Q);
 				}
-				// HereDoc.Quote always == '\''
+			} else if (HereDoc.DelimiterLength == 0) {
+				// no delimiter, illegal (but '' and "" are legal)
+				sc.ChangeState(SCE_SH_ERROR);
+				sc.SetState(SCE_SH_DEFAULT);
+			} else {
+				sc.SetState(SCE_SH_HERE_Q);
 			}
-			sc.SetState(SCE_SH_HERE_Q);
 		}
 
 		// update cmdState about the current command segment
@@ -494,16 +638,38 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 			} else if (setWordStart.Contains(sc.ch)) {
 				sc.SetState(SCE_SH_WORD);
 			} else if (sc.ch == '#') {
-				sc.SetState(SCE_SH_COMMENTLINE);
+				if (stylePrev != SCE_SH_WORD && stylePrev != SCE_SH_IDENTIFIER &&
+					(sc.currentPos == 0 || setMetaCharacter.Contains(sc.chPrev))) {
+					sc.SetState(SCE_SH_COMMENTLINE);
+				} else {
+					sc.SetState(SCE_SH_WORD);
+				}
+				// handle some zsh features within arithmetic expressions only
+				if (cmdState == BASH_CMD_ARITH) {
+					if (sc.chPrev == '[') {	// [#8] [##8] output digit setting
+						sc.SetState(SCE_SH_WORD);
+						if (sc.chNext == '#') {
+							sc.Forward();
+						}
+					} else if (sc.Match("##^") && IsUpperCase(sc.GetRelative(3))) {	// ##^A
+						sc.SetState(SCE_SH_IDENTIFIER);
+						sc.Forward(3);
+					} else if (sc.chNext == '#' && !IsASpace(sc.GetRelative(2))) {	// ##a
+						sc.SetState(SCE_SH_IDENTIFIER);
+						sc.Forward(2);
+					} else if (setWordStart.Contains(sc.chNext)) {	// #name
+						sc.SetState(SCE_SH_IDENTIFIER);
+					}
+				}
 			} else if (sc.ch == '\"') {
 				sc.SetState(SCE_SH_STRING);
-				Quote.Start(sc.ch);
+				QuoteStack.Start(sc.ch, BASH_DELIM_STRING);
 			} else if (sc.ch == '\'') {
 				sc.SetState(SCE_SH_CHARACTER);
 				Quote.Start(sc.ch);
 			} else if (sc.ch == '`') {
 				sc.SetState(SCE_SH_BACKTICKS);
-				Quote.Start(sc.ch);
+				QuoteStack.Start(sc.ch, BASH_DELIM_BACKTICK);
 			} else if (sc.ch == '$') {
 				if (sc.Match("$((")) {
 					sc.SetState(SCE_SH_OPERATOR);	// handle '((' later
@@ -513,21 +679,31 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 				sc.Forward();
 				if (sc.ch == '{') {
 					sc.ChangeState(SCE_SH_PARAM);
+					Quote.Start(sc.ch);
 				} else if (sc.ch == '\'') {
 					sc.ChangeState(SCE_SH_STRING);
+					QuoteStack.Start(sc.ch, BASH_DELIM_CSTRING);
 				} else if (sc.ch == '"') {
 					sc.ChangeState(SCE_SH_STRING);
-				} else if (sc.ch == '(' || sc.ch == '`') {
+					QuoteStack.Start(sc.ch, BASH_DELIM_LSTRING);
+				} else if (sc.ch == '(') {
 					sc.ChangeState(SCE_SH_BACKTICKS);
+					QuoteStack.Start(sc.ch, BASH_DELIM_COMMAND);
+				} else if (sc.ch == '`') {	// $` seen in a configure script, valid?
+					sc.ChangeState(SCE_SH_BACKTICKS);
+					QuoteStack.Start(sc.ch, BASH_DELIM_BACKTICK);
 				} else {
 					continue;	// scalar has no delimiter pair
 				}
-				// fallthrough, open delim for $[{'"(`]
-				Quote.Start(sc.ch);
 			} else if (sc.Match('<', '<')) {
 				sc.SetState(SCE_SH_HERE_DELIM);
 				HereDoc.State = 0;
-				HereDoc.Indent = false;
+				if (sc.GetRelative(2) == '-') {	// <<- indent case
+					HereDoc.Indent = true;
+					sc.Forward();
+				} else {
+					HereDoc.Indent = false;
+				}
 			} else if (sc.ch == '-'	&&	// one-char file test operators
 					   setSingleCharOp.Contains(sc.chNext) &&
 					   !setWord.Contains(sc.GetRelative(2)) &&
@@ -538,6 +714,15 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 				char s[10];
 				bool isCmdDelim = false;
 				sc.SetState(SCE_SH_OPERATOR);
+				// globs have no whitespace, do not appear in arithmetic expressions
+				if (cmdState != BASH_CMD_ARITH && sc.ch == '(' && sc.chNext != '(') {
+					int i = GlobScan(sc);
+					if (i > 1) {
+						sc.SetState(SCE_SH_IDENTIFIER);
+						sc.Forward(i);
+						continue;
+					}
+				}
 				// handle opening delimiters for test/arithmetic expressions - ((,[[,[
 				if (cmdState == BASH_CMD_START
 				 || cmdState == BASH_CMD_BODY) {
@@ -597,12 +782,16 @@ static void ColouriseBashDoc(unsigned int startPos, int length, int initStyle,
 		}// sc.state
 	}
 	sc.Complete();
+	if (sc.state == SCE_SH_HERE_Q) {
+		styler.ChangeLexerState(sc.currentPos, styler.Length());
+	}
+	sc.Complete();
 }
 
-static bool IsCommentLine(int line, Accessor &styler) {
-	int pos = styler.LineStart(line);
-	int eol_pos = styler.LineStart(line + 1) - 1;
-	for (int i = pos; i < eol_pos; i++) {
+static bool IsCommentLine(Sci_Position line, Accessor &styler) {
+	Sci_Position pos = styler.LineStart(line);
+	Sci_Position eol_pos = styler.LineStart(line + 1) - 1;
+	for (Sci_Position i = pos; i < eol_pos; i++) {
 		char ch = styler[i];
 		if (ch == '#')
 			return true;
@@ -612,18 +801,19 @@ static bool IsCommentLine(int line, Accessor &styler) {
 	return false;
 }
 
-static void FoldBashDoc(unsigned int startPos, int length, int, WordList *[],
+static void FoldBashDoc(Sci_PositionU startPos, Sci_Position length, int, WordList *[],
 						Accessor &styler) {
 	bool foldComment = styler.GetPropertyInt("fold.comment") != 0;
 	bool foldCompact = styler.GetPropertyInt("fold.compact", 1) != 0;
-	unsigned int endPos = startPos + length;
+	Sci_PositionU endPos = startPos + length;
 	int visibleChars = 0;
-	int lineCurrent = styler.GetLine(startPos);
+	int skipHereCh = 0;
+	Sci_Position lineCurrent = styler.GetLine(startPos);
 	int levelPrev = styler.LevelAt(lineCurrent) & SC_FOLDLEVELNUMBERMASK;
 	int levelCurrent = levelPrev;
 	char chNext = styler[startPos];
 	int styleNext = styler.StyleAt(startPos);
-	for (unsigned int i = startPos; i < endPos; i++) {
+	for (Sci_PositionU i = startPos; i < endPos; i++) {
 		char ch = chNext;
 		chNext = styler.SafeGetCharAt(i + 1);
 		int style = styleNext;
@@ -649,9 +839,17 @@ static void FoldBashDoc(unsigned int startPos, int length, int, WordList *[],
 		// Here Document folding
 		if (style == SCE_SH_HERE_DELIM) {
 			if (ch == '<' && chNext == '<') {
-				levelCurrent++;
+				if (styler.SafeGetCharAt(i + 2) == '<') {
+					skipHereCh = 1;
+				} else {
+					if (skipHereCh == 0) {
+						levelCurrent++;
+					} else {
+						skipHereCh = 0;
+					}
+				}
 			}
-		} else if (style == SCE_SH_HERE_Q && styler.StyleAt(i+1) == SCE_PL_DEFAULT) {
+		} else if (style == SCE_SH_HERE_Q && styler.StyleAt(i+1) == SCE_SH_DEFAULT) {
 			levelCurrent--;
 		}
 		if (atEOL) {

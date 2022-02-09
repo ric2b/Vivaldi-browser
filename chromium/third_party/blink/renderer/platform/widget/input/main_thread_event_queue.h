@@ -9,7 +9,7 @@
 
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "cc/input/touch_action.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -46,6 +46,12 @@ class PLATFORM_EXPORT MainThreadEventQueueClient {
   virtual bool HandleInputEvent(const WebCoalescedInputEvent& event,
                                 std::unique_ptr<cc::EventMetrics> metrics,
                                 HandledEventCallback handled_callback) = 0;
+
+  // Notify clients that the queued events have been dispatched. `raf_aligned`
+  // determines whether the events were rAF-aligned events or non-rAF-aligned
+  // ones.
+  virtual void InputEventsDispatched(bool raf_aligned) = 0;
+
   // Requests a BeginMainFrame callback from the compositor.
   virtual void SetNeedsMainFrame() = 0;
 };

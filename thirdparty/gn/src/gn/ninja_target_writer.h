@@ -7,7 +7,6 @@
 
 #include <iosfwd>
 
-#include "base/macros.h"
 #include "gn/path_output.h"
 #include "gn/substitution_type.h"
 
@@ -66,7 +65,8 @@ class NinjaTargetWriter {
   void WriteCopyRules();
   void WriteEscapedSubstitution(const Substitution* type);
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaTargetWriter);
+  NinjaTargetWriter(const NinjaTargetWriter&) = delete;
+  NinjaTargetWriter& operator=(const NinjaTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_TARGET_WRITER_H_

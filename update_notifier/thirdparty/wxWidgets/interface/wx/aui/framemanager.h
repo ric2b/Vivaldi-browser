@@ -46,7 +46,7 @@ enum wxAuiManagerOption
     /// When a docked pane is resized, its content is refreshed in live (instead of moving
     /// the border alone and refreshing the content at the end).
     wxAUI_MGR_LIVE_RESIZE              = 1 << 8,
-    /// Default behavior.
+    /// Default behaviour.
     wxAUI_MGR_DEFAULT = wxAUI_MGR_ALLOW_FLOATING |
                         wxAUI_MGR_TRANSPARENT_HINT |
                         wxAUI_MGR_HINT_FADE |
@@ -144,7 +144,7 @@ enum wxAuiManagerOption
            When a docked pane is resized, its content is refreshed in live (instead of moving
            the border alone and refreshing the content at the end).
     @style{wxAUI_MGR_DEFAULT}
-           Default behavior, combines: wxAUI_MGR_ALLOW_FLOATING | wxAUI_MGR_TRANSPARENT_HINT |
+           Default behaviour, combines: wxAUI_MGR_ALLOW_FLOATING | wxAUI_MGR_TRANSPARENT_HINT |
            wxAUI_MGR_HINT_FADE | wxAUI_MGR_NO_VENETIAN_BLINDS_FADE.
     @endStyleTable
 
@@ -208,11 +208,67 @@ public:
     //@}
 
     /**
+        Returns true if live resize is always used on the current platform.
+
+        If this function returns true, ::wxAUI_MGR_LIVE_RESIZE flag is ignored
+        and live resize is always used, whether it's specified or not.
+
+        Currently this is the case for wxOSX and wxGTK3 ports, as live resizing
+        is the only implemented method there.
+
+        @since 3.1.4
+     */
+    static bool AlwaysUsesLiveResize();
+
+    /**
+        This function is used by controls to calculate the drop hint rectangle.
+
+        The method first calls DoDrop() to determine the exact position the
+        pane would be at were if dropped.
+
+        @param paneWindow The window pointer of the pane being dragged.
+        @param pt The mouse position, in client coordinates.
+        @param offset Describes the offset that the mouse is from the upper-left
+            corner of the item being dragged.
+        @return The rectangle hint will be returned in screen coordinates if the pane
+            would indeed become docked at the specified drop point.
+            Otherwise, an empty rectangle is returned.
+    */
+    wxRect CalculateHintRect(wxWindow* paneWindow, const wxPoint& pt, const wxPoint& offset);
+
+    /**
+        Check if a key modifier is pressed (actually ::WXK_CONTROL or
+        ::WXK_ALT) while dragging the frame to not dock the window.
+    */
+    virtual bool CanDockPanel(const wxAuiPaneInfo & p);
+
+    /**
+        Destroys or hides the given pane depending on its flags.
+
+        @see wxAuiPaneInfo::DestroyOnClose
+    */
+    void ClosePane(wxAuiPaneInfo& paneInfo);
+
+    /**
+        Creates a floating frame in this wxAuiManager with the given parent and
+        wxAuiPaneInfo.
+    */
+    virtual wxAuiFloatingFrame* CreateFloatingFrame(wxWindow* parent, const wxAuiPaneInfo& p);
+
+    /**
         Tells the wxAuiManager to stop managing the pane specified by window.
         The window, if in a floated frame, is reparented to the frame managed
         by wxAuiManager.
     */
     bool DetachPane(wxWindow* window);
+
+    /**
+        This function is used by controls to draw the hint window.
+
+        It is rarely called, and is mostly used by controls implementing custom
+        pane drag/drop behaviour.
+    */
+    void DrawHintRect(wxWindow* paneWindow, const wxPoint& pt, const wxPoint& offset);
 
     /**
         Returns an array of all panes managed by the frame manager.
@@ -268,6 +324,20 @@ public:
     //@}
 
     /**
+        Returns true if windows are resized live.
+
+        This function combines the check for AlwaysUsesLiveResize() and, for
+        the platforms where live resizing is optional, the check for
+        wxAUI_MGR_LIVE_RESIZE flag.
+
+        Using this accessor allows to verify whether live resizing is being
+        actually used.
+
+        @since 3.1.4
+    */
+    bool HasLiveResize() const;
+
+    /**
         HideHint() hides any docking hint that may be visible.
     */
     virtual void HideHint();
@@ -289,38 +359,84 @@ public:
 
     /**
         LoadPaneInfo() is similar to LoadPerspective, with the exception that it
-        only loads information about a single pane.  It is used in combination with
-        SavePaneInfo().
+        only loads information about a single pane.
+
+        This method writes the serialized data into the passed pane. Pointers to
+        UI elements are not modified.
+
+        @note This operation also changes the name in the pane information!
+
+        @sa LoadPerspective
+        @sa SavePaneInfo().
+        @sa SavePerspective
     */
     void LoadPaneInfo(wxString pane_part, wxAuiPaneInfo& pane);
 
     /**
-        Loads a saved perspective. If update is @true, wxAuiManager::Update()
-        is automatically invoked, thus realizing the saved perspective on screen.
+        Loads a saved perspective.
+
+        A perspective is the layout state of an AUI managed window.
+
+        All currently existing panes that have an object in "perspective"
+        with the same name ("equivalent") will receive the layout parameters of the object in
+        "perspective". Existing panes that do not have an equivalent in "perspective" remain
+        unchanged, objects in "perspective" having no equivalent in the manager are ignored.
+
+        @param perspective Serialized layout information of a perspective (excl. pointers to UI elements).
+        @param update      If update is @true, wxAuiManager::Update() is automatically invoked,
+                           thus realizing the specified perspective on screen.
+
+        @sa LoadPaneInfo
+        @sa LoadPerspective
+        @sa SavePerspective
     */
     bool LoadPerspective(const wxString& perspective,
                          bool update = true);
 
     /**
-        SavePaneInfo() is similar to SavePerspective, with the exception that it only
-        saves information about a single pane.  It is used in combination with
-        LoadPaneInfo().
+        Maximize the given pane.
     */
-    wxString SavePaneInfo(wxAuiPaneInfo& pane);
+    void MaximizePane(wxAuiPaneInfo& paneInfo);
+
+    /**
+        Restore the last state of the given pane.
+    */
+    void RestorePane(wxAuiPaneInfo& paneInfo);
+
+    /**
+        Restore the previously maximized pane.
+    */
+    void RestoreMaximizedPane();
+
+    /**
+        SavePaneInfo() is similar to SavePerspective, with the exception that it only
+        saves information about a single pane.
+
+        @param pane Pane whose layout parameters should be serialized.
+        @return     The serialized layout parameters of the pane are returned within
+                    the string. Information about the pointers to UI elements stored
+                    in the pane are not serialized.
+
+        @sa LoadPaneInfo
+        @sa LoadPerspective
+        @sa SavePerspective
+    */
+    wxString SavePaneInfo(const wxAuiPaneInfo& pane);
 
     /**
         Saves the entire user interface layout into an encoded wxString, which
         can then be stored by the application (probably using wxConfig).
 
-        When a perspective is restored using LoadPerspective(), the entire user
-        interface will return to the state it was when the perspective was saved.
+        @sa LoadPerspective
+        @sa LoadPaneInfo
+        @sa SavePaneInfo
     */
     wxString SavePerspective();
 
     /**
         Instructs wxAuiManager to use art provider specified by parameter
         @a art_provider for all drawing calls.
-        This allows plugable look-and-feel features. The previous art provider object,
+        This allows pluggable look-and-feel features. The previous art provider object,
         if any, will be deleted by wxAuiManager.
 
         @see wxAuiDockArt.
@@ -329,7 +445,7 @@ public:
 
     /**
         When a user creates a new dock by dragging a window into a docked position,
-        often times the large size of the window will create a dock that is unwieldly
+        often times the large size of the window will create a dock that is unwieldy
         large. wxAuiManager by default limits the size of any new dock to 1/3 of the
         window size.  For horizontal docks, this would be 1/3 of the window height.
         For vertical docks, 1/3 of the width.
@@ -363,11 +479,17 @@ public:
     virtual void ShowHint(const wxRect& rect);
 
     /**
-        Uninitializes the framework and should be called before a managed frame or
-        window is destroyed. UnInit() is usually called in the managed wxFrame's
-        destructor.  It is necessary to call this function before the managed frame
-        or window is destroyed, otherwise the manager cannot remove its custom event
-        handlers from a window.
+        Mostly used internally to define the drag action parameters.
+    */
+    void StartPaneDrag(wxWindow* paneWindow, const wxPoint& offset);
+
+    /**
+        Dissociate the managed window from the manager.
+
+        This function may be called before the managed frame or window is
+        destroyed, but, since wxWidgets 3.1.4, it's unnecessary to call it
+        explicitly, as it will be called automatically when this window is
+        destroyed, as well as when the manager itself is.
     */
     void UnInit();
 
@@ -795,6 +917,7 @@ public:
 
     /**
         Right() sets the pane dock position to the right side of the frame.
+        This is the same thing as calling Direction(wxAUI_DOCK_RIGHT).
     */
     wxAuiPaneInfo& Right();
 
@@ -810,8 +933,12 @@ public:
     wxAuiPaneInfo& Row(int row);
 
     /**
-        Write the safe parts of a newly loaded PaneInfo structure "source" into "this"
-        used on loading perspectives etc.
+        Write the safe parts of a PaneInfo object "source" into "this".
+        "Safe parts" are all non-UI elements (e.g. all layout determining parameters like the
+        size, position etc.). "Unsafe parts" (pointers to button, frame and window) are not
+        modified by this write operation.
+
+        @remark This method is used when loading perspectives.
     */
     void SafeSet(wxAuiPaneInfo source);
 
@@ -834,6 +961,7 @@ public:
 
     /**
         Top() sets the pane dock position to the top of the frame.
+        This is the same thing as calling Direction(wxAUI_DOCK_TOP).
     */
     wxAuiPaneInfo& Top();
 
@@ -854,6 +982,60 @@ public:
         Makes a copy of the wxAuiPaneInfo object.
     */
     wxAuiPaneInfo& operator=(const wxAuiPaneInfo& c);
+
+
+    /// name of the pane
+    wxString name;
+
+    /// caption displayed on the window
+    wxString caption;
+
+    /// icon of the pane, may be invalid
+    wxBitmap icon;
+
+    /// window that is in this pane
+    wxWindow* window;
+
+    /// floating frame window that holds the pane
+    wxFrame* frame;
+
+    /// a combination of wxPaneState values
+    unsigned int state;
+
+    /// dock direction (top, bottom, left, right, center)
+    int dock_direction;
+
+    /// layer number (0 = innermost layer)
+    int dock_layer;
+
+    /// row number on the docking bar (0 = first row)
+    int dock_row;
+
+    /// position inside the row (0 = first position)
+    int dock_pos;
+
+    /// size that the layout engine will prefer
+    wxSize best_size;
+
+    /// minimum size the pane window can tolerate
+    wxSize min_size;
+
+    /// maximum size the pane window can tolerate
+    wxSize max_size;
+
+    /// position while floating
+    wxPoint floating_pos;
+
+    /// size while floating
+    wxSize floating_size;
+
+    /// proportion while docked
+    int dock_proportion;
+
+    /// current rectangle (populated by wxAUI)
+    wxRect rect;
+
+    bool IsValid() const;
 };
 
 
@@ -960,3 +1142,66 @@ public:
     void Veto(bool veto = true);
 };
 
+
+
+wxEventType wxEVT_AUI_PANE_BUTTON;
+wxEventType wxEVT_AUI_PANE_CLOSE;
+wxEventType wxEVT_AUI_PANE_MAXIMIZE;
+wxEventType wxEVT_AUI_PANE_RESTORE;
+wxEventType wxEVT_AUI_PANE_ACTIVATED;
+wxEventType wxEVT_AUI_RENDER;
+wxEventType wxEVT_AUI_FIND_MANAGER;
+
+
+
+class wxAuiDockInfo
+{
+public:
+    wxAuiDockInfo();
+    wxAuiDockInfo(const wxAuiDockInfo& c);
+    wxAuiDockInfo& operator=(const wxAuiDockInfo& c);
+
+    bool IsOk() const;
+    bool IsHorizontal() const;
+    bool IsVertical() const;
+
+    wxAuiPaneInfoPtrArray panes; // array of panes
+    wxRect rect;              // current rectangle
+    int dock_direction;       // dock direction (top, bottom, left, right, center)
+    int dock_layer;           // layer number (0 = innermost layer)
+    int dock_row;             // row number on the docking bar (0 = first row)
+    int size;                 // size of the dock
+    int min_size;             // minimum size of a dock (0 if there is no min)
+    bool resizable;           // flag indicating whether the dock is resizable
+    bool toolbar;             // flag indicating dock contains only toolbars
+    bool fixed;               // flag indicating that the dock operates on
+                              // absolute coordinates as opposed to proportional
+    bool reserved1;
+};
+
+
+class wxAuiDockUIPart
+{
+public:
+    enum
+    {
+        typeCaption,
+        typeGripper,
+        typeDock,
+        typeDockSizer,
+        typePane,
+        typePaneSizer,
+        typeBackground,
+        typePaneBorder,
+        typePaneButton
+    };
+
+    int type;                // ui part type (see enum above)
+    int orientation;         // orientation (either wxHORIZONTAL or wxVERTICAL)
+    wxAuiDockInfo* dock;        // which dock the item is associated with
+    wxAuiPaneInfo* pane;        // which pane the item is associated with
+    int button;              // which pane button the item is associated with
+    wxSizer* cont_sizer;     // the part's containing sizer
+    wxSizerItem* sizer_item; // the sizer item of the part
+    wxRect rect;             // client coord rectangle of the part itself
+};

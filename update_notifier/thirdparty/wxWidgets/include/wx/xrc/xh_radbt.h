@@ -16,12 +16,12 @@
 
 class WXDLLIMPEXP_XRC wxRadioButtonXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxRadioButtonXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxRadioButtonXmlHandler);
 
 public:
     wxRadioButtonXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 };
 
 #endif // wxUSE_XRC && wxUSE_RADIOBOX

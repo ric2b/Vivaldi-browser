@@ -74,7 +74,8 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   void RenderFrameCreated(content::RenderFrameHost* render_view_host) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* sender) override;
   void DidFinishNavigation(

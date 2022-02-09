@@ -7,7 +7,9 @@
 #include <array>
 #include <sstream>
 
+#include "base/containers/flat_map.h"
 #include "base/logging.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/value_util.h"
@@ -22,7 +24,7 @@ const char kParameterMemoryPrefix[] = "param:";
 // non-existent values. Expects bool parameters as 'false' and 'true'.
 template <typename T>
 absl::optional<T> GetTypedParameter(
-    const std::map<std::string, ValueProto> parameters,
+    const base::flat_map<std::string, ValueProto> parameters,
     const std::string& key) {
   auto iter = parameters.find(key);
   if (iter == parameters.end())
@@ -90,6 +92,17 @@ const char kIntent[] = "INTENT";
 // Parameter that allows enabling Text-to-Speech functionality.
 const char kEnableTtsParameterName[] = "ENABLE_TTS";
 
+// Parameter name of the CALLER script parameter. Note that the corresponding
+// values are integers, corresponding to the caller proto in the backend.
+const char kCallerParameterName[] = "CALLER";
+
+// Parameter name of the SOURCE script parameter. Note that the corresponding
+// values are integers, corresponding to the source proto in the backend.
+const char kSourceParameterName[] = "SOURCE";
+
+// Parameter to specify experiments.
+const char kExperimentsParameterName[] = "EXPERIMENT_IDS";
+
 // The list of script parameters that trigger scripts are allowed to send to
 // the backend.
 constexpr std::array<const char*, 6> kAllowlistedTriggerScriptParameters = {
@@ -113,7 +126,7 @@ const char kDetailsTotalPriceLabel[] = "DETAILS_TOTAL_PRICE_LABEL";
 const char kDetailsTotalPrice[] = "DETAILS_TOTAL_PRICE";
 
 ScriptParameters::ScriptParameters(
-    const std::map<std::string, std::string>& parameters) {
+    const base::flat_map<std::string, std::string>& parameters) {
   for (const auto& it : parameters) {
     parameters_.emplace(
         it.first, SimpleValue(it.second, /* is_client_side_only= */ false));
@@ -230,6 +243,26 @@ absl::optional<bool> ScriptParameters::GetEnableTts() const {
   return GetTypedParameter<bool>(parameters_, kEnableTtsParameterName);
 }
 
+absl::optional<int> ScriptParameters::GetCaller() const {
+  return GetTypedParameter<int>(parameters_, kCallerParameterName);
+}
+
+absl::optional<int> ScriptParameters::GetSource() const {
+  return GetTypedParameter<int>(parameters_, kSourceParameterName);
+}
+
+std::vector<std::string> ScriptParameters::GetExperiments() const {
+  absl::optional<std::string> experiments_str =
+      GetParameter(kExperimentsParameterName);
+  if (!experiments_str) {
+    return std::vector<std::string>();
+  }
+
+  return base::SplitString(*experiments_str, ",",
+                           base::WhitespaceHandling::TRIM_WHITESPACE,
+                           base::SplitResult::SPLIT_WANT_NONEMPTY);
+}
+
 absl::optional<bool> ScriptParameters::GetDetailsShowInitial() const {
   return GetTypedParameter<bool>(parameters_, kDetailsShowInitialParameterName);
 }
@@ -277,7 +310,7 @@ absl::optional<std::string> ScriptParameters::GetDetailsTotalPrice() const {
 }
 
 void ScriptParameters::UpdateDeviceOnlyParameters(
-    const std::map<std::string, std::string>& parameters) {
+    const base::flat_map<std::string, std::string>& parameters) {
   for (const auto& parameter : parameters) {
     parameters_[parameter.first] =
         SimpleValue(parameter.second, /* is_client_side_only= */ true);

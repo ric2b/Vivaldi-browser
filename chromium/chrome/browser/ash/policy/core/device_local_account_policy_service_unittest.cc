@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,6 +27,7 @@
 #include "chrome/browser/ash/policy/invalidation/fake_affiliated_invalidation_service_provider.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/device_settings_test_helper.h"
+#include "chrome/browser/ui/webui/certificates_handler.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
@@ -1084,7 +1084,7 @@ TEST_F(DeviceLocalAccountPolicyProviderTest,
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
       .Times(AtLeast(1));
   cros_settings_helper_->SetBoolean(
-      chromeos::kDeviceRestrictedManagedGuestSessionEnabled, false);
+      ash::kDeviceRestrictedManagedGuestSessionEnabled, false);
   InstallDeviceLocalAccountPolicy(kAccount1);
   broker->core()->store()->Load();
   FlushDeviceSettings();
@@ -1100,7 +1100,7 @@ TEST_F(DeviceLocalAccountPolicyProviderTest,
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
       .Times(AtLeast(1));
   cros_settings_helper_->SetBoolean(
-      chromeos::kDeviceRestrictedManagedGuestSessionEnabled, true);
+      ash::kDeviceRestrictedManagedGuestSessionEnabled, true);
   device_local_account_policy_.payload()
       .mutable_passwordmanagerenabled()
       ->set_value(true);
@@ -1143,12 +1143,15 @@ TEST_F(DeviceLocalAccountPolicyProviderTest,
       key::kCACertificateManagementAllowed, POLICY_LEVEL_MANDATORY,
       POLICY_SCOPE_USER,
       POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,
-      base::Value(false), nullptr);
+      base::Value(static_cast<int>(CACertificateManagementPermission::kNone)),
+      nullptr);
   expected_policy_map_restricted.Set(
       key::kClientCertificateManagementAllowed, POLICY_LEVEL_MANDATORY,
       POLICY_SCOPE_USER,
       POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,
-      base::Value(false), nullptr);
+      base::Value(
+          static_cast<int>(ClientCertificateManagementPermission::kNone)),
+      nullptr);
   expected_policy_map_restricted.Set(
       key::kEnableMediaRouter, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
       POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,

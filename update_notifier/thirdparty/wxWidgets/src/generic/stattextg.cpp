@@ -9,9 +9,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_STATTEXT
 
@@ -27,7 +24,7 @@
     #include "wx/generic/private/markuptext.h"
 #endif // wxUSE_MARKUP
 
-IMPLEMENT_DYNAMIC_CLASS(wxGenericStaticText, wxStaticTextBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxGenericStaticText, wxStaticTextBase);
 
 
 bool wxGenericStaticText::Create(wxWindow *parent,
@@ -44,7 +41,7 @@ bool wxGenericStaticText::Create(wxWindow *parent,
 
     SetLabel(label);
     SetInitialSize(size);
-    Connect(wxEVT_PAINT, wxPaintEventHandler(wxGenericStaticText::OnPaint));
+    Bind(wxEVT_PAINT, &wxGenericStaticText::OnPaint, this);
     return true;
 }
 
@@ -70,12 +67,7 @@ void wxGenericStaticText::OnPaint(wxPaintEvent& WXUNUSED(event))
     wxPaintDC dc(this);
 
     wxRect rect = GetClientRect();
-    if ( IsEnabled() )
-    {
-        dc.SetTextForeground(
-                       wxSystemSettings::GetColour(wxSYS_COLOUR_BTNTEXT));
-    }
-    else // paint disabled text
+    if ( !IsEnabled() )
     {
         // draw shadow of the text
         dc.SetTextForeground(
@@ -105,9 +97,9 @@ wxSize wxGenericStaticText::DoGetBestClientSize() const
 void wxGenericStaticText::SetLabel(const wxString& label)
 {
     wxControl::SetLabel(label);
-    DoSetLabel(GetEllipsizedLabel());
-    if ( !HasFlag(wxST_NO_AUTORESIZE) && !IsEllipsized() )
-        InvalidateBestSize();
+    WXSetVisibleLabel(GetEllipsizedLabel());
+
+    AutoResizeIfNecessary();
 
 #if wxUSE_MARKUP
     if ( m_markupText )
@@ -120,7 +112,7 @@ void wxGenericStaticText::SetLabel(const wxString& label)
     Refresh();
 }
 
-void wxGenericStaticText::DoSetLabel(const wxString& label)
+void wxGenericStaticText::WXSetVisibleLabel(const wxString& label)
 {
     m_mnemonic = FindAccelIndex(label, &m_label);
 }
@@ -137,8 +129,7 @@ bool wxGenericStaticText::DoSetLabelMarkup(const wxString& markup)
     else
         m_markupText->SetMarkup(markup);
 
-    if ( !HasFlag(wxST_NO_AUTORESIZE) )
-        InvalidateBestSize();
+    AutoResizeIfNecessary();
 
     Refresh();
 
@@ -151,8 +142,9 @@ bool wxGenericStaticText::SetFont(const wxFont &font)
 {
     if ( !wxControl::SetFont(font) )
         return false;
-    if ( !HasFlag(wxST_NO_AUTORESIZE) )
-        InvalidateBestSize();
+
+    AutoResizeIfNecessary();
+
     Refresh();
     return true;
 }

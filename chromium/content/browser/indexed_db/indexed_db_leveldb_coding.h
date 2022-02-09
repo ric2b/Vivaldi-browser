@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
 #include "components/services/storage/indexed_db/scopes/scope_lock_range.h"
@@ -535,7 +535,12 @@ class IndexDataKey {
  public:
   CONTENT_EXPORT IndexDataKey();
   CONTENT_EXPORT IndexDataKey(IndexDataKey&& other);
+
+  IndexDataKey(const IndexDataKey&) = delete;
+  IndexDataKey& operator=(const IndexDataKey&) = delete;
+
   CONTENT_EXPORT ~IndexDataKey();
+
   CONTENT_EXPORT static bool Decode(base::StringPiece* slice,
                                     IndexDataKey* result);
   CONTENT_EXPORT static std::string Encode(
@@ -580,8 +585,6 @@ class IndexDataKey {
   std::string encoded_user_key_;
   std::string encoded_primary_key_;
   int64_t sequence_number_;
-
-  DISALLOW_COPY_AND_ASSIGN(IndexDataKey);
 };
 
 }  // namespace content

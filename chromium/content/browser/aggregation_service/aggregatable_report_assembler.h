@@ -21,9 +21,16 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
+template <class T>
+class scoped_refptr;
+
+namespace network {
+class SharedURLLoaderFactory;
+}  // namespace network
+
 namespace content {
 
-class AggregatableReportManager;
+class AggregationServiceStorageContext;
 class StoragePartition;
 
 // This class provides an interface for assembling an aggregatable report. It is
@@ -53,8 +60,8 @@ class CONTENT_EXPORT AggregatableReportAssembler {
   // the possibility of unbounded memory growth
   static constexpr size_t kMaxSimultaneousRequests = 1000;
 
-  explicit AggregatableReportAssembler(AggregatableReportManager* manager,
-                                       StoragePartition* storage_partition);
+  AggregatableReportAssembler(AggregationServiceStorageContext* storage_context,
+                              StoragePartition* storage_partition);
   // Not copyable or movable.
   AggregatableReportAssembler(const AggregatableReportAssembler& other) =
       delete;
@@ -66,11 +73,23 @@ class CONTENT_EXPORT AggregatableReportAssembler {
       std::unique_ptr<AggregationServiceKeyFetcher> fetcher,
       std::unique_ptr<AggregatableReport::Provider> report_provider);
 
+  // Used by the aggregation service tool to inject a `url_loader_factory` to
+  // AggregationServiceNetworkFetcherImpl if one is provided.
+  static std::unique_ptr<AggregatableReportAssembler> CreateForTesting(
+      AggregationServiceStorageContext* storage_context,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+
   // Fetches the necessary public keys and uses it to construct an
   // AggregatableReport from the information in `report_request`. See the
   // AggregatableReport documentation for more detail on the returned report.
-  void AssembleReport(AggregatableReportRequest report_request,
-                      AssemblyCallback callback);
+  virtual void AssembleReport(AggregatableReportRequest report_request,
+                              AssemblyCallback callback);
+
+ protected:
+  // For testing only.
+  AggregatableReportAssembler(
+      AggregationServiceStorageContext* storage_context,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
  private:
   // Represents a request to assemble a report that has not completed.

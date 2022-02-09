@@ -100,6 +100,7 @@ public:
         If the help viewer is not running, runs it and displays the given section.
 
         - @e WinHelp, MS HTML Help @a sectionNo is a context id.
+        - @e MS HTML Help: Pass -1 in @a sectionNo to display the index.
         - @e External HTML help: wxExtHelpController implements @a sectionNo as
           an id in a map file, which is of the form:
         - @e wxHtmlHelpController: @a sectionNo is an identifier as specified in
@@ -140,10 +141,10 @@ public:
     */
     virtual wxWindow* GetParentWindow() const;
 
-    //@{
     /**
-        Initializes the help instance with a help filename, and optionally a server
-        socket number if using wxHelp (now obsolete). Does not invoke the help viewer.
+        Initializes the help instance with a help filename.
+
+        Does not invoke the help viewer.
         This must be called directly after the help instance object is created and
         before any attempts to communicate with the viewer.
 
@@ -152,17 +153,16 @@ public:
         while searching for a suitable file. For WinHelp, the hlp extension is appended.
     */
     virtual bool Initialize(const wxString& file);
-    virtual bool Initialize(const wxString& file, int server);
-    //@}
 
     /**
         If the help viewer is not running, runs it, and searches for sections matching
         the given keyword. If one match is found, the file is displayed at this section.
-        The optional parameter allows to search the index (wxHELP_SEARCH_INDEX)
+        The optional parameter allows searching the index (wxHELP_SEARCH_INDEX)
         but this currently is only supported by the wxHtmlHelpController.
 
         - @e WinHelp, MS HTML Help:
           If more than one match is found, the first topic is displayed.
+        - @e MS HTML Help: Pass an empty string to display the search page.
         - @e External HTML help, simple wxHTML help:
           If more than one match is found, a choice of topics is displayed.
         - @e wxHtmlHelpController: see wxHtmlHelpController::KeywordSearch.
@@ -249,7 +249,7 @@ public:
 
     This is an alias for one of a family of help controller classes which is
     most appropriate for the current platform.
-    
+
     A help controller allows an application to display help, at the contents
     or at a particular topic, and shut the help program down on termination.
     This avoids proliferation of many instances of the help viewer whenever the
@@ -265,7 +265,6 @@ public:
     An appropriate class is aliased to the name wxHelpController for each platform, as
     follows:
     - On desktop Windows, wxCHMHelpController is used (MS HTML Help).
-    - On Windows CE, wxWinceHelpController is used.
     - On all other platforms, wxHtmlHelpController is used if wxHTML is compiled
       into wxWidgets; otherwise wxExtHelpController is used (for invoking an
       external browser).
@@ -285,8 +284,6 @@ public:
       HTB versions of the help file. For wxMSW only.
     - wxExtHelpController, for controlling external browsers under Unix.
       The default browser is Netscape Navigator. The 'help' sample shows its use.
-    - wxWinceHelpController, for controlling a simple @c .htm help controller for
-      Windows CE applications.
     - wxHtmlHelpController, a sophisticated help controller using wxHTML, in a
       similar style to the Microsoft HTML Help viewer and using some of the same
       files. Although it has an API compatible with other help controllers, it has

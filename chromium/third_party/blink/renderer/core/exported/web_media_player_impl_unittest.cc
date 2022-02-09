@@ -16,11 +16,11 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_runner_util.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -52,6 +52,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/platform/media/web_media_player_params.h"
 #include "third_party/blink/public/platform/media/webmediaplayer_delegate.h"
@@ -70,6 +71,7 @@
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/platform/media/power_status_helper.h"
 #include "third_party/blink/renderer/platform/media/resource_multi_buffer_data_provider.h"
 #include "third_party/blink/renderer/platform/media/testing/mock_resource_fetch_context.h"
 #include "third_party/blink/renderer/platform/media/testing/mock_web_associated_url_loader.h"
@@ -292,6 +294,8 @@ class MockSurfaceLayerBridge : public WebSurfaceLayerBridge {
   MOCK_METHOD1(SetContentsOpaque, void(bool));
   MOCK_METHOD0(CreateSurfaceLayer, void());
   MOCK_METHOD0(ClearObserver, void());
+  MOCK_METHOD0(RegisterFrameSinkHierarchy, void());
+  MOCK_METHOD0(UnregisterFrameSinkHierarchy, void());
 };
 
 class MockVideoFrameCompositor : public VideoFrameCompositor {
@@ -430,7 +434,7 @@ class WebMediaPlayerImplTest
         viz::TestContextProvider::Create(),
         WebMediaPlayer::SurfaceLayerMode::kAlways,
         is_background_suspend_enabled_, is_background_video_playback_enabled_,
-        true, std::move(demuxer_override), nullptr);
+        true, std::move(demuxer_override));
 
     auto compositor = std::make_unique<NiceMock<MockVideoFrameCompositor>>(
         params->video_frame_compositor_task_runner());
@@ -439,7 +443,7 @@ class WebMediaPlayerImplTest
     wmpi_ = std::make_unique<WebMediaPlayerImpl>(
         GetWebLocalFrame(), &client_, &encrypted_client_, &delegate_,
         std::move(factory_selector), url_index_.get(), std::move(compositor),
-        std::move(params));
+        nullptr, std::move(params));
   }
 
   std::unique_ptr<WebSurfaceLayerBridge> CreateMockSurfaceLayerBridge(
@@ -789,13 +793,13 @@ class WebMediaPlayerImplTest
 
   void CreateCdm() {
     // Must use a supported key system on a secure context.
-    std::u16string key_system = u"org.w3.clearkey";
+    media::CdmConfig cdm_config = {"org.w3.clearkey", false, false, false};
     auto test_origin = WebSecurityOrigin::CreateFromString(
         WebString::FromUTF8("https://test.origin"));
 
     base::RunLoop run_loop;
     WebContentDecryptionModuleImpl::Create(
-        &mock_cdm_factory_, key_system, test_origin, media::CdmConfig(),
+        &mock_cdm_factory_, test_origin, cdm_config,
         base::BindOnce(&WebMediaPlayerImplTest::OnCdmCreated,
                        base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -2067,6 +2071,19 @@ TEST_F(WebMediaPlayerImplTest, PictureInPictureStateChange) {
   EXPECT_CALL(*surface_layer_bridge_ptr_, ClearObserver());
 }
 
+TEST_F(WebMediaPlayerImplTest, RegisterFrameSinkHierarchy) {
+  InitializeWebMediaPlayerImpl();
+  media::PipelineMetadata metadata;
+  metadata.has_video = true;
+  OnMetadata(metadata);
+
+  EXPECT_CALL(*surface_layer_bridge_ptr_, RegisterFrameSinkHierarchy());
+  wmpi_->RegisterFrameSinkHierarchy();
+
+  EXPECT_CALL(*surface_layer_bridge_ptr_, UnregisterFrameSinkHierarchy());
+  wmpi_->UnregisterFrameSinkHierarchy();
+}
+
 TEST_F(WebMediaPlayerImplTest, OnProgressClearsStale) {
   InitializeWebMediaPlayerImpl();
   SetMetadata(true, true);
@@ -2082,13 +2099,7 @@ TEST_F(WebMediaPlayerImplTest, OnProgressClearsStale) {
   }
 }
 
-// Disabled due to flakiness: crbug.com/1223150
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
-#define MAYBE_MemDumpProvidersRegistration DISABLED_MemDumpProvidersRegistration
-#else
-#define MAYBE_MemDumpProvidersRegistration MemDumpProvidersRegistration
-#endif
-TEST_F(WebMediaPlayerImplTest, MAYBE_MemDumpProvidersRegistration) {
+TEST_F(WebMediaPlayerImplTest, MemDumpProvidersRegistration) {
   auto* dump_manager = base::trace_event::MemoryDumpManager::GetInstance();
   InitializeWebMediaPlayerImpl();
 

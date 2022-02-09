@@ -103,7 +103,15 @@ std::u16string PermissionRequest::GetDialogMessageText() const {
 #endif
 
 #if !defined(OS_ANDROID)
-absl::optional<std::u16string> PermissionRequest::GetChipText() const {
+IconId PermissionRequest::GetIconForChip() {
+  return permissions::GetIconId(request_type_);
+}
+
+IconId PermissionRequest::GetBlockedIconForChip() {
+  return permissions::GetBlockedIconId(request_type_);
+}
+
+absl::optional<std::u16string> PermissionRequest::GetRequestChipText() const {
   int message_id;
   switch (request_type_) {
     case RequestType::kArSession:
@@ -142,6 +150,21 @@ absl::optional<std::u16string> PermissionRequest::GetChipText() const {
   return l10n_util::GetStringUTF16(message_id);
 }
 
+absl::optional<std::u16string> PermissionRequest::GetQuietChipText() const {
+  int message_id;
+  switch (request_type_) {
+    case RequestType::kGeolocation:
+      message_id = IDS_GEOLOCATION_PERMISSION_BLOCKED_CHIP;
+      break;
+    case RequestType::kNotifications:
+      message_id = IDS_NOTIFICATION_PERMISSIONS_BLOCKED_CHIP;
+      break;
+    default:
+      return absl::nullopt;
+  }
+  return l10n_util::GetStringUTF16(message_id);
+}
+
 std::u16string PermissionRequest::GetMessageTextFragment() const {
   int message_id = 0;
   switch (request_type_) {
@@ -163,10 +186,6 @@ std::u16string PermissionRequest::GetMessageTextFragment() const {
     case RequestType::kDiskQuota:
       message_id = IDS_REQUEST_QUOTA_PERMISSION_FRAGMENT;
       break;
-    case RequestType::kFileHandling:
-      // Handled by an override in `FileHandlingPermissionRequestImpl`.
-      NOTREACHED();
-      return std::u16string();
     case RequestType::kFontAccess:
       message_id = IDS_FONT_ACCESS_PERMISSION_FRAGMENT;
       break;

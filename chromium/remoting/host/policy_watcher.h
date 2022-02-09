@@ -8,10 +8,15 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/policy_service.h"
+
+#if defined(OS_WIN)
+#include "base/win/registry.h"
+#endif
 
 namespace base {
 class DictionaryValue;
@@ -151,6 +156,10 @@ class PolicyWatcher : public policy::PolicyService::Observer {
                        const policy::PolicyMap& current) override;
   void OnPolicyServiceInitialized(policy::PolicyDomain domain) override;
 
+#if defined(OS_WIN)
+  void WatchForRegistryChanges();
+#endif
+
   PolicyUpdatedCallback policy_updated_callback_;
   PolicyErrorCallback policy_error_callback_;
 
@@ -164,7 +173,7 @@ class PolicyWatcher : public policy::PolicyService::Observer {
   // The set of policy values to use if a policy has not been explicitly set.
   std::unique_ptr<base::DictionaryValue> default_values_;
 
-  policy::PolicyService* policy_service_;
+  raw_ptr<policy::PolicyService> policy_service_;
 
   // Order of fields below is important to ensure destruction takes object
   // dependencies into account:
@@ -173,6 +182,13 @@ class PolicyWatcher : public policy::PolicyService::Observer {
   std::unique_ptr<policy::SchemaRegistry> owned_schema_registry_;
   std::unique_ptr<policy::ConfigurationPolicyProvider> owned_policy_provider_;
   std::unique_ptr<policy::PolicyService> owned_policy_service_;
+
+#if defined(OS_WIN)
+  // |policy_key_| relies on |policy_service_| to notify the host of policy
+  // changes. Make sure |policy_key_| is destroyed to prevent any notifications
+  // from firing while the above objects are being torn down.
+  base::win::RegKey policy_key_;
+#endif
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

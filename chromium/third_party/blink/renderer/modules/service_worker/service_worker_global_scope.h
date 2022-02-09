@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/modules/service_worker/service_worker_installed_scripts_manager.h"
 #include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver_set.h"
@@ -217,11 +216,13 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   void RespondToFetchEventWithNoResponse(
       int fetch_event_id,
       const KURL& request_url,
+      bool range_request,
       base::TimeTicks event_dispatch_time,
       base::TimeTicks respond_with_settled_time);
   // Responds to the fetch event with |response|.
   void RespondToFetchEvent(int fetch_event_id,
                            const KURL& request_url,
+                           bool range_request,
                            mojom::blink::FetchAPIResponsePtr,
                            base::TimeTicks event_dispatch_time,
                            base::TimeTicks respond_with_settled_time);
@@ -230,6 +231,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   void RespondToFetchEventWithResponseStream(
       int fetch_event_id,
       const KURL& request_url,
+      bool range_request,
       mojom::blink::FetchAPIResponsePtr,
       mojom::blink::ServiceWorkerStreamHandlePtr,
       base::TimeTicks event_dispatch_time,
@@ -294,6 +296,10 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   // Returns true if a FetchEvent exists with the given request URL and
   // is still waiting for a Response.
   bool HasRelatedFetchEvent(const KURL& request_url) const;
+
+  // Returns true if a FetchEvent exists with the given request URL and
+  // a range request header.
+  bool HasRangeFetchEvent(const KURL& request_url) const;
 
   int GetOutstandingThrottledLimit() const override;
 
@@ -481,8 +487,8 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel,
                            const String& message) override;
 
-  void NoteNewFetchEvent(const KURL& request_url);
-  void NoteRespondedToFetchEvent(const KURL& request_url);
+  void NoteNewFetchEvent(const mojom::blink::FetchAPIRequest& request);
+  void NoteRespondedToFetchEvent(const KURL& request_url, bool range_request);
 
   void AbortCallbackForFetchEvent(
       int event_id,
@@ -654,8 +660,16 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   // request URL.  This information can be used as a hint that cache_storage
   // or fetch requests to the same URL is likely to be used to satisfy a
   // FetchEvent.  This in turn can allow us to use more aggressive
-  // optimizations in these cases.
-  HashMap<KURL, int> unresponded_fetch_event_counts_;
+  // optimizations in these cases.  We track separate counts for total
+  // outstanding FetchEvents and outstanding FetchEvents with range requests.
+  struct FetchEventCounts {
+    FetchEventCounts() = default;
+    explicit FetchEventCounts(int tc, int rc)
+        : total_count(tc), range_count(rc) {}
+    int total_count = 0;
+    int range_count = 0;
+  };
+  HashMap<KURL, FetchEventCounts> unresponded_fetch_event_counts_;
 
   // ServiceWorker event queue where all events are queued before
   // they are dispatched.

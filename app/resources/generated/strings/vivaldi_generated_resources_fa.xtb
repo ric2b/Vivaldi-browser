@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">&amp;تنظیمات زبان</translation>
 <translation id="150411034776756821">حذف <ph name="SITE" /></translation>
 <translation id="1546280085599573572">این افزونه، صفحه‌ای را با کلیک روی دکمه صفحه اصلی نمایش داده می‌شود، تغییر داده است.</translation>
+<translation id="1552752544932680961">مدیریت افزونه</translation>
 <translation id="15662109988763471">چاپگر انتخابی موجود نیست و یا به‌درستی نصب نشده است. چاپگر خود را بررسی کرده یا چاپگر دیگری را انتخاب کنید.</translation>
 <translation id="1588438908519853928">معمولی</translation>
 <translation id="1588870296199743671">گشودن پیوند با...</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">حافظه‌ی نهان اسکریپت</translation>
 <translation id="6169666352732958425">ارسال محتوای میزکار امکان‌پذیر نیست.</translation>
 <translation id="6196854373336333322">افزونه «<ph name="EXTENSION_NAME" />»، کنترل تنظیمات پروکسی شما را در اختیار گرفته است یعنی می‌تواند هر چیزی که در حالت آنلاین انجام می‌دهید تغییر دهد، خراب کند یا استراق سمع کند. اگر مطمئن نیستید چرا این تغییر انجام شده است، احتمالاً این افزونه را نمی‌خواهید.</translation>
+<translation id="6200151268994853226">مدیریت افزونه</translation>
 <translation id="6206311232642889873">&amp;کپی تصویر</translation>
 <translation id="6239558157302047471">بارگذاری مجدد &amp;قاب</translation>
 <translation id="6247802389331535091">سیستم: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -333,7 +335,6 @@
 <translation id="6892812721183419409">گشودن پیوند به‌عنوان <ph name="USER" /></translation>
 <translation id="6900284862687837908">برنامه پس‌زمینه: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ابطال دسترسی به فایل</translation>
-<translation id="6916590542764765824">مدیریت افزونه‌ها</translation>
 <translation id="6945221475159498467">انتخاب</translation>
 <translation id="6955446738988643816">بازرسی بالاپرها</translation>
 <translation id="6970856801391541997">چاپ صفحات خاص</translation>
@@ -401,7 +402,6 @@
 <translation id="8032244173881942855">ارسال محتوای زبانه امکان‌پذیر نیست.</translation>
 <translation id="8071432093239591881">چاپ کردن به‌‌عنوان تصویر</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> کیلوبایت</translation>
-<translation id="8137559199583651773">مدیریت افزونه‌ها</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {بارگیری درحال انجام است} other {بارگیری‌ها درحال انجام است}}</translation>
 <translation id="8230134520748321204">رمز عبور <ph name="ORIGIN" /> ذخیره شود؟</translation>

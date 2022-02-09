@@ -8,30 +8,17 @@
 #include "base/i18n/rtl.h"
 #import "ios/chrome/common/constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/common/ui/promo_style/highlighted_button.h"
 #import "ios/chrome/common/ui/util/button_util.h"
 #include "ios/chrome/common/ui/util/device_util.h"
 #include "ios/chrome/common/ui/util/dynamic_type_util.h"
+#include "ios/chrome/common/ui/util/image_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-NSString* const kPromoStyleTitleAccessibilityIdentifier =
-    @"kPromoStyleTitleAccessibilityIdentifier";
-NSString* const kPromoStyleSubtitleAccessibilityIdentifier =
-    @"kPromoStyleSubtitleAccessibilityIdentifier";
-NSString* const kPromoStylePrimaryActionAccessibilityIdentifier =
-    @"kPromoStylePrimaryActionAccessibilityIdentifier";
-NSString* const kPromoStyleSecondaryActionAccessibilityIdentifier =
-    @"kPromoStyleSecondaryActionAccessibilityIdentifier";
-NSString* const kPromoStyleTertiaryActionAccessibilityIdentifier =
-    @"kPromoStyleTertiaryActionAccessibilityIdentifier";
-NSString* const kPromoStyleLearnMoreActionAccessibilityIdentifier =
-    @"kPromoStyleLearnMoreActionAccessibilityIdentifier";
-NSString* const kPromoStyleScrollViewAccessibilityIdentifier =
-    @"kPromoStyleScrollViewAccessibilityIdentifier";
 
 namespace {
 
@@ -69,6 +56,14 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 // layout reflects the latest updates.
 @property(nonatomic, assign) BOOL canUpdateViewsOnScroll;
 
+// Redefinition to allow write. The property should only be read when
+// -hasTopSpecificContentView returns YES to not create the view when reading
+// it. The view should only be lazily instanciated when read externally.
+@property(nonatomic, strong, readwrite) UIView* topSpecificContentView;
+
+// Whether the image is currently being calculated; used to prevent infinite
+// recursions caused by |viewDidLayoutSubviews|.
+@property(nonatomic, assign) BOOL calculatingImageSize;
 @end
 
 @implementation PromoStyleViewController
@@ -97,6 +92,9 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
   self.scrollContentView.translatesAutoresizingMaskIntoConstraints = NO;
   [self.scrollContentView addSubview:self.imageView];
   [self.scrollContentView addSubview:self.titleLabel];
+  if ([self hasTopSpecificContentView]) {
+    [self.scrollContentView addSubview:self.topSpecificContentView];
+  }
   [self.scrollContentView addSubview:self.subtitleLabel];
   [self.view addLayoutGuide:subtitleMarginLayoutGuide];
   [self.scrollContentView addSubview:self.specificContentView];
@@ -139,6 +137,25 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
           ? 0
           : kActionsBottomMargin;
 
+  NSLayoutConstraint* subtitleLabelTopConstraint = [self.subtitleLabel.topAnchor
+      constraintEqualToAnchor:self.titleLabel.bottomAnchor
+                     constant:kDefaultMargin];
+  if ([self hasTopSpecificContentView]) {
+    // When set, put the |topSpecificContentView| view between the title and
+    // subtitle labels.
+    [NSLayoutConstraint activateConstraints:@[
+      [self.topSpecificContentView.topAnchor
+          constraintEqualToAnchor:self.titleLabel.bottomAnchor],
+      [self.topSpecificContentView.centerXAnchor
+          constraintEqualToAnchor:self.scrollContentView.centerXAnchor],
+      [self.topSpecificContentView.widthAnchor
+          constraintLessThanOrEqualToAnchor:self.scrollContentView.widthAnchor],
+    ]];
+    subtitleLabelTopConstraint = [self.subtitleLabel.topAnchor
+        constraintEqualToAnchor:self.topSpecificContentView.bottomAnchor];
+  }
+  subtitleLabelTopConstraint.active = YES;
+
   [NSLayoutConstraint activateConstraints:@[
     // Content width layout guide constraints. Constrain the width to both at
     // least 65% of the view width, and to the full view width with margins.
@@ -157,7 +174,8 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
                                  constant:-2 * kDefaultMargin],
 
     // Scroll view constraints.
-    [self.scrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+    [self.scrollView.topAnchor
+        constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
     [self.scrollView.leadingAnchor
         constraintEqualToAnchor:self.view.leadingAnchor],
     [self.scrollView.trailingAnchor
@@ -207,9 +225,6 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
     [self.titleLabel.widthAnchor
         constraintLessThanOrEqualToAnchor:self.scrollContentView.widthAnchor
                                  constant:-2 * kTitleHorizontalMargin],
-    [self.subtitleLabel.topAnchor
-        constraintEqualToAnchor:self.titleLabel.bottomAnchor
-                       constant:kDefaultMargin],
     [self.subtitleLabel.centerXAnchor
         constraintEqualToAnchor:self.scrollContentView.centerXAnchor],
     [self.subtitleLabel.widthAnchor
@@ -283,12 +298,6 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
 
-  // Rescale image here as on iPad the view height isn't correctly set during
-  // -viewDidLoad.
-  self.imageView.image = [self scaleSourceImage:self.bannerImage
-                                   currentImage:self.imageView.image
-                                         toSize:[self computeBannerImageSize]];
-
   // Reset |didReachBottom| to make sure that its value is correctly updated
   // to reflect the scrolling state when the view reappears and is refreshed
   // (e.g., when getting back from a full screen view that was hidding this
@@ -318,6 +327,22 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
       [self setReadMoreText];
     }
   });
+}
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+
+  // Prevents potential recursive calls to |viewDidLayoutSubviews|.
+  if (self.calculatingImageSize) {
+    return;
+  }
+  // Rescale image here as on iPad the view height isn't correctly set before
+  // subviews are laid out.
+  self.calculatingImageSize = YES;
+  self.imageView.image = [self scaleSourceImage:self.bannerImage
+                                   currentImage:self.imageView.image
+                                         toSize:[self computeBannerImageSize]];
+  self.calculatingImageSize = NO;
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -410,12 +435,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
   if (CGSizeEqualToSize(newSize, currentImage.size)) {
     return currentImage;
   }
-
-  UIGraphicsBeginImageContextWithOptions(newSize, NO, 0.0);
-  [sourceImage drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
-  UIImage* newImage = UIGraphicsGetImageFromCurrentImageContext();
-  UIGraphicsEndImageContext();
-  return newImage;
+  return ResizeImage(sourceImage, newSize, ProjectionMode::kAspectFit);
 }
 
 // Determines which font text style to use depending on the device size, the
@@ -484,6 +504,14 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
     _specificContentView.translatesAutoresizingMaskIntoConstraints = NO;
   }
   return _specificContentView;
+}
+
+- (UIView*)topSpecificContentView {
+  if (!_topSpecificContentView) {
+    _topSpecificContentView = [[UIView alloc] init];
+    _topSpecificContentView.translatesAutoresizingMaskIntoConstraints = NO;
+  }
+  return _topSpecificContentView;
 }
 
 - (UIButton*)primaryActionButton {
@@ -614,7 +642,7 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
   return _tertiaryActionButton;
 }
 
-// Helper to create the learn more button
+// Helper to create the learn more button.
 - (UIButton*)learnMoreButton {
   if (!_learnMoreButton) {
     DCHECK(self.shouldShowLearnMoreButton);
@@ -742,6 +770,11 @@ constexpr CGFloat kLearnMoreButtonSide = 40;
 - (bool)isRegularXRegularSizeClass:(UITraitCollection*)traitCollection {
   return traitCollection.verticalSizeClass == UIUserInterfaceSizeClassRegular &&
          traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular;
+}
+
+// Returns YES if |_topSpecificContentView| is instantiated.
+- (BOOL)hasTopSpecificContentView {
+  return _topSpecificContentView != nil;
 }
 
 #pragma mark - UIScrollViewDelegate

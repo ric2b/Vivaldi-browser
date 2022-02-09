@@ -63,10 +63,10 @@ unsigned AdjustLinkMatchType(EInsideLink inside_link,
 }
 
 ContainerQueryEvaluator* FindContainerQueryEvaluator(
-    const AtomicString& name,
+    const ContainerSelector& selector,
     const StyleRecalcContext& style_recalc_context) {
-  if (auto* element =
-          ContainerQueryEvaluator::FindContainer(style_recalc_context, name)) {
+  if (auto* element = ContainerQueryEvaluator::FindContainer(
+          style_recalc_context, selector)) {
     return element->GetContainerQueryEvaluator();
   }
 
@@ -121,6 +121,9 @@ class CascadeLayerSeeker {
 
  private:
   static const CascadeLayerMap* FindLayerMap(const MatchRequest& request) {
+    // VTT embedded style is not in any layer.
+    if (request.vtt_originating_element)
+      return nullptr;
     if (request.scope) {
       return request.scope->ContainingTreeScope()
           .GetScopedStyleResolver()
@@ -299,10 +302,10 @@ void ElementRuleCollector::CollectMatchingRulesForList(
           result.dynamic_pseudo == kPseudoIdNone) {
         result_.SetDependsOnContainerQueries();
 
-        auto* evaluator = FindContainerQueryEvaluator(container_query->Name(),
-                                                      style_recalc_context_);
+        auto* evaluator = FindContainerQueryEvaluator(
+            container_query->Selector(), style_recalc_context_);
 
-        if (!evaluator || !evaluator->EvalAndAdd(*container_query)) {
+        if (!evaluator || !evaluator->EvalAndAdd(*container_query, result_)) {
           rejected++;
           if (AffectsAnimations(*rule_data))
             result_.SetConditionallyAffectsAnimations();
@@ -330,8 +333,7 @@ void ElementRuleCollector::CollectMatchingRulesForList(
 
 DISABLE_CFI_PERF
 void ElementRuleCollector::CollectMatchingRules(
-    const MatchRequest& match_request,
-    bool matching_tree_boundary_rules) {
+    const MatchRequest& match_request) {
   DCHECK(match_request.rule_set);
 
   SelectorChecker checker(style_.get(), nullptr, pseudo_style_request_, mode_,
@@ -353,11 +355,10 @@ void ElementRuleCollector::CollectMatchingRules(
   // Check whether other types of rules are applicable in the current tree
   // scope. Criteria for this:
   // a) the rules are UA rules.
-  // b) matching tree boundary crossing rules.
-  // c) the rules come from a shadow style sheet in the same tree scope as the
+  // b) the rules come from a shadow style sheet in the same tree scope as the
   //    given element.
   // c) is checked in rulesApplicableInCurrentTreeScope.
-  if (!matching_ua_rules_ && !matching_tree_boundary_rules &&
+  if (!matching_ua_rules_ &&
       !RulesApplicableInCurrentTreeScope(&element, match_request.scope))
     return;
 
@@ -420,6 +421,16 @@ void ElementRuleCollector::CollectMatchingShadowHostRules(
                               match_request, checker);
 }
 
+void ElementRuleCollector::CollectMatchingSlottedRules(
+    const MatchRequest& match_request) {
+  SelectorChecker checker(style_.get(), nullptr, pseudo_style_request_, mode_,
+                          matching_ua_rules_);
+
+  CollectMatchingRulesForList(
+      match_request.rule_set->SlottedPseudoElementRules(), match_request,
+      checker);
+}
+
 void ElementRuleCollector::CollectMatchingPartPseudoRules(
     const MatchRequest& match_request,
     PartNames& part_names,
@@ -469,7 +480,8 @@ void ElementRuleCollector::AppendCSSOMWrapperForRule(
   EnsureRuleList()->emplace_back(css_rule, rule_data->SelectorIndex());
 }
 
-void ElementRuleCollector::SortAndTransferMatchedRules() {
+void ElementRuleCollector::SortAndTransferMatchedRules(
+    bool is_vtt_embedded_style) {
   if (matched_rules_.IsEmpty())
     return;
 
@@ -502,6 +514,7 @@ void ElementRuleCollector::SortAndTransferMatchedRules() {
             .SetValidPropertyFilter(
                 rule_data->GetValidPropertyFilter(matching_ua_rules_))
             .SetLayerOrder(matched_rule.LayerOrder())
+            .SetIsInlineStyle(is_vtt_embedded_style)
             .Build());
   }
 }
@@ -526,8 +539,13 @@ void ElementRuleCollector::DidMatchRule(
          dynamic_pseudo == kPseudoIdAfter) &&
         !rule_data->Rule()->Properties().HasProperty(CSSPropertyID::kContent))
       return;
-    if (!rule_data->Rule()->Properties().IsEmpty())
+    if (!rule_data->Rule()->Properties().IsEmpty()) {
       style_->SetHasPseudoElementStyle(dynamic_pseudo);
+      if (dynamic_pseudo == kPseudoIdHighlight) {
+        DCHECK(result.custom_highlight_name);
+        style_->SetHasCustomHighlightName(result.custom_highlight_name);
+      }
+    }
   } else {
     matched_rules_.push_back(MatchedRule(rule_data, layer_order,
                                          match_request.style_sheet_index,

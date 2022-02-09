@@ -152,7 +152,7 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
     if (ShouldIgnoreGeneratedEvent(targeted_event.event_params.event))
       continue;
     ui::AXEvent generated_event;
-    generated_event.id = targeted_event.node->id();
+    generated_event.id = targeted_event.node_id;
     generated_event.event_from = targeted_event.event_params.event_from;
     generated_event.event_from_action =
         targeted_event.event_params.event_from_action;
@@ -496,6 +496,21 @@ void AutomationAXTreeWrapper::OnAtomicUpdateFinished(
         tree->GetFromId(id));
   }
   text_changed_node_ids_.clear();
+}
+
+bool AutomationAXTreeWrapper::IsTreeIgnored() {
+  // Check the hosting nodes within the parenting trees for ignored host nodes.
+  AutomationAXTreeWrapper* tree = this;
+  while (tree) {
+    ui::AXNode* host = owner_->GetHostInParentTree(&tree);
+    if (!host)
+      break;
+
+    // This catches things like aria hidden on an iframe.
+    if (host->data().HasState(ax::mojom::State::kInvisible))
+      return true;
+  }
+  return false;
 }
 
 ui::AXNode* AutomationAXTreeWrapper::GetNodeFromTree(

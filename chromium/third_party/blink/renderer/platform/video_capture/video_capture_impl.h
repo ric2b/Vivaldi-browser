@@ -8,12 +8,14 @@
 #include <stdint.h>
 #include <map>
 
+#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_pool.h"
 #include "base/memory/weak_ptr.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_checker.h"
+#include "base/token.h"
 #include "media/base/video_frame.h"
 #include "media/capture/mojom/video_capture.mojom-blink.h"
 #include "media/capture/video_capture_types.h"
@@ -109,7 +111,8 @@ class PLATFORM_EXPORT VideoCaptureImpl
       std::unique_ptr<gpu::GpuMemoryBufferSupport> gpu_memory_buffer_support);
 
   // media::mojom::VideoCaptureObserver implementation.
-  void OnStateChanged(media::mojom::VideoCaptureState state) override;
+  void OnStateChanged(
+      media::mojom::blink::VideoCaptureResultPtr result) override;
   void OnNewBuffer(
       int32_t buffer_id,
       media::mojom::blink::VideoBufferHandlePtr buffer_handle) override;

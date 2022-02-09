@@ -19,7 +19,7 @@ component("platform_window") {
 
   defines = [ "IS_PLATFORM_WINDOW_IMPL" ]
 
-  public_deps = [ "//ui/base/cursor:cursor_base" ]
+  public_deps = []
 
   deps = [
     "//base",
@@ -59,7 +59,7 @@ component("platform_window") {
 
 group("platform_impls") {
   public_deps = [ "//ui/platform_window/stub" ]
-  if (use_x11) {
+  if (ozone_platform_x11) {
     public_deps += [ "//ui/platform_window/x11" ]
   } else if (is_win) {
     public_deps += [ "//ui/platform_window/win" ]

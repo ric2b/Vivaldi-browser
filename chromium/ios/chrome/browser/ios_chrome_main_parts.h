@@ -9,7 +9,6 @@
 
 #include "base/allocator/buildflags.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "ios/chrome/browser/ios_chrome_field_trials.h"
 #include "ios/web/public/init/web_main_parts.h"
 
@@ -38,7 +37,7 @@ class IOSChromeMainParts : public web::WebMainParts {
 
   // Sets up the field trials and related initialization. Call only after
   // about:flags have been converted to switches.
-  void SetupFieldTrials();
+  void SetUpFieldTrials();
 
   // Constructs the metrics service and initializes metrics recording.
   void SetupMetrics();

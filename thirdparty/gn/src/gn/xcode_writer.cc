@@ -325,7 +325,10 @@ class CollectPBXObjectsPerClassHelper : public PBXObjectVisitorConst {
  private:
   std::map<PBXObjectClass, std::vector<const PBXObject*>> objects_per_class_;
 
-  DISALLOW_COPY_AND_ASSIGN(CollectPBXObjectsPerClassHelper);
+  CollectPBXObjectsPerClassHelper(const CollectPBXObjectsPerClassHelper&) =
+      delete;
+  CollectPBXObjectsPerClassHelper& operator=(
+      const CollectPBXObjectsPerClassHelper&) = delete;
 };
 
 std::map<PBXObjectClass, std::vector<const PBXObject*>>
@@ -360,7 +363,9 @@ class RecursivelyAssignIdsHelper : public PBXObjectVisitor {
   std::string seed_;
   int64_t counter_;
 
-  DISALLOW_COPY_AND_ASSIGN(RecursivelyAssignIdsHelper);
+  RecursivelyAssignIdsHelper(const RecursivelyAssignIdsHelper&) = delete;
+  RecursivelyAssignIdsHelper& operator=(const RecursivelyAssignIdsHelper&) =
+      delete;
 };
 
 void RecursivelyAssignIds(PBXProject* project) {
@@ -647,6 +652,11 @@ bool XcodeProject::AddSourcesFromBuilder(const Builder& builder, Err* err) {
         sources.insert(source);
     }
 
+    const SourceFile& bridge_header = target->swift_values().bridge_header();
+    if (!bridge_header.is_null() && ShouldIncludeFileInProject(bridge_header)) {
+      sources.insert(bridge_header);
+    }
+
     if (target->output_type() == Target::ACTION ||
         target->output_type() == Target::ACTION_FOREACH) {
       if (ShouldIncludeFileInProject(target->action_values().script()))
@@ -884,7 +894,7 @@ std::optional<std::vector<const Target*>> XcodeProject::GetTargetsFromBuilder(
   // Filter out all target of type EXECUTABLE that are direct dependency of
   // a BUNDLE_DATA target (under the assumption that they will be part of a
   // CREATE_BUNDLE target generating an application bundle).
-  std::set<const Target*> targets(all_targets.begin(), all_targets.end());
+  TargetSet targets(all_targets.begin(), all_targets.end());
   for (const Target* target : all_targets) {
     if (!target->settings()->is_default())
       continue;
@@ -896,9 +906,7 @@ std::optional<std::vector<const Target*>> XcodeProject::GetTargetsFromBuilder(
       if (pair.ptr->output_type() != Target::EXECUTABLE)
         continue;
 
-      auto iter = targets.find(pair.ptr);
-      if (iter != targets.end())
-        targets.erase(iter);
+      targets.erase(pair.ptr);
     }
   }
 
@@ -970,10 +978,9 @@ PBXNativeTarget* XcodeProject::AddBundleTarget(const Target* target,
   const std::string& target_output_name = RebasePath(
       target->bundle_data().GetBundleRootDirOutput(target->settings()).value(),
       build_settings_->build_dir());
-  const std::string output_dir = RebasePath(target->bundle_data()
-          .GetBundleDir(target->settings())
-          .value(),
-      build_settings_->build_dir());
+  const std::string output_dir =
+      RebasePath(target->bundle_data().GetBundleDir(target->settings()).value(),
+                 build_settings_->build_dir());
   const std::string root_src_dir =
       RebasePath("//", build_settings_->build_dir());
   return project_.AddNativeTarget(

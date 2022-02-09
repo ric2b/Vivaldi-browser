@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/threading/platform_thread.h"
@@ -292,9 +292,10 @@ class HostContentSettingsMap : public content_settings::Observer,
   void ShutdownOnUIThread() override;
 
   // content_settings::Observer implementation.
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override;
 
   // Returns the ProviderType associated with the given source string.
   // TODO(estade): I regret adding this. At the moment there are no legitimate
@@ -437,7 +438,7 @@ class HostContentSettingsMap : public content_settings::Observer,
 #endif
 
   // Weak; owned by the Profile.
-  PrefService* prefs_;
+  raw_ptr<PrefService> prefs_;
 
   // Whether this settings map is for an incognito or guest session.
   bool is_off_the_record_;
@@ -459,7 +460,7 @@ class HostContentSettingsMap : public content_settings::Observer,
       user_modifiable_providers_;
 
   // content_settings_providers_[PREF_PROVIDER] but specialized.
-  content_settings::PrefProvider* pref_provider_ = nullptr;
+  raw_ptr<content_settings::PrefProvider> pref_provider_ = nullptr;
 
   base::ThreadChecker thread_checker_;
 

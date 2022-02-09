@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
@@ -163,14 +162,5 @@ class AdaptiveScreenBrightnessManager
 }  // namespace ml
 }  // namespace power
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-namespace power {
-namespace ml {
-using ::ash::power::ml::AdaptiveScreenBrightnessManager;
-}  // namespace ml
-}  // namespace power
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_POWER_ML_ADAPTIVE_SCREEN_BRIGHTNESS_MANAGER_H_

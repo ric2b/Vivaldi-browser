@@ -5,15 +5,17 @@
 #ifndef COMPONENTS_FEED_CORE_V2_FEED_STREAM_H_
 #define COMPONENTS_FEED_CORE_V2_FEED_STREAM_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
-#include "base/sequenced_task_runner.h"
-#include "base/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/version.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
 #include "components/feed/core/proto/v2/wire/reliability_logging_enums.pb.h"
@@ -27,7 +29,7 @@
 #include "components/feed/core/v2/public/stream_type.h"
 #include "components/feed/core/v2/request_throttler.h"
 #include "components/feed/core/v2/scheduling.h"
-#include "components/feed/core/v2/stream/notice_card_tracker.h"
+#include "components/feed/core/v2/stream/privacy_notice_card_tracker.h"
 #include "components/feed/core/v2/stream/upload_criteria.h"
 #include "components/feed/core/v2/stream_model.h"
 #include "components/feed/core/v2/stream_surface_set.h"
@@ -46,6 +48,7 @@ namespace feed {
 namespace feed_stream {
 class UnreadContentNotifier;
 }
+class NoticeCardTracker;
 class FeedNetwork;
 class FeedStore;
 class WebFeedSubscriptionCoordinator;
@@ -75,6 +78,7 @@ class FeedStream : public FeedApi,
     virtual bool IsAutoplayEnabled() = 0;
     virtual void ClearAll() = 0;
     virtual std::string GetSyncSignedInGaia() = 0;
+    virtual std::string GetSyncSignedInEmail() = 0;
     virtual void PrefetchImage(const GURL& url) = 0;
     virtual void RegisterExperiments(const Experiments& experiments) = 0;
   };
@@ -130,7 +134,13 @@ class FeedStream : public FeedApi,
   bool RejectEphemeralChange(const StreamType& stream_type,
                              EphemeralChangeId id) override;
   void ProcessThereAndBackAgain(base::StringPiece data) override;
+  void ProcessThereAndBackAgain(
+      base::StringPiece data,
+      const feedui::LoggingParameters& logging_parameters) override;
   void ProcessViewAction(base::StringPiece data) override;
+  void ProcessViewAction(
+      base::StringPiece data,
+      const feedui::LoggingParameters& logging_parameters) override;
   bool WasUrlRecentlyNavigatedFromFeed(const GURL& url) override;
   DebugStreamData GetDebugStreamData() override;
   void ForceRefreshForDebugging(const StreamType& stream_type) override;
@@ -156,6 +166,14 @@ class FeedStream : public FeedApi,
   void ReportStreamScrollStart() override;
   void ReportOtherUserAction(const StreamType& stream_type,
                              FeedUserActionType action_type) override;
+  void ReportNoticeCreated(const StreamType& stream_type,
+                           const std::string& key) override;
+  void ReportNoticeViewed(const StreamType& stream_type,
+                          const std::string& key) override;
+  void ReportNoticeOpenAction(const StreamType& stream_type,
+                              const std::string& key) override;
+  void ReportNoticeDismissed(const StreamType& stream_type,
+                             const std::string& key) override;
   base::Time GetLastFetchTime(const StreamType& stream_type) override;
   void SetContentOrder(const StreamType& stream_type,
                        ContentOrder content_order) override;
@@ -294,6 +312,8 @@ class FeedStream : public FeedApi,
 
   bool IsEnabledAndVisible();
 
+  LoggingParameters GetLoggingParameters(const StreamType& stream_type);
+
   base::WeakPtr<FeedStream> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
@@ -349,7 +369,6 @@ class FeedStream : public FeedApi,
   void BackgroundRefreshComplete(LoadStreamTask::Result result);
   void LoadTaskComplete(const LoadStreamTask::Result& result);
   void UploadActionsComplete(UploadActionsTask::Result result);
-
   void ClearAll();
 
   bool IsFeedEnabledByEnterprisePolicy();
@@ -366,17 +385,19 @@ class FeedStream : public FeedApi,
   const Stream* FindStream(const StreamType& type) const;
   void UpdateExperiments(Experiments experiments);
 
+  NoticeCardTracker& GetNoticeCardTracker(const std::string& key);
+
   // Unowned.
 
-  RefreshTaskScheduler* refresh_task_scheduler_;
-  MetricsReporter* metrics_reporter_;
-  Delegate* delegate_;
-  PrefService* profile_prefs_;  // May be null.
-  FeedNetwork* feed_network_;
-  ImageFetcher* image_fetcher_;
-  FeedStore* store_;
-  PersistentKeyValueStoreImpl* persistent_key_value_store_;
-  const WireResponseTranslator* wire_response_translator_;
+  raw_ptr<RefreshTaskScheduler> refresh_task_scheduler_;
+  raw_ptr<MetricsReporter> metrics_reporter_;
+  raw_ptr<Delegate> delegate_;
+  raw_ptr<PrefService> profile_prefs_;  // May be null.
+  raw_ptr<FeedNetwork> feed_network_;
+  raw_ptr<ImageFetcher> image_fetcher_;
+  raw_ptr<FeedStore> store_;
+  raw_ptr<PersistentKeyValueStoreImpl> persistent_key_value_store_;
+  raw_ptr<const WireResponseTranslator> wire_response_translator_;
 
   StreamModel::Context stream_model_context_;
 
@@ -411,7 +432,9 @@ class FeedStream : public FeedApi,
   feedui::StreamUpdate forced_stream_update_for_debugging_;
 
   feed_stream::UploadCriteria upload_criteria_;
-  NoticeCardTracker notice_card_tracker_;
+  PrivacyNoticeCardTracker privacy_notice_card_tracker_;
+
+  std::map<std::string, NoticeCardTracker> notice_card_trackers_;
 
   bool clear_all_in_progress_ = false;
 

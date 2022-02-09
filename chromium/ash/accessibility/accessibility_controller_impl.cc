@@ -40,6 +40,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/accessibility/accessibility_feature_disable_dialog.h"
+#include "ash/system/accessibility/dictation_bubble_controller.h"
 #include "ash/system/accessibility/dictation_button_tray.h"
 #include "ash/system/accessibility/floating_accessibility_controller.h"
 #include "ash/system/accessibility/select_to_speak/select_to_speak_menu_bubble_controller.h"
@@ -777,6 +778,7 @@ void AccessibilityControllerImpl::Shutdown() {
 
   // Clean up any child windows and widgets that might be animating out.
   dictation_nudge_controller_.reset();
+  dictation_bubble_controller_.reset();
 
   for (auto& observer : observers_)
     observer.OnAccessibilityControllerShutdown();
@@ -1093,9 +1095,6 @@ void AccessibilityControllerImpl::ShowSelectToSpeakPanel(
     const gfx::Rect& anchor,
     bool is_paused,
     double speech_rate) {
-  if (!features::IsSelectToSpeakNavigationControlEnabled()) {
-    return;
-  }
   if (!select_to_speak_bubble_controller_) {
     select_to_speak_bubble_controller_ =
         std::make_unique<SelectToSpeakMenuBubbleController>();
@@ -1104,8 +1103,7 @@ void AccessibilityControllerImpl::ShowSelectToSpeakPanel(
 }
 
 void AccessibilityControllerImpl::HideSelectToSpeakPanel() {
-  if (!features::IsSelectToSpeakNavigationControlEnabled() ||
-      !select_to_speak_bubble_controller_) {
+  if (!select_to_speak_bubble_controller_) {
     return;
   }
   select_to_speak_bubble_controller_->Hide();
@@ -1114,7 +1112,7 @@ void AccessibilityControllerImpl::HideSelectToSpeakPanel() {
 void AccessibilityControllerImpl::OnSelectToSpeakPanelAction(
     SelectToSpeakPanelAction action,
     double value) {
-  if (!features::IsSelectToSpeakNavigationControlEnabled() || !client_) {
+  if (!client_) {
     return;
   }
   client_->OnSelectToSpeakPanelAction(action, value);
@@ -2056,12 +2054,13 @@ void AccessibilityControllerImpl::ShowConfirmationDialog(
 
 void AccessibilityControllerImpl::
     UpdateDictationButtonOnSpeechRecognitionDownloadChanged(
-        bool download_in_progress) {
+        int download_progress) {
+  dictation_soda_download_progress_ = download_progress;
   Shell::Get()
       ->GetPrimaryRootWindowController()
       ->GetStatusAreaWidget()
       ->dictation_button_tray()
-      ->UpdateOnSpeechRecognitionDownloadChanged(download_in_progress);
+      ->UpdateOnSpeechRecognitionDownloadChanged(download_progress);
 }
 
 void AccessibilityControllerImpl::
@@ -2101,8 +2100,16 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
       UpdateAccessibilityHighlightingFromPrefs();
       break;
     case FeatureType::kDictation:
-      if (!enabled)
+      if (enabled &&
+          ::features::IsExperimentalAccessibilityDictationCommandsEnabled()) {
+        // The Dictation bubble is hidden behind a flag; only create the
+        // controller if the flag is enabled.
+        dictation_bubble_controller_ =
+            std::make_unique<DictationBubbleController>();
+      } else {
         dictation_nudge_controller_.reset();
+        dictation_bubble_controller_.reset();
+      }
       break;
     case FeatureType::kFloatingMenu:
       if (enabled && always_show_floating_menu_when_enabled_)

@@ -13,7 +13,7 @@
 
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -30,10 +30,9 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace base {
-class DictionaryValue;
 class FilePath;
 class RefCountedMemory;
-}
+}  // namespace base
 
 namespace printing {
 
@@ -175,14 +174,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
   // Passes |closure| to PrintPreviewHandler::SetPdfSavedClosureForTesting().
   void SetPdfSavedClosureForTesting(base::OnceClosure closure);
 
-  // Tell the handler to send the enable-manipulate-settings-for-test WebUI
-  // event.
-  void SendEnableManipulateSettingsForTest();
-
-  // Tell the handler to send the manipulate-settings-for-test WebUI event
-  // to set the print preview settings contained in |settings|.
-  void SendManipulateSettingsForTest(const base::DictionaryValue& settings);
-
   // See SetPrintPreviewDataForIndex().
   void SetPrintPreviewDataForIndexForTest(
       int index,
@@ -263,7 +254,7 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
 #endif
 
   // Weak pointer to the WebUI handler.
-  PrintPreviewHandler* const handler_;
+  const raw_ptr<PrintPreviewHandler> handler_;
 
   // Indicates whether the source document is from ARC.
   bool source_is_arc_ = false;

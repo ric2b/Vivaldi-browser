@@ -21,9 +21,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
@@ -38,8 +38,8 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_host.h"
 #include "content/browser/service_worker/service_worker_installed_scripts_sender.h"
+#include "content/browser/service_worker/service_worker_security_utils.h"
 #include "content/common/content_navigation_policy.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/page_navigator.h"
@@ -169,7 +169,7 @@ void DidShowPaymentHandlerWindow(
     int render_frame_id) {
   if (success) {
     service_worker_client_utils::DidNavigate(
-        context, url.GetOrigin(), key,
+        context, url.DeprecatedGetOriginAsURL(), key,
         base::BindOnce(&OnOpenWindowFinished, std::move(callback)),
         GlobalRenderFrameHostId(render_process_id, render_frame_id));
   } else {
@@ -869,6 +869,10 @@ void ServiceWorkerVersion::RestoreControlleeFromBackForwardCacheMap(
     // cause of the crash.
     BackForwardCacheCanStoreDocumentResult can_store;
     can_store.No(controllees_to_be_evicted_.at(client_uuid));
+    TRACE_EVENT(
+        "navigation",
+        "ServiceWorkerVersion::RestoreControlleeFromBackForwardCacheMap",
+        ChromeTrackEvent::kBackForwardCacheCanStoreDocumentResult, can_store);
     SCOPED_CRASH_KEY_STRING32("RestoreForBFCache", "no_controllee_reason",
                               can_store.ToString());
     base::debug::DumpWithoutCrashing();
@@ -1065,6 +1069,14 @@ void ServiceWorkerVersion::InitializeGlobalScope(
       std::move(reporting_observer_receiver_));
 
   is_endpoint_ready_ = true;
+}
+
+bool ServiceWorkerVersion::IsControlleeProcessID(int process_id) const {
+  for (const auto& controllee : controllee_map_) {
+    if (controllee.second && controllee.second->GetProcessId() == process_id)
+      return true;
+  }
+  return false;
 }
 
 void ServiceWorkerVersion::SetValidOriginTrialTokens(
@@ -1370,8 +1382,8 @@ void ServiceWorkerVersion::GetClient(const std::string& client_uuid,
   }
   ServiceWorkerContainerHost* container_host =
       context_->GetContainerHostByClientID(client_uuid);
-  if (!container_host ||
-      container_host->url().GetOrigin() != script_url_.GetOrigin()) {
+  if (!container_host || container_host->url().DeprecatedGetOriginAsURL() !=
+                             script_url_.DeprecatedGetOriginAsURL()) {
     // The promise will be resolved to 'undefined'.
     // Note that we don't BadMessage here since Clients#get() can be passed an
     // arbitrary UUID. The BadMessages for the origin mismatches below are
@@ -1460,7 +1472,8 @@ void ServiceWorkerVersion::PostMessageToClient(
     }
   }
 
-  if (container_host->url().GetOrigin() != script_url_.GetOrigin()) {
+  if (container_host->url().DeprecatedGetOriginAsURL() !=
+      script_url_.DeprecatedGetOriginAsURL()) {
     mojo::ReportBadMessage(
         "Received Client#postMessage() request for a cross-origin client.");
     receiver_.reset();
@@ -1510,7 +1523,8 @@ void ServiceWorkerVersion::FocusClient(const std::string& client_uuid,
     std::move(callback).Run(nullptr /* client */);
     return;
   }
-  if (container_host->url().GetOrigin() != script_url_.GetOrigin()) {
+  if (container_host->url().DeprecatedGetOriginAsURL() !=
+      script_url_.DeprecatedGetOriginAsURL()) {
     mojo::ReportBadMessage(
         "Received WindowClient#focus() request for a cross-origin client.");
     receiver_.reset();
@@ -1564,7 +1578,8 @@ void ServiceWorkerVersion::NavigateClient(const std::string& client_uuid,
                             std::string("The client was not found."));
     return;
   }
-  if (container_host->url().GetOrigin() != script_url_.GetOrigin()) {
+  if (container_host->url().DeprecatedGetOriginAsURL() !=
+      script_url_.DeprecatedGetOriginAsURL()) {
     mojo::ReportBadMessage(
         "Received WindowClient#navigate() request for a cross-origin client.");
     receiver_.reset();
@@ -1715,8 +1730,15 @@ void ServiceWorkerVersion::OnSimpleEventFinished(
 void ServiceWorkerVersion::CountFeature(blink::mojom::WebFeature feature) {
   if (!used_features_.insert(feature).second)
     return;
-  for (auto container_host_by_uuid : controllee_map_)
-    container_host_by_uuid.second->CountFeature(feature);
+  for (auto container_host_by_uuid : controllee_map_) {
+    const base::WeakPtr<ServiceWorkerContainerHost>& container_host =
+        container_host_by_uuid.second;
+    // TODO(crbug.com/1253581 crbug.com/1021718): controllee_map_ should be only
+    // containing live container hosts. The below "if" check is a workaround for
+    // unmatched AddControllee / RemoveControllee calls.
+    if (container_host)
+      container_host->CountFeature(feature);
+  }
 }
 
 void ServiceWorkerVersion::set_cross_origin_embedder_policy(
@@ -1899,7 +1921,8 @@ void ServiceWorkerVersion::StartWorkerInternal() {
   params->user_agent = (origin_trial_tokens_ &&
                         origin_trial_tokens_->contains("UserAgentReduction"))
                            ? browser_client->GetReducedUserAgent()
-                           : browser_client->GetUserAgent();
+                           : browser_client->GetUserAgentBasedOnPolicy(
+                                 context_->wrapper()->browser_context());
   params->ua_metadata = browser_client->GetUserAgentMetadata();
   params->is_installed = IsInstalled(status_);
   params->script_url_to_skip_throttling = updated_script_url_;
@@ -2334,7 +2357,7 @@ bool ServiceWorkerVersion::IsStartWorkerAllowed() const {
   // Check that the worker is allowed on this origin. It's possible a
   // worker was previously allowed and installed, but later the embedder's
   // policy or binary changed to disallow this origin.
-  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(
+  if (!service_worker_security_utils::AllOriginsMatchAndCanAccessServiceWorkers(
           {script_url_})) {
     return false;
   }
@@ -2414,24 +2437,34 @@ bool ServiceWorkerVersion::ShouldRequireForegroundPriority(
   if (fetch_handler_existence_ != FetchHandlerExistence::EXISTS)
     return false;
 
-  // Keep the service worker at foreground priority if its controlling clients
-  // from a different process.  In this situation we are likely to need to
+  // Keep the service worker at foreground priority if it has clients from
+  // different foreground processes.  In this situation we are likely to need to
   // quickly service FetchEvents when the worker's process does not have any
   // visible windows and would have otherwise been moved to the background.
-  //
-  // Ideally we would check the visibility of all clients as well, but that
-  // would also require triggering additional checks on every visibility
-  // change of all clients.  That would add a lot of complexity and its
-  // unclear we need to pay that cost yet.  This may get easier once the
-  // service worker code runs on the UI thread directly. (crbug.com/824858)
   //
   // For now the requirement for cross-process clients should filter out most
   // service workers.  The impact of foreground service workers is further
   // limited by the automatic shutdown mechanism.
   for (const auto& controllee : controllee_map_) {
-    ServiceWorkerContainerHost* container_host = controllee.second.get();
-    if (container_host->GetProcessId() != worker_process_id)
+    const int controllee_process_id = controllee.second->GetProcessId();
+    RenderProcessHost* render_host =
+        RenderProcessHost::FromID(controllee_process_id);
+
+    // It's possible that |controllee_process_id| and |render_host| won't be
+    // valid until the controllee commits. Require foreground priority in this
+    // case.
+    if (!render_host)
       return true;
+
+    // Require foreground if the controllee is in different process and is
+    // foreground.
+    if (controllee_process_id != worker_process_id &&
+        (!base::FeatureList::IsEnabled(
+             features::
+                 kChangeServiceWorkerPriorityForClientForegroundStateChange) ||
+         !render_host->IsProcessBackgrounded())) {
+      return true;
+    }
   }
   return false;
 }

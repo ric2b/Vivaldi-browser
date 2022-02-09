@@ -70,8 +70,8 @@ class Label {
   std::string GetUserVisibleName(const Label& default_toolchain) const;
 
   bool operator==(const Label& other) const {
-    return name_.SameAs(other.name_) && dir_ == other.dir_ &&
-           toolchain_dir_ == other.toolchain_dir_ &&
+    return hash_ == other.hash_ && name_.SameAs(other.name_) &&
+           dir_ == other.dir_ && toolchain_dir_ == other.toolchain_dir_ &&
            toolchain_name_.SameAs(other.toolchain_name_);
   }
   bool operator!=(const Label& other) const { return !operator==(other); }
@@ -101,7 +101,8 @@ class Label {
   size_t hash() const { return hash_; }
 
  private:
-  Label(SourceDir dir, StringAtom name) : dir_(dir), name_(name) {}
+  Label(SourceDir dir, StringAtom name)
+      : dir_(dir), name_(name), hash_(ComputeHash()) {}
 
   Label(SourceDir dir,
         StringAtom name,
@@ -110,13 +111,14 @@ class Label {
       : dir_(dir),
         name_(name),
         toolchain_dir_(toolchain_dir),
-        toolchain_name_(toolchain_name) {}
+        toolchain_name_(toolchain_name),
+        hash_(ComputeHash()) {}
 
   size_t ComputeHash() const {
     size_t h0 = dir_.hash();
-    size_t h1 = name_.hash();
+    size_t h1 = name_.ptr_hash();
     size_t h2 = toolchain_dir_.hash();
-    size_t h3 = toolchain_name_.hash();
+    size_t h3 = toolchain_name_.ptr_hash();
     return ((h3 * 131 + h2) * 131 + h1) * 131 + h0;
   }
 

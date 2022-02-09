@@ -9,6 +9,7 @@
 
 #include "base/feature_list.h"
 #include "base/token.h"
+#include "base/values.h"
 #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/common/buildflags.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/content/content_platform_specific_tab_data.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -34,6 +36,10 @@
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
 #include "chrome/browser/sessions/tab_loader.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+#include "chrome/browser/ui/side_search/side_search_utils.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -99,8 +105,35 @@ sessions::LiveTab* BrowserLiveTabContext::GetActiveLiveTab() const {
       browser_->tab_strip_model()->GetActiveWebContents());
 }
 
-bool BrowserLiveTabContext::IsTabPinned(int index) const {
-  return browser_->tab_strip_model()->IsTabPinned(index);
+std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
+    int index) const {
+  std::map<std::string, std::string> extra_data;
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  if (IsSideSearchEnabled(browser_->profile())) {
+    absl::optional<std::pair<std::string, std::string>> side_search_data =
+        side_search::MaybeGetSideSearchTabRestoreData(
+            browser_->tab_strip_model()->GetWebContentsAt(index));
+    if (side_search_data.has_value())
+      extra_data.insert(side_search_data.value());
+  }
+#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
+
+  return extra_data;
+}
+
+std::map<std::string, std::string>
+BrowserLiveTabContext::GetExtraDataForWindow() const {
+  std::map<std::string, std::string> extra_data;
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  if (IsSideSearchEnabled(browser_->profile())) {
+    side_search::MaybeAddSideSearchWindowRestoreData(
+        browser_->window()->IsSideSearchPanelVisible(), extra_data);
+  }
+#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
+
+  return extra_data;
 }
 
 absl::optional<tab_groups::TabGroupId> BrowserLiveTabContext::GetTabGroupForTab(
@@ -115,6 +148,10 @@ BrowserLiveTabContext::GetVisualDataForGroup(
       ->group_model()
       ->GetTabGroup(group)
       ->visual_data();
+}
+
+bool BrowserLiveTabContext::IsTabPinned(int index) const {
+  return browser_->tab_strip_model()->IsTabPinned(index);
 }
 
 void BrowserLiveTabContext::SetVisualDataForGroup(
@@ -147,6 +184,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     bool pin,
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     const SessionID* tab_id,
     const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
@@ -174,9 +212,9 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     if (wc) {
       // Cache hit.
       restored_from_closed_tab_cache = true;
-      web_contents = chrome::AddRestoredTabFromCache(std::move(wc), browser_,
-                                                     tab_index, group, select,
-                                                     pin, user_agent_override);
+      web_contents = chrome::AddRestoredTabFromCache(
+          std::move(wc), browser_, tab_index, group, select, pin,
+          user_agent_override, extra_data);
     }
   }
 
@@ -185,7 +223,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     web_contents = chrome::AddRestoredTab(
         browser_, navigations, tab_index, selected_navigation, extension_app_id,
         group, select, pin, base::TimeTicks(), storage_namespace,
-        user_agent_override, false /* from_session_restore */,
+        user_agent_override, extra_data, false /* from_session_restore */,
         page_action_overrides, ext_data);
   }
 
@@ -236,6 +274,7 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
     const std::string& extension_app_id,
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
   SessionStorageNamespace* storage_namespace =
@@ -247,7 +286,8 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
 
   WebContents* web_contents = chrome::ReplaceRestoredTab(
       browser_, navigations, selected_navigation, extension_app_id,
-      storage_namespace, user_agent_override, false /* from_session_restore */,
+      storage_namespace, user_agent_override, extra_data,
+      false /* from_session_restore */,
       page_action_overrides, ext_data);
 
   return sessions::ContentLiveTab::GetForWebContents(web_contents);
@@ -265,6 +305,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
     ui::WindowShowState show_state,
     const std::string& workspace,
     const std::string& user_title,
+    const std::map<std::string, std::string>& extra_data,
     const std::string& ext_data) {
   std::unique_ptr<Browser::CreateParams> create_params;
   if (ShouldCreateAppWindowForAppName(profile, app_name)) {
@@ -285,6 +326,11 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
   create_params->initial_workspace = workspace;
   create_params->user_title = user_title;
   Browser* browser = Browser::Create(*create_params.get());
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  browser->window()->MaybeRestoreSideSearchStatePerWindow(extra_data);
+#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
+
   return browser->live_tab_context();
 }
 

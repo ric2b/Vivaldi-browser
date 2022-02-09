@@ -30,10 +30,11 @@ import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 
 import {loadTimeData} from '../../i18n_setup.js';
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {routes} from '../os_route.m.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 import {AndroidAppsBrowserProxyImpl, AndroidAppsInfo} from './android_apps_browser_proxy.js';
 import {AppManagementEntryPoint, AppManagementEntryPointsHistogramName} from './app_management_page/constants.js';
@@ -121,6 +122,12 @@ Polymer({
     showAndroidApps: Boolean,
 
     /**
+     * Show ARCVM Manage USB related settings and sub-page.
+     * @type {boolean}
+     */
+    showArcvmManageUsb: Boolean,
+
+    /**
      * Whether the App Notifications page should be shown.
      * @type {boolean}
      */
@@ -190,6 +197,12 @@ Polymer({
       },
     },
 
+    /** @private {boolean} */
+    isDndEnabled_: {
+      type: Boolean,
+      value: false,
+    },
+
     /**
      * Used by DeepLinkingBehavior to focus this page's deep links.
      * @type {!Set<!chromeos.settings.mojom.Setting>}
@@ -221,6 +234,9 @@ Polymer({
     this.mojoInterfaceProvider_.addObserver(
         this.appNotificationsObserverReceiver_.$.bindNewPipeAndPassRemote());
 
+    this.mojoInterfaceProvider_.getQuietMode().then((result) => {
+      this.isDndEnabled_ = result.enabled;
+    });
     this.mojoInterfaceProvider_.getApps().then((result) => {
       this.appsWithNotifications_ = result.apps;
     });
@@ -321,14 +337,19 @@ Polymer({
   },
 
   /** Override chromeos.settings.appNotification.onQuietModeChanged */
-  onQuietModeChanged(enabled) {},
+  onQuietModeChanged(enabled) {
+    this.isDndEnabled_ = enabled;
+  },
 
   /**
    * @return {string}
    * @protected
    */
   getAppListCountDescription_() {
-    return this.i18n(
-        'appNotificationsCountDescription', this.appsWithNotifications_.length);
+    return this.isDndEnabled_ ?
+        this.i18n('appNotificationsDoNotDisturbDescription') :
+        this.i18n(
+            'appNotificationsCountDescription',
+            this.appsWithNotifications_.length);
   }
 });

@@ -11,10 +11,11 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
@@ -143,7 +144,7 @@ class TestAppWindow : public content::WebContentsObserver {
   void WebContentsDestroyed() override { window_ = nullptr; }
 
  private:
-  extensions::AppWindow* window_;
+  raw_ptr<extensions::AppWindow> window_;
 };
 
 class TabDesktopMediaListTest : public testing::Test {
@@ -316,7 +317,7 @@ class TabDesktopMediaListTest : public testing::Test {
   ScopedTestingLocalState local_state_;
 
   std::unique_ptr<content::RenderViewHostTestEnabler> rvh_test_enabler_;
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
   std::unique_ptr<Browser> browser_;
 
   // Must be listed before |list_|, so it's destroyed last.

@@ -28,14 +28,6 @@
 #error "This file requires ARC support."
 #endif
 
-// TODO(crbug.com/1015113) The EG2 macro is breaking indexing for some reason
-// without the trailing semicolon.  For now, disable the extra semi warning
-// so Xcode indexing works for the egtest.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
-GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(AdaptiveToolbarAppInterface);
-#pragma clang diagnostic pop
-
 namespace {
 
 using chrome_test_util::BackButton;
@@ -499,9 +491,7 @@ UIViewController* TopPresentedViewController() {
                         true /* menu should appear */)];
   [[EarlGrey selectElementWithMatcher:
                  chrome_test_util::StaticTextWithAccessibilityLabelId(
-                     web::features::UseWebViewNativeContextMenuSystem()
-                         ? IDS_IOS_OPEN_IN_INCOGNITO_ACTION_TITLE
-                         : IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)]
+                     IDS_IOS_OPEN_IN_INCOGNITO_ACTION_TITLE)]
       performAction:grey_tap()];
 
   // Check the buttons status.

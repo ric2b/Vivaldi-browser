@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/renderer/gin_port.h"
 #include "extensions/renderer/one_time_message_handler.h"
@@ -22,6 +21,7 @@ class RenderFrame;
 }
 
 namespace extensions {
+enum class SerializationFormat;
 class NativeExtensionBindingsSystem;
 class ScriptContextSetIterable;
 struct Message;
@@ -109,7 +109,8 @@ class NativeRendererMessagingService : public GinPort::Delegate {
   // Creates and opens a new message port in the specified context.
   gin::Handle<GinPort> Connect(ScriptContext* script_context,
                                const MessageTarget& target,
-                               const std::string& name);
+                               const std::string& name,
+                               SerializationFormat format);
 
   // Sends a one-time message, as is used by runtime.sendMessage.
   void SendOneTimeMessage(ScriptContext* script_context,

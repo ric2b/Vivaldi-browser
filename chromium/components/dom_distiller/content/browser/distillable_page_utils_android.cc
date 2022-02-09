@@ -4,7 +4,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/dom_distiller/content/browser/android/jni_headers/DistillablePageUtils_jni.h"
 #include "components/dom_distiller/content/browser/distillable_page_utils.h"
@@ -40,7 +40,9 @@ class JniDistillabilityObserverWrapper
   }
 
  private:
-  explicit JniDistillabilityObserverWrapper(content::WebContents* contents) {}
+  explicit JniDistillabilityObserverWrapper(content::WebContents* contents)
+      : content::WebContentsUserData<JniDistillabilityObserverWrapper>(
+            *contents) {}
   friend class content::WebContentsUserData<JniDistillabilityObserverWrapper>;
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

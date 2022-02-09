@@ -24,12 +24,7 @@
 #include "wx/dynarray.h"        // wxArrayInt
 #include "wx/gdicmn.h"          // wxPoint
 
-// some compilers don't have standard compliant rdbuf() (and MSVC has it only
-// in its new iostream library, not in the old one used with iostream.h)
-#if defined(__WATCOMC__) || \
-    ((defined(__VISUALC5__) || defined(__VISUALC6__)) && wxUSE_IOSTREAMH)
-    #define wxHAS_TEXT_WINDOW_STREAM 0
-#elif wxUSE_STD_IOSTREAM
+#if wxUSE_STD_IOSTREAM
     #include "wx/ioswrap.h"
     #define wxHAS_TEXT_WINDOW_STREAM 1
 #else
@@ -100,11 +95,6 @@ const wxTextCoord wxInvalidTextCoord    = -2;
 #define wxTE_WORDWRAP       0x0001  // wrap only at words boundaries
 #define wxTE_BESTWRAP       0x0000  // this is the default
 
-#if WXWIN_COMPATIBILITY_2_6
-    // obsolete synonym
-    #define wxTE_LINEWRAP       wxTE_CHARWRAP
-#endif // WXWIN_COMPATIBILITY_2_6
-
 #if WXWIN_COMPATIBILITY_2_8
     // this style is (or at least should be) on by default now, don't use it
     #define wxTE_AUTO_SCROLL    0
@@ -114,8 +104,7 @@ const wxTextCoord wxInvalidTextCoord    = -2;
 // wxTE_RICH controls - can be used together with or instead of wxTE_RICH
 #define wxTE_RICH2          0x8000
 
-// reuse wxTE_RICH2's value for CAPEDIT control on Windows CE
-#if defined(__SMARTPHONE__) || defined(__POCKETPC__)
+#if defined(__WXOSX_IPHONE__)
 #define wxTE_CAPITALIZE     wxTE_RICH2
 #else
 #define wxTE_CAPITALIZE     0
@@ -205,6 +194,9 @@ enum wxTextAttrFlags
     wxTEXT_ATTR_EFFECTS              = 0x00800000,
     wxTEXT_ATTR_OUTLINE_LEVEL        = 0x01000000,
 
+    wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE = 0x20000000,
+    wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER =  0x40000000,
+
     /*!
     * Character and paragraph combined styles
     */
@@ -216,7 +208,8 @@ enum wxTextAttrFlags
     wxTEXT_ATTR_PARAGRAPH = \
         (wxTEXT_ATTR_ALIGNMENT|wxTEXT_ATTR_LEFT_INDENT|wxTEXT_ATTR_RIGHT_INDENT|wxTEXT_ATTR_TABS|\
             wxTEXT_ATTR_PARA_SPACING_BEFORE|wxTEXT_ATTR_PARA_SPACING_AFTER|wxTEXT_ATTR_LINE_SPACING|\
-            wxTEXT_ATTR_BULLET|wxTEXT_ATTR_PARAGRAPH_STYLE_NAME|wxTEXT_ATTR_LIST_STYLE_NAME|wxTEXT_ATTR_OUTLINE_LEVEL|wxTEXT_ATTR_PAGE_BREAK),
+            wxTEXT_ATTR_BULLET|wxTEXT_ATTR_PARAGRAPH_STYLE_NAME|wxTEXT_ATTR_LIST_STYLE_NAME|wxTEXT_ATTR_OUTLINE_LEVEL|\
+            wxTEXT_ATTR_PAGE_BREAK|wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE|wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER),
 
     wxTEXT_ATTR_ALL = (wxTEXT_ATTR_CHARACTER|wxTEXT_ATTR_PARAGRAPH)
 };
@@ -262,7 +255,9 @@ enum wxTextAttrEffects
     wxTEXT_ATTR_EFFECT_OUTLINE               = 0x00000040,
     wxTEXT_ATTR_EFFECT_ENGRAVE               = 0x00000080,
     wxTEXT_ATTR_EFFECT_SUPERSCRIPT           = 0x00000100,
-    wxTEXT_ATTR_EFFECT_SUBSCRIPT             = 0x00000200
+    wxTEXT_ATTR_EFFECT_SUBSCRIPT             = 0x00000200,
+    wxTEXT_ATTR_EFFECT_RTL                   = 0x00000400,
+    wxTEXT_ATTR_EFFECT_SUPPRESS_HYPHENATION  = 0x00001000
 };
 
 /*!
@@ -273,6 +268,14 @@ enum wxTextAttrLineSpacing
     wxTEXT_ATTR_LINE_SPACING_NORMAL         = 10,
     wxTEXT_ATTR_LINE_SPACING_HALF           = 15,
     wxTEXT_ATTR_LINE_SPACING_TWICE          = 20
+};
+
+enum wxTextAttrUnderlineType
+{
+     wxTEXT_ATTR_UNDERLINE_NONE,
+     wxTEXT_ATTR_UNDERLINE_SOLID,
+     wxTEXT_ATTR_UNDERLINE_DOUBLE,
+     wxTEXT_ATTR_UNDERLINE_SPECIAL
 };
 
 // ----------------------------------------------------------------------------
@@ -325,7 +328,13 @@ public:
     void SetFontStyle(wxFontStyle fontStyle) { m_fontStyle = fontStyle; m_flags |= wxTEXT_ATTR_FONT_ITALIC; }
     void SetFontWeight(wxFontWeight fontWeight) { m_fontWeight = fontWeight; m_flags |= wxTEXT_ATTR_FONT_WEIGHT; }
     void SetFontFaceName(const wxString& faceName) { m_fontFaceName = faceName; m_flags |= wxTEXT_ATTR_FONT_FACE; }
-    void SetFontUnderlined(bool underlined) { m_fontUnderlined = underlined; m_flags |= wxTEXT_ATTR_FONT_UNDERLINE; }
+    void SetFontUnderlined(bool underlined) { SetFontUnderlined(underlined ? wxTEXT_ATTR_UNDERLINE_SOLID : wxTEXT_ATTR_UNDERLINE_NONE); }
+    void SetFontUnderlined(wxTextAttrUnderlineType type, const wxColour& colour = wxNullColour)
+    {
+        m_flags |= wxTEXT_ATTR_FONT_UNDERLINE;
+        m_fontUnderlineType = type;
+        m_colUnderline = colour;
+    }
     void SetFontStrikethrough(bool strikethrough) { m_fontStrikethrough = strikethrough; m_flags |= wxTEXT_ATTR_FONT_STRIKETHROUGH; }
     void SetFontEncoding(wxFontEncoding encoding) { m_fontEncoding = encoding; m_flags |= wxTEXT_ATTR_FONT_ENCODING; }
     void SetFontFamily(wxFontFamily family) { m_fontFamily = family; m_flags |= wxTEXT_ATTR_FONT_FAMILY; }
@@ -364,7 +373,9 @@ public:
     int GetFontSize() const { return m_fontSize; }
     wxFontStyle GetFontStyle() const { return m_fontStyle; }
     wxFontWeight GetFontWeight() const { return m_fontWeight; }
-    bool GetFontUnderlined() const { return m_fontUnderlined; }
+    bool GetFontUnderlined() const { return m_fontUnderlineType != wxTEXT_ATTR_UNDERLINE_NONE; }
+    wxTextAttrUnderlineType GetUnderlineType() const { return m_fontUnderlineType; }
+    const wxColour& GetUnderlineColour() const { return m_colUnderline; }
     bool GetFontStrikethrough() const { return m_fontStrikethrough; }
     const wxString& GetFontFaceName() const { return m_fontFaceName; }
     wxFontEncoding GetFontEncoding() const { return m_fontEncoding; }
@@ -513,7 +524,8 @@ private:
     wxFontStyle         m_fontStyle;
     wxFontWeight        m_fontWeight;
     wxFontFamily        m_fontFamily;
-    bool                m_fontUnderlined;
+    wxTextAttrUnderlineType m_fontUnderlineType;
+    wxColour            m_colUnderline;
     bool                m_fontStrikethrough;
     wxString            m_fontFaceName;
 
@@ -643,17 +655,17 @@ public:
     wxTextCtrlIface() { }
 
     // wxTextAreaBase overrides
-    virtual wxString GetValue() const
+    virtual wxString GetValue() const wxOVERRIDE
     {
        return wxTextEntryBase::GetValue();
     }
-    virtual void SetValue(const wxString& value)
+    virtual void SetValue(const wxString& value) wxOVERRIDE
     {
        wxTextEntryBase::SetValue(value);
     }
 
 protected:
-    virtual bool IsValidPosition(long pos) const
+    virtual bool IsValidPosition(long pos) const wxOVERRIDE
     {
         return pos >= 0 && pos <= GetLastPosition();
     }
@@ -701,45 +713,42 @@ public:
 
 
     // do the window-specific processing after processing the update event
-    virtual void DoUpdateWindowUI(wxUpdateUIEvent& event);
+    virtual void DoUpdateWindowUI(wxUpdateUIEvent& event) wxOVERRIDE;
 
-    virtual bool ShouldInheritColours() const { return false; }
+    virtual bool ShouldInheritColours() const wxOVERRIDE { return false; }
 
     // work around the problem with having HitTest() both in wxControl and
     // wxTextAreaBase base classes
-    virtual wxTextCtrlHitTestResult HitTest(const wxPoint& pt, long *pos) const
+    virtual wxTextCtrlHitTestResult HitTest(const wxPoint& pt, long *pos) const wxOVERRIDE
     {
         return wxTextAreaBase::HitTest(pt, pos);
     }
 
     virtual wxTextCtrlHitTestResult HitTest(const wxPoint& pt,
                                             wxTextCoord *col,
-                                            wxTextCoord *row) const
+                                            wxTextCoord *row) const wxOVERRIDE
     {
         return wxTextAreaBase::HitTest(pt, col, row);
     }
 
     // we provide stubs for these functions as not all platforms have styles
     // support, but we really should leave them pure virtual here
-    virtual bool SetStyle(long start, long end, const wxTextAttr& style);
-    virtual bool GetStyle(long position, wxTextAttr& style);
-    virtual bool SetDefaultStyle(const wxTextAttr& style);
+    virtual bool SetStyle(long start, long end, const wxTextAttr& style) wxOVERRIDE;
+    virtual bool GetStyle(long position, wxTextAttr& style) wxOVERRIDE;
+    virtual bool SetDefaultStyle(const wxTextAttr& style) wxOVERRIDE;
 
     // wxTextAreaBase overrides
-    virtual wxString GetValue() const
+    virtual wxString GetValue() const wxOVERRIDE
     {
        return wxTextEntry::GetValue();
     }
-    virtual void SetValue(const wxString& value)
+    virtual void SetValue(const wxString& value) wxOVERRIDE
     {
        wxTextEntry::SetValue(value);
     }
 
-    // wxTextEntry overrides
-    virtual bool SetHint(const wxString& hint);
-
     // wxWindow overrides
-    virtual wxVisualAttributes GetDefaultAttributes() const
+    virtual wxVisualAttributes GetDefaultAttributes() const wxOVERRIDE
     {
         return GetClassDefaultAttributes(GetWindowVariant());
     }
@@ -750,23 +759,30 @@ public:
         return GetCompositeControlsDefaultAttributes(variant);
     }
 
+    virtual const wxTextEntry* WXGetTextEntry() const wxOVERRIDE { return this; }
+
 protected:
+    // Override wxEvtHandler method to check for a common problem of binding
+    // wxEVT_TEXT_ENTER to a control without wxTE_PROCESS_ENTER style, which is
+    // never going to work.
+    virtual bool OnDynamicBind(wxDynamicEventTableEntry& entry) wxOVERRIDE;
+
     // override streambuf method
 #if wxHAS_TEXT_WINDOW_STREAM
-    int overflow(int i);
+    int overflow(int i) wxOVERRIDE;
 #endif // wxHAS_TEXT_WINDOW_STREAM
 
     // Another wxTextAreaBase override.
-    virtual bool IsValidPosition(long pos) const
+    virtual bool IsValidPosition(long pos) const wxOVERRIDE
     {
         return pos >= 0 && pos <= GetLastPosition();
     }
 
     // implement the wxTextEntry pure virtual method
-    virtual wxWindow *GetEditableWindow() { return this; }
+    virtual wxWindow *GetEditableWindow() wxOVERRIDE { return this; }
 
     wxDECLARE_NO_COPY_CLASS(wxTextCtrlBase);
-    DECLARE_ABSTRACT_CLASS(wxTextCtrlBase)
+    wxDECLARE_ABSTRACT_CLASS(wxTextCtrlBase);
 };
 
 // ----------------------------------------------------------------------------
@@ -777,8 +793,6 @@ protected:
     #include "wx/x11/textctrl.h"
 #elif defined(__WXUNIVERSAL__)
     #include "wx/univ/textctrl.h"
-#elif defined(__SMARTPHONE__) && defined(__WXWINCE__)
-    #include "wx/msw/wince/textctrlce.h"
 #elif defined(__WXMSW__)
     #include "wx/msw/textctrl.h"
 #elif defined(__WXMOTIF__)
@@ -789,10 +803,8 @@ protected:
     #include "wx/gtk1/textctrl.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/textctrl.h"
-#elif defined(__WXCOCOA__)
-    #include "wx/cocoa/textctrl.h"
-#elif defined(__WXPM__)
-    #include "wx/os2/textctrl.h"
+#elif defined(__WXQT__)
+    #include "wx/qt/textctrl.h"
 #endif
 
 // ----------------------------------------------------------------------------
@@ -829,7 +841,7 @@ public:
     // get the end of the URL
     long GetURLEnd() const { return m_end; }
 
-    virtual wxEvent *Clone() const { return new wxTextUrlEvent(*this); }
+    virtual wxEvent *Clone() const wxOVERRIDE { return new wxTextUrlEvent(*this); }
 
 protected:
     // the corresponding mouse event
@@ -840,7 +852,7 @@ protected:
          m_end;
 
 private:
-    DECLARE_DYNAMIC_CLASS_NO_ASSIGN(wxTextUrlEvent)
+    wxDECLARE_DYNAMIC_CLASS_NO_ASSIGN(wxTextUrlEvent);
 
 public:
     // for wxWin RTTI only, don't use

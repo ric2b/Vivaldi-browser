@@ -29,8 +29,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.components.bookmarks.BookmarkId;
-import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 
 import java.util.ArrayList;
@@ -202,6 +202,10 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
     private void updateFolderList() {
         List<BookmarkId> folderList = new ArrayList<>();
         List<Integer> depthList = new ArrayList<>();
+        if (ReadingListFeatures.shouldAllowBookmarkTypeSwapping()) {
+            folderList.add(mModel.getReadingListFolder());
+            depthList.add(0);
+        }
         mModel.getMoveDestinations(folderList, depthList, mBookmarksToMove);
         List<FolderListEntry> entryList = new ArrayList<>(folderList.size() + 3);
 
@@ -277,9 +281,10 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             if (ChromeApplicationImpl.isVivaldi() && entry.mId.equals(mParentId)) {
                 finish();
             } else {
-                mModel.moveBookmarks(mBookmarksToMove, entry.mId);
-                BookmarkUtils.setLastUsedParent(this, entry.mId);
-                finish();
+            ReadingListUtils.typeSwapBookmarksIfNecessary(mModel, mBookmarksToMove, entry.mId);
+            mModel.moveBookmarks(mBookmarksToMove, entry.mId);
+            BookmarkUtils.setLastUsedParent(this, entry.mId);
+            finish();
             }
         }
     }
@@ -422,7 +427,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                     iconDrawable = VivaldiBookmarkUtils.getFolderIconForAddDialog(
                             view.getContext(), entry.mIsSpeedDial, entry.mIsSelected);
                 } else
-                iconDrawable = BookmarkUtils.getFolderIcon(view.getContext(), BookmarkType.NORMAL);
+                iconDrawable = BookmarkUtils.getFolderIcon(view.getContext(), entry.mId.getType());
             } else {
                 // For new folder, start_icon is different.
                 VectorDrawableCompat vectorDrawable = VectorDrawableCompat.create(

@@ -19,6 +19,7 @@
 #include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
@@ -28,6 +29,7 @@
 #include "build/build_config.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/browser/test_page_specific_content_settings_delegate.h"
+#include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_context_base.h"
@@ -157,7 +159,7 @@ class GeolocationPermissionContextTests
   // permissions::Observer:
   void OnPermissionChanged(const ContentSettingsPattern& primary_pattern,
                            const ContentSettingsPattern& secondary_pattern,
-                           ContentSettingsType content_type) override;
+                           ContentSettingsTypeSet content_type_set) override;
 
 #if defined(OS_ANDROID)
   bool RequestPermissionIsLSDShown(const GURL& origin);
@@ -180,9 +182,10 @@ class GeolocationPermissionContextTests
 
   TestPermissionsClient client_;
   // owned by |manager_|
-  GeolocationPermissionContext* geolocation_permission_context_ = nullptr;
+  raw_ptr<GeolocationPermissionContext> geolocation_permission_context_ =
+      nullptr;
   // owned by |geolocation_permission_context_|
-  TestGeolocationPermissionContextDelegate* delegate_ = nullptr;
+  raw_ptr<TestGeolocationPermissionContextDelegate> delegate_ = nullptr;
   std::vector<std::unique_ptr<content::WebContents>> extra_tabs_;
   std::vector<std::unique_ptr<MockPermissionPromptFactory>>
       mock_permission_prompt_factories_;
@@ -197,8 +200,8 @@ class GeolocationPermissionContextTests
   std::map<int, std::pair<PermissionRequestID::RequestLocalId, bool>>
       responses_;
   int num_permission_updates_ = 0;
-  ContentSettingsPattern* expected_primary_pattern_ = nullptr;
-  ContentSettingsPattern* expected_secondary_pattern_ = nullptr;
+  raw_ptr<ContentSettingsPattern> expected_primary_pattern_ = nullptr;
+  raw_ptr<ContentSettingsPattern> expected_secondary_pattern_ = nullptr;
 };
 
 PermissionRequestID GeolocationPermissionContextTests::RequestID(
@@ -241,12 +244,12 @@ void GeolocationPermissionContextTests::PermissionResponse(
 void GeolocationPermissionContextTests::OnPermissionChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type) {
+    ContentSettingsTypeSet content_type_set) {
   EXPECT_TRUE(primary_pattern.IsValid());
   EXPECT_TRUE(secondary_pattern.IsValid());
   EXPECT_EQ(*expected_primary_pattern_, primary_pattern);
   EXPECT_EQ(*expected_secondary_pattern_, secondary_pattern);
-  EXPECT_EQ(content_type, ContentSettingsType::GEOLOCATION);
+  EXPECT_EQ(content_type_set.GetType(), ContentSettingsType::GEOLOCATION);
   num_permission_updates_++;
 }
 
@@ -457,7 +460,7 @@ void GeolocationPermissionContextTests::DenyPrompt() {
 void GeolocationPermissionContextTests::ClosePrompt() {
   PermissionRequestManager* manager =
       PermissionRequestManager::FromWebContents(web_contents());
-  manager->Closing();
+  manager->Dismiss();
   base::RunLoop().RunUntilIdle();
 }
 

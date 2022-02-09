@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_DIRDLG || wxUSE_FILEDLG
 
@@ -70,24 +67,8 @@
 
 #endif // __WINDOWS__
 
-#if defined(__OS2__) || defined(__DOS__)
-    #ifdef __OS2__
-        #define INCL_BASE
-        #include <os2.h>
-        #ifndef __EMX__
-            #include <direct.h>
-        #endif
-        #include <stdlib.h>
-        #include <ctype.h>
-    #endif
-#endif // __OS2__
-
 #if defined(__WXMAC__)
 //    #include "MoreFilesX.h"
-#endif
-
-#ifdef __BORLANDC__
-    #include "dos.h"
 #endif
 
 extern WXDLLEXPORT_DATA(const char) wxFileSelectorDefaultWildcardStr[];
@@ -107,19 +88,18 @@ wxDEFINE_EVENT( wxEVT_DIRCTRL_SELECTIONCHANGED, wxTreeEvent );
 wxDEFINE_EVENT( wxEVT_DIRCTRL_FILEACTIVATED, wxTreeEvent );
 
 // ----------------------------------------------------------------------------
-// wxGetAvailableDrives, for WINDOWS, DOS, OS2, MAC, UNIX (returns "/")
+// wxGetAvailableDrives, for WINDOWS, OSX, UNIX (returns "/")
 // ----------------------------------------------------------------------------
 
+// since the macOS implementation needs objective-C this is dirdlg.mm
+#ifdef __WXOSX__
+extern size_t wxGetAvailableDrives(wxArrayString &paths, wxArrayString &names, wxArrayInt &icon_ids);
+#else
 size_t wxGetAvailableDrives(wxArrayString &paths, wxArrayString &names, wxArrayInt &icon_ids)
 {
 #ifdef wxHAS_FILESYSTEM_VOLUMES
 
-#ifdef __WXWINCE__
-    // No logical drives; return "\"
-    paths.Add(wxT("\\"));
-    names.Add(wxT("\\"));
-    icon_ids.Add(wxFileIconsTable::computer);
-#elif defined(__WIN32__) && wxUSE_FSVOLUME
+#if defined(__WIN32__) && wxUSE_FSVOLUME
     // TODO: this code (using wxFSVolumeBase) should be used for all platforms
     //       but unfortunately wxFSVolumeBase is not implemented everywhere
     const wxArrayString as = wxFSVolumeBase::GetVolumes();
@@ -156,56 +136,7 @@ size_t wxGetAvailableDrives(wxArrayString &paths, wxArrayString &names, wxArrayI
         names.Add(vol.GetDisplayName());
         icon_ids.Add(imageId);
     }
-#elif defined(__OS2__)
-    APIRET rc;
-    ULONG ulDriveNum = 0;
-    ULONG ulDriveMap = 0;
-    rc = ::DosQueryCurrentDisk(&ulDriveNum, &ulDriveMap);
-    if ( rc == 0)
-    {
-        size_t i = 0;
-        while (i < 26)
-        {
-            if (ulDriveMap & ( 1 << i ))
-            {
-                const wxString path = wxFileName::GetVolumeString(
-                                        'A' + i, wxPATH_GET_SEPARATOR);
-                const wxString name = wxFileName::GetVolumeString(
-                                        'A' + i, wxPATH_NO_SEPARATOR);
-
-                // Note: If _filesys is unsupported by some compilers,
-                //       we can always replace it by DosQueryFSAttach
-                char filesysname[20];
-#ifdef __WATCOMC__
-                ULONG cbBuffer = sizeof(filesysname);
-                PFSQBUFFER2 pfsqBuffer = (PFSQBUFFER2)filesysname;
-                APIRET rc = ::DosQueryFSAttach(name.fn_str(),0,FSAIL_QUERYNAME,pfsqBuffer,&cbBuffer);
-                if (rc != NO_ERROR)
-                {
-                    filesysname[0] = '\0';
-                }
-#else
-                _filesys(name.fn_str(), filesysname, sizeof(filesysname));
-#endif
-                /* FAT, LAN, HPFS, CDFS, NFS */
-                int imageId;
-                if (path == wxT("A:\\") || path == wxT("B:\\"))
-                    imageId = wxFileIconsTable::floppy;
-                else if (!strcmp(filesysname, "CDFS"))
-                    imageId = wxFileIconsTable::cdrom;
-                else if (!strcmp(filesysname, "LAN") ||
-                         !strcmp(filesysname, "NFS"))
-                    imageId = wxFileIconsTable::drive;
-                else
-                    imageId = wxFileIconsTable::drive;
-                paths.Add(path);
-                names.Add(name);
-                icon_ids.Add(imageId);
-            }
-            i ++;
-        }
-    }
-#else // !__WIN32__, !__OS2__
+#else // !__WIN32__
     /* If we can switch to the drive, it exists. */
     for ( char drive = 'A'; drive <= 'Z'; drive++ )
     {
@@ -222,38 +153,6 @@ size_t wxGetAvailableDrives(wxArrayString &paths, wxArrayString &names, wxArrayI
     }
 #endif // __WIN32__/!__WIN32__
 
-#elif defined(__WXMAC__) && wxOSX_USE_COCOA_OR_CARBON
-
-    ItemCount volumeIndex = 1;
-    OSErr err = noErr ;
-
-    while( noErr == err )
-    {
-        HFSUniStr255 volumeName ;
-        FSRef fsRef ;
-        FSVolumeInfo volumeInfo ;
-        err = FSGetVolumeInfo(0, volumeIndex, NULL, kFSVolInfoFlags , &volumeInfo , &volumeName, &fsRef);
-        if( noErr == err )
-        {
-            wxString path = wxMacFSRefToPath( &fsRef ) ;
-            wxString name = wxMacHFSUniStrToString( &volumeName ) ;
-
-            if ( (volumeInfo.flags & kFSVolFlagSoftwareLockedMask) || (volumeInfo.flags & kFSVolFlagHardwareLockedMask) )
-            {
-                icon_ids.Add(wxFileIconsTable::cdrom);
-            }
-            else
-            {
-                icon_ids.Add(wxFileIconsTable::drive);
-            }
-            // todo other removable
-
-            paths.Add(path);
-            names.Add(name);
-            volumeIndex++ ;
-        }
-    }
-
 #elif defined(__UNIX__)
     paths.Add(wxT("/"));
     names.Add(wxT("/"));
@@ -265,40 +164,17 @@ size_t wxGetAvailableDrives(wxArrayString &paths, wxArrayString &names, wxArrayI
     wxASSERT_MSG( (paths.GetCount() == icon_ids.GetCount()), wxT("Wrong number of icons for available drives."));
     return paths.GetCount();
 }
+#endif
 
 // ----------------------------------------------------------------------------
 // wxIsDriveAvailable
 // ----------------------------------------------------------------------------
 
-#if defined(__DOS__)
+#if defined(__WINDOWS__)
 
-bool wxIsDriveAvailable(const wxString& dirName)
+int setdrive(int drive)
 {
-    // FIXME: this method leads to hang up under Watcom for some reason
-#ifdef __WATCOMC__
-    wxUnusedVar(dirName);
-#else
-    if ( dirName.length() == 3 && dirName[1u] == wxT(':') )
-    {
-        wxString dirNameLower(dirName.Lower());
-        // VS: always return true for removable media, since Win95 doesn't
-        //     like it when MS-DOS app accesses empty floppy drive
-        return (dirNameLower[0u] == wxT('a') ||
-                dirNameLower[0u] == wxT('b') ||
-                wxDirExists(dirNameLower));
-    }
-    else
-#endif
-        return true;
-}
-
-#elif defined(__WINDOWS__) || defined(__OS2__)
-
-int setdrive(int WXUNUSED_IN_WINCE(drive))
-{
-#ifdef __WXWINCE__
-    return 0;
-#elif defined(wxHAS_DRIVE_FUNCTIONS)
+#if defined(wxHAS_DRIVE_FUNCTIONS)
     return _chdrive(drive);
 #else
     wxChar  newdrive[4];
@@ -307,12 +183,7 @@ int setdrive(int WXUNUSED_IN_WINCE(drive))
         return -1;
     newdrive[0] = (wxChar)(wxT('A') + drive - 1);
     newdrive[1] = wxT(':');
-#ifdef __OS2__
-    newdrive[2] = wxT('\\');
-    newdrive[3] = wxT('\0');
-#else
     newdrive[2] = wxT('\0');
-#endif
 #if defined(__WINDOWS__)
     if (::SetCurrentDirectory(newdrive))
 #else
@@ -325,11 +196,8 @@ int setdrive(int WXUNUSED_IN_WINCE(drive))
 #endif // !GNUWIN32
 }
 
-bool wxIsDriveAvailable(const wxString& WXUNUSED_IN_WINCE(dirName))
+bool wxIsDriveAvailable(const wxString& dirName)
 {
-#ifdef __WXWINCE__
-    return false;
-#else
 #ifdef __WIN32__
     UINT errorMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
 #endif
@@ -343,11 +211,6 @@ bool wxIsDriveAvailable(const wxString& WXUNUSED_IN_WINCE(dirName))
 #ifndef wxHAS_DRIVE_FUNCTIONS
         success = wxDirExists(dirNameLower);
 #else
-        #if defined(__OS2__)
-        // Avoid changing to drive since no media may be inserted.
-        if (dirNameLower[(size_t)0] == 'a' || dirNameLower[(size_t)0] == 'b')
-            return success;
-        #endif
         int currentDrive = _getdrive();
         int thisDrive = (int) (dirNameLower[(size_t)0] - 'a' + 1) ;
         int err = setdrive( thisDrive ) ;
@@ -364,9 +227,8 @@ bool wxIsDriveAvailable(const wxString& WXUNUSED_IN_WINCE(dirName))
 #endif
 
     return success;
-#endif
 }
-#endif // __WINDOWS__ || __OS2__
+#endif // __WINDOWS__
 
 #endif // wxUSE_DIRDLG || wxUSE_FILEDLG
 
@@ -387,9 +249,9 @@ static int wxCMPFUNC_CONV wxDirCtrlStringCompareFunction(const wxString& strFirs
 
 wxDirItemData::wxDirItemData(const wxString& path, const wxString& name,
                              bool isDir)
+    : m_path(path)
+    , m_name(name)
 {
-    m_path = path;
-    m_name = name;
     /* Insert logic to detect hidden files here
      * In UnixLand we just check whether the first char is a dot
      * For FileNameFromPath read LastDirNameInThisPath ;-) */
@@ -439,7 +301,7 @@ bool wxDirItemData::HasFiles(const wxString& WXUNUSED(spec)) const
 // wxGenericDirCtrl
 //-----------------------------------------------------------------------------
 
-BEGIN_EVENT_TABLE(wxGenericDirCtrl, wxControl)
+wxBEGIN_EVENT_TABLE(wxGenericDirCtrl, wxControl)
   EVT_TREE_ITEM_EXPANDING     (wxID_TREECTRL, wxGenericDirCtrl::OnExpandItem)
   EVT_TREE_ITEM_COLLAPSED     (wxID_TREECTRL, wxGenericDirCtrl::OnCollapseItem)
   EVT_TREE_BEGIN_LABEL_EDIT   (wxID_TREECTRL, wxGenericDirCtrl::OnBeginEditItem)
@@ -447,7 +309,7 @@ BEGIN_EVENT_TABLE(wxGenericDirCtrl, wxControl)
   EVT_TREE_SEL_CHANGED        (wxID_TREECTRL, wxGenericDirCtrl::OnTreeSelChange)
   EVT_TREE_ITEM_ACTIVATED     (wxID_TREECTRL, wxGenericDirCtrl::OnItemActivated)
   EVT_SIZE                    (wxGenericDirCtrl::OnSize)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 wxGenericDirCtrl::wxGenericDirCtrl(void)
 {
@@ -475,7 +337,7 @@ void wxGenericDirCtrl::ExpandRoot()
 }
 
 bool wxGenericDirCtrl::Create(wxWindow *parent,
-                              const wxWindowID treeid,
+                              wxWindowID treeid,
                               const wxString& dir,
                               const wxPoint& pos,
                               const wxSize& size,
@@ -490,15 +352,9 @@ bool wxGenericDirCtrl::Create(wxWindow *parent,
     SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_3DFACE));
     SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
 
-    Init();
-
     long treeStyle = wxTR_HAS_BUTTONS;
 
-    // On Windows CE, if you hide the root, you get a crash when
-    // attempting to access data for children of the root item.
-#ifndef __WXWINCE__
     treeStyle |= wxTR_HIDE_ROOT;
-#endif
 
 #ifdef __WXGTK20__
     treeStyle |= wxTR_NO_LINES;
@@ -530,6 +386,19 @@ bool wxGenericDirCtrl::Create(wxWindow *parent,
     if (m_filterListCtrl)
         m_filterListCtrl->FillFilterList(filter, defaultFilter);
 
+    // TODO: set the icon size according to current scaling for this window.
+    // Currently, there's insufficient API in wxWidgets to determine what icons
+    // are available and whether to take the nearest size according to a tolerance
+    // instead of scaling.
+    // if (!wxTheFileIconsTable->IsOk())
+    //     wxTheFileIconsTable->SetSize(scaledSize);
+
+    // Meanwhile, in your application initialisation, where you have better knowledge of what
+    // icons are available and whether to scale, you can do this:
+    //
+    // wxTheFileIconsTable->SetSize(calculatedIconSizeForDPI);
+    //
+    // Obviously this can't take into account monitors with different DPI.
     m_treeCtrl->SetImageList(wxTheFileIconsTable->GetSmallImageList());
 
     m_showHidden = false;
@@ -537,7 +406,7 @@ bool wxGenericDirCtrl::Create(wxWindow *parent,
 
     wxString rootName;
 
-#if defined(__WINDOWS__) || defined(__OS2__) || defined(__DOS__)
+#if defined(__WINDOWS__)
     rootName = _("Computer");
 #else
     rootName = _("Sections");
@@ -562,7 +431,7 @@ void wxGenericDirCtrl::Init()
 {
     m_showHidden = false;
     m_currentFilter = 0;
-    m_currentFilterStr = wxEmptyString; // Default: any file
+    m_currentFilterStr.clear(); // Default: any file
     m_treeCtrl = NULL;
     m_filterListCtrl = NULL;
 }
@@ -791,11 +660,11 @@ void wxGenericDirCtrl::PopulateNode(wxTreeItemId parentId)
 
     wxASSERT(data);
 
-    wxString search,path,filename;
+    wxString path;
 
     wxString dirName(data->m_path);
 
-#if (defined(__WINDOWS__) && !defined(__WXWINCE__)) || defined(__DOS__) || defined(__OS2__)
+#if defined(__WINDOWS__)
     // Check if this is a root directory and if so,
     // whether the drive is available.
     if (!wxIsDriveAvailable(dirName))
@@ -809,7 +678,7 @@ void wxGenericDirCtrl::PopulateNode(wxTreeItemId parentId)
     // This may take a longish time. Go to busy cursor
     wxBusyCursor busy;
 
-#if defined(__WINDOWS__) || defined(__DOS__) || defined(__OS2__)
+#if defined(__WINDOWS__)
     if (dirName.Last() == ':')
         dirName += wxString(wxFILE_SEP_PATH);
 #endif
@@ -958,8 +827,8 @@ wxTreeItemId wxGenericDirCtrl::FindChild(wxTreeItemId parentId, const wxString& 
     // Append a separator to foil bogus substring matching
     path2 += wxString(wxFILE_SEP_PATH);
 
-    // In MSW or PM, case is not significant
-#if defined(__WINDOWS__) || defined(__DOS__) || defined(__OS2__)
+    // In MSW case is not significant
+#if defined(__WINDOWS__)
     path2.MakeLower();
 #endif
 
@@ -975,8 +844,8 @@ wxTreeItemId wxGenericDirCtrl::FindChild(wxTreeItemId parentId, const wxString& 
             if (!wxEndsWithPathSeparator(childPath))
                 childPath += wxString(wxFILE_SEP_PATH);
 
-            // In MSW and PM, case is not significant
-#if defined(__WINDOWS__) || defined(__DOS__) || defined(__OS2__)
+            // In MSW case is not significant
+#if defined(__WINDOWS__)
             childPath.MakeLower();
 #endif
 
@@ -1033,7 +902,7 @@ bool wxGenericDirCtrl::ExpandPath(const wxString& path)
         {
             data = GetItemData(childId);
 
-            if (data && data->m_path != wxEmptyString && !data->m_isDir)
+            if (data && !data->m_path.empty() && !data->m_isDir)
             {
                 m_treeCtrl->SelectItem(childId);
                 m_treeCtrl->EnsureVisible(childId);
@@ -1093,7 +962,7 @@ wxString wxGenericDirCtrl::GetPath(wxTreeItemId itemId) const
     const wxDirItemData*
         data = static_cast<wxDirItemData*>(m_treeCtrl->GetItemData(itemId));
 
-    return data->m_path;
+    return data ? data->m_path : wxString();
 }
 
 wxString wxGenericDirCtrl::GetPath() const
@@ -1224,7 +1093,7 @@ void wxGenericDirCtrl::FindChildFiles(wxTreeItemId treeid, int dirFlags, wxArray
 
     wxString dirName(data->m_path);
 
-#if defined(__WINDOWS__) || defined(__OS2__)
+#if defined(__WINDOWS__)
     if (dirName.Last() == ':')
         dirName += wxString(wxFILE_SEP_PATH);
 #endif
@@ -1319,7 +1188,7 @@ void wxGenericDirCtrl::DoResize()
         wxSize filterSz ;
         if (m_filterListCtrl)
         {
-            filterSz = m_filterListCtrl->GetSize();
+            filterSz = m_filterListCtrl->GetBestSize();
             sz.y -= (filterSz.y + verticalSpacing);
         }
         m_treeCtrl->SetSize(0, 0, sz.x, sz.y);
@@ -1362,27 +1231,19 @@ wxTreeItemId wxGenericDirCtrl::AppendItem (const wxTreeItemId & parent,
 // wxDirFilterListCtrl
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_CLASS(wxDirFilterListCtrl, wxChoice)
+wxIMPLEMENT_CLASS(wxDirFilterListCtrl, wxChoice);
 
-BEGIN_EVENT_TABLE(wxDirFilterListCtrl, wxChoice)
+wxBEGIN_EVENT_TABLE(wxDirFilterListCtrl, wxChoice)
     EVT_CHOICE(wxID_ANY, wxDirFilterListCtrl::OnSelFilter)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 bool wxDirFilterListCtrl::Create(wxGenericDirCtrl* parent,
-                                 const wxWindowID treeid,
+                                 wxWindowID treeid,
                                  const wxPoint& pos,
                                  const wxSize& size,
                                  long style)
 {
     m_dirCtrl = parent;
-
-    // by default our border style is determined by the style of our parent
-    if ( !(style & wxBORDER_MASK) )
-    {
-        style |= parent->HasFlag(wxDIRCTRL_3D_INTERNAL) ? wxBORDER_SUNKEN
-                                                        : wxBORDER_NONE;
-    }
-
     return wxChoice::Create(parent, treeid, pos, size, 0, NULL, style);
 }
 
@@ -1445,6 +1306,7 @@ void wxDirFilterListCtrl::FillFilterList(const wxString& filter, int defaultFilt
 // wxFileIconsTable icons
 // ----------------------------------------------------------------------------
 
+#if 0
 #ifndef __WXGTK20__
 /* Computer (c) Julian Smart */
 static const char* const file_icons_tbl_computer_xpm[] = {
@@ -1511,6 +1373,7 @@ static const char* const file_icons_tbl_computer_xpm[] = {
 "                "
 };
 #endif // !GTK+ 2
+#endif
 
 // ----------------------------------------------------------------------------
 // wxFileIconsTable & friends
@@ -1523,17 +1386,17 @@ wxFileIconsTable* wxTheFileIconsTable = NULL;
 
 class wxFileIconsTableModule: public wxModule
 {
-DECLARE_DYNAMIC_CLASS(wxFileIconsTableModule)
+    wxDECLARE_DYNAMIC_CLASS(wxFileIconsTableModule);
 public:
     wxFileIconsTableModule() {}
-    bool OnInit() { wxTheFileIconsTable = new wxFileIconsTable; return true; }
-    void OnExit()
+    bool OnInit() wxOVERRIDE { wxTheFileIconsTable = new wxFileIconsTable; return true; }
+    void OnExit() wxOVERRIDE
     {
         wxDELETE(wxTheFileIconsTable);
     }
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxFileIconsTableModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxFileIconsTableModule, wxModule);
 
 class wxFileIconEntry : public wxObject
 {
@@ -1544,6 +1407,7 @@ public:
 };
 
 wxFileIconsTable::wxFileIconsTable()
+    : m_size(16, 16)
 {
     m_HashTable = NULL;
     m_smallImageList = NULL;
@@ -1556,59 +1420,63 @@ wxFileIconsTable::~wxFileIconsTable()
         WX_CLEAR_HASH_TABLE(*m_HashTable);
         delete m_HashTable;
     }
-    if (m_smallImageList) delete m_smallImageList;
+    delete m_smallImageList;
 }
 
 // delayed initialization - wait until first use (wxArtProv not created yet)
-void wxFileIconsTable::Create()
+void wxFileIconsTable::Create(const wxSize& sz)
 {
     wxCHECK_RET(!m_smallImageList && !m_HashTable, wxT("creating icons twice"));
     m_HashTable = new wxHashTable(wxKEY_STRING);
-    m_smallImageList = new wxImageList(16, 16);
+    m_smallImageList = new wxImageList(sz.x, sz.y);
 
     // folder:
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_FOLDER,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // folder_open
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_FOLDER_OPEN,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // computer
 #ifdef __WXGTK20__
     // GTK24 uses this icon in the file open dialog
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_HARDDISK,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
 #else
-    m_smallImageList->Add(wxIcon(file_icons_tbl_computer_xpm));
+    m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_HARDDISK,
+                                                   wxART_CMN_DIALOG,
+                                                   sz));
+    // TODO: add computer icon if really necessary
+    //m_smallImageList->Add(wxIcon(file_icons_tbl_computer_xpm));
 #endif
     // drive
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_HARDDISK,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // cdrom
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_CDROM,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // floppy
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_FLOPPY,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // removeable
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_REMOVABLE,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // file
     m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_NORMAL_FILE,
                                                    wxART_CMN_DIALOG,
-                                                   wxSize(16, 16)));
+                                                   sz));
     // executable
     if (GetIconID(wxEmptyString, wxT("application/x-executable")) == file)
     {
         m_smallImageList->Add(wxArtProvider::GetBitmap(wxART_EXECUTABLE_FILE,
                                                        wxART_CMN_DIALOG,
-                                                       wxSize(16, 16)));
+                                                       sz));
         delete m_HashTable->Get(wxT("exe"));
         m_HashTable->Delete(wxT("exe"));
         m_HashTable->Put(wxT("exe"), new wxFileIconEntry(executable));
@@ -1621,122 +1489,15 @@ void wxFileIconsTable::Create()
 wxImageList *wxFileIconsTable::GetSmallImageList()
 {
     if (!m_smallImageList)
-        Create();
+        Create(m_size);
 
     return m_smallImageList;
 }
 
-#if wxUSE_MIMETYPE && wxUSE_IMAGE && (!defined(__WINDOWS__) || wxUSE_WXDIB)
-// VS: we don't need this function w/o wxMimeTypesManager because we'll only have
-//     one icon and we won't resize it
-
-static wxBitmap CreateAntialiasedBitmap(const wxImage& img)
-{
-    const unsigned int size = 16;
-
-    wxImage smallimg (size, size);
-    unsigned char *p1, *p2, *ps;
-    unsigned char mr = img.GetMaskRed(),
-                  mg = img.GetMaskGreen(),
-                  mb = img.GetMaskBlue();
-
-    unsigned x, y;
-    unsigned sr, sg, sb, smask;
-
-    p1 = img.GetData(), p2 = img.GetData() + 3 * size*2, ps = smallimg.GetData();
-    smallimg.SetMaskColour(mr, mr, mr);
-
-    for (y = 0; y < size; y++)
-    {
-        for (x = 0; x < size; x++)
-        {
-            sr = sg = sb = smask = 0;
-            if (p1[0] != mr || p1[1] != mg || p1[2] != mb)
-                sr += p1[0], sg += p1[1], sb += p1[2];
-            else smask++;
-            p1 += 3;
-            if (p1[0] != mr || p1[1] != mg || p1[2] != mb)
-                sr += p1[0], sg += p1[1], sb += p1[2];
-            else smask++;
-            p1 += 3;
-            if (p2[0] != mr || p2[1] != mg || p2[2] != mb)
-                sr += p2[0], sg += p2[1], sb += p2[2];
-            else smask++;
-            p2 += 3;
-            if (p2[0] != mr || p2[1] != mg || p2[2] != mb)
-                sr += p2[0], sg += p2[1], sb += p2[2];
-            else smask++;
-            p2 += 3;
-
-            if (smask > 2)
-                ps[0] = ps[1] = ps[2] = mr;
-            else
-            {
-                ps[0] = (unsigned char)(sr >> 2);
-                ps[1] = (unsigned char)(sg >> 2);
-                ps[2] = (unsigned char)(sb >> 2);
-            }
-            ps += 3;
-        }
-        p1 += size*2 * 3, p2 += size*2 * 3;
-    }
-
-    return wxBitmap(smallimg);
-}
-
-// This function is currently not unused anymore
-#if 0
-// finds empty borders and return non-empty area of image:
-static wxImage CutEmptyBorders(const wxImage& img)
-{
-    unsigned char mr = img.GetMaskRed(),
-                  mg = img.GetMaskGreen(),
-                  mb = img.GetMaskBlue();
-    unsigned char *dt = img.GetData(), *dttmp;
-    unsigned w = img.GetWidth(), h = img.GetHeight();
-
-    unsigned top, bottom, left, right, i;
-    bool empt;
-
-#define MK_DTTMP(x,y)      dttmp = dt + ((x + y * w) * 3)
-#define NOEMPTY_PIX(empt)  if (dttmp[0] != mr || dttmp[1] != mg || dttmp[2] != mb) {empt = false; break;}
-
-    for (empt = true, top = 0; empt && top < h; top++)
-    {
-        MK_DTTMP(0, top);
-        for (i = 0; i < w; i++, dttmp+=3)
-            NOEMPTY_PIX(empt)
-    }
-    for (empt = true, bottom = h-1; empt && bottom > top; bottom--)
-    {
-        MK_DTTMP(0, bottom);
-        for (i = 0; i < w; i++, dttmp+=3)
-            NOEMPTY_PIX(empt)
-    }
-    for (empt = true, left = 0; empt && left < w; left++)
-    {
-        MK_DTTMP(left, 0);
-        for (i = 0; i < h; i++, dttmp+=3*w)
-            NOEMPTY_PIX(empt)
-    }
-    for (empt = true, right = w-1; empt && right > left; right--)
-    {
-        MK_DTTMP(right, 0);
-        for (i = 0; i < h; i++, dttmp+=3*w)
-            NOEMPTY_PIX(empt)
-    }
-    top--, left--, bottom++, right++;
-
-    return img.GetSubImage(wxRect(left, top, right - left + 1, bottom - top + 1));
-}
-#endif // #if 0
-
-#endif // wxUSE_MIMETYPE
-
 int wxFileIconsTable::GetIconID(const wxString& extension, const wxString& mime)
 {
     if (!m_smallImageList)
-        Create();
+        Create(m_size);
 
 #if wxUSE_MIMETYPE
     if (!extension.empty())
@@ -1779,7 +1540,7 @@ int wxFileIconsTable::GetIconID(const wxString& extension, const wxString& mime)
         return newid;
     }
 
-    const unsigned int size = 16;
+    int size = m_size.x;
 
     int treeid = m_smallImageList->GetImageCount();
     if ((bmp.GetWidth() == (int) size) && (bmp.GetHeight() == (int) size))
@@ -1791,11 +1552,41 @@ int wxFileIconsTable::GetIconID(const wxString& extension, const wxString& mime)
     {
         wxImage img = bmp.ConvertToImage();
 
-        if ((img.GetWidth() != size*2) || (img.GetHeight() != size*2))
-//            m_smallImageList->Add(CreateAntialiasedBitmap(CutEmptyBorders(img).Rescale(size*2, size*2)));
-            m_smallImageList->Add(CreateAntialiasedBitmap(img.Rescale(size*2, size*2)));
+        if (img.HasMask())
+            img.InitAlpha();
+
+        wxBitmap bmp2;
+        if ((img.GetWidth() != size) || (img.GetHeight() != size))
+        {
+            // TODO: replace with public API that gets the bitmap scale.
+            // But this function may be called from code that doesn't pass a window,
+            // so we will need to be able to get the scaling factor of the current
+            // display, somehow. We could use wxTheApp->GetTopWindow() but sometimes
+            // this won't be available.
+#if defined(__WXOSX_COCOA__)
+            if (wxOSXGetMainScreenContentScaleFactor() > 1.0)
+            {
+                img.Rescale(2*size, 2*size, wxIMAGE_QUALITY_HIGH);
+                bmp2 = wxBitmap(img, -1, 2.0);
+            }
+            else
+#endif
+            {
+                // Double, using normal quality scaling.
+                img.Rescale(2*img.GetWidth(), 2*img.GetHeight());
+
+                // Then scale to the desired size. This gives the best quality,
+                // and better than CreateAntialiasedBitmap.
+                if ((img.GetWidth() != size) || (img.GetHeight() != size))
+                    img.Rescale(size, size, wxIMAGE_QUALITY_HIGH);
+
+                bmp2 = wxBitmap(img);
+            }
+        }
         else
-            m_smallImageList->Add(CreateAntialiasedBitmap(img));
+            bmp2 = wxBitmap(img);
+
+        m_smallImageList->Add(bmp2);
     }
 #endif // wxUSE_IMAGE
 

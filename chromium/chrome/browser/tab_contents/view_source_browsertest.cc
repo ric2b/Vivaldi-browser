@@ -4,7 +4,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -266,8 +266,9 @@ IN_PROC_BROWSER_TEST_F(ViewSourceTest, CrossSiteSubframe) {
 
   // Do a sanity check that in this particular test page the main frame and the
   // subframe are cross-site.
-  EXPECT_NE(original_main_frame->GetLastCommittedURL().GetOrigin(),
-            original_child_frame->GetLastCommittedURL().GetOrigin());
+  EXPECT_NE(
+      original_main_frame->GetLastCommittedURL().DeprecatedGetOriginAsURL(),
+      original_child_frame->GetLastCommittedURL().DeprecatedGetOriginAsURL());
   if (content::AreAllSitesIsolatedForTesting()) {
     EXPECT_NE(original_main_frame->GetSiteInstance(),
               original_child_frame->GetSiteInstance());
@@ -792,7 +793,7 @@ class ViewSourcePrerenderTest : public ViewSourceTest {
                           base::Unretained(this))};
 
   // The WebContents which is expected to request prerendering.
-  content::WebContents* target_ = nullptr;
+  raw_ptr<content::WebContents> target_ = nullptr;
 };
 
 // A frame in a prerendered page should be able to have its source viewed, like

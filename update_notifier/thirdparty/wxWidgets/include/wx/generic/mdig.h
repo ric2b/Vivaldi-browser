@@ -48,7 +48,7 @@ public:
                      const wxPoint& pos = wxDefaultPosition,
                      const wxSize& size = wxDefaultSize,
                      long style = wxDEFAULT_FRAME_STYLE | wxVSCROLL | wxHSCROLL,
-                     const wxString& name = wxFrameNameStr)
+                     const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         Init();
 
@@ -61,7 +61,7 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE | wxVSCROLL | wxHSCROLL,
-                const wxString& name = wxFrameNameStr);
+                const wxString& name = wxASCII_STR(wxFrameNameStr));
 
     virtual ~wxGenericMDIParentFrame();
 
@@ -124,8 +124,8 @@ private:
     // and we forwarded the event to this child (as we do with menu events)
     wxMDIChildFrameBase *m_childHandler;
 
-    DECLARE_EVENT_TABLE()
-    DECLARE_DYNAMIC_CLASS(wxGenericMDIParentFrame)
+    wxDECLARE_EVENT_TABLE();
+    wxDECLARE_DYNAMIC_CLASS(wxGenericMDIParentFrame);
 };
 
 // ----------------------------------------------------------------------------
@@ -142,7 +142,7 @@ public:
                            const wxPoint& pos = wxDefaultPosition,
                            const wxSize& size = wxDefaultSize,
                            long style = wxDEFAULT_FRAME_STYLE,
-                           const wxString& name = wxFrameNameStr)
+                           const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         Init();
 
@@ -155,7 +155,7 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE,
-                const wxString& name = wxFrameNameStr);
+                const wxString& name = wxASCII_STR(wxFrameNameStr));
 
     virtual ~wxGenericMDIChildFrame();
 
@@ -199,11 +199,13 @@ protected:
     void Init();
 
 private:
+#if wxUSE_MENUS
     void OnMenuHighlight(wxMenuEvent& event);
+#endif // wxUSE_MENUS
     void OnClose(wxCloseEvent& event);
 
-    DECLARE_DYNAMIC_CLASS(wxGenericMDIChildFrame)
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_DYNAMIC_CLASS(wxGenericMDIChildFrame);
+    wxDECLARE_EVENT_TABLE();
 
     friend class wxGenericMDIClientWindow;
 };
@@ -243,7 +245,7 @@ private:
     // the notebook containing all MDI children as its pages
     wxNotebook *m_notebook;
 
-    DECLARE_DYNAMIC_CLASS(wxGenericMDIClientWindow)
+    wxDECLARE_DYNAMIC_CLASS(wxGenericMDIClientWindow);
 };
 
 // ----------------------------------------------------------------------------

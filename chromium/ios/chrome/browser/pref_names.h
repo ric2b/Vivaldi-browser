@@ -33,6 +33,7 @@ extern const char kLinkPreviewEnabled[];
 extern const char kNTPContentSuggestionsEnabled[];
 extern const char kPrintingEnabled[];
 extern const char kSearchSuggestEnabled[];
+extern const char kTrackPricesOnTabsEnabled[];
 
 extern const char kNetworkPredictionSetting[];
 
@@ -43,7 +44,6 @@ extern const char kSigninLastAccounts[];
 extern const char kSigninLastAccountsMigrated[];
 extern const char kSigninShouldPromptForSigninAgain[];
 extern const char kSigninWebSignDismissalCount[];
-extern const char kSigninBottomSheetShownCount[];
 
 extern const char kIosUserZoomMultipliers[];
 

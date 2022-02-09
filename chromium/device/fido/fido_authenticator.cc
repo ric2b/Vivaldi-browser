@@ -116,6 +116,18 @@ void FidoAuthenticator::DeleteCredential(
   NOTREACHED();
 }
 
+bool FidoAuthenticator::SupportsUpdateUserInformation() const {
+  return false;
+}
+
+void FidoAuthenticator::UpdateUserInformation(
+    const pin::TokenResponse& pin_token,
+    const PublicKeyCredentialDescriptor& credential_id,
+    const PublicKeyCredentialUserEntity& updated_user,
+    UpdateUserInformationCallback callback) {
+  NOTREACHED();
+}
+
 void FidoAuthenticator::GetModality(BioEnrollmentCallback) {
   NOTREACHED();
 }

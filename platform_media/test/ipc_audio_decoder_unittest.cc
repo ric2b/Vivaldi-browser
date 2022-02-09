@@ -115,10 +115,10 @@ TEST_F(IPCAudioDecoderTest, AAC) {
 #if defined(OS_MAC)
           // On Mac hash is not compared.
           "-4.72,-4.77,-4.73,-4.63,-4.53,-3.78,", 1, 44100,
-          base::TimeDelta::FromMicroseconds(312000), 13760, 10607
+          base::Microseconds(312000), 13760, 10607
 #elif defined(OS_WIN) || defined(OS_LINUX)
           "2.62,3.23,2.38,2.56,2.75,2.73,", 1, 44100,
-          base::TimeDelta::FromMicroseconds(312000), 13760, 13760
+          base::Microseconds(312000), 13760, 13760
 #endif
   );
 }

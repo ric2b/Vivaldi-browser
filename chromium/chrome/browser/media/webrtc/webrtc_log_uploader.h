@@ -14,10 +14,10 @@
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/media/webrtc/webrtc_log_buffer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -224,7 +224,7 @@ class WebRtcLogUploader {
 
   // For testing purposes, see OverrideUploadWithBufferForTesting. Only accessed
   // on the background sequence
-  std::string* post_data_ = nullptr;
+  raw_ptr<std::string> post_data_ = nullptr;
 
   // For testing purposes.
   GURL upload_url_for_testing_;

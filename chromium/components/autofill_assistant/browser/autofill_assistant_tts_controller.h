@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "content/public/browser/tts_controller.h"
 #include "content/public/browser/tts_utterance.h"
 
@@ -23,6 +24,8 @@ class AutofillAssistantTtsController : public content::UtteranceEventDelegate {
 
   class TtsEventDelegate {
    public:
+    virtual ~TtsEventDelegate() = default;
+
     virtual void OnTtsEvent(TtsEventType event) = 0;
   };
 
@@ -44,7 +47,7 @@ class AutofillAssistantTtsController : public content::UtteranceEventDelegate {
   // generate any TTS event.
   virtual void Stop();
 
-  void SetTtsEventDelegate(TtsEventDelegate* tts_event_delegate);
+  void SetTtsEventDelegate(base::WeakPtr<TtsEventDelegate> tts_event_delegate);
 
   // Overrides UtteranceEventDelegate
   // Note: We will get this callback only for the events related to any current
@@ -56,9 +59,9 @@ class AutofillAssistantTtsController : public content::UtteranceEventDelegate {
                   const std::string& error_message) override;
 
  private:
-  content::TtsController* tts_controller_ = nullptr;
+  raw_ptr<content::TtsController> tts_controller_ = nullptr;
 
-  TtsEventDelegate* tts_event_delegate_ = nullptr;
+  base::WeakPtr<TtsEventDelegate> tts_event_delegate_;
 };
 
 }  // namespace autofill_assistant

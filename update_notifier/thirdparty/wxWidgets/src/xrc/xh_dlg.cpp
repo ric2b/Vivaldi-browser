@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC
 
@@ -25,7 +22,7 @@
     #include "wx/dialog.h"
 #endif
 
-IMPLEMENT_DYNAMIC_CLASS(wxDialogXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxDialogXmlHandler, wxXmlResourceHandler);
 
 wxDialogXmlHandler::wxDialogXmlHandler() : wxXmlResourceHandler()
 {
@@ -45,20 +42,12 @@ wxDialogXmlHandler::wxDialogXmlHandler() : wxXmlResourceHandler()
     XRC_ADD_STYLE(wxFRAME_SHAPED);
     XRC_ADD_STYLE(wxDIALOG_EX_CONTEXTHELP);
 
-#if WXWIN_COMPATIBILITY_2_6
-    XRC_ADD_STYLE(wxDIALOG_MODAL);
-    XRC_ADD_STYLE(wxTHICK_FRAME);
-    XRC_ADD_STYLE(wxRESIZE_BOX);
-    XRC_ADD_STYLE(wxDIALOG_MODELESS);
-    XRC_ADD_STYLE(wxNO_3D);
-#endif // WXWIN_COMPATIBILITY_2_6
-
     AddWindowStyles();
 }
 
 wxObject *wxDialogXmlHandler::DoCreateResource()
 {
-    XRC_MAKE_INSTANCE(dlg, wxDialog);
+    XRC_MAKE_INSTANCE(dlg, wxDialog)
 
     dlg->Create(m_parentAsWindow,
                 GetID(),

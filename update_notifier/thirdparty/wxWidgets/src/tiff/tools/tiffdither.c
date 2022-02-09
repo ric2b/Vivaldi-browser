@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -38,6 +37,14 @@
 #endif
 
 #include "tiffio.h"
+#include "tiffiop.h"
+
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
 
 #define	streq(a,b)	(strcmp(a,b) == 0)
 #define	strneq(a,b,n)	(strncmp(a,b,n) == 0)
@@ -49,13 +56,13 @@ uint32	imagewidth;
 uint32	imagelength;
 int	threshold = 128;
 
-static	void usage(void);
+static	void usage(int code);
 
 /* 
  * Floyd-Steinberg error propragation with threshold.
  * This code is stolen from tiffmedian.
  */
-static void
+static int
 fsdither(TIFF* in, TIFF* out)
 {
 	unsigned char *outline, *inputline, *inptr;
@@ -67,14 +74,19 @@ fsdither(TIFF* in, TIFF* out)
 	int lastline, lastpixel;
 	int bit;
 	tsize_t outlinesize;
+	int errcode = 0;
 
 	imax = imagelength - 1;
 	jmax = imagewidth - 1;
 	inputline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));
-	thisline = (short *)_TIFFmalloc(imagewidth * sizeof (short));
-	nextline = (short *)_TIFFmalloc(imagewidth * sizeof (short));
+	thisline = (short *)_TIFFmalloc(TIFFSafeMultiply(tmsize_t, imagewidth, sizeof (short)));
+	nextline = (short *)_TIFFmalloc(TIFFSafeMultiply(tmsize_t, imagewidth, sizeof (short)));
 	outlinesize = TIFFScanlineSize(out);
 	outline = (unsigned char *) _TIFFmalloc(outlinesize);
+	if (! (inputline && thisline && nextline && outline)) {
+	    fprintf(stderr, "Out of memory.\n");
+	    goto skip_on_error;
+	}
 
 	/*
 	 * Get first line
@@ -92,7 +104,7 @@ fsdither(TIFF* in, TIFF* out)
 		nextline = tmpptr;
 		lastline = (i == imax);
 		if (TIFFReadScanline(in, inputline, i, 0) <= 0)
-			break;
+			goto skip_on_error;
 		inptr = inputline;
 		nextptr = nextline;
 		for (j = 0; j < imagewidth; ++j)
@@ -130,13 +142,18 @@ fsdither(TIFF* in, TIFF* out)
 			}
 		}
 		if (TIFFWriteScanline(out, outline, i-1, 0) < 0)
-			break;
+			goto skip_on_error;
 	}
+	goto exit_label;
+
   skip_on_error:
+	errcode = 1;
+  exit_label:
 	_TIFFfree(inputline);
 	_TIFFfree(thisline);
 	_TIFFfree(nextline);
 	_TIFFfree(outline);
+	return errcode;
 }
 
 static	uint16 compression = COMPRESSION_PACKBITS;
@@ -156,7 +173,7 @@ processG3Options(char* cp)
 			else if (strneq(cp, "fill", 4))
 				group3options |= GROUP3OPT_FILLBITS;
 			else
-				usage();
+				usage(EXIT_FAILURE);
 		} while ((cp = strchr(cp, ':')));
 	}
 }
@@ -198,14 +215,16 @@ main(int argc, char* argv[])
 	uint32 rowsperstrip = (uint32) -1;
 	uint16 fillorder = 0;
 	int c;
+#if !HAVE_DECL_OPTARG
 	extern int optind;
 	extern char *optarg;
+#endif
 
-	while ((c = getopt(argc, argv, "c:f:r:t:")) != -1)
+	while ((c = getopt(argc, argv, "c:f:r:t:h")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
 			if (!processCompressOptions(optarg))
-				usage();
+				usage(EXIT_FAILURE);
 			break;
 		case 'f':		/* fill order */
 			if (streq(optarg, "lsb2msb"))
@@ -213,7 +232,7 @@ main(int argc, char* argv[])
 			else if (streq(optarg, "msb2lsb"))
 				fillorder = FILLORDER_MSB2LSB;
 			else
-				usage();
+				usage(EXIT_FAILURE);
 			break;
 		case 'r':		/* rows/strip */
 			rowsperstrip = atoi(optarg);
@@ -225,29 +244,31 @@ main(int argc, char* argv[])
 			else if (threshold > 255)
 				threshold = 255;
 			break;
+		case 'h':
+			usage(EXIT_SUCCESS);
 		case '?':
-			usage();
+			usage(EXIT_FAILURE);
 			/*NOTREACHED*/
 		}
 	if (argc - optind < 2)
-		usage();
+		usage(EXIT_FAILURE);
 	in = TIFFOpen(argv[optind], "r");
 	if (in == NULL)
-		return (-1);
+		return (EXIT_FAILURE);
 	TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
 	if (samplesperpixel != 1) {
 		fprintf(stderr, "%s: Not a b&w image.\n", argv[0]);
-		return (-1);
+		return (EXIT_FAILURE);
 	}
 	TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);
 	if (bitspersample != 8) {
 		fprintf(stderr,
 		    " %s: Sorry, only handle 8-bit samples.\n", argv[0]);
-		return (-1);
+		return (EXIT_FAILURE);
 	}
 	out = TIFFOpen(argv[optind+1], "w");
 	if (out == NULL)
-		return (-1);
+		return (EXIT_FAILURE);
 	CopyField(TIFFTAG_IMAGEWIDTH, imagewidth);
 	TIFFGetField(in, TIFFTAG_IMAGELENGTH, &imagelength);
 	TIFFSetField(out, TIFFTAG_IMAGELENGTH, imagelength-1);
@@ -259,7 +280,7 @@ main(int argc, char* argv[])
 		TIFFSetField(out, TIFFTAG_FILLORDER, fillorder);
 	else
 		CopyField(TIFFTAG_FILLORDER, shortv);
-	sprintf(thing, "Dithered B&W version of %s", argv[optind]);
+	snprintf(thing, sizeof(thing), "Dithered B&W version of %s", argv[optind]);
 	TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);
 	CopyField(TIFFTAG_PHOTOMETRIC, shortv);
 	CopyField(TIFFTAG_ORIENTATION, shortv);
@@ -281,13 +302,14 @@ main(int argc, char* argv[])
 	fsdither(in, out);
 	TIFFClose(in);
 	TIFFClose(out);
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
-char* stuff[] = {
+static const char* stuff[] = {
 "usage: tiffdither [options] input.tif output.tif",
 "where options are:",
 " -r #		make each strip have no more than # rows",
+" -t #		set the threshold value for dithering (default 128)",
 " -f lsb2msb	force lsb-to-msb FillOrder for output",
 " -f msb2lsb	force msb-to-lsb FillOrder for output",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
@@ -310,16 +332,15 @@ NULL
 };
 
 static void
-usage(void)
+usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+        fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
-	exit(-1);
+		fprintf(out, "%s\n", stuff[i]);
+	exit(code);
 }
 
 /* vim: set ts=8 sts=8 sw=8 noet: */

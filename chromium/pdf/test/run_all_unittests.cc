@@ -30,11 +30,11 @@
 namespace {
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
-constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
+constexpr gin::V8SnapshotFileType kSnapshotType =
 #if defined(USE_V8_CONTEXT_SNAPSHOT)
-    gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+    gin::V8SnapshotFileType::kWithAdditionalContext;
 #else
-    gin::V8Initializer::V8SnapshotFileType::kDefault;
+    gin::V8SnapshotFileType::kDefault;
 #endif  // defined(USE_V8_CONTEXT_SNAPSHOT)
 #endif  // defined(V8_USE_EXTERNAL_STARTUP_DATA)
 
@@ -95,7 +95,7 @@ class PdfTestSuite final : public base::TestSuite {
     ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
     base::FilePath pdf_tests_pak_path;
-    ASSERT_TRUE(base::PathService::Get(base::DIR_MODULE, &pdf_tests_pak_path));
+    ASSERT_TRUE(base::PathService::Get(base::DIR_ASSETS, &pdf_tests_pak_path));
     pdf_tests_pak_path =
         pdf_tests_pak_path.AppendASCII("pdf_tests_resources.pak");
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(

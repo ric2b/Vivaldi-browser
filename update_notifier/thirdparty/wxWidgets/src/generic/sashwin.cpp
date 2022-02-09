@@ -13,9 +13,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_SASH
 
@@ -36,10 +33,10 @@
 
 wxDEFINE_EVENT( wxEVT_SASH_DRAGGED, wxSashEvent );
 
-IMPLEMENT_DYNAMIC_CLASS(wxSashWindow, wxWindow)
-IMPLEMENT_DYNAMIC_CLASS(wxSashEvent, wxCommandEvent)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSashWindow, wxWindow);
+wxIMPLEMENT_DYNAMIC_CLASS(wxSashEvent, wxCommandEvent);
 
-BEGIN_EVENT_TABLE(wxSashWindow, wxWindow)
+wxBEGIN_EVENT_TABLE(wxSashWindow, wxWindow)
     EVT_PAINT(wxSashWindow::OnPaint)
     EVT_SIZE(wxSashWindow::OnSize)
     EVT_MOUSE_EVENTS(wxSashWindow::OnMouseEvent)
@@ -47,7 +44,7 @@ BEGIN_EVENT_TABLE(wxSashWindow, wxWindow)
     EVT_SET_CURSOR(wxSashWindow::OnSetCursor)
 #endif // __WXMSW__ || __WXMAC__
 
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 bool wxSashWindow::Create(wxWindow *parent, wxWindowID id, const wxPoint& pos,
     const wxSize& size, long style, const wxString& name)

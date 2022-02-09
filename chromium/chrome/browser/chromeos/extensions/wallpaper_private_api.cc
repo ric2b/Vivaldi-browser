@@ -11,23 +11,23 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
+#include "ash/webui/personalization_app/proto/backdrop_wallpaper.pb.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
-#include "base/task_runner_util.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/values.h"
-#include "chrome/browser/ash/backdrop_wallpaper_handlers/backdrop_wallpaper_handlers.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/wallpaper/wallpaper_enumerator.h"
+#include "chrome/browser/ash/wallpaper_handlers/wallpaper_handlers.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -35,7 +35,6 @@
 #include "chrome/browser/ui/webui/settings/chromeos/pref_names.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/components/personalization_app/proto/backdrop_wallpaper.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/pref_names.h"
@@ -339,7 +338,9 @@ WallpaperPrivateSetWallpaperIfExistsFunction::Run() {
           asset_id, GURL(params->url), params->collection_id,
           wallpaper_api_util::GetLayoutEnum(
               wallpaper_base::ToString(params->layout)),
-          params->preview_mode, from_user, /*daily_refresh_enabled=*/false),
+          params->preview_mode, from_user, /*daily_refresh_enabled=*/false,
+          /*unit_id=*/absl::nullopt,
+          /*variants=*/std::vector<ash::OnlineWallpaperVariant>()),
       base::BindOnce(&WallpaperPrivateSetWallpaperIfExistsFunction::
                          OnSetOnlineWallpaperIfExistsCallback,
                      this));
@@ -382,7 +383,8 @@ ExtensionFunction::ResponseAction WallpaperPrivateSetWallpaperFunction::Run() {
           wallpaper_api_util::GetLayoutEnum(
               wallpaper_base::ToString(params->layout)),
           params->preview_mode, /*from_user=*/false,
-          /*daily_refresh_enabled=*/false),
+          /*daily_refresh_enabled=*/false, /*unit_id=*/absl::nullopt,
+          /*variants=*/std::vector<ash::OnlineWallpaperVariant>()),
       std::string(params->wallpaper.begin(), params->wallpaper.end()),
       base::BindOnce(
           &WallpaperPrivateSetWallpaperFunction::OnSetWallpaperCallback, this));
@@ -659,13 +661,8 @@ void WallpaperPrivateGetOfflineWallpaperListFunction::
 
 ExtensionFunction::ResponseAction
 WallpaperPrivateRecordWallpaperUMAFunction::Run() {
-  std::unique_ptr<record_wallpaper_uma::Params> params(
-      record_wallpaper_uma::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  ash::WallpaperType source = GetWallpaperType(params->source);
-  UMA_HISTOGRAM_ENUMERATION("Ash.Wallpaper.Source", source,
-                            ash::WallpaperType::kCount);
+  // Removed UMA recording code for Ash.Wallpaper.Source metric
+  // to not be triggered by the old Wallpaper Picker
   return RespondNow(NoArguments());
 }
 
@@ -678,7 +675,7 @@ WallpaperPrivateGetCollectionsInfoFunction::
 ExtensionFunction::ResponseAction
 WallpaperPrivateGetCollectionsInfoFunction::Run() {
   collection_info_fetcher_ =
-      std::make_unique<backdrop_wallpaper_handlers::CollectionInfoFetcher>();
+      std::make_unique<wallpaper_handlers::BackdropCollectionInfoFetcher>();
   collection_info_fetcher_->Start(base::BindOnce(
       &WallpaperPrivateGetCollectionsInfoFunction::OnCollectionsInfoFetched,
       this));
@@ -717,7 +714,7 @@ ExtensionFunction::ResponseAction WallpaperPrivateGetImagesInfoFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   image_info_fetcher_ =
-      std::make_unique<backdrop_wallpaper_handlers::ImageInfoFetcher>(
+      std::make_unique<wallpaper_handlers::BackdropImageInfoFetcher>(
           params->collection_id);
   image_info_fetcher_->Start(base::BindOnce(
       &WallpaperPrivateGetImagesInfoFunction::OnImagesInfoFetched, this));
@@ -865,7 +862,7 @@ WallpaperPrivateGetSurpriseMeImageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   surprise_me_image_fetcher_ =
-      std::make_unique<backdrop_wallpaper_handlers::SurpriseMeImageFetcher>(
+      std::make_unique<wallpaper_handlers::BackdropSurpriseMeImageFetcher>(
           params->collection_id,
           params->resume_token ? *params->resume_token : std::string());
   surprise_me_image_fetcher_->Start(base::BindOnce(

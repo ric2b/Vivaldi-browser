@@ -108,7 +108,7 @@ WaylandScreen::~WaylandScreen() = default;
 
 void WaylandScreen::OnOutputAddedOrUpdated(uint32_t output_id,
                                            const gfx::Rect& bounds,
-                                           int32_t scale,
+                                           float scale,
                                            int32_t transform) {
   AddOrUpdateDisplay(output_id, bounds, scale, transform);
 }
@@ -133,7 +133,7 @@ void WaylandScreen::OnOutputRemoved(uint32_t output_id) {
 
 void WaylandScreen::AddOrUpdateDisplay(uint32_t output_id,
                                        const gfx::Rect& new_bounds,
-                                       int32_t scale_factor,
+                                       float scale_factor,
                                        int32_t transform) {
   display::Display changed_display(output_id);
   if (!display::Display::HasForceDeviceScaleFactor()) {
@@ -234,7 +234,8 @@ gfx::Point WaylandScreen::GetCursorScreenPoint() const {
   // the last known cursor position. Otherwise, return such a point, which is
   // not contained by any of the windows.
   auto* cursor_position = connection_->wayland_cursor_position();
-  if (connection_->wayland_window_manager()->GetCurrentFocusedWindow() &&
+  if (connection_->wayland_window_manager()
+          ->GetCurrentPointerOrTouchFocusedWindow() &&
       cursor_position)
     return cursor_position->GetCursorSurfacePoint();
 
@@ -249,8 +250,8 @@ gfx::AcceleratedWidget WaylandScreen::GetAcceleratedWidgetAtScreenPoint(
     const gfx::Point& point) const {
   // It is safe to check only for focused windows and test if they contain the
   // point or not.
-  auto* window =
-      connection_->wayland_window_manager()->GetCurrentFocusedWindow();
+  auto* window = connection_->wayland_window_manager()
+                     ->GetCurrentPointerOrTouchFocusedWindow();
   if (window && window->GetBoundsInDIP().Contains(point))
     return window->GetWidget();
   return gfx::kNullAcceleratedWidget;
@@ -283,9 +284,9 @@ display::Display WaylandScreen::GetDisplayMatching(
   return display_matching ? *display_matching : GetPrimaryDisplay();
 }
 
-void WaylandScreen::SetScreenSaverSuspended(bool suspend) {
+bool WaylandScreen::SetScreenSaverSuspended(bool suspend) {
   if (!connection_->zwp_idle_inhibit_manager())
-    return;
+    return false;
 
   if (suspend) {
     // Wayland inhibits idle behaviour on certain output, and implies that a
@@ -299,7 +300,7 @@ void WaylandScreen::SetScreenSaverSuspended(bool suspend) {
     const auto* current_window = window_manager->GetCurrentFocusedWindow();
     if (!current_window) {
       LOG(WARNING) << "Cannot inhibit going idle when no window is focused";
-      return;
+      return false;
     }
     DCHECK(current_window->root_surface());
     idle_inhibitor_ = connection_->zwp_idle_inhibit_manager()->CreateInhibitor(
@@ -307,6 +308,8 @@ void WaylandScreen::SetScreenSaverSuspended(bool suspend) {
   } else {
     idle_inhibitor_.reset();
   }
+
+  return true;
 }
 
 bool WaylandScreen::IsScreenSaverActive() const {

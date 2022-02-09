@@ -40,9 +40,12 @@ interface RepeaterEvent {
   },
 }
 
-interface SiteEntryElement {
+export interface SiteEntryElement {
   $: {
     expandIcon: CrIconButtonElement,
+    collapseParent: HTMLElement,
+    cookies: HTMLElement,
+    displayName: HTMLElement,
     originList: CrLazyRenderElement<IronCollapseElement>,
     toggleButton: HTMLElement,
   };
@@ -59,7 +62,7 @@ const SiteEntryElementBase =
       BaseMixinInterface
     };
 
-class SiteEntryElement extends SiteEntryElementBase {
+export class SiteEntryElement extends SiteEntryElementBase {
   static get is() {
     return 'site-entry';
   }
@@ -129,7 +132,6 @@ class SiteEntryElement extends SiteEntryElementBase {
        */
       sortMethod: {type: String, observer: 'updateOrigins_'},
 
-      /** @private */
       enableConsolidatedSiteStorageControls_: {
         type: Boolean,
         value: () =>
@@ -146,6 +148,7 @@ class SiteEntryElement extends SiteEntryElementBase {
   private originUsages_: Array<string>;
   private cookiesNum_: Array<string>;
   sortMethod?: SortMethod;
+  private enableConsolidatedSiteStorageControls_: boolean;
 
   private button_: Element|null = null;
   private localDataBrowserProxy_: LocalDataBrowserProxy =
@@ -479,6 +482,12 @@ class SiteEntryElement extends SiteEntryElementBase {
     }
     assertNotReached();
     return (_origin1, _origin2) => 0;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'site-entry': SiteEntryElement;
   }
 }
 

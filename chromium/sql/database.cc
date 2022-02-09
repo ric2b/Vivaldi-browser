@@ -17,12 +17,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/ignore_result.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -31,6 +32,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
@@ -65,7 +67,7 @@ class ScopedBusyTimeout {
   }
 
  private:
-  sqlite3* db_;
+  raw_ptr<sqlite3> db_;
 };
 
 // Helper to "safely" enable writable_schema.  No error checking
@@ -84,7 +86,7 @@ class ScopedWritableSchema {
   }
 
  private:
-  sqlite3* db_;
+  raw_ptr<sqlite3> db_;
 };
 
 // Helper to wrap the sqlite3_backup_*() step of Raze().  Return
@@ -450,6 +452,8 @@ base::FilePath Database::DbPath() const {
     return base::FilePath();
 
   const char* path = sqlite3_db_filename(db_, "main");
+  if (!path)
+    return base::FilePath();
   const base::StringPiece db_path(path);
 #if defined(OS_WIN)
   return base::FilePath(base::UTF8ToWide(db_path));

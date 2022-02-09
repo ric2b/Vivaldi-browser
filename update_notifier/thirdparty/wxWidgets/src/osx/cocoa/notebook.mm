@@ -29,7 +29,7 @@
 // controller
 //
 
-@interface wxTabViewController : NSObject wxOSX_10_6_AND_LATER(<NSTabViewDelegate>)
+@interface wxTabViewController : NSObject <NSTabViewDelegate>
 {
 }
 
@@ -112,8 +112,19 @@
 @implementation WXCTabViewImageItem : NSTabViewItem
 - (id)init
 {
-    m_image = nil;
-    return [super initWithIdentifier:nil];
+    // With 10.12 SDK initWithIdentifier: is declared as taking a non-nil value
+    // and while this was fixed in 10.13 by adding the missing "nullable",
+    // avoid the annoying warning with 10.12 by explicitly disabling it.
+    wxCLANG_WARNING_SUPPRESS(nonnull)
+
+    if (self = [super initWithIdentifier:nil])
+    {
+        m_image = nil;
+    }
+
+    wxCLANG_WARNING_RESTORE(nonnull)
+
+    return self;
 }
 - (void)dealloc
 {
@@ -131,7 +142,6 @@
     {
         imageSize.width *= labelSize.height/imageSize.height;
         imageSize.height *= labelSize.height/imageSize.height;
-        [m_image setScalesWhenResized:YES];
         [m_image setSize: imageSize];
     }
     labelSize.width += imageSize.width;
@@ -142,9 +152,19 @@
     if(m_image)
     {
         NSSize imageSize = [m_image size];
-        [m_image compositeToPoint:NSMakePoint(tabRect.origin.x,
-                tabRect.origin.y+imageSize.height)
-            operation:NSCompositeSourceOver];
+        NSAffineTransform* imageTransform = [NSAffineTransform transform];
+        if( [[self view] isFlipped] )
+        {
+            [imageTransform translateXBy:tabRect.origin.x yBy:tabRect.origin.y+imageSize.height];
+            [imageTransform scaleXBy:1.0 yBy:-1.0];
+            [imageTransform concat];
+        }
+        [m_image drawAtPoint:NSZeroPoint fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1.0];
+        if( [[self view] isFlipped] )
+        {
+            [imageTransform invert];
+            [imageTransform concat];
+        }
         tabRect.size.width -= imageSize.width;
         tabRect.origin.x += imageSize.width;
     }
@@ -154,6 +174,7 @@
 {
     return m_image;
 }
+
 - (void)setImage:(NSImage*)image
 {
     [image retain];
@@ -162,6 +183,7 @@
     if(!m_image)
         return;
 }
+
 @end // implementation WXCTabViewImageItem : NSTabViewItem
 
 
@@ -172,7 +194,7 @@ public:
     {
     }
 
-    void GetContentArea( int &left , int &top , int &width , int &height ) const
+    void GetContentArea( int &left , int &top , int &width , int &height ) const wxOVERRIDE
     {
         wxNSTabView* slf = (wxNSTabView*) m_osxView;
         NSRect r = [slf contentRect];
@@ -182,7 +204,7 @@ public:
         height = (int)r.size.height;
     }
 
-    void SetValue( wxInt32 value )
+    void SetValue( wxInt32 value ) wxOVERRIDE
     {
         wxNSTabView* slf = (wxNSTabView*) m_osxView;
         // avoid 'changed' events when setting the tab programmatically
@@ -193,7 +215,7 @@ public:
         [slf setDelegate:controller];
     }
 
-    wxInt32 GetValue() const
+    wxInt32 GetValue() const wxOVERRIDE
     {
         wxNSTabView* slf = (wxNSTabView*) m_osxView;
         NSTabViewItem* selectedItem = [slf selectedTabViewItem];
@@ -203,7 +225,7 @@ public:
             return [slf indexOfTabViewItem:selectedItem]+1;
     }
 
-    void SetMaximum( wxInt32 maximum )
+    void SetMaximum( wxInt32 maximum ) wxOVERRIDE
     {
         wxNSTabView* slf = (wxNSTabView*) m_osxView;
         int cocoacount = [slf numberOfTabViewItems ];
@@ -231,7 +253,7 @@ public:
         [slf setDelegate:controller];
     }
 
-    void SetupTabs( const wxNotebook& notebook)
+    void SetupTabs( const wxNotebook& notebook) wxOVERRIDE
     {
         int pcount = notebook.GetPageCount();
 
@@ -255,7 +277,7 @@ public:
         }
     }
 
-    int TabHitTest(const wxPoint & pt, long* flags)
+    int TabHitTest(const wxPoint & pt, long* flags) wxOVERRIDE
     {
         int retval = wxNOT_FOUND;
         

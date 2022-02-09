@@ -46,23 +46,29 @@ MixedContentDownloadDialogBridge::~MixedContentDownloadDialogBridge() {
 void MixedContentDownloadDialogBridge::CreateDialog(
     download::DownloadItem* download,
     const base::FilePath& base_name,
-    download::DownloadItem::MixedContentStatus mixed_content_status,
     ui::WindowAndroid* window_android,
     base::OnceCallback<void(bool /* accept */)> callback) {
+  if (!window_android) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), false));
+    return;
+  }
   JNIEnv* env = base::android::AttachCurrentThread();
+  intptr_t callback_id = reinterpret_cast<intptr_t>(
+      new MixedContentDialogCallback(std::move(callback)));
+  validator_.AddJavaCallback(callback_id);
   Java_MixedContentDownloadDialogBridge_showDialog(
       env, java_object_, window_android->GetJavaObject(),
-      mixed_content_status == MixedContentStatus::BLOCK,
       base::android::ConvertUTF16ToJavaString(
           env, base::UTF8ToUTF16(base_name.value())),
-      download->GetTotalBytes(),
-      reinterpret_cast<intptr_t>(
-          new MixedContentDialogCallback(std::move(callback))));
+      download->GetTotalBytes(), callback_id);
 }
 
 void MixedContentDownloadDialogBridge::OnConfirmed(JNIEnv* env,
                                                    jlong callback_id,
                                                    jboolean accepted) {
+  if (!validator_.ValidateAndClearJavaCallback(callback_id))
+    return;
   // Convert java long long int to c++ pointer, take ownership.
   std::unique_ptr<MixedContentDialogCallback> cb(
       reinterpret_cast<MixedContentDialogCallback*>(callback_id));

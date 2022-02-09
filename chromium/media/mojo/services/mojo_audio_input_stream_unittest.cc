@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/run_loop.h"
 #include "base/sync_socket.h"
@@ -100,6 +101,9 @@ class MockClient : public mojom::AudioInputStreamClient {
  public:
   MockClient() = default;
 
+  MockClient(const MockClient&) = delete;
+  MockClient& operator=(const MockClient&) = delete;
+
   void Initialized(mojom::ReadOnlyAudioDataPipePtr data_pipe,
                    bool initially_muted) {
     ASSERT_TRUE(data_pipe->shared_memory.IsValid());
@@ -124,8 +128,6 @@ class MockClient : public mojom::AudioInputStreamClient {
  private:
   base::ReadOnlySharedMemoryRegion region_;
   std::unique_ptr<base::CancelableSyncSocket> socket_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockClient);
 };
 
 std::unique_ptr<AudioInputDelegate> CreateNoDelegate(
@@ -147,6 +149,9 @@ class MojoAudioInputStreamTest : public Test {
       : foreign_socket_(std::make_unique<TestCancelableSyncSocket>()),
         client_receiver_(&client_) {}
 
+  MojoAudioInputStreamTest(const MojoAudioInputStreamTest&) = delete;
+  MojoAudioInputStreamTest& operator=(const MojoAudioInputStreamTest&) = delete;
+
   mojo::Remote<mojom::AudioInputStream> CreateAudioInput() {
     mojo::Remote<mojom::AudioInputStream> stream;
     ExpectDelegateCreation();
@@ -165,7 +170,7 @@ class MojoAudioInputStreamTest : public Test {
   void ExpectDelegateCreation() {
     delegate_ = new StrictMock<MockDelegate>();
     mock_delegate_factory_.PrepareDelegateForCreation(
-        base::WrapUnique(delegate_));
+        base::WrapUnique(delegate_.get()));
     EXPECT_TRUE(
         base::CancelableSyncSocket::CreatePair(&local_, foreign_socket_.get()));
     mem_ = base::ReadOnlySharedMemoryRegion::Create(kShmemSize).region;
@@ -178,15 +183,13 @@ class MojoAudioInputStreamTest : public Test {
   base::CancelableSyncSocket local_;
   std::unique_ptr<TestCancelableSyncSocket> foreign_socket_;
   base::ReadOnlySharedMemoryRegion mem_;
-  StrictMock<MockDelegate>* delegate_ = nullptr;
+  raw_ptr<StrictMock<MockDelegate>> delegate_ = nullptr;
   AudioInputDelegate::EventHandler* delegate_event_handler_ = nullptr;
   StrictMock<MockDelegateFactory> mock_delegate_factory_;
   StrictMock<MockDeleter> deleter_;
   StrictMock<MockClient> client_;
   mojo::Receiver<media::mojom::AudioInputStreamClient> client_receiver_;
   std::unique_ptr<MojoAudioInputStream> impl_;
-
-  DISALLOW_COPY_AND_ASSIGN(MojoAudioInputStreamTest);
 };
 
 TEST_F(MojoAudioInputStreamTest, NoDelegate_SignalsError) {

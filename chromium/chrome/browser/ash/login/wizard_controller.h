@@ -9,9 +9,7 @@
 #include <memory>
 #include <string>
 
-#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -36,6 +34,7 @@
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
 #include "chrome/browser/ash/login/screens/gesture_navigation_screen.h"
 #include "chrome/browser/ash/login/screens/guest_tos_screen.h"
+#include "chrome/browser/ash/login/screens/hardware_data_collection_screen.h"
 #include "chrome/browser/ash/login/screens/hid_detection_screen.h"
 #include "chrome/browser/ash/login/screens/kiosk_autolaunch_screen.h"
 #include "chrome/browser/ash/login/screens/locale_switch_screen.h"
@@ -48,6 +47,7 @@
 #include "chrome/browser/ash/login/screens/packaged_license_screen.h"
 #include "chrome/browser/ash/login/screens/parental_handoff_screen.h"
 #include "chrome/browser/ash/login/screens/pin_setup_screen.h"
+#include "chrome/browser/ash/login/screens/quick_start_screen.h"
 #include "chrome/browser/ash/login/screens/recommend_apps_screen.h"
 #include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
 #include "chrome/browser/ash/login/screens/sync_consent_screen.h"
@@ -56,16 +56,8 @@
 #include "chrome/browser/ash/login/screens/user_creation_screen.h"
 #include "chrome/browser/ash/login/screens/welcome_screen.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/geolocation/geoposition.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/geolocation/simple_geolocation_provider.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/timezone/timezone_provider.h"
-// TODO(https://crbug.com/1164001): move to forward declaration.
-#include "chromeos/timezone/timezone_request.h"
 #include "components/account_id/account_id.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefService;
 
@@ -73,6 +65,10 @@ namespace ash {
 class BaseScreen;
 class DemoSetupController;
 class ErrorScreen;
+struct Geoposition;
+class SimpleGeolocationProvider;
+class TimeZoneProvider;
+struct TimeZoneResponseData;
 enum class KioskAppType;
 
 namespace login {
@@ -167,8 +163,9 @@ class WizardController {
   // Advances to login/update screen. Should be used in for testing only.
   void SkipToLoginForTesting();
 
-  // Forces to exit wizard after accepting terms of service.
-  void EndOnboardingAfterToS();
+  OobeScreenId get_screen_after_managed_tos_for_testing() {
+    return wizard_context_->screen_after_managed_tos;
+  }
 
   // Returns current DemoSetupController if demo setup flow is in progress or
   // nullptr otherwise.
@@ -240,6 +237,7 @@ class WizardController {
 
   // Show specific screen.
   void ShowWelcomeScreen();
+  void ShowQuickStartScreen();
   void ShowNetworkScreen();
   void ShowEulaScreen();
   void ShowEnrollmentScreen();
@@ -300,6 +298,7 @@ class WizardController {
   void OnWrongHWIDScreenExit();
   void OnHidDetectionScreenExit(HIDDetectionScreen::Result result);
   void OnWelcomeScreenExit(WelcomeScreen::Result result);
+  void OnQuickStartScreenExit(QuickStartScreen::Result result);
   void OnNetworkScreenExit(NetworkScreen::Result result);
   bool ShowEulaOrArcTosAfterNetworkScreen();
   void OnEulaScreenExit(EulaScreen::Result result);
@@ -349,6 +348,7 @@ class WizardController {
   void OnConsolidatedConsentScreenExit(
       ConsolidatedConsentScreen::Result result);
   void OnGuestTosScreenExit(GuestTosScreen::Result result);
+  void OnHWDataCollectionScreenExit(HWDataCollectionScreen::Result result);
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.

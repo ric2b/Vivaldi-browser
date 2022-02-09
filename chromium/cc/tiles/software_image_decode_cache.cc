@@ -13,7 +13,9 @@
 #include "base/bind.h"
 #include "base/debug/stack_trace.h"
 #include "base/format_macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ostream_operators.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -47,9 +49,10 @@ class AutoRemoveKeyFromTaskMap {
   ~AutoRemoveKeyFromTaskMap() { task_map_->erase(key_); }
 
  private:
-  std::unordered_map<SoftwareImageDecodeCache::CacheKey,
-                     scoped_refptr<TileTask>,
-                     SoftwareImageDecodeCache::CacheKeyHash>* task_map_;
+  raw_ptr<std::unordered_map<SoftwareImageDecodeCache::CacheKey,
+                             scoped_refptr<TileTask>,
+                             SoftwareImageDecodeCache::CacheKeyHash>>
+      task_map_;
   const SoftwareImageDecodeCache::CacheKey& key_;
 };
 
@@ -104,7 +107,7 @@ class SoftwareImageDecodeTaskImpl : public TileTask {
   ~SoftwareImageDecodeTaskImpl() override = default;
 
  private:
-  SoftwareImageDecodeCache* cache_;
+  raw_ptr<SoftwareImageDecodeCache> cache_;
   SoftwareImageDecodeCache::CacheKey image_key_;
   PaintImage paint_image_;
   SoftwareImageDecodeCache::DecodeTaskType task_type_;
@@ -141,7 +144,7 @@ SoftwareImageDecodeCache::SoftwareImageDecodeCache(
     SkColorType color_type,
     size_t locked_memory_limit_bytes,
     PaintImage::GeneratorClientId generator_client_id)
-    : decoded_images_(ImageMRUCache::NO_AUTO_EVICT),
+    : decoded_images_(ImageLRUCache::NO_AUTO_EVICT),
       locked_images_budget_(locked_memory_limit_bytes),
       color_type_(color_type),
       generator_client_id_(generator_client_id),

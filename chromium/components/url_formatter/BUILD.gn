@@ -29,10 +29,6 @@ static_library("url_formatter") {
     "url_formatter.h",
   ]
 
-  configs += [
-    "//build/config/compiler:noshadowing",
-  ]
-
   deps = [
     "//base",
     "//base:i18n",
@@ -54,6 +50,7 @@ static_library("url_formatter") {
     deps += [
       "android:jni_headers",
       "//url:gurl_android",
+      "//url:origin_android",
     ]
   }
 }

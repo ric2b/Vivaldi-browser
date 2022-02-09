@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_BUNDLE_DATA_TARGET_GENERATOR_H_
 #define TOOLS_GN_BUNDLE_DATA_TARGET_GENERATOR_H_
 
-#include "base/macros.h"
 #include "gn/target_generator.h"
 
 // Populates a Target with the values from a bundle_data rule.
@@ -26,7 +25,9 @@ class BundleDataTargetGenerator : public TargetGenerator {
   bool EnsureSubstitutionIsInBundleDir(const SubstitutionPattern& pattern,
                                        const Value& original_value);
 
-  DISALLOW_COPY_AND_ASSIGN(BundleDataTargetGenerator);
+  BundleDataTargetGenerator(const BundleDataTargetGenerator&) = delete;
+  BundleDataTargetGenerator& operator=(const BundleDataTargetGenerator&) =
+      delete;
 };
 
 #endif  // TOOLS_GN_BUNDLE_DATA_TARGET_GENERATOR_H_

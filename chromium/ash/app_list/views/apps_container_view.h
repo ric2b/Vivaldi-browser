@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/views/app_list_folder_controller.h"
 #include "ash/app_list/views/app_list_page.h"
@@ -17,7 +18,6 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/views/controls/separator.h"
 
@@ -26,8 +26,8 @@ namespace ash {
 class ApplicationDragAndDropHost;
 class AppListFolderItem;
 class AppListFolderView;
-class AppListModel;
 class ContentsView;
+class ContinueSectionView;
 class FolderBackgroundView;
 class PageSwitcher;
 class SuggestionChipContainerView;
@@ -37,12 +37,13 @@ class SuggestionChipContainerView;
 // active folder.
 class ASH_EXPORT AppsContainerView
     : public AppListPage,
+      public AppListModelProvider::Observer,
       public AppListFolderController,
       public PaginationModelObserver,
       public PagedAppsGridView::ContainerDelegate,
       public RecentAppsView::Delegate {
  public:
-  AppsContainerView(ContentsView* contents_view, AppListModel* model);
+  explicit AppsContainerView(ContentsView* contents_view);
 
   AppsContainerView(const AppsContainerView&) = delete;
   AppsContainerView& operator=(const AppsContainerView&) = delete;
@@ -110,7 +111,6 @@ class ASH_EXPORT AppsContainerView
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-  void OnThemeChanged() override;
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
 
   // AppListPage overrides:
@@ -136,6 +136,10 @@ class ASH_EXPORT AppsContainerView
                         const TransformAnimator& animator,
                         float default_offset) override;
 
+  // AppListModelProvider::Observer:
+  void OnActiveAppListModelsChanged(AppListModel* model,
+                                    SearchModel* search_model) override;
+
   // AppListFolderController:
   void ShowFolderForItemView(AppListItemView* folder_item_view) override;
   void ShowApps(AppListItemView* folder_item_view, bool select_folder) override;
@@ -155,7 +159,9 @@ class ASH_EXPORT AppsContainerView
   void MoveFocusUpFromRecents() override;
   void MoveFocusDownFromRecents(int column) override;
 
-  RecentAppsView* recent_apps() { return recent_apps_; }
+  ContinueSectionView* GetContinueSection();
+  RecentAppsView* GetRecentApps();
+  views::View* GetSeparatorView();
   PagedAppsGridView* apps_grid_view() { return apps_grid_view_; }
   FolderBackgroundView* folder_background_view() {
     return folder_background_view_;
@@ -189,6 +195,8 @@ class ASH_EXPORT AppsContainerView
     SHOW_ITEM_REPARENT,
   };
 
+  class ContinueContainer;
+
   void SetShowState(ShowState show_state, bool show_apps_with_animation);
 
   // Updates the whole container opacity to match the app list state.
@@ -217,20 +225,29 @@ class ASH_EXPORT AppsContainerView
   struct GridLayout {
     int columns;
     int rows;
+    int first_page_rows;
   };
   // Returns the number of columns and rows |apps_grid_view_| should display,
   // depending on the current display work area size.
   GridLayout CalculateGridLayout() const;
 
-  // Depending on the provided grid layout, updates the number of rows and
-  // columns in the top level apps grid.
-  void UpdateTopLevelGridDimensions(const GridLayout& grid_layout);
+  // Calculates the grid layout and updates the number of rows and columns shown
+  // in the top level apps grid.
+  void UpdateTopLevelGridDimensions();
+
+  // Returns the space available to the apps grid for laying out its contents.
+  gfx::Rect CalculateAvailableBoundsForAppsGrid(
+      const gfx::Rect& contents_bounds) const;
 
   // Depending on the provided apps container contents bounds and grid layout,
   // updates `app_list_config_` to be used within the apps container, and passes
   // it on to child views that require it.
-  void UpdateAppListConfig(const gfx::Rect& contents_bounds,
-                           const GridLayout& grid_layout);
+  void UpdateAppListConfig(const gfx::Rect& contents_bounds);
+
+  // Updates the apps container UI to display contents from the active app list
+  // model. Should be called to initialize the apps container contents, and
+  // whenever the active app list model changes.
+  void UpdateForActiveAppListModel();
 
   // Callback returned by DisableBlur().
   void OnSuggestionChipsBlurDisablerReleased();
@@ -250,9 +267,7 @@ class ASH_EXPORT AppsContainerView
 
   // The views below are owned by views hierarchy.
   SuggestionChipContainerView* suggestion_chip_container_view_ = nullptr;
-  views::View* continue_container_ = nullptr;
-  RecentAppsView* recent_apps_ = nullptr;
-  views::Separator* separator_ = nullptr;
+  ContinueContainer* continue_container_ = nullptr;
   PagedAppsGridView* apps_grid_view_ = nullptr;
   AppListFolderView* app_list_folder_view_ = nullptr;
   PageSwitcher* page_switcher_ = nullptr;

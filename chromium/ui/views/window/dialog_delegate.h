@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/time/time.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -372,7 +371,70 @@ class VIEWS_EXPORT DialogDelegateView : public DialogDelegate, public View {
   View* GetContentsView() override;
 };
 
+// Explicitly instantiate the following templates to ensure proper linking,
+// especially when using GCC.
+template View* DialogDelegate::SetExtraView<View>(std::unique_ptr<View>);
+template View* DialogDelegate::SetFootnoteView<View>(std::unique_ptr<View>);
+
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, DialogDelegateView, View)
+VIEW_BUILDER_PROPERTY(ax::mojom::Role, AccessibleRole)
+VIEW_BUILDER_PROPERTY(std::u16string, AccessibleTitle)
+VIEW_BUILDER_PROPERTY(bool, CanMaximize)
+VIEW_BUILDER_PROPERTY(bool, CanMinimize)
+VIEW_BUILDER_PROPERTY(bool, CanResize)
+VIEW_BUILDER_VIEW_TYPE_PROPERTY(views::View, ExtraView)
+VIEW_BUILDER_VIEW_TYPE_PROPERTY(views::View, FootnoteView)
+VIEW_BUILDER_PROPERTY(bool, FocusTraversesOut)
+VIEW_BUILDER_PROPERTY(bool, EnableArrowKeyTraversal)
+VIEW_BUILDER_PROPERTY(gfx::ImageSkia, Icon)
+VIEW_BUILDER_PROPERTY(gfx::ImageSkia, AppIcon)
+VIEW_BUILDER_PROPERTY(ui::ModalType, ModalType)
+VIEW_BUILDER_PROPERTY(bool, OwnedByWidget)
+VIEW_BUILDER_PROPERTY(bool, ShowCloseButton)
+VIEW_BUILDER_PROPERTY(bool, ShowIcon)
+VIEW_BUILDER_PROPERTY(bool, ShowTitle)
+// Manually define the SetTitle methods to resolve the overloads properly.
+BuilderT& SetTitle(const std::u16string& value) & {
+  auto setter = std::make_unique<::views::internal::PropertySetter<
+      ViewClass_, std::u16string,
+      decltype((static_cast<void (WidgetDelegate::*)(const std::u16string&)>(
+          &ViewClass_::SetTitle))),
+      &WidgetDelegate::SetTitle>>(value);
+  ::views::internal::ViewBuilderCore::AddPropertySetter(std::move(setter));
+  return *static_cast<BuilderT*>(this);
+}
+BuilderT&& SetTitle(const std::u16string& value) && {
+  return std::move(this->SetTitle(value));
+}
+BuilderT& SetTitle(int value) & {
+  auto setter = std::make_unique<::views::internal::PropertySetter<
+      ViewClass_, int,
+      decltype(
+          (static_cast<void (WidgetDelegate::*)(int)>(&ViewClass_::SetTitle))),
+      &WidgetDelegate::SetTitle>>(value);
+  ::views::internal::ViewBuilderCore::AddPropertySetter(std::move(setter));
+  return *static_cast<BuilderT*>(this);
+}
+BuilderT&& SetTitle(int value) && {
+  return std::move(this->SetTitle(value));
+}
+#if defined(USE_AURA)
+VIEW_BUILDER_PROPERTY(bool, CenterTitle)
+#endif
+VIEW_BUILDER_PROPERTY(int, Buttons)
+VIEW_BUILDER_PROPERTY(int, DefaultButton)
+VIEW_BUILDER_METHOD(SetButtonLabel, ui::DialogButton, std::u16string)
+VIEW_BUILDER_METHOD(SetButtonEnabled, ui::DialogButton, bool)
+VIEW_BUILDER_METHOD(set_margins, gfx::Insets)
+VIEW_BUILDER_METHOD(set_use_round_corners, bool)
+VIEW_BUILDER_METHOD(set_corner_radius, int)
+VIEW_BUILDER_METHOD(set_draggable, bool)
+VIEW_BUILDER_METHOD(set_use_custom_frame, bool)
+VIEW_BUILDER_METHOD(set_fixed_width, int)
+VIEW_BUILDER_PROPERTY(base::OnceClosure, AcceptCallback)
+VIEW_BUILDER_PROPERTY(base::OnceClosure, CancelCallback)
+VIEW_BUILDER_PROPERTY(base::OnceClosure, CloseCallback)
+VIEW_BUILDER_PROPERTY(const gfx::Insets&, ButtonRowInsets)
 END_VIEW_BUILDER
 
 }  // namespace views

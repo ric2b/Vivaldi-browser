@@ -77,14 +77,12 @@ void VideoPIPController::SeekTo(double current_position, double seek_progress) {
     media_controller_remote_->SeekTo(seek_progress * position_->duration());
   } else if (current_position < seek_progress &&
              SupportsAction(MediaSessionAction::kSeekForward)) {
-    base::TimeDelta delta =
-        base::TimeDelta::FromSecondsD((seek_progress - current_position) *
+    base::TimeDelta delta = base::Seconds((seek_progress - current_position) *
                                       position_->duration().InSecondsF());
     media_controller_remote_->Seek(delta);
   } else if (current_position > seek_progress &&
              SupportsAction(MediaSessionAction::kSeekBackward)) {
-    base::TimeDelta delta =
-        base::TimeDelta::FromSecondsD(-(current_position - seek_progress) *
+    base::TimeDelta delta = base::Seconds(-(current_position - seek_progress) *
                                       position_->duration().InSecondsF());
     media_controller_remote_->Seek(delta);
   }
@@ -92,10 +90,10 @@ void VideoPIPController::SeekTo(double current_position, double seek_progress) {
 
 void VideoPIPController::Seek(int seconds) {
   if (seconds > 0 && SupportsAction(MediaSessionAction::kSeekForward)) {
-    base::TimeDelta delta = base::TimeDelta::FromSeconds(seconds);
+    base::TimeDelta delta = base::Seconds(seconds);
     media_controller_remote_->Seek(delta);
   } else if (SupportsAction(MediaSessionAction::kSeekBackward)) {
-    base::TimeDelta delta = base::TimeDelta::FromSeconds(seconds);
+    base::TimeDelta delta = base::Seconds(seconds);
     media_controller_remote_->Seek(delta);
   }
 }

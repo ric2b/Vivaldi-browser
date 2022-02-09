@@ -29,6 +29,8 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/commerce/commerce_feature_list.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/power_bookmarks/power_bookmark_utils.h"
 #include "chrome/browser/power_bookmarks/proto/power_bookmark_meta.pb.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
@@ -43,7 +45,9 @@
 #include "components/bookmarks/common/android/bookmark_type.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/commerce/core/proto/price_tracking.pb.h"
 #include "components/dom_distiller/core/url_utils.h"
+#include "components/optimization_guide/proto/hints.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/query_parser.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -72,8 +76,6 @@ using bookmarks::BookmarkType;
 using content::BrowserThread;
 
 namespace {
-
-const int kInvalidId = -1;
 
 class BookmarkTitleComparer {
  public:
@@ -115,13 +117,15 @@ BookmarkBridge::BookmarkBridge(JNIEnv* env,
     : weak_java_ref_(env, obj),
       bookmark_model_(nullptr),
       managed_bookmark_service_(nullptr),
-      partner_bookmarks_shim_(nullptr) {
+      partner_bookmarks_shim_(nullptr),
+      weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   profile_ = ProfileAndroid::FromProfileAndroid(j_profile);
-  profile_observation_.Observe(profile_);
+  profile_observation_.Observe(profile_.get());
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(profile_);
   managed_bookmark_service_ =
       ManagedBookmarkServiceFactory::GetForProfile(profile_);
+  opt_guide_ = OptimizationGuideKeyedServiceFactory::GetForProfile(profile_);
 
   // Registers the notifications we are interested.
   bookmark_model_->AddObserver(this);
@@ -152,7 +156,7 @@ BookmarkBridge::BookmarkBridge(JNIEnv* env,
 
 BookmarkBridge::~BookmarkBridge() {
   if (profile_) {
-    DCHECK(profile_observation_.IsObservingSource(profile_));
+    DCHECK(profile_observation_.IsObservingSource(profile_.get()));
     profile_observation_.Reset();
   }
   bookmark_model_->RemoveObserver(this);
@@ -172,7 +176,8 @@ static jlong JNI_BookmarkBridge_Init(JNIEnv* env,
   return reinterpret_cast<intptr_t>(bridge);
 }
 
-jlong BookmarkBridge::GetBookmarkIdForWebContents(
+base::android::ScopedJavaLocalRef<jobject>
+BookmarkBridge::GetBookmarkIdForWebContents(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& jweb_contents,
@@ -181,7 +186,7 @@ jlong BookmarkBridge::GetBookmarkIdForWebContents(
 
   auto* web_contents = content::WebContents::FromJavaWebContents(jweb_contents);
   if (!web_contents)
-    return kInvalidId;
+    return nullptr;
 
   // TODO(https://crbug.com/1023759): We currently don't have a separate tab
   // model for incognito CCTs and incognito Tabs. So for incognito CCTs, the
@@ -200,7 +205,8 @@ jlong BookmarkBridge::GetBookmarkIdForWebContents(
   if (reading_list_manager_->IsLoaded()) {
     const auto* node = reading_list_manager_->Get(url);
     if (node)
-      return node->id();
+      return JavaBookmarkIdCreateBookmarkId(env, node->id(),
+                                            GetBookmarkType(node));
   }
 
   // Get all the nodes for |url| and sort them by date added.
@@ -222,10 +228,11 @@ jlong BookmarkBridge::GetBookmarkIdForWebContents(
     }
     if (only_editable && !managed->CanBeEditedByUser(node))
       continue;
-    return node->id();
+    return JavaBookmarkIdCreateBookmarkId(env, node->id(),
+                                          GetBookmarkType(node));
   }
 
-  return kInvalidId;
+  return nullptr;
 }
 
 jboolean BookmarkBridge::IsEditBookmarksEnabled(JNIEnv* env) {
@@ -353,6 +360,16 @@ void BookmarkBridge::GetTopLevelFolderIDs(
   }
 }
 
+base::android::ScopedJavaLocalRef<jobject> BookmarkBridge::GetReadingListFolder(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  const BookmarkNode* root_node = reading_list_manager_->GetRoot();
+  ScopedJavaLocalRef<jobject> folder_id_obj = JavaBookmarkIdCreateBookmarkId(
+      env, root_node->id(), GetBookmarkType(root_node));
+  return folder_id_obj;
+}
+
 void BookmarkBridge::GetAllFoldersWithDepths(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -453,6 +470,19 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::GetPartnerFolderId(
   ScopedJavaLocalRef<jobject> folder_id_obj = JavaBookmarkIdCreateBookmarkId(
       env, partner_node->id(), GetBookmarkType(partner_node));
   return folder_id_obj;
+}
+
+base::android::ScopedJavaLocalRef<jstring>
+BookmarkBridge::GetBookmarkGuidByIdForTesting(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jlong id,
+    jint type) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  const BookmarkNode* node = GetNodeByID(id, type);
+  DCHECK(node) << "Bookmark with id " << id << " doesn't exist.";
+  return base::android::ConvertUTF8ToJavaString(
+      env, node->guid().AsLowercaseString());
 }
 
 jint BookmarkBridge::GetChildCount(JNIEnv* env,
@@ -760,6 +790,7 @@ void BookmarkBridge::SearchBookmarks(JNIEnv* env,
                                      const JavaParamRef<jobject>& j_list,
                                      const JavaParamRef<jstring>& j_query,
                                      const JavaParamRef<jobjectArray>& j_tags,
+                                     jint type,
                                      jint max_results) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(bookmark_model_->loaded());
@@ -769,12 +800,17 @@ void BookmarkBridge::SearchBookmarks(JNIEnv* env,
   power_bookmarks::PowerBookmarkQueryFields query;
   query.word_phrase_query = std::make_unique<std::u16string>(
       base::android::ConvertJavaStringToUTF16(env, j_query));
+  if (query.word_phrase_query->empty())
+    query.word_phrase_query.reset();
 
   if (base::FeatureList::IsEnabled(commerce::kShoppingList)) {
     if (!j_tags.is_null()) {
       base::android::AppendJavaStringArrayToStringVector(env, j_tags,
                                                          &query.tags);
     }
+
+    if (type >= 0)
+      query.type = static_cast<power_bookmarks::PowerBookmarkType>(type);
 
     power_bookmarks::GetBookmarksMatchingProperties(bookmark_model_, query,
                                                     max_results, &results);
@@ -789,7 +825,7 @@ void BookmarkBridge::SearchBookmarks(JNIEnv* env,
     partner_bookmarks_shim_->GetPartnerBookmarksMatchingProperties(
         query, max_results, &results);
   }
-  DCHECK((int)results.size() <= max_results);
+  DCHECK((int)results.size() <= max_results || max_results == -1);
   for (const bookmarks::BookmarkNode* match : results) {
     if (!IsReachable(match))
       continue;
@@ -1148,10 +1184,14 @@ const BookmarkNode* BookmarkBridge::GetParentNode(const BookmarkNode* node) {
 }
 
 int BookmarkBridge::GetBookmarkType(const BookmarkNode* node) {
-  if (partner_bookmarks_shim_->IsPartnerBookmark(node))
+  // TODO(crbug.com/1150559) return the wrong type when the backend is not
+  // loaded?
+  if (partner_bookmarks_shim_->IsLoaded() &&
+      partner_bookmarks_shim_->IsPartnerBookmark(node))
     return BookmarkType::BOOKMARK_TYPE_PARTNER;
 
-  if (reading_list_manager_->IsReadingListBookmark(node))
+  if (reading_list_manager_->IsLoaded() &&
+      reading_list_manager_->IsReadingListBookmark(node))
     return BookmarkType::BOOKMARK_TYPE_READING_LIST;
 
   return BookmarkType::BOOKMARK_TYPE_NORMAL;
@@ -1377,7 +1417,89 @@ void BookmarkBridge::ReorderChildren(
 // Should destroy the bookmark bridge, if OTR profile is destroyed not to delete
 // related resources twice.
 void BookmarkBridge::OnProfileWillBeDestroyed(Profile* profile) {
+  weak_ptr_factory_.InvalidateWeakPtrs();
   DestroyJavaObject();
+}
+
+void BookmarkBridge::GetUpdatedProductPrices(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobjectArray>& gurls,
+    const JavaParamRef<jobject>& callback) {
+  std::vector<GURL> urls;
+  for (int i = 0; i < env->GetArrayLength(gurls.obj()); i++) {
+    urls.push_back(*url::GURLAndroid::ToNativeGURL(
+        env, ScopedJavaLocalRef<jobject>(
+                 env, env->GetObjectArrayElement(gurls.obj(), i))));
+  }
+
+  CHECK(opt_guide_);
+
+  opt_guide_->CanApplyOptimizationOnDemand(
+      urls, {optimization_guide::proto::OptimizationType::PRICE_TRACKING},
+      optimization_guide::proto::RequestContext::CONTEXT_BOOKMARKS,
+      base::BindRepeating(&BookmarkBridge::OnProductPriceUpdated,
+                          weak_ptr_factory_.GetWeakPtr(),
+                          ScopedJavaGlobalRef<jobject>(callback)));
+}
+
+void BookmarkBridge::OnProductPriceUpdated(
+    ScopedJavaGlobalRef<jobject> callback,
+    const GURL& url,
+    const base::flat_map<
+        optimization_guide::proto::OptimizationType,
+        optimization_guide::OptimizationGuideDecisionWithMetadata>& decisions) {
+  JNIEnv* env = AttachCurrentThread();
+
+  if (!decisions.contains(
+          optimization_guide::proto::OptimizationType::PRICE_TRACKING)) {
+    return;
+  }
+
+  auto iter = decisions.find(
+      optimization_guide::proto::OptimizationType::PRICE_TRACKING);
+
+  if (iter == decisions.cend())
+    return;
+
+  optimization_guide::OptimizationGuideDecisionWithMetadata decision =
+      iter->second;
+
+  // Only fire the callback for price tracking info if successful.
+  if (decision.decision !=
+      optimization_guide::OptimizationGuideDecision::kTrue) {
+    return;
+  }
+
+  if (decision.metadata.any_metadata().has_value()) {
+    absl::optional<commerce::PriceTrackingData> parsed_any =
+        optimization_guide::ParsedAnyMetadata<commerce::PriceTrackingData>(
+            decision.metadata.any_metadata().value());
+
+    if (!parsed_any.has_value())
+      return;
+
+    commerce::PriceTrackingData price_tracking_data = parsed_any.value();
+
+    bool has_price = price_tracking_data.IsInitialized() &&
+                     price_tracking_data.has_buyable_product() &&
+                     price_tracking_data.buyable_product().has_current_price();
+
+    if (has_price) {
+      commerce::ProductPrice price =
+          price_tracking_data.buyable_product().current_price();
+
+      int size = price.ByteSize();
+      std::vector<uint8_t> data;
+      data.resize(size);
+      price.SerializeToArray(data.data(), size);
+
+      Java_BookmarkBridge_onProductPriceUpdated(
+          env, weak_java_ref_.get(env),
+          url::GURLAndroid::FromNativeGURL(env, url),
+          base::android::ToJavaByteArray(env, data.data(), size), callback);
+    }
+  }
 }
 
 void BookmarkBridge::DestroyJavaObject() {

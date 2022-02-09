@@ -20,7 +20,7 @@
 <translation id="1244303850296295656">Gabim me shtesën</translation>
 <translation id="125220115284141797">Standard</translation>
 <translation id="1297175357211070620">Destinacioni</translation>
-<translation id="1303101771013849280">Skedari HTML i faqeve interesante</translation>
+<translation id="1303101771013849280">Faqet interesante nga skedari HTML</translation>
 <translation id="1430915738399379752">Printoj</translation>
 <translation id="1433811987160647649">Pyes para aksesit</translation>
 <translation id="1451375123200651445">Faqe interneti, skedar unik</translation>
@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">&amp;Parametrat gjuhësorë</translation>
 <translation id="150411034776756821">Heq <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Kjo shtesë ka ndryshuar faqen që hapet kur klikoni butonin e Shtëpisë.</translation>
+<translation id="1552752544932680961">Administroj shtesën</translation>
 <translation id="15662109988763471">Printeri i përzgjedhur nuk është i disponueshëm ose nuk është instaluar në rregull. Kontrollojeni ose provoni një printer tjetër.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Hap lidhjen me...</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">Kashi i skripteve</translation>
 <translation id="6169666352732958425">Nuk transmetohet tryeza e punës.</translation>
 <translation id="6196854373336333322">Shtesa <ph name="EXTENSION_NAME" /> ka marrë nën kontroll vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në internet. Nëse nuk e dini arsyen e ndryshimit, ka shumë mundësi që nuk ju duhet.</translation>
+<translation id="6200151268994853226">Administroj shtesën</translation>
 <translation id="6206311232642889873">Kopj&amp;oj imazhin</translation>
 <translation id="6239558157302047471">Freskoj &amp;kuadrin</translation>
 <translation id="6247802389331535091">Sistemi: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -333,7 +335,6 @@
 <translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikacioni në sfond: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revokoj aksesin te skedari</translation>
-<translation id="6916590542764765824">Administroj shtesat</translation>
 <translation id="6945221475159498467">Përzgjedh</translation>
 <translation id="6955446738988643816">Inspektoj faqen modale</translation>
 <translation id="6970856801391541997">Printoj faqe specifike</translation>
@@ -401,7 +402,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8032244173881942855">Nuk transmetohet skeda.</translation>
 <translation id="8071432093239591881">Printoj si imazh</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8137559199583651773">Administroj shtesat</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Shkarkimi vijon} other {Shkarkimet vijojnë}}</translation>
 <translation id="8230134520748321204">Do regjistroni fjalëkalimin për <ph name="ORIGIN" />?</translation>

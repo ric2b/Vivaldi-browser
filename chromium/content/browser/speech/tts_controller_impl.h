@@ -12,7 +12,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -45,6 +45,9 @@ class CONTENT_EXPORT TtsControllerImpl
  public:
   // Get the single instance of this class.
   static TtsControllerImpl* GetInstance();
+
+  TtsControllerImpl(const TtsControllerImpl&) = delete;
+  TtsControllerImpl& operator=(const TtsControllerImpl&) = delete;
 
   static void SkipAddNetworkChangeObserverForTests(bool enabled);
 
@@ -87,6 +90,8 @@ class CONTENT_EXPORT TtsControllerImpl
       const std::string& utterance,
       base::OnceCallback<void(const std::string&)> callback) override;
 
+  void SetRemoteTtsEngineDelegate(RemoteTtsEngineDelegate* delegate) override;
+
  protected:
   TtsControllerImpl();
   ~TtsControllerImpl() override;
@@ -97,6 +102,10 @@ class CONTENT_EXPORT TtsControllerImpl
  private:
   friend class TestTtsControllerImpl;
   friend struct base::DefaultSingletonTraits<TtsControllerImpl>;
+
+  void GetVoicesInternal(BrowserContext* browser_context,
+                         const GURL& source_url,
+                         std::vector<VoiceData>* out_voices);
 
   // Get the platform TTS implementation (or injected mock).
   TtsPlatform* GetTtsPlatform();
@@ -171,9 +180,10 @@ class CONTENT_EXPORT TtsControllerImpl
   TtsControllerDelegate* GetTtsControllerDelegate();
   void SetTtsControllerDelegateForTesting(TtsControllerDelegate* delegate);
   TtsControllerDelegate* delegate_ = nullptr;
+  RemoteTtsEngineDelegate* remote_engine_delegate_ = nullptr;
 #endif
 
-  TtsEngineDelegate* engine_delegate_ = nullptr;
+  raw_ptr<TtsEngineDelegate> engine_delegate_ = nullptr;
 
   bool stop_speaking_when_hidden_ = false;
 
@@ -188,7 +198,7 @@ class CONTENT_EXPORT TtsControllerImpl
 
   // A pointer to the platform implementation of text-to-speech, for
   // dependency injection.
-  TtsPlatform* tts_platform_ = nullptr;
+  raw_ptr<TtsPlatform> tts_platform_ = nullptr;
 
   // A queue of utterances to speak after the current one finishes.
   std::list<std::unique_ptr<TtsUtterance>> utterance_list_;
@@ -199,8 +209,6 @@ class CONTENT_EXPORT TtsControllerImpl
   // Skip |AddNetworkChangeObserver| call during the creation of tts_controller
   // for unittests as network change notifier wouldn't have been created.
   static bool skip_add_network_change_observer_for_tests_;
-
-  DISALLOW_COPY_AND_ASSIGN(TtsControllerImpl);
 };
 
 }  // namespace content

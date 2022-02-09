@@ -14,6 +14,7 @@
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/no_destructor.h"
@@ -75,17 +76,38 @@ bool CastMainDelegate::BasicStartupComplete(int* exit_code) {
   logging::LoggingSettings settings;
   settings.logging_dest =
       logging::LOG_TO_SYSTEM_DEBUG_LOG | logging::LOG_TO_STDERR;
-#if defined(OS_ANDROID)
+
   const base::CommandLine* command_line(base::CommandLine::ForCurrentProcess());
   std::string process_type =
       command_line->GetSwitchValueASCII(switches::kProcessType);
+
+  // Must be created outside of the if scope below to avoid lifetime concerns.
+  std::string log_path_as_string;
+  if (command_line->HasSwitch(switches::kLogFile)) {
+    auto file_path = command_line->GetSwitchValuePath(switches::kLogFile);
+    DCHECK(!file_path.empty());
+    log_path_as_string = file_path.value();
+
+    settings.logging_dest = logging::LOG_TO_ALL;
+    settings.log_file_path = log_path_as_string.c_str();
+    settings.lock_log = logging::DONT_LOCK_LOG_FILE;
+
+    // If this is the browser process, delete the old log file. Else, append to
+    // it.
+    settings.delete_old = process_type.empty()
+                              ? logging::DELETE_OLD_LOG_FILE
+                              : logging::APPEND_TO_OLD_LOG_FILE;
+  }
+
+#if defined(OS_ANDROID)
   // Browser process logs are recorded for attaching with crash dumps.
   if (process_type.empty()) {
     base::FilePath log_file;
     base::PathService::Get(FILE_CAST_ANDROID_LOG, &log_file);
     settings.logging_dest =
         logging::LOG_TO_SYSTEM_DEBUG_LOG | logging::LOG_TO_STDERR;
-    settings.log_file_path = log_file.value().c_str();
+    log_path_as_string = log_file.value();
+    settings.log_file_path = log_path_as_string.c_str();
     settings.delete_old = logging::DELETE_OLD_LOG_FILE;
   }
 #endif  // defined(OS_ANDROID)
@@ -132,6 +154,10 @@ bool CastMainDelegate::BasicStartupComplete(int* exit_code) {
     }
   }
 #endif  // defined(OS_ANDROID)
+
+  if (settings.logging_dest & logging::LOG_TO_FILE) {
+    LOG(INFO) << "Logging to file: " << settings.log_file_path;
+  }
   return false;
 }
 
@@ -171,25 +197,24 @@ void CastMainDelegate::PreSandboxStartup() {
   InitializeResourceBundle();
 }
 
-int CastMainDelegate::RunProcess(
+absl::variant<int, content::MainFunctionParams> CastMainDelegate::RunProcess(
     const std::string& process_type,
-    const content::MainFunctionParams& main_function_params) {
+    content::MainFunctionParams main_function_params) {
 #if defined(OS_ANDROID)
   if (!process_type.empty())
-    return -1;
+    return std::move(main_function_params);
 
   // Note: Android must handle running its own browser process.
   // See ChromeMainDelegateAndroid::RunProcess.
   browser_runner_ = content::BrowserMainRunner::Create();
-  int exit_code = browser_runner_->Initialize(main_function_params);
+  int exit_code = browser_runner_->Initialize(std::move(main_function_params));
   // On Android we do not run BrowserMain(), so the above initialization of a
-  // BrowserMainRunner is all we want to occur. Return >= 0 to avoid running
-  // BrowserMain, while preserving any error codes > 0.
+  // BrowserMainRunner is all we want to occur. Preserve any error codes > 0.
   if (exit_code > 0)
     return exit_code;
   return 0;
 #else
-  return -1;
+  return std::move(main_function_params);
 #endif  // defined(OS_ANDROID)
 }
 

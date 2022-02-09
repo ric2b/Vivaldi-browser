@@ -20,9 +20,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_MDI
 
@@ -51,14 +48,14 @@ enum MDI_MENU_ID
 // wxGenericMDIParentFrame
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxGenericMDIParentFrame, wxFrame)
+wxIMPLEMENT_DYNAMIC_CLASS(wxGenericMDIParentFrame, wxFrame);
 
-BEGIN_EVENT_TABLE(wxGenericMDIParentFrame, wxFrame)
+wxBEGIN_EVENT_TABLE(wxGenericMDIParentFrame, wxFrame)
     EVT_CLOSE(wxGenericMDIParentFrame::OnClose)
 #if wxUSE_MENUS
     EVT_MENU(wxID_ANY, wxGenericMDIParentFrame::OnWindowMenu)
 #endif
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 void wxGenericMDIParentFrame::Init()
 {
@@ -379,13 +376,15 @@ bool wxGenericMDIParentFrame::ProcessEvent(wxEvent& event)
 // wxGenericMDIChildFrame
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxGenericMDIChildFrame, wxFrame)
+wxIMPLEMENT_DYNAMIC_CLASS(wxGenericMDIChildFrame, wxFrame);
 
-BEGIN_EVENT_TABLE(wxGenericMDIChildFrame, wxFrame)
+wxBEGIN_EVENT_TABLE(wxGenericMDIChildFrame, wxFrame)
+#if wxUSE_MENUS
     EVT_MENU_HIGHLIGHT_ALL(wxGenericMDIChildFrame::OnMenuHighlight)
+#endif // wxUSE_MENUS
 
     EVT_CLOSE(wxGenericMDIChildFrame::OnClose)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 void wxGenericMDIChildFrame::Init()
 {
@@ -493,6 +492,7 @@ void wxGenericMDIChildFrame::Activate()
     parent->WXActivateChild(this);
 }
 
+#if wxUSE_MENUS
 void wxGenericMDIChildFrame::OnMenuHighlight(wxMenuEvent& event)
 {
     wxGenericMDIParentFrame * const parent = GetGenericMDIParent();
@@ -503,6 +503,7 @@ void wxGenericMDIChildFrame::OnMenuHighlight(wxMenuEvent& event)
         parent->OnMenuHighlight(event);
     }
 }
+#endif // wxUSE_MENUS
 
 void wxGenericMDIChildFrame::OnClose(wxCloseEvent& WXUNUSED(event))
 {
@@ -525,7 +526,7 @@ bool wxGenericMDIChildFrame::TryAfter(wxEvent& event)
 // wxGenericMDIClientWindow
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxGenericMDIClientWindow, wxWindow)
+wxIMPLEMENT_DYNAMIC_CLASS(wxGenericMDIClientWindow, wxWindow);
 
 bool
 wxGenericMDIClientWindow::CreateGenericClient(wxWindow *parent)
@@ -534,17 +535,15 @@ wxGenericMDIClientWindow::CreateGenericClient(wxWindow *parent)
         return false;
 
     m_notebook = new wxNotebook(this, wxID_ANY);
-    m_notebook->Connect
+    m_notebook->Bind
                 (
                     wxEVT_NOTEBOOK_PAGE_CHANGED,
-                    wxNotebookEventHandler(
-                        wxGenericMDIClientWindow::OnPageChanged),
-                    NULL,
+                    &wxGenericMDIClientWindow::OnPageChanged,
                     this
                 );
 
     // now that we have a notebook to resize, hook up OnSize() too
-    Connect(wxEVT_SIZE, wxSizeEventHandler(wxGenericMDIClientWindow::OnSize));
+    Bind(wxEVT_SIZE, &wxGenericMDIClientWindow::OnSize, this);
 
     return true;
 }

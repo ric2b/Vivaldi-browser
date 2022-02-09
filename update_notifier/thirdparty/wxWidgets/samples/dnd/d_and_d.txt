@@ -1,4 +1,4 @@
-                        Drag-and-Drop Support in wxWindows
+                        Drag-and-Drop Support in wxWidgets
                         ==================================
 
 1. Overview
@@ -7,9 +7,7 @@
  a) What is it?
 
     We're calling drag-and-drop (or d&d for short) the OLE mechanism of data
-transfer. Please note that it's not the same thing as the file oriented d&d
-of Windows 3.1 "File Manager" which is designed for and limited to the file
-names only.
+transfer.
 
     OLE d&d allows application to transfer data of any type to the same or
 another process.
@@ -36,7 +34,7 @@ the d&d operation. Finally, the drop target receives the notification when
 the data is dropped onto the associated window (see below) and is responsible
 for pasting the data and returning the result code (copy, move or failure).
 There is one class for each one of these roles in wxWindows d&d implementation,
-plese see their descriptions below for details.
+please see their descriptions below for details.
 
 
 
@@ -69,7 +67,7 @@ pointer manipulations and only requires you to override GetCountFormats()
 and GetFormat(n) functions to let it know what data formats you support.
 If it's not flexible enough for your application (i.e. the set of supported
 formats changes over time...), you should override IsAcceptedData(). In 99%
-of cases the default implementation is ok and you only have to return count
+of cases the default implementation is OK and you only have to return count
 of supported formats (CF_xxx constants or one of your custom formats which
 must have been registered) and their values.
 

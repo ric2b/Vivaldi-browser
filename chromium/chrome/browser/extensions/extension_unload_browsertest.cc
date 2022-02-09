@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -64,7 +65,7 @@ class TestTabStripModelObserver : public TabStripModelObserver {
       run_loop_.Quit();
   }
 
-  TabStripModel* model_;
+  raw_ptr<TabStripModel> model_;
   int desired_count_;
   base::RunLoop run_loop_;
 };
@@ -242,11 +243,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionUnloadBrowserTest, CrashedTabs) {
   test_tab_strip_model_observer.WaitForTabCount(1);
 
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
-  EXPECT_NE(extension->url().GetOrigin(), browser()
-                                              ->tab_strip_model()
-                                              ->GetActiveWebContents()
-                                              ->GetLastCommittedURL()
-                                              .GetOrigin());
+  EXPECT_NE(extension->url().DeprecatedGetOriginAsURL(),
+            browser()
+                ->tab_strip_model()
+                ->GetActiveWebContents()
+                ->GetLastCommittedURL()
+                .DeprecatedGetOriginAsURL());
 }
 
 // TODO(devlin): Investigate what to do for embedded iframes.

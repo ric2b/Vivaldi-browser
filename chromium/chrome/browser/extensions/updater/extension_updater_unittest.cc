@@ -19,13 +19,14 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread.h"
@@ -362,7 +363,7 @@ class MockService : public TestExtensionService {
   }
 
  protected:
-  TestExtensionPrefs* const prefs_;
+  const raw_ptr<TestExtensionPrefs> prefs_;
   PendingExtensionManager pending_extension_manager_;
 
  private:
@@ -371,7 +372,7 @@ class MockService : public TestExtensionService {
     std::unique_ptr<ExtensionDownloader> downloader =
         ChromeExtensionDownloaderFactory::CreateForURLLoaderFactory(
             test_shared_url_loader_factory_,
-            downloader_delegate_override_ ? downloader_delegate_override_
+            downloader_delegate_override_ ? downloader_delegate_override_.get()
                                           : delegate,
             GetTestVerifierFormat());
     return downloader;
@@ -392,7 +393,7 @@ class MockService : public TestExtensionService {
   AccountInfo account_info_;
   std::unique_ptr<signin::IdentityTestEnvironment> identity_test_env_;
 
-  ExtensionDownloaderDelegate* downloader_delegate_override_;
+  raw_ptr<ExtensionDownloaderDelegate> downloader_delegate_override_;
 
   scoped_refptr<network::SharedURLLoaderFactory>
       test_shared_url_loader_factory_;
@@ -476,7 +477,7 @@ class ServiceForManifestTests : public MockService {
   }
 
  private:
-  ExtensionRegistry* registry_;
+  raw_ptr<ExtensionRegistry> registry_;
 };
 
 class ServiceForDownloadTests : public MockService {
@@ -2682,8 +2683,9 @@ TEST_F(ExtensionUpdaterTest, TestUpdatingRemotelyDisabledExtensions) {
   blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
       remotely_blocklisted_id, BitMapBlocklistState::BLOCKLISTED_MALWARE,
       service.extension_prefs());
-  service.extension_prefs()->AddDisableReason(
-      remotely_blocklisted_id, disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
+  blocklist_prefs::AddOmahaBlocklistState(
+      remotely_blocklisted_id, BitMapBlocklistState::BLOCKLISTED_MALWARE,
+      service.extension_prefs());
 
   // We expect that both enabled and remotely blocklisted extensions are
   // auto-updated.

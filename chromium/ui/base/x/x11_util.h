@@ -16,7 +16,6 @@
 
 #include "base/component_export.h"
 #include "base/containers/flat_set.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
@@ -265,11 +264,6 @@ static const int32_t kAllDesktops = -1;
 COMPONENT_EXPORT(UI_BASE_X)
 bool GetWindowDesktop(x11::Window window, int32_t* desktop);
 
-// Returns all children windows of a given window in top-to-bottom stacking
-// order.
-COMPONENT_EXPORT(UI_BASE_X)
-bool GetXWindowStack(x11::Window window, std::vector<x11::Window>* windows);
-
 enum WindowManagerName {
   WM_OTHER,    // We were able to obtain the WM's name, but there is
                // no corresponding entry in this enum.
@@ -352,8 +346,9 @@ COMPONENT_EXPORT(UI_BASE_X) bool IsCompositingManagerPresent();
 // Returns true if a given window is in full-screen mode.
 COMPONENT_EXPORT(UI_BASE_X) bool IsX11WindowFullScreen(x11::Window window);
 
-// Suspends or resumes the X screen saver.  Must be called on the UI thread.
-COMPONENT_EXPORT(UI_BASE_X) void SuspendX11ScreenSaver(bool suspend);
+// Suspends or resumes the X screen saver, and returns whether the operation was
+// successful.  Must be called on the UI thread.
+COMPONENT_EXPORT(UI_BASE_X) bool SuspendX11ScreenSaver(bool suspend);
 
 // Returns true if the window manager supports the given hint.
 COMPONENT_EXPORT(UI_BASE_X) bool WmSupportsHint(x11::Atom atom);
@@ -442,19 +437,6 @@ class COMPONENT_EXPORT(UI_BASE_X) XVisualManager {
 
   x11::VisualId opaque_visual_id_{};
   x11::VisualId transparent_visual_id_{};
-};
-
-class COMPONENT_EXPORT(UI_BASE_X) ScopedUnsetDisplay {
- public:
-  ScopedUnsetDisplay();
-
-  ScopedUnsetDisplay(const ScopedUnsetDisplay&) = delete;
-  ScopedUnsetDisplay& operator=(const ScopedUnsetDisplay&) = delete;
-
-  ~ScopedUnsetDisplay();
-
- private:
-  absl::optional<std::string> display_;
 };
 
 }  // namespace ui

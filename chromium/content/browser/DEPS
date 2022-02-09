@@ -45,6 +45,7 @@ include_rules = [
 
   "+content/public/app",
   "+content/public/browser",
+  "+content/services/shared_storage_worklet/public",
   "+device/base/synchronization",
   "+device/bluetooth",
   "+device/fido/hid",
@@ -59,6 +60,7 @@ include_rules = [
   "+sql",
   "+ui/aura_extra",
   "+components/vector_icons",
+  "+ui/strings/grit/ax_strings.h",
   "+ui/webui",
 
   # TODO(crbug.com/1079201): Consider removing "+serivces". Each service should

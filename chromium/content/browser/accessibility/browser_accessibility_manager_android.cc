@@ -222,10 +222,10 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::ALERT: {
       // When an alertdialog is shown, we will announce the hint, which
       // (should) contain the description set by the author. If it is
-      // empty, then we will try GetInnerText() as a fallback.
+      // empty, then we will try GetTextContentUTF16() as a fallback.
       std::u16string text = android_node->GetHint();
       if (text.empty())
-        text = android_node->GetInnerText();
+        text = android_node->GetTextContentUTF16();
 
       wcax->AnnounceLiveRegionText(text);
       break;
@@ -254,7 +254,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::LIVE_REGION_NODE_CHANGED: {
       // This event is fired when an object appears in a live region.
       // Speak its text.
-      std::u16string text = android_node->GetInnerText();
+      std::u16string text = android_node->GetTextContentUTF16();
       wcax->AnnounceLiveRegionText(text);
       break;
     }
@@ -386,7 +386,7 @@ bool BrowserAccessibilityManagerAndroid::NextAtGranularity(
     int32_t* end_index) {
   switch (granularity) {
     case ANDROID_ACCESSIBILITY_NODE_INFO_MOVEMENT_GRANULARITY_CHARACTER: {
-      std::u16string text = node->GetInnerText();
+      std::u16string text = node->GetTextContentUTF16();
       if (cursor_index >= static_cast<int32_t>(text.length()))
         return false;
       base::i18n::UTF16CharIterator iter(text);
@@ -435,7 +435,7 @@ bool BrowserAccessibilityManagerAndroid::PreviousAtGranularity(
     case ANDROID_ACCESSIBILITY_NODE_INFO_MOVEMENT_GRANULARITY_CHARACTER: {
       if (cursor_index <= 0)
         return false;
-      std::u16string text = node->GetInnerText();
+      std::u16string text = node->GetTextContentUTF16();
       base::i18n::UTF16CharIterator iter(text);
       int previous_index = 0;
       while (!iter.end() &&
@@ -506,27 +506,6 @@ void BrowserAccessibilityManagerAndroid::HandleHoverEvent(
     wcax->HandleHover(android_node->unique_id());
 }
 
-gfx::Rect BrowserAccessibilityManagerAndroid::GetViewBoundsInScreenCoordinates()
-    const {
-  // We have to take the device scale factor into account on Android.
-  BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
-  if (delegate) {
-    gfx::Rect bounds = delegate->AccessibilityGetViewBounds();
-
-    // http://www.chromium.org/developers/design-documents/blink-coordinate-spaces
-    // The bounds returned by the delegate are always in device-independent
-    // pixels (DIPs), meaning physical pixels divided by device scale factor
-    // (DSF). However, if UseZoomForDSF is enabled, then Blink does not apply
-    // DSF when going from physical to screen pixels. In that case, we need to
-    // multiply DSF back in to get to Blink's notion of "screen pixels."
-    if (IsUseZoomForDSFEnabled() && device_scale_factor() > 0.0 &&
-        device_scale_factor() != 1.0)
-      bounds = ScaleToEnclosingRect(bounds, device_scale_factor());
-    return bounds;
-  }
-  return gfx::Rect();
-}
-
 void BrowserAccessibilityManagerAndroid::OnNodeWillBeDeleted(ui::AXTree* tree,
                                                              ui::AXNode* node) {
   BrowserAccessibility* wrapper = GetFromAXNode(node);
@@ -534,6 +513,15 @@ void BrowserAccessibilityManagerAndroid::OnNodeWillBeDeleted(ui::AXTree* tree,
       static_cast<BrowserAccessibilityAndroid*>(wrapper);
 
   ClearNodeInfoCacheForGivenId(android_node->unique_id());
+
+  // When a node will be deleted, clear its parent from the cache as well, or
+  // the parent could erroneously report the cleared node as a child later on.
+  BrowserAccessibilityAndroid* parent_node =
+      static_cast<BrowserAccessibilityAndroid*>(
+          android_node->PlatformGetParent());
+  if (parent_node != nullptr) {
+    ClearNodeInfoCacheForGivenId(parent_node->unique_id());
+  }
 
   BrowserAccessibilityManager::OnNodeWillBeDeleted(tree, node);
 }
@@ -603,6 +591,16 @@ BrowserAccessibilityManagerAndroid::GetWebContentsAXFromRootManager() {
   auto* parent_manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(parent_node->manager());
   return parent_manager->GetWebContentsAXFromRootManager();
+}
+
+std::u16string
+BrowserAccessibilityManagerAndroid::GenerateAccessibilityNodeInfoString(
+    int32_t unique_id) {
+  WebContentsAccessibilityAndroid* wcax = GetWebContentsAXFromRootManager();
+  if (!wcax)
+    return nullptr;
+
+  return wcax->GenerateAccessibilityNodeInfoString(unique_id);
 }
 
 }  // namespace content

@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_COMBOBOX
 
@@ -93,16 +90,16 @@ protected:
 private:
     friend class wxComboBox; // it accesses our DoGetItemClientData()
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 // ----------------------------------------------------------------------------
 // event tables and such
 // ----------------------------------------------------------------------------
 
-BEGIN_EVENT_TABLE(wxComboListBox, wxListBox)
+wxBEGIN_EVENT_TABLE(wxComboListBox, wxListBox)
     EVT_LEFT_UP(wxComboListBox::OnLeftUp)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ============================================================================
 // implementation
@@ -270,17 +267,12 @@ wxComboBox::~wxComboBox()
 // wxComboBox methods forwarded to wxTextCtrl
 // ----------------------------------------------------------------------------
 
-wxString wxComboBox::DoGetValue() const
-{
-    return GetTextCtrl() ? GetTextCtrl()->GetValue() : m_valueString;
-}
-
 void wxComboBox::SetValue(const wxString& value)
 {
-    if ( GetTextCtrl() )
-        GetTextCtrl()->SetValue(value);
+    if ( HasFlag(wxCB_READONLY) )
+        SetStringSelection(value);
     else
-        m_valueString = value;
+        GetTextCtrl()->SetValue(value);
 }
 
 void wxComboBox::WriteText(const wxString& value)

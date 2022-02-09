@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "chrome/browser/ash/input_method/assistive_suggester_blocklist.h"
+#include "ash/services/ime/public/cpp/suggestions.h"
+#include "base/memory/weak_ptr.h"
+#include "chrome/browser/ash/input_method/assistive_suggester_switch.h"
 #include "chrome/browser/ash/input_method/emoji_suggester.h"
 #include "chrome/browser/ash/input_method/input_method_engine.h"
 #include "chrome/browser/ash/input_method/input_method_engine_base.h"
@@ -18,7 +20,6 @@
 #include "chrome/browser/ash/input_method/suggester.h"
 #include "chrome/browser/ash/input_method/suggestion_enums.h"
 #include "chrome/browser/ash/input_method/suggestions_source.h"
-#include "chromeos/services/ime/public/cpp/suggestions.h"
 
 namespace ash {
 namespace input_method {
@@ -27,12 +28,24 @@ namespace input_method {
 // dismiss the suggestion according to the user action.
 class AssistiveSuggester : public SuggestionsSource {
  public:
-  AssistiveSuggester(InputMethodEngine* engine,
-                     Profile* profile,
-                     std::unique_ptr<AssistiveSuggesterBlocklist> blocklist);
+  enum AssistiveFeature {
+    kEmojiSuggestion,
+    kMultiWordSuggestion,
+    kPersonalInfoSuggestion,
+  };
+
+  AssistiveSuggester(
+      InputMethodEngine* engine,
+      Profile* profile,
+      std::unique_ptr<AssistiveSuggesterSwitch> suggester_switch);
+
   ~AssistiveSuggester() override;
 
   bool IsAssistiveFeatureEnabled();
+
+  // Is the given assisitive feature blocked from being shown to a user given
+  // the current browser context.
+  bool IsAssistiveFeatureAllowed(const AssistiveFeature& feature);
 
   // SuggestionsSource overrides
   std::vector<ime::TextSuggestion> GetSuggestions() override;
@@ -42,6 +55,10 @@ class AssistiveSuggester : public SuggestionsSource {
 
   // Called when a text field loses focus, and suggester stops working.
   void OnBlur();
+
+  // This records any text input state metrics for each relevant assistive
+  // feature. It is called once when a text field gains focus.
+  void RecordTextInputStateMetrics(const std::string& engine_id);
 
   // Checks the text before cursor, emits metric if any assistive prefix is
   // matched.
@@ -85,6 +102,8 @@ class AssistiveSuggester : public SuggestionsSource {
 
   bool IsEmojiSuggestAdditionEnabled();
 
+  bool IsEnhancedEmojiSuggestEnabled();
+
   bool IsMultiWordSuggestEnabled();
 
   bool IsExpandedMultiWordSuggestEnabled();
@@ -98,23 +117,30 @@ class AssistiveSuggester : public SuggestionsSource {
   DisabledReason GetDisabledReasonForPersonalInfo();
 
   // Only the first applicable reason in DisabledReason enum is returned.
-  DisabledReason GetDisabledReasonForMultiWord();
+  DisabledReason GetDisabledReasonForMultiWord(
+      const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions);
 
   bool IsActionEnabled(AssistiveType action);
 
   bool WithinGrammarFragment(int cursor_pos, int anchor_pos);
 
+  void ProcessExternalSuggestions(
+      const std::vector<ime::TextSuggestion>& suggestions,
+      const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions);
+
   Profile* profile_;
   PersonalInfoSuggester personal_info_suggester_;
   EmojiSuggester emoji_suggester_;
   MultiWordSuggester multi_word_suggester_;
-  std::unique_ptr<AssistiveSuggesterBlocklist> blocklist_;
+  std::unique_ptr<AssistiveSuggesterSwitch> suggester_switch_;
 
   // ID of the focused text field, 0 if none is focused.
   int context_id_ = -1;
 
   // The current suggester in use, nullptr means no suggestion is shown.
   Suggester* current_suggester_ = nullptr;
+
+  base::WeakPtrFactory<AssistiveSuggester> weak_ptr_factory_{this};
 };
 
 }  // namespace input_method

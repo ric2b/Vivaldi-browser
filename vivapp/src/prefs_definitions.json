@@ -215,6 +215,7 @@
         "syncable": true
       },
       "show_profile": {
+        "description": "Controls the visibility of the account button.",
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -225,6 +226,13 @@
         "syncable": true
       },
       "show_qr_generator": {
+        "description": "Controls the visibility of QR button.",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "show_reading_list": {
+        "description": "Controls the visibility of the reading list button.",
         "type": "boolean",
         "default": false,
         "syncable": true
@@ -507,6 +515,11 @@
         "default": "dialog",
         "syncable": false
       },
+      "notification_fullscreen": {
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
       "notification_sound": {
         "type": "string",
         "default": "",
@@ -550,12 +563,23 @@
           "syncable": true
         }
       },
+      "click_time_slot": {
+        "type": "enum",
+        "description": "Action to take when clicking on an empty calendar slot",
+        "enum_values": {
+          "select": 0,
+          "create": 1
+        },
+        "default": "create",
+        "syncable": true
+      },
       "click_outside": {
         "type": "enum",
+        "description": "Action to take when clicking outside of an event being edited",
         "enum_values": {
           "cancel": 0,
           "save_and_close": 1,
-          "save_and_new": 2
+          "save_and_new_DEPRECATED": 2
         },
         "default": "save_and_close",
         "syncable": true
@@ -659,7 +683,7 @@
         },
         "selected_pane": {
           "type": "enum",
-          "default": "accounts",
+          "default": "events",
           "syncable": false,
           "description": "Calendar status popup last selected pane",
           "enum_values": {
@@ -740,7 +764,7 @@
       "panel": {
         "editor_height": {
           "type": "integer",
-          "default": 216,
+          "default": 246,
           "syncable": true
         },
         "sorting": {
@@ -891,6 +915,12 @@
       },
       "panel_activity_indicators_enabled": {
         "description": "Show activity indicators in the Mail Panel",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "panel_show_error_messages": {
+        "description": "Display error messages in Mail Panel",
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -1133,7 +1163,7 @@
         },
         "selected_pane": {
           "type": "enum",
-          "default": "accounts",
+          "default": "messages",
           "syncable": false,
           "description": "Mail status popup last selected pane",
           "enum_values": {
@@ -1168,6 +1198,12 @@
       },
       "search_on_enter": {
         "description": "Start mail search by pressing enter key",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "mailto_in_vivaldi": {
+        "description": "Handle mailto protocol in Vivaldi",
         "type": "boolean",
         "default": false,
         "syncable": true
@@ -1859,7 +1895,7 @@
       "size": {
         "width": {
           "type": "integer",
-          "default": 960,
+          "default": 980,
           "syncable": false
         },
         "height": {
@@ -2060,6 +2096,12 @@
         "description": "Show dialog on startup regarding media support on Windows N-versions.",
         "type": "boolean",
         "default": true,
+        "syncable": false
+      },
+      "show_git_directory_warning": {
+        "description": "Set to Git repo path on startup if we store a |.gitignore| file in the profile folder and find .git directories somewhere in the profile folder.",
+        "type": "file_path",
+        "default": "",
         "syncable": false
       }
     },
@@ -2366,6 +2408,18 @@
           "syncable": true
         }
       },
+      "show_trash_can": {
+        "description": "Show trash can button",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "show_synced_tabs_button": {
+        "description": "Show synced tabs button",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "show_close_button": {
         "description": "Show tab close button",
         "type": "boolean",
@@ -2477,6 +2531,12 @@
           "default": false,
           "syncable": true
         }
+      },
+      "horizontal_scrolling": {
+        "description": "Horizontal scrolling in tab bars",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
       }
     },
     "appearance": {
@@ -2982,6 +3042,7 @@
           "MailMsgFlag",
           "MailMsgLabel",
           "MailMsgSpam",
+          "MailMsgArchive",
           "MailMsgTrash",
           "FlexibleSpacer",
           "MailViewThreading",
@@ -3003,6 +3064,7 @@
           "MailMsgFlag",
           "MailMsgLabel",
           "MailMsgSpam",
+          "MailMsgArchive",
           "MailMsgTrash",
           "MailMsgMove"
         ],
@@ -3144,7 +3206,7 @@
             "fontFamily": "sans-serif",
             "fontSize": 1.3,
             "lineHeight": 1.5,
-            "width": 700,
+            "width": 64,
             "themeStyle": "light"
           },
           "syncable": false

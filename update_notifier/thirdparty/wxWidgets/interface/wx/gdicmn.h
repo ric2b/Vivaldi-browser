@@ -107,6 +107,60 @@ enum wxStockCursor
     wxCURSOR_MAX
 };
 
+/**
+    Flags used by wxControl::Ellipsize function.
+*/
+enum wxEllipsizeFlags
+{
+    /// No special flags.
+    wxELLIPSIZE_FLAGS_NONE = 0,
+
+    /**
+        Take mnemonics into account when calculating the text width.
+
+        With this flag when calculating the size of the passed string,
+        mnemonics characters (see wxControl::SetLabel) will be automatically
+        reduced to a single character. This leads to correct calculations only
+        if the string passed to Ellipsize() will be used with
+        wxControl::SetLabel. If you don't want ampersand to be interpreted as
+        mnemonics (e.g. because you use wxControl::SetLabelText) then don't use
+        this flag.
+     */
+    wxELLIPSIZE_FLAGS_PROCESS_MNEMONICS = 1,
+
+    /**
+        Expand tabs in spaces when calculating the text width.
+
+        This flag tells wxControl::Ellipsize() to calculate the width of tab
+        characters @c '\\t' as 6 spaces.
+     */
+    wxELLIPSIZE_FLAGS_EXPAND_TABS = 2,
+
+    /// The default flags for wxControl::Ellipsize.
+    wxELLIPSIZE_FLAGS_DEFAULT = wxELLIPSIZE_FLAGS_PROCESS_MNEMONICS|
+                                wxELLIPSIZE_FLAGS_EXPAND_TABS
+};
+
+
+/**
+    The different ellipsization modes supported by the
+    wxControl::Ellipsize and wxRendererNative::DrawItemText() functions.
+*/
+enum wxEllipsizeMode
+{
+    /// Don't ellipsize the text at all. @since 2.9.1
+    wxELLIPSIZE_NONE,
+
+    /// Put the ellipsis at the start of the string, if the string needs ellipsization.
+    wxELLIPSIZE_START,
+
+    /// Put the ellipsis in the middle of the string, if the string needs ellipsization.
+    wxELLIPSIZE_MIDDLE,
+
+    /// Put the ellipsis at the end of the string, if the string needs ellipsization.
+    wxELLIPSIZE_END
+};
+
 
 
 /**
@@ -194,13 +248,24 @@ public:
 
 
 /**
-    @class wxRect
+    Represents a rectangle with integer coordinates.
 
-    A class for manipulating rectangles.
+    @c x and @c y members specify the coordinates of the rectangle top-left
+    corner and @c width and @c height specify its width and height
+    respectively. The usual C++ semi-open interval convention is used: point
+    @c p lies inside the rectangle if and only if both conditions below are
+    satisfied:
+    @code
+        x <= p.x < x + width
+        y <= p.y < y + height
+    @endcode
 
-    Note that the x, y coordinates and the width and height stored inside a wxRect
-    object may be negative and that wxRect functions do not perform any check against
-    negative values.
+    In other words, the rectangle left and right boundaries are at @c x and @c
+    x+width-1 and its top and bottom boundaries are at @c y and @c y+height-1
+    respectively.
+
+    Note that the x and y coordinates may be negative, but width and height are
+    always strictly positive for non-empty rectangles.
 
     @library{wxcore}
     @category{data}
@@ -221,6 +286,9 @@ public:
     wxRect(int x, int y, int width, int height);
     /**
         Creates a wxRect object from top-left and bottom-right points.
+
+        The width of the rectangle will be @c bottomRight.x-topLeft.x+1 and the
+        height will be @c bottomRight.y-topLeft.y+1.
     */
     wxRect(const wxPoint& topLeft, const wxPoint& bottomRight);
     /**
@@ -503,7 +571,7 @@ public:
      */
     void SetBottomLeft(const wxPoint &p);
 
-    
+
     //@{
     /**
         Modifies the rectangle to contain the bounding box of this rectangle
@@ -555,12 +623,12 @@ public:
     int width;
 
     /**
-        x coordinate of the top-level corner of the rectangle.
+        x coordinate of the top-left corner of the rectangle.
     */
     int x;
 
     /**
-        y coordinate of the top-level corner of the rectangle.
+        y coordinate of the top-left corner of the rectangle.
     */
     int y;
 };
@@ -848,7 +916,7 @@ wxColourDatabase* wxTheColourDatabase;
     @class wxSize
 
     A wxSize is a useful data structure for graphics operations.
-    It simply contains integer @e width and @e height members.
+    It simply contains integer @e x and @e y members.
 
     Note that the width and height stored inside a wxSize object may be negative
     and that wxSize functions do not perform any check against negative values
@@ -960,7 +1028,7 @@ public:
         @return A reference to this object (so that you can concatenate other
                  operations in the same line).
     */
-    wxSize& Scale(float xscale, float yscale);
+    wxSize& Scale(double xscale, double yscale);
 
     /**
         Sets the width and height members.
@@ -1039,7 +1107,7 @@ const wxSize wxDefaultSize;
 
 /**
     This macro loads a bitmap from either application resources (on the
-    platforms for which they exist, i.e. Windows and OS2) or from an XPM file.
+    platforms for which they exist, i.e.\ Windows) or from an XPM file.
     This can help to avoid using @ifdef_ when creating bitmaps.
 
     @see @ref overview_bitmap, wxICON()
@@ -1063,7 +1131,7 @@ const wxSize wxDefaultSize;
     @endcode
     to be able to use @c wxBITMAP_PNG(mybitmap) in the code.
 
-    Under OS X the file with the specified name and "png" extension must be
+    Under macOS the file with the specified name and "png" extension must be
     present in the "Resources" subdirectory of the application bundle.
 
     Under the other platforms, this is equivalent to wxBITMAP_PNG_FROM_DATA()
@@ -1107,7 +1175,7 @@ const wxSize wxDefaultSize;
 
     You can use wxBITMAP_PNG() to load the PNG bitmaps from resources on the
     platforms that support this and only fall back to loading them from data
-    under the other ones (i.e. not Windows and not OS X).
+    under the other ones (i.e. not Windows and not macOS).
 
     @header{wx/gdicmn.h}
 
@@ -1117,7 +1185,7 @@ const wxSize wxDefaultSize;
 
 /**
     This macro loads an icon from either application resources (on the
-    platforms for which they exist, i.e. Windows and OS2) or from an XPM file.
+    platforms for which they exist, i.e.\ Windows) or from an XPM file.
     This can help to avoid using @ifdef_ when creating icons.
 
     @see @ref overview_bitmap, wxBITMAP()
@@ -1129,6 +1197,10 @@ const wxSize wxDefaultSize;
 /**
     Returns @true if the display is colour, @false otherwise.
 
+    @note Use of this function is not recommended in the new code as it only
+        works for the primary display. Use wxDisplay::GetDepth() to retrieve
+        the depth of the appropriate display and compare it with 1 instead.
+
     @header{wx/gdicmn.h}
 */
 bool wxColourDisplay();
@@ -1136,6 +1208,10 @@ bool wxColourDisplay();
 /**
     Returns the depth of the display (a value of 1 denotes a monochrome
     display).
+
+    @note Use of this function is not recommended in the new code as it only
+        works for the primary display. Use wxDisplay::GetDepth() to retrieve
+        the depth of the appropriate display instead.
 
     @header{wx/gdicmn.h}
 */
@@ -1158,7 +1234,7 @@ void wxSetCursor(const wxCursor& cursor);
 /**
     Returns the dimensions of the work area on the display.
 
-    This is the same as wxGetClientDisplayRect() but allows to retrieve the
+    This is the same as wxGetClientDisplayRect() but allows retrieving the
     individual components instead of the entire rectangle.
 
     Any of the output pointers can be @NULL if the corresponding value is not
@@ -1194,6 +1270,10 @@ wxRect wxGetClientDisplayRect();
     The @c x component of the returned wxSize object contains the horizontal
     resolution and the @c y one -- the vertical resolution.
 
+    @note Use of this function is not recommended in the new code as it only
+        works for the primary display. Use wxDisplay::GetPPI() to retrieve
+        the resolution of the appropriate display instead.
+
     @header{wx/gdicmn.h}
 
     @see wxDisplay
@@ -1207,6 +1287,10 @@ wxSize wxGetDisplayPPI();
 //@{
 /**
     Returns the display size in pixels.
+
+    @note Use of this function is not recommended in the new code as it only
+        works for the primary display. Use wxDisplay::GetGeometry() to retrieve
+        the size of the appropriate display instead.
 
     Either of output pointers can be @NULL if the caller is not interested in
     the corresponding value.
@@ -1222,6 +1306,10 @@ void wxDisplaySize(int* width, int* height);
 //@{
 /**
     Returns the display size in pixels.
+
+    @note Use of this function is not recommended in the new code as it only
+        works for the primary display. Use wxDisplay::GetGeometry() to retrieve
+        the size of the appropriate display instead.
 
     @see wxDisplay
 

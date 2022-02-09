@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "net/base/net_export.h"
 #include "net/http/structured_headers.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -53,7 +52,7 @@ class NET_EXPORT ReportingHeaderParser {
   static void ParseReportToHeader(
       ReportingContext* context,
       const NetworkIsolationKey& network_isolation_key,
-      const GURL& url,
+      const url::Origin& origin,
       std::unique_ptr<base::Value> value);
 
   // `isolation_info` here will be stored in the cache, associated with the

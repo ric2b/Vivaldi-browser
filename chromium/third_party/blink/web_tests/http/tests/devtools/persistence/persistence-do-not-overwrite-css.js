@@ -6,7 +6,7 @@
   TestRunner.addResult(
       `Verify that persistence does not overwrite CSS files when CSS model reports error on getStyleSheetText.\n`);
   await TestRunner.loadTestModule('bindings_test_runner');
-  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadLegacyModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.loadHTML(`
       <style>
       body {
@@ -26,7 +26,7 @@
           .then(onCSSContent);
 
       function onCSSContent({ content, error, isEncoded }) {
-        fs = new BindingsTestRunner.TestFileSystem('file:///var/www');
+        fs = new BindingsTestRunner.TestFileSystem('/var/www');
         BindingsTestRunner.addFiles(fs, {
           'simple.css': {content: content},
         });

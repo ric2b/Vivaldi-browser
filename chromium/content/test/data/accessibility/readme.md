@@ -34,11 +34,11 @@ this below.
 
 Each test is parameterized to run multiple times.  Most platforms dump in the
 "blink" format (the internal data), and again in a "native" (platform-specific)
-format.  The Windows platform has a second native format, "uia", so it runs a
-third time.  The test name indicates which test pass was run, e.g.,
+format.  The Windows platform has two native formats, "uia" and "ia2", so the
+test is run three times.  The test name indicates which test pass was run, e.g.,
 `DumpAccessibilityTreeTest.TestName/blink`.  (Note: for easier identification,
 the Windows, Mac, Linux, and Android platforms rename the "native" pass to
-"win", "mac", "linux" and "android", respectively.)
+"ia2", "mac", "linux" and "android", respectively.)
 
 The test output is a compact text representation of the accessible node(s)
 for that format, and it should be familiar if you're familiar with the
@@ -82,6 +82,8 @@ Supported platforms are:
 * `auralinux-trusty` -- expected Linux ATK output (Version Specific Expected File)
 * `auralinux-xenial` -- expected Linux ATK output (Version Specific Expected File)
 * `blink` -- representation of internal accessibility tree
+* `blink-cros` -- representation of internal accessibility tree
+  (Version Specific Expected File for Chrome OS and Lacros)
 * `mac` -- expected Mac NSAccessibility output
 * `win` -- expected Win IAccessible/IAccessible2 output
 * `uia-win` -- expected Win UIA output
@@ -131,6 +133,13 @@ create `foo-expected-auralinux-xenial.txt`.
 
 At the present time there is no version-specific support for Bionic Beaver,
 which is the current version run on "linux-rel".
+
+The need for a version-specific expectations file on Chrome OS / Lacros is
+extremely rare. However, there can be occasional differences in the internal
+accessibility tree. For instance, the SVG `g` element is always included
+in order to support select-to-speak functionality. If `foo.html` has a
+`foo-expected-blink.txt` file which works on all platforms except the Chrome OS
+and Lacros bots, create `foo-expected-blink-cros.txt`.
 
 ## Directives
 

@@ -29,9 +29,9 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/intrinsic_sizing_info.h"
-#include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/svg/layout_ng_svg_text.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_masker.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_text.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
@@ -71,6 +71,7 @@ LayoutSVGRoot::~LayoutSVGRoot() = default;
 
 void LayoutSVGRoot::Trace(Visitor* visitor) const {
   visitor->Trace(content_);
+  visitor->Trace(text_set_);
   LayoutReplaced::Trace(visitor);
 }
 
@@ -85,14 +86,14 @@ void LayoutSVGRoot::UnscaledIntrinsicSizingInfo(
   absl::optional<float> intrinsic_width = svg->IntrinsicWidth();
   absl::optional<float> intrinsic_height = svg->IntrinsicHeight();
   intrinsic_sizing_info.size =
-      FloatSize(intrinsic_width.value_or(0), intrinsic_height.value_or(0));
+      gfx::SizeF(intrinsic_width.value_or(0), intrinsic_height.value_or(0));
   intrinsic_sizing_info.has_width = intrinsic_width.has_value();
   intrinsic_sizing_info.has_height = intrinsic_height.has_value();
 
   if (!intrinsic_sizing_info.size.IsEmpty()) {
     intrinsic_sizing_info.aspect_ratio = intrinsic_sizing_info.size;
   } else {
-    FloatSize view_box_size = svg->viewBox()->CurrentValue()->Value().Size();
+    gfx::SizeF view_box_size = svg->viewBox()->CurrentValue()->Rect().size();
     if (!view_box_size.IsEmpty()) {
       // The viewBox can only yield an intrinsic ratio, not an intrinsic size.
       intrinsic_sizing_info.aspect_ratio = view_box_size;
@@ -102,9 +103,7 @@ void LayoutSVGRoot::UnscaledIntrinsicSizingInfo(
   if (ar_type == EAspectRatioType::kRatio ||
       (ar_type == EAspectRatioType::kAutoAndRatio &&
        intrinsic_sizing_info.aspect_ratio.IsEmpty())) {
-    FloatSize aspect_ratio = StyleRef().AspectRatio().GetRatio();
-    intrinsic_sizing_info.aspect_ratio.SetWidth(aspect_ratio.Width());
-    intrinsic_sizing_info.aspect_ratio.SetHeight(aspect_ratio.Height());
+    intrinsic_sizing_info.aspect_ratio = StyleRef().AspectRatio().GetRatio();
   }
 
   if (!IsHorizontalWritingMode())
@@ -205,7 +204,6 @@ double LayoutSVGRoot::LogicalSizeScaleFactorForPercentageLengths() const {
 void LayoutSVGRoot::UpdateLayout() {
   NOT_DESTROYED();
   DCHECK(NeedsLayout());
-  LayoutAnalyzer::Scope analyzer(*this);
 
   LayoutSize old_size = Size();
   UpdateLogicalWidth();
@@ -301,7 +299,7 @@ void LayoutSVGRoot::RecalcVisualOverflow() {
 
 LayoutRect LayoutSVGRoot::ComputeContentsVisualOverflow() const {
   NOT_DESTROYED();
-  FloatRect content_visual_rect = VisualRectInLocalSVGCoordinates();
+  gfx::RectF content_visual_rect = VisualRectInLocalSVGCoordinates();
   content_visual_rect =
       local_to_border_box_transform_.MapRect(content_visual_rect);
   // Condition the visual overflow rect to avoid being clipped/culled
@@ -378,6 +376,15 @@ void LayoutSVGRoot::StyleDidChange(StyleDifference diff,
 
   SVGResources::UpdateClipPathFilterMask(To<SVGSVGElement>(*GetNode()),
                                          old_style, StyleRef());
+
+  if (diff.TransformChanged()) {
+    for (auto& svg_text : text_set_) {
+      svg_text->SetNeedsLayout(layout_invalidation_reason::kStyleChange,
+                               kMarkContainerChain);
+      svg_text->SetNeedsTextMetricsUpdate();
+    }
+  }
+
   if (!Parent())
     return;
   if (diff.HasDifference())
@@ -460,7 +467,7 @@ void LayoutSVGRoot::WillBeRemovedFromTree() {
 PositionWithAffinity LayoutSVGRoot::PositionForPoint(
     const PhysicalOffset& point) const {
   NOT_DESTROYED();
-  FloatPoint absolute_point = FloatPoint(point);
+  gfx::PointF absolute_point(point);
   absolute_point =
       local_to_border_box_transform_.Inverse().MapPoint(absolute_point);
   LayoutObject* closest_descendant =
@@ -483,7 +490,7 @@ PositionWithAffinity LayoutSVGRoot::PositionForPoint(
   absolute_point = transform.Inverse().MapPoint(absolute_point);
 
   return closest_descendant->PositionForPoint(
-      PhysicalOffset::FromFloatPointRound(absolute_point));
+      PhysicalOffset::FromPointFRound(absolute_point));
 }
 
 // LayoutBox methods will expect coordinates w/o any transforms in coordinates
@@ -494,15 +501,15 @@ SVGTransformChange LayoutSVGRoot::BuildLocalToBorderBoxTransform() {
   auto* svg = To<SVGSVGElement>(GetNode());
   DCHECK(svg);
   float scale = StyleRef().EffectiveZoom();
-  FloatSize content_size(ContentWidth() / scale, ContentHeight() / scale);
+  gfx::SizeF content_size(ContentWidth() / scale, ContentHeight() / scale);
   local_to_border_box_transform_ = svg->ViewBoxToViewTransform(content_size);
 
-  FloatPoint translate = svg->CurrentTranslate();
+  gfx::Vector2dF translate = svg->CurrentTranslate();
   LayoutSize border_and_padding(BorderLeft() + PaddingLeft(),
                                 BorderTop() + PaddingTop());
   AffineTransform view_to_border_box_transform(
-      scale, 0, 0, scale, border_and_padding.Width() + translate.X(),
-      border_and_padding.Height() + translate.Y());
+      scale, 0, 0, scale, border_and_padding.Width() + translate.x(),
+      border_and_padding.Height() + translate.y());
   view_to_border_box_transform.Scale(svg->currentScale());
   local_to_border_box_transform_.PreMultiply(view_to_border_box_transform);
   return change_detector.ComputeChange(local_to_border_box_transform_);
@@ -588,6 +595,18 @@ void LayoutSVGRoot::NotifyDescendantCompositingReasonsChanged() {
     return;
   has_descendant_with_compositing_reason_dirty_ = true;
   SetNeedsLayout(layout_invalidation_reason::kSvgChanged);
+}
+
+void LayoutSVGRoot::AddSvgTextDescendant(LayoutNGSVGText& svg_text) {
+  NOT_DESTROYED();
+  DCHECK(!text_set_.Contains(&svg_text));
+  text_set_.insert(&svg_text);
+}
+
+void LayoutSVGRoot::RemoveSvgTextDescendant(LayoutNGSVGText& svg_text) {
+  NOT_DESTROYED();
+  DCHECK(text_set_.Contains(&svg_text));
+  text_set_.erase(&svg_text);
 }
 
 PaintLayerType LayoutSVGRoot::LayerTypeRequired() const {

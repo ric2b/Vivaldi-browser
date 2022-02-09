@@ -29,9 +29,10 @@ FastPairRepositoryImpl::FastPairRepositoryImpl()
           std::unique_ptr<image_fetcher::ImageFetcher>())),
       saved_device_registry_(std::make_unique<SavedDeviceRegistry>()),
       footprints_last_updated_(base::Time::UnixEpoch()) {
-  footprints_fetcher_->GetUserDevices(
-      base::BindOnce(&FastPairRepositoryImpl::UpdateUserDevicesCache,
-                     weak_ptr_factory_.GetWeakPtr()));
+  // TODO(crbug/1270534): Determine the best place to make this call.
+  // footprints_fetcher_->GetUserDevices(
+  //     base::BindOnce(&FastPairRepositoryImpl::UpdateUserDevicesCache,
+  //                    weak_ptr_factory_.GetWeakPtr()));
 }
 
 FastPairRepositoryImpl::~FastPairRepositoryImpl() = default;
@@ -179,11 +180,12 @@ void FastPairRepositoryImpl::AssociateAccountKey(
     scoped_refptr<Device> device,
     const std::vector<uint8_t>& account_key) {
   QP_LOG(INFO) << __func__;
+  DCHECK(device->classic_address());
   GetDeviceMetadata(
       device->metadata_id,
       base::BindOnce(&FastPairRepositoryImpl::AddToFootprints,
                      weak_ptr_factory_.GetWeakPtr(), device->metadata_id,
-                     device->address, account_key));
+                     device->classic_address().value(), account_key));
 }
 
 void FastPairRepositoryImpl::AddToFootprints(
@@ -214,7 +216,7 @@ void FastPairRepositoryImpl::OnAddToFootprintsComplete(
   saved_device_registry_->SaveAccountKey(mac_address, account_key);
 }
 
-void FastPairRepositoryImpl::DeleteAssociatedDevice(
+bool FastPairRepositoryImpl::DeleteAssociatedDevice(
     const device::BluetoothDevice* device) {
   QP_LOG(INFO) << __func__;
   absl::optional<const std::vector<uint8_t>> account_key =
@@ -223,13 +225,14 @@ void FastPairRepositoryImpl::DeleteAssociatedDevice(
     QP_LOG(VERBOSE)
         << __func__
         << ": Cannot find matching account key for unpaired device.";
-    return;
+    return false;
   }
 
   QP_LOG(INFO) << __func__ << ": Removing device from Footprints.";
   footprints_fetcher_->DeleteUserDevice(base::HexEncode(*account_key),
                                         base::DoNothing());
   // TODO(jonmann): Handle saving pending update to disk + retries.
+  return true;
 }
 
 }  // namespace quick_pair

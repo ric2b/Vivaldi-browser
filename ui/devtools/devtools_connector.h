@@ -143,7 +143,7 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate,
                       const blink::mojom::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
-  bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) override;
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,

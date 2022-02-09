@@ -17,7 +17,7 @@
 
 // Split platforms into two groups - those which have well-working
 // double-buffering by default, and those which do not.
-#if defined(__WXMAC__) || defined(__WXGTK20__) || defined(__WXDFB__)
+#if defined(__WXMAC__) || defined(__WXGTK20__) || defined(__WXDFB__) || defined(__WXQT__)
     #define wxALWAYS_NATIVE_DOUBLE_BUFFER       1
 #else
     #define wxALWAYS_NATIVE_DOUBLE_BUFFER       0
@@ -134,8 +134,8 @@ private:
     int m_style;
 
     wxSize m_area;
-    
-    DECLARE_DYNAMIC_CLASS(wxBufferedDC)
+
+    wxDECLARE_DYNAMIC_CLASS(wxBufferedDC);
     wxDECLARE_NO_COPY_CLASS(wxBufferedDC);
 };
 
@@ -153,6 +153,8 @@ public:
     wxBufferedPaintDC(wxWindow *window, wxBitmap& buffer, int style = wxBUFFER_CLIENT_AREA)
         : m_paintdc(window)
     {
+        SetWindow(window);
+
         // If we're buffering the virtual window, scale the paint DC as well
         if (style & wxBUFFER_VIRTUAL_AREA)
             window->PrepareDC( m_paintdc );
@@ -167,6 +169,8 @@ public:
     wxBufferedPaintDC(wxWindow *window, int style = wxBUFFER_CLIENT_AREA)
         : m_paintdc(window)
     {
+        SetWindow(window);
+
         // If we're using the virtual window, scale the paint DC as well
         if (style & wxBUFFER_VIRTUAL_AREA)
             window->PrepareDC( m_paintdc );
@@ -195,7 +199,7 @@ protected:
 private:
     wxPaintDC m_paintdc;
 
-    DECLARE_ABSTRACT_CLASS(wxBufferedPaintDC)
+    wxDECLARE_ABSTRACT_CLASS(wxBufferedPaintDC);
     wxDECLARE_NO_COPY_CLASS(wxBufferedPaintDC);
 };
 

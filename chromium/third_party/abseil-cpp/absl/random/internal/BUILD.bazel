@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-
 # Internal-only implementation classes for Abseil Random
 load(
     "//absl:copts/configure_copts.bzl",
@@ -37,7 +35,11 @@ cc_library(
     hdrs = ["traits.h"],
     copts = ABSL_DEFAULT_COPTS,
     linkopts = ABSL_DEFAULT_LINKOPTS,
-    deps = ["//absl/base:config"],
+    deps = [
+        "//absl/base:config",
+        "//absl/numeric:bits",
+        "//absl/numeric:int128",
+    ],
 )
 
 cc_library(
@@ -60,6 +62,7 @@ cc_library(
     copts = ABSL_DEFAULT_COPTS,
     linkopts = ABSL_DEFAULT_LINKOPTS,
     deps = [
+        ":traits",
         "//absl/base:config",
         "//absl/meta:type_traits",
     ],
@@ -676,6 +679,7 @@ cc_library(
         ":traits",
         "//absl/base:config",
         "//absl/meta:type_traits",
+        "//absl/numeric:int128",
     ],
 )
 

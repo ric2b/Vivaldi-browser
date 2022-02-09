@@ -9,7 +9,6 @@
 
 #include "base/containers/flat_set.h"
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "components/page_load_metrics/renderer/page_resource_data_use.h"
 #include "components/page_load_metrics/renderer/page_timing_metadata_recorder.h"
@@ -114,7 +113,7 @@ class PageTimingMetricsSender {
   mojom::PageLoadTimingPtr last_timing_;
   mojom::CpuTimingPtr last_cpu_timing_;
   mojom::InputTimingPtr input_timing_delta_;
-  blink::MobileFriendliness mobile_friendliness_;
+  absl::optional<blink::MobileFriendliness> mobile_friendliness_;
 
   // The the sender keep track of metadata as it comes in, because the sender is
   // scoped to a single committed load.

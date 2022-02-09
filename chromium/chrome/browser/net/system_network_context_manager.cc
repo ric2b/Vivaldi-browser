@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/process/process_handle.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_split.h"
@@ -20,6 +21,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/first_party_sets_component_installer.h"
@@ -92,21 +94,11 @@
 #include "extensions/common/constants.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-namespace {
-
-constexpr bool kCertificateTransparencyEnabled =
-#if (BUILDFLAG(GOOGLE_CHROME_BRANDING) || VIVALDI_BUILD) && defined(OFFICIAL_BUILD) && \
-    !defined(OS_ANDROID)
-    // Certificate Transparency is only enabled if:
-    //   - Desktop (!OS_ANDROID); OS_IOS does not use this file
-    //   - base::GetBuildTime() is deterministic to the source (OFFICIAL_BUILD)
-    //   - The build in reliably updatable (GOOGLE_CHROME_BRANDING)
-    true;
-#else
-    false;
+#if defined(OS_WIN)
+#include "chrome/browser/net/chrome_mojo_proxy_resolver_win.h"
 #endif
 
-bool g_enable_certificate_transparency = kCertificateTransparencyEnabled;
+namespace {
 
 // The global instance of the SystemNetworkContextmanager.
 SystemNetworkContextManager* g_system_network_context_manager = nullptr;
@@ -265,7 +257,7 @@ class SystemNetworkContextManager::URLLoaderFactoryForSystem
   ~URLLoaderFactoryForSystem() override = default;
 
   SEQUENCE_CHECKER(sequence_checker_);
-  SystemNetworkContextManager* manager_;
+  raw_ptr<SystemNetworkContextManager> manager_;
 };
 
 network::mojom::NetworkContext* SystemNetworkContextManager::GetContext() {
@@ -520,8 +512,7 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
       CreateHttpAuthDynamicParams(local_state_));
 
   // Configure the Certificate Transparency logs.
-#if !defined(OS_ANDROID)
-  if (g_enable_certificate_transparency) {
+  if (IsCertificateTransparencyEnabled()) {
     std::vector<std::string> operated_by_google_logs =
         certificate_transparency::GetLogsOperatedByGoogle();
     std::vector<std::pair<std::string, base::TimeDelta>> disqualified_logs =
@@ -531,6 +522,7 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
       network::mojom::CTLogInfoPtr log_info = network::mojom::CTLogInfo::New();
       log_info->public_key = std::string(ct_log.log_key, ct_log.log_key_length);
       log_info->name = ct_log.log_name;
+      log_info->current_operator = ct_log.current_operator;
 
       std::string log_id = crypto::SHA256HashString(log_info->public_key);
       log_info->operated_by_google =
@@ -544,13 +536,22 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
       if (it != std::end(disqualified_logs) && it->first == log_id) {
         log_info->disqualified_at = it->second;
       }
+
+      for (size_t i = 0; i < ct_log.previous_operators_length; i++) {
+        const auto& op = ct_log.previous_operators[i];
+        network::mojom::PreviousOperatorEntryPtr previous_operator =
+            network::mojom::PreviousOperatorEntry::New();
+        previous_operator->name = op.name;
+        previous_operator->end_time = op.end_time;
+        log_info->previous_operators.push_back(std::move(previous_operator));
+      }
+
       log_list_mojo.push_back(std::move(log_info));
     }
     network_service->UpdateCtLogList(
         std::move(log_list_mojo),
         certificate_transparency::GetLogListTimestamp());
   }
-#endif
 
   int max_connections_per_proxy =
       local_state_->GetInteger(prefs::kMaxConnectionsPerProxy);
@@ -602,19 +603,16 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   // Configure SCT Auditing in the NetworkService.
   SCTReportingService::ReconfigureAfterNetworkRestart();
 
-  if (net::cookie_util::IsFirstPartySetsEnabled()) {
-    component_updater::FirstPartySetsComponentInstallerPolicy::
-        ReconfigureAfterNetworkRestart(
-            base::BindRepeating([](const std::string& raw_sets) {
-              // We use a fresh pointer here (instead of using `network_service`
-              // from the enclosing scope) to avoid use-after-free bugs, since
-              // `network_service` is not guaranteed to live until the
-              // invocation of this callback.
-              network::mojom::NetworkService* network_service =
-                  content::GetNetworkService();
-              network_service->SetFirstPartySets(raw_sets);
-            }));
-  }
+  component_updater::FirstPartySetsComponentInstallerPolicy::
+      ReconfigureAfterNetworkRestart(base::BindOnce([](base::File sets_file) {
+        // We use a fresh pointer here (instead of using `network_service`
+        // from the enclosing scope) to avoid use-after-free bugs, since
+        // `network_service` is not guaranteed to live until the
+        // invocation of this callback.
+        network::mojom::NetworkService* network_service =
+            content::GetNetworkService();
+        network_service->SetFirstPartySets(std::move(sets_file));
+      }));
 
   UpdateExplicitlyAllowedNetworkPorts();
 }
@@ -689,6 +687,13 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
     }
   }
 
+#if defined(OS_WIN)
+  if (command_line.HasSwitch(switches::kUseSystemProxyResolver)) {
+    network_context_params->windows_system_proxy_resolver =
+        ChromeMojoProxyResolverWin::CreateWithSelfOwnedReceiver();
+  }
+#endif
+
   network_context_params->pac_quick_check_enabled =
       local_state_->GetBoolean(prefs::kQuickCheckEnabled);
 
@@ -698,13 +703,9 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
   // point, all NetworkContexts will be destroyed as well.
   AddSSLConfigToNetworkContextParams(network_context_params);
 
-#if !defined(OS_ANDROID)
-
-  if (g_enable_certificate_transparency) {
+  if (IsCertificateTransparencyEnabled()) {
     network_context_params->enforce_chrome_ct_policy = true;
   }
-
-#endif
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
   cert_verifier_creation_params->use_builtin_cert_verifier =
@@ -750,6 +751,8 @@ SystemNetworkContextManager::GetNetExportFileWriter() {
 // static
 bool SystemNetworkContextManager::IsNetworkSandboxEnabled() {
 #if defined(OS_WIN)
+  if (!sandbox::policy::features::IsWinNetworkServiceSandboxSupported())
+    return false;
   auto* local_state = g_browser_process->local_state();
   if (local_state &&
       local_state->HasPrefPath(prefs::kNetworkServiceSandboxEnabled)) {
@@ -787,8 +790,29 @@ SystemNetworkContextManager::GetHttpAuthDynamicParamsForTesting() {
 
 void SystemNetworkContextManager::SetEnableCertificateTransparencyForTesting(
     absl::optional<bool> enabled) {
-  g_enable_certificate_transparency =
-      enabled.value_or(kCertificateTransparencyEnabled);
+  certificate_transparency_enabled_for_testing_ = enabled;
+}
+
+bool SystemNetworkContextManager::IsCertificateTransparencyEnabled() {
+  if (certificate_transparency_enabled_for_testing_.has_value())
+    return certificate_transparency_enabled_for_testing_.value();
+#if (BUILDFLAG(GOOGLE_CHROME_BRANDING) || VIVALDI_BUILD) && defined(OFFICIAL_BUILD)
+// TODO(carlosil): Figure out if we can/should remove the OFFICIAL_BUILD and
+// GOOGLE_CHROME_BRANDING checks now that enforcement does not rely on build
+// dates, and allow embedders to enforce.
+//    Certificate Transparency is only enabled if:
+//   - base::GetBuildTime() is deterministic to the source (OFFICIAL_BUILD)
+//   - The build in reliably updatable (GOOGLE_CHROME_BRANDING)
+#if defined(OS_ANDROID)
+  // On Android, enforcement is currently controlled via a feature flag.
+  return base::FeatureList::IsEnabled(
+      features::kCertificateTransparencyAndroid);
+#else
+  return true;
+#endif
+#else
+  return false;
+#endif
 }
 
 network::mojom::NetworkContextParamsPtr
@@ -820,4 +844,9 @@ void SystemNetworkContextManager::UpdateReferrersEnabled() {
 
 // static
 StubResolverConfigReader*
-SystemNetworkContextManager::stub_resolver_config_reader_for_testing_ = nullptr;
+    SystemNetworkContextManager::stub_resolver_config_reader_for_testing_ =
+        nullptr;
+
+absl::optional<bool>
+    SystemNetworkContextManager::certificate_transparency_enabled_for_testing_ =
+        absl::nullopt;

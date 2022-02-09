@@ -31,7 +31,6 @@
 #include "third_party/blink/renderer/core/html/html_table_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
-#include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_object_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_table_caption.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
@@ -317,7 +316,8 @@ LayoutNGTableSectionInterface* LayoutTable::SectionBelowInterface(
     const LayoutNGTableSectionInterface* section,
     SkipEmptySectionsValue skip_empty_sections) const {
   NOT_DESTROYED();
-  return SectionBelow(section->ToLayoutTableSection(), skip_empty_sections);
+  return SectionBelow(To<LayoutTableSection>(section->ToLayoutObject()),
+                      skip_empty_sections);
 }
 LayoutNGTableSectionInterface* LayoutTable::BottomNonEmptySectionInterface()
     const {
@@ -703,7 +703,6 @@ void LayoutTable::RecalcVisualOverflow() {
 void LayoutTable::UpdateLayout() {
   NOT_DESTROYED();
   DCHECK(NeedsLayout());
-  LayoutAnalyzer::Scope analyzer(*this);
 
   if (SimplifiedLayout())
     return;
@@ -1917,7 +1916,8 @@ void LayoutTable::UpdateCollapsedOuterBorders() const {
 // LayoutNGTableCellInterface API
 bool LayoutTable::IsFirstCell(const LayoutNGTableCellInterface& cell) const {
   NOT_DESTROYED();
-  const LayoutTableCell& layout_cell = *cell.ToLayoutTableCell();
+  const LayoutTableCell& layout_cell =
+      To<LayoutTableCell>(*cell.ToLayoutObject());
   return !(CellPreceding(layout_cell) || CellAbove(layout_cell));
 }
 

@@ -110,11 +110,18 @@ bool IsSelectiveUIAEnablementEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const base::Feature kMagnifierContinuousMouseFollowingModeSetting{
     "MagnifierContinuousMouseFollowingModeSetting",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsMagnifierContinuousMouseFollowingModeSettingEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kMagnifierContinuousMouseFollowingModeSetting);
+}
+
+const base::Feature kDockedMagnifierResizing{"DockedMagnifierResizing",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsDockedMagnifierResizingEnabled() {
+  return base::FeatureList::IsEnabled(::features::kDockedMagnifierResizing);
 }
 
 const base::Feature kExperimentalAccessibilityDictationOffline{
@@ -139,15 +146,6 @@ const base::Feature kExperimentalAccessibilityDictationCommands{
 bool IsExperimentalAccessibilityDictationCommandsEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kExperimentalAccessibilityDictationCommands);
-}
-
-const base::Feature kExperimentalAccessibilitySwitchAccessSetupGuide{
-    "ExperimentalAccessibilitySwitchAccessSetupGuide",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-bool IsExperimentalAccessibilitySwitchAccessSetupGuideEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kExperimentalAccessibilitySwitchAccessSetupGuide);
 }
 
 const base::Feature kEnhancedNetworkVoices{"EnhancedNetworkVoices",
@@ -180,16 +178,6 @@ bool IsAriaElementReflectionEnabled() {
   return base::FeatureList::IsEnabled(::features::kEnableAriaElementReflection);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-const base::Feature kSelectToSpeakNavigationControl{
-    "SelectToSpeakNavigationControl", base::FEATURE_ENABLED_BY_DEFAULT};
-
-bool IsSelectToSpeakNavigationControlEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kSelectToSpeakNavigationControl);
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 #if defined(OS_ANDROID)
 const base::Feature kComputeAXMode{"ComputeAXMode",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
@@ -198,5 +186,12 @@ bool IsComputeAXModeEnabled() {
   return base::FeatureList::IsEnabled(::features::kComputeAXMode);
 }
 #endif  // defined(OS_ANDROID)
+
+const base::Feature kReaderModeSidePanel{"ReaderModeSidePanel",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsReaderModeSidePanelEnabled() {
+  return base::FeatureList::IsEnabled(::features::kReaderModeSidePanel);
+}
 
 }  // namespace features

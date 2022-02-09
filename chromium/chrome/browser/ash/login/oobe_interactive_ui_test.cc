@@ -4,6 +4,11 @@
 
 #include <memory>
 
+#include "ash/components/arc/session/arc_service_manager.h"
+#include "ash/components/arc/session/arc_session_runner.h"
+#include "ash/components/arc/test/arc_util_test_support.h"
+#include "ash/components/arc/test/fake_arc_session.h"
+#include "ash/components/attestation/attestation_flow_utils.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -11,7 +16,6 @@
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
@@ -55,13 +59,8 @@
 #include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chromeos/assistant/buildflags.h"
-#include "chromeos/attestation/attestation_flow_utils.h"
 #include "chromeos/dbus/update_engine/update_engine_client.h"
 #include "chromeos/system/fake_statistics_provider.h"
-#include "components/arc/arc_service_manager.h"
-#include "components/arc/session/arc_session_runner.h"
-#include "components/arc/test/arc_util_test_support.h"
-#include "components/arc/test/fake_arc_session.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -742,8 +741,9 @@ void OobeInteractiveUITest::SimpleEndToEnd() {
 }
 
 // Disabled on *San bots since they time out.
+// crbug.com/1260131: SimpleEndToEnd is flaky on builder "linux-chromeos-dbg"
 #if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || \
-    defined(LEAK_SANITIZER)
+    defined(LEAK_SANITIZER) || !defined(NDEBUG)
 #define MAYBE_SimpleEndToEnd DISABLED_SimpleEndToEnd
 #else
 #define MAYBE_SimpleEndToEnd SimpleEndToEnd
@@ -783,7 +783,7 @@ class OobeZeroTouchInteractiveUITest : public OobeInteractiveUITest {
     chromeos::AttestationClient::Get()
         ->GetTestInterface()
         ->AllowlistSignSimpleChallengeKey(
-            /*username=*/"", chromeos::attestation::GetKeyNameForProfile(
+            /*username=*/"", attestation::GetKeyNameForProfile(
                                  chromeos::attestation::
                                      PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
                                  ""));
@@ -832,7 +832,7 @@ void OobeZeroTouchInteractiveUITest::ZeroTouchEndToEnd() {
 // crbug.com/997987. Disabled on MSAN since they time out.
 // crbug.com/1055853: EndToEnd is flaky on Linux Chromium OS ASan LSan
 #if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || \
-    defined(LEAK_SANITIZER) || (defined(OS_CHROMEOS) && !defined(NDEBUG))
+    defined(LEAK_SANITIZER) || !defined(NDEBUG)
 #define MAYBE_EndToEnd DISABLED_EndToEnd
 #else
 #define MAYBE_EndToEnd EndToEnd
@@ -936,8 +936,7 @@ class PublicSessionOobeTest : public MixinBasedInProcessBrowserTest,
       &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
 };
 
-// TODO(crbug.com/1248317): This test is flaky.
-IN_PROC_BROWSER_TEST_P(PublicSessionOobeTest, DISABLED_NoTermsOfService) {
+IN_PROC_BROWSER_TEST_P(PublicSessionOobeTest, NoTermsOfService) {
   login_manager_.WaitForActiveSession();
   // Check that the dialog was never shown.
   EXPECT_FALSE(DialogWasVisible());

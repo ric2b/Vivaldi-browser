@@ -51,33 +51,25 @@ git config --global user.email "..."
 ```bash
 git clone --depth=1 git@github.com:ric2b/Vivaldi-browser.git w
 
-wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
-tar --xz -xf ... && mv vivaldi-source v0 && ls -la
-ls -ld {w,v0}/.git
-# rm -rf v0/.git
+curl -O https://vivaldi.com/source/vivaldi-source_5.2...tar.xz
+time tar --xz -xf ... && mv vivaldi-source v0 && ls -la
 
-cp -r w/{.git,README.md} v0
+mv w/{.git,README.md} v0
 cd v0
-git status | grep -v chromium
-git add .
-git status | grep -v chromium
-git commit -m 'Added version 2.0...' | grep -v chromium
-git status | grep -v chromium
-git log
+time git add . && time git commit -m 'Added version 5...' > /dev/null && git tag 5...
+git log --oneline
 cd ..
-
-# git add . && git commit -m 'Added version 2.0...' | grep -v chromium
 ```
 
 #### Committing a second version
 
-```
-wget https://vivaldi.com/source/vivaldi-source-2.1...tar.xz
-tar --xz -xf ... && mv vivaldi-source v1 && ls -la
+```bash
+curl -O https://vivaldi.com/source/vivaldi-source_5.2...tar.xz
+time tar --xz -xf ... && mv vivaldi-source v1 && ls -la
 ls -ld v{0,1}/.git
 # rm -rf v1/.git
 
-cp -r v0/{.git,README.md} v1
+mv v0/{.git,README.md} v1
 ...
 ```
 
@@ -86,6 +78,7 @@ cp -r v0/{.git,README.md} v1
 ```
 git status | grep -v chromium
 git push
+git push --tags
 cd ..
 
 cd ..

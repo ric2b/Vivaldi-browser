@@ -106,7 +106,6 @@ extern const char kExtensionsInstallVerification[];
 extern const char kExtensionsNotWebstore[];
 extern const char kForceAppMode[];
 extern const char kForceFirstRun[];
-extern const char kForceStackedTabStripLayout[];
 extern const char kHideCrashRestoreBubble[];
 extern const char kHomePage[];
 extern const char kIncognito[];
@@ -170,6 +169,7 @@ extern const char kTrustedDownloadSources[];
 extern const char kTryChromeAgain[];
 extern const char kUnlimitedStorage[];
 extern const char kUserDataDir[];
+extern const char kUseSystemProxyResolver[];
 extern const char kValidateCrx[];
 extern const char kVersion[];
 extern const char kWebRtcRemoteEventLogProactivePruningDelta[];
@@ -190,6 +190,7 @@ extern const char kForceEnableNightMode[];
 extern const char kForceShowUpdateMenuBadge[];
 extern const char kForceShowUpdateMenuItemCustomSummary[];
 extern const char kForceEnableSigninFRE[];
+extern const char kForceDisableSigninFRE[];
 extern const char kForceUpdateMenuType[];
 extern const char kMarketUrlForTesting[];
 #endif  // defined(OS_ANDROID)
@@ -215,7 +216,6 @@ extern const char kWmClass[];
 
 #if defined(OS_MAC)
 extern const char kAppsKeepChromeAliveInTests[];
-extern const char kDisableHostedAppShimCreation[];
 extern const char kEnableUserMetrics[];
 extern const char kMetricsClientID[];
 extern const char kRelauncherProcess[];

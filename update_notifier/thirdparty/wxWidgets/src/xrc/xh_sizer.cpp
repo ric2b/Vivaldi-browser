@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC
 
@@ -40,7 +37,7 @@
 // wxSizerXmlHandler
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxSizerXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSizerXmlHandler, wxXmlResourceHandler);
 
 wxSizerXmlHandler::wxSizerXmlHandler()
                   :wxXmlResourceHandler(),
@@ -267,6 +264,10 @@ wxObject* wxSizerXmlHandler::Handle_sizer()
 
     CreateChildren(parent, true/*only this handler*/);
 
+    // This has to be done after CreateChildren().
+    if ( GetBool(wxT("hideitems"), 0) == 1 )
+        sizer->ShowItems(false);
+
     // set growable rows and cols for sizers which support this
     if ( wxFlexGridSizer *flexsizer = wxDynamicCast(sizer, wxFlexGridSizer) )
     {
@@ -316,14 +317,63 @@ wxSizer*  wxSizerXmlHandler::Handle_wxBoxSizer()
 #if wxUSE_STATBOX
 wxSizer*  wxSizerXmlHandler::Handle_wxStaticBoxSizer()
 {
-    return new wxStaticBoxSizer(
-            new wxStaticBox(m_parentAsWindow,
-                            GetID(),
-                            GetText(wxT("label")),
-                            wxDefaultPosition, wxDefaultSize,
-                            0/*style*/,
-                            GetName()),
-            GetStyle(wxT("orient"), wxHORIZONTAL));
+    wxXmlNode* nodeWindowLabel = GetParamNode(wxS("windowlabel"));
+    wxString const& labelText = GetText(wxS("label"));
+
+    wxStaticBox* box = NULL;
+    if ( nodeWindowLabel )
+    {
+        if ( !labelText.empty() )
+        {
+            ReportError("Either label or windowlabel can be used, but not both");
+            return NULL;
+        }
+
+#ifdef wxHAS_WINDOW_LABEL_IN_STATIC_BOX
+        wxXmlNode* n = nodeWindowLabel->GetChildren();
+        if ( !n )
+        {
+            ReportError("windowlabel must have a window child");
+            return NULL;
+        }
+
+        if ( n->GetNext() )
+        {
+            ReportError("windowlabel can only have a single child");
+            return NULL;
+        }
+
+        wxObject* const item = CreateResFromNode(n, m_parent, NULL);
+        wxWindow* const wndLabel = wxDynamicCast(item, wxWindow);
+        if ( !wndLabel )
+        {
+            ReportError(n, "windowlabel child must be a window");
+            return NULL;
+        }
+
+        box = new wxStaticBox(m_parentAsWindow,
+                              GetID(),
+                              wndLabel,
+                              wxDefaultPosition, wxDefaultSize,
+                              0/*style*/,
+                              GetName());
+#else // !wxHAS_WINDOW_LABEL_IN_STATIC_BOX
+        ReportError("Support for using windows as wxStaticBox labels is "
+                    "missing in this build of wxWidgets.");
+        return NULL;
+#endif // wxHAS_WINDOW_LABEL_IN_STATIC_BOX/!wxHAS_WINDOW_LABEL_IN_STATIC_BOX
+    }
+    else // Using plain text label.
+    {
+        box = new wxStaticBox(m_parentAsWindow,
+                              GetID(),
+                              labelText,
+                              wxDefaultPosition, wxDefaultSize,
+                              0/*style*/,
+                              GetName());
+    }
+
+    return new wxStaticBoxSizer(box, GetStyle(wxS("orient"), wxHORIZONTAL));
 }
 #endif // wxUSE_STATBOX
 
@@ -508,17 +558,17 @@ void wxSizerXmlHandler::SetGrowables(wxFlexGridSizer* sizer,
 }
 
 
-wxGBPosition wxSizerXmlHandler::GetGBPos(const wxString& param)
+wxGBPosition wxSizerXmlHandler::GetGBPos()
 {
-    wxSize sz = GetSize(param);
+    wxSize sz = GetPairInts(wxS("cellpos"));
     if (sz.x < 0) sz.x = 0;
     if (sz.y < 0) sz.y = 0;
     return wxGBPosition(sz.x, sz.y);
 }
 
-wxGBSpan wxSizerXmlHandler::GetGBSpan(const wxString& param)
+wxGBSpan wxSizerXmlHandler::GetGBSpan()
 {
-    wxSize sz = GetSize(param);
+    wxSize sz = GetPairInts(wxS("cellspan"));
     if (sz.x < 1) sz.x = 1;
     if (sz.y < 1) sz.y = 1;
     return wxGBSpan(sz.x, sz.y);
@@ -534,23 +584,333 @@ wxSizerItem* wxSizerXmlHandler::MakeSizerItem()
         return new wxSizerItem();
 }
 
+int wxSizerXmlHandler::GetSizerFlags()
+{
+    const wxString s = GetParamValue(wxS("flag"));
+    if ( s.empty() )
+        return 0;
+
+    // Parse flags keeping track of invalid combinations. This is somewhat
+    // redundant with the checks performed in wxSizer subclasses themselves but
+    // doing it here allows us to give the exact line number at which the
+    // offending line numbers are given, which is very valuable.
+    //
+    // We also can detect invalid flags combinations involving wxALIGN_LEFT and
+    // wxALIGN_TOP here, while this is impossible at wxSizer level as both of
+    // these flags have value of 0.
+
+
+    // As the logic is exactly the same in horizontal and vertical
+    // orientations, use arrays and loops to avoid duplicating the code.
+
+    enum Orient
+    {
+        Orient_Horz,
+        Orient_Vert,
+        Orient_Max
+    };
+
+    const char* const orientName[] = { "horizontal", "vertical" };
+
+    // The already seen alignment flag in the given orientation or empty if
+    // none have been seen yet.
+    wxString alignFlagIn[] = { wxString(), wxString() };
+
+    // Either "wxEXPAND" or "wxGROW" depending on the string used in the input,
+    // or empty string if none is specified.
+    wxString expandFlag;
+
+    // Either "wxALIGN_CENTRE" or "wxALIGN_CENTER" if either flag was found or
+    // empty string.
+    wxString centreFlag;
+
+    // Indicates whether we can use alignment in the given orientation at all.
+    bool alignAllowedIn[] = { true, true };
+
+    // Find out the sizer orientation: it is the principal/major size direction
+    // for the 1D sizers and undefined/invalid for the 2D ones.
+    Orient orientSizer;
+    if ( wxBoxSizer* const boxSizer = wxDynamicCast(m_parentSizer, wxBoxSizer) )
+    {
+        orientSizer = boxSizer->GetOrientation() == wxHORIZONTAL
+                        ? Orient_Horz
+                        : Orient_Vert;
+
+        // Alignment can be only used in the transversal/minor direction.
+        alignAllowedIn[orientSizer] = false;
+    }
+    else
+    {
+        orientSizer = Orient_Max;
+    }
+
+    int flags = 0;
+
+    wxStringTokenizer tkn(s, wxS("| \t\n"), wxTOKEN_STRTOK);
+    while ( tkn.HasMoreTokens() )
+    {
+        const wxString flagName = tkn.GetNextToken();
+        const int n = m_styleNames.Index(flagName);
+        if ( n == wxNOT_FOUND )
+        {
+            ReportParamError
+            (
+                "flag",
+                wxString::Format("unknown sizer flag \"%s\"", flagName)
+            );
+            continue;
+        }
+
+        // Flag description is the string that appears in the error messages,
+        // the main difference from the flag name is that it can indicate that
+        // wxALIGN_CENTRE_XXX flag could have been encountered as part of
+        // wxALIGN_CENTRE which should make the error message more clear as
+        // seeing references to e.g. wxALIGN_CENTRE_VERTICAL when it's never
+        // used could be confusing.
+        wxString flagDesc = wxS('"') + flagName + wxS('"');
+
+        int flag = m_styleValues[n];
+
+        bool flagSpecifiesAlignIn[] = { false, false };
+
+        switch ( flag )
+        {
+            case wxALIGN_CENTRE_HORIZONTAL:
+            case wxALIGN_RIGHT:
+                flagSpecifiesAlignIn[Orient_Horz] = true;
+                break;
+
+            case wxALIGN_CENTRE_VERTICAL:
+            case wxALIGN_BOTTOM:
+                flagSpecifiesAlignIn[Orient_Vert] = true;
+                break;
+
+            case wxEXPAND:
+                expandFlag = flagName;
+                break;
+
+            case wxALIGN_CENTRE:
+                // wxALIGN_CENTRE is a combination of wxALIGN_CENTRE_HORIZONTAL
+                // and wxALIGN_CENTRE_VERTICAL but we also handle it as just
+                // one of those flags if alignment in the other direction is
+                // not allowed for both compatibility and convenience reasons.
+                switch ( orientSizer )
+                {
+                    case Orient_Horz:
+                        flagSpecifiesAlignIn[Orient_Vert] = true;
+                        flagDesc.Printf
+                        (
+                             "\"wxALIGN_CENTRE_VERTICAL\" (as part of %s)",
+                             flagName
+                        );
+                        flag = wxALIGN_CENTRE_VERTICAL;
+                        break;
+
+                    case Orient_Vert:
+                        flagSpecifiesAlignIn[Orient_Horz] = true;
+                        flagDesc.Printf
+                        (
+                            "\"wxALIGN_CENTRE_HORIZONTAL\" (as part of %s)",
+                            flagName
+                        );
+                        flag = wxALIGN_CENTRE_HORIZONTAL;
+                        break;
+
+                    case Orient_Max:
+                        // For 2D sizers we need to deal with this flag at the
+                        // end, so just remember that we had it for now.
+                        centreFlag = flagName;
+                        flag = 0;
+                        break;
+                }
+                break;
+
+            case 0:
+                // This is a special case: both wxALIGN_LEFT and wxALIGN_TOP
+                // have value of 0, so we need to examine the name of the flag
+                // and not just its value.
+                if ( flagName == wxS("wxALIGN_LEFT") )
+                    flagSpecifiesAlignIn[Orient_Horz] = true;
+                else if ( flagName == wxS("wxALIGN_TOP") )
+                    flagSpecifiesAlignIn[Orient_Vert] = true;
+                break;
+        }
+
+        for ( int orient = 0; orient < Orient_Max; orient++ )
+        {
+            if ( !flagSpecifiesAlignIn[orient] )
+                continue;
+
+            if ( !alignAllowedIn[orient] )
+            {
+                ReportParamError
+                (
+                    "flag",
+                    wxString::Format
+                    (
+                        "%s alignment flag %s has no effect inside "
+                        "a %s box sizer, remove it and consider inserting "
+                        "a spacer instead",
+                        orientName[orient],
+                        flagDesc,
+                        orientName[orient]
+                    )
+                );
+
+                // Notice that we take care to not add this invalid flag to the
+                // flags we will actually use with wxSizer: they would just
+                // trigger an assert there which wouldn't be very useful as
+                // we've already given an error about this.
+                flag = 0;
+            }
+            else if ( alignFlagIn[orient].empty() )
+            {
+                alignFlagIn[orient] = flagDesc;
+            }
+            else
+            {
+                ReportParamError
+                (
+                    "flag",
+                    wxString::Format
+                    (
+                        "both %s and %s specify %s alignment "
+                        "and can't be used together",
+                        alignFlagIn[orient],
+                        flagDesc,
+                        orientName[orient]
+                    )
+                );
+
+                flag = 0;
+            }
+        }
+
+        flags |= flag;
+    }
+
+    // Now that we know all the alignment flags we can interpret wxALIGN_CENTRE
+    // for the 2D sizers ("centreFlag" is only set in the 2D case).
+    if ( !centreFlag.empty() )
+    {
+        if ( !expandFlag.empty() )
+        {
+            ReportParamError
+            (
+                "flag",
+                wxString::Format
+                (
+                    "\"%s\" has no effect when combined with \"%s\"",
+                    centreFlag,
+                    expandFlag
+                )
+            );
+        }
+        else // !wxEXPAND
+        {
+            int flagsCentre = 0;
+
+            if ( alignFlagIn[Orient_Horz].empty() )
+                flagsCentre |= wxALIGN_CENTRE_HORIZONTAL;
+
+            if ( alignFlagIn[Orient_Vert].empty() )
+                flagsCentre |= wxALIGN_CENTRE_VERTICAL;
+
+            if ( !flagsCentre )
+            {
+                ReportParamError
+                (
+                    "flag",
+                    wxString::Format
+                    (
+                        "\"%s\" flag has no effect when combined "
+                        "with both %s and %s horizontal and "
+                        "vertical alignment flags",
+                        centreFlag,
+                        alignFlagIn[Orient_Horz],
+                        alignFlagIn[Orient_Vert]
+                    )
+                );
+            }
+
+            flags |= flagsCentre;
+        }
+    }
+
+    // Finally check that the alignment flags are compatible with wxEXPAND.
+    if ( !expandFlag.empty() )
+    {
+        if ( orientSizer != Orient_Max )
+        {
+            const Orient orientOther = orientSizer == Orient_Horz
+                                            ? Orient_Vert
+                                            : Orient_Horz;
+
+            if ( !alignFlagIn[orientOther].empty() )
+            {
+                ReportParamError
+                (
+                    "flag",
+                    wxString::Format
+                    (
+                        "\"%s\" is incompatible with %s alignment flag "
+                        "\"%s\" in a %s box sizer",
+                        expandFlag,
+                        orientName[orientOther],
+                        alignFlagIn[orientOther],
+                        orientName[orientSizer]
+                    )
+                );
+
+                // Just as with the alignment flags above, ignore wxEXPAND
+                // completely to avoid asserts from wxSizer code.
+                flags &= ~wxEXPAND;
+            }
+        }
+        else // 2D sizer
+        {
+            if ( !alignFlagIn[Orient_Horz].empty() &&
+                    !alignFlagIn[Orient_Vert].empty() )
+            {
+                ReportParamError
+                (
+                    "flag",
+                    wxString::Format
+                    (
+                        "\"%s\" flag has no effect when combined "
+                        "with both %s and %s horizontal and "
+                        "vertical alignment flags",
+                        expandFlag,
+                        alignFlagIn[Orient_Horz],
+                        alignFlagIn[Orient_Vert]
+                    )
+                );
+
+                flags &= ~wxEXPAND;
+            }
+        }
+    }
+
+    return flags;
+}
+
 void wxSizerXmlHandler::SetSizerItemAttributes(wxSizerItem* sitem)
 {
     sitem->SetProportion(GetLong(wxT("option")));  // Should this check for "proportion" too?
-    sitem->SetFlag(GetStyle(wxT("flag")));
+    sitem->SetFlag(GetSizerFlags());
     sitem->SetBorder(GetDimension(wxT("border")));
     wxSize sz = GetSize(wxT("minsize"));
     if (!(sz == wxDefaultSize))
         sitem->SetMinSize(sz);
-    sz = GetSize(wxT("ratio"));
+    sz = GetPairInts(wxT("ratio"));
     if (!(sz == wxDefaultSize))
         sitem->SetRatio(sz);
 
     if (m_isGBS)
     {
         wxGBSizerItem* gbsitem = (wxGBSizerItem*)sitem;
-        gbsitem->SetPos(GetGBPos(wxT("cellpos")));
-        gbsitem->SetSpan(GetGBSpan(wxT("cellspan")));
+        gbsitem->SetPos(GetGBPos());
+        gbsitem->SetSpan(GetGBSpan());
     }
 
     // record the id of the item, if any, for use by XRCSIZERITEM()
@@ -572,7 +932,7 @@ void wxSizerXmlHandler::AddSizerItem(wxSizerItem* sitem)
 //-----------------------------------------------------------------------------
 #if wxUSE_BUTTON
 
-IMPLEMENT_DYNAMIC_CLASS(wxStdDialogButtonSizerXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxStdDialogButtonSizerXmlHandler, wxXmlResourceHandler);
 
 wxStdDialogButtonSizerXmlHandler::wxStdDialogButtonSizerXmlHandler()
     : m_isInside(false), m_parentSizer(NULL)

@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "gn/err.h"
 #include "gn/pattern.h"
@@ -408,7 +407,8 @@ class Scope {
   static UpdateParseMap target_update_list;
   static UpdateParseMap template_update_list;
 
-  DISALLOW_COPY_AND_ASSIGN(Scope);
+  Scope(const Scope&) = delete;
+  Scope& operator=(const Scope&) = delete;
 };
 
 #endif  // TOOLS_GN_SCOPE_H_

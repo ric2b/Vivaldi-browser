@@ -16,7 +16,6 @@
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/string_escape.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -29,14 +28,15 @@
 #include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/url_constants.h"
-#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -49,6 +49,9 @@
 #include "chrome/common/url_constants.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/zoom/page_zoom.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -89,6 +92,7 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/base/resource/resource_bundle.h"
 
 using base::DictionaryValue;
 using content::BrowserThread;
@@ -104,54 +108,6 @@ static const char kFrontendHostId[] = "id";
 static const char kFrontendHostMethod[] = "method";
 static const char kFrontendHostParams[] = "params";
 static const char kTitleFormat[] = "DevTools - %s";
-
-static const char kDevToolsActionTakenHistogram[] = "DevTools.ActionTaken";
-static const char kDevToolsPanelShownHistogram[] = "DevTools.PanelShown";
-static const char kDevToolsPanelClosedHistogram[] = "DevTools.PanelClosed";
-static const char kDevToolsSidebarPaneShownHistogram[] =
-    "DevTools.SidebarPaneShown";
-static const char kDevToolsKeyboardShortcutFiredHistogram[] =
-    "DevTools.KeyboardShortcutFired";
-static const char kDevToolsIssuesPanelOpenedFromHistogram[] =
-    "DevTools.IssuesPanelOpenedFrom";
-static const char kDevToolsKeybindSetSettingChanged[] =
-    "DevTools.KeybindSetSettingChanged";
-static const char kDevToolsDualScreenDeviceEmulatedHistogram[] =
-    "DevTools.DualScreenDeviceEmulated";
-static const char kDevtoolsGridSettingChangedHistogram[] =
-    "DevTools.GridSettingChanged";
-static const char kDevtoolsCSSGridSettingsHistogram[] =
-    "DevTools.CSSGridSettings2";
-static const char kDevToolsHighlightedPersistentCSSGridCountHistogram[] =
-    "DevTools.HighlightedPersistentCSSGridCount";
-static const char kDevtoolsExperimentEnabledHistogram[] =
-    "DevTools.ExperimentEnabled";
-static const char kDevtoolsExperimentDisabledHistogram[] =
-    "DevTools.ExperimentDisabled";
-static const char kDevtoolsExperimentEnabledAtLaunchHistogram[] =
-    "DevTools.ExperimentEnabledAtLaunch";
-static const char kDevToolsComputedStyleGroupingHistogram[] =
-    "DevTools.ComputedStyleGrouping";
-static const char kDevtoolsIssuesPanelIssueExpandedHistogram[] =
-    "DevTools.IssuesPanelIssueExpanded";
-static const char kDevtoolsIssuesPanelResourceOpenedHistogram[] =
-    "DevTools.IssuesPanelResourceOpened";
-static const char kDevToolsGridOverlayOpenedFromHistogram[] =
-    "DevTools.GridOverlayOpenedFrom";
-static const char kDevToolsCssEditorOpenedHistogram[] =
-    "DevTools.CssEditorOpened";
-static const char kDevToolsIssueCreatedHistogram[] = "DevTools.IssueCreated";
-static const char kDevToolsDeveloperResourceLoadedHistogram[] =
-    "DevTools.DeveloperResourceLoaded";
-static const char kDevToolsDeveloperResourceSchemeHistogram[] =
-    "DevTools.DeveloperResourceScheme";
-static const char kDevToolsLinearMemoryInspectorRevealedFromHistogram[] =
-    "DevTools.LinearMemoryInspector.RevealedFrom";
-static const char kDevToolsLinearMemoryInspectorTargetHistogram[] =
-    "DevTools.LinearMemoryInspector.Target";
-static const char kDevToolsLanguageHistogram[] = "DevTools.Language";
-static const char kDevToolsConsoleShowsCorsErrorsHistogram[] =
-    "DevTools.ConsoleShowsCorsErrors";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -590,7 +546,8 @@ class DevToolsUIBindings::FrontendWebContentsObserver
 
  private:
   // contents::WebContentsObserver:
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DocumentOnLoadCompletedInMainFrame(
@@ -634,13 +591,13 @@ bool DevToolsUIBindings::IsValidRemoteFrontendURL(const GURL& url) {
              .spec() == url.spec();
 }
 
-void DevToolsUIBindings::FrontendWebContentsObserver::RenderProcessGone(
-    base::TerminationStatus status) {
+void DevToolsUIBindings::FrontendWebContentsObserver::
+    PrimaryMainFrameRenderProcessGone(base::TerminationStatus status) {
   bool crashed = true;
   switch (status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
     case base::TERMINATION_STATUS_PROCESS_CRASHED:
@@ -677,9 +634,6 @@ void DevToolsUIBindings::FrontendWebContentsObserver::
 
 void DevToolsUIBindings::FrontendWebContentsObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
   if (navigation_handle->IsInPrimaryMainFrame() &&
       navigation_handle->HasCommitted())
     devtools_bindings_->DidNavigateMainFrame();
@@ -713,8 +667,6 @@ DevToolsUIBindings::DevToolsUIBindings(content::WebContents* web_contents)
   file_helper_ =
       std::make_unique<DevToolsFileHelper>(web_contents_, profile_, this);
   file_system_indexer_ = new DevToolsFileSystemIndexer();
-  extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
-      web_contents_);
 
   // Register on-load actions.
   embedder_message_dispatcher_ =
@@ -964,9 +916,18 @@ void DevToolsUIBindings::LoadNetworkResource(DispatchCallback callback,
       return;
     }
   } else {
-    auto* partition =
-        web_contents_->GetBrowserContext()->GetStoragePartitionForUrl(gurl);
-    url_loader_factory = partition->GetURLLoaderFactoryForBrowserProcess();
+    content::WebContents* target_tab =
+        DevToolsWindow::AsDevToolsWindow(web_contents_)
+            ->GetInspectedWebContents();
+    if (target_tab) {
+      auto* partition = target_tab->GetMainFrame()->GetStoragePartition();
+      url_loader_factory = partition->GetURLLoaderFactoryForBrowserProcess();
+    } else {
+      base::DictionaryValue response;
+      response.SetInteger("statusCode", 409);
+      std::move(callback).Run(&response);
+      return;
+    }
   }
 
   NetworkResourceLoader::Create(
@@ -1276,6 +1237,51 @@ void DevToolsUIBindings::ClearPreferences() {
   settings_.Clear();
 }
 
+void DevToolsUIBindings::GetSyncInformation(DispatchCallback callback) {
+  base::Value result =
+      DevToolsUIBindings::GetSyncInformationForProfile(profile_);
+  std::move(callback).Run(&result);
+}
+
+base::Value DevToolsUIBindings::GetSyncInformationForProfile(Profile* profile) {
+  base::Value result(base::Value::Type::DICTIONARY);
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(profile);
+  if (!sync_service) {
+    result.SetBoolKey("isSyncActive", false);
+    return result;
+  }
+
+  result.SetBoolKey("isSyncActive", sync_service->IsSyncFeatureActive());
+  result.SetBoolKey(
+      "arePreferencesSynced",
+      sync_service->GetActiveDataTypes().Has(syncer::ModelType::PREFERENCES));
+
+  CoreAccountInfo account_info = sync_service->GetAccountInfo();
+  if (account_info.IsEmpty())
+    return result;
+
+  result.SetStringKey("accountEmail", account_info.email);
+
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile);
+  AccountInfo extended_info =
+      identity_manager->FindExtendedAccountInfo(account_info);
+  gfx::Image account_image;
+  if (extended_info.IsEmpty() || extended_info.account_image.IsEmpty()) {
+    account_image = ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+        profiles::GetPlaceholderAvatarIconResourceID());
+  } else {
+    account_image = extended_info.account_image;
+  }
+  scoped_refptr<base::RefCountedMemory> png_bytes =
+      account_image.As1xPNGBytes();
+  if (png_bytes->size() > 0)
+    result.SetStringKey("accountImage", base::Base64Encode(*png_bytes));
+
+  return result;
+}
+
 void DevToolsUIBindings::Reattach(DispatchCallback callback) {
   if (agent_host_.get()) {
     agent_host_->DetachClient(this);
@@ -1316,32 +1322,9 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
     return;
   }
 
-  if (name == kDevToolsActionTakenHistogram ||
-      name == kDevToolsPanelShownHistogram ||
-      name == kDevToolsPanelClosedHistogram ||
-      name == kDevToolsSidebarPaneShownHistogram ||
-      name == kDevToolsKeyboardShortcutFiredHistogram ||
-      name == kDevToolsIssuesPanelOpenedFromHistogram ||
-      name == kDevToolsKeybindSetSettingChanged ||
-      name == kDevToolsDualScreenDeviceEmulatedHistogram ||
-      name == kDevtoolsGridSettingChangedHistogram ||
-      name == kDevtoolsCSSGridSettingsHistogram ||
-      name == kDevToolsHighlightedPersistentCSSGridCountHistogram ||
-      name == kDevtoolsExperimentEnabledHistogram ||
-      name == kDevtoolsExperimentDisabledHistogram ||
-      name == kDevtoolsExperimentEnabledAtLaunchHistogram ||
-      name == kDevToolsComputedStyleGroupingHistogram ||
-      name == kDevtoolsIssuesPanelIssueExpandedHistogram ||
-      name == kDevtoolsIssuesPanelResourceOpenedHistogram ||
-      name == kDevToolsGridOverlayOpenedFromHistogram ||
-      name == kDevToolsCssEditorOpenedHistogram ||
-      name == kDevToolsIssueCreatedHistogram ||
-      name == kDevToolsDeveloperResourceLoadedHistogram ||
-      name == kDevToolsDeveloperResourceSchemeHistogram ||
-      name == kDevToolsLinearMemoryInspectorRevealedFromHistogram ||
-      name == kDevToolsLinearMemoryInspectorTargetHistogram ||
-      name == kDevToolsLanguageHistogram ||
-      name == kDevToolsConsoleShowsCorsErrorsHistogram)
+  const std::string kDevToolsHistogramPrefix = "DevTools.";
+  if (name.compare(0, kDevToolsHistogramPrefix.size(),
+                   kDevToolsHistogramPrefix) == 0)
     base::UmaHistogramExactLinear(name, sample, boundary_value);
   else
     frontend_host_->BadMessageReceived();
@@ -1661,9 +1644,6 @@ void DevToolsUIBindings::CallClientMethod(
 
 void DevToolsUIBindings::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
   if (navigation_handle->IsInPrimaryMainFrame()) {
     if (frontend_loaded_ && agent_host_.get()) {
       agent_host_->DetachClient(this);
@@ -1675,11 +1655,8 @@ void DevToolsUIBindings::ReadyToCommitNavigation(
       frontend_host_.reset();
       return;
     }
-    if (navigation_handle->GetRenderFrameHost() ==
-            web_contents_->GetMainFrame() &&
-        frontend_host_) {
+    if (frontend_host_)
       return;
-    }
     if (content::RenderFrameHost* opener = web_contents_->GetOpener()) {
       content::WebContents* opener_wc =
           content::WebContents::FromRenderFrameHost(opener);
@@ -1697,7 +1674,8 @@ void DevToolsUIBindings::ReadyToCommitNavigation(
   }
 
   content::RenderFrameHost* frame = navigation_handle->GetRenderFrameHost();
-  std::string origin = navigation_handle->GetURL().GetOrigin().spec();
+  std::string origin =
+      navigation_handle->GetURL().DeprecatedGetOriginAsURL().spec();
   auto it = extensions_api_.find(origin);
   if (it == extensions_api_.end())
     return;

@@ -20,9 +20,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
@@ -47,10 +44,10 @@ class MyClient;
 class MyApp : public wxApp
 {
 public:
-    MyApp() { Connect(wxEVT_IDLE, wxIdleEventHandler(MyApp::OnIdle)); }
+    MyApp() { Bind(wxEVT_IDLE, &MyApp::OnIdle, this); }
 
-    virtual bool OnInit();
-    virtual int OnExit();
+    virtual bool OnInit() wxOVERRIDE;
+    virtual int OnExit() wxOVERRIDE;
 
 private:
     void OnIdle(wxIdleEvent& event);
@@ -61,11 +58,11 @@ private:
 class MyConnection : public MyConnectionBase
 {
 public:
-    virtual bool DoExecute(const void *data, size_t size, wxIPCFormat format);
-    virtual const void *Request(const wxString& item, size_t *size = NULL, wxIPCFormat format = wxIPC_TEXT);
-    virtual bool DoPoke(const wxString& item, const void* data, size_t size, wxIPCFormat format);
-    virtual bool OnAdvise(const wxString& topic, const wxString& item, const void *data, size_t size, wxIPCFormat format);
-    virtual bool OnDisconnect();
+    virtual bool DoExecute(const void *data, size_t size, wxIPCFormat format) wxOVERRIDE;
+    virtual const void *Request(const wxString& item, size_t *size = NULL, wxIPCFormat format = wxIPC_TEXT) wxOVERRIDE;
+    virtual bool DoPoke(const wxString& item, const void* data, size_t size, wxIPCFormat format) wxOVERRIDE;
+    virtual bool OnAdvise(const wxString& topic, const wxString& item, const void *data, size_t size, wxIPCFormat format) wxOVERRIDE;
+    virtual bool OnDisconnect() wxOVERRIDE;
 };
 
 class MyClient : public wxClient,
@@ -77,10 +74,10 @@ public:
 
     bool Connect(const wxString& sHost, const wxString& sService, const wxString& sTopic);
     void Disconnect();
-    wxConnectionBase *OnMakeConnection();
-    bool IsConnected() { return m_connection != NULL; };
+    wxConnectionBase *OnMakeConnection() wxOVERRIDE;
+    bool IsConnected() { return m_connection != NULL; }
 
-    virtual void Notify();
+    virtual void Notify() wxOVERRIDE;
 
     void StartNextTestIfNecessary();
 
@@ -107,7 +104,7 @@ private:
 // implementation
 // ============================================================================
 
-IMPLEMENT_APP_CONSOLE(MyApp)
+wxIMPLEMENT_APP_CONSOLE(MyApp);
 
 // ----------------------------------------------------------------------------
 // MyApp

@@ -19,6 +19,7 @@
 #include "components/feed/core/common/pref_names.h"
 #include "components/feed/core/proto/v2/store.pb.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
+#include "components/feed/core/proto/v2/wire/content_id.pb.h"
 #include "components/feed/core/proto/v2/wire/reliability_logging_enums.pb.h"
 #include "components/feed/core/proto/v2/wire/there_and_back_again_data.pb.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
@@ -40,6 +41,7 @@
 #include "components/feed/core/v2/public/types.h"
 #include "components/feed/core/v2/public/unread_content_observer.h"
 #include "components/feed/core/v2/scheduling.h"
+#include "components/feed/core/v2/stream/notice_card_tracker.h"
 #include "components/feed/core/v2/stream/unread_content_notifier.h"
 #include "components/feed/core/v2/stream_model.h"
 #include "components/feed/core/v2/surface_updater.h"
@@ -131,7 +133,7 @@ FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
       task_queue_(this),
       request_throttler_(profile_prefs),
       upload_criteria_(profile_prefs),
-      notice_card_tracker_(profile_prefs) {
+      privacy_notice_card_tracker_(profile_prefs) {
   DCHECK(persistent_key_value_store_);
   DCHECK(feed_network_);
   DCHECK(profile_prefs_);
@@ -256,6 +258,15 @@ void FeedStream::StreamLoadComplete(LoadStreamTask::Result result) {
   Stream& stream = GetStream(result.stream_type);
   if (result.load_type == LoadType::kManualRefresh)
     UnloadModel(result.stream_type);
+
+  // TODO(crbug.com/1268575): SetLastFetchHadNoticeCard is duplicated here to
+  // ensure that the pref is updated before LoadModel(), which needs this
+  // information. This is fragile, we should instead store this information
+  // along with the stream.
+  if (result.fetched_content_has_notice_card.has_value())
+    feed::prefs::SetLastFetchHadNoticeCard(
+        *profile_prefs_, *result.fetched_content_has_notice_card);
+
   if (result.update_request) {
     auto model = std::make_unique<StreamModel>(&stream_model_context_);
     model->Update(std::move(result.update_request));
@@ -318,6 +329,23 @@ void FeedStream::StreamLoadComplete(LoadStreamTask::Result result) {
   }
 }
 
+LoggingParameters FeedStream::GetLoggingParameters(
+    const StreamType& stream_type) {
+  LoggingParameters logging_params;
+  logging_params.client_instance_id = GetClientInstanceId();
+  logging_params.logging_enabled = IsActivityLoggingEnabled(stream_type);
+  Stream& stream = GetStream(stream_type);
+  if (stream.model) {
+    logging_params.root_event_id = stream.model->GetRootEventId();
+  }
+  logging_params.view_actions_enabled = CanLogViews();
+  // We provide account name even if logging is disabled, so that account name
+  // can be verified for action uploads.
+  logging_params.email = delegate_->GetSyncSignedInEmail();
+
+  return logging_params;
+}
+
 void FeedStream::OnEnterBackground() {
   metrics_reporter_->OnEnterBackground();
   if (GetFeedConfig().upload_actions_on_enter_background) {
@@ -336,6 +364,7 @@ bool FeedStream::IsActivityLoggingEnabled(const StreamType& stream_type) const {
 
 void FeedStream::UpdateIsActivityLoggingEnabled(const StreamType& stream_type) {
   Stream& stream = GetStream(stream_type);
+
   stream.is_activity_logging_enabled =
       stream.model &&
       ((stream.model->signed_in() && stream.model->logging_enabled()) ||
@@ -632,6 +661,14 @@ void FeedStream::ProcessThereAndBackAgain(base::StringPiece data) {
   }
 }
 
+void FeedStream::ProcessThereAndBackAgain(
+    base::StringPiece data,
+    const feedui::LoggingParameters& logging_parameters) {
+  // TODO(crbug.com/1268575): Thread logging parameters to UploadActionTask when
+  // it's always available.
+  ProcessThereAndBackAgain(data);
+}
+
 void FeedStream::ProcessViewAction(base::StringPiece data) {
   if (!CanLogViews()) {
     return;
@@ -642,6 +679,14 @@ void FeedStream::ProcessViewAction(base::StringPiece data) {
   UploadAction(std::move(msg), /*upload_now=*/false,
                base::BindOnce(&FeedStream::UploadActionsComplete,
                               base::Unretained(this)));
+}
+
+void FeedStream::ProcessViewAction(
+    base::StringPiece data,
+    const feedui::LoggingParameters& logging_parameters) {
+  // TODO(crbug.com/1268575): Thread logging parameters to UploadActionTask when
+  // it's always available.
+  ProcessViewAction(data);
 }
 
 void FeedStream::UploadActionsComplete(UploadActionsTask::Result result) {
@@ -887,8 +932,10 @@ RequestMetadata FeedStream::GetRequestMetadata(const StreamType& stream_type,
   result.display_metrics = delegate_->GetDisplayMetrics();
   result.language_tag = delegate_->GetLanguageTag();
   result.notice_card_acknowledged =
-      notice_card_tracker_.HasAcknowledgedNoticeCard();
+      privacy_notice_card_tracker_.HasAcknowledgedNoticeCard();
   result.autoplay_enabled = delegate_->IsAutoplayEnabled();
+  result.acknowledged_notice_keys =
+      NoticeCardTracker::GetAllAckowledgedKeys(profile_prefs_);
   if (stream_type.IsWebFeed()) {
     result.content_order = GetValidWebFeedContentOrder(*profile_prefs_);
   }
@@ -1121,8 +1168,16 @@ void FeedStream::LoadModel(const StreamType& stream_type,
   stream.model = std::move(model);
   stream.model->SetStreamType(stream_type);
   stream.model->SetStoreObserver(this);
+
+  // TODO(crbug.com/1268575): Once the internal changes to support per-item
+  // logging parameters is submitted, we should remove
+  // UpdateIsActivityLoggingEnabled() and instead store the logging parameters
+  // on the model.
+  UpdateIsActivityLoggingEnabled(stream_type);
+
   stream.content_ids = stream.model->GetContentIds();
-  stream.surface_updater->SetModel(stream.model.get());
+  stream.surface_updater->SetModel(stream.model.get(),
+                                   GetLoggingParameters(stream_type));
   ScheduleModelUnloadIfNoSurfacesAttached(stream_type);
   MaybeNotifyHasUnreadContent(stream_type);
 }
@@ -1155,7 +1210,7 @@ void FeedStream::UnloadModel(const StreamType& stream_type) {
   Stream* stream = FindStream(stream_type);
   if (!stream || !stream->model)
     return;
-  stream->surface_updater->SetModel(nullptr);
+  stream->surface_updater->SetModel(nullptr, LoggingParameters());
   stream->model.reset();
 }
 
@@ -1185,7 +1240,7 @@ void FeedStream::ReportOpenAction(const GURL& url,
   metrics_reporter_->OpenAction(stream_type, index);
 
   if (stream.model) {
-    notice_card_tracker_.OnOpenAction(
+    privacy_notice_card_tracker_.OnOpenAction(
         stream.model->FindContentId(ToContentRevision(slice_id)));
   }
 }
@@ -1206,7 +1261,7 @@ void FeedStream::ReportOpenInNewTabAction(const GURL& url,
   metrics_reporter_->OpenInNewTabAction(stream_type, index);
 
   if (stream.model) {
-    notice_card_tracker_.OnOpenAction(
+    privacy_notice_card_tracker_.OnOpenAction(
         stream.model->FindContentId(ToContentRevision(slice_id)));
   }
 }
@@ -1219,15 +1274,15 @@ void FeedStream::ReportSliceViewed(SurfaceId surface_id,
   if (index < 0)
     return;
 
-  if (stream.model) {
-    metrics_reporter_->ContentSliceViewed(
-        stream_type, index, stream.model->GetContentList().size());
-  }
-  if (stream.model) {
-    notice_card_tracker_.OnCardViewed(
-        stream.model->signed_in(),
-        stream.model->FindContentId(ToContentRevision(slice_id)));
-  }
+  if (!stream.model)
+    return;
+
+  metrics_reporter_->ContentSliceViewed(stream_type, index,
+                                        stream.model->GetContentList().size());
+
+  privacy_notice_card_tracker_.OnCardViewed(
+      stream.model->signed_in(),
+      stream.model->FindContentId(ToContentRevision(slice_id)));
 }
 
 // TODO(crbug/1147237): Rename this method and related members?
@@ -1279,6 +1334,56 @@ void FeedStream::ReportStreamScrollStart() {
 void FeedStream::ReportOtherUserAction(const StreamType& stream_type,
                                        FeedUserActionType action_type) {
   metrics_reporter_->OtherUserAction(stream_type, action_type);
+}
+
+void FeedStream::ReportNoticeCreated(const StreamType& stream_type,
+                                     const std::string& key) {
+  metrics_reporter_->OnNoticeCreated(stream_type, key);
+}
+
+void FeedStream::ReportNoticeViewed(const StreamType& stream_type,
+                                    const std::string& key) {
+  metrics_reporter_->OnNoticeViewed(stream_type, key);
+  NoticeCardTracker& tracker = GetNoticeCardTracker(key);
+  bool was_acknowledged = tracker.HasAcknowledged();
+  tracker.OnViewed();
+  if (!was_acknowledged && tracker.HasAcknowledged()) {
+    metrics_reporter_->OnNoticeAcknowledged(
+        stream_type, key, NoticeAcknowledgementPath::kViaViewing);
+  }
+}
+
+void FeedStream::ReportNoticeOpenAction(const StreamType& stream_type,
+                                        const std::string& key) {
+  metrics_reporter_->OnNoticeOpenAction(stream_type, key);
+  NoticeCardTracker& tracker = GetNoticeCardTracker(key);
+  bool was_acknowledged = tracker.HasAcknowledged();
+  tracker.OnOpenAction();
+  if (!was_acknowledged && tracker.HasAcknowledged())
+    metrics_reporter_->OnNoticeAcknowledged(
+        stream_type, key, NoticeAcknowledgementPath::kViaOpenAction);
+}
+
+void FeedStream::ReportNoticeDismissed(const StreamType& stream_type,
+                                       const std::string& key) {
+  metrics_reporter_->OnNoticeDismissed(stream_type, key);
+  NoticeCardTracker& tracker = GetNoticeCardTracker(key);
+  bool was_acknowledged = tracker.HasAcknowledged();
+  tracker.OnDismissed();
+  if (!was_acknowledged && tracker.HasAcknowledged())
+    metrics_reporter_->OnNoticeAcknowledged(
+        stream_type, key, NoticeAcknowledgementPath::kViaDismissal);
+}
+
+NoticeCardTracker& FeedStream::GetNoticeCardTracker(const std::string& key) {
+  const auto iter = notice_card_trackers_.find(key);
+  if (iter != notice_card_trackers_.end())
+    return iter->second;
+
+  return notice_card_trackers_
+      .emplace(std::piecewise_construct, std::forward_as_tuple(key),
+               std::forward_as_tuple(profile_prefs_, key))
+      .first->second;
 }
 
 void FeedStream::SetContentOrder(const StreamType& stream_type,

@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "net/base/net_export.h"
 #include "net/cert/cert_database.h"
@@ -40,6 +40,14 @@ class TransportSecurityState;
 class NET_EXPORT SSLClientSocket : public SSLSocket {
  public:
   SSLClientSocket();
+
+  // Called in response to |ERR_ECH_NOT_NEGOTIATED| in Connect(), to determine
+  // how to retry the connection, up to some limit. If this method returns a
+  // non-empty string, it is the serialized updated ECHConfigList provided by
+  // the server. The connection can be retried with the new value. If it returns
+  // an empty string, the server has indicated ECH has been disabled. The
+  // connection can be retried with ECH disabled.
+  virtual std::vector<uint8_t> GetECHRetryConfigs() = 0;
 
   // Log SSL key material to |logger|. Must be called before any
   // SSLClientSockets are created.
@@ -182,12 +190,12 @@ class NET_EXPORT SSLClientContext : public SSLConfigService::Observer,
 
   SSLContextConfig config_;
 
-  SSLConfigService* ssl_config_service_;
-  CertVerifier* cert_verifier_;
-  TransportSecurityState* transport_security_state_;
-  CTPolicyEnforcer* ct_policy_enforcer_;
-  SSLClientSessionCache* ssl_client_session_cache_;
-  SCTAuditingDelegate* sct_auditing_delegate_;
+  raw_ptr<SSLConfigService> ssl_config_service_;
+  raw_ptr<CertVerifier> cert_verifier_;
+  raw_ptr<TransportSecurityState> transport_security_state_;
+  raw_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
+  raw_ptr<SSLClientSessionCache> ssl_client_session_cache_;
+  raw_ptr<SCTAuditingDelegate> sct_auditing_delegate_;
 
   SSLClientAuthCache ssl_client_auth_cache_;
 

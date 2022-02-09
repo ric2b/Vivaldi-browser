@@ -5,12 +5,13 @@
 #ifndef CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_H_
 #define CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_H_
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "content/browser/loader/navigation_url_loader.h"
 #include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/navigation_subresource_loader_params.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/ssl_status.h"
@@ -53,7 +54,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       std::unique_ptr<NavigationRequestInfo> request_info,
       std::unique_ptr<NavigationUIData> navigation_ui_data,
       ServiceWorkerMainResourceHandle* service_worker_handle,
-      AppCacheNavigationHandle* appcache_handle,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
       NavigationURLLoaderDelegate* delegate,
@@ -96,15 +96,12 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // This is called only once (while Restart can be called multiple times).
   // Sets `started_` true.
   void StartImpl(
-      scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory,
-      AppCacheNavigationHandle* appcache_handle,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
       scoped_refptr<SignedExchangePrefetchMetricRecorder>
           signed_exchange_prefetch_metric_recorder,
       mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_for_webui,
-      std::string accept_langs,
-      bool needs_loader_factory_interceptor);
+      std::string accept_langs);
 
   void BindNonNetworkURLLoaderFactoryReceiver(
       const GURL& url,
@@ -113,8 +110,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       const GURL& url,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver);
 
-  void CreateInterceptors(AppCacheNavigationHandle* appcache_handle,
-                          scoped_refptr<PrefetchedSignedExchangeCache>
+  void CreateInterceptors(scoped_refptr<PrefetchedSignedExchangeCache>
                               prefetched_signed_exchange_cache,
                           scoped_refptr<SignedExchangePrefetchMetricRecorder>
                               signed_exchange_prefetch_metric_recorder,
@@ -218,10 +214,10 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       blink::PreviewsState new_previews_state) override;
   bool SetNavigationTimeout(base::TimeDelta timeout) override;
 
-  NavigationURLLoaderDelegate* delegate_;
-  BrowserContext* browser_context_;
-  StoragePartitionImpl* storage_partition_;
-  ServiceWorkerMainResourceHandle* service_worker_handle_;
+  raw_ptr<NavigationURLLoaderDelegate> delegate_;
+  raw_ptr<BrowserContext> browser_context_;
+  raw_ptr<StoragePartitionImpl> storage_partition_;
+  raw_ptr<ServiceWorkerMainResourceHandle> service_worker_handle_;
 
   std::unique_ptr<network::ResourceRequest> resource_request_;
   std::unique_ptr<NavigationRequestInfo> request_info_;
@@ -248,8 +244,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   net::HttpRequestHeaders url_loader_modified_headers_;
   net::HttpRequestHeaders url_loader_modified_cors_exempt_headers_;
 
-  // Currently used by the AppCache loader to pass its factory to the
-  // renderer which enables it to handle subresources.
   absl::optional<SubresourceLoaderParams> subresource_loader_params_;
 
   std::vector<std::unique_ptr<NavigationLoaderInterceptor>> interceptors_;
@@ -333,6 +327,9 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
 
   // Timer used for triggering (optional) early timeout on the navigation.
   base::OneShotTimer timeout_timer_;
+
+  // The time this loader was created.
+  base::TimeTicks loader_creation_time_;
 
   base::WeakPtrFactory<NavigationURLLoaderImpl> weak_factory_{this};
 };

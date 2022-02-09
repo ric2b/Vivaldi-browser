@@ -20,6 +20,7 @@ import '../guest_os/guest_os_shared_usb_devices.js';
 import '//resources/cr_components/chromeos/localized_link/localized_link.js';
 import './crostini_arc_adb.js';
 import './crostini_export_import.js';
+import './crostini_extra_containers.js';
 import './crostini_port_forwarding.js';
 import './crostini_subpage.js';
 
@@ -28,10 +29,11 @@ import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {routes} from '../os_route.m.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 import {CrostiniBrowserProxy, CrostiniBrowserProxyImpl, CrostiniDiskInfo, CrostiniPortActiveSetting, CrostiniPortProtocol, CrostiniPortSetting, DEFAULT_CROSTINI_CONTAINER, DEFAULT_CROSTINI_VM, MAX_VALID_PORT_NUMBER, MIN_VALID_PORT_NUMBER, PortState} from './crostini_browser_proxy.js';
 
@@ -68,6 +70,11 @@ Polymer({
         if (routes.CROSTINI_EXPORT_IMPORT) {
           map.set(
               routes.CROSTINI_EXPORT_IMPORT.path, '#crostini .subpage-arrow');
+        }
+        if (routes.CROSTINI_EXTRA_CONTAINERS) {
+          map.set(
+              routes.CROSTINI_EXTRA_CONTAINERS.path,
+              '#crostini .subpage-arrow');
         }
         if (routes.CROSTINI_PORT_FORWARDING) {
           map.set(

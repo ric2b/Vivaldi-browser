@@ -13,7 +13,6 @@
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 
 // -----------------------------------------------------------------------------
@@ -156,7 +155,7 @@ class BlockingMethodCaller;
 namespace system {
 class StatisticsProviderImpl;
 bool IsCoreSchedulingAvailable();
-int NumberOfProcessorsForCoreScheduling();
+int NumberOfPhysicalCores();
 }
 }
 namespace chrome_cleaner {
@@ -170,12 +169,14 @@ class BrowserProcessIOThread;
 class BrowserTestBase;
 class CategorizedWorkerPool;
 class DesktopCaptureDevice;
+class DWriteFontCollectionProxy;
 class EmergencyTraceFinalisationCoordinator;
 class InProcessUtilityThread;
 class NestedMessagePumpAndroid;
 class NetworkServiceInstancePrivate;
 class PepperPrintSettingsManagerImpl;
 class RenderProcessHostImpl;
+class RenderProcessHost;
 class RenderWidgetHostViewMac;
 class RTCVideoDecoder;
 class SandboxHostLinux;
@@ -257,12 +258,7 @@ class SyncCallRestrictions;
 namespace core {
 class ScopedIPCSupport;
 }
-}
-namespace nacl {
-namespace nonsfi {
-class PluginMainDelegate;
-}
-}  // namespace nacl
+}  // namespace mojo
 namespace printing {
 class LocalPrinterHandlerDefault;
 #if defined(OS_MAC)
@@ -345,6 +341,12 @@ class DesktopConfigurationMonitor;
 }
 
 namespace base {
+class Environment;
+}
+
+bool HasWaylandDisplay(base::Environment* env);
+
+namespace base {
 
 namespace sequence_manager {
 namespace internal {
@@ -425,6 +427,10 @@ class BASE_EXPORT ScopedDisallowBlocking {
 };
 
 class BASE_EXPORT ScopedAllowBlocking {
+ public:
+  ScopedAllowBlocking(const ScopedAllowBlocking&) = delete;
+  ScopedAllowBlocking& operator=(const ScopedAllowBlocking&) = delete;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ThreadRestrictionsTest,
                            NestedAllowRestoresPreviousStack);
@@ -478,7 +484,8 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend Profile* ::GetLastProfileMac();  // crbug.com/1176734
   friend bool PathProviderWin(int, FilePath*);
   friend bool chromeos::system::IsCoreSchedulingAvailable();
-  friend int chromeos::system::NumberOfProcessorsForCoreScheduling();
+  friend int chromeos::system::NumberOfPhysicalCores();
+  friend bool ::HasWaylandDisplay(base::Environment* env);  // crbug.com/1246928
 
   ScopedAllowBlocking(const Location& from_here = Location::Current());
   ~ScopedAllowBlocking();
@@ -488,8 +495,6 @@ class BASE_EXPORT ScopedAllowBlocking {
 #endif
 
   friend class VivaldiScopedAllowBlocking;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedAllowBlocking);
 };
 
 // A version of ScopedAllowBlocking to use in Vivaldi code without the need to
@@ -540,6 +545,11 @@ class BASE_EXPORT ScopedDisallowBaseSyncPrimitives {
 };
 
 class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
+ public:
+  ScopedAllowBaseSyncPrimitives(const ScopedAllowBaseSyncPrimitives&) = delete;
+  ScopedAllowBaseSyncPrimitives& operator=(
+      const ScopedAllowBaseSyncPrimitives&) = delete;
+
  private:
   // This can only be instantiated by friends. Use
   // ScopedAllowBaseSyncPrimitivesForTesting in unit tests to avoid the friend
@@ -562,6 +572,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class chrome_cleaner::SystemReportComponent;
   friend class content::BrowserMainLoop;
   friend class content::BrowserProcessIOThread;
+  friend class content::DWriteFontCollectionProxy;
   friend class content::ServiceWorkerContextClient;
   friend class device::UsbContext;
   friend class functions::ExecScriptScopedAllowBaseSyncPrimitives;
@@ -592,11 +603,15 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
 #if DCHECK_IS_ON()
   std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitives);
 };
 
 class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
+ public:
+  ScopedAllowBaseSyncPrimitivesOutsideBlockingScope(
+      const ScopedAllowBaseSyncPrimitivesOutsideBlockingScope&) = delete;
+  ScopedAllowBaseSyncPrimitivesOutsideBlockingScope& operator=(
+      const ScopedAllowBaseSyncPrimitivesOutsideBlockingScope&) = delete;
+
  private:
   // This can only be instantiated by friends. Use
   // ScopedAllowBaseSyncPrimitivesForTesting in unit tests to avoid the friend
@@ -638,6 +653,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class content::SynchronousCompositorHost;
   friend class content::SynchronousCompositorSyncCallBridge;
   friend class content::WaitForProcessesToDumpProfilingInfo;
+  friend class content::RenderProcessHost;
   friend class media::AudioInputDevice;
   friend class media::AudioOutputDevice;
   friend class media::PaintCanvasVideoRenderer;
@@ -689,8 +705,6 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
 #if DCHECK_IS_ON()
   std::unique_ptr<BooleanWithStack> was_disallowed_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitivesOutsideBlockingScope);
 };
 
 // Allow base-sync-primitives in tests, doesn't require explicit friend'ing like
@@ -835,8 +849,6 @@ class BASE_EXPORT PermanentSingletonAllowance {
   PermanentSingletonAllowance() = delete;
 
  private:
-  friend class nacl::nonsfi::PluginMainDelegate;
-
   // Re-allow singletons on this thread. Since //base APIs DisallowSingleton()
   // when they risk running past shutdown, this should only be called in rare
   // cases where the caller knows the process will be killed rather than

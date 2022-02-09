@@ -191,11 +191,11 @@ ExtensionInstallProto::InstallLocation GetInstallLocation(
 
 ExtensionInstallProto::ActionType GetActionType(const Manifest& manifest) {
   // Arbitrary order; each of these is mutually exclusive.
-  if (manifest.HasKey(extensions::manifest_keys::kBrowserAction))
+  if (manifest.FindKey(extensions::manifest_keys::kBrowserAction))
     return ExtensionInstallProto::BROWSER_ACTION;
-  if (manifest.HasKey(extensions::manifest_keys::kPageAction))
+  if (manifest.FindKey(extensions::manifest_keys::kPageAction))
     return ExtensionInstallProto::PAGE_ACTION;
-  if (manifest.HasKey(extensions::manifest_keys::kSystemIndicator))
+  if (manifest.FindKey(extensions::manifest_keys::kSystemIndicator))
     return ExtensionInstallProto::SYSTEM_INDICATOR;
   return ExtensionInstallProto::NO_ACTION;
 }
@@ -254,8 +254,6 @@ std::vector<ExtensionInstallProto::DisableReason> GetDisableReasons(
        ExtensionInstallProto::CUSTODIAN_APPROVAL_REQUIRED},
       {extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY,
        ExtensionInstallProto::BLOCKED_BY_POLICY},
-      {extensions::disable_reason::DISABLE_REMOTELY_FOR_MALWARE,
-       ExtensionInstallProto::DISABLE_REMOTELY_FOR_MALWARE},
       {extensions::disable_reason::DISABLE_REINSTALL,
        ExtensionInstallProto::REINSTALL},
       {extensions::disable_reason::DISABLE_NOT_ALLOWLISTED,

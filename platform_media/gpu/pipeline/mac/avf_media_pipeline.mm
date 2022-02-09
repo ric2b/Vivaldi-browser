@@ -164,14 +164,14 @@ void AVFMediaPipeline::MediaDecoderInitialized(InitializeCB initialize_cb,
   if (media_decoder_->has_video_track()) {
     PlatformStreamType stream_type = PlatformStreamType::kVideo;
     // >=3 frames for fps <= 25
-    base::TimeDelta capacity = base::TimeDelta::FromMilliseconds(120);
+    base::TimeDelta capacity = base::Milliseconds(120);
     GetElem(media_queues_, stream_type) = std::make_unique<AVFDataBufferQueue>(
         stream_type, capacity, capacity_available_cb, capacity_depleted_cb);
   }
   if (media_decoder_->has_audio_track()) {
     PlatformStreamType stream_type = PlatformStreamType::kAudio;
     // AVFMediaDecoder decodes audio ahead of video.
-    base::TimeDelta capacity = base::TimeDelta::FromMilliseconds(200);
+    base::TimeDelta capacity = base::Milliseconds(200);
     GetElem(media_queues_, stream_type) = std::make_unique<AVFDataBufferQueue>(
         stream_type, capacity, capacity_available_cb, capacity_depleted_cb);
   }

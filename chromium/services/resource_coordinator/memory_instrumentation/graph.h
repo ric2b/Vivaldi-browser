@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
@@ -57,8 +57,8 @@ class GlobalDumpGraph {
 
    private:
     base::ProcessId pid_;
-    GlobalDumpGraph* global_graph_;
-    GlobalDumpGraph::Node* root_;
+    raw_ptr<GlobalDumpGraph> global_graph_;
+    raw_ptr<GlobalDumpGraph::Node> root_;
   };
 
   // A single node in the graph of allocator dumps associated with a
@@ -180,8 +180,8 @@ class GlobalDumpGraph {
     }
 
    private:
-    GlobalDumpGraph::Process* dump_graph_;
-    Node* const parent_;
+    raw_ptr<GlobalDumpGraph::Process> dump_graph_;
+    const raw_ptr<Node> parent_;
     base::trace_event::MemoryAllocatorDumpGuid guid_;
     std::map<std::string, Entry> entries_;
     std::map<std::string, Node*> children_;
@@ -194,7 +194,7 @@ class GlobalDumpGraph {
     double cumulative_owned_coefficient_ = 1;
     double cumulative_owning_coefficient_ = 1;
 
-    GlobalDumpGraph::Edge* owns_edge_;
+    raw_ptr<GlobalDumpGraph::Edge> owns_edge_;
     std::vector<GlobalDumpGraph::Edge*> owned_by_edges_;
   };
 
@@ -253,6 +253,10 @@ class GlobalDumpGraph {
       std::map<base::trace_event::MemoryAllocatorDumpGuid, Node*>;
 
   GlobalDumpGraph();
+
+  GlobalDumpGraph(const GlobalDumpGraph&) = delete;
+  GlobalDumpGraph& operator=(const GlobalDumpGraph&) = delete;
+
   ~GlobalDumpGraph();
 
   // Creates a container for all the dump graphs for the process given
@@ -293,8 +297,6 @@ class GlobalDumpGraph {
   GuidNodeMap nodes_by_guid_;
   std::unique_ptr<GlobalDumpGraph::Process> shared_memory_graph_;
   ProcessDumpGraphMap process_dump_graphs_;
-
-  DISALLOW_COPY_AND_ASSIGN(GlobalDumpGraph);
 };
 
 }  // namespace memory_instrumentation

@@ -11,7 +11,6 @@
 #include "base/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -35,9 +34,9 @@
 #include "chromeos/network/network_policy_observer.h"
 #include "chromeos/network/network_profile_handler.h"
 #include "chromeos/network/network_state.h"
+#include "chromeos/network/onc/network_onc_utils.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_test_utils.h"
-#include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/onc/onc_validator.h"
 #include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/network/test_cellular_esim_profile_handler.h"
@@ -72,6 +71,11 @@ constexpr char kTestGuidManagedWifi[] = "policy_wifi1";
 // for a managed Cellular service.
 constexpr char kTestGuidManagedCellular[] = "policy_cellular";
 
+// The GUID used by
+// chromeos/test/data/network/policy/policy_cellular_with_iccid.onc files for a
+// managed Cellular service.
+constexpr char kTestGuidManagedCellular2[] = "policy_cellular2";
+
 // The GUID used by chromeos/test/data/network/policy/*.{json,onc} files for an
 // unmanaged Wifi service.
 constexpr char kTestGuidUnmanagedWifi2[] = "wifi2";
@@ -82,6 +86,12 @@ constexpr char kTestGuidEthernetEap[] = "policy_ethernet_eap";
 
 constexpr char kTestEuiccPath[] = "/org/chromium/Hermes/Euicc/0";
 constexpr char kTestEid[] = "12345678901234567890123456789012";
+
+// A valid but empty (no networks and no certificates) and unencrypted
+// configuration.
+constexpr char kEmptyUnencryptedConfiguration[] =
+    "{\"Type\":\"UnencryptedConfiguration\",\"NetworkConfigurations\":[],"
+    "\"Certificates\":[]}";
 
 std::string PrettyJson(const base::DictionaryValue& value) {
   std::string pretty;
@@ -101,13 +111,18 @@ class TestNetworkProfileHandler : public NetworkProfileHandler {
  public:
   TestNetworkProfileHandler() { Init(); }
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestNetworkProfileHandler);
+  TestNetworkProfileHandler(const TestNetworkProfileHandler&) = delete;
+  TestNetworkProfileHandler& operator=(const TestNetworkProfileHandler&) =
+      delete;
 };
 
 class TestNetworkPolicyObserver : public NetworkPolicyObserver {
  public:
   TestNetworkPolicyObserver() = default;
+
+  TestNetworkPolicyObserver(const TestNetworkPolicyObserver&) = delete;
+  TestNetworkPolicyObserver& operator=(const TestNetworkPolicyObserver&) =
+      delete;
 
   void PoliciesApplied(const std::string& userhash) override {
     policies_applied_count_++;
@@ -121,15 +136,22 @@ class TestNetworkPolicyObserver : public NetworkPolicyObserver {
 
  private:
   int policies_applied_count_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(TestNetworkPolicyObserver);
 };
 
 }  // namespace
 
 class ManagedNetworkConfigurationHandlerTest : public testing::Test {
  public:
-  ManagedNetworkConfigurationHandlerTest() {
+  ManagedNetworkConfigurationHandlerTest() = default;
+  ManagedNetworkConfigurationHandlerTest(
+      const ManagedNetworkConfigurationHandlerTest&) = delete;
+  ManagedNetworkConfigurationHandlerTest& operator=(
+      const ManagedNetworkConfigurationHandlerTest&) = delete;
+
+  ~ManagedNetworkConfigurationHandlerTest() override = default;
+
+  // testing::Test:
+  void SetUp() override {
     shill_clients::InitializeFakes();
     hermes_clients::InitializeFakes();
 
@@ -137,9 +159,9 @@ class ManagedNetworkConfigurationHandlerTest : public testing::Test {
     network_device_handler_ = NetworkDeviceHandler::InitializeForTesting(
         network_state_handler_.get());
     network_profile_handler_ = NetworkProfileHandler::InitializeForTesting();
-    network_configuration_handler_.reset(
+    network_configuration_handler_ =
         NetworkConfigurationHandler::InitializeForTest(
-            network_state_handler_.get(), network_device_handler_.get()));
+            network_state_handler_.get(), network_device_handler_.get());
     network_connection_handler_ =
         std::make_unique<FakeNetworkConnectionHandler>();
     cellular_inhibitor_ = std::make_unique<CellularInhibitor>();
@@ -190,12 +212,9 @@ class ManagedNetworkConfigurationHandlerTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  ManagedNetworkConfigurationHandlerTest(
-      const ManagedNetworkConfigurationHandlerTest&) = delete;
-  ManagedNetworkConfigurationHandlerTest& operator=(
-      const ManagedNetworkConfigurationHandlerTest&) = delete;
-
-  ~ManagedNetworkConfigurationHandlerTest() override {
+  void TearDown() override {
+    // Run remaining tasks.
+    base::RunLoop().RunUntilIdle();
     ResetManagedNetworkConfigurationHandler();
     cellular_policy_handler_.reset();
     cellular_esim_installer_.reset();
@@ -247,7 +266,7 @@ class ManagedNetworkConfigurationHandlerTest : public testing::Test {
                  const std::string& path_to_onc) {
     base::Value policy =
         path_to_onc.empty()
-            ? onc::ReadDictionaryFromJson(onc::kEmptyUnencryptedConfiguration)
+            ? onc::ReadDictionaryFromJson(kEmptyUnencryptedConfiguration)
             : test_utils::ReadTestDictionaryValue(path_to_onc);
 
     onc::Validator validator(true,   // error_on_unknown_field
@@ -385,6 +404,23 @@ TEST_F(ManagedNetworkConfigurationHandlerTest, SetPolicyManagedCellular) {
       GetShillServiceClient()->GetServiceProperties(service_path);
   ASSERT_TRUE(properties);
   EXPECT_THAT(*properties, DictionaryHasValues(*expected_shill_properties));
+
+  // Verify that applying a new cellular policy with same ICCID should update
+  // the old shill configuration.
+  SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY, std::string(),
+            "policy/policy_cellular_with_iccid.onc");
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_EQ(std::string(), GetShillServiceClient()->FindServiceMatchingGUID(
+                               kTestGuidManagedCellular));
+  service_path = GetShillServiceClient()->FindServiceMatchingGUID(
+      kTestGuidManagedCellular2);
+  const base::Value* properties2 =
+      GetShillServiceClient()->GetServiceProperties(service_path);
+  ASSERT_TRUE(properties2);
+  absl::optional<bool> auto_connect =
+      properties2->FindBoolKey(shill::kAutoConnectProperty);
+  ASSERT_TRUE(*auto_connect);
 }
 
 TEST_F(ManagedNetworkConfigurationHandlerTest, SetPolicyManageUnconfigured) {

@@ -72,16 +72,17 @@ struct WXDLLIMPEXP_BASE wxLanguageInfo
 #endif // __WINDOWS__
 
     // return the locale name corresponding to this language usable with
-    // setlocale() on the current system
+    // setlocale() on the current system or empty string if this locale is not
+    // supported
     wxString GetLocaleName() const;
+
+    // Call setlocale() and return non-null value if it works for this language.
+    //
+    // This function is mostly for internal use, as changing locale involves
+    // more than just calling setlocale() on some platforms, use wxLocale to
+    // do everything that needs to be done instead of calling this method.
+    const char* TrySetLocale() const;
 };
-
-// for Unix systems GetLocaleName() is trivial so implement it inline here, for
-// MSW it's implemented in intl.cpp
-#ifndef __WINDOWS__
-inline wxString wxLanguageInfo::GetLocaleName() const { return CanonicalName; }
-#endif // !__WINDOWS__
-
 
 // ----------------------------------------------------------------------------
 // wxLocaleCategory: the category of locale settings
@@ -214,6 +215,17 @@ public:
     static wxString GetInfo(wxLocaleInfo index,
                             wxLocaleCategory cat = wxLOCALE_CAT_DEFAULT);
 
+    // Same as GetInfo() but uses current locale at the OS level to retrieve
+    // the information. Normally it should be the same as the one used by
+    // GetInfo() but there are two exceptions: the most important one is that
+    // if no locale had been set, GetInfo() would fall back to "C" locale,
+    // while this one uses the default OS locale. Another, more rare, one is
+    // that some locales might not supported by the OS.
+    //
+    // Currently this is the same as GetInfo() under non-MSW platforms.
+    static wxString GetOSInfo(wxLocaleInfo index,
+                              wxLocaleCategory cat = wxLOCALE_CAT_DEFAULT);
+
     // return true if the locale was set successfully
     bool IsOk() const { return m_pszOldLocale != NULL; }
 
@@ -321,9 +333,11 @@ public:
     static void DestroyLanguagesDB();
 
 private:
-    bool DoInit(const wxString& name,
+    // This method is trivial and just updates the corresponding member
+    // variables without doing anything else.
+    void DoInit(const wxString& name,
                 const wxString& shortName,
-                const wxString& locale);
+                int language);
 
     // copy default table of languages from global static array to
     // m_langugagesInfo, called by InitLanguagesDB
@@ -331,6 +345,17 @@ private:
 
     // initialize the member fields to default values
     void DoCommonInit();
+
+    // After trying to set locale, call this method to give the appropriate
+    // error if it couldn't be set (success == false) and to load the
+    // translations for the given language, if necessary.
+    //
+    // The return value is the same as "success" parameter.
+    bool DoCommonPostInit(bool success,
+                          const wxString& name,
+                          const wxString& shortName,
+                          bool bLoadDefault);
+
 
     wxString       m_strLocale,       // this locale name
                    m_strShort;        // short name for the locale

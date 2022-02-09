@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_PRERENDER_PRERENDER_HOST_H_
 
 #include <memory>
+#include <string>
 
 #include "base/observer_list_types.h"
 #include "base/types/pass_key.h"
@@ -63,7 +64,7 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
     kNavigationRequestBlockedByCsp = 9,
     kMainFrameNavigation = 10,
     kMojoBinderPolicy = 11,
-    kPlugin = 12,
+    // kPlugin = 12,  // No longer used.
     kRendererProcessCrashed = 13,
     kRendererProcessKilled = 14,
     kDownload = 15,
@@ -83,11 +84,16 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
     kAudioOutputDeviceRequested = 29,
     kMixedContent = 30,
     kTriggerBackgrounded = 31,
-    kMaxValue = kTriggerBackgrounded,
+    // Break down into kEmbedderTriggeredAndSameOriginRedirected and
+    // kEmbedderTriggeredAndCrossOriginRedirected for investigation.
+    // kEmbedderTriggeredAndRedirected = 32,
+    kEmbedderTriggeredAndSameOriginRedirected = 33,
+    kEmbedderTriggeredAndCrossOriginRedirected = 34,
+    kMaxValue = kEmbedderTriggeredAndCrossOriginRedirected,
   };
 
   PrerenderHost(const PrerenderAttributes& attributes,
-                RenderFrameHostImpl& initiator_render_frame_host);
+                WebContents& web_contents);
   ~PrerenderHost() override;
 
   PrerenderHost(const PrerenderHost&) = delete;
@@ -124,6 +130,9 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
   // This must be called after StartPrerendering() and before Activate().
   RenderFrameHostImpl* GetPrerenderedMainFrameHost();
 
+  // Returns the frame tree for the prerendered page `this` is hosting.
+  FrameTree& GetPrerenderFrameTree();
+
   // Tells the reason of the destruction of this host. PrerenderHostRegistry
   // uses this before abandoning the host.
   void RecordFinalStatus(base::PassKey<PrerenderHostRegistry>,
@@ -149,8 +158,14 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
   void SetInitialNavigation(NavigationRequest* navigation);
   absl::optional<int64_t> GetInitialNavigationId() const;
 
-  url::Origin initiator_origin() const { return initiator_origin_; }
-  const GURL& initiator_url() const { return initiator_url_; }
+  // Returns absl::nullopt iff prerendering is initiated by the browser (not by
+  // a renderer using Speculation Rules API).
+  absl::optional<url::Origin> initiator_origin() const {
+    return attributes_.initiator_origin;
+  }
+  const GURL& initiator_url() const { return attributes_.initiator_url; }
+
+  bool IsBrowserInitiated() { return attributes_.IsBrowserInitiated(); }
 
   int frame_tree_node_id() const { return frame_tree_node_id_; }
 
@@ -158,6 +173,11 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
 
   const absl::optional<FinalStatus>& final_status() const {
     return final_status_;
+  }
+
+  PrerenderTriggerType trigger_type() const { return attributes_.trigger_type; }
+  const std::string& embedder_histogram_suffix() const {
+    return attributes_.embedder_histogram_suffix;
   }
 
  private:
@@ -176,10 +196,6 @@ class CONTENT_EXPORT PrerenderHost : public WebContentsObserver {
       const blink::mojom::CommonNavigationParams& potential_activation);
 
   const PrerenderAttributes attributes_;
-  const url::Origin initiator_origin_;
-  const GURL initiator_url_;
-  const int initiator_process_id_;
-  const blink::LocalFrameToken initiator_frame_token_;
 
   // Indicates if `page_holder_` is ready for activation.
   bool is_ready_for_activation_ = false;

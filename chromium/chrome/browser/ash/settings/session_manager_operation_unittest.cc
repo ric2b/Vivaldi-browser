@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -84,7 +83,7 @@ class SessionManagerOperationTest : public testing::Test {
 
   void SetUp() override {
     policy_.payload().mutable_user_allowlist()->add_user_allowlist(
-        "fake-whitelist");
+        "fake-allowlist");
     policy_.Build();
 
     profile_ = std::make_unique<TestingProfile>();

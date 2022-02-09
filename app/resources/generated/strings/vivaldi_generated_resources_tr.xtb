@@ -82,6 +82,7 @@
 <translation id="241082044617551207">Bilinmeyen eklenti</translation>
 <translation id="2423578206845792524">Resmi farklı kay&amp;det...</translation>
 <translation id="2439110203301358333">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir eklenti ekledi.</translation>
+<translation id="2443487764245141020">Sitelerin bir tanımlayıcı kullanarak da cihazınızı tanımlaması gerekebilir</translation>
 <translation id="2445081178310039857">Eklenti kök dizini gerekiyor.</translation>
 <translation id="2470702053775288986">Desteklenmeyen eklentiler devre dışı bırakıldı</translation>
 <translation id="2476578072172137802">Site Ayarları</translation>
@@ -332,7 +333,6 @@
 <translation id="6892812721183419409">Bağlantıyı <ph name="USER" /> Olarak Aç</translation>
 <translation id="6900284862687837908">Arka Plan Uygulaması: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Dosya erişimini iptal et</translation>
-<translation id="6916590542764765824">Eklentileri Yönet</translation>
 <translation id="6945221475159498467">Seç</translation>
 <translation id="6955446738988643816">Açılır Pencereyi İncele</translation>
 <translation id="6970856801391541997">Belirli Sayfaları Yazdır</translation>
@@ -400,7 +400,6 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Eklentinizin yeni sürümlerin
 <translation id="8032244173881942855">Sekme yayınlanamıyor.</translation>
 <translation id="8071432093239591881">Resim olarak yazdır</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
-<translation id="8137559199583651773">Eklentileri yönet</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {İndirme işlemi devam ediyor} other {İndirme işlemi devam ediyor}}</translation>
 <translation id="8230134520748321204"><ph name="ORIGIN" /> için parolanız kaydedilsin mi?</translation>

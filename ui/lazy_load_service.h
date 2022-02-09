@@ -3,7 +3,6 @@
 #ifndef UI_LAZY_LOAD_SERVICE_H_
 #define UI_LAZY_LOAD_SERVICE_H_
 
-#include "base/macros.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_source_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 class Profile;

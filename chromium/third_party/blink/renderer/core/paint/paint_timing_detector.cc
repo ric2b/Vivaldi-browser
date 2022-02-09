@@ -5,6 +5,7 @@
 
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/performance/largest_contentful_paint_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -25,7 +26,6 @@
 #include "third_party/blink/renderer/core/style/style_fetched_image.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
-#include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/paint/float_clip_rect.h"
@@ -33,8 +33,10 @@
 #include "third_party/blink/renderer/platform/graphics/paint/property_tree_state.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scoped_paint_chunk_properties.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace blink {
 
@@ -114,7 +116,7 @@ void PaintTimingDetector::NotifyBackgroundImagePaint(
     const Image& image,
     const StyleFetchedImage& style_image,
     const PropertyTreeStateOrAlias& current_paint_chunk_properties,
-    const IntRect& image_border) {
+    const gfx::Rect& image_border) {
   DCHECK(style_image.CachedImage());
   LayoutObject* object = node.GetLayoutObject();
   if (!object)
@@ -122,34 +124,44 @@ void PaintTimingDetector::NotifyBackgroundImagePaint(
   LocalFrameView* frame_view = object->GetFrameView();
   if (!frame_view)
     return;
-  PaintTimingDetector& detector = frame_view->GetPaintTimingDetector();
-  if (!detector.GetImagePaintTimingDetector())
+
+  ImagePaintTimingDetector* detector =
+      frame_view->GetPaintTimingDetector().GetImagePaintTimingDetector();
+  if (!detector)
     return;
+
   if (!IsBackgroundImageContentful(*object, image))
     return;
-  detector.GetImagePaintTimingDetector()->RecordImage(
-      *object, image.Size(), *style_image.CachedImage(),
-      current_paint_chunk_properties, &style_image, image_border);
+
+  ImageResourceContent* cached_image = style_image.CachedImage();
+  DCHECK(cached_image);
+  // TODO(yoav): |image| and |cached_image.GetImage()| are not the same here in
+  // the case of SVGs. Figure out why and if we can remove this footgun.
+
+  detector->RecordImage(*object, image.Size(), *cached_image,
+                        current_paint_chunk_properties, &style_image,
+                        image_border);
 }
 
 // static
 void PaintTimingDetector::NotifyImagePaint(
     const LayoutObject& object,
-    const IntSize& intrinsic_size,
+    const gfx::Size& intrinsic_size,
     const ImageResourceContent& cached_image,
     const PropertyTreeStateOrAlias& current_paint_chunk_properties,
-    const IntRect& image_border) {
+    const gfx::Rect& image_border) {
   if (IgnorePaintTimingScope::ShouldIgnore())
     return;
   LocalFrameView* frame_view = object.GetFrameView();
   if (!frame_view)
     return;
-  PaintTimingDetector& detector = frame_view->GetPaintTimingDetector();
-  if (!detector.GetImagePaintTimingDetector())
+  ImagePaintTimingDetector* detector =
+      frame_view->GetPaintTimingDetector().GetImagePaintTimingDetector();
+  if (!detector)
     return;
-  detector.GetImagePaintTimingDetector()->RecordImage(
-      object, intrinsic_size, cached_image, current_paint_chunk_properties,
-      nullptr, image_border);
+
+  detector->RecordImage(object, intrinsic_size, cached_image,
+                        current_paint_chunk_properties, nullptr, image_border);
 }
 
 void PaintTimingDetector::NotifyImageFinished(
@@ -243,31 +255,21 @@ PaintTimingDetector::GetLargestContentfulPaintCalculator() {
 bool PaintTimingDetector::NotifyIfChangedLargestImagePaint(
     base::TimeTicks image_paint_time,
     uint64_t image_paint_size,
-    base::TimeTicks removed_image_paint_time,
-    uint64_t removed_image_paint_size) {
-  // The version that considers removed nodes cannot change when the version
-  // that doesn't consider removed nodes does not change.
+    bool is_animated) {
   if (!HasLargestImagePaintChanged(image_paint_time, image_paint_size))
     return false;
 
-  experimental_largest_image_paint_time_ = image_paint_time;
-  experimental_largest_image_paint_size_ = image_paint_size;
-  // Compute LCP by using the largest size (smallest paint time in case of tie).
-  if (removed_image_paint_size < image_paint_size) {
-    largest_image_paint_time_ = image_paint_time;
-    largest_image_paint_size_ = image_paint_size;
-  } else if (removed_image_paint_size > image_paint_size) {
-    largest_image_paint_time_ = removed_image_paint_time;
-    largest_image_paint_size_ = removed_image_paint_size;
+  if (is_animated) {
+    // Set the animated image flag.
+    largest_contentful_paint_type_ |=
+        LargestContentfulPaintType::kLCPTypeAnimatedImage;
   } else {
-    largest_image_paint_size_ = image_paint_size;
-    if (image_paint_time.is_null()) {
-      largest_image_paint_time_ = removed_image_paint_time;
-    } else {
-      largest_image_paint_time_ =
-          std::min(image_paint_time, removed_image_paint_time);
-    }
+    // Unset the animated image flag.
+    largest_contentful_paint_type_ &=
+        ~LargestContentfulPaintType::kLCPTypeAnimatedImage;
   }
+  largest_image_paint_time_ = image_paint_time;
+  largest_image_paint_size_ = image_paint_size;
   UpdateLargestContentfulPaintTime();
   DidChangePerformanceTiming();
   return true;
@@ -276,12 +278,8 @@ bool PaintTimingDetector::NotifyIfChangedLargestImagePaint(
 bool PaintTimingDetector::NotifyIfChangedLargestTextPaint(
     base::TimeTicks text_paint_time,
     uint64_t text_paint_size) {
-  // The version that considers removed nodes cannot change when the version
-  // that doesn't consider removed nodes does not change.
   if (!HasLargestTextPaintChanged(text_paint_time, text_paint_size))
     return false;
-  experimental_largest_text_paint_time_ = text_paint_time;
-  experimental_largest_text_paint_size_ = text_paint_size;
   if (largest_text_paint_size_ < text_paint_size) {
     DCHECK(!text_paint_time.is_null());
     largest_text_paint_time_ = text_paint_time;
@@ -307,15 +305,15 @@ void PaintTimingDetector::UpdateLargestContentfulPaintTime() {
 bool PaintTimingDetector::HasLargestImagePaintChanged(
     base::TimeTicks largest_image_paint_time,
     uint64_t largest_image_paint_size) const {
-  return largest_image_paint_time != experimental_largest_image_paint_time_ ||
-         largest_image_paint_size != experimental_largest_image_paint_size_;
+  return largest_image_paint_time != largest_image_paint_time_ ||
+         largest_image_paint_size != largest_image_paint_size_;
 }
 
 bool PaintTimingDetector::HasLargestTextPaintChanged(
     base::TimeTicks largest_text_paint_time,
     uint64_t largest_text_paint_size) const {
-  return largest_text_paint_time != experimental_largest_text_paint_time_ ||
-         largest_text_paint_size != experimental_largest_text_paint_size_;
+  return largest_text_paint_time != largest_text_paint_time_ ||
+         largest_text_paint_size != largest_text_paint_size_;
 }
 
 void PaintTimingDetector::DidChangePerformanceTiming() {
@@ -328,24 +326,23 @@ void PaintTimingDetector::DidChangePerformanceTiming() {
   loader->DidChangePerformanceTiming();
 }
 
-FloatRect PaintTimingDetector::BlinkSpaceToDIPs(
-    const FloatRect& float_rect) const {
+gfx::RectF PaintTimingDetector::BlinkSpaceToDIPs(const gfx::RectF& rect) const {
   FrameWidget* widget = frame_view_->GetFrame().GetWidgetForLocalRoot();
   // May be nullptr in tests.
   if (!widget)
-    return float_rect;
-  return FloatRect(widget->BlinkSpaceToDIPs(gfx::RectF(float_rect)));
+    return rect;
+  return widget->BlinkSpaceToDIPs(rect);
 }
 
-FloatRect PaintTimingDetector::CalculateVisualRect(
-    const IntRect& visual_rect,
+gfx::RectF PaintTimingDetector::CalculateVisualRect(
+    const gfx::Rect& visual_rect,
     const PropertyTreeStateOrAlias& current_paint_chunk_properties) const {
   // This case should be dealt with outside the function.
   DCHECK(!visual_rect.IsEmpty());
 
   // As Layout objects live in different transform spaces, the object's rect
   // should be projected to the viewport's transform space.
-  FloatClipRect float_clip_visual_rect = FloatClipRect(FloatRect(visual_rect));
+  FloatClipRect float_clip_visual_rect((gfx::RectF(visual_rect)));
   const LocalFrame& local_root = frame_view_->GetFrame().LocalFrameRoot();
   GeometryMapper::LocalToAncestorVisualRect(current_paint_chunk_properties,
                                             local_root.ContentLayoutObject()
@@ -363,7 +360,7 @@ FloatRect PaintTimingDetector::CalculateVisualRect(
       .LocalFrameRoot()
       .View()
       ->MapToVisualRectInRemoteRootFrame(layout_visual_rect);
-  return BlinkSpaceToDIPs(FloatRect(layout_visual_rect));
+  return BlinkSpaceToDIPs(gfx::RectF(layout_visual_rect));
 }
 
 void PaintTimingDetector::UpdateLargestContentfulPaintCandidate() {
@@ -386,8 +383,8 @@ void PaintTimingDetector::UpdateLargestContentfulPaintCandidate() {
     largest_image_record = image_timing_detector->UpdateCandidate();
   }
 
-  lcp_calculator->UpdateLargestContentPaintIfNeeded(largest_text_record,
-                                                    largest_image_record);
+  lcp_calculator->UpdateLargestContentfulPaintIfNeeded(largest_text_record,
+                                                       largest_image_record);
 }
 
 void PaintTimingDetector::ReportIgnoredContent() {
@@ -476,7 +473,6 @@ void PaintTimingCallbackManagerImpl::
 
 void PaintTimingCallbackManagerImpl::ReportPaintTime(
     std::unique_ptr<PaintTimingCallbackManager::CallbackQueue> frame_callbacks,
-    WebSwapResult result,
     base::TimeTicks paint_time) {
   while (!frame_callbacks->empty()) {
     std::move(frame_callbacks->front()).Run(paint_time);
@@ -488,6 +484,17 @@ void PaintTimingCallbackManagerImpl::ReportPaintTime(
 void PaintTimingCallbackManagerImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_view_);
   PaintTimingCallbackManager::Trace(visitor);
+}
+
+void LCPRectInfo::OutputToTraceValue(TracedValue& value) const {
+  value.SetInteger("frame_x", frame_rect_info_.x());
+  value.SetInteger("frame_y", frame_rect_info_.y());
+  value.SetInteger("frame_width", frame_rect_info_.width());
+  value.SetInteger("frame_height", frame_rect_info_.height());
+  value.SetInteger("root_x", root_rect_info_.x());
+  value.SetInteger("root_y", root_rect_info_.y());
+  value.SetInteger("root_width", root_rect_info_.width());
+  value.SetInteger("root_height", root_rect_info_.height());
 }
 
 }  // namespace blink

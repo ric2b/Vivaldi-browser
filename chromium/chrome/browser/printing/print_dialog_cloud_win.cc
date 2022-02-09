@@ -13,7 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -76,7 +75,8 @@ class PrintDataSetter : public content::WebContentsObserver {
   void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override {
     GURL url = web_contents()->GetURL();
     if (cloud_devices::IsCloudPrintURL(url)) {
-      std::u16string origin = base::UTF8ToUTF16(url.GetOrigin().spec());
+      std::u16string origin =
+          base::UTF8ToUTF16(url.DeprecatedGetOriginAsURL().spec());
       content::MessagePortProvider::PostMessageToFrame(
           web_contents()->GetPrimaryPage(), origin, origin, message_data_);
     }

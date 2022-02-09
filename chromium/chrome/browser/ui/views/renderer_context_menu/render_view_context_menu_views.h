@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_VIEWS_H_
 #define CHROME_BROWSER_UI_VIEWS_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_VIEWS_H_
 
-#include "base/macros.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "ui/base/ui_base_types.h"
 
@@ -35,7 +34,7 @@ class RenderViewContextMenuViews : public RenderViewContextMenu {
 
   // Factory function to create an instance.
   static RenderViewContextMenuViews* Create(
-      content::RenderFrameHost* render_frame_host,
+      content::RenderFrameHost& render_frame_host,
       const content::ContextMenuParams& params);
 
   void RunMenuAt(views::Widget* parent,
@@ -48,7 +47,7 @@ class RenderViewContextMenuViews : public RenderViewContextMenu {
   void Show() override;
 
  protected:
-  RenderViewContextMenuViews(content::RenderFrameHost* render_frame_host,
+  RenderViewContextMenuViews(content::RenderFrameHost& render_frame_host,
                              const content::ContextMenuParams& params);
 
   // RenderViewContextMenu implementation.

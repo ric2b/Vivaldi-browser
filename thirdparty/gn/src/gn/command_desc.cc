@@ -296,6 +296,7 @@ std::map<std::string, DescHandlerFunc> GetHandlers() {
           {variables::kPrecompiledHeader, DefaultHandler},
           {variables::kPrecompiledSource, DefaultHandler},
           {variables::kDeps, DepsHandler},
+          {variables::kGenDeps, DefaultHandler},
           {variables::kLibs, DefaultHandler},
           {variables::kLibDirs, DefaultHandler},
           {variables::kDataKeys, DefaultHandler},

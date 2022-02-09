@@ -21,7 +21,7 @@ TH_Storage::TH_Storage(content::BrowserContext* context, TH_Model* model)
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
       writer_(context->GetPath().Append(kTranslateHistoryFileName),
               backend_task_runner_,
-              base::TimeDelta::FromMilliseconds(kSaveDelayMS)),
+              base::Milliseconds(kSaveDelayMS)),
       weak_factory_(this) {}
 
 TH_Storage::~TH_Storage() {

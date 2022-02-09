@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_STATBMP
 
@@ -64,7 +61,7 @@ wxBEGIN_FLAGS( wxStaticBitmapStyle )
 
 wxEND_FLAGS( wxStaticBitmapStyle )
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxStaticBitmap, wxControl, "wx/statbmp.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxStaticBitmap, wxControl, "wx/statbmp.h");
 
 wxBEGIN_PROPERTIES_TABLE(wxStaticBitmap)
     wxPROPERTY_FLAGS( WindowStyle, wxStaticBitmapStyle, long, \

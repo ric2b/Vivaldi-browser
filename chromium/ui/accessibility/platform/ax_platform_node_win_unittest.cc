@@ -2885,13 +2885,14 @@ TEST_F(AXPlatformNodeWinTest, UnlabeledImageRoleDescription) {
   tree.nodes[2].role = ax::mojom::Role::kImage;
 
   Init(tree);
-  ComPtr<IAccessible> root_obj(GetRootIAccessible());
+  ComPtr<IAccessible> ia2_root_obj(GetRootIAccessible());
+  auto* uia_root_node(GetRootAsAXNode());
 
   for (int child_index = 0;
        child_index < static_cast<int>(tree.nodes[0].child_ids.size());
        ++child_index) {
     ComPtr<IDispatch> child_dispatch;
-    ASSERT_HRESULT_SUCCEEDED(root_obj->get_accChild(
+    ASSERT_HRESULT_SUCCEEDED(ia2_root_obj->get_accChild(
         ScopedVariant(child_index + 1), &child_dispatch));
     ComPtr<IAccessible> child;
     ASSERT_HRESULT_SUCCEEDED(child_dispatch.As(&child));
@@ -2901,6 +2902,12 @@ TEST_F(AXPlatformNodeWinTest, UnlabeledImageRoleDescription) {
     ASSERT_EQ(S_OK,
               ia2_child->get_localizedExtendedRole(role_description.Receive()));
     EXPECT_STREQ(L"Unlabeled image", role_description.Get());
+
+    ComPtr<IRawElementProviderSimple> uia_child =
+        QueryInterfaceFromNode<IRawElementProviderSimple>(
+            uia_root_node->children()[child_index]);
+    EXPECT_UIA_BSTR_EQ(uia_child, UIA_LocalizedControlTypePropertyId,
+                       L"Unlabeled image");
   }
 }
 
@@ -3071,18 +3078,25 @@ TEST_F(AXPlatformNodeWinTest, AnnotatedImageName) {
 
   Init(tree);
 
-  ComPtr<IAccessible> root_obj(GetRootIAccessible());
+  ComPtr<IAccessible> ia2_root_obj(GetRootIAccessible());
+  auto* uia_root_node(GetRootAsAXNode());
 
   for (int child_index = 0; child_index < child_count; child_index++) {
     ComPtr<IDispatch> child_dispatch;
-    ASSERT_HRESULT_SUCCEEDED(root_obj->get_accChild(
+    ASSERT_HRESULT_SUCCEEDED(ia2_root_obj->get_accChild(
         ScopedVariant(child_index + 1), &child_dispatch));
-    ComPtr<IAccessible> child;
-    ASSERT_HRESULT_SUCCEEDED(child_dispatch.As(&child));
+    ComPtr<IAccessible> ia2_child;
+    ASSERT_HRESULT_SUCCEEDED(child_dispatch.As(&ia2_child));
 
-    ScopedBstr name;
-    EXPECT_EQ(S_OK, child->get_accName(SELF, name.Receive()));
-    EXPECT_STREQ(expected_names[child_index], name.Get());
+    ScopedBstr ia2_name;
+    EXPECT_EQ(S_OK, ia2_child->get_accName(SELF, ia2_name.Receive()));
+    EXPECT_STREQ(expected_names[child_index], ia2_name.Get());
+
+    ComPtr<IRawElementProviderSimple> uia_child =
+        QueryInterfaceFromNode<IRawElementProviderSimple>(
+            uia_root_node->children()[child_index]);
+    EXPECT_UIA_BSTR_EQ(uia_child, UIA_NamePropertyId,
+                       expected_names[child_index]);
   }
 }
 
@@ -3986,16 +4000,27 @@ TEST_F(AXPlatformNodeWinTest, UIAGetPropertySimple) {
                           "fake description");
   root.AddIntAttribute(ax::mojom::IntAttribute::kSetSize, 2);
   root.AddIntAttribute(ax::mojom::IntAttribute::kInvalidState, 1);
+  root.AddIntAttribute(ax::mojom::IntAttribute::kAriaCurrentState,
+                       static_cast<int>(ax::mojom::AriaCurrentState::kNone));
   root.id = 1;
 
   AXNodeData child1;
   child1.id = 2;
   child1.role = ax::mojom::Role::kListItem;
   child1.AddIntAttribute(ax::mojom::IntAttribute::kPosInSet, 1);
+  child1.AddIntAttribute(ax::mojom::IntAttribute::kAriaCurrentState,
+                         static_cast<int>(ax::mojom::AriaCurrentState::kPage));
   child1.SetName("child1");
   root.child_ids.push_back(child1.id);
 
-  Init(root, child1);
+  AXNodeData child2;
+  child2.id = 3;
+  child2.role = ax::mojom::Role::kGenericContainer;
+  child2.AddIntAttribute(ax::mojom::IntAttribute::kAriaCurrentState,
+                         static_cast<int>(ax::mojom::AriaCurrentState::kFalse));
+  root.child_ids.push_back(child2.id);
+
+  Init(root, child1, child2);
 
   ComPtr<IRawElementProviderSimple> root_node =
       GetRootIRawElementProviderSimple();
@@ -4033,6 +4058,19 @@ TEST_F(AXPlatformNodeWinTest, UIAGetPropertySimple) {
       QueryInterfaceFromNode<IRawElementProviderSimple>(
           GetRootAsAXNode()->children()[0]);
   EXPECT_UIA_INT_EQ(child_node1, UIA_PositionInSetPropertyId, 1);
+  EXPECT_UIA_BSTR_EQ(
+      child_node1, UIA_AriaPropertiesPropertyId,
+      L"readonly=true;expanded=false;multiline=false;multiselectable=false;"
+      L"posinset=1;required=false;current=page");
+
+  ComPtr<IRawElementProviderSimple> child_node2 =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(
+          GetRootAsAXNode()->children()[1]);
+  // aria-current="false" should not be serialized.
+  EXPECT_UIA_BSTR_EQ(
+      child_node2, UIA_AriaPropertiesPropertyId,
+      L"readonly=true;expanded=false;multiline=false;multiselectable=false;"
+      L"required=false");
 }
 
 TEST_F(AXPlatformNodeWinTest, UIAGetPropertyValueClickablePoint) {

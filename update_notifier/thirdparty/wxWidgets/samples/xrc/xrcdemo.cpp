@@ -13,9 +13,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 // For all others, include the necessary headers (this file is usually all you
 // need because it includes almost all "standard" wxWidgets headers)
@@ -41,6 +38,11 @@
     #include "wx/xrc/xh_ribbon.h"
 #endif // wxUSE_RIBBON
 
+#if wxUSE_AUI
+    #include "wx/xrc/xh_aui.h"
+    #include "wx/xrc/xh_auitoolb.h"
+#endif // wxUSE_AUI
+
 #include "wx/cshelp.h"              // wxSimpleHelpProvider for helptext
 
 #include "myframe.h"
@@ -54,7 +56,7 @@
 // static object for many reasons) and also declares the accessor function
 // wxGetApp() which will return the reference of the right type (i.e. the_app and
 // not wxApp).
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 //-----------------------------------------------------------------------------
 // Public methods
@@ -70,8 +72,12 @@ bool MyApp::OnInit()
     // load a handler for that image type. This example uses XPMs & a gif, but
     // if you want PNGs, then add a PNG handler, etc. See wxImage::AddHandler()
     // documentation for the types of image handlers available.
+#if wxUSE_XPM
     wxImage::AddHandler(new wxXPMHandler);
+#endif
+#if wxUSE_GIF
     wxImage::AddHandler(new wxGIFHandler);
+#endif
 
     // Initialize all the XRC handlers. Always required (unless you feel like
     // going through and initializing a handler of each control type you will
@@ -81,8 +87,17 @@ bool MyApp::OnInit()
     // wxXRC docs for details.
     wxXmlResource::Get()->InitAllHandlers();
 
+    // Allow using environment variables in the file paths in the resources,
+    // while keeping the default wxXRC_USE_LOCALE flag.
+    wxXmlResource::Get()->SetFlags(wxXRC_USE_LOCALE | wxXRC_USE_ENVVARS);
+
 #if wxUSE_RIBBON
     wxXmlResource::Get()->AddHandler(new wxRibbonXmlHandler);
+#endif
+
+#if wxUSE_AUI
+    wxXmlResource::Get()->AddHandler(new wxAuiXmlHandler);
+    wxXmlResource::Get()->AddHandler(new wxAuiToolBarXmlHandler);
 #endif
 
     // Load all of the XRC files that will be used. You can put everything

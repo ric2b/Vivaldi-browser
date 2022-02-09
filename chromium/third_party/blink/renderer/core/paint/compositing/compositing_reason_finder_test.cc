@@ -356,8 +356,7 @@ TEST_P(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
 }
 
 TEST_P(CompositingReasonFinderTest,
-       CompositeWithBackfaceVisibilityAncestorAndPreserve3D) {
-  ScopedTransformInteropForTest ti_enabled(true);
+       CompositeWithBackfaceVisibilityAncestorAndPreserve3DAncestor) {
   ScopedBackfaceVisibilityInteropForTest bfi_enabled(true);
 
   SetBodyInnerHTML(R"HTML(
@@ -372,6 +371,36 @@ TEST_P(CompositingReasonFinderTest,
 
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     PaintLayer* target_layer = GetPaintLayerByElementId("target");
+    // This likely doesn't pass anymore, but I'm going to skip updating the
+    // non-CAP codepath.
+    EXPECT_REASONS(CompositingReason::kBackfaceInvisibility3DAncestor,
+                   target_layer->PotentialCompositingReasonsFromNonStyle());
+    EXPECT_EQ(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
+  }
+
+  EXPECT_REASONS(
+      CompositingReason::kBackfaceInvisibility3DAncestor |
+          CompositingReason::kTransform3DSceneLeaf,
+      DirectReasonsForPaintProperties(*GetLayoutObjectByElementId("target")));
+}
+
+TEST_P(CompositingReasonFinderTest,
+       CompositeWithBackfaceVisibilityAncestorAndPreserve3D) {
+  ScopedBackfaceVisibilityInteropForTest bfi_enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      div { width: 100px; height: 100px; position: relative }
+    </style>
+    <div style="backface-visibility: hidden; transform-style: preserve-3d">
+      <div id=target style="transform-style: preserve-3d"></div>
+    </div>
+  )HTML");
+
+  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    // completely untested non-CAP test
+    PaintLayer* target_layer = GetPaintLayerByElementId("target");
     EXPECT_REASONS(CompositingReason::kBackfaceInvisibility3DAncestor,
                    target_layer->PotentialCompositingReasonsFromNonStyle());
     EXPECT_EQ(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
@@ -384,7 +413,6 @@ TEST_P(CompositingReasonFinderTest,
 
 TEST_P(CompositingReasonFinderTest,
        CompositeWithBackfaceVisibilityAncestorAndPreserve3DWithInterveningDiv) {
-  ScopedTransformInteropForTest ti_enabled(true);
   ScopedBackfaceVisibilityInteropForTest bfi_enabled(true);
 
   SetBodyInnerHTML(R"HTML(
@@ -412,7 +440,6 @@ TEST_P(CompositingReasonFinderTest,
 
 TEST_P(CompositingReasonFinderTest,
        CompositeWithBackfaceVisibilityAncestorWithInterveningStackingDiv) {
-  ScopedTransformInteropForTest ti_enabled(true);
   ScopedBackfaceVisibilityInteropForTest bfi_enabled(true);
 
   SetBodyInnerHTML(R"HTML(
@@ -431,6 +458,8 @@ TEST_P(CompositingReasonFinderTest,
     PaintLayer* intermediate_layer = GetPaintLayerByElementId("intermediate");
     PaintLayer* target_layer = GetPaintLayerByElementId("target");
 
+    // This likely doesn't pass anymore, but I'm going to skip updating the
+    // non-CAP codepath.
     EXPECT_REASONS(
         CompositingReason::kBackfaceInvisibility3DAncestor,
         intermediate_layer->PotentialCompositingReasonsFromNonStyle());
@@ -441,7 +470,8 @@ TEST_P(CompositingReasonFinderTest,
     EXPECT_NE(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
   }
 
-  EXPECT_REASONS(CompositingReason::kBackfaceInvisibility3DAncestor,
+  EXPECT_REASONS(CompositingReason::kBackfaceInvisibility3DAncestor |
+                     CompositingReason::kTransform3DSceneLeaf,
                  DirectReasonsForPaintProperties(
                      *GetLayoutObjectByElementId("intermediate")));
   EXPECT_REASONS(
@@ -451,7 +481,6 @@ TEST_P(CompositingReasonFinderTest,
 
 TEST_P(CompositingReasonFinderTest,
        CompositeWithBackfaceVisibilityAncestorAndFlattening) {
-  ScopedTransformInteropForTest ti_enabled(true);
   ScopedBackfaceVisibilityInteropForTest bfi_enabled(true);
 
   SetBodyInnerHTML(R"HTML(
@@ -477,7 +506,6 @@ TEST_P(CompositingReasonFinderTest,
 }
 
 TEST_P(CompositingReasonFinderTest, CompositeWithBackfaceVisibility) {
-  ScopedTransformInteropForTest ti_enabled(true);
   ScopedBackfaceVisibilityInteropForTest bfi_enabled(true);
 
   SetBodyInnerHTML(R"HTML(
@@ -532,6 +560,9 @@ TEST_P(CompositingReasonFinderTest, NotSupportedTransformAnimationsOnSVG) {
       <text id="text">text content
         <tspan id="tspan">tspan content</tspan>
       </text>
+      <filter>
+        <feBlend id="feBlend"></feBlend>
+      </filter>
     </svg>
   )HTML");
 
@@ -556,6 +587,10 @@ TEST_P(CompositingReasonFinderTest, NotSupportedTransformAnimationsOnSVG) {
   ASSERT_TRUE(tspan_content->IsText());
   EXPECT_EQ(CompositingReason::kNone,
             DirectReasonsForPaintProperties(*tspan_content));
+
+  auto* feBlend = GetLayoutObjectByElementId("feBlend");
+  EXPECT_REASONS(CompositingReason::kNone,
+                 DirectReasonsForPaintProperties(*feBlend));
 }
 
 }  // namespace blink

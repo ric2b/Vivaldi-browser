@@ -13,10 +13,10 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -287,7 +287,11 @@ void TestDownloadHttpResponse::ParseRequestHeader() {
   request_range_ = ranges[0];
   if (parameters_.support_partial_response)
     range_.set_first_byte_position(request_range_.first_byte_position());
-  range_.ComputeBounds(parameters_.size);
+
+  if (request_range_.HasLastBytePosition())
+    range_.set_last_byte_position(request_range_.last_byte_position());
+  else
+    range_.ComputeBounds(parameters_.size);
 
   response_sent_offset_ = range_.first_byte_position();
 }

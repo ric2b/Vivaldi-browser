@@ -4,6 +4,8 @@
 #include "content/browser/broadcast_channel/broadcast_channel_service.h"
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
+#include "content/browser/broadcast_channel/broadcast_channel_provider.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
@@ -17,7 +19,7 @@ class BroadcastChannelService::Connection
     : public blink::mojom::BroadcastChannelClient {
  public:
   Connection(
-      const url::Origin& origin,
+      const blink::StorageKey& storage_key,
       const std::string& name,
       mojo::PendingAssociatedRemote<blink::mojom::BroadcastChannelClient>
           client,
@@ -29,7 +31,7 @@ class BroadcastChannelService::Connection
   void MessageToClient(const blink::CloneableMessage& message) const {
     client_->OnMessage(message.ShallowClone());
   }
-  const url::Origin& origin() const { return origin_; }
+  const blink::StorageKey& storage_key() const { return storage_key_; }
   const std::string& name() const { return name_; }
 
   void set_connection_error_handler(
@@ -45,13 +47,13 @@ class BroadcastChannelService::Connection
   // Note: We use a raw pointer here because each Connection is owned by
   // BroadcastChannelService, so the lifetime of each Connection object
   // should not exceed the lifetime of `service_`.
-  BroadcastChannelService* service_;
-  const url::Origin origin_;
+  raw_ptr<BroadcastChannelService> service_;
+  const blink::StorageKey storage_key_;
   const std::string name_;
 };
 
 BroadcastChannelService::Connection::Connection(
-    const url::Origin& origin,
+    const blink::StorageKey& storage_key,
     const std::string& name,
     mojo::PendingAssociatedRemote<blink::mojom::BroadcastChannelClient> client,
     mojo::PendingAssociatedReceiver<blink::mojom::BroadcastChannelClient>
@@ -60,7 +62,7 @@ BroadcastChannelService::Connection::Connection(
     : receiver_(this, std::move(connection)),
       client_(std::move(client)),
       service_(service),
-      origin_(origin),
+      storage_key_(storage_key),
       name_(name) {}
 
 void BroadcastChannelService::Connection::OnMessage(
@@ -72,8 +74,8 @@ BroadcastChannelService::BroadcastChannelService() = default;
 BroadcastChannelService::~BroadcastChannelService() = default;
 
 void BroadcastChannelService::UnregisterConnection(Connection* c) {
-  const url::Origin origin = c->origin();
-  auto& connections = connections_[origin];
+  const blink::StorageKey storage_key = c->storage_key();
+  auto& connections = connections_[storage_key];
   for (auto it = connections.lower_bound(c->name()),
             end = connections.upper_bound(c->name());
        it != end; ++it) {
@@ -83,13 +85,13 @@ void BroadcastChannelService::UnregisterConnection(Connection* c) {
     }
   }
   if (connections.empty())
-    connections_.erase(origin);
+    connections_.erase(storage_key);
 }
 
 void BroadcastChannelService::ReceivedMessageOnConnection(
     Connection* c,
     const blink::CloneableMessage& message) {
-  auto& connections = connections_[c->origin()];
+  auto& connections = connections_[c->storage_key()];
   for (auto it = connections.lower_bound(c->name()),
             end = connections.upper_bound(c->name());
        it != end; ++it) {
@@ -99,17 +101,32 @@ void BroadcastChannelService::ReceivedMessageOnConnection(
 }
 
 void BroadcastChannelService::ConnectToChannel(
-    const url::Origin& origin,
+    const blink::StorageKey& storage_key,
     const std::string& name,
     mojo::PendingAssociatedRemote<blink::mojom::BroadcastChannelClient> client,
     mojo::PendingAssociatedReceiver<blink::mojom::BroadcastChannelClient>
         connection) {
   std::unique_ptr<Connection> c = std::make_unique<Connection>(
-      origin, name, std::move(client), std::move(connection), this);
+      storage_key, name, std::move(client), std::move(connection), this);
 
   c->set_connection_error_handler(
       base::BindRepeating(&BroadcastChannelService::UnregisterConnection,
                           base::Unretained(this), c.get()));
-  connections_[origin].insert(std::make_pair(name, std::move(c)));
+  connections_[storage_key].insert(std::make_pair(name, std::move(c)));
+}
+
+void BroadcastChannelService::AddReceiver(
+    std::unique_ptr<BroadcastChannelProvider> provider,
+    mojo::PendingReceiver<blink::mojom::BroadcastChannelProvider>
+        pending_receiver) {
+  receivers_.Add(std::move(provider), std::move(pending_receiver));
+}
+
+void BroadcastChannelService::AddAssociatedReceiver(
+    std::unique_ptr<BroadcastChannelProvider> provider,
+    mojo::PendingAssociatedReceiver<blink::mojom::BroadcastChannelProvider>
+        pending_associated_receiver) {
+  associated_receivers_.Add(std::move(provider),
+                            std::move(pending_associated_receiver));
 }
 }  // namespace content

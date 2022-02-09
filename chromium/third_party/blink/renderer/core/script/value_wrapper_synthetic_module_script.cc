@@ -181,7 +181,7 @@ ValueWrapperSyntheticModuleScript::ValueWrapperSyntheticModuleScript(
       export_value_(v8::Isolate::GetCurrent(), value) {}
 
 // This is the definition of [[EvaluationSteps]] As per the synthetic module
-// spec  https://heycam.github.io/webidl/#synthetic-module-records
+// spec  https://webidl.spec.whatwg.org/#synthetic-module-records
 // It is responsible for setting the default export of the provided module to
 // the value wrapped by the ValueWrapperSyntheticModuleScript
 v8::MaybeLocal<v8::Value> ValueWrapperSyntheticModuleScript::EvaluationSteps(
@@ -201,26 +201,22 @@ v8::MaybeLocal<v8::Value> ValueWrapperSyntheticModuleScript::EvaluationSteps(
   v8::TryCatch try_catch(isolate);
   v8::Maybe<bool> result = module->SetSyntheticModuleExport(
       isolate, V8String(isolate, "default"),
-      value_wrapper_synthetic_module_script->export_value_.NewLocal(isolate));
+      value_wrapper_synthetic_module_script->export_value_.Get(isolate));
 
   // Setting the default export should never fail.
   DCHECK(!try_catch.HasCaught());
   DCHECK(!result.IsNothing() && result.FromJust());
 
-  if (base::FeatureList::IsEnabled(features::kTopLevelAwait)) {
-    v8::Local<v8::Promise::Resolver> promise_resolver;
-    if (!v8::Promise::Resolver::New(context).ToLocal(&promise_resolver)) {
-      if (!isolate->IsExecutionTerminating()) {
-        LOG(FATAL) << "Cannot recover from failure to create a new "
-                      "v8::Promise::Resolver object (OOM?)";
-      }
-      return v8::MaybeLocal<v8::Value>();
+  v8::Local<v8::Promise::Resolver> promise_resolver;
+  if (!v8::Promise::Resolver::New(context).ToLocal(&promise_resolver)) {
+    if (!isolate->IsExecutionTerminating()) {
+      LOG(FATAL) << "Cannot recover from failure to create a new "
+                    "v8::Promise::Resolver object (OOM?)";
     }
-    promise_resolver->Resolve(context, v8::Undefined(isolate)).ToChecked();
-    return promise_resolver->GetPromise();
+    return v8::MaybeLocal<v8::Value>();
   }
-
-  return v8::Undefined(isolate);
+  promise_resolver->Resolve(context, v8::Undefined(isolate)).ToChecked();
+  return promise_resolver->GetPromise();
 }
 
 void ValueWrapperSyntheticModuleScript::Trace(Visitor* visitor) const {

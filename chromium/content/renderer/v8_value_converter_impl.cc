@@ -90,6 +90,9 @@ class V8ValueConverterImpl::FromV8ValueState {
       : max_recursion_depth_(kMaxRecursionDepth),
         avoid_identity_hash_for_testing_(avoid_identity_hash_for_testing) {}
 
+  FromV8ValueState(const FromV8ValueState&) = delete;
+  FromV8ValueState& operator=(const FromV8ValueState&) = delete;
+
   // If |handle| is not in |unique_map_|, then add it to |unique_map_| and
   // return true.
   //
@@ -144,8 +147,6 @@ class V8ValueConverterImpl::FromV8ValueState {
   int max_recursion_depth_;
 
   bool avoid_identity_hash_for_testing_;
-
-  DISALLOW_COPY_AND_ASSIGN(FromV8ValueState);
 };
 
 // A class to ensure that objects/arrays that are being converted by
@@ -292,11 +293,10 @@ v8::Local<v8::Value> V8ValueConverterImpl::ToV8Array(
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
   for (size_t i = 0; i < val->GetList().size(); ++i) {
-    const base::Value* child = nullptr;
-    CHECK(val->Get(i, &child));
+    const base::Value& child = val->GetList()[i];
 
     v8::Local<v8::Value> child_v8 =
-        ToV8ValueImpl(isolate, creation_context, child);
+        ToV8ValueImpl(isolate, creation_context, &child);
     CHECK(!child_v8.IsEmpty());
 
     v8::Maybe<bool> maybe =

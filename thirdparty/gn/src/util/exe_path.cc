@@ -104,6 +104,16 @@ base::FilePath GetExePath() {
   return base::FilePath(raw);
 }
 
+#elif defined(OS_ZOS)
+
+base::FilePath GetExePath() {
+  char path[PATH_MAX];
+  if (__getexepath(path, sizeof(path), getpid()) != 0) {
+    return base::FilePath();
+  }
+  return base::FilePath(path);
+}
+
 #else
 
 base::FilePath GetExePath() {

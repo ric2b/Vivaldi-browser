@@ -7,11 +7,13 @@
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
 #include "chrome/browser/ui/user_education/tutorial/tutorial_service_manager.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
+#include "chrome/browser/ui/views/tabs/tab_group_header.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/user_education/tutorial_bubble_factory_views.h"
 #include "chrome/common/chrome_constants.h"
@@ -25,6 +27,7 @@ BrowserTutorialServiceFactory* BrowserTutorialServiceFactory::GetInstance() {
   BrowserTutorialServiceFactory* factory =
       base::Singleton<BrowserTutorialServiceFactory>::get();
   factory->RegisterBubbleFactories();
+  factory->RegisterTutorials();
   return factory;
 }
 
@@ -43,14 +46,10 @@ BrowserTutorialServiceFactory::~BrowserTutorialServiceFactory() = default;
 
 KeyedService* BrowserTutorialServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  std::unique_ptr<TutorialRegistry> tutorial_registry =
-      std::make_unique<BrowserTutorialRegistry>();
-  tutorial_registry->RegisterTutorials();
-
   std::unique_ptr<TutorialBubbleFactoryRegistry> bubble_owner_registry =
       std::make_unique<TutorialBubbleFactoryRegistry>();
 
-  TutorialService* service = new TutorialService(std::move(tutorial_registry));
+  TutorialService* service = new TutorialService();
 
   return service;
 }
@@ -83,23 +82,44 @@ BrowserTutorialServiceFactory::GetDefaultElementContextForProfile(
   return views::ElementTrackerViews::GetContextForView(browser_view);
 }
 
-void BrowserTutorialRegistry::RegisterTutorials() {
-  {
+void BrowserTutorialServiceFactory::RegisterTutorials() {
+  if (registered_tutorials_)
+    return;
+
+  TutorialRegistry* tutorial_registry =
+      TutorialServiceManager::GetInstance()->tutorial_registry();
+
+  {  // Tab Group Tutorial
     TutorialDescription* description = new TutorialDescription();
     TutorialDescription::Step step1(
         absl::nullopt,
         u"Right Click on a Tab and select \"Add Tab To new Group\".",
-        ui::InteractionSequence::StepType::kShown,
-        TabStrip::kTabStripIdentifier, TutorialDescription::Step::Arrow::TOP);
+        ui::InteractionSequence::StepType::kShown, kTabStripElementId,
+        std::string(), TutorialDescription::Step::Arrow::TOP, absl::nullopt);
     description->steps.emplace_back(step1);
 
     TutorialDescription::Step step2(
         absl::nullopt, u"Select \"Enter a name for your Tab Group\".",
         ui::InteractionSequence::StepType::kShown,
-        TabGroupEditorBubbleView::kEditorBubbleIdentifier,
-        TutorialDescription::Step::Arrow::CENTER_HORIZONTAL);
-    description->steps.emplace_back(step2);
+        TabGroupEditorBubbleView::kEditorBubbleIdentifier, std::string(),
+        TutorialDescription::Step::Arrow::CENTER_HORIZONTAL,
+        false /*must_remain_visible*/);
+    description->steps.emplace_back(std::move(step2));
 
-    AddTutorial("Tab Group Tutorial", *description);
+    TutorialDescription::Step step3(
+        absl::nullopt, absl::nullopt,
+        ui::InteractionSequence::StepType::kHidden,
+        TabGroupEditorBubbleView::kEditorBubbleIdentifier, std::string(),
+        TutorialDescription::Step::Arrow::NONE, false /*must_remain_visible*/);
+    description->steps.emplace_back(std::move(step3));
+
+    TutorialDescription::Step step4(
+        absl::nullopt, u"Congratulations, you've made your first tab group.",
+        ui::InteractionSequence::StepType::kShown,
+        TabGroupHeader::kTabGroupHeaderIdentifier, std::string(),
+        TutorialDescription::Step::Arrow::TOP, absl::nullopt);
+    description->steps.emplace_back(std::move(step4));
+
+    tutorial_registry->AddTutorial("Tab Group Tutorial", *description);
   }
 }

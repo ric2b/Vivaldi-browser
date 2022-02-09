@@ -11,8 +11,8 @@
 #include <vector>
 
 #include "base/check.h"
-#include "base/containers/mru_cache.h"
-#include "base/macros.h"
+#include "base/containers/lru_cache.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
 #include "base/time/tick_clock.h"
@@ -143,10 +143,10 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
  private:
   using EndpointBackoffKey = std::pair<NetworkIsolationKey, GURL>;
 
-  const ReportingPolicy* const policy_;
-  const base::TickClock* const tick_clock_;
-  const ReportingDelegate* const delegate_;
-  ReportingCache* const cache_;
+  const raw_ptr<const ReportingPolicy> policy_;
+  const raw_ptr<const base::TickClock> tick_clock_;
+  const raw_ptr<const ReportingDelegate> delegate_;
+  const raw_ptr<ReportingCache> cache_;
 
   RandIntCallback rand_callback_;
 
@@ -155,7 +155,7 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
   // to be cleared as well.
   // TODO(chlily): clear this data when endpoints are deleted to avoid unbounded
   // growth of this map.
-  base::MRUCache<EndpointBackoffKey, std::unique_ptr<net::BackoffEntry>>
+  base::LRUCache<EndpointBackoffKey, std::unique_ptr<net::BackoffEntry>>
       endpoint_backoff_;
 };
 

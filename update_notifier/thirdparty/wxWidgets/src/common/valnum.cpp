@@ -18,9 +18,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_VALIDATORS && wxUSE_TEXTCTRL
 
@@ -32,14 +29,16 @@
 #include "wx/valnum.h"
 #include "wx/numformatter.h"
 
+#include <math.h>
+
 // ============================================================================
 // wxNumValidatorBase implementation
 // ============================================================================
 
-BEGIN_EVENT_TABLE(wxNumValidatorBase, wxValidator)
+wxBEGIN_EVENT_TABLE(wxNumValidatorBase, wxValidator)
     EVT_CHAR(wxNumValidatorBase::OnChar)
     EVT_KILL_FOCUS(wxNumValidatorBase::OnKillFocus)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 int wxNumValidatorBase::GetFormatFlags() const
 {
@@ -50,6 +49,23 @@ int wxNumValidatorBase::GetFormatFlags() const
         flags |= wxNumberFormatter::Style_NoTrailingZeroes;
 
     return flags;
+}
+
+void wxNumValidatorBase::SetWindow(wxWindow *win)
+{
+    wxValidator::SetWindow(win);
+
+#if wxUSE_TEXTCTRL
+    if ( wxDynamicCast(m_validatorWindow, wxTextCtrl) )
+        return;
+#endif // wxUSE_TEXTCTRL
+
+#if wxUSE_COMBOBOX
+    if ( wxDynamicCast(m_validatorWindow, wxComboBox) )
+        return;
+#endif // wxUSE_COMBOBOX
+
+    wxFAIL_MSG("Can only be used with wxTextCtrl or wxComboBox");
 }
 
 wxTextEntry *wxNumValidatorBase::GetTextEntry() const
@@ -63,8 +79,6 @@ wxTextEntry *wxNumValidatorBase::GetTextEntry() const
     if ( wxComboBox *combo = wxDynamicCast(m_validatorWindow, wxComboBox) )
         return combo;
 #endif // wxUSE_COMBOBOX
-
-    wxFAIL_MSG("Can only be used with wxTextCtrl or wxComboBox");
 
     return NULL;
 }
@@ -103,6 +117,10 @@ wxNumValidatorBase::GetCurrentValueAndInsertionPoint(wxString& val,
 
 bool wxNumValidatorBase::IsMinusOk(const wxString& val, int pos) const
 {
+    // We need to know if we accept negative numbers at all.
+    if ( !CanBeNegative() )
+        return false;
+
     // Minus is only ever accepted in the beginning of the string.
     if ( pos != 0 )
         return false;
@@ -111,6 +129,15 @@ bool wxNumValidatorBase::IsMinusOk(const wxString& val, int pos) const
     if ( !val.empty() && val[0] == '-' )
         return false;
 
+    // Notice that entering '-' can make our value invalid, for example if
+    // we're limited to -5..15 range and the current value is 12, then the
+    // new value would be (invalid) -12. We consider it better to let the
+    // user do this because perhaps he is going to press Delete key next to
+    // make it -2 and forcing him to delete 1 first would be unnatural.
+    //
+    // TODO: It would be nice to indicate that the current control contents
+    //       is invalid (if it's indeed going to be the case) once
+    //       wxValidator supports doing this non-intrusively.
     return true;
 }
 
@@ -151,7 +178,10 @@ void wxNumValidatorBase::OnChar(wxKeyEvent& event)
     int pos;
     GetCurrentValueAndInsertionPoint(val, pos);
 
-    if ( !IsCharOk(val, pos, ch) )
+    // Minus is a special case because we can deal with it directly here, for
+    // all the rest call the derived class virtual function.
+    const bool ok = ch == '-' ? IsMinusOk(val, pos) : IsCharOk(val, pos, ch);
+    if ( !ok )
     {
         if ( !wxValidator::IsSilent() )
             wxBell();
@@ -163,9 +193,21 @@ void wxNumValidatorBase::OnChar(wxKeyEvent& event)
 
 void wxNumValidatorBase::OnKillFocus(wxFocusEvent& event)
 {
+    event.Skip();
+
     wxTextEntry * const control = GetTextEntry();
     if ( !control )
         return;
+
+    const wxString& valueNorm = NormalizeString(control->GetValue());
+    if ( control->GetValue() == valueNorm )
+    {
+        // Don't do anything at all if the value doesn't really change, even if
+        // the control optimizes away the calls to ChangeValue() which don't
+        // actually change it, it's easier to skip all the complications below
+        // if we don't need to do anything.
+        return;
+    }
 
     // When we change the control value below, its "modified" status is reset
     // so we need to explicitly keep it marked as modified if it was so in the
@@ -176,12 +218,10 @@ void wxNumValidatorBase::OnKillFocus(wxFocusEvent& event)
     wxTextCtrl * const text = wxDynamicCast(m_validatorWindow, wxTextCtrl);
     const bool wasModified = text ? text->IsModified() : false;
 
-    control->ChangeValue(NormalizeString(control->GetValue()));
+    control->ChangeValue(valueNorm);
 
     if ( wasModified )
         text->MarkDirty();
-
-    event.Skip();
 }
 
 // ============================================================================
@@ -190,33 +230,42 @@ void wxNumValidatorBase::OnKillFocus(wxFocusEvent& event)
 
 wxString wxIntegerValidatorBase::ToString(LongestValueType value) const
 {
-    return wxNumberFormatter::ToString(value, GetFormatFlags());
+    if ( CanBeNegative() )
+    {
+        return wxNumberFormatter::ToString(value, GetFormatFlags());
+    }
+    else
+    {
+        ULongestValueType uvalue = static_cast<ULongestValueType>(value);
+        return wxNumberFormatter::ToString(uvalue, GetFormatFlags());
+    }
 }
 
 bool
-wxIntegerValidatorBase::FromString(const wxString& s, LongestValueType *value)
+wxIntegerValidatorBase::FromString(const wxString& s,
+                                   LongestValueType *value) const
 {
-    return wxNumberFormatter::FromString(s, value);
+    if ( CanBeNegative() )
+    {
+        return wxNumberFormatter::FromString(s, value);
+    }
+    else
+    {
+        // Parse as unsigned to ensure we don't accept minus sign here.
+        ULongestValueType uvalue;
+        if ( !wxNumberFormatter::FromString(s, &uvalue) )
+            return false;
+
+        // This cast is lossless.
+        *value = static_cast<LongestValueType>(uvalue);
+
+        return true;
+    }
 }
 
 bool
 wxIntegerValidatorBase::IsCharOk(const wxString& val, int pos, wxChar ch) const
 {
-    // We may accept minus sign if we can represent negative numbers at all.
-    if ( ch == '-' )
-    {
-        // Notice that entering '-' can make our value invalid, for example if
-        // we're limited to -5..15 range and the current value is 12, then the
-        // new value would be (invalid) -12. We consider it better to let the
-        // user do this because perhaps he is going to press Delete key next to
-        // make it -2 and forcing him to delete 1 first would be unnatural.
-        //
-        // TODO: It would be nice to indicate that the current control contents
-        //       is invalid (if it's indeed going to be the case) once
-        //       wxValidator supports doing this non-intrusively.
-        return m_min < 0 && IsMinusOk(val, pos);
-    }
-
     // We only accept digits here (remember that '-' is taken care of by the
     // base class already).
     if ( ch < '0' || ch > '9' )
@@ -236,14 +285,31 @@ wxIntegerValidatorBase::IsCharOk(const wxString& val, int pos, wxChar ch) const
 
 wxString wxFloatingPointValidatorBase::ToString(LongestValueType value) const
 {
-    return wxNumberFormatter::ToString(value, m_precision, GetFormatFlags());
+    // When using factor > 1 we're going to show more digits than are
+    // significant in the real value, so decrease precision to account for it.
+    int precision = m_precision;
+    if ( precision && m_factor > 1 )
+    {
+        precision -= static_cast<int>(log10(static_cast<double>(m_factor)));
+        if ( precision < 0 )
+            precision = 0;
+    }
+
+    return wxNumberFormatter::ToString(value*m_factor,
+                                       precision,
+                                       GetFormatFlags());
 }
 
 bool
 wxFloatingPointValidatorBase::FromString(const wxString& s,
-                                         LongestValueType *value)
+                                         LongestValueType *value) const
 {
-    return wxNumberFormatter::FromString(s, value);
+    if ( !wxNumberFormatter::FromString(s, value) )
+        return false;
+
+    *value /= m_factor;
+
+    return true;
 }
 
 bool
@@ -251,10 +317,6 @@ wxFloatingPointValidatorBase::IsCharOk(const wxString& val,
                                        int pos,
                                        wxChar ch) const
 {
-    // We may accept minus sign if we can represent negative numbers at all.
-    if ( ch == '-' )
-        return m_min < 0 && IsMinusOk(val, pos);
-
     const wxChar separator = wxNumberFormatter::GetDecimalSeparator();
     if ( ch == separator )
     {

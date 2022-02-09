@@ -14,7 +14,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/ip_endpoint.h"
@@ -29,7 +29,7 @@
 #include "net/spdy/spdy_session.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
-#include "url/origin.h"
+#include "url/scheme_host_port.h"
 
 namespace net {
 
@@ -359,7 +359,7 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
   DispatchRequestHeadersCallback(headers);
 
   bool will_send_data =
-      HasUploadData() | spdy_session_->EndStreamWithDataFrame();
+      HasUploadData() || spdy_session_->EndStreamWithDataFrame();
   result = stream_->SendRequestHeaders(
       std::move(headers),
       will_send_data ? MORE_DATA_TO_SEND : NO_MORE_DATA_TO_SEND);
@@ -721,8 +721,7 @@ base::StringPiece SpdyHttpStream::GetAcceptChViaAlps() const {
     return {};
   }
 
-  const url::Origin origin = url::Origin::Create(request_info_->url);
-  return session()->GetAcceptChViaAlpsForOrigin(origin);
+  return session()->GetAcceptChViaAlps(url::SchemeHostPort(request_info_->url));
 }
 
 }  // namespace net

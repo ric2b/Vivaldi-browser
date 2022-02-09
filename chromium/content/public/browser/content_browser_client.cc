@@ -20,7 +20,7 @@
 #include "base/guid.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -50,7 +50,7 @@
 #include "net/ssl/client_cert_identity.h"
 #include "net/ssl/client_cert_store.h"
 #include "sandbox/policy/features.h"
-#include "sandbox/policy/sandbox_type.h"
+#include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/device/public/cpp/geolocation/geolocation_manager.h"
 #include "services/device/public/cpp/geolocation/location_provider.h"
@@ -80,7 +80,7 @@
 namespace content {
 
 std::unique_ptr<BrowserMainParts> ContentBrowserClient::CreateBrowserMainParts(
-    const MainFunctionParams& parameters) {
+    MainFunctionParams parameters) {
   return nullptr;
 }
 
@@ -270,6 +270,10 @@ bool ContentBrowserClient::ShouldSubframesTryToReuseExistingProcess(
   return true;
 }
 
+bool ContentBrowserClient::ShouldAllowNoLongerUsedProcessToExit() {
+  return true;
+}
+
 bool ContentBrowserClient::ShouldSwapBrowsingInstancesForNavigation(
     SiteInstance* site_instance,
     const GURL& current_effective_url,
@@ -371,14 +375,6 @@ base::FilePath ContentBrowserClient::GetLoggingFileName(
   return base::FilePath();
 }
 
-bool ContentBrowserClient::AllowAppCache(
-    const GURL& manifest_url,
-    const net::SiteForCookies& site_for_cookies,
-    const absl::optional<url::Origin>& top_frame_origin,
-    BrowserContext* context) {
-  return true;
-}
-
 AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorker(
     const GURL& scope,
     const net::SiteForCookies& site_for_cookies,
@@ -387,6 +383,11 @@ AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorker(
     BrowserContext* context) {
   return AllowServiceWorkerResult::Yes();
 }
+
+void ContentBrowserClient::WillStartServiceWorker(
+    BrowserContext* context,
+    const GURL& script_url,
+    RenderProcessHost* render_process_host) {}
 
 bool ContentBrowserClient::AllowSharedWorker(
     const GURL& worker_url,
@@ -736,10 +737,9 @@ std::unique_ptr<NavigationUIData> ContentBrowserClient::GetNavigationUIData(
 }
 
 #if defined(OS_WIN)
-bool ContentBrowserClient::PreSpawnChild(
-    sandbox::TargetPolicy* policy,
-    sandbox::policy::SandboxType sandbox_type,
-    ChildSpawnFlags flags) {
+bool ContentBrowserClient::PreSpawnChild(sandbox::TargetPolicy* policy,
+                                         sandbox::mojom::Sandbox sandbox_type,
+                                         ChildSpawnFlags flags) {
   return true;
 }
 
@@ -749,7 +749,7 @@ bool ContentBrowserClient::IsUtilityCetCompatible(
 }
 
 std::wstring ContentBrowserClient::GetAppContainerSidForSandboxType(
-    sandbox::policy::SandboxType sandbox_type) {
+    sandbox::mojom::Sandbox sandbox_type) {
   // Embedders should override this method and return different SIDs for each
   // sandbox type. Note: All content level tests will run child processes in the
   // same AppContainer.
@@ -844,8 +844,10 @@ void ContentBrowserClient::CreateWebSocket(
 }
 
 void ContentBrowserClient::WillCreateWebTransport(
-    RenderFrameHost* frame,
+    int process_id,
+    int frame_routing_id,
     const GURL& url,
+    const url::Origin& initiator_origin,
     mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
         handshake_client,
     WillCreateWebTransportCallback callback) {
@@ -890,7 +892,7 @@ void ContentBrowserClient::ConfigureNetworkContextParams(
     network::mojom::NetworkContextParams* network_context_params,
     cert_verifier::mojom::CertVerifierCreationParams*
         cert_verifier_creation_params) {
-  network_context_params->user_agent = GetUserAgent();
+  network_context_params->user_agent = GetUserAgentBasedOnPolicy(context);
   network_context_params->accept_language = "en-us,en";
 }
 
@@ -996,7 +998,7 @@ std::unique_ptr<LoginDelegate> ContentBrowserClient::CreateLoginDelegate(
     const net::AuthChallengeInfo& auth_info,
     content::WebContents* web_contents,
     const GlobalRequestID& request_id,
-    bool is_request_for_main_frame,
+    bool is_request_for_primary_main_frame,
     const GURL& url,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
@@ -1080,6 +1082,11 @@ std::string ContentBrowserClient::GetProduct() {
 
 std::string ContentBrowserClient::GetUserAgent() {
   return std::string();
+}
+
+std::string ContentBrowserClient::GetUserAgentBasedOnPolicy(
+    content::BrowserContext* content) {
+  return GetUserAgent();
 }
 
 std::string ContentBrowserClient::GetReducedUserAgent() {
@@ -1193,6 +1200,14 @@ void ContentBrowserClient::IsClipboardPasteContentAllowed(
   std::move(callback).Run(ClipboardPasteContentAllowed(true));
 }
 
+bool ContentBrowserClient::IsClipboardCopyAllowed(
+    content::BrowserContext* browser_context,
+    const GURL& url,
+    size_t data_size_in_bytes,
+    std::u16string& replacement_data) {
+  return true;
+}
+
 bool ContentBrowserClient::CanEnterFullscreenWithoutUserActivation() {
   return false;
 }
@@ -1210,15 +1225,6 @@ XrIntegrationClient* ContentBrowserClient::GetXrIntegrationClient() {
   return nullptr;
 }
 #endif
-
-bool ContentBrowserClient::IsOriginTrialRequiredForAppCache(
-    content::BrowserContext* browser_context) {
-  // In Chrome proper, this also considers Profile preferences.
-  // As a default, only consider the base::Feature.
-  // Compare this with the ChromeContentBrowserClient implementation.
-  return base::FeatureList::IsEnabled(
-      blink::features::kAppCacheRequireOriginTrial);
-}
 
 void ContentBrowserClient::BindBrowserControlInterface(
     mojo::ScopedMessagePipeHandle pipe) {}
@@ -1249,7 +1255,7 @@ void ContentBrowserClient::OnKeepaliveRequestFinished() {}
 
 #if defined(OS_MAC)
 bool ContentBrowserClient::SetupEmbedderSandboxParameters(
-    sandbox::policy::SandboxType sandbox_type,
+    sandbox::mojom::Sandbox sandbox_type,
     sandbox::SeatbeltExecClient* client) {
   return false;
 }
@@ -1285,6 +1291,23 @@ void ContentBrowserClient::ShowDirectSocketsConnectionDialog(
     base::OnceCallback<void(bool, const std::string&, const std::string&)>
         callback) {
   std::move(callback).Run(false, std::string(), std::string());
+}
+
+bool ContentBrowserClient::IsFindInPageDisabledForOrigin(
+    const url::Origin& origin) {
+  return false;
+}
+
+void ContentBrowserClient::OnWebContentsCreated(WebContents* web_contents) {}
+
+void ContentBrowserClient::FlushBackgroundAttributions(
+    base::OnceClosure callback) {
+  std::move(callback).Run();
+}
+
+bool ContentBrowserClient::ShouldPreconnectNavigation(
+    BrowserContext* browser_context) {
+  return false;
 }
 
 }  // namespace content

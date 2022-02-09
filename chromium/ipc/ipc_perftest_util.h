@@ -7,16 +7,17 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
+
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process_metrics.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/single_thread_task_executor.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_listener.h"
@@ -58,7 +59,7 @@ class ChannelReflectorListener : public Listener {
   void Send(IPC::Message* message);
 
  private:
-  Sender* channel_;
+  raw_ptr<Sender> channel_;
   base::OnceClosure quit_closure_;
 };
 

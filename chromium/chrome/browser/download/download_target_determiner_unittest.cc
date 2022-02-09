@@ -13,11 +13,12 @@
 #include "base/files/file_path.h"
 #include "base/json/values_util.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -354,6 +355,13 @@ class DownloadTargetDeterminerTest : public ChromeRenderViewHostTestHarness {
 
   DownloadPrefs* download_prefs() {
     return download_prefs_.get();
+  }
+
+ protected:
+  // ChromeRenderViewHostTestHarness overrides.
+  TestingProfile::TestingFactories GetTestingFactories() const override {
+    return {{HistoryServiceFactory::GetInstance(),
+             HistoryServiceFactory::GetDefaultFactory()}};
   }
 
  private:
@@ -1193,9 +1201,6 @@ TEST_F(DownloadTargetDeterminerTest, VisitedReferrer) {
   ASSERT_EQ(DownloadFileType::ALLOW_ON_USER_GESTURE,
             safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
                 base::FilePath(FILE_PATH_LITERAL("foo.kindabad"))));
-
-  // First the history service must exist.
-  ASSERT_TRUE(profile()->CreateHistoryService());
 
   GURL url("http://visited.example.com/visited-link.html");
   // The time of visit is picked to be several seconds prior to the most recent
@@ -2455,11 +2460,8 @@ class MockPluginServiceFilter : public content::PluginServiceFilter {
   MOCK_METHOD1(MockPluginAvailable, bool(const base::FilePath&));
 
   bool IsPluginAvailable(int render_process_id,
-                         int render_view_id,
-                         const GURL& url,
-                         const url::Origin& main_frame_origin,
-                         content::WebPluginInfo* plugin) override {
-    return MockPluginAvailable(plugin->path);
+                         const content::WebPluginInfo& plugin) override {
+    return MockPluginAvailable(plugin.path);
   }
 
   bool CanLoadPlugin(int render_process_id,
@@ -2499,7 +2501,7 @@ class ScopedRegisterInternalPlugin {
   const base::FilePath& path() { return plugin_path_; }
 
  private:
-  content::PluginService* plugin_service_;
+  raw_ptr<content::PluginService> plugin_service_;
   base::FilePath plugin_path_;
 };
 
@@ -2529,7 +2531,7 @@ class DownloadTargetDeterminerTestWithPlugin
   }
 
  protected:
-  content::PluginServiceFilter* old_plugin_service_filter_;
+  raw_ptr<content::PluginServiceFilter> old_plugin_service_filter_;
   testing::StrictMock<MockPluginServiceFilter> mock_plugin_filter_;
 };
 

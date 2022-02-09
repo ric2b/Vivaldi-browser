@@ -13,7 +13,6 @@
 
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/cxx17_backports.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -123,7 +122,7 @@ Mixer::~Mixer() = default;
 
 void Mixer::InitializeRankers(Profile* profile) {
   search_result_ranker_ = std::make_unique<SearchResultRanker>(profile);
-  search_result_ranker_->InitializeRankers(search_controller_);
+  search_result_ranker_->InitializeRankers();
 
   if (app_list_features::IsSuggestedFilesEnabled() ||
       app_list_features::IsSuggestedLocalFilesEnabled()) {
@@ -191,7 +190,8 @@ void Mixer::MixAndPublish(size_t num_max_results, const std::u16string& query) {
     new_results.push_back(sort_data.result);
   }
   search_controller_->NotifyResultsAdded(new_results);
-  model_updater_->PublishSearchResults(new_results);
+  // Categories are unused in old search.
+  model_updater_->PublishSearchResults(new_results, /*categories=*/{});
 }
 
 void Mixer::FetchResults(const std::u16string& query) {

@@ -15,7 +15,9 @@ constexpr StaticOobeScreenId LacrosDataMigrationScreenView::kScreenId;
 
 LacrosDataMigrationScreenHandler::LacrosDataMigrationScreenHandler(
     JSCallsContainer* js_calls_container)
-    : BaseScreenHandler(kScreenId, js_calls_container) {}
+    : BaseScreenHandler(kScreenId, js_calls_container) {
+  set_user_acted_method_path("login.LacrosDataMigrationScreen.userActed");
+}
 
 LacrosDataMigrationScreenHandler::~LacrosDataMigrationScreenHandler() {
   if (screen_)
@@ -28,6 +30,10 @@ void LacrosDataMigrationScreenHandler::DeclareLocalizedValues(
                IDS_LACROS_DATA_MIGRATION_SCREEN_TITLE);
   builder->Add("lacrosDataMigrationSubtitle",
                IDS_LACROS_DATA_MIGRATION_SCREEN_SUBTITLE);
+  builder->Add("lacrosDataMigrationSkipButton",
+               IDS_LACROS_DATA_MIGRATION_SCREEN_SKIP_BUTTON);
+  builder->Add("lacrosDataMigrationSkipSuggestion",
+               IDS_LACROS_DATA_MIGRATION_SCREEN_SKIP_SUGGESTION);
 }
 
 void LacrosDataMigrationScreenHandler::Bind(LacrosDataMigrationScreen* screen) {
@@ -46,6 +52,14 @@ void LacrosDataMigrationScreenHandler::Show() {
     return;
   }
   ShowScreen(kScreenId);
+}
+
+void LacrosDataMigrationScreenHandler::SetProgressValue(int progress) {
+  CallJS("login.LacrosDataMigrationScreen.setProgressValue", progress);
+}
+
+void LacrosDataMigrationScreenHandler::ShowSkipButton() {
+  CallJS("login.LacrosDataMigrationScreen.showSkipButton");
 }
 
 void LacrosDataMigrationScreenHandler::Initialize() {

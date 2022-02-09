@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/dcclient.h"
 #include "wx/msw/dcclient.h"
@@ -33,7 +30,10 @@
     #include "wx/window.h"
 #endif
 
+#include "wx/stack.h"
+
 #include "wx/msw/private.h"
+#include "wx/msw/private/paint.h"
 
 // ----------------------------------------------------------------------------
 // local data structures
@@ -136,18 +136,6 @@ PaintDCInfos gs_PaintDCInfos;
 
 } // anonymous namespace
 
-// ----------------------------------------------------------------------------
-// global variables
-// ----------------------------------------------------------------------------
-
-#ifdef wxHAS_PAINT_DEBUG
-    // a global variable which we check to verify that wxPaintDC are only
-    // created in response to WM_PAINT message - doing this from elsewhere is a
-    // common programming error among wxWidgets programmers and might lead to
-    // very subtle and difficult to debug refresh/repaint bugs.
-    int g_isPainting = 0;
-#endif // wxHAS_PAINT_DEBUG
-
 // ===========================================================================
 // implementation
 // ===========================================================================
@@ -156,7 +144,7 @@ PaintDCInfos gs_PaintDCInfos;
 // wxMSWWindowDCImpl
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxWindowDCImpl, wxMSWDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxWindowDCImpl, wxMSWDCImpl);
 
 wxWindowDCImpl::wxWindowDCImpl( wxDC *owner ) :
    wxMSWDCImpl( owner )
@@ -199,7 +187,7 @@ void wxWindowDCImpl::DoGetSize(int *width, int *height) const
 // wxClientDCImpl
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxClientDCImpl, wxWindowDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxClientDCImpl, wxWindowDCImpl);
 
 wxClientDCImpl::wxClientDCImpl( wxDC *owner ) :
    wxWindowDCImpl( owner )
@@ -226,11 +214,7 @@ void wxClientDCImpl::InitDC()
 
     // in wxUniv build we must manually do some DC adjustments usually
     // performed by Windows for us
-    //
-    // we also need to take the menu/toolbar manually into account under
-    // Windows CE because they're just another control there, not anything
-    // special as usually under Windows
-#if defined(__WXUNIVERSAL__) || defined(__WXWINCE__)
+#if defined(__WXUNIVERSAL__)
     wxPoint ptOrigin = m_window->GetClientAreaOrigin();
     if ( ptOrigin.x || ptOrigin.y )
     {
@@ -241,7 +225,7 @@ void wxClientDCImpl::InitDC()
     // clip the DC to avoid overwriting the non client area
     wxSize size = m_window->GetClientSize();
     DoSetClippingRegion(0, 0, size.x, size.y);
-#endif // __WXUNIVERSAL__ || __WXWINCE__
+#endif // __WXUNIVERSAL__
 }
 
 wxClientDCImpl::~wxClientDCImpl()
@@ -259,7 +243,7 @@ void wxClientDCImpl::DoGetSize(int *width, int *height) const
 // wxPaintDCImpl
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxPaintDCImpl, wxClientDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxPaintDCImpl, wxClientDCImpl);
 
 wxPaintDCImpl::wxPaintDCImpl( wxDC *owner ) :
    wxClientDCImpl( owner )
@@ -271,20 +255,13 @@ wxPaintDCImpl::wxPaintDCImpl( wxDC *owner, wxWindow *window ) :
 {
     wxCHECK_RET( window, wxT("NULL canvas in wxPaintDCImpl ctor") );
 
-#ifdef wxHAS_PAINT_DEBUG
-    if ( g_isPainting <= 0 )
-    {
-        wxFAIL_MSG( wxT("wxPaintDCImpl may be created only in EVT_PAINT handler!") );
+    using namespace wxMSWImpl;
+    wxCHECK_RET( !paintStack.empty(),
+                 "wxPaintDC can't be created outside wxEVT_PAINT handler" );
+    wxCHECK_RET( paintStack.top().window == window,
+                 "wxPaintDC must be associated with the window being repainted" );
 
-        return;
-    }
-#endif // wxHAS_PAINT_DEBUG
-
-    // see comments in src/msw/window.cpp where this is defined
-    extern bool wxDidCreatePaintDC;
-
-    wxDidCreatePaintDC = true;
-
+    paintStack.top().createdPaintDC = true;
 
     m_window = window;
 
@@ -306,7 +283,7 @@ wxPaintDCImpl::wxPaintDCImpl( wxDC *owner, wxWindow *window ) :
     InitDC();
 
     // the HDC can have a clipping box (which we didn't set), make sure our
-    // DoGetClippingBox() checks for it
+    // DoGetClippingRect() checks for it
     m_clipping = true;
 }
 
@@ -363,7 +340,7 @@ public:
 };
 
 
-IMPLEMENT_ABSTRACT_CLASS(wxPaintDCEx,wxPaintDC)
+wxIMPLEMENT_ABSTRACT_CLASS(wxPaintDCEx, wxPaintDC);
 
 wxPaintDCEx::wxPaintDCEx(wxWindow *window, WXHDC dc)
            : wxPaintDC(new wxPaintDCExImpl(this, window, dc))

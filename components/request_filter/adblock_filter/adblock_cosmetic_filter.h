@@ -3,7 +3,6 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_COSMETIC_FILTER_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_COSMETIC_FILTER_H_
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"

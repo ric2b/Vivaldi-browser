@@ -38,6 +38,11 @@
 
 namespace vivaldi_theme_io {
 
+const char kIdKey[] = "id";
+
+const char kVivaldiIdPrefix[] = "Vivaldi";
+const char kVendorIdPrefix[] = "Vendor";
+
 namespace {
 
 // JSON max nesting is theme.section.value
@@ -51,8 +56,14 @@ constexpr const char kSettingsFileName[] = "settings.json";
 constexpr const char kTempBlobFileName[] = ".data.zip";
 
 constexpr const char kBackgroundImageKey[] = "backgroundImage";
-constexpr const char kIdKey[] = "id";
 constexpr const char kVersionKey[] = "version";
+
+// Prefixes of theme ids for system themes. Such id is never exposed to users or
+// the theme server. In particular, on export it is replaced with a random GUID.
+constexpr const char* kSystemThemeIdPrefixes[] = {
+    kVendorIdPrefix,
+    kVivaldiIdPrefix,
+};
 
 // Get a sequence for theme IO operations.
 scoped_refptr<base::SequencedTaskRunner> GetOneShotFileTaskRunner() {
@@ -161,9 +172,9 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       }
       std::string resource;
       if (ResourceReader::IsResourceURL(*background_image, &resource)) {
-        ResourceReader reader;
-        if (!reader.Open(resource)) {
-          error_ = reader.error();
+        ResourceReader reader(resource);
+        if (!reader.IsValid()) {
+          error_ = reader.GetError();
           return;
         }
         WriteBackgroundImage(resource, reader.data(), reader.size());
@@ -392,7 +403,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
       return;
     }
     std::string verify_error;
-    VerifyAndNormalizeJson(/*for_export=*/false, *settings, verify_error);
+    VerifyAndNormalizeJson({}, *settings, verify_error);
     if (!verify_error.empty()) {
       AddError(ImportError::kBadSettings, std::move(verify_error));
       return;
@@ -515,7 +526,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
 
 }  // namespace
 
-void VerifyAndNormalizeJson(bool for_export,
+void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
                             base::Value& object,
                             std::string& error) {
   // Manually check that object contains only known keys of the proper type and
@@ -619,8 +630,10 @@ void VerifyAndNormalizeJson(bool for_export,
 
   class Checker {
    public:
-    Checker(base::Value& object, std::string& error, bool for_export)
-        : object_(object), error_(error), for_export_(for_export) {}
+    Checker(base::Value& object,
+            std::string& error,
+            VerifyAndNormalizeFlags flags)
+        : object_(object), error_(error), flags_(flags) {}
 
     void DoCheck() {
       if (!object_.is_dict()) {
@@ -704,18 +717,26 @@ void VerifyAndNormalizeJson(bool for_export,
         return;
       }
 
-      // Special case for the id that during the export replaces Vivaldi* of
-      // default themes with a new GUID.
+      // The special case for the id, see comments for kSystemThemeIdPrefixes.
       if (key_ == kIdKey) {
-        if (for_export_) {
-          if (base::StartsWith(value->GetString(), "Vivaldi")) {
+        bool named_id = false;
+        if (flags_.allow_named_id) {
+          for (const char* prefix : kSystemThemeIdPrefixes) {
+            if (base::StartsWith(value->GetString(), prefix)) {
+              named_id = true;
+              break;
+            }
+          }
+        }
+        if (named_id) {
+          if (flags_.for_export) {
             value->GetString() =
                 base::GUID::GenerateRandomV4().AsLowercaseString();
           }
-        }
-        if (!base::GUID::ParseLowercase(value->GetString()).is_valid()) {
-          AddError(base::StringPrintf("The property %s is a not a valid GUID",
-                                      KeyText().c_str()));
+        } else if (!base::GUID::ParseLowercase(value->GetString()).is_valid()) {
+          AddError(base::StringPrintf(
+              "The property %s is a not a valid GUID - %s", KeyText().c_str(),
+              value->GetString().c_str()));
         }
       }
     }
@@ -768,12 +789,12 @@ void VerifyAndNormalizeJson(bool for_export,
 
     base::Value& object_;
     std::string& error_;
-    const bool for_export_;
+    const VerifyAndNormalizeFlags flags_;
     base::StringPiece key_;
     bool required_ = false;
   };
 
-  Checker checker(object, error, for_export);
+  Checker checker(object, error, flags);
   checker.DoCheck();
 }
 

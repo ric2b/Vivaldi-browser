@@ -11,9 +11,9 @@
 #ifndef _WX_UNIX_TASKBAR_H_
 #define _WX_UNIX_TASKBAR_H_
 
-class WXDLLIMPEXP_FWD_ADV wxTaskBarIconArea;
+class WXDLLIMPEXP_FWD_CORE wxTaskBarIconArea;
 
-class WXDLLIMPEXP_ADV wxTaskBarIcon: public wxTaskBarIconBase
+class WXDLLIMPEXP_CORE wxTaskBarIcon: public wxTaskBarIconBase
 {
 public:
     wxTaskBarIcon();
@@ -24,9 +24,9 @@ public:
     bool IsIconInstalled() const;
 
     // Operations:
-    bool SetIcon(const wxIcon& icon, const wxString& tooltip = wxEmptyString);
-    bool RemoveIcon();
-    bool PopupMenu(wxMenu *menu);
+    bool SetIcon(const wxIcon& icon, const wxString& tooltip = wxEmptyString) wxOVERRIDE;
+    bool RemoveIcon() wxOVERRIDE;
+    bool PopupMenu(wxMenu *menu) wxOVERRIDE;
 
 protected:
     wxTaskBarIconArea *m_iconWnd;
@@ -34,7 +34,7 @@ protected:
 private:
     void OnDestroy(wxWindowDestroyEvent&);
 
-    DECLARE_DYNAMIC_CLASS(wxTaskBarIcon)
+    wxDECLARE_DYNAMIC_CLASS(wxTaskBarIcon);
 };
 
 #endif // _WX_UNIX_TASKBAR_H_

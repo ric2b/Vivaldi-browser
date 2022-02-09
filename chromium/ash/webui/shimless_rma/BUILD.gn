@@ -2,7 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-assert(is_chromeos, "Shimless RMA is Chrome OS only")
+import("//build/config/chromeos/ui_mode.gni")
+
+assert(is_chromeos_ash, "Shimless RMA is ash-chrome only")
 
 static_library("shimless_rma") {
   sources = [
@@ -18,6 +20,7 @@ static_library("shimless_rma") {
     "//ash/webui/resources:shimless_rma_resources",
     "//ash/webui/shimless_rma/backend",
     "//ash/webui/shimless_rma/mojom",
+    "//chromeos/strings/",
     "//content/public/browser",
     "//dbus",
     "//ui/chromeos/strings:strings_provider",

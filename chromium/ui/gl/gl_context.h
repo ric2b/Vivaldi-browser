@@ -11,7 +11,7 @@
 
 #include "base/atomicops.h"
 #include "base/cancelable_callback.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/atomic_flag.h"
@@ -69,6 +69,13 @@ enum ContextPriority {
   ContextPriorityHigh
 };
 
+// Angle allows selecting context virtualization group at context creation time.
+// This enum is used to specify the group number to use for a given context.
+// Currently all contexts which does not specify any group number are part of
+// default angle context virtualization group. DrDc will use below enum to
+// become part of different virtualization group.
+enum class AngleContextVirtualizationGroup { kDefault = -1, kDrDc = 1 };
+
 struct GL_EXPORT GLContextAttribs {
   GLContextAttribs();
   GLContextAttribs(const GLContextAttribs& other);
@@ -105,6 +112,9 @@ struct GL_EXPORT GLContextAttribs {
   // state when MakeCurrent was previously called.
   bool angle_restore_external_context_state = false;
 
+  AngleContextVirtualizationGroup angle_context_virtualization_group_number =
+      AngleContextVirtualizationGroup::kDefault;
+
   ContextPriority context_priority = ContextPriorityMedium;
 };
 
@@ -123,12 +133,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext>,
   // This should be called at most once at GPU process startup time.
   // By default, GPU switching is not supported unless this is called.
   static void SetSwitchableGPUsSupported();
-
-  // This should be called at most once at GPU process startup time.
-  static void SetForcedGpuPreference(GpuPreference gpu_preference);
-  // If a gpu preference is forced (by GPU driver bug workaround, etc), return
-  // it. Otherwise, return the original input preference.
-  static GpuPreference AdjustGpuPreference(GpuPreference gpu_preference);
 
   // Initializes the GL context to be compatible with the given surface. The GL
   // context can be made with other surface's of the same type. The compatible
@@ -312,8 +316,6 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext>,
 
   static bool switchable_gpus_supported_;
 
-  static GpuPreference forced_gpu_preference_;
-
   GLWorkarounds gl_workarounds_;
   std::string disabled_gl_extensions_;
 
@@ -325,10 +327,10 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext>,
   std::unique_ptr<CurrentGL> current_gl_;
 
   // Copy of the real API (if one was created) for dynamic initialization
-  RealGLApi* real_gl_api_ = nullptr;
+  raw_ptr<RealGLApi> real_gl_api_ = nullptr;
 
   scoped_refptr<GLShareGroup> share_group_;
-  GLContext* current_virtual_context_ = nullptr;
+  raw_ptr<GLContext> current_virtual_context_ = nullptr;
   bool state_dirtied_externally_ = false;
   std::unique_ptr<GLStateRestorer> state_restorer_;
   std::unique_ptr<GLVersionInfo> version_info_;

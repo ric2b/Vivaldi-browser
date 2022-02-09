@@ -46,6 +46,10 @@ void FilterAndSortPasswords(
 
 }  // namespace
 
+SavedpasswordsGetListFunction::SavedpasswordsGetListFunction() {}
+
+SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {}
+
 ExtensionFunction::ResponseAction SavedpasswordsGetListFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStoreInterface> password_store =
@@ -53,7 +57,8 @@ ExtensionFunction::ResponseAction SavedpasswordsGetListFunction::Run() {
                                           ServiceAccessType::EXPLICIT_ACCESS);
 
   AddRef();  // Balanced in OnGetPasswordStoreResults
-  password_store->GetAllLoginsWithAffiliationAndBrandingInformation(this);
+  password_store->GetAllLoginsWithAffiliationAndBrandingInformation(
+      weak_ptr_factory_.GetWeakPtr());
   return RespondLater();
 }
 
@@ -100,7 +105,8 @@ ExtensionFunction::ResponseAction SavedpasswordsRemoveFunction::Run() {
       profile, ServiceAccessType::EXPLICIT_ACCESS);
 
   AddRef();  // Balanced in OnGetPasswordStoreResults
-  password_store_->GetAllLoginsWithAffiliationAndBrandingInformation(this);
+  password_store_->GetAllLoginsWithAffiliationAndBrandingInformation(
+      weak_ptr_factory_.GetWeakPtr());
   return RespondLater();
 }
 
@@ -156,6 +162,10 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+SavedpasswordsGetFunction::SavedpasswordsGetFunction() {}
+
+SavedpasswordsGetFunction::~SavedpasswordsGetFunction() {}
+
 ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   using vivaldi::savedpasswords::Get::Params;
 
@@ -178,7 +188,7 @@ ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   // Adding a ref on the behalf of the password store, which expects us to
   // remain alive
   AddRef();
-  password_store->GetLogins(form_digest, this);
+  password_store->GetLogins(form_digest, weak_ptr_factory_.GetWeakPtr());
 
   return RespondLater();
 }

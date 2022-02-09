@@ -115,7 +115,15 @@ enum class InstallResultCode {
   kSuccessOfflineOnlyInstall = 23,
   kSuccessOfflineFallbackInstall = 24,
 
-  kMaxValue = kSuccessOfflineFallbackInstall,
+  // Failure category:
+  // The install task was destroyed, most likely due to WebAppInstallManager
+  // shutdown.
+  kInstallTaskDestroyed = 25,
+
+  // Web App update due to manifest change failed.
+  kUpdateTaskFailed = 26,
+
+  kMaxValue = kUpdateTaskFailed,
 };
 
 // Checks if InstallResultCode is not a failure.
@@ -276,7 +284,54 @@ enum class FileHandlerUpdateAction {
   kNoUpdate = 2,
 };
 
+// Reflects the user's decision to allow or disallow an API such as File
+// Handling. APIs should generally start off as kRequiresPrompt.
+enum class ApiApprovalState {
+  kRequiresPrompt = 0,
+  kAllowed = 1,
+  kDisallowed = 2,
+};
+
+// State concerning whether a particular feature has been enabled at the OS
+// level. For example, with File Handling, this indicates whether an app should
+// be/has been registered with the OS to handle opening certain file types.
+enum class OsIntegrationState {
+  kEnabled = 0,
+  kDisabled = 1,
+};
+
 using LaunchHandler = blink::Manifest::LaunchHandler;
+
+// A result how `WebAppIconDownloader` processed the list of icon urls.
+enum class IconsDownloadedResult {
+  // All the requested icon urls have been processed and `icons_map` populated
+  // for successful http responses. `icons_http_results` contains success and
+  // failure codes. `icons_map` can be empty if every icon url failed,
+  kCompleted,
+  //
+  // There was an error downloading the icons, `icons_map` is empty:
+  //
+  // Unexpected navigations or state changes on the `web_contents`.
+  kPrimaryPageChanged,
+  // At least one icon download failed and
+  // `WebAppIconDownloader::FailAllIfAnyFail()` flag was specified.
+  // `icons_http_results` contains the failed url and http status code.
+  kAbortedDueToFailure,
+};
+
+const char* IconsDownloadedResultToString(IconsDownloadedResult result);
+
+// Generic result enumeration to be used for operations that can fail. If more
+// information is needed in a return value, we can move to something similar to
+// `base::FileErrorOr` in the future.
+enum class Result {
+  // No errors have occurred. This generally means the operation was either
+  // completed successfully or possibly intentionally skipped.
+  kOk,
+  kError
+};
+
+using ResultCallback = base::OnceCallback<void(Result)>;
 
 }  // namespace web_app
 

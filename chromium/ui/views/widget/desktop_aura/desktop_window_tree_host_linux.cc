@@ -283,7 +283,7 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
             (located_event->AsMouseEvent()->changed_button_flags() ==
                                        ui::EF_FORWARD_MOUSE_BUTTON);
         if (back_button_pressed || forward_button_pressed) {
-          Widget* widget = native_widget_delegate()->AsWidget();
+          Widget* widget = GetWidget();
           if (widget && widget->widget_delegate()) {
             ReleaseCapture();  // Always release capture on mouse up
             widget->widget_delegate()->HandleKeyboardCode(
@@ -398,6 +398,13 @@ void DesktopWindowTreeHostLinux::AddAdditionalInitProperties(
 
   DCHECK(!properties->x11_extension_delegate);
   properties->x11_extension_delegate = this;
+}
+
+base::flat_map<std::string, std::string>
+DesktopWindowTreeHostLinux::GetKeyboardLayoutMap() {
+  if (auto* linux_ui = LinuxUI::instance())
+    return linux_ui->GetKeyboardLayoutMap();
+  return WindowTreeHostPlatform::GetKeyboardLayoutMap();
 }
 
 void DesktopWindowTreeHostLinux::OnCompleteSwapWithNewSize(

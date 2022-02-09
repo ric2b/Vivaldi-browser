@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/net/pacing/paced_sender.h"
@@ -43,6 +43,9 @@ class FakeRtcpTransport : public PacedPacketSender {
   explicit FakeRtcpTransport(base::SimpleTestTickClock* clock)
       : clock_(clock), packet_delay_(base::Milliseconds(42)) {}
 
+  FakeRtcpTransport(const FakeRtcpTransport&) = delete;
+  FakeRtcpTransport& operator=(const FakeRtcpTransport&) = delete;
+
   void set_rtcp_destination(RtcpSession* rtcp_session) {
     rtcp_session_ = rtcp_session;
   }
@@ -66,16 +69,18 @@ class FakeRtcpTransport : public PacedPacketSender {
   void CancelSendingPacket(const PacketKey& packet_key) final {}
 
  private:
-  base::SimpleTestTickClock* const clock_;
+  const raw_ptr<base::SimpleTestTickClock> clock_;
   base::TimeDelta packet_delay_;
-  RtcpSession* rtcp_session_;  //  RTCP destination.
-
-  DISALLOW_COPY_AND_ASSIGN(FakeRtcpTransport);
+  raw_ptr<RtcpSession> rtcp_session_;  //  RTCP destination.
 };
 
 }  // namespace
 
 class RtcpTest : public ::testing::Test, public RtcpObserver {
+ public:
+  RtcpTest(const RtcpTest&) = delete;
+  RtcpTest& operator=(const RtcpTest&) = delete;
+
  protected:
   RtcpTest()
       : sender_clock_(new base::SimpleTestTickClock()),
@@ -187,9 +192,6 @@ class RtcpTest : public ::testing::Test, public RtcpObserver {
   RtcpCastMessage last_cast_message_;
   RtcpReceiverLogMessage last_logs_;
   bool received_pli_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RtcpTest);
 };
 
 TEST_F(RtcpTest, LipSyncGleanedFromSenderReport) {

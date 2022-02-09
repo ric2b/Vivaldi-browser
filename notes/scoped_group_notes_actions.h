@@ -6,8 +6,6 @@
 #ifndef NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
 #define NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
 
-#include "base/macros.h"
-
 namespace vivaldi {
 
 class NotesModel;

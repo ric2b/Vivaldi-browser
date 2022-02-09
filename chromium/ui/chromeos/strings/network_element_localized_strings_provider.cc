@@ -103,6 +103,10 @@ constexpr webui::LocalizedString kElementLocalizedStrings[] = {
     {"networkListItemActivateA11yLabel",
      IDS_NETWORK_LIST_ITEM_ACTIVATE_A11Y_LABEL},
     {"networkListItemActivating", IDS_NETWORK_LIST_ITEM_ACTIVATING},
+    {"networkListItemCellularBlockedA11yLabel",
+     IDS_NETWORK_LIST_ITEM_CELLULAR_BLOCKED_A11Y_LABEL},
+    {"networkListItemCellularBlockedWithConnectionStatusA11yLabel",
+     IDS_NETWORK_LIST_ITEM_CELLULAR_BLOCKED_WITH_CONNECTION_STATUS_A11Y_LABEL},
     {"networkListItemUnavailableSimNetwork",
      IDS_NETWORK_LIST_ITEM_UNAVAILABLE_SIM_NETWORK},
     {"networkListItemDownload", IDS_NETWORK_LIST_ITEM_DOWNLOAD},
@@ -405,6 +409,8 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
 
   html_source->AddBoolean("useAttachApn",
                           chromeos::features::ShouldUseAttachApn());
+  html_source->AddBoolean("esimPolicyEnabled",
+                          chromeos::features::IsESimPolicyEnabled());
 }
 
 void AddConfigLocalizedStrings(content::WebUIDataSource* html_source) {

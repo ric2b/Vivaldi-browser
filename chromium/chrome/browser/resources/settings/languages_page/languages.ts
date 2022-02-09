@@ -13,9 +13,8 @@
 import '../prefs/prefs.js';
 
 import {assert} from '//resources/js/assert.m.js';
-import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {PromiseResolver} from '//resources/js/promise_resolver.m.js';
-import {html, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {PrefsMixin} from '../prefs/prefs_mixin.js';
 import {CrSettingsPrefs} from '../prefs/prefs_types.js';
@@ -130,7 +129,7 @@ class SettingsLanguagesElement extends SettingsLanguagesElementBase implements
       // All observers wait for the model to be populated by including the
       // |languages| property.
       'alwaysTranslateLanguagesPrefChanged_(' +
-          'prefs.translate_whitelists.value.*, languages)',
+          'prefs.translate_allowlists.value.*, languages)',
       'neverTranslateLanguagesPrefChanged_(' +
           'prefs.translate_blocked_languages.value.*, languages)',
       // <if expr="is_win">
@@ -451,7 +450,7 @@ class SettingsLanguagesElement extends SettingsLanguagesElementBase implements
       return;
     }
     const alwaysTranslateCodes =
-        Object.keys(this.getPref('translate_whitelists').value);
+        Object.keys(this.getPref('translate_allowlists').value);
     const alwaysTranslateLanguages =
         alwaysTranslateCodes.map(code => this.getLanguage(code));
     this.set('languages.alwaysTranslate', alwaysTranslateLanguages);

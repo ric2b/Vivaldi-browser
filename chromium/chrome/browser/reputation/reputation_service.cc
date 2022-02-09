@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/lookalikes/lookalike_url_blocking_page.h"
@@ -159,6 +158,11 @@ void ReputationService::SetSensitiveKeywordsForTesting(
     size_t num_new_keywords) {
   sensitive_keywords_ = new_keywords;
   num_sensitive_keywords_ = num_new_keywords;
+}
+
+void ReputationService::ResetSensitiveKeywordsForTesting() {
+  sensitive_keywords_ = top500_domains::kTopKeywords;
+  num_sensitive_keywords_ = top500_domains::kNumTopKeywords;
 }
 
 void ReputationService::GetReputationStatusWithEngagedSites(

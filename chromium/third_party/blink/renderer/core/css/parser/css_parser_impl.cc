@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/css/css_keyframes_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/parser/at_rule_descriptor_parser.h"
+#include "third_party/blink/renderer/core/css/parser/container_query_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_at_rule_id.h"
 #include "third_party/blink/renderer/core/css/parser/css_lazy_parsing_state.h"
 #include "third_party/blink/renderer/core/css/parser/css_lazy_property_parser_impl.h"
@@ -34,8 +35,8 @@
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/frame/deprecation.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 
@@ -54,20 +55,17 @@ AtomicString ConsumeStringOrURI(CSSParserTokenStream& stream) {
       !EqualIgnoringASCIICase(token.Value(), "url"))
     return AtomicString();
 
-  CSSParserTokenStream::BlockGuard guard(stream);
-  const CSSParserToken& uri = stream.ConsumeIncludingWhitespace();
-  if (uri.GetType() == kBadStringToken || !stream.UncheckedAtEnd())
-    return AtomicString();
-  DCHECK_EQ(uri.GetType(), kStringToken);
-  return uri.Value().ToAtomicString();
-}
-
-AtomicString ConsumeContainerName(CSSParserTokenRange& range,
-                                  const CSSParserContext& context) {
-  CSSValue* name = css_parsing_utils::ConsumeContainerName(range, context);
-  if (auto* custom_ident = DynamicTo<CSSCustomIdentValue>(name))
-    return custom_ident->Value();
-  return g_null_atom;
+  AtomicString result;
+  {
+    CSSParserTokenStream::BlockGuard guard(stream);
+    const CSSParserToken& uri = stream.ConsumeIncludingWhitespace();
+    if (uri.GetType() != kBadStringToken && stream.UncheckedAtEnd()) {
+      DCHECK_EQ(uri.GetType(), kStringToken);
+      result = uri.Value().ToAtomicString();
+    }
+  }
+  stream.ConsumeWhitespace();
+  return result;
 }
 
 // Finds the longest prefix of |range| that matches a <layer-name> and parses
@@ -701,7 +699,7 @@ StyleRuleCharset* CSSParserImpl::ConsumeCharsetRule(
 }
 
 StyleRuleImport* CSSParserImpl::ConsumeImportRule(
-    AtomicString uri,
+    const AtomicString& uri,
     CSSParserTokenStream& stream) {
   wtf_size_t prelude_offset_start = stream.LookAheadOffset();
   CSSParserTokenRange prelude = ConsumeAtRulePrelude(stream);
@@ -1065,16 +1063,18 @@ StyleRuleContainer* CSSParserImpl::ConsumeContainerRule(
     observer_->StartRuleBody(stream.Offset());
   }
 
-  AtomicString name = ConsumeContainerName(prelude, *context_);
+  ContainerQueryParser query_parser(*context_);
 
-  // TODO(crbug.com/1145970): Restrict what is allowed by @container.
-  scoped_refptr<MediaQuerySet> media_queries =
-      MediaQueryParser::ParseMediaQuerySet(prelude,
-                                           context_->GetExecutionContext());
-  if (!media_queries)
+  absl::optional<ContainerSelector> selector =
+      query_parser.ConsumeSelector(prelude);
+  if (!selector)
+    return nullptr;
+
+  std::unique_ptr<MediaQueryExpNode> query = query_parser.ParseQuery(prelude);
+  if (!query)
     return nullptr;
   ContainerQuery* container_query =
-      MakeGarbageCollected<ContainerQuery>(name, media_queries);
+      MakeGarbageCollected<ContainerQuery>(*selector, std::move(query));
 
   HeapVector<Member<StyleRuleBase>> rules;
   ConsumeRuleList(stream, kRegularRuleList,
@@ -1327,9 +1327,6 @@ void CSSParserImpl::ConsumeDeclaration(CSSParserTokenStream& stream,
     ConsumeVariableValue(tokenized_value, variable_name, important,
                          is_animation_tainted);
   } else if (unresolved_property != CSSPropertyID::kInvalid) {
-    if (style_sheet_ && style_sheet_->SingleOwnerDocument())
-      Deprecation::WarnOnDeprecatedProperties(
-          style_sheet_->SingleOwnerDocument()->GetFrame(), unresolved_property);
     ConsumeDeclarationValue(tokenized_value, unresolved_property, important,
                             rule_type);
   }

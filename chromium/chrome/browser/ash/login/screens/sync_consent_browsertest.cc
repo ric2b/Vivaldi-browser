@@ -7,7 +7,6 @@
 #include "ash/constants/ash_switches.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -39,7 +38,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/public/identity_manager/consent_level.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/base/pref_names.h"
@@ -204,6 +203,7 @@ class SyncConsentTest
   void SwitchLanguage(const std::string& language) {
     WelcomeScreen* welcome_screen =
         WizardController::default_controller()->GetScreen<WelcomeScreen>();
+    welcome_screen->UpdateLanguageList();
     test::LanguageReloadObserver observer(welcome_screen);
     test::OobeJS().SelectElementInPath(language,
                                        {"connect", "languageSelect", "select"});

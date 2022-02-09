@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/infobars/confirm_infobar_creator.h"
 #include "chrome/browser/ui/browser.h"
@@ -51,7 +52,7 @@ class ShareTabInsteadButton : public TabSharingInfoBarDelegateButton {
   }
 
  private:
-  TabSharingUI* const ui_;
+  const raw_ptr<TabSharingUI> ui_;
 };
 
 // Represents a button which, when clicked, changes the activated tab to be
@@ -92,8 +93,8 @@ class SwitchToTabButton : public TabSharingInfoBarDelegateButton {
     }
     return l10n_util::GetStringFUTF16(
         IDS_TAB_SHARING_INFOBAR_SWITCH_TO_BUTTON,
-        url_formatter::FormatUrlForSecurityDisplay(
-            rfh->GetLastCommittedURL().GetOrigin(),
+        url_formatter::FormatOriginForSecurityDisplay(
+            rfh->GetLastCommittedOrigin(),
             url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
   }
 

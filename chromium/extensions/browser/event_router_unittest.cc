@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/cxx17_backports.h"
-#include "base/macros.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
@@ -231,19 +230,18 @@ class EventRouterFilterTest : public ExtensionsTest,
   bool ContainsFilter(const std::string& extension_id,
                       const std::string& event_name,
                       const DictionaryValue& to_check) {
-    const ListValue* filter_list = GetFilterList(extension_id, event_name);
+    const Value* filter_list = GetFilterList(extension_id, event_name);
     if (!filter_list) {
       ADD_FAILURE();
       return false;
     }
 
-    for (size_t i = 0; i < filter_list->GetList().size(); ++i) {
-      const DictionaryValue* filter = nullptr;
-      if (!filter_list->GetDictionary(i, &filter)) {
+    for (const base::Value& filter : filter_list->GetList()) {
+      if (!filter.is_dict()) {
         ADD_FAILURE();
         return false;
       }
-      if (filter->Equals(&to_check))
+      if (filter.Equals(&to_check))
         return true;
     }
     return false;
@@ -252,17 +250,15 @@ class EventRouterFilterTest : public ExtensionsTest,
   bool is_for_service_worker() const { return GetParam(); }
 
  private:
-  const ListValue* GetFilterList(const std::string& extension_id,
-                                 const std::string& event_name) {
+  const Value* GetFilterList(const std::string& extension_id,
+                             const std::string& event_name) {
     const base::DictionaryValue* filtered_events =
         GetFilteredEvents(extension_id);
     DictionaryValue::Iterator iter(*filtered_events);
     if (iter.key() != event_name)
       return nullptr;
 
-    const base::ListValue* filter_list = nullptr;
-    iter.value().GetAsList(&filter_list);
-    return filter_list;
+    return iter.value().is_list() ? &iter.value() : nullptr;
   }
 
   std::unique_ptr<content::RenderProcessHost> render_process_host_;
@@ -435,6 +431,7 @@ TEST_P(EventRouterFilterTest, Basic) {
   const std::string kEventName = "webNavigation.onBeforeNavigate";
 
   const std::string kExtensionId = "mbflcebpggnecokmikipoihdbecnjfoj";
+  auto param = mojom::EventListenerParam::NewExtensionId(kExtensionId);
   const std::string kHostSuffixes[] = {"foo.com", "bar.com", "baz.com"};
 
   absl::optional<ServiceWorkerIdentifier> worker_identifier = absl::nullopt;
@@ -451,7 +448,7 @@ TEST_P(EventRouterFilterTest, Basic) {
     std::unique_ptr<base::DictionaryValue> filter =
         CreateHostSuffixFilter(kHostSuffixes[i]);
     event_router()->AddFilteredEventListener(kEventName, render_process_host(),
-                                             kExtensionId, worker_identifier,
+                                             param.Clone(), worker_identifier,
                                              *filter, true);
     filters.push_back(std::move(filter));
   }
@@ -463,10 +460,8 @@ TEST_P(EventRouterFilterTest, Basic) {
 
   DictionaryValue::Iterator iter(*filtered_events);
   ASSERT_EQ(kEventName, iter.key());
-  const base::ListValue* filter_list = nullptr;
-  ASSERT_TRUE(iter.value().GetAsList(&filter_list));
-  ASSERT_TRUE(filter_list);
-  ASSERT_EQ(3u, filter_list->GetList().size());
+  ASSERT_TRUE(iter.value().is_list());
+  ASSERT_EQ(3u, iter.value().GetList().size());
 
   ASSERT_TRUE(ContainsFilter(kExtensionId, kEventName, *filters[0]));
   ASSERT_TRUE(ContainsFilter(kExtensionId, kEventName, *filters[1]));
@@ -474,7 +469,7 @@ TEST_P(EventRouterFilterTest, Basic) {
 
   // Remove the second filter.
   event_router()->RemoveFilteredEventListener(kEventName, render_process_host(),
-                                              kExtensionId, worker_identifier,
+                                              param.Clone(), worker_identifier,
                                               *filters[1], true);
   ASSERT_TRUE(ContainsFilter(kExtensionId, kEventName, *filters[0]));
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, *filters[1]));
@@ -482,7 +477,7 @@ TEST_P(EventRouterFilterTest, Basic) {
 
   // Remove the first filter.
   event_router()->RemoveFilteredEventListener(kEventName, render_process_host(),
-                                              kExtensionId, worker_identifier,
+                                              param.Clone(), worker_identifier,
                                               *filters[0], true);
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, *filters[0]));
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, *filters[1]));
@@ -490,11 +485,30 @@ TEST_P(EventRouterFilterTest, Basic) {
 
   // Remove the third filter.
   event_router()->RemoveFilteredEventListener(kEventName, render_process_host(),
-                                              kExtensionId, worker_identifier,
+                                              param.Clone(), worker_identifier,
                                               *filters[2], true);
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, *filters[0]));
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, *filters[1]));
   ASSERT_FALSE(ContainsFilter(kExtensionId, kEventName, *filters[2]));
+}
+
+TEST_P(EventRouterFilterTest, URLBasedFilteredEventListener) {
+  const std::string kEventName = "windows.onRemoved";
+  const GURL kUrl("chrome-untrusted://terminal");
+  absl::optional<ServiceWorkerIdentifier> worker_identifier = absl::nullopt;
+  auto filter = std::make_unique<DictionaryValue>();
+  bool lazy = false;
+  EXPECT_FALSE(event_router()->HasEventListener(kEventName));
+  event_router()->AddFilteredEventListener(
+      kEventName, render_process_host(),
+      mojom::EventListenerParam::NewListenerUrl(kUrl), worker_identifier,
+      *filter, lazy);
+  EXPECT_TRUE(event_router()->HasEventListener(kEventName));
+  event_router()->RemoveFilteredEventListener(
+      kEventName, render_process_host(),
+      mojom::EventListenerParam::NewListenerUrl(kUrl), worker_identifier,
+      *filter, lazy);
+  EXPECT_FALSE(event_router()->HasEventListener(kEventName));
 }
 
 INSTANTIATE_TEST_SUITE_P(Lazy, EventRouterFilterTest, testing::Values(false));

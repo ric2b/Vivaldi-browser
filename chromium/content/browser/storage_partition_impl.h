@@ -14,15 +14,13 @@
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/services/storage/public/mojom/partition.mojom.h"
 #include "components/services/storage/public/mojom/storage_service.mojom-forward.h"
-#include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_sync/background_sync_context_impl.h"
-#include "content/browser/broadcast_channel/broadcast_channel_service.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/content_index/content_index_context_impl.h"
 #include "content/browser/devtools/devtools_background_services_context_impl.h"
@@ -43,6 +41,8 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "storage/browser/quota/quota_client_type.h"
+#include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/dom_storage/dom_storage.mojom.h"
 
@@ -58,14 +58,15 @@ class IsolationInfo;
 
 namespace content {
 
+class AggregationServiceImpl;
 class BackgroundFetchContext;
 class BlobRegistryWrapper;
 class BluetoothAllowedDevicesMap;
-class BroadcastChannelProvider;
+class BroadcastChannelService;
 class BucketContext;
 class CacheStorageControlWrapper;
 class ComputePressureManager;
-class ConversionManagerImpl;
+class AttributionManagerImpl;
 class CookieStoreManager;
 class FileSystemAccessEntryFactory;
 class FileSystemAccessManagerImpl;
@@ -81,6 +82,7 @@ class PaymentAppContextImpl;
 class PrefetchURLLoaderService;
 class PushMessagingContext;
 class QuotaContext;
+class SharedStorageWorkletHostManager;
 
 class CONTENT_EXPORT StoragePartitionImpl
     : public StoragePartition,
@@ -125,6 +127,9 @@ class CONTENT_EXPORT StoragePartitionImpl
       BackgroundSyncContextImpl* background_sync_context);
   void OverrideSharedWorkerServiceForTesting(
       std::unique_ptr<SharedWorkerServiceImpl> shared_worker_service);
+  void OverrideSharedStorageWorkletHostManagerForTesting(
+      std::unique_ptr<SharedStorageWorkletHostManager>
+          shared_storage_worklet_host_manager);
 
   // Returns the StoragePartitionConfig that represents this StoragePartition.
   const StoragePartitionConfig& GetConfig();
@@ -150,7 +155,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   CreateURLLoaderNetworkObserverForNavigationRequest(
       int frame_tree_id) override;
   storage::QuotaManager* GetQuotaManager() override;
-  ChromeAppCacheService* GetAppCacheService() override;
   BackgroundSyncContextImpl* GetBackgroundSyncContext() override;
   storage::FileSystemContext* GetFileSystemContext() override;
   FontAccessContext* GetFontAccessContext() override;
@@ -158,6 +162,11 @@ class CONTENT_EXPORT StoragePartitionImpl
   DOMStorageContextWrapper* GetDOMStorageContext() override;
   storage::mojom::LocalStorageControl* GetLocalStorageControl() override;
   LockManager* GetLockManager();  // override; TODO: Add to interface
+  // TODO(https://crbug.com/1218540): Add this method to the StoragePartition
+  // interface, which would also require making SharedStorageWorkletHostManager
+  // an interface accessible in //content/public/.
+  SharedStorageWorkletHostManager*
+  GetSharedStorageWorkletHostManager();  // override;
   storage::mojom::IndexedDBControl& GetIndexedDBControl() override;
   FileSystemAccessEntryFactory* GetFileSystemAccessEntryFactory() override;
   storage::mojom::CacheStorageControl* GetCacheStorageControl() override;
@@ -213,10 +222,11 @@ class CONTENT_EXPORT StoragePartitionImpl
   void SetNetworkContextForTesting(
       mojo::PendingRemote<network::mojom::NetworkContext>
           network_context_remote) override;
+
+  base::WeakPtr<StoragePartition> GetWeakPtr();
   BackgroundFetchContext* GetBackgroundFetchContext();
   PaymentAppContextImpl* GetPaymentAppContext();
   BroadcastChannelService* GetBroadcastChannelService();
-  BroadcastChannelProvider* GetBroadcastChannelProvider();
   BluetoothAllowedDevicesMap* GetBluetoothAllowedDevicesMap();
   BlobRegistryWrapper* GetBlobRegistry();
   PrefetchURLLoaderService* GetPrefetchURLLoaderService();
@@ -224,13 +234,14 @@ class CONTENT_EXPORT StoragePartitionImpl
   FileSystemAccessManagerImpl* GetFileSystemAccessManager();
   BucketContext* GetBucketContext();
   QuotaContext* GetQuotaContext();
-  ConversionManagerImpl* GetConversionManager();
+  AttributionManagerImpl* GetAttributionManager();
   void SetFontAccessManagerForTesting(
       std::unique_ptr<FontAccessManagerImpl> font_access_manager);
   FontAccessManagerImpl* GetFontAccessManager();
   InterestGroupManager* GetInterestGroupManager();
   ComputePressureManager* GetComputePressureManager();
   std::string GetPartitionDomain();
+  AggregationServiceImpl* GetAggregationService();
 
   // blink::mojom::DomStorage interface.
   void OpenLocalStorage(
@@ -337,19 +348,15 @@ class CONTENT_EXPORT StoragePartitionImpl
     return cors_exempt_header_list_;
   }
 
-  // When this StoragePartition is for guests (e.g., for a <webview> tag), this
-  // is the site URL to use when creating a SiteInstance for a service worker or
-  // a shared worker. Typically one would use the script URL of the worker
-  // (e.g., "https://example.com/sw.js"), but if this StoragePartition is for
-  // guests, one must use the <webview> guest site URL to ensure that the worker
-  // stays in this StoragePartition. This is an empty GURL if this
-  // StoragePartition is not for guests.
-  void set_site_for_guest_service_worker_or_shared_worker(const GURL& site) {
-    site_for_guest_service_worker_or_shared_worker_ = site;
-  }
-  const GURL& site_for_guest_service_worker_or_shared_worker() const {
-    return site_for_guest_service_worker_or_shared_worker_;
-  }
+  // Tracks whether this StoragePartition is for guests (e.g., for a <webview>
+  // tag).  This is needed to properly create a SiteInstance for a
+  // service worker or a shared worker in a guest. Typically one would use the
+  // script URL of the worker (e.g., "https://example.com/sw.js"), but if this
+  // StoragePartition is for guests, one must create the SiteInstance via
+  // guest-specific helpers that ensure that the worker stays in the same
+  // StoragePartition.
+  void set_is_guest() { is_guest_ = true; }
+  bool is_guest() const { return is_guest_; }
 
   // Use the network context to retrieve the origin policy manager.
   network::mojom::OriginPolicyManager*
@@ -397,6 +404,47 @@ class CONTENT_EXPORT StoragePartitionImpl
       const blink::StorageKey& storage_key,
       const std::string& namespace_id,
       mojo::PendingReceiver<blink::mojom::StorageArea> receiver);
+
+  class URLLoaderNetworkContext {
+   public:
+    enum class Type {
+      // A network context for a RenderFrameHost.
+      kRenderFrameHostContext,
+      // A network context for a navigation request or a service worker.
+      kNavigationRequestContext,
+    };
+
+    ~URLLoaderNetworkContext();
+
+    // Creates a URLLoaderNetworkContext for the render frame host.
+    static URLLoaderNetworkContext CreateForRenderFrameHost(
+        GlobalRenderFrameHostId global_render_frame_host_id);
+
+    // Creates a URLLoaderNetworkContext for the navigation request.
+    static URLLoaderNetworkContext CreateForNavigation(int frame_tree_node_id);
+
+    // Returns true if `type` is `kNavigationRequestContext`.
+    bool IsNavigationRequestContext();
+
+    Type type() const { return type_; }
+
+    GlobalRenderFrameHostId render_frame_host_id() const {
+      return render_frame_host_id_;
+    }
+
+    int frame_tree_node_id() const { return frame_tree_node_id_; }
+
+   private:
+    URLLoaderNetworkContext(URLLoaderNetworkContext::Type type,
+                            GlobalRenderFrameHostId global_render_frame_host_id,
+                            int frame_tree_node_id);
+
+    Type type_;
+    // Used for kRenderFrameHostContext.
+    GlobalRenderFrameHostId render_frame_host_id_;
+    // Used for kNavigationRequestContext.
+    int frame_tree_node_id_;
+  };
 
   // NOTE(andre@vivaldi.com) : When we have a WebView that "adopt" a WebContents
   // in WebViewGuest we need to set the parent of the WebView as fallback
@@ -532,7 +580,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Raw pointer that should always be valid. The BrowserContext owns the
   // StoragePartitionImplMap which then owns StoragePartitionImpl. When the
   // BrowserContext is destroyed, `this` will be destroyed too.
-  BrowserContext* browser_context_;
+  raw_ptr<BrowserContext> browser_context_;
 
   const base::FilePath partition_path_;
 
@@ -549,11 +597,12 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
   scoped_refptr<QuotaContext> quota_context_;
   scoped_refptr<storage::QuotaManager> quota_manager_;
-  scoped_refptr<ChromeAppCacheService> appcache_service_;
   scoped_refptr<storage::FileSystemContext> filesystem_context_;
   scoped_refptr<storage::DatabaseTracker> database_tracker_;
   scoped_refptr<DOMStorageContextWrapper> dom_storage_context_;
   std::unique_ptr<LockManager> lock_manager_;
+  std::unique_ptr<SharedStorageWorkletHostManager>
+      shared_storage_worklet_host_manager_;
   std::unique_ptr<IndexedDBControlWrapper> indexed_db_control_wrapper_;
   std::unique_ptr<CacheStorageControlWrapper> cache_storage_control_wrapper_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
@@ -568,10 +617,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<BackgroundSyncContextImpl> background_sync_context_;
   scoped_refptr<PaymentAppContextImpl> payment_app_context_;
   std::unique_ptr<BroadcastChannelService> broadcast_channel_service_;
-  std::unique_ptr<BroadcastChannelProvider> broadcast_channel_provider_;
   std::unique_ptr<BluetoothAllowedDevicesMap> bluetooth_allowed_devices_map_;
   scoped_refptr<BlobRegistryWrapper> blob_registry_;
-  scoped_refptr<PrefetchURLLoaderService> prefetch_url_loader_service_;
+  std::unique_ptr<PrefetchURLLoaderService> prefetch_url_loader_service_;
   std::unique_ptr<CookieStoreManager> cookie_store_manager_;
   scoped_refptr<BucketContext> bucket_context_;
   scoped_refptr<GeneratedCodeCacheContext> generated_code_cache_context_;
@@ -582,9 +630,10 @@ class CONTENT_EXPORT StoragePartitionImpl
       proto_database_provider_;
   scoped_refptr<ContentIndexContextImpl> content_index_context_;
   scoped_refptr<NativeIOContextImpl> native_io_context_;
-  std::unique_ptr<ConversionManagerImpl> conversion_manager_;
+  std::unique_ptr<AttributionManagerImpl> attribution_manager_;
   std::unique_ptr<FontAccessManagerImpl> font_access_manager_;
   std::unique_ptr<InterestGroupManager> interest_group_manager_;
+  std::unique_ptr<AggregationServiceImpl> aggregation_service_;
 
   // TODO(crbug.com/1205695): ComputePressureManager should live elsewher. The
   //                          Compute Pressure API does not store data.
@@ -638,8 +687,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Initialized in InitNetworkContext() and never updated after then.
   std::vector<std::string> cors_exempt_header_list_;
 
-  // See comments for site_for_guest_service_worker_or_shared_worker().
-  GURL site_for_guest_service_worker_or_shared_worker_;
+  // See comments for is_guest().
+  bool is_guest_ = false;
 
   // Track number of running deletion. For test use only.
   int deletion_helpers_running_;
@@ -659,10 +708,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   mojo::UniqueReceiverSet<network::mojom::CookieAccessObserver>
       service_worker_cookie_observers_;
 
-  struct URLLoaderNetworkContext {
-    int process_id;
-    int routing_id;
-  };
   mojo::ReceiverSet<network::mojom::URLLoaderNetworkServiceObserver,
                     URLLoaderNetworkContext>
       url_loader_network_observers_;

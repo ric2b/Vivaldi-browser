@@ -8,6 +8,13 @@
 #include <optional>
 #include <string>
 
+#ifdef major
+#undef major
+#endif
+#ifdef minor
+#undef minor
+#endif
+
 // Represents a semantic version.
 class Version {
  public:

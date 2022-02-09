@@ -14,27 +14,21 @@ namespace app_list {
 // the highest scoring result per-category. This is assumed to run after the
 // score normalization stage, which makes score comparable between search
 // providers.
+//
+// TODO(crbug.com/1199206): This is temporarily unused while being incorporated
+// into the FtrlCategoryRanker.
 class CategoryItemRanker : public Ranker {
  public:
-  CategoryItemRanker();
-  ~CategoryItemRanker() override;
+  CategoryItemRanker() = default;
+  ~CategoryItemRanker() override = default;
 
   CategoryItemRanker(const CategoryItemRanker&) = delete;
   CategoryItemRanker& operator=(const CategoryItemRanker&) = delete;
 
   // Ranker:
-  void Start(const std::u16string& query) override;
-  void Rank(ResultsMap& results, ProviderType provider) override;
-
- private:
-  // Updates the score of |provider|'s category in |category_scores_|.
-  void UpdateCategoryScore(ResultsMap& results, ProviderType provider);
-
-  // Rescores all current |results| to order them into their categories based on
-  // |category_scores_|.
-  void RescoreResults(ResultsMap& results);
-
-  std::map<Category, double> category_scores_;
+  void UpdateCategoryRanks(const ResultsMap& results,
+                           CategoriesList& categories,
+                           ProviderType provider) override;
 };
 
 }  // namespace app_list

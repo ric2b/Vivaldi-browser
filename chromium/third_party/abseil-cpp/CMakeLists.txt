@@ -146,7 +146,7 @@ if(BUILD_TESTING)
       message(FATAL_ERROR "Do not set both ABSL_USE_GOOGLETEST_HEAD and ABSL_GOOGLETEST_DOWNLOAD_URL")
     endif()
     if(ABSL_USE_GOOGLETEST_HEAD)
-      set(absl_gtest_download_url "https://github.com/google/googletest/archive/master.zip")
+      set(absl_gtest_download_url "https://github.com/google/googletest/archive/main.zip")
     elseif(ABSL_GOOGLETEST_DOWNLOAD_URL)
       set(absl_gtest_download_url ${ABSL_GOOGLETEST_DOWNLOAD_URL})
     endif()
@@ -160,22 +160,16 @@ if(BUILD_TESTING)
 
   if (NOT ABSL_FIND_GOOGLETEST)
     # When Google Test is included directly rather than through find_package, the aliases are missing.
-    add_library(GTest::gtest_main ALIAS gtest_main)
     add_library(GTest::gtest ALIAS gtest)
+    add_library(GTest::gtest_main ALIAS gtest_main)
     add_library(GTest::gmock ALIAS gmock)
+    add_library(GTest::gmock_main ALIAS gmock_main)
   endif()
 
   check_target(GTest::gtest)
   check_target(GTest::gtest_main)
   check_target(GTest::gmock)
   check_target(GTest::gmock_main)
-
-  list(APPEND ABSL_TEST_COMMON_LIBRARIES
-    GTest::gtest_main
-    GTest::gtest
-    GTest::gmock
-    ${CMAKE_THREAD_LIBS_INIT}
-  )
 endif()
 
 add_subdirectory(absl)

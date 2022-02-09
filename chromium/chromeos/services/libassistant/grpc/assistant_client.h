@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "base/callback_forward.h"
-#include "base/memory/weak_ptr.h"
 #include "chromeos/assistant/internal/proto/shared/proto/v2/device_state_event.pb.h"
 #include "chromeos/services/libassistant/grpc/external_services/grpc_services_observer.h"
+#include "chromeos/services/libassistant/grpc/services_status_observer.h"
 #include "chromeos/services/libassistant/public/cpp/assistant_timer.h"
 
 namespace assistant {
@@ -88,10 +88,10 @@ class AssistantClient {
   AssistantClient& operator=(const AssistantClient&) = delete;
   virtual ~AssistantClient();
 
-  // Starts Libassistant services. |services_ready_callback| will be invoked
-  // upon the completion of Libassistant  initialization when all services are
-  // available and ready to use.
-  virtual void StartServices(base::OnceClosure services_ready_callback) = 0;
+  // Starts Libassistant services. |services_status_observer| will get notified
+  // on new status change.
+  virtual void StartServices(
+      ServicesStatusObserver* services_status_observer) = 0;
 
   virtual void SetChromeOSApiDelegate(
       assistant_client::ChromeOSApiDelegate* delegate) = 0;
@@ -105,11 +105,6 @@ class AssistantClient {
 
   virtual void AddExperimentIds(const std::vector<std::string>& exp_ids) = 0;
 
-  virtual void SendVoicelessInteraction(
-      const ::assistant::api::Interaction& interaction,
-      const std::string& description,
-      const ::assistant::api::VoicelessOptions& options,
-      base::OnceCallback<void(bool)> on_done) = 0;
 
   // Speaker Id Enrollment methods.
   virtual void AddSpeakerIdEnrollmentEventObserver(
@@ -127,7 +122,7 @@ class AssistantClient {
   virtual void ResetAllDataAndShutdown() = 0;
 
   // Display methods.
-  virtual void OnDisplayRequest(const OnDisplayRequestRequest& request) = 0;
+  virtual void SendDisplayRequest(const OnDisplayRequestRequest& request) = 0;
   virtual void AddDisplayEventObserver(
       GrpcServicesObserver<OnAssistantDisplayEventRequest>* observer) = 0;
 
@@ -142,8 +137,17 @@ class AssistantClient {
       GrpcServicesObserver<OnDeviceStateEventRequest>* observer) = 0;
 
   // Conversation methods.
+  virtual void SendVoicelessInteraction(
+      const ::assistant::api::Interaction& interaction,
+      const std::string& description,
+      const ::assistant::api::VoicelessOptions& options,
+      base::OnceCallback<void(bool)> on_done) = 0;
   virtual void RegisterActionModule(
       assistant_client::ActionModule* action_module) = 0;
+  virtual void SendScreenContextRequest(
+      const std::vector<std::string>& context_protos) = 0;
+  virtual void StartVoiceInteraction() = 0;
+  virtual void StopAssistantInteraction(bool cancel_conversation) = 0;
 
   // Settings-related functionality during bootup:
   virtual void SetAuthenticationInfo(const AuthTokens& tokens) = 0;
@@ -167,6 +171,7 @@ class AssistantClient {
   virtual std::string GetDeviceId() = 0;
 
   // Audio-related functionality:
+  // Enables or disables audio input pipeline.
   virtual void EnableListening(bool listening_enabled) = 0;
 
   // Alarm/timer-related functionality:
@@ -180,13 +185,15 @@ class AssistantClient {
   virtual void RemoveTimer(const std::string& timer_id) = 0;
   // Resumes the specified timer (expected to be in paused state).
   virtual void ResumeTimer(const std::string& timer_id) = 0;
-  // Returns the list of all currently scheduled, ringing or paused timers.
-  virtual std::vector<assistant::AssistantTimer> GetTimers() = 0;
+  // Returns the list of all currently scheduled, ringing or paused timers in
+  // the callback.
+  virtual void GetTimers(
+      base::OnceCallback<void(const std::vector<assistant::AssistantTimer>&)>
+          on_done) = 0;
 
   // Registers |observer| to get notified on any alarm/timer status change.
-  virtual void RegisterAlarmTimerEventObserver(
-      base::WeakPtr<
-          GrpcServicesObserver<::assistant::api::OnAlarmTimerEventRequest>>
+  virtual void AddAlarmTimerEventObserver(
+      GrpcServicesObserver<::assistant::api::OnAlarmTimerEventRequest>*
           observer) = 0;
 
   // Will not return nullptr.

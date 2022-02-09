@@ -5,21 +5,35 @@
 import './shimless_rma_shared_css.js';
 import './base_page.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getShimlessRmaService} from './mojo_interface_provider.js';
-import {FinalizationObserverInterface, FinalizationObserverReceiver, ShimlessRmaServiceInterface, StateResult} from './shimless_rma_types.js';
+import {FinalizationObserverInterface, FinalizationObserverReceiver, FinalizationStatus, ShimlessRmaServiceInterface, StateResult} from './shimless_rma_types.js';
 
-// TODO(gavindodd): Update text for i18n
-const openDeviceMessage = 'Open your device and reconnect the battery.';
-const hwwpEnabledMessage = 'HWWP enabled.';
+/** @type {!Object<!FinalizationStatus, string>} */
+const finalizationStatusTextKeys = {
+  [FinalizationStatus.kInProgress]: 'finalizePageProgressText',
+  [FinalizationStatus.kComplete]: 'finalizePageCompleteText',
+  [FinalizationStatus.kFailedBlocking]: 'finalizePageFailedBlockingText',
+  [FinalizationStatus.kFailedNonBlocking]: 'finalizePageFailedNonBlockingText',
+};
 
 /**
  * @fileoverview
  * 'wrapup-finalize-page' wait for device finalization and hardware verification
  * to be completed.
  */
-export class WrapupFinalizePageElement extends PolymerElement {
+
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ * @implements {I18nBehaviorInterface}
+ */
+const WrapupFinalizePageBase = mixinBehaviors([I18nBehavior], PolymerElement);
+
+/** @polymer */
+export class WrapupFinalizePage extends WrapupFinalizePageBase {
   static get is() {
     return 'wrapup-finalize-page';
   }
@@ -33,7 +47,7 @@ export class WrapupFinalizePageElement extends PolymerElement {
       /** @protected */
       finalizationMessage_: {
         type: String,
-        value: 'Finalizing...',
+        value: '',
       },
     };
   }
@@ -46,8 +60,7 @@ export class WrapupFinalizePageElement extends PolymerElement {
     this.finalizationComplete_ = false;
     /**
      * Receiver responsible for observing hardware write protection state.
-     * @private {
-     *  ?FinalizationObserverReceiver}
+     * @private {?FinalizationObserverReceiver}
      */
     this.finalizationObserverReceiver_ = new FinalizationObserverReceiver(
         /** @type {!FinalizationObserverInterface} */ (this));
@@ -57,26 +70,32 @@ export class WrapupFinalizePageElement extends PolymerElement {
   }
 
   /**
-   * @param {boolean} is_compliant
-   * @param {string} error_message
+   * @param {!FinalizationStatus} status
+   * @param {number} progress
    */
-  onHardwareVerificationResult(is_compliant, error_message) {
-    this.finalizationMessage_ = is_compliant ?
-        'Device is compliant.' :
-        'Device is not compliant: ' + error_message;
-    this.finalizationComplete_ = true;
+  onFinalizationUpdated(status, progress) {
+    if (status === FinalizationStatus.kInProgress) {
+      this.finalizationMessage_ = this.i18n(
+          finalizationStatusTextKeys[status], Math.round(progress * 100));
+    } else {
+      this.finalizationMessage_ = this.i18n(finalizationStatusTextKeys[status]);
+    }
+    this.finalizationComplete_ = status === FinalizationStatus.kComplete ||
+        status === FinalizationStatus.kFailedNonBlocking;
+    this.dispatchEvent(new CustomEvent(
+        'disable-next-button',
+        {bubbles: true, composed: true, detail: !this.finalizationComplete_},
+        ));
   }
 
   /** @return {!Promise<!StateResult>} */
   onNextButtonClick() {
     if (this.finalizationComplete_) {
-      // TODO(crbug.com/1218180): Replace with a state specific function e.g.
-      // FinalizationComplete()
-      return this.shimlessRmaService_.transitionNextState();
+      return this.shimlessRmaService_.finalizationComplete();
     } else {
       return Promise.reject(new Error('Finalization is not complete.'));
     }
   }
-};
+}
 
-customElements.define(WrapupFinalizePageElement.is, WrapupFinalizePageElement);
+customElements.define(WrapupFinalizePage.is, WrapupFinalizePage);

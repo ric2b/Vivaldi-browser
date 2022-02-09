@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_DRAGIMAGE
 
@@ -44,10 +41,6 @@
 #include "wx/msw/dragimag.h"
 #include "wx/msw/private.h"
 
-#ifdef __WXWINCE__  // for SM_CXCURSOR and SM_CYCURSOR
-#include "wx/msw/wince/missing.h"
-#endif // __WXWINCE__
-
 // Wine doesn't have this yet
 #ifndef ListView_CreateDragImage
 #define ListView_CreateDragImage(hwnd, i, lpptUpLeft) \
@@ -58,7 +51,7 @@
 // macros
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxDragImage, wxObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxDragImage, wxObject);
 
 #define GetHimageList() ((HIMAGELIST) m_hImageList)
 
@@ -147,9 +140,6 @@ bool wxDragImage::Create(const wxBitmap& image, const wxCursor& cursor)
         ImageList_Destroy(GetHimageList());
     m_hImageList = 0;
 
-#ifdef __WXWINCE__
-    UINT flags = ILC_COLOR;
-#else
     UINT flags wxDUMMY_INITIALIZE(0) ;
     if (image.GetDepth() <= 4)
         flags = ILC_COLOR4;
@@ -161,7 +151,6 @@ bool wxDragImage::Create(const wxBitmap& image, const wxCursor& cursor)
         flags = ILC_COLOR24;
     else
         flags = ILC_COLOR32;
-#endif
 
     bool mask = (image.GetMask() != 0);
 
@@ -204,9 +193,6 @@ bool wxDragImage::Create(const wxIcon& image, const wxCursor& cursor)
         ImageList_Destroy(GetHimageList());
     m_hImageList = 0;
 
-#ifdef __WXWINCE__
-    UINT flags = ILC_COLOR;
-#else
     UINT flags wxDUMMY_INITIALIZE(0) ;
     if (image.GetDepth() <= 4)
         flags = ILC_COLOR4;
@@ -218,7 +204,6 @@ bool wxDragImage::Create(const wxIcon& image, const wxCursor& cursor)
         flags = ILC_COLOR24;
     else
         flags = ILC_COLOR32;
-#endif
 
     flags |= ILC_MASK;
 
@@ -346,14 +331,8 @@ bool wxDragImage::BeginDrag(const wxPoint& hotspot, wxWindow* window, bool fullS
 #else
         if (!m_hCursorImageList)
         {
-#ifndef SM_CXCURSOR
-            // Smartphone may not have these metric symbol
-            int cxCursor = 16;
-            int cyCursor = 16;
-#else
-            int cxCursor = ::GetSystemMetrics(SM_CXCURSOR);
-            int cyCursor = ::GetSystemMetrics(SM_CYCURSOR);
-#endif
+            int cxCursor = wxGetSystemMetrics(SM_CXCURSOR, window);
+            int cyCursor = wxGetSystemMetrics(SM_CYCURSOR, window);
             m_hCursorImageList = (WXHIMAGELIST) ImageList_Create(cxCursor, cyCursor, ILC_MASK, 1, 1);
         }
 
@@ -460,12 +439,8 @@ bool wxDragImage::Move(const wxPoint& pt)
         rect.left = 0; rect.top = 0;
         rect.right = 0; rect.bottom = 0;
         DWORD style = ::GetWindowLong((HWND) m_window->GetHWND(), GWL_STYLE);
-#ifdef __WIN32__
         DWORD exStyle = ::GetWindowLong((HWND) m_window->GetHWND(), GWL_EXSTYLE);
         ::AdjustWindowRectEx(& rect, style, FALSE, exStyle);
-#else
-        ::AdjustWindowRect(& rect, style, FALSE);
-#endif
         // Subtract the (negative) values, i.e. add a small increment
         pt2.x -= rect.left; pt2.y -= rect.top;
     }

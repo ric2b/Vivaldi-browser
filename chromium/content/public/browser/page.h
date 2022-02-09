@@ -21,7 +21,7 @@ namespace content {
 // At the moment some navigations might create a new blink::Document in the
 // existing RenderFrameHost, which will lead to a creation of a new Page
 // associated with the same main RenderFrameHost. See the comment in
-// |RenderDocumentHostUserData| for more details and crbug.com/936696 for the
+// |DocumentUserData| for more details and crbug.com/936696 for the
 // progress on always creating a new RenderFrameHost for each new document.
 
 // Page is created when a main document is created, which can happen in the
@@ -84,6 +84,10 @@ class CONTENT_EXPORT Page : public base::SupportsUserData {
   virtual void WriteIntoTrace(perfetto::TracedValue context) = 0;
 
   virtual base::WeakPtr<Page> GetWeakPtr() = 0;
+
+  // Whether the most recent page scale factor sent by the main frame's renderer
+  // is 1 (i.e. no magnification).
+  virtual bool IsPageScaleFactorOne() = 0;
 
  private:
   // This method is needed to ensure that PageImpl can both implement a Page's

@@ -6,6 +6,11 @@
     "description": "Use the <code>vivaldi.importData.getProfiles</code> to display installed browsers.",
     "types": [
       {
+        "id": "import_types",
+        "type": "string",
+        "enum": ["internet_explorer", "firefox", "safari", "bookmarks_file", "opera", "opera_bookmark", "chrome", "chromium", "vivaldi", "yandex", "opera_opium_beta", "opera_opium_dev", "brave", "edge", "edge_chromium", "thunderbird", "opera_opium", "unknown" ]
+      },
+      {
         "id": "UserProfileItem",
         "type": "object",
         "description": "UserProfileItem. Contains info for userprofile",
@@ -25,6 +30,10 @@
         "type": "object",
         "description": "ProfileItem.",
         "properties": {
+          "import_type": {
+            "description": "The type of import profile item",
+            "$ref": "import_types"
+          },
           "name": {
             "type": "string",
             "description": "Import item name."
@@ -142,6 +151,48 @@
               {
                 "name": "result",
                 "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openThunderbirdMailbox",
+        "type": "function",
+        "description": "Opens Thunderbird mailbox from disk and seek to seekPosition. If called with already opened file it only seeks to seekPosition. If called with a new path it closes the current file and opens the new one.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description": "Path to mailbox."
+          },
+          {
+            "name": "seekPosition",
+            "type": "integer",
+            "optional": "true",
+            "description": "Seek to this position after opening"
+          }
+        ]
+      },
+      {
+        "name": "readMessageFromThunderbirdMailbox",
+        "type": "function",
+        "description": "Read one message from currently open Thunderbird mailbox.",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "description": "Callback function containing message",
+            "parameters": [
+              {
+                "name": "message",
+                "type": "string",
+                "description": "Contents of the message just read"
+              },
+              {
+                "name": "seekPosition",
+                "type": "integer",
+                "description": "Seek position in file after reading. Returns -1 if all messages have been read."
               }
             ]
           }

@@ -38,7 +38,6 @@ bool BubbleContentsWrapper::Host::HandleKeyboardEvent(
 BubbleContentsWrapper::BubbleContentsWrapper(
     content::BrowserContext* browser_context,
     int task_manager_string_id,
-    bool enable_extension_apis,
     bool webui_resizes_host,
     bool esc_closes_ui)
     : webui_resizes_host_(webui_resizes_host),
@@ -48,12 +47,6 @@ BubbleContentsWrapper::BubbleContentsWrapper(
   web_contents_->SetDelegate(this);
   WebContentsObserver::Observe(web_contents_.get());
 
-  if (enable_extension_apis) {
-    // In order for the WebUI in the renderer to use extensions APIs we must
-    // add a ChromeExtensionWebContentsObserver to the WebView's WebContents.
-    extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
-        web_contents_.get());
-  }
   PrefsTabHelper::CreateForWebContents(web_contents_.get());
   task_manager::WebContentsTags::CreateForToolContents(web_contents_.get(),
                                                        task_manager_string_id);
@@ -92,7 +85,7 @@ bool BubbleContentsWrapper::HandleKeyboardEvent(
 }
 
 bool BubbleContentsWrapper::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   // Ignores context menu.
   return true;
@@ -110,7 +103,8 @@ void BubbleContentsWrapper::RenderViewHostChanged(
                                             gfx::Size(INT_MAX, INT_MAX));
 }
 
-void BubbleContentsWrapper::RenderProcessGone(base::TerminationStatus status) {
+void BubbleContentsWrapper::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
   CloseUI();
 }
 

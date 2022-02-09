@@ -10,8 +10,7 @@
 
 #include <memory>
 
-#include "base/macros.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/tick_clock.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/network_isolation_key.h"

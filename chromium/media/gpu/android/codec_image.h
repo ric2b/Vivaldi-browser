@@ -12,7 +12,6 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "gpu/command_buffer/service/ref_counted_lock.h"
 #include "gpu/command_buffer/service/stream_texture_shared_image_interface.h"
@@ -51,6 +50,9 @@ class MEDIA_GPU_EXPORT CodecImage
 
   CodecImage(const gfx::Size& coded_size,
              scoped_refptr<gpu::RefCountedLock> drdc_lock);
+
+  CodecImage(const CodecImage&) = delete;
+  CodecImage& operator=(const CodecImage&) = delete;
 
   // (Re-)Initialize this CodecImage to use |output_buffer| et. al.
   //
@@ -179,8 +181,6 @@ class MEDIA_GPU_EXPORT CodecImage
   // Bound to the gpu main thread on which this CodecImage is created. Some
   // methods can only be called on this thread.
   THREAD_CHECKER(gpu_main_thread_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(CodecImage);
 };
 
 // Temporary helper class to prevent touching a non-threadsafe-ref-counted
@@ -193,6 +193,9 @@ class MEDIA_GPU_EXPORT CodecImageHolder
   CodecImageHolder(scoped_refptr<base::SequencedTaskRunner> task_runner,
                    scoped_refptr<CodecImage> codec_image);
 
+  CodecImageHolder(const CodecImageHolder&) = delete;
+  CodecImageHolder& operator=(const CodecImageHolder&) = delete;
+
   // Safe from any thread.
   CodecImage* codec_image_raw() const { return codec_image_.get(); }
 
@@ -203,8 +206,6 @@ class MEDIA_GPU_EXPORT CodecImageHolder
   friend class base::DeleteHelper<CodecImageHolder>;
 
   scoped_refptr<CodecImage> codec_image_;
-
-  DISALLOW_COPY_AND_ASSIGN(CodecImageHolder);
 };
 
 }  // namespace media

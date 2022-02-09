@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
 #include "chromeos/services/bluetooth_config/fake_adapter_state_controller.h"
+#include "chromeos/services/bluetooth_config/fake_device_name_manager.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/bluetooth/test/mock_bluetooth_device.h"
@@ -29,6 +30,7 @@ using NiceMockDevice =
 
 const uint32_t kTestBluetoothClass = 1337u;
 const char kTestBluetoothName[] = "testName";
+const char kTestBluetoothNickname[] = "nickname";
 
 class FakeObserver : public DeviceCache::Observer {
  public:
@@ -80,7 +82,8 @@ class DeviceCacheImplTest : public testing::Test {
 
   void Init() {
     device_cache_ = std::make_unique<DeviceCacheImpl>(
-        &fake_adapter_state_controller_, mock_adapter_);
+        &fake_adapter_state_controller_, mock_adapter_,
+        &fake_device_name_manager_);
     device_cache_->AddObserver(&fake_observer_);
   }
 
@@ -143,6 +146,14 @@ class DeviceCacheImplTest : public testing::Test {
     device_cache_->DeviceChanged(mock_adapter_.get(), it->get());
   }
 
+  void ChangeDeviceIsBlockedByPolicy(const std::string& device_id,
+                                     bool is_blocked_by_policy) {
+    std::vector<NiceMockDevice>::iterator it = FindDevice(device_id);
+    EXPECT_TRUE(it != mock_devices_.end());
+
+    it->get()->SetIsBlockedByPolicy(is_blocked_by_policy);
+  }
+
   void ChangeInquiryRssi(const std::string& device_id,
                          const absl::optional<int8_t> inquiry_rssi) {
     std::vector<NiceMockDevice>::iterator it = FindDevice(device_id);
@@ -152,6 +163,34 @@ class DeviceCacheImplTest : public testing::Test {
         .WillByDefault(testing::Return(inquiry_rssi));
 
     device_cache_->DeviceChanged(mock_adapter_.get(), it->get());
+  }
+
+  void SetDeviceNickname(const std::string& device_id,
+                         const std::string& nickname) {
+    fake_device_name_manager_.SetDeviceNickname(device_id, nickname);
+  }
+
+  void ForgetDevice(const std::string& device_id) {
+    // Simulates the real-life behavior of when a device is forgotten.
+    auto it = FindDevice(device_id);
+    EXPECT_TRUE(it != mock_devices_.end());
+
+    // The device should start paired.
+    EXPECT_TRUE(it->get()->IsPaired());
+
+    // DevicePairedChanged() is called first.
+    device_cache_->DevicePairedChanged(mock_adapter_.get(), it->get(),
+                                       /*new_paired_status=*/false);
+
+    // DeviceChanged() gets called twice with device->IsPaired() still true.
+    device_cache_->DeviceChanged(mock_adapter_.get(), it->get());
+    device_cache_->DeviceChanged(mock_adapter_.get(), it->get());
+
+    // The device is then removed.
+    NiceMockDevice device = std::move(*it);
+    mock_devices_.erase(it);
+
+    device_cache_->DeviceRemoved(mock_adapter_.get(), device.get());
   }
 
   PairedDeviceList GetPairedDevices() {
@@ -192,6 +231,7 @@ class DeviceCacheImplTest : public testing::Test {
   size_t num_devices_created_ = 0u;
 
   FakeAdapterStateController fake_adapter_state_controller_;
+  FakeDeviceNameManager fake_device_name_manager_;
   scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>> mock_adapter_;
   FakeObserver fake_observer_;
 
@@ -377,6 +417,51 @@ TEST_F(DeviceCacheImplTest, PairingStateChanges) {
   EXPECT_TRUE(GetUnpairedDevices().empty());
 }
 
+TEST_F(DeviceCacheImplTest, PairedDeviceNicknameChanges) {
+  Init();
+  EXPECT_TRUE(GetPairedDevices().empty());
+
+  // Add a paired device.
+  std::string paired_device_id;
+  AddDevice(/*paired=*/true, /*connected=*/true, &paired_device_id);
+  EXPECT_EQ(1u, GetNumPairedDeviceListObserverEvents());
+  PairedDeviceList list = GetPairedDevices();
+  EXPECT_EQ(1u, list.size());
+  EXPECT_EQ(paired_device_id, list[0]->device_properties->id);
+  EXPECT_FALSE(list[0]->nickname);
+
+  // Set the device's nickname
+  SetDeviceNickname(paired_device_id, kTestBluetoothNickname);
+  EXPECT_EQ(2u, GetNumPairedDeviceListObserverEvents());
+  list = GetPairedDevices();
+  EXPECT_EQ(1u, list.size());
+  EXPECT_EQ(paired_device_id, list[0]->device_properties->id);
+  EXPECT_EQ(kTestBluetoothNickname, list[0]->nickname);
+}
+
+TEST_F(DeviceCacheImplTest, PairedDeviceAdminPolicyChanges) {
+  Init();
+  EXPECT_TRUE(GetPairedDevices().empty());
+
+  // Add a paired device.
+  std::string paired_device_id;
+  AddDevice(/*paired=*/true, /*connected=*/true, &paired_device_id);
+  EXPECT_EQ(1u, GetNumPairedDeviceListObserverEvents());
+  PairedDeviceList list = GetPairedDevices();
+  EXPECT_EQ(1u, list.size());
+  EXPECT_EQ(paired_device_id, list[0]->device_properties->id);
+  EXPECT_FALSE(list[0]->device_properties->is_blocked_by_policy);
+
+  // Change its admin policy.
+  ChangeDeviceIsBlockedByPolicy(paired_device_id,
+                                /*is_blocked_by_policy=*/true);
+  EXPECT_EQ(2u, GetNumPairedDeviceListObserverEvents());
+  list = GetPairedDevices();
+  EXPECT_EQ(1u, list.size());
+  EXPECT_EQ(paired_device_id, list[0]->device_properties->id);
+  EXPECT_TRUE(list[0]->device_properties->is_blocked_by_policy);
+}
+
 TEST_F(DeviceCacheImplTest, PairedDeviceBluetoothClassChanges) {
   Init();
   EXPECT_TRUE(GetPairedDevices().empty());
@@ -393,11 +478,30 @@ TEST_F(DeviceCacheImplTest, PairedDeviceBluetoothClassChanges) {
 
   // Change its device type.
   ChangeDeviceType(paired_device_id, device::BluetoothDeviceType::PHONE);
-  EXPECT_EQ(3u, GetNumPairedDeviceListObserverEvents());
+  EXPECT_EQ(2u, GetNumPairedDeviceListObserverEvents());
   list = GetPairedDevices();
   EXPECT_EQ(1u, list.size());
   EXPECT_EQ(paired_device_id, list[0]->device_properties->id);
   EXPECT_EQ(mojom::DeviceType::kPhone, list[0]->device_properties->device_type);
+}
+
+TEST_F(DeviceCacheImplTest, PairedDeviceForgotten) {
+  Init();
+  EXPECT_TRUE(GetPairedDevices().empty());
+
+  // Add a paired device.
+  std::string paired_device_id;
+  AddDevice(/*paired=*/true, /*connected=*/true, &paired_device_id);
+  EXPECT_EQ(1u, GetNumPairedDeviceListObserverEvents());
+  PairedDeviceList list = GetPairedDevices();
+  EXPECT_EQ(1u, list.size());
+  EXPECT_EQ(paired_device_id, list[0]->device_properties->id);
+  EXPECT_EQ(mojom::DeviceType::kUnknown,
+            list[0]->device_properties->device_type);
+
+  ForgetDevice(paired_device_id);
+  EXPECT_EQ(2u, GetNumPairedDeviceListObserverEvents());
+  EXPECT_TRUE(GetPairedDevices().empty());
 }
 
 TEST_F(DeviceCacheImplTest, UnpairedDeviceBluetoothClassChanges) {
@@ -415,7 +519,7 @@ TEST_F(DeviceCacheImplTest, UnpairedDeviceBluetoothClassChanges) {
 
   // Change its device type.
   ChangeDeviceType(unpaired_device_id, device::BluetoothDeviceType::PHONE);
-  EXPECT_EQ(3u, GetNumUnpairedDeviceListObserverEvents());
+  EXPECT_EQ(2u, GetNumUnpairedDeviceListObserverEvents());
   list = GetUnpairedDevices();
   EXPECT_EQ(1u, list.size());
   EXPECT_EQ(unpaired_device_id, list[0]->id);
@@ -449,7 +553,7 @@ TEST_F(DeviceCacheImplTest, UnpairedDeviceSignalStrengthChanges) {
   // Update device 1's signal strength to be greater than device 2. Device 1
   // should now be returned first.
   ChangeInquiryRssi(unpaired_device_id1, 3);
-  EXPECT_EQ(4u, GetNumUnpairedDeviceListObserverEvents());
+  EXPECT_EQ(3u, GetNumUnpairedDeviceListObserverEvents());
   list = GetUnpairedDevices();
   EXPECT_EQ(2u, list.size());
   EXPECT_EQ(unpaired_device_id1, list[0]->id);

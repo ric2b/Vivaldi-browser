@@ -51,8 +51,6 @@ TestMediaRouteProvider::TestMediaRouteProvider(
     : receiver_(this, std::move(receiver)),
       media_router_(std::move(media_router)) {
   SetSinks();
-  media_router_->OnSinkAvailabilityUpdated(
-      kProviderId, mojom::MediaRouter::SinkAvailability::PER_SOURCE);
 }
 
 TestMediaRouteProvider::~TestMediaRouteProvider() = default;
@@ -146,34 +144,6 @@ void TestMediaRouteProvider::JoinRoute(const std::string& media_source,
     MediaRoute& existing_route = pos->second;
     std::move(callback).Run(existing_route, nullptr,
                             std::string("Successfully joined session"),
-                            RouteRequestResult::ResultCode::OK);
-  }
-}
-
-void TestMediaRouteProvider::ConnectRouteByRouteId(
-    const std::string& media_source,
-    const std::string& route_id,
-    const std::string& presentation_id,
-    const url::Origin& origin,
-    int32_t tab_id,
-    base::TimeDelta timeout,
-    bool incognito,
-    ConnectRouteByRouteIdCallback callback) {
-  if (!IsValidSource(media_source)) {
-    std::move(callback).Run(absl::nullopt, nullptr,
-                            std::string("The media source is invalid."),
-                            RouteRequestResult::UNKNOWN_ERROR);
-    return;
-  }
-  auto pos = routes_.find(route_id);
-  if (pos == presentation_ids_to_routes_.end()) {
-    std::move(callback).Run(absl::nullopt, nullptr,
-                            std::string("Presentation does not exist."),
-                            RouteRequestResult::UNKNOWN_ERROR);
-  } else {
-    MediaRoute& existing_route = pos->second;
-    std::move(callback).Run(existing_route, nullptr,
-                            std::string("Connect route by route ID"),
                             RouteRequestResult::ResultCode::OK);
   }
 }

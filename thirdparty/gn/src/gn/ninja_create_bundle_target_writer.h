@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_CREATE_BUNDLE_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_CREATE_BUNDLE_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/ninja_target_writer.h"
 
 class BundleFileRule;
@@ -65,7 +64,9 @@ class NinjaCreateBundleTargetWriter : public NinjaTargetWriter {
       const std::vector<OutputFile>& order_only_deps,
       std::vector<OutputFile>* output_files);
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaCreateBundleTargetWriter);
+  NinjaCreateBundleTargetWriter(const NinjaCreateBundleTargetWriter&) = delete;
+  NinjaCreateBundleTargetWriter& operator=(
+      const NinjaCreateBundleTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_CREATE_BUNDLE_TARGET_WRITER_H_

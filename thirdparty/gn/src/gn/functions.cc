@@ -302,7 +302,7 @@ const char kConfig_Help[] =
   need to remove the corresponding config that sets it. The final set of flags,
   defines, etc. for a target is generated in this order:
 
-   1. The values specified directly on the target (rather than using a config.
+   1. The values specified directly on the target (rather than using a config).
    2. The configs specified in the target's "configs" list, in order.
    3. Public_configs from a breadth-first traversal of the dependency tree in
       the order that the targets appear in "deps".
@@ -332,6 +332,7 @@ Variables valid in a config definition
     CONFIG_VALUES_VARS_HELP
 
     R"(  Nested configs: configs
+  General: visibility
 
 Variables on a target used to apply configs
 

@@ -22,6 +22,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/win_util.h"
+#include "build/branding_buildflags.h"
 #include "chrome/installer/util/install_service_work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 #include "chrome/updater/app/server/win/updater_idl.h"
@@ -63,7 +64,7 @@ bool RegisterWakeTask(const base::CommandLine& run_command,
                       UpdaterScope scope) {
   auto task_scheduler = TaskScheduler::CreateInstance();
   if (!task_scheduler->RegisterTask(
-          GetTaskName(scope).c_str(), GetTaskDisplayName(scope).c_str(),
+          scope, GetTaskName(scope).c_str(), GetTaskDisplayName(scope).c_str(),
           run_command, TaskScheduler::TriggerType::TRIGGER_TYPE_HOURLY, true)) {
     LOG(ERROR) << "RegisterWakeTask failed.";
     return false;
@@ -85,16 +86,16 @@ std::vector<IID> GetSideBySideInterfaces() {
 }
 
 std::vector<IID> GetActiveInterfaces() {
-  return {__uuidof(IAppBundleWeb),
-          __uuidof(IAppWeb),
-          __uuidof(ICompleteStatus),
-          __uuidof(ICurrentState),
-          __uuidof(IGoogleUpdate3Web),
-          __uuidof(IUpdateState),
-          __uuidof(IUpdater),
-          __uuidof(IUpdaterObserver),
-          __uuidof(IUpdaterRegisterAppCallback),
-          __uuidof(IUpdaterCallback)};
+  return {
+    __uuidof(IUpdateState), __uuidof(IUpdater), __uuidof(IUpdaterObserver),
+        __uuidof(IUpdaterRegisterAppCallback), __uuidof(IUpdaterCallback),
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+        __uuidof(IAppBundleWeb), __uuidof(IAppWeb), __uuidof(ICompleteStatus),
+        __uuidof(ICurrentState), __uuidof(IGoogleUpdate3Web),
+        __uuidof(IProcessLauncher), __uuidof(IProcessLauncher2),
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  };
 }
 
 std::vector<CLSID> GetSideBySideServers(UpdaterScope scope) {
@@ -109,10 +110,22 @@ std::vector<CLSID> GetSideBySideServers(UpdaterScope scope) {
 std::vector<CLSID> GetActiveServers(UpdaterScope scope) {
   switch (scope) {
     case UpdaterScope::kUser:
-      return {__uuidof(UpdaterUserClass), __uuidof(GoogleUpdate3WebUserClass)};
+      return {
+        __uuidof(UpdaterUserClass),
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+            __uuidof(GoogleUpdate3WebUserClass)
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      };
     case UpdaterScope::kSystem:
-      return {__uuidof(UpdaterSystemClass),
-              __uuidof(GoogleUpdate3WebSystemClass)};
+      return {
+        __uuidof(UpdaterSystemClass),
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+            __uuidof(GoogleUpdate3WebSystemClass),
+            __uuidof(ProcessLauncherClass)
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      };
   }
 }
 
@@ -274,6 +287,8 @@ std::wstring GetComTypeLibResourceIndex(REFIID iid) {
       {__uuidof(IAppWeb), kUpdaterLegacyIndex},
       {__uuidof(ICurrentState), kUpdaterLegacyIndex},
       {__uuidof(IGoogleUpdate3Web), kUpdaterLegacyIndex},
+      {__uuidof(IProcessLauncher), kUpdaterLegacyIndex},
+      {__uuidof(IProcessLauncher2), kUpdaterLegacyIndex},
   };
   auto index = kTypeLibIndexes.find(iid);
   return index != kTypeLibIndexes.end() ? index->second : L"";

@@ -26,6 +26,8 @@
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
+#include "content/browser/devtools/worker_devtools_agent_host.h"
+#include "content/browser/devtools/worker_devtools_manager.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -200,6 +202,7 @@ void BackForwardCacheNotUsed(
 }
 
 namespace {
+
 protocol::String BuildBlockedByResponseReason(
     network::mojom::BlockedByResponseReason reason) {
   switch (reason) {
@@ -221,6 +224,53 @@ protocol::String BuildBlockedByResponseReason(
       return protocol::Audits::BlockedByResponseReasonEnum::CorpNotSameSite;
   }
 }
+
+void ReportBlockedByResponseIssue(
+    const GURL& url,
+    std::string& requestId,
+    FrameTreeNode* ftn,
+    RenderFrameHostImpl* parent_frame,
+    const network::URLLoaderCompletionStatus& status) {
+  DCHECK(status.blocked_by_response_reason);
+
+  auto issueDetails = protocol::Audits::InspectorIssueDetails::Create();
+  auto request = protocol::Audits::AffectedRequest::Create()
+                     .SetRequestId(requestId)
+                     .SetUrl(url.spec())
+                     .Build();
+  auto blockedByResponseDetails =
+      protocol::Audits::BlockedByResponseIssueDetails::Create()
+          .SetRequest(std::move(request))
+          .SetReason(
+              BuildBlockedByResponseReason(*status.blocked_by_response_reason))
+          .Build();
+
+  blockedByResponseDetails->SetBlockedFrame(
+      protocol::Audits::AffectedFrame::Create()
+          .SetFrameId(ftn->devtools_frame_token().ToString())
+          .Build());
+  if (parent_frame) {
+    blockedByResponseDetails->SetParentFrame(
+        protocol::Audits::AffectedFrame::Create()
+            .SetFrameId(parent_frame->frame_tree_node()
+                            ->devtools_frame_token()
+                            .ToString())
+            .Build());
+  }
+
+  issueDetails.SetBlockedByResponseIssueDetails(
+      std::move(blockedByResponseDetails));
+
+  auto inspector_issue =
+      protocol::Audits::InspectorIssue::Create()
+          .SetCode(
+              protocol::Audits::InspectorIssueCodeEnum::BlockedByResponseIssue)
+          .SetDetails(issueDetails.Build())
+          .Build();
+
+  ReportBrowserInitiatedIssue(ftn->current_frame_host(), inspector_issue.get());
+}
+
 }  // namespace
 
 void OnNavigationRequestFailed(
@@ -230,44 +280,9 @@ void OnNavigationRequestFailed(
   std::string id = nav_request.devtools_navigation_token().ToString();
 
   if (status.blocked_by_response_reason) {
-    auto issueDetails = protocol::Audits::InspectorIssueDetails::Create();
-    auto request =
-        protocol::Audits::AffectedRequest::Create()
-            .SetRequestId(id)
-            .SetUrl(const_cast<NavigationRequest&>(nav_request).GetURL().spec())
-            .Build();
-    auto blockedByResponseDetails =
-        protocol::Audits::BlockedByResponseIssueDetails::Create()
-            .SetRequest(std::move(request))
-            .SetReason(BuildBlockedByResponseReason(
-                *status.blocked_by_response_reason))
-            .Build();
-
-    blockedByResponseDetails->SetBlockedFrame(
-        protocol::Audits::AffectedFrame::Create()
-            .SetFrameId(ftn->devtools_frame_token().ToString())
-            .Build());
-    if (ftn->parent()) {
-      blockedByResponseDetails->SetParentFrame(
-          protocol::Audits::AffectedFrame::Create()
-              .SetFrameId(ftn->parent()
-                              ->frame_tree_node()
-                              ->devtools_frame_token()
-                              .ToString())
-              .Build());
-    }
-    issueDetails.SetBlockedByResponseIssueDetails(
-        std::move(blockedByResponseDetails));
-
-    auto inspector_issue =
-        protocol::Audits::InspectorIssue::Create()
-            .SetCode(protocol::Audits::InspectorIssueCodeEnum::
-                         BlockedByResponseIssue)
-            .SetDetails(issueDetails.Build())
-            .Build();
-
-    ReportBrowserInitiatedIssue(ftn->current_frame_host(),
-                                inspector_issue.get());
+    ReportBlockedByResponseIssue(
+        const_cast<NavigationRequest&>(nav_request).GetURL(), id, ftn,
+        ftn->parent(), status);
   }
 
   // If a BFCache navigation fails, it will be restarted as a regular
@@ -394,7 +409,7 @@ void ThrottleForServiceWorkerAgentHost(
     scoped_refptr<DevToolsThrottleHandle> throttle_handle) {
   for (auto* target_handler :
        protocol::TargetHandler::ForAgentHost(requesting_agent_host)) {
-    target_handler->AddServiceWorkerThrottle(agent_host, throttle_handle);
+    target_handler->AddWorkerThrottle(agent_host, throttle_handle);
   }
 }
 
@@ -404,13 +419,15 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
       NavigationRequest::From(navigation_handle)->frame_tree_node();
   FrameTreeNode* parent = FrameTreeNode::From(frame_tree_node->parent());
   if (!parent) {
-    if (WebContentsImpl::FromFrameTreeNode(frame_tree_node)->IsPortal() &&
-        WebContentsImpl::FromFrameTreeNode(frame_tree_node)
-            ->GetOuterWebContents()) {
-      parent = WebContentsImpl::FromFrameTreeNode(frame_tree_node)
-                   ->GetOuterWebContents()
-                   ->GetFrameTree()
-                   ->root();
+    FrameTreeNode* outer_delegate_node =
+        frame_tree_node->render_manager()->GetOuterDelegateNode();
+    if (outer_delegate_node &&
+        (WebContentsImpl::FromFrameTreeNode(frame_tree_node)->IsPortal() ||
+         frame_tree_node->IsFencedFrameRoot())) {
+      parent = frame_tree_node->render_manager()
+                   ->GetOuterDelegateNode()
+                   ->parent()
+                   ->frame_tree_node();
     }
   }
 
@@ -430,7 +447,7 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
   return result;
 }
 
-void ThrottleMainScriptFetch(
+void ThrottleServiceWorkerMainScriptFetch(
     ServiceWorkerContextWrapper* wrapper,
     int64_t version_id,
     const GlobalRenderFrameHostId& requesting_frame_id,
@@ -464,6 +481,24 @@ void ThrottleMainScriptFetch(
 
   ThrottleForServiceWorkerAgentHost(agent_host, requesting_agent_host,
                                     throttle_handle);
+}
+
+void ThrottleWorkerMainScriptFetch(
+    const base::UnguessableToken& devtools_worker_token,
+    const GlobalRenderFrameHostId& ancestor_render_frame_host_id,
+    scoped_refptr<DevToolsThrottleHandle> throttle_handle) {
+  WorkerDevToolsAgentHost* agent_host =
+      WorkerDevToolsManager::GetInstance().GetDevToolsHostFromToken(
+          devtools_worker_token);
+  DCHECK(agent_host);
+
+  RenderFrameHostImpl* rfh =
+      RenderFrameHostImpl::FromID(ancestor_render_frame_host_id);
+  DCHECK(rfh);
+
+  FrameTreeNode* ftn = rfh->frame_tree_node();
+  DispatchToAgents(ftn, &protocol::TargetHandler::AddWorkerThrottle, agent_host,
+                   std::move(throttle_handle));
 }
 
 bool ShouldWaitForDebuggerInWindowOpen() {
@@ -855,6 +890,17 @@ void PortalActivated(RenderFrameHostImpl* render_frame_host_impl) {
   UpdatePortals(render_frame_host_impl);
 }
 
+void FencedFrameCreated(
+    base::SafeRef<RenderFrameHostImpl> owner_render_frame_host,
+    FencedFrame* fenced_frame) {
+  auto* agent_host = static_cast<RenderFrameDevToolsAgentHost*>(
+      RenderFrameDevToolsAgentHost::GetFor(
+          owner_render_frame_host->frame_tree_node()));
+  if (!agent_host)
+    return;
+  agent_host->DidCreateFencedFrame(fenced_frame);
+}
+
 void WillStartDragging(FrameTreeNode* main_frame_tree_node,
                        const blink::mojom::DragDataPtr drag_data,
                        blink::DragOperationsMask drag_operations_mask,
@@ -1196,19 +1242,88 @@ void OnServiceWorkerMainScriptFetchingFailed(
   DispatchToAgents(ftn, &protocol::LogHandler::EntryAdded, entry.get());
 }
 
-void LogWorkletError(RenderFrameHostImpl* frame_host,
-                     const std::string& error) {
-  FrameTreeNode* ftn = frame_host->frame_tree_node();
+void OnWorkerMainScriptLoadingFailed(
+    const GURL& url,
+    const base::UnguessableToken& worker_token,
+    FrameTreeNode* ftn,
+    RenderFrameHostImpl* ancestor_rfh,
+    const network::URLLoaderCompletionStatus& status) {
+  DCHECK(ftn);
+
+  std::string id = worker_token.ToString();
+
+  if (status.blocked_by_response_reason)
+    ReportBlockedByResponseIssue(url, id, ftn, ancestor_rfh, status);
+
+  DispatchToAgents(ftn, &protocol::NetworkHandler::LoadingComplete, id,
+                   protocol::Network::ResourceTypeEnum::Other, status);
+}
+
+void OnWorkerMainScriptLoadingFinished(
+    FrameTreeNode* ftn,
+    const base::UnguessableToken& worker_token,
+    const network::URLLoaderCompletionStatus& status) {
+  DCHECK(ftn);
+  DispatchToAgents(ftn, &protocol::NetworkHandler::LoadingComplete,
+                   worker_token.ToString(),
+                   protocol::Network::ResourceTypeEnum::Other, status);
+}
+
+void OnWorkerMainScriptRequestWillBeSent(
+    FrameTreeNode* ftn,
+    const base::UnguessableToken& worker_token,
+    const network::ResourceRequest& request) {
+  DCHECK(ftn);
+
+  auto timestamp = base::TimeTicks::Now();
+  network::mojom::URLRequestDevToolsInfoPtr request_info =
+      network::ExtractDevToolsInfo(request);
+  DispatchToAgents(
+      ftn, &protocol::NetworkHandler::RequestSent, worker_token.ToString(),
+      /*loader_id=*/"", request.headers, *request_info,
+      protocol::Network::Initiator::TypeEnum::Script, ftn->current_url(),
+      /*initiator_devtools_request_id*/ "", timestamp);
+}
+
+void LogWorkletMessage(RenderFrameHostImpl& frame_host,
+                       blink::mojom::ConsoleMessageLevel log_level,
+                       const std::string& message) {
+  FrameTreeNode* ftn = frame_host.frame_tree_node();
   if (!ftn)
     return;
-  std::string text = base::StrCat({"Worklet error: ", error});
+
+  std::string log_level_string;
+  switch (log_level) {
+    case blink::mojom::ConsoleMessageLevel::kVerbose:
+      log_level_string = protocol::Log::LogEntry::LevelEnum::Verbose;
+      break;
+    case blink::mojom::ConsoleMessageLevel::kInfo:
+      log_level_string = protocol::Log::LogEntry::LevelEnum::Info;
+      break;
+    case blink::mojom::ConsoleMessageLevel::kWarning:
+      log_level_string = protocol::Log::LogEntry::LevelEnum::Warning;
+      break;
+    case blink::mojom::ConsoleMessageLevel::kError:
+      log_level_string = protocol::Log::LogEntry::LevelEnum::Error;
+      break;
+  }
+
+  DCHECK(!log_level_string.empty());
+
   auto entry = protocol::Log::LogEntry::Create()
                    .SetSource(protocol::Log::LogEntry::SourceEnum::Other)
-                   .SetLevel(protocol::Log::LogEntry::LevelEnum::Error)
-                   .SetText(text)
+                   .SetLevel(log_level_string)
+                   .SetText(message)
                    .SetTimestamp(base::Time::Now().ToDoubleT() * 1000.0)
                    .Build();
   DispatchToAgents(ftn, &protocol::LogHandler::EntryAdded, entry.get());
+
+  // Manually trigger RenderFrameHostImpl::DidAddMessageToConsole, so that the
+  // observer behavior aligns more with the observer behavior for the regular
+  // devtools logging path from the renderer.
+  frame_host.DidAddMessageToConsole(log_level, base::UTF8ToUTF16(message),
+                                    /*line_no=*/0, /*source_id=*/{},
+                                    /*untrusted_stack_trace=*/{});
 }
 
 void ApplyNetworkContextParamsOverrides(

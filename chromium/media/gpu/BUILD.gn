@@ -31,11 +31,11 @@ component("gpu") {
   # media-related content code should access //media/gpu.
   visibility = [
     ":*",
+    "//ash/components/arc/mojom:media",
+    "//ash/components/arc/mojom:media_mojolpm",
+    "//ash/components/arc/video_accelerator:common",
     "//chrome/gpu",
     "//chromecast/*",
-    "//components/arc/mojom:media",
-    "//components/arc/mojom:media_mojolpm",
-    "//components/arc/video_accelerator:common",
     "//components/chromeos_camera/*",
     "//components/mirroring/service:mirroring_service",
     "//components/viz/service/main",
@@ -185,6 +185,7 @@ component("gpu") {
       "windows/d3d11_h264_accelerator.h",
       "windows/d3d11_picture_buffer.cc",
       "windows/d3d11_picture_buffer.h",
+      "windows/d3d11_status.h",
       "windows/d3d11_texture_selector.cc",
       "windows/d3d11_texture_selector.h",
       "windows/d3d11_texture_wrapper.cc",

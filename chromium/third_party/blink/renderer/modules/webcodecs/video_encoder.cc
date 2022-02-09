@@ -13,11 +13,11 @@
 #include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/os_buildflags.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/raster_interface.h"
@@ -39,9 +39,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_avc_encoder_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_encoded_video_chunk_metadata.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_svc_output_metadata.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_color_space_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_decoder_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_encoder_config.h"
@@ -106,7 +108,7 @@ bool IsAcceleratedConfigurationSupported(
     media::VideoCodecProfile profile,
     const media::VideoEncoder::Options& options,
     media::GpuVideoAcceleratorFactories* gpu_factories) {
-  if (!gpu_factories || !gpu_factories->IsGpuVideoAcceleratorEnabled())
+  if (!gpu_factories || !gpu_factories->IsGpuVideoEncodeAcceleratorEnabled())
     return false;
 
   auto supported_profiles =
@@ -186,6 +188,10 @@ VideoEncoderTraits::ParsedConfig* ParseConfigStatic(
 
   if (config->hasBitrate()) {
     uint32_t bps = base::saturated_cast<uint32_t>(config->bitrate());
+    if (bps == 0) {
+      exception_state.ThrowTypeError("Zero is not a valid bitrate.");
+      return nullptr;
+    }
     if (config->hasBitrateMode() && config->bitrateMode() == "constant") {
       result->options.bitrate = media::Bitrate::ConstantBitrate(bps);
     } else {
@@ -243,19 +249,20 @@ VideoEncoderTraits::ParsedConfig* ParseConfigStatic(
   result->level = 0;
   result->codec_string = config->codec();
 
+  // Some codec strings provide color space info, but for WebCodecs this is
+  // ignored. Instead, the VideoFrames given to encode() are the source of truth
+  // for input color space. Note also that the output color space is up to the
+  // underlying codec impl. See https://github.com/w3c/webcodecs/issues/345.
+  media::VideoColorSpace codec_string_color_space;
+
   bool parse_succeeded = media::ParseVideoCodecString(
       "", config->codec().Utf8(), &is_codec_ambiguous, &result->codec,
-      &result->profile, &result->level, &result->color_space);
+      &result->profile, &result->level, &codec_string_color_space);
 
   if (!parse_succeeded || is_codec_ambiguous) {
     exception_state.ThrowTypeError("Unknown codec.");
     return nullptr;
   }
-
-  // For now spec allows UA to always choose the output color space, so ignore
-  // whatever we parsed from the codec string. Hard-code to 601 since that is
-  // correct most often. See https://crbug.com/1241448.
-  result->color_space = media::VideoColorSpace::REC601();
 
   // We are done with the parsing.
   if (!config->hasAvc())
@@ -298,6 +305,15 @@ bool VerifyCodecSupportStatic(VideoEncoderTraits::ParsedConfig* config,
       break;
 
     case media::VideoCodec::kH264:
+      if (config->options.frame_size.width() % 2 != 0 ||
+          config->options.frame_size.height() % 2 != 0) {
+        if (exception_state) {
+          exception_state->ThrowDOMException(
+              DOMExceptionCode::kNotSupportedError,
+              "H264 only supports even sized frames.");
+        }
+        return false;
+      }
       break;
 
     default:
@@ -353,24 +369,24 @@ VideoEncoderConfig* CopyConfig(const VideoEncoderConfig& config) {
   return result;
 }
 
-#if defined(OS_MAC)
-const base::Feature kWebCodecsEncoderGpuMemoryBufferReadback{
-    "WebCodecsEncoderGpuMemoryBufferReadback",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kWebCodecsEncoderGpuMemoryBufferReadback {
+  "WebCodecsEncoderGpuMemoryBufferReadback",
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || \
+    (BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY))
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
 #endif
+};
 
 bool CanUseGpuMemoryBufferReadback(media::VideoPixelFormat format,
                                    bool force_opaque) {
-#if defined(OS_MAC)
   // GMB readback only works with NV12, so only opaque buffers can be used.
   return (format == media::PIXEL_FORMAT_XBGR ||
           format == media::PIXEL_FORMAT_XRGB ||
           (force_opaque && (format == media::PIXEL_FORMAT_ABGR ||
                             format == media::PIXEL_FORMAT_ARGB))) &&
          base::FeatureList::IsEnabled(kWebCodecsEncoderGpuMemoryBufferReadback);
-#else
-  return false;
-#endif
 }
 
 }  // namespace
@@ -624,6 +640,7 @@ void VideoEncoder::ProcessEncode(Request* request) {
     // TODO(crbug.com/1195433): Once support for alpha channel encoding is
     // implemented, |force_opaque| must be set based on the VideoEncoderConfig.
     const bool can_use_gmb =
+        !disable_accelerated_frame_pool_ &&
         CanUseGpuMemoryBufferReadback(frame->format(), /*force_opaque=*/true);
     if (can_use_gmb && !accelerated_frame_pool_) {
       if (auto wrapper = SharedGpuContext::ContextProviderWrapper()) {
@@ -637,10 +654,17 @@ void VideoEncoder::ProcessEncode(Request* request) {
       // HasPendingActivity() keeps the VideoEncoder alive long enough.
       auto blit_done_callback = [](VideoEncoder* self, bool keyframe,
                                    uint32_t reset_count,
+                                   base::TimeDelta timestamp,
+                                   media::VideoFrameMetadata metadata,
                                    media::VideoEncoder::StatusCB done_callback,
                                    scoped_refptr<media::VideoFrame> frame) {
-        if (!self || self->reset_count_ != reset_count)
+        if (!self || self->reset_count_ != reset_count || !frame)
           return;
+
+        // CopyRGBATextureToVideoFrame() operates on mailboxes and not frames,
+        // so we must manually copy over properties relevant to the encoder.
+        frame->set_timestamp(timestamp);
+        frame->set_metadata(metadata);
 
         DCHECK_CALLED_ON_VALID_SEQUENCE(self->sequence_checker_);
         --self->requested_encodes_;
@@ -667,11 +691,21 @@ void VideoEncoder::ProcessEncode(Request* request) {
       // be nice to not have to do this, but currently the request processing
       // loop must execute synchronously or flush() will miss frames.
       blocking_request_in_progress_ = true;
+      // When doing RGBA to YUVA conversion using `accelerated_frame_pool_`, use
+      // sRGB primaries and the 601 YUV matrix. Note that this is subtly
+      // different from the 601 gfx::ColorSpace because the 601 gfx::ColorSpace
+      // has different (non-sRGB) primaries.
+      // https://crbug.com/1258245
+      constexpr gfx::ColorSpace dst_color_space(
+          gfx::ColorSpace::PrimaryID::BT709,
+          gfx::ColorSpace::TransferID::IEC61966_2_1,
+          gfx::ColorSpace::MatrixID::SMPTE170M,
+          gfx::ColorSpace::RangeID::LIMITED);
       if (accelerated_frame_pool_->CopyRGBATextureToVideoFrame(
-              format, frame->coded_size(), gfx::ColorSpace::CreateSRGB(),
-              origin, frame->mailbox_holder(0),
+              format, frame->coded_size(), frame->ColorSpace(), origin,
+              frame->mailbox_holder(0), dst_color_space,
               WTF::Bind(blit_done_callback, WrapWeakPersistent(this), keyframe,
-                        reset_count_,
+                        reset_count_, frame->timestamp(), frame->metadata(),
                         ConvertToBaseOnceCallback(CrossThreadBindOnce(
                             done_callback, WrapCrossThreadWeakPersistent(this),
                             WrapCrossThreadPersistent(request)))))) {
@@ -679,35 +713,35 @@ void VideoEncoder::ProcessEncode(Request* request) {
         return;
       }
 
-      // Error occurred, fall through to error handling below.
+      // Error occurred, fall through to normal readback path below.
       blocking_request_in_progress_ = false;
-      frame.reset();
+      disable_accelerated_frame_pool_ = true;
+      accelerated_frame_pool_.reset();
+    }
+
+    auto wrapper = SharedGpuContext::ContextProviderWrapper();
+    scoped_refptr<viz::RasterContextProvider> raster_provider;
+    if (wrapper && wrapper->ContextProvider())
+      raster_provider = wrapper->ContextProvider()->RasterContextProvider();
+    if (raster_provider) {
+      auto* ri = raster_provider->RasterInterface();
+      auto* gr_context = raster_provider->GrContext();
+
+      frame = ReadbackTextureBackedFrameToMemorySync(*frame, ri, gr_context,
+                                                     &readback_frame_pool_);
     } else {
-      auto wrapper = SharedGpuContext::ContextProviderWrapper();
-      scoped_refptr<viz::RasterContextProvider> raster_provider;
-      if (wrapper && wrapper->ContextProvider())
-        raster_provider = wrapper->ContextProvider()->RasterContextProvider();
-      if (raster_provider) {
-        auto* ri = raster_provider->RasterInterface();
-        auto* gr_context = raster_provider->GrContext();
-
-        frame = ReadbackTextureBackedFrameToMemorySync(*frame, ri, gr_context,
-                                                       &readback_frame_pool_);
-      } else {
-        frame.reset();
-      }
+      frame.reset();
     }
+  }
 
-    if (!frame) {
-      auto status = media::Status(media::StatusCode::kEncoderFailedEncode,
-                                  "Can't readback frame textures.");
-      callback_runner_->PostTask(
-          FROM_HERE,
-          ConvertToBaseOnceCallback(CrossThreadBindOnce(
-              done_callback, WrapCrossThreadWeakPersistent(this),
-              WrapCrossThreadPersistent(request), std::move(status))));
-      return;
-    }
+  if (!frame) {
+    auto status = media::Status(media::StatusCode::kEncoderFailedEncode,
+                                "Can't readback frame textures.");
+    callback_runner_->PostTask(
+        FROM_HERE, ConvertToBaseOnceCallback(CrossThreadBindOnce(
+                       done_callback, WrapCrossThreadWeakPersistent(this),
+                       WrapCrossThreadPersistent(request), std::move(status))));
+    return;
   }
 
   // Currently underlying encoders can't handle alpha channel, so let's
@@ -840,11 +874,36 @@ void VideoEncoder::CallOutputCallback(
   auto* chunk = MakeGarbageCollected<EncodedVideoChunk>(std::move(buffer));
 
   auto* metadata = EncodedVideoChunkMetadata::Create();
-  if (active_config->options.scalability_mode.has_value())
-    metadata->setTemporalLayerId(output.temporal_id);
+  if (active_config->options.scalability_mode.has_value()) {
+    auto* svc_metadata = SvcOutputMetadata::Create();
+    svc_metadata->setTemporalLayerId(output.temporal_id);
+    metadata->setSvc(svc_metadata);
 
-  if (first_output_after_configure_ || codec_desc.has_value()) {
+    // TODO(https://crbug.com/1275024): Remove these lines after deprecating.
+    if (!base::FeatureList::IsEnabled(kRemoveWebCodecsSpecViolations))
+      metadata->setTemporalLayerId(output.temporal_id);
+  }
+
+  // TODO(https://crbug.com/1241448): All encoders should output color space.
+  // For now, fallback to 601 since that is correct most often.
+  gfx::ColorSpace output_color_space = output.color_space.IsValid()
+                                           ? output.color_space
+                                           : gfx::ColorSpace::CreateREC601();
+
+  if (first_output_after_configure_ || codec_desc.has_value() ||
+      output_color_space != last_output_color_space_) {
     first_output_after_configure_ = false;
+
+    if (output_color_space != last_output_color_space_) {
+// TODO(crbug.com/1241448): Make Android obey the contract below. For now
+// Android VEA only _eventually_ gives a key frame when color space changes.
+#if !defined(OS_ANDROID)
+      DCHECK(output.key_frame) << "Encoders should generate a keyframe when "
+                               << "changing color space";
+#endif
+      last_output_color_space_ = output_color_space;
+    }
+
     auto* decoder_config = VideoDecoderConfig::Create();
     decoder_config->setCodec(active_config->codec_string);
     decoder_config->setCodedHeight(active_config->options.frame_size.height());
@@ -858,7 +917,7 @@ void VideoEncoder::CallOutputCallback(
     }
 
     VideoColorSpace* color_space =
-        MakeGarbageCollected<VideoColorSpace>(active_config->color_space);
+        MakeGarbageCollected<VideoColorSpace>(output_color_space);
     decoder_config->setColorSpace(color_space->toJSON());
 
     if (codec_desc.has_value()) {
@@ -976,7 +1035,11 @@ ScriptPromise VideoEncoder::isConfigSupported(ScriptState* script_state,
     auto* support = VideoEncoderSupport::Create();
     support->setConfig(config_copy);
     support->setSupported(false);
-    return ScriptPromise::Cast(script_state, ToV8(support, script_state));
+
+    return ScriptPromise::Cast(
+        script_state,
+        ToV8Traits<VideoEncoderSupport>::ToV8(script_state, support)
+            .ToLocalChecked());
   }
 
   // Create promises for resolving hardware and software encoding support and

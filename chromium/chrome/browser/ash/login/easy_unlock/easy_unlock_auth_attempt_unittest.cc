@@ -8,11 +8,11 @@
 
 #include <memory>
 
+#include "ash/components/proximity_auth/screenlock_bridge.h"
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_manager.h"
-#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -148,6 +148,16 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
       ASSERT_EQ(EasyUnlockKeyManager::GetKeyLabel(0u), key_label);
       state_ = STATE_SIGNIN_DONE;
     }
+  }
+
+  void SetSmartLockState(const AccountId& account_id,
+                         ash::SmartLockState state) override {
+    GTEST_FAIL();
+  }
+
+  void NotifySmartLockAuthResult(const AccountId& account_id,
+                                 bool successful) override {
+    GTEST_FAIL();
   }
 
  private:

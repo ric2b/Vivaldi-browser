@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 
 class Profile;
@@ -80,6 +79,9 @@ class CrostiniFeatures {
   // then this returns true, else if the policy is set to false, this returns
   // false.
   virtual bool IsPortForwardingAllowed(Profile* profile);
+
+  // Returns true if user is allowed to use multiple (non-default) containers.
+  virtual bool IsMultiContainerAllowed(Profile*);
 
   // TODO(crbug.com/1004708): Move other functions from crostini_util to here.
 

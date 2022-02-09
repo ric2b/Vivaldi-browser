@@ -20,18 +20,10 @@
 
 #include <errno.h>
 
-#if defined(__WATCOMC__)
-    #include <nerrno.h>
-#endif
-
 #include <sys/types.h>
 
 #ifdef HAVE_SYS_SELECT_H
 #   include <sys/select.h>
-#endif
-
-#ifdef __EMX__
-    #include <sys/select.h>
 #endif
 
 #ifndef WX_SOCKLEN_T
@@ -98,17 +90,18 @@ wxSocketError wxSocketImplUnix::GetLastError() const
 
 void wxSocketImplUnix::DoEnableEvents(int flags, bool enable)
 {
-    // No events for blocking sockets, they should be usable from the other
-    // threads and the events only work for the sockets used by the main one.
-    if ( GetSocketFlags() & wxSOCKET_BLOCK )
-        return;
-
     wxSocketManager * const manager = wxSocketManager::Get();
     if (!manager)
         return;
 
     if ( enable )
     {
+        // We should never try to enable events for the blocking sockets, they
+        // should be usable from the other threads and the events only work for
+        // the sockets used by the main one.
+        wxASSERT_MSG( !(GetSocketFlags() & wxSOCKET_BLOCK),
+                      "enabling events for a blocking socket?" );
+
         if ( flags & wxSOCKET_INPUT_FLAG )
             manager->Install_Callback(this, wxSOCKET_INPUT);
         if ( flags & wxSOCKET_OUTPUT_FLAG )
@@ -183,7 +176,7 @@ void wxSocketImplUnix::OnReadWaiting()
 
             default:
                 wxFAIL_MSG( "unexpected CheckForInput() return value" );
-                // fall through
+                wxFALLTHROUGH;
 
             case -1:
                 if ( GetLastError() == wxSOCKET_WOULDBLOCK )

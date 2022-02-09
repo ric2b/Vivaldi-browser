@@ -113,7 +113,12 @@ void OnSafetyTipClosed(ReputationCheckResult result,
       action_suffix = "SwitchTab";
       break;
     case SafetyTipInteraction::kStartNewNavigation:
-      action_suffix = "StartNewNavigation";
+      NOTREACHED();
+      // Do nothing because the safety tip is no longer listening directly
+      // with navigation start.
+      break;
+    case SafetyTipInteraction::kChangePrimaryPage:
+      action_suffix = "ChangePrimaryPage";
       break;
   }
   if (warning_dismissed) {
@@ -292,6 +297,8 @@ void ReputationWebContentsObserver::RegisterSafetyTipCloseCallbackForTesting(
 ReputationWebContentsObserver::ReputationWebContentsObserver(
     content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
+      content::WebContentsUserData<ReputationWebContentsObserver>(
+          *web_contents),
       profile_(Profile::FromBrowserContext(web_contents->GetBrowserContext())),
       reputation_check_pending_for_testing_(true),
       weak_factory_(this) {

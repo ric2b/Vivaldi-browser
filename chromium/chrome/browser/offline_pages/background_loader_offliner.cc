@@ -261,7 +261,7 @@ void BackgroundLoaderOffliner::DocumentOnLoadCompletedInMainFrame(
   snapshot_controller_->DocumentOnLoadCompletedInMainFrame();
 }
 
-void BackgroundLoaderOffliner::RenderProcessGone(
+void BackgroundLoaderOffliner::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
   if (pending_request_) {
     SavePageRequest request(*pending_request_.get());
@@ -489,7 +489,7 @@ void BackgroundLoaderOffliner::ResetLoader() {
 void BackgroundLoaderOffliner::AttachObservers() {
   content::WebContents* contents = loader_->web_contents();
   content::WebContentsObserver::Observe(contents);
-  OfflinerUserData::AddToWebContents(contents, this);
+  OfflinerUserData::CreateForWebContents(contents, this);
 }
 
 void BackgroundLoaderOffliner::AddLoadingSignal(const char* signal_name) {

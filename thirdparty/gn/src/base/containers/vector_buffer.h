@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/macros.h"
 
 namespace base {
 namespace internal {
@@ -154,7 +153,8 @@ class VectorBuffer {
   T* buffer_ = nullptr;
   size_t capacity_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(VectorBuffer);
+  VectorBuffer(const VectorBuffer&) = delete;
+  VectorBuffer& operator=(const VectorBuffer&) = delete;
 };
 
 }  // namespace internal

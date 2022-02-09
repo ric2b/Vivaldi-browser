@@ -45,6 +45,9 @@ import javax.inject.Named;
 
 import dagger.Lazy;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Works with the toolbar in a Custom Tab. Encapsulates interactions with Chrome's toolbar-related
  * classes such as {@link ToolbarManager} and {@link BrowserControlsVisibilityManager}.
@@ -126,6 +129,9 @@ public class CustomTabToolbarCoordinator {
         if (mIntentDataProvider.isMediaViewer()) {
             manager.setToolbarShadowVisibility(View.GONE);
         }
+
+        // Vivaldi: Remove share button for automotive. Ref. POLE-31.
+        if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
         showCustomButtonsOnToolbar();
     }
 

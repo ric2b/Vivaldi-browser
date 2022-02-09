@@ -42,28 +42,29 @@ public:
     virtual ~wxDataViewColumn();
 
     // implement wxHeaderColumnBase pure virtual methods
-    virtual wxAlignment GetAlignment() const { return m_alignment; }
-    virtual int GetFlags() const { return m_flags; }
+    virtual wxAlignment GetAlignment() const wxOVERRIDE { return m_alignment; }
+    virtual int GetFlags() const wxOVERRIDE { return m_flags; }
     virtual int GetMaxWidth() const { return m_maxWidth; }
-    virtual int GetMinWidth() const { return m_minWidth; }
-    virtual wxString GetTitle() const { return m_title; }
-    virtual int GetWidth() const;
-    virtual bool IsSortOrderAscending() const { return m_ascending; }
-    virtual bool IsSortKey() const;
-    virtual bool IsHidden() const;
+    virtual int GetMinWidth() const wxOVERRIDE { return m_minWidth; }
+    virtual wxString GetTitle() const wxOVERRIDE { return m_title; }
+    virtual int GetWidth() const wxOVERRIDE;
+    virtual bool IsSortOrderAscending() const wxOVERRIDE { return m_ascending; }
+    virtual bool IsSortKey() const wxOVERRIDE;
+    virtual bool IsHidden() const wxOVERRIDE;
 
-    virtual void SetAlignment  (wxAlignment align);
-    virtual void SetBitmap     (wxBitmap const& bitmap);
-    virtual void SetFlags      (int flags) { m_flags = flags; /*SetIndividualFlags(flags); */ }
-    virtual void SetHidden     (bool hidden);
+    virtual void SetAlignment  (wxAlignment align) wxOVERRIDE;
+    virtual void SetBitmap     (wxBitmap const& bitmap) wxOVERRIDE;
+    virtual void SetFlags      (int flags) wxOVERRIDE { m_flags = flags; /*SetIndividualFlags(flags); */ }
+    virtual void SetHidden     (bool hidden) wxOVERRIDE;
     virtual void SetMaxWidth   (int maxWidth);
-    virtual void SetMinWidth   (int minWidth);
-    virtual void SetReorderable(bool reorderable);
-    virtual void SetResizeable (bool resizable);
-    virtual void SetSortable   (bool sortable);
-    virtual void SetSortOrder  (bool ascending);
-    virtual void SetTitle      (wxString const& title);
-    virtual void SetWidth      (int  width);
+    virtual void SetMinWidth   (int minWidth) wxOVERRIDE;
+    virtual void SetReorderable(bool reorderable) wxOVERRIDE;
+    virtual void SetResizeable (bool resizable) wxOVERRIDE;
+    virtual void UnsetAsSortKey() wxOVERRIDE;
+    virtual void SetSortable   (bool sortable) wxOVERRIDE;
+    virtual void SetSortOrder  (bool ascending) wxOVERRIDE;
+    virtual void SetTitle      (wxString const& title) wxOVERRIDE;
+    virtual void SetWidth      (int  width) wxOVERRIDE;
 
    // implementation only
     wxDataViewColumnNativeData* GetNativeData() const
@@ -133,7 +134,7 @@ public:
                  const wxSize& size = wxDefaultSize,
                  long style = 0,
                  const wxValidator& validator = wxDefaultValidator,
-                 const wxString& name = wxDataViewCtrlNameStr )
+                 const wxString& name = wxASCII_STR(wxDataViewCtrlNameStr) )
   {
     Init();
     Create(parent, winid, pos, size, style, validator, name);
@@ -147,7 +148,7 @@ public:
               const wxSize& size = wxDefaultSize,
               long style = 0,
               const wxValidator& validator = wxDefaultValidator,
-              const wxString& name = wxDataViewCtrlNameStr);
+              const wxString& name = wxASCII_STR(wxDataViewCtrlNameStr));
 
   virtual wxWindow* GetMainWindow() // not used for the native implementation
   {
@@ -155,39 +156,43 @@ public:
   }
 
  // inherited methods from wxDataViewCtrlBase:
-  virtual bool AssociateModel(wxDataViewModel* model);
+  virtual bool AssociateModel(wxDataViewModel* model) wxOVERRIDE;
 
-  virtual bool              AppendColumn     (wxDataViewColumn* columnPtr);
-  virtual bool              ClearColumns     ();
-  virtual bool              DeleteColumn     (wxDataViewColumn* columnPtr);
-  virtual wxDataViewColumn* GetColumn        (unsigned int pos) const;
-  virtual unsigned int      GetColumnCount   () const;
-  virtual int               GetColumnPosition(const wxDataViewColumn* columnPtr) const;
-  virtual wxDataViewColumn* GetSortingColumn () const;
-  virtual bool              InsertColumn     (unsigned int pos, wxDataViewColumn *col);
-  virtual bool              PrependColumn    (wxDataViewColumn* columnPtr);
+  virtual bool              AppendColumn     (wxDataViewColumn* columnPtr) wxOVERRIDE;
+  virtual bool              ClearColumns     () wxOVERRIDE;
+  virtual bool              DeleteColumn     (wxDataViewColumn* columnPtr) wxOVERRIDE;
+  virtual wxDataViewColumn* GetColumn        (unsigned int pos) const wxOVERRIDE;
+  virtual unsigned int      GetColumnCount   () const wxOVERRIDE;
+  virtual int               GetColumnPosition(const wxDataViewColumn* columnPtr) const wxOVERRIDE;
+  virtual wxDataViewColumn* GetSortingColumn () const wxOVERRIDE;
+  virtual bool              InsertColumn     (unsigned int pos, wxDataViewColumn *col) wxOVERRIDE;
+  virtual bool              PrependColumn    (wxDataViewColumn* columnPtr) wxOVERRIDE;
 
-  virtual void Collapse( const wxDataViewItem& item);
-  virtual void EnsureVisible(const wxDataViewItem& item, const wxDataViewColumn* columnPtr=NULL);
-  virtual void Expand(const wxDataViewItem& item);
-  virtual bool IsExpanded(const wxDataViewItem & item) const;
+  virtual void Collapse( const wxDataViewItem& item) wxOVERRIDE;
+  virtual void EnsureVisible(const wxDataViewItem& item, const wxDataViewColumn* columnPtr=NULL) wxOVERRIDE;
+  virtual bool IsExpanded(const wxDataViewItem & item) const wxOVERRIDE;
 
   virtual unsigned int GetCount() const;
+  virtual int GetCountPerPage() const wxOVERRIDE;
   virtual wxRect GetItemRect(const wxDataViewItem& item,
-                             const wxDataViewColumn* columnPtr = NULL) const;
-  virtual int GetSelectedItemsCount() const;
-  virtual int GetSelections(wxDataViewItemArray& sel) const;
+                             const wxDataViewColumn* columnPtr = NULL) const wxOVERRIDE;
+  virtual int GetSelectedItemsCount() const wxOVERRIDE;
+  virtual int GetSelections(wxDataViewItemArray& sel) const wxOVERRIDE;
 
-  virtual void HitTest(const wxPoint& point, wxDataViewItem& item, wxDataViewColumn*& columnPtr) const;
+  virtual wxDataViewItem GetTopItem() const wxOVERRIDE;
 
-  virtual bool IsSelected(const wxDataViewItem& item) const;
+  virtual void HitTest(const wxPoint& point, wxDataViewItem& item, wxDataViewColumn*& columnPtr) const wxOVERRIDE;
 
-  virtual void SelectAll();
-  virtual void Select(const wxDataViewItem& item);
-  virtual void SetSelections(const wxDataViewItemArray& sel);
+  virtual bool SetRowHeight(int rowHeight) wxOVERRIDE;
 
-  virtual void Unselect(const wxDataViewItem& item);
-  virtual void UnselectAll();
+  virtual bool IsSelected(const wxDataViewItem& item) const wxOVERRIDE;
+
+  virtual void SelectAll() wxOVERRIDE;
+  virtual void Select(const wxDataViewItem& item) wxOVERRIDE;
+  virtual void SetSelections(const wxDataViewItemArray& sel) wxOVERRIDE;
+
+  virtual void Unselect(const wxDataViewItem& item) wxOVERRIDE;
+  virtual void UnselectAll() wxOVERRIDE;
 
 //
 // implementation
@@ -200,8 +205,8 @@ public:
 
  // finishes editing of custom items; if no custom item is currently edited the method does nothing
   void FinishCustomItemEditing();
-  
-  virtual void EditItem(const wxDataViewItem& item, const wxDataViewColumn *column);
+
+  virtual void EditItem(const wxDataViewItem& item, const wxDataViewColumn *column) wxOVERRIDE;
 
  // returns the n-th pointer to a column;
  // this method is different from GetColumn(unsigned int pos) because here 'n' is not a position in the control but the n-th
@@ -256,9 +261,11 @@ public:
     m_Deleting = deleting;
   }
 
-  virtual wxDataViewColumn *GetCurrentColumn() const;
+  void AdjustAutosizedColumns() const;
 
-  virtual wxVisualAttributes GetDefaultAttributes() const
+  virtual wxDataViewColumn *GetCurrentColumn() const wxOVERRIDE;
+
+  virtual wxVisualAttributes GetDefaultAttributes() const wxOVERRIDE
   {
       return GetClassDefaultAttributes(GetWindowVariant());
   }
@@ -268,10 +275,12 @@ public:
 
 protected:
  // inherited methods from wxDataViewCtrlBase
-  virtual void DoSetExpanderColumn();
-  virtual void DoSetIndent();
+  virtual void DoSetExpanderColumn() wxOVERRIDE;
+  virtual void DoSetIndent() wxOVERRIDE;
 
-  virtual wxSize DoGetBestSize() const;
+  virtual void DoExpand(const wxDataViewItem& item, bool expandChildren) wxOVERRIDE;
+
+  virtual wxSize DoGetBestSize() const wxOVERRIDE;
 
  // event handling
   void OnSize(wxSizeEvent &event);
@@ -281,8 +290,8 @@ private:
  // initializing of local variables:
   void Init();
 
-  virtual wxDataViewItem DoGetCurrentItem() const;
-  virtual void DoSetCurrentItem(const wxDataViewItem& item);
+  virtual wxDataViewItem DoGetCurrentItem() const wxOVERRIDE;
+  virtual void DoSetCurrentItem(const wxDataViewItem& item) wxOVERRIDE;
 
  //
  // variables
@@ -299,12 +308,12 @@ private:
 
   wxDataViewColumnPtrArrayType m_ColumnPtrs; // all column pointers are stored in an array
 
-  wxDataViewModelNotifier* m_ModelNotifier; // stores the model notifier for the control (does not own the notifier)
+  class wxOSXDataViewModelNotifier* m_ModelNotifier; // stores the model notifier for the control (does not own the notifier)
 
  // wxWidget internal stuff:
-  DECLARE_DYNAMIC_CLASS(wxDataViewCtrl)
-  DECLARE_NO_COPY_CLASS(wxDataViewCtrl)
-  DECLARE_EVENT_TABLE()
+  wxDECLARE_DYNAMIC_CLASS(wxDataViewCtrl);
+  wxDECLARE_NO_COPY_CLASS(wxDataViewCtrl);
+  wxDECLARE_EVENT_TABLE();
 };
 
 #endif // _WX_DATAVIEWCTRL_OSX_H_

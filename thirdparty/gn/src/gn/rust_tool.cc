@@ -38,6 +38,11 @@ bool RustTool::ValidateName(const char* name) const {
          name == kRsToolStaticlib;
 }
 
+bool RustTool::MayLink() const {
+  return name_ == kRsToolBin || name_ == kRsToolCDylib || name_ == kRsToolDylib ||
+         name_ == kRsToolMacro;
+}
+
 void RustTool::SetComplete() {
   SetToolComplete();
 }
@@ -114,9 +119,9 @@ bool RustTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
 }
 
 bool RustTool::ValidateSubstitution(const Substitution* sub_type) const {
-  if (name_ == kRsToolBin || name_ == kRsToolCDylib || name_ == kRsToolDylib ||
-      name_ == kRsToolMacro || name_ == kRsToolRlib ||
-      name_ == kRsToolStaticlib)
+  if (MayLink())
+    return IsValidRustLinkerSubstitution(sub_type);
+  if (ValidateName(name_))
     return IsValidRustSubstitution(sub_type);
   NOTREACHED();
   return false;

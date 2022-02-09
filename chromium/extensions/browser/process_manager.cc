@@ -13,12 +13,11 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/one_shot_event.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/public/browser/browser_context.h"
@@ -99,18 +98,17 @@ base::TimeDelta GetEventPageSuspendDelay() {
 
 std::string GetExtensionIdForSiteInstance(
     content::SiteInstance* site_instance) {
-  if (!site_instance)
-    return std::string();
+  // <webview> guests always store the ExtensionId in the partition domain.
+  if (site_instance->IsGuest())
+    return site_instance->GetStoragePartitionConfig().partition_domain();
 
   // This works for both apps and extensions because the site has been
   // normalized to the extension URL for hosted apps.
   const GURL& site_url = site_instance->GetSiteURL();
+  if (site_url.SchemeIs(kExtensionScheme))
+    return site_url.host();
 
-  if (!site_url.SchemeIs(kExtensionScheme) &&
-      !site_url.SchemeIs(content::kGuestScheme))
-    return std::string();
-
-  return site_url.host();
+  return std::string();
 }
 
 std::string GetExtensionID(content::RenderFrameHost* render_frame_host) {
@@ -489,11 +487,11 @@ const Extension* ProcessManager::GetExtensionForWebContents(
     // extension urls are loaded in that SiteInstance).
     content::NavigationController& controller = web_contents->GetController();
     content::NavigationEntry* entry = controller.GetLastCommittedEntry();
-    // If there is no last committed entry, check the pending entry. This can
-    // happen in cases where we query this before any entry is fully committed,
-    // such as when attributing a WebContents for the TaskManager. If there is
-    // a committed navigation, use that instead.
-    if (!entry)
+    // If the "last committed" entry is the initial entry, check the pending
+    // entry. This can happen in cases where we query this before any entry is
+    // fully committed, such as when attributing a WebContents for the
+    // TaskManager. If there is a committed navigation, use that instead.
+    if (!entry || entry->IsInitialEntry())
       entry = controller.GetPendingEntry();
     if (!entry ||
         extension_registry_->enabled_extensions().GetExtensionOrAppByURL(

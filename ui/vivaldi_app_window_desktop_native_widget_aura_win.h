@@ -7,7 +7,6 @@
 #ifndef UI_VIVALDI_APP_WINDOW_DESKTOP_NATIVE_WIDGET_AURA_WIN_H_
 #define UI_VIVALDI_APP_WINDOW_DESKTOP_NATIVE_WIDGET_AURA_WIN_H_
 
-#include "base/macros.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 
 class VivaldiNativeAppWindowViewsWin;

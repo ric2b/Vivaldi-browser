@@ -47,35 +47,26 @@ WX_PG_DECLARE_EDITOR_WITH_DECL(DatePickerCtrl,WXDLLIMPEXP_PROPGRID)
 #define wxPG_COLOUR_CUSTOM      0xFFFFFF
 #define wxPG_COLOUR_UNSPECIFIED (wxPG_COLOUR_CUSTOM+1)
 
-/** @class wxColourPropertyValue
-
-    Because text, background and other colours tend to differ between
-    platforms, wxSystemColourProperty must be able to select between system
-    colour and, when necessary, to pick a custom one. wxSystemColourProperty
-    value makes this possible.
-*/
+// Because text, background and other colours tend to differ between
+// platforms, wxSystemColourProperty must be able to select between system
+// colour and, when necessary, to pick a custom one. wxSystemColourProperty
+// value makes this possible.
 class WXDLLIMPEXP_PROPGRID wxColourPropertyValue : public wxObject
 {
 public:
-    /** An integer value relating to the colour, and which exact
-        meaning depends on the property with which it is used.
-
-        For wxSystemColourProperty:
-
-        Any of wxSYS_COLOUR_XXX, or any web-colour ( use wxPG_TO_WEB_COLOUR
-        macro - (currently unsupported) ), or wxPG_COLOUR_CUSTOM.
-
-        For custom colour properties without values array specified:
-
-        index or wxPG_COLOUR_CUSTOM
-
-        For custom colour properties <b>with</b> values array specified:
-
-        m_arrValues[index] or wxPG_COLOUR_CUSTOM
-    */
+    // An integer value relating to the colour, and which exact
+    // meaning depends on the property with which it is used.
+    // For wxSystemColourProperty:
+    // Any of wxSYS_COLOUR_XXX, or any web-colour ( use wxPG_TO_WEB_COLOUR
+    // macro - (currently unsupported) ), or wxPG_COLOUR_CUSTOM.
+    //
+    // For custom colour properties without values array specified:
+    // index or wxPG_COLOUR_CUSTOM
+    // For custom colour properties with values array specified:
+    // m_arrValues[index] or wxPG_COLOUR_CUSTOM
     wxUint32    m_type;
 
-    /** Resulting colour. Should be correct regardless of type. */
+    // Resulting colour. Should be correct regardless of type.
     wxColour    m_colour;
 
     wxColourPropertyValue()
@@ -90,9 +81,9 @@ public:
 
     wxColourPropertyValue( const wxColourPropertyValue& v )
         : wxObject()
+        , m_colour(v.m_colour)
     {
         m_type = v.m_type;
-        m_colour = v.m_colour;
     }
 
     void Init( wxUint32 type, const wxColour& colour )
@@ -103,9 +94,9 @@ public:
 
     wxColourPropertyValue( const wxColour& colour )
         : wxObject()
+        , m_colour(colour)
     {
         m_type = wxPG_COLOUR_CUSTOM;
-        m_colour = colour;
     }
 
     wxColourPropertyValue( wxUint32 type )
@@ -127,7 +118,7 @@ public:
     }
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxColourPropertyValue)
+    wxDECLARE_DYNAMIC_CLASS(wxColourPropertyValue);
 };
 
 
@@ -137,19 +128,9 @@ operator==(const wxColourPropertyValue&, const wxColourPropertyValue&);
 DECLARE_VARIANT_OBJECT_EXPORTED(wxColourPropertyValue, WXDLLIMPEXP_PROPGRID)
 
 // -----------------------------------------------------------------------
-// Declare part of custom colour property macro pairs.
 
-#if wxUSE_IMAGE
-    #include "wx/image.h"
-#endif
-
-// -----------------------------------------------------------------------
-
-/** @class wxFontProperty
-    @ingroup classes
-    Property representing wxFont.
-*/
-class WXDLLIMPEXP_PROPGRID wxFontProperty : public wxPGProperty
+// Property representing wxFont.
+class WXDLLIMPEXP_PROPGRID wxFontProperty : public wxEditorDialogProperty
 {
     WX_PG_DECLARE_PROPERTY_CLASS(wxFontProperty)
 public:
@@ -158,30 +139,26 @@ public:
                    const wxString& name = wxPG_LABEL,
                    const wxFont& value = wxFont());
     virtual ~wxFontProperty();
-    virtual void OnSetValue();
-    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const;
-    virtual bool OnEvent( wxPropertyGrid* propgrid,
-                          wxWindow* primary, wxEvent& event );
+    virtual void OnSetValue() wxOVERRIDE;
+    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const wxOVERRIDE;
     virtual wxVariant ChildChanged( wxVariant& thisValue,
                                     int childIndex,
-                                    wxVariant& childValue ) const;
-    virtual void RefreshChildren();
+                                    wxVariant& childValue ) const wxOVERRIDE;
+    virtual void RefreshChildren() wxOVERRIDE;
 
 protected:
+    virtual bool DisplayEditorDialog(wxPropertyGrid* pg, wxVariant& value) wxOVERRIDE;
 };
 
 // -----------------------------------------------------------------------
 
 
-/** If set, then match from list is searched for a custom colour. */
+// If set, then match from list is searched for a custom colour.
 #define wxPG_PROP_TRANSLATE_CUSTOM      wxPG_PROP_CLASS_SPECIFIC_1
 
 
-/** @class wxSystemColourProperty
-    @ingroup classes
-    Has dropdown list of wxWidgets system colours. Value used is
-    of wxColourPropertyValue type.
-*/
+// Has dropdown list of wxWidgets system colours. Value used is
+// of wxColourPropertyValue type.
 class WXDLLIMPEXP_PROPGRID wxSystemColourProperty : public wxEnumProperty
 {
     WX_PG_DECLARE_PROPERTY_CLASS(wxSystemColourProperty)
@@ -193,40 +170,36 @@ public:
                                 value = wxColourPropertyValue() );
     virtual ~wxSystemColourProperty();
 
-    virtual void OnSetValue();
+    virtual void OnSetValue() wxOVERRIDE;
     virtual bool IntToValue(wxVariant& variant,
                             int number,
-                            int argFlags = 0) const;
+                            int argFlags = 0) const wxOVERRIDE;
 
-    /**
-        Override in derived class to customize how colours are printed as
-        strings.
-    */
+    // Override in derived class to customize how colours are printed as
+    // strings.
     virtual wxString ColourToString( const wxColour& col, int index,
                                      int argFlags = 0 ) const;
 
-    /** Returns index of entry that triggers colour picker dialog
-        (default is last).
-    */
+    // Returns index of entry that triggers colour picker dialog
+    // (default is last).
     virtual int GetCustomColourIndex() const;
 
-    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const;
+    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const wxOVERRIDE;
     virtual bool StringToValue( wxVariant& variant,
                                 const wxString& text,
-                                int argFlags = 0 ) const;
+                                int argFlags = 0 ) const wxOVERRIDE;
     virtual bool OnEvent( wxPropertyGrid* propgrid,
-                          wxWindow* primary, wxEvent& event );
-    virtual bool DoSetAttribute( const wxString& name, wxVariant& value );
-    virtual wxSize OnMeasureImage( int item ) const;
+                          wxWindow* primary, wxEvent& event ) wxOVERRIDE;
+    virtual bool DoSetAttribute( const wxString& name, wxVariant& value ) wxOVERRIDE;
+    virtual wxSize OnMeasureImage( int item ) const wxOVERRIDE;
     virtual void OnCustomPaint( wxDC& dc,
-                                const wxRect& rect, wxPGPaintData& paintdata );
+                                const wxRect& rect, wxPGPaintData& paintdata ) wxOVERRIDE;
 
     // Helper function to show the colour dialog
     bool QueryColourFromUser( wxVariant& variant ) const;
 
-    /** Default is to use wxSystemSettings::GetColour(index). Override to use
-        custom colour tables etc.
-    */
+    // Default is to use wxSystemSettings::GetColour(index). Override to use
+    // custom colour tables etc.
     virtual wxColour GetColour( int index ) const;
 
     wxColourPropertyValue GetVal( const wxVariant* pVariant = NULL ) const;
@@ -235,10 +208,10 @@ protected:
 
     // Special constructors to be used by derived classes.
     wxSystemColourProperty( const wxString& label, const wxString& name,
-        const wxChar* const* labels, const long* values, wxPGChoices* choicesCache,
+        const char* const* labels, const long* values, wxPGChoices* choicesCache,
         const wxColourPropertyValue& value );
     wxSystemColourProperty( const wxString& label, const wxString& name,
-        const wxChar* const* labels, const long* values, wxPGChoices* choicesCache,
+        const char* const* labels, const long* values, wxPGChoices* choicesCache,
         const wxColour& value );
 
     void Init( int type, const wxColour& colour );
@@ -270,11 +243,11 @@ public:
                       const wxColour& value = *wxWHITE );
     virtual ~wxColourProperty();
 
-    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const;
-    virtual wxColour GetColour( int index ) const;
+    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const wxOVERRIDE;
+    virtual wxColour GetColour( int index ) const wxOVERRIDE;
 
 protected:
-    virtual wxVariant DoTranslateVal( wxColourPropertyValue& v ) const;
+    virtual wxVariant DoTranslateVal( wxColourPropertyValue& v ) const wxOVERRIDE;
 
 private:
     void Init( wxColour colour );
@@ -282,22 +255,19 @@ private:
 
 // -----------------------------------------------------------------------
 
-/** @class wxCursorProperty
-    @ingroup classes
-    Property representing wxCursor.
-*/
+// Property representing wxCursor.
 class WXDLLIMPEXP_PROPGRID wxCursorProperty : public wxEnumProperty
 {
-    DECLARE_DYNAMIC_CLASS(wxCursorProperty)
+    wxDECLARE_DYNAMIC_CLASS(wxCursorProperty);
 
     wxCursorProperty( const wxString& label= wxPG_LABEL,
                       const wxString& name= wxPG_LABEL,
                       int value = 0 );
     virtual ~wxCursorProperty();
 
-    virtual wxSize OnMeasureImage( int item ) const;
+    virtual wxSize OnMeasureImage( int item ) const wxOVERRIDE;
     virtual void OnCustomPaint( wxDC& dc,
-                                const wxRect& rect, wxPGPaintData& paintdata );
+                                const wxRect& rect, wxPGPaintData& paintdata ) wxOVERRIDE;
 };
 
 // -----------------------------------------------------------------------
@@ -305,14 +275,13 @@ class WXDLLIMPEXP_PROPGRID wxCursorProperty : public wxEnumProperty
 #if wxUSE_IMAGE
 
 WXDLLIMPEXP_PROPGRID const wxString& wxPGGetDefaultImageWildcard();
+class WXDLLIMPEXP_FWD_CORE wxBitmap;
+class WXDLLIMPEXP_FWD_CORE wxImage;
 
-/** @class wxImageFileProperty
-    @ingroup classes
-    Property representing image file(name).
-*/
+// Property representing image file(name).
 class WXDLLIMPEXP_PROPGRID wxImageFileProperty : public wxFileProperty
 {
-    DECLARE_DYNAMIC_CLASS(wxImageFileProperty)
+    wxDECLARE_DYNAMIC_CLASS(wxImageFileProperty);
 public:
 
     wxImageFileProperty( const wxString& label= wxPG_LABEL,
@@ -320,11 +289,11 @@ public:
                          const wxString& value = wxEmptyString);
     virtual ~wxImageFileProperty();
 
-    virtual void OnSetValue();
+    virtual void OnSetValue() wxOVERRIDE;
 
-    virtual wxSize OnMeasureImage( int item ) const;
+    virtual wxSize OnMeasureImage( int item ) const wxOVERRIDE;
     virtual void OnCustomPaint( wxDC& dc,
-                                const wxRect& rect, wxPGPaintData& paintdata );
+                                const wxRect& rect, wxPGPaintData& paintdata ) wxOVERRIDE;
 
 protected:
     wxBitmap*   m_pBitmap; // final thumbnail area
@@ -339,19 +308,10 @@ private:
 
 #if wxUSE_CHOICEDLG
 
-/** @class wxMultiChoiceProperty
-    @ingroup classes
-    Property that manages a value resulting from wxMultiChoiceDialog. Value is
-    array of strings. You can get value as array of choice values/indices by
-    calling wxMultiChoiceProperty::GetValueAsArrayInt().
-
-    <b>Supported special attributes:</b>
-    - "UserStringMode": If > 0, allow user to manually enter strings that are
-      not in the list of choices. If this value is 1, user strings are
-      preferably placed in front of valid choices. If value is 2, then those
-      strings will placed behind valid choices.
-*/
-class WXDLLIMPEXP_PROPGRID wxMultiChoiceProperty : public wxPGProperty
+// Property that manages a value resulting from wxMultiChoiceDialog. Value is
+// array of strings. You can get value as array of choice values/indices by
+// calling wxMultiChoiceProperty::GetValueAsArrayInt().
+class WXDLLIMPEXP_PROPGRID wxMultiChoiceProperty : public wxEditorDialogProperty
 {
     WX_PG_DECLARE_PROPERTY_CLASS(wxMultiChoiceProperty)
 public:
@@ -371,13 +331,12 @@ public:
 
     virtual ~wxMultiChoiceProperty();
 
-    virtual void OnSetValue();
-    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const;
+    virtual void OnSetValue() wxOVERRIDE;
+    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const wxOVERRIDE;
     virtual bool StringToValue(wxVariant& variant,
                                const wxString& text,
-                               int argFlags = 0) const;
-    virtual bool OnEvent( wxPropertyGrid* propgrid,
-                          wxWindow* primary, wxEvent& event );
+                               int argFlags = 0) const wxOVERRIDE;
+    virtual bool DoSetAttribute( const wxString& name, wxVariant& value ) wxOVERRIDE;
 
     wxArrayInt GetValueAsArrayInt() const
     {
@@ -385,6 +344,7 @@ public:
     }
 
 protected:
+    virtual bool DisplayEditorDialog(wxPropertyGrid* pg, wxVariant& value) wxOVERRIDE;
 
     void GenerateValueAsString( wxVariant& value, wxString* target ) const;
 
@@ -395,6 +355,8 @@ protected:
 
     // Cache displayed text since generating it is relatively complicated.
     wxString            m_display;
+    // How to handle user strings
+    int                 m_userStringMode;
 };
 
 #endif // wxUSE_CHOICEDLG
@@ -403,16 +365,7 @@ protected:
 
 #if wxUSE_DATETIME
 
-/** @class wxDateProperty
-    @ingroup classes
-    Property representing wxDateTime.
-
-    <b>Supported special attributes:</b>
-    - "DateFormat": Determines displayed date format.
-    - "PickerStyle": Determines window style used with wxDatePickerCtrl.
-       Default is wxDP_DEFAULT | wxDP_SHOWCENTURY. Using wxDP_ALLOWNONE
-       enables additional support for unspecified property value.
-*/
+// Property representing wxDateTime.
 class WXDLLIMPEXP_PROPGRID wxDateProperty : public wxPGProperty
 {
     WX_PG_DECLARE_PROPERTY_CLASS(wxDateProperty)
@@ -423,13 +376,13 @@ public:
                     const wxDateTime& value = wxDateTime() );
     virtual ~wxDateProperty();
 
-    virtual void OnSetValue();
-    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const;
+    virtual void OnSetValue() wxOVERRIDE;
+    virtual wxString ValueToString( wxVariant& value, int argFlags = 0 ) const wxOVERRIDE;
     virtual bool StringToValue(wxVariant& variant,
                                const wxString& text,
-                               int argFlags = 0) const;
+                               int argFlags = 0) const wxOVERRIDE;
 
-    virtual bool DoSetAttribute( const wxString& name, wxVariant& value );
+    virtual bool DoSetAttribute( const wxString& name, wxVariant& value ) wxOVERRIDE;
 
     void SetFormat( const wxString& format )
     {
@@ -494,17 +447,17 @@ protected:
 //   used for event handling here.
 class WXDLLIMPEXP_PROPGRID wxPGSpinCtrlEditor : public wxPGTextCtrlEditor
 {
-    DECLARE_DYNAMIC_CLASS(wxPGSpinCtrlEditor)
+    wxDECLARE_DYNAMIC_CLASS(wxPGSpinCtrlEditor);
 public:
     virtual ~wxPGSpinCtrlEditor();
 
-    wxString GetName() const;
+    wxString GetName() const wxOVERRIDE;
     virtual wxPGWindowList CreateControls(wxPropertyGrid* propgrid,
                                           wxPGProperty* property,
                                           const wxPoint& pos,
-                                          const wxSize& size) const;
+                                          const wxSize& size) const wxOVERRIDE;
     virtual bool OnEvent( wxPropertyGrid* propgrid, wxPGProperty* property,
-        wxWindow* wnd, wxEvent& event ) const;
+        wxWindow* wnd, wxEvent& event ) const wxOVERRIDE;
 
 private:
     mutable wxString m_tempString;

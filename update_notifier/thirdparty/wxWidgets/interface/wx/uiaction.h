@@ -109,7 +109,7 @@ public:
         Press a key.
 
         If you are using modifiers then it needs to be paired with an identical
-        KeyUp or the modifiers will not be released (MSW and OSX).
+        KeyUp or the modifiers will not be released (MSW and macOS).
 
         @param keycode
             Key to operate on, as an integer. It is interpreted as a wxKeyCode.
@@ -145,15 +145,39 @@ public:
     bool Char(int keycode, int modifiers = wxMOD_NONE);
 
     /**
-        Emulate typing in the keys representing the given string.
+        Simulate selection of an item with the given text.
 
-        Currently only the ASCII letters, digits and characters for the definition
-        of numbers (i.e. characters @c a-z @c A-Z @c 0-9 @c + @c - @c . @c , @c 'space')
-        are supported.
+        This method selects an item in the currently focused wxChoice,
+        wxComboBox, wxListBox and similar controls. It does it by simulating
+        keyboard events, so the behaviour should be the same as if the item
+        was really selected by the user.
+
+        Notice that the implementation of this method uses wxYield() and so
+        events can be dispatched from it.
 
         @param text
-            The string to type.
+            The text of the item to select.
+
+        @return
+            @true if the item @a text was successfully selected or @false if
+            the currently focused window is not one of the controls allowing
+            item selection or if the item with the given text was not found in
+            it.
+
+        @since 3.1.0
+     */
+    bool Select(const wxString& text);
+
+    /**
+        Emulate typing in the keys representing the given string.
+
+        Currently only the ASCII letters are universally supported. Digits and
+        punctuation characters can be used with the standard QWERTY (US)
+        keyboard layout but may not work with other layouts.
+
+        @param text
+            The string, containing only US ASCII characters, to type.
     */
-    bool Text(const wxString& text);
+    bool Text(const char* text);
 };
 

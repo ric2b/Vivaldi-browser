@@ -143,12 +143,6 @@ class WebClient {
       WebState* web_state,
       mojo::GenericPendingReceiver receiver) {}
 
-  // Allows the embedder to specify legacy TLS enforcement on a per-host basis,
-  // for example to allow users to bypass interstitial warnings on affected
-  // hosts.
-  virtual bool IsLegacyTLSAllowedForHost(WebState* web_state,
-                                         const std::string& hostname);
-
   // Calls the given |callback| with the contents of an error page to display
   // when a navigation error occurs. |error| is always a valid pointer. The
   // string passed to |callback| will be nil if no error page should be
@@ -182,7 +176,12 @@ class WebClient {
   virtual UserAgentType GetDefaultUserAgent(id<UITraitEnvironment> web_view,
                                             const GURL& url);
 
+  // Returns true if URL was restored via session restoration cache.
   virtual bool RestoreSessionFromCache(web::WebState* web_state) const;
+
+  // Correct missing NTP and reading list virtualURLs and titles. Native session
+  // restoration may not properly restore these items.
+  virtual void CleanupNativeRestoreURLs(web::WebState* web_state) const;
 };
 
 }  // namespace web

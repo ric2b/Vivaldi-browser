@@ -246,8 +246,6 @@ NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendTextItem(
   NGInlineItem& item =
       AppendItem(items_, type, start_offset, text_.length(), layout_object);
   DCHECK(!item.IsEmptyItem());
-  // text item is not empty.
-  is_empty_inline_ = false;
   is_block_level_ = false;
   return item;
 }
@@ -402,6 +400,24 @@ bool NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendTextReusing(
     if (!text_.length() && !item.Length() && collapse_spaces)
       continue;
 
+    // We are reusing items that included 'generated line breaks', inserted to
+    // deal with leading preserved space sequences. If we are performing a
+    // relayout after removing a <br> (eg. <div>abc<br><span> dfg</span></div>)
+    // it may imply that the preserved spaces are not a leading sequence
+    // anymore.
+    if (item.IsGeneratedForLineBreak()) {
+      // We wont restore 'generated line breaks' at the start
+      // TODO(jfernandez): How it's possible that we have a generated break at
+      // position 0 ?
+      if (!text_.length())
+        continue;
+      int index = text_.length() - 1;
+      while (index >= 0 && text_[index] == kSpaceCharacter)
+        --index;
+      if (index >= 0 && text_[index] != kNewlineCharacter)
+        continue;
+    }
+
     unsigned start = text_.length();
     text_.Append(original_string, item.StartOffset(), item.Length());
 
@@ -409,7 +425,6 @@ bool NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendTextReusing(
     // itself may be reused.
     if (item.StartOffset() == start) {
       items_->push_back(item);
-      is_empty_inline_ &= item.IsEmptyItem();
       is_block_level_ &= item.IsBlockLevel();
       continue;
     }
@@ -440,7 +455,6 @@ bool NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendTextReusing(
 #endif
 
     items_->push_back(adjusted_item);
-    is_empty_inline_ &= adjusted_item.IsEmptyItem();
     is_block_level_ &= adjusted_item.IsBlockLevel();
   }
   return true;
@@ -759,8 +773,6 @@ void NGInlineItemsBuilderTemplate<
                                   text_.length(), layout_object);
   item.SetEndCollapseType(end_collapse, space_run_has_newline);
   DCHECK(!item.IsEmptyItem());
-  // text item is not empty.
-  is_empty_inline_ = false;
   is_block_level_ = false;
 }
 
@@ -996,7 +1008,6 @@ NGInlineItem& NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::Append(
   unsigned end_offset = text_.length();
   NGInlineItem& item =
       AppendItem(items_, type, end_offset - 1, end_offset, layout_object);
-  is_empty_inline_ &= item.IsEmptyItem();
   is_block_level_ &= item.IsBlockLevel();
   return item;
 }
@@ -1061,7 +1072,6 @@ NGInlineItem& NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendOpaque(
   NGInlineItem& item =
       AppendItem(items_, type, end_offset - 1, end_offset, layout_object);
   item.SetEndCollapseType(NGInlineItem::kOpaqueToCollapsing);
-  is_empty_inline_ &= item.IsEmptyItem();
   is_block_level_ &= item.IsBlockLevel();
   return item;
 }
@@ -1074,7 +1084,6 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendOpaque(
   NGInlineItem& item =
       AppendItem(items_, type, end_offset, end_offset, layout_object);
   item.SetEndCollapseType(NGInlineItem::kOpaqueToCollapsing);
-  is_empty_inline_ &= item.IsEmptyItem();
   is_block_level_ &= item.IsBlockLevel();
 }
 
@@ -1222,10 +1231,8 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::EnterBlock(
                      kPopDirectionalFormattingCharacter);
   }
 
-  if (style->Display() == EDisplay::kListItem && style->ListStyleType()) {
-    is_empty_inline_ = false;
+  if (style->Display() == EDisplay::kListItem && style->ListStyleType())
     is_block_level_ = false;
-  }
 }
 
 template <typename OffsetMappingBuilder>
@@ -1370,12 +1377,7 @@ void NGInlineItemsBuilderTemplate<
   // |SegmentText()| will analyze the text and reset |is_bidi_enabled_| if it
   // doesn't contain any RTL characters.
   data->is_bidi_enabled_ = MayBeBidiEnabled();
-  // Note: Even if |IsEmptyInline()| is true, |text_| isn't empty, e.g. it
-  // holds U+FFFC(ORC) for float or abspos.
-  data->has_line_even_if_empty_ =
-      IsEmptyInline() && block_flow_->HasLineIfEmpty();
   data->has_ruby_ = has_ruby_;
-  data->is_empty_inline_ = IsEmptyInline();
   data->is_block_level_ = IsBlockLevel();
   data->changes_may_affect_earlier_lines_ = HasUnicodeBidiPlainText();
 }

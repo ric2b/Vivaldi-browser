@@ -34,7 +34,7 @@
         If set to non-zero value, abort the program if an assertion fails. The
         default behaviour in case of assertion failure depends on the build mode
         and can be changed by overriding wxApp::OnAssertFailure() but setting
-        this option allows to change it without modifying the program code and
+        this option allows changing it without modifying the program code and
         also applies to asserts which may happen before the wxApp object
         creation or after its destruction.
     @endFlagTable
@@ -66,21 +66,12 @@
         Setting this to 0 causes more flicker, but allows applications to paint
         graphics on the parent of a static box (the optimized refresh causes any
         such drawing to disappear).
-    @flag{msw.display.directdraw}
-        If set to 1, use DirectDraw-based implementation of wxDisplay.
-        By default the standard Win32 functions are used.
     @flag{msw.font.no-proof-quality}
         If set to 1, use default fonts quality instead of proof quality when
         creating fonts. With proof quality the fonts have slightly better
         appearance but not all fonts are available in this quality,
         e.g. the Terminal font in small sizes is not and this option may be
         used if wider fonts selection is more important than higher quality.
-    @flag{wince.dialog.real-ok-cancel}
-        The PocketPC guidelines recommend for Ok/Cancel dialogs to use an OK button
-        located inside the caption bar and implement Cancel functionality through
-        Undo outside the dialog.
-        wxDialog::CreateButtonSizer will follow the native behaviour on WinCE but
-        it can be overridden with real wxButtons by setting the option below to 1.
     @endFlagTable
 
 
@@ -90,8 +81,8 @@
     @flag{gtk.tlw.can-set-transparent}
         wxTopLevelWindow::CanSetTransparent() method normally tries to detect
         automatically whether transparency for top level windows is currently
-        supported, however this may sometimes fail and this option allows to
-        override the automatic detection. Setting it to 1 makes the transparency
+        supported, however this may sometimes fail and this option allows
+        overriding the automatic detection. Setting it to 1 makes the transparency
         be always available (setting it can still fail, of course) and setting it
         to 0 makes it always unavailable.
     @flag{gtk.desktop}
@@ -118,11 +109,10 @@
         Tells wxListCtrl to use the generic control even when it is capable of
         using the native control instead. Also known as wxMAC_ALWAYS_USE_GENERIC_LISTCTRL.
     @flag{mac.textcontrol-use-spell-checker}
-        This option only has effect for Mac OS X 10.4 and higher.
         If 1 activates the spell checking in wxTextCtrl.
     @flag{osx.openfiledialog.always-show-types}
-        Per default a wxFileDialog with wxFD_OPEN does not show a types-popup on OSX but allows
-        the selection of files from any of the supported types. Setting this to 1 shows a wxChoice 
+        Per default a wxFileDialog with wxFD_OPEN does not show a types-popup on macOS but allows
+        the selection of files from any of the supported types. Setting this to 1 shows a wxChoice
         for selection (if there is more than one supported filetype).
     @endFlagTable
 

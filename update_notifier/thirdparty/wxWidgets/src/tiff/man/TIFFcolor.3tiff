@@ -264,4 +264,4 @@ _TIFFfree(cielab);
 .BR libtiff (3TIFF),
 .PP
 Libtiff library home page:
-.BR http://www.remotesensing.org/libtiff/
+.BR http://www.simplesystems.org/libtiff/

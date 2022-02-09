@@ -15,10 +15,9 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/scoped_multi_source_observation.h"
-#include "base/sequenced_task_runner_helpers.h"
+#include "base/task/sequenced_task_runner_helpers.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/proxy_config_monitor.h"
 #include "chrome/browser/profiles/profile.h"
@@ -70,7 +69,6 @@ class DownloadProtectionService;
 #endif
 class PasswordProtectionService;
 class SafeBrowsingDatabaseManager;
-class SafeBrowsingNetworkContext;
 class SafeBrowsingServiceFactory;
 class SafeBrowsingUIManager;
 class TriggerManager;
@@ -126,13 +124,6 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   }
 #endif
 
-  // NetworkContext and URLLoaderFactory used for safe browsing requests.
-  // Called on UI thread.
-  // TODO(crbug/1049833): Transition all callers of these functions to the
-  // per-profile methods below.
-  network::mojom::NetworkContext* GetNetworkContext();
-  virtual scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory();
-
   // Get the NetworkContext or URLLoaderFactory attached to |browser_context|.
   // Called on UI thread.
   network::mojom::NetworkContext* GetNetworkContext(
@@ -141,7 +132,8 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
       content::BrowserContext* browser_context);
 
   // Flushes above two interfaces to avoid races in tests.
-  void FlushNetworkInterfaceForTesting();
+  void FlushNetworkInterfaceForTesting(
+      content::BrowserContext* browser_context);
 
   const scoped_refptr<SafeBrowsingUIManager>& ui_manager() const;
 
@@ -236,10 +228,7 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   // |sb_url_loader_factory| is a SharedURLLoaderFactory attached to the Safe
   // Browsing NetworkContexts, and |browser_url_loader_factory| is attached to
   // the global browser process.
-  // TODO(crbug.com/1049833): Remove the sb_url_loader_factory here.
   void StartOnIOThread(std::unique_ptr<network::PendingSharedURLLoaderFactory>
-                           sb_url_loader_factory,
-                       std::unique_ptr<network::PendingSharedURLLoaderFactory>
                            browser_url_loader_factory);
 
   // Called to stop or shutdown operations on the io_thread. This may be called
@@ -278,11 +267,10 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   // use.
   network::mojom::NetworkContextParamsPtr CreateNetworkContextParams();
 
-  std::unique_ptr<ProxyConfigMonitor> proxy_config_monitor_;
+  // Logs metrics related to cookies.
+  void RecordCookieMetrics(Profile* profile);
 
-  // This owns the URLRequestContext inside the network service. This is used by
-  // SimpleURLLoader for safe browsing requests.
-  std::unique_ptr<safe_browsing::SafeBrowsingNetworkContext> network_context_;
+  std::unique_ptr<ProxyConfigMonitor> proxy_config_monitor_;
 
   // Provides phishing and malware statistics. Accessed on UI thread.
   std::unique_ptr<PingManager> ping_manager_;

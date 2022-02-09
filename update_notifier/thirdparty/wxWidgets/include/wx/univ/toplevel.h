@@ -99,7 +99,7 @@ public:
                      const wxPoint& pos = wxDefaultPosition,
                      const wxSize& size = wxDefaultSize,
                      long style = wxDEFAULT_FRAME_STYLE,
-                     const wxString& name = wxFrameNameStr)
+                     const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         Init();
 
@@ -112,7 +112,7 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE,
-                const wxString& name = wxFrameNameStr);
+                const wxString& name = wxASCII_STR(wxFrameNameStr));
 
     // wxUniv-specific methods: do [not] use native decorations for this (or
     // all) window(s)
@@ -127,9 +127,9 @@ public:
 
 
     // implement base class pure virtuals
-    virtual bool ShowFullScreen(bool show, long style = wxFULLSCREEN_ALL);
-    virtual wxPoint GetClientAreaOrigin() const;
-    virtual void SetIcons(const wxIconBundle& icons);
+    virtual bool ShowFullScreen(bool show, long style = wxFULLSCREEN_ALL) wxOVERRIDE;
+    virtual wxPoint GetClientAreaOrigin() const wxOVERRIDE;
+    virtual void SetIcons(const wxIconBundle& icons) wxOVERRIDE;
 
     // implementation from now on
     // --------------------------
@@ -139,10 +139,10 @@ public:
 
     virtual bool PerformAction(const wxControlAction& action,
                                long numArg = -1,
-                               const wxString& strArg = wxEmptyString);
+                               const wxString& strArg = wxEmptyString) wxOVERRIDE;
 
     static wxInputHandler *GetStdInputHandler(wxInputHandler *handlerDef);
-    virtual wxInputHandler *DoGetStdInputHandler(wxInputHandler *handlerDef)
+    virtual wxInputHandler *DoGetStdInputHandler(wxInputHandler *handlerDef) wxOVERRIDE
     {
         return GetStdInputHandler(handlerDef);
     }
@@ -150,13 +150,13 @@ public:
     // move/resize the frame interactively, i.e. let the user do it
     virtual void InteractiveMove(int flags = wxINTERACTIVE_MOVE);
 
-    virtual wxSize GetMinSize() const;
+    virtual wxSize GetMinSize() const wxOVERRIDE;
 
-    virtual wxWindow *GetInputWindow() const { return const_cast<wxTopLevelWindow*>(this); }
+    virtual wxWindow *GetInputWindow() const wxOVERRIDE { return const_cast<wxTopLevelWindow*>(this); }
 
 protected:
-    virtual void DoGetClientSize(int *width, int *height) const;
-    virtual void DoSetClientSize(int width, int height);
+    virtual void DoGetClientSize(int *width, int *height) const wxOVERRIDE;
+    virtual void DoSetClientSize(int width, int height) wxOVERRIDE;
 
     // handle titlebar button click event
     virtual void ClickTitleBarButton(long button);
@@ -187,8 +187,8 @@ protected:
     // currently pressed titlebar button
     long m_pressedButton;
 
-    DECLARE_DYNAMIC_CLASS(wxTopLevelWindow)
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_DYNAMIC_CLASS(wxTopLevelWindow);
+    wxDECLARE_EVENT_TABLE();
     WX_DECLARE_INPUT_CONSUMER()
 };
 

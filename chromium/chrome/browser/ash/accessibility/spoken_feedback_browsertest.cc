@@ -27,7 +27,6 @@
 #include "ash/system/unified/unified_system_tray.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/task/post_task.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "build/build_config.h"
@@ -267,7 +266,6 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, LearnModeHardwareKeys) {
         browser()->profile(), extension_misc::kChromeVoxExtensionId,
         "CommandHandler.onCommand('showKbExplorerPage');");
   });
-  sm_.ExpectSpeech("ChromeVox Learn Mode");
   sm_.ExpectSpeechPattern(
       "Press a qwerty key, refreshable braille key, or touch gesture to learn "
       "*");
@@ -305,7 +303,6 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, LearnModeEscapeWithGesture) {
         browser()->profile(), extension_misc::kChromeVoxExtensionId,
         "CommandHandler.onCommand('showKbExplorerPage');");
   });
-  sm_.ExpectSpeech("ChromeVox Learn Mode");
   sm_.ExpectSpeechPattern(
       "Press a qwerty key, refreshable braille key, or touch gesture to learn "
       "*");
@@ -858,8 +855,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxStickyMode) {
 // sending js commands above. This variant may be subject to flakes as it
 // depends on more of the UI events stack and sticky mode invocation has a
 // timing element to it.
-// Consistently failing on ChromiumOS MSan. http://crbug.com/1182542
-#if defined(OS_CHROMEOS) && defined(MEMORY_SANITIZER)
+// Consistently failing on ChromiumOS MSan and ASan. http://crbug.com/1182542
+#if defined(OS_CHROMEOS) && \
+    (defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER))
 #define MAYBE_ChromeVoxStickyModeRawKeys DISABLED_ChromeVoxStickyModeRawKeys
 #else
 #define MAYBE_ChromeVoxStickyModeRawKeys ChromeVoxStickyModeRawKeys
@@ -1372,9 +1370,6 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DarkenScreenConfirmation) {
 
   // Try to darken screen and check the dialog is shown.
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_F7); });
-  sm_.ExpectSpeech("Continue");
-  sm_.ExpectSpeech("default");
-  sm_.ExpectSpeech("Button");
   sm_.ExpectSpeech("Turn off screen?");
   sm_.ExpectSpeech("Dialog");
   sm_.ExpectSpeech(
@@ -1383,6 +1378,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DarkenScreenConfirmation) {
   sm_.ExpectSpeech(
       "You can always turn the screen back on by pressing Search plus "
       "Brightness up.");
+  sm_.ExpectSpeech("Continue");
+  sm_.ExpectSpeech("default");
+  sm_.ExpectSpeech("Button");
 
   sm_.Call([]() {
     // Accept the dialog and see that the screen is darkened.
@@ -1537,6 +1535,12 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, SpokenFeedbackInOobe) {
   });
 
   sm_.ExpectSpeech("Get started");
+
+  sm_.Call([]() {
+    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+        nullptr, ui::VKEY_TAB, false, false, false, false));
+  });
+  sm_.ExpectSpeech("Pause animation");
 
   sm_.Call([]() {
     ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(

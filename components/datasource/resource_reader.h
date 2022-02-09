@@ -10,12 +10,15 @@
 #include "base/files/memory_mapped_file.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 // Helper to access Vivaldi resources
 class ResourceReader {
  public:
-  ResourceReader();
+  // Try to open the resource. If this does not succeed, `IsValid()` will return
+  // false and `GetError()` will return error details.
+  ResourceReader(std::string resource_path);
   ResourceReader(const ResourceReader&) = delete;
   ~ResourceReader();
   ResourceReader operator=(const ResourceReader&) = delete;
@@ -25,17 +28,22 @@ class ResourceReader {
   static bool IsResourceURL(base::StringPiece url,
                             std::string* subpath = nullptr);
 
+#if !defined(OS_ANDROID)
+  // Get directory holding Vivaldi resource files. To simplify development in
+  // non-official builds this may return source directory of vivapp/src, not the
+  // directory from the build or installation. This way the changes to it can be
+  // reflected without a rebuild.
+  static const base::FilePath& GetResourceDirectory();
+#endif
+
   // Convenience method to read a resource as JSON from the given resource
-  // directory and resource. |resource_directory| should not start or end with a
-  // slash. If |error| is given, it will contain an error message on return in
-  // case of failure. When not given, the error is logged.
+  // directory and resource. `resource_directory`, when not empty, should not
+  // start or end with a slash. All errors are logged.
   static absl::optional<base::Value> ReadJSON(
       base::StringPiece resource_directory,
-      base::StringPiece resource_name,
-      std::string* error = nullptr);
+      base::StringPiece resource_name);
 
-  // Try to open the resource. On failure |error()| contains the error text.
-  bool Open(std::string resource_path);
+  bool IsValid() const { return mapped_file_.IsValid(); }
 
   const uint8_t* data() const { return mapped_file_.data(); }
   size_t size() const { return mapped_file_.length(); }
@@ -47,12 +55,19 @@ class ResourceReader {
   // Parse the asset as JSON.
   absl::optional<base::Value> ParseJSON();
 
-  const std::string& error() const { return error_; }
+  std::string GetError() const;
+
+  // Return true if the open error was due to missing resource.
+  bool IsNotFoundError() const {
+    DCHECK(!IsValid());
+    return not_found_error_;
+  }
 
  private:
   base::MemoryMappedFile mapped_file_;
   std::string resource_path_;
   std::string error_;
+  bool not_found_error_ = false;
 };
 
 #endif  // COMPONENTS_RESOURCES_RESOURCE_READER_H_

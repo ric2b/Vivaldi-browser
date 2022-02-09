@@ -407,10 +407,25 @@ bool KeyframeEffect::HasTickingKeyframeModel() const {
   return false;
 }
 
-bool KeyframeEffect::AffectsCustomProperty() const {
-  for (const auto& it : keyframe_models())
-    if (it->TargetProperty() == TargetProperty::CSS_CUSTOM_PROPERTY)
+bool KeyframeEffect::RequiresInvalidation() const {
+  for (const auto& it : keyframe_models()) {
+    if (it->TargetProperty() == TargetProperty::NATIVE_PROPERTY ||
+        it->TargetProperty() == TargetProperty::CSS_CUSTOM_PROPERTY) {
       return true;
+    }
+  }
+  return false;
+}
+
+bool KeyframeEffect::AffectsNativeProperty() const {
+  for (const auto& it : keyframe_models()) {
+    // TODO(crbug.com/1257778): include the SCROLL_OFFSET here so that we won't
+    // create a compositor animation frame sequence tracker when there is a
+    // composited scroll.
+    if (it->TargetProperty() != TargetProperty::CSS_CUSTOM_PROPERTY &&
+        it->TargetProperty() != TargetProperty::NATIVE_PROPERTY)
+      return true;
+  }
   return false;
 }
 
@@ -585,7 +600,7 @@ void KeyframeEffect::PushNewKeyframeModelsToImplThread(
         !ScrollOffsetAnimationCurve::ToScrollOffsetAnimationCurve(
              keyframe_model->curve())
              ->HasSetInitialValue()) {
-      gfx::Vector2dF current_scroll_offset;
+      gfx::PointF current_scroll_offset;
       if (keyframe_effect_impl->HasElementInActiveList()) {
         current_scroll_offset =
             keyframe_effect_impl->ScrollOffsetForAnimation();
@@ -1013,7 +1028,7 @@ bool KeyframeEffect::HasElementInActiveList() const {
   return element_animations_->has_element_in_active_list();
 }
 
-gfx::Vector2dF KeyframeEffect::ScrollOffsetForAnimation() const {
+gfx::PointF KeyframeEffect::ScrollOffsetForAnimation() const {
   DCHECK(has_bound_element_animations());
   return element_animations_->ScrollOffsetForAnimation();
 }

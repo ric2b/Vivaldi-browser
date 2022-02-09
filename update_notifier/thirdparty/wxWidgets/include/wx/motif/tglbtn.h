@@ -23,7 +23,7 @@ public:
                     const wxSize& size = wxDefaultSize,
                     long style = 0,
                     const wxValidator& val = wxDefaultValidator,
-                    const wxString& name = wxCheckBoxNameStr )
+                    const wxString& name = wxASCII_STR(wxCheckBoxNameStr) )
     {
         Init();
 
@@ -35,13 +35,13 @@ public:
                  const wxSize& size = wxDefaultSize,
                  long style = 0,
                  const wxValidator& val = wxDefaultValidator,
-                 const wxString &name = wxCheckBoxNameStr );
+                 const wxString &name = wxASCII_STR(wxCheckBoxNameStr) );
 
 protected:
     virtual wxBorder GetDefaultBorder() const { return wxBORDER_NONE; }
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxToggleButton)
+    wxDECLARE_DYNAMIC_CLASS(wxToggleButton);
 
     // common part of all constructors
     void Init()

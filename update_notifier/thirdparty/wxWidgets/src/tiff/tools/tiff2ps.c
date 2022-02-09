@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -41,8 +40,20 @@
 
 #include "tiffio.h"
 
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 /*
  * Revision history
+ * 2013-Jan-21
+ *    Richard Nolde: Fix bug in auto rotate option code. Once a
+ *    rotation angle was set by the auto rotate check, it was
+ *    retained for all pages that followed instead of being
+ *    retested for each page.
  *
  * 2010-Sep-17
  *    Richard Nolde: Reinstate code from Feb 2009 that never got
@@ -57,7 +68,7 @@
  *    if not specified on the command line.
  *    Add new command line option to specify document creator
  *    as an alterntive to the string "tiff2ps" following model
- *    of patch submitted by Thomas Jarosch for specifiying a
+ *    of patch submitted by Thomas Jarosch for specifying a
  *    document title which is also supported now.
  *
  * 2009-Feb-11
@@ -67,7 +78,7 @@
  *    or landscape) if -h or -w is specified. Rotation is in
  *    degrees counterclockwise since that is how Postscript does
  *    it. The auto opption rotates the image 90 degrees ccw to
- *    produce landscape if that is a better fit than portait.
+ *    produce landscape if that is a better fit than portrait.
  *
  *    Cleaned up code in TIFF2PS and broke into smaller functions
  *    to simplify rotations.
@@ -170,6 +181,12 @@
 #define	FALSE	0
 #endif
 
+#define DEFAULT_MAX_MALLOC (256 * 1024 * 1024)
+
+/* malloc size limit (in bytes)
+ * disabled when set to 0 */
+static tmsize_t maxMalloc = DEFAULT_MAX_MALLOC;
+
 int	ascii85 = FALSE;		/* use ASCII85 encoding */
 int	interpolate = TRUE;		/* interpolate level2 image */
 int	level2 = FALSE;			/* generate PostScript level 2 */
@@ -230,6 +247,20 @@ tsize_t Ascii85EncodeBlock( uint8 * ascii85_p, unsigned f_eod, const uint8 * raw
 
 static	void usage(int);
 
+/**
+ * This custom malloc function enforce a maximum allocation size
+ */
+static void* limitMalloc(tmsize_t s)
+{
+	if (maxMalloc && (s > maxMalloc)) {
+		fprintf(stderr, "MemoryLimitError: allocation of " TIFF_UINT64_FORMAT " bytes is forbidden. Limit is " TIFF_UINT64_FORMAT ".\n",
+		        (uint64)s, (uint64)maxMalloc);
+		fprintf(stderr, "                  use -M option to change limit.\n");
+		return NULL;
+	}
+	return _TIFFmalloc(s);
+}
+
 int
 main(int argc, char* argv[])
 {
@@ -240,23 +271,28 @@ main(int argc, char* argv[])
 	double pageWidth = 0;
 	double pageHeight = 0;
 	uint32 diroff = 0;
+#if !HAVE_DECL_OPTARG
 	extern char *optarg;
 	extern int optind;
+#endif
 	FILE* output = stdout;
 
         pageOrientation[0] = '\0';
 
-	while ((c = getopt(argc, argv, "b:d:h:H:W:L:i:w:l:o:O:P:C:r:t:acemxyzps1238DT")) != -1)
+	while ((c = getopt(argc, argv, "b:d:h:H:W:L:M:i:w:l:o:O:P:C:r:t:acemxyzps1238DT")) != -1)
 		switch (c) {
+		case 'M':
+			maxMalloc = (tmsize_t)strtoul(optarg, NULL, 0) << 20;
+			break;
 		case 'b':
 			bottommargin = atof(optarg);
 			break;
 		case 'c':
 			centered = 1;
 			break;
-                case 'C':
-                        creator = optarg;
-                        break;
+		case 'C':
+			creator = optarg;
+			break;
 		case 'd': /* without -a, this only processes one image at this IFD */
 			dirnum = atoi(optarg);
 			break;
@@ -303,7 +339,7 @@ main(int argc, char* argv[])
                           case '9': diroff = (uint32) strtoul(optarg, NULL, 0);
 			          break;
                           default: TIFFError ("-o", "Offset must be a numeric value.");
-			    exit (1);
+			    exit (EXIT_FAILURE);
 			  }
 			break;
 		case 'O':		/* XXX too bad -o is already taken */
@@ -312,21 +348,21 @@ main(int argc, char* argv[])
 				fprintf(stderr,
 				    "%s: %s: Cannot open output file.\n",
 				    argv[0], optarg);
-				exit(-2);
+			    exit (EXIT_FAILURE);
 			}
 			break;
 		case 'P':
-                        switch (optarg[0])
-                          {
-                          case 'l':
-                          case 'L': strcpy (pageOrientation, "Landscape");
-			            break; 
-                          case 'p':
-                          case 'P': strcpy (pageOrientation, "Portrait");
-			            break; 
-                          default: TIFFError ("-P", "Page orientation must be Landscape or Portrait");
-			           exit (-1);
-			  }
+			switch (optarg[0])
+			{
+			  case 'l':
+			  case 'L': strcpy (pageOrientation, "Landscape");
+				break;
+			  case 'p':
+			  case 'P': strcpy (pageOrientation, "Portrait");
+				break;
+			  default: TIFFError ("-P", "Page orientation must be Landscape or Portrait");
+			    exit (EXIT_FAILURE);
+			}
 			break;
 		case 'l':
 			leftmargin = atof(optarg);
@@ -357,7 +393,7 @@ main(int argc, char* argv[])
 			    break;
 			  default:
                             fprintf (stderr, "Rotation angle must be 90, 180, 270 (degrees ccw) or auto\n");
-			    exit (-1);
+			    exit (EXIT_FAILURE);
 			  }
 			break;
 		case 's':
@@ -395,7 +431,7 @@ main(int argc, char* argv[])
 			res_unit = RESUNIT_INCH;
 			break;
 		case '?':
-			usage(-1);
+			usage(EXIT_FAILURE);
 		}
 
         if (useImagemask == TRUE)
@@ -403,38 +439,33 @@ main(int argc, char* argv[])
 	  if ((level2 == FALSE) && (level3 == FALSE))
             {
 	    TIFFError ("-m "," imagemask operator requres Postscript Level2 or Level3");
-	    exit (1);
+	    exit (EXIT_FAILURE);
             }
           }
 
         if (pageWidth && (maxPageWidth > pageWidth))
 	  {
 	  TIFFError ("-W", "Max viewport width cannot exceed page width");
-	  exit (1);
-          }
-
-	if (pageHeight && (maxPageHeight > pageHeight))
-	  {
-	  TIFFError ("-H", "Max viewport height cannot exceed page height");
-	  exit (1);
+	  exit (EXIT_FAILURE);
           }
 
         /* auto rotate requires a specified page width and height */
         if (auto_rotate == TRUE)
           {
+	    /*
 	  if ((pageWidth == 0) || (pageHeight == 0))
 	    TIFFWarning ("-r auto", " requires page height and width specified with -h and -w");
-
+	    */
           if ((maxPageWidth > 0) || (maxPageHeight > 0))
             {
 	    TIFFError ("-r auto", " is incompatible with maximum page width/height specified by -H or -W");
-            exit (1);
+            exit (EXIT_FAILURE);
             }
           }
         if ((maxPageWidth > 0) && (maxPageHeight > 0))
             {
 	    TIFFError ("-H and -W", " Use only one of -H or -W to define a viewport");
-            exit (1);
+            exit (EXIT_FAILURE);
             }
 
         if ((generateEPSF == TRUE) && (printAll == TRUE))
@@ -463,10 +494,16 @@ main(int argc, char* argv[])
 		if (tif != NULL) {
 			if (dirnum != -1
                             && !TIFFSetDirectory(tif, (tdir_t)dirnum))
-				return (-1);
+                        {
+                                TIFFClose(tif);
+				return (EXIT_FAILURE);
+                        }
 			else if (diroff != 0 &&
 			    !TIFFSetSubDirectory(tif, diroff))
-				return (-1);
+                        {
+                                TIFFClose(tif);
+				return (EXIT_FAILURE);
+                        }
 			np = TIFF2PS(output, tif, pageWidth, pageHeight,
 				     leftmargin, bottommargin, centered);
                         if (np < 0)
@@ -479,10 +516,10 @@ main(int argc, char* argv[])
 	if (np)
 		PSTail(output, np);
 	else
-		usage(-1);
+		usage(EXIT_FAILURE);
 	if (output != stdout)
 		fclose(output);
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
 static	uint16 samplesperpixel;
@@ -511,7 +548,7 @@ checkImage(TIFF* tif)
 			    "PhotometricInterpretation=YCbCr");
 			return (0);
 		}
-		/* fall thru... */
+		/* fall through... */
 	case PHOTOMETRIC_RGB:
 		if (alpha && bitspersample != 8) {
 			TIFFError(filename,
@@ -519,7 +556,7 @@ checkImage(TIFF* tif)
 			    bitspersample);
 			return (0);
 		}
-		/* fall thru... */
+		/* fall through... */
 	case PHOTOMETRIC_SEPARATED:
 	case PHOTOMETRIC_PALETTE:
 	case PHOTOMETRIC_MINISBLACK:
@@ -543,7 +580,7 @@ checkImage(TIFF* tif)
 		bitspersample = 8;
 		break;
 	case PHOTOMETRIC_CIELAB:
-		/* fall thru... */
+		/* fall through... */
 	default:
 		TIFFError(filename,
 		    "Can not handle image with PhotometricInterpretation=%d",
@@ -675,8 +712,8 @@ isCCITTCompression(TIFF* tif)
 
 static	tsize_t tf_bytesperrow;
 static	tsize_t ps_bytesperrow;
-static	tsize_t	tf_rowsperstrip;
-static	tsize_t	tf_numberstrips;
+static	uint32	tf_rowsperstrip;
+static	uint32	tf_numberstrips;
 static	char *hex = "0123456789abcdef";
 
 /*
@@ -857,6 +894,9 @@ int exportMaskedImage(FILE *fp, double pagewidth, double pageheight,
                 {
                if (splitheight < imageheight) /* More than one vertical image segments */
                  {
+                 /* Intra2net: Keep correct apspect ratio */
+                 xscale = (imagewidth + overlap) * (pageheight / splitheight) * scale;
+
                  xtran = -1.0 * column * (pagewidth - overlap);
                   subimage_height = imageheight - ((splitheight - overlap) * row);
                  ytran  = pageheight - subimage_height * (pageheight / splitheight);
@@ -888,6 +928,14 @@ int exportMaskedImage(FILE *fp, double pagewidth, double pageheight,
                  xtran = 0;
                   }
                 }
+
+            if (imagewidth <= pagewidth) {
+                /* Intra2net: Crop page at the bottom instead of the top (-> output starts at the top).
+                     Only do this in non-page-split mode */
+                if (imageheight <= splitheight) {
+                    ytran = pageheight - imageheight; /* Note: Will be negative for images longer than page size */
+                }
+            }
               bott_offset += ytran / (center ? 2 : 1);
               left_offset += xtran / (center ? 2 : 1);
               break;
@@ -1392,7 +1440,10 @@ int get_viewport (double pgwidth, double pgheight, double pswidth, double psheig
   /* Only one of maxPageHeight or maxPageWidth can be specified */
   if (maxPageHeight != 0)   /* Clip the viewport to maxPageHeight on each page */
     {
-    *view_height = maxPageHeight * PS_UNIT_SIZE;
+    if (pgheight != 0 && pgheight < maxPageHeight)
+      *view_height = pgheight * PS_UNIT_SIZE;
+    else
+      *view_height = maxPageHeight * PS_UNIT_SIZE;
     /*
      * if (res_unit == RESUNIT_CENTIMETER)
      * *view_height /= 2.54F;
@@ -1422,7 +1473,10 @@ int get_viewport (double pgwidth, double pgheight, double pswidth, double psheig
 
   if (maxPageWidth != 0)   /* Clip the viewport to maxPageWidth on each page */
     {
-    *view_width = maxPageWidth * PS_UNIT_SIZE;
+    if (pgwidth != 0 && pgwidth < maxPageWidth)
+      *view_width = pgwidth * PS_UNIT_SIZE;
+    else
+      *view_width = maxPageWidth * PS_UNIT_SIZE;
     /* if (res_unit == RESUNIT_CENTIMETER)
      *  *view_width /= 2.54F;
      */
@@ -1591,6 +1645,8 @@ int TIFF2PS(FILE* fd, TIFF* tif, double pgwidth, double pgheight, double lm, dou
        }
   if (generateEPSF)
     break;
+  if (auto_rotate)
+    rotation = 0.0;
   TIFFGetFieldDefaulted(tif, TIFFTAG_SUBFILETYPE, &subfiletype);
   } while (((subfiletype & FILETYPE_PAGE) || printAll) && TIFFReadDirectory(tif));
 
@@ -1772,7 +1828,7 @@ PS_Lvl2ImageDict(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 	int use_rawdata;
 	uint32 tile_width, tile_height;
 	uint16 predictor, minsamplevalue, maxsamplevalue;
-	int repeat_count;
+	uint32 repeat_count;
 	char im_h[64], im_x[64], im_y[64];
 	char * imageOp = "image";
 
@@ -1780,8 +1836,8 @@ PS_Lvl2ImageDict(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 		imageOp = "imagemask";
 
 	(void)strcpy(im_x, "0");
-	(void)sprintf(im_y, "%lu", (long) h);
-	(void)sprintf(im_h, "%lu", (long) h);
+	(void)snprintf(im_y, sizeof(im_y), "%lu", (long) h);
+	(void)snprintf(im_h, sizeof(im_h), "%lu", (long) h);
 	tile_width = w;
 	tile_height = h;
 	if (TIFFIsTiled(tif)) {
@@ -1802,7 +1858,7 @@ PS_Lvl2ImageDict(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 		}
 		if (tile_height < h) {
 			fputs("/im_y 0 def\n", fd);
-			(void)sprintf(im_y, "%lu im_y sub", (unsigned long) h);
+			(void)snprintf(im_y, sizeof(im_y), "%lu im_y sub", (unsigned long) h);
 		}
 	} else {
 		repeat_count = tf_numberstrips;
@@ -1814,7 +1870,7 @@ PS_Lvl2ImageDict(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 			fprintf(fd, "/im_h %lu def\n",
 			    (unsigned long) tile_height);
 			(void)strcpy(im_h, "im_h");
-			(void)sprintf(im_y, "%lu im_y sub", (unsigned long) h);
+			(void)snprintf(im_y, sizeof(im_y), "%lu im_y sub", (unsigned long) h);
 		}
 	}
 
@@ -1824,7 +1880,7 @@ PS_Lvl2ImageDict(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 	fputs("{ % exec\n", fd);
 
 	if (repeat_count > 1)
-		fprintf(fd, "%d { %% repeat\n", repeat_count);
+		fprintf(fd, "%u { %% repeat\n", repeat_count);
 
 	/*
 	 * Output filter options and image dictionary.
@@ -2161,7 +2217,7 @@ PS_Lvl2page(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 		else
 			chunk_size = TIFFStripSize(tif);
 	}
-	buf_data = (unsigned char *)_TIFFmalloc(chunk_size);
+	buf_data = (unsigned char *)limitMalloc(chunk_size);
 	if (!buf_data) {
 		TIFFError(filename, "Can't alloc %lu bytes for %s.",
 			(unsigned long) chunk_size, tiled_image ? "tiles" : "strips");
@@ -2179,7 +2235,7 @@ PS_Lvl2page(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 	     * 5*chunk_size/4.
 	     */
 
-	    ascii85_p = _TIFFmalloc( (chunk_size+(chunk_size/2)) + 8 );
+	    ascii85_p = limitMalloc( (chunk_size+(chunk_size/2)) + 8 );
 
 	    if ( !ascii85_p ) {
 		_TIFFfree( buf_data );
@@ -2238,7 +2294,7 @@ PS_Lvl2page(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 		if (alpha) {
 			int adjust, i, j = 0;
 			int ncomps = samplesperpixel - extrasamples;
-			for (i = 0; i < byte_count; i+=samplesperpixel) {
+			for (i = 0; (i + ncomps) < byte_count; i+=samplesperpixel) {
 				adjust = 255 - buf_data[i + ncomps];
 				switch (ncomps) {
 					case 1:
@@ -2418,7 +2474,12 @@ PSDataColorContig(FILE* fd, TIFF* tif, uint32 w, uint32 h, int nc)
 	unsigned char *cp, c;
 
 	(void) w;
-	tf_buf = (unsigned char *) _TIFFmalloc(tf_bytesperrow);
+        if( es < 0 )
+        {
+            TIFFError(filename, "Inconsistent value of es: %d (samplesperpixel=%u, nc=%d)", es, samplesperpixel, nc);
+            return;
+        }
+	tf_buf = (unsigned char *) limitMalloc(tf_bytesperrow);
 	if (tf_buf == NULL) {
 		TIFFError(filename, "No space for scanline buffer");
 		return;
@@ -2436,8 +2497,10 @@ PSDataColorContig(FILE* fd, TIFF* tif, uint32 w, uint32 h, int nc)
 		}
 		if (alpha) {
 			int adjust;
-			cc = 0;
-			for (; cc < tf_bytesperrow; cc += samplesperpixel) {
+			/*
+			 * the code inside this loop reads nc bytes + 1 extra byte (for adjust)
+			 */
+			for (cc = 0; (cc + nc) < tf_bytesperrow; cc += samplesperpixel) {
 				DOBREAK(breaklen, nc, fd);
 				/*
 				 * For images with alpha, matte against
@@ -2455,8 +2518,10 @@ PSDataColorContig(FILE* fd, TIFF* tif, uint32 w, uint32 h, int nc)
 				cp += es;
 			}
 		} else {
-			cc = 0;
-			for (; cc < tf_bytesperrow; cc += samplesperpixel) {
+			/*
+			 * the code inside this loop reads nc bytes per iteration
+			 */
+			for (cc = 0; (cc + nc) <= tf_bytesperrow; cc += samplesperpixel) {
 				DOBREAK(breaklen, nc, fd);
 				switch (nc) {
 				case 4: c = *cp++; PUTHEX(c,fd);
@@ -2482,7 +2547,7 @@ PSDataColorSeparate(FILE* fd, TIFF* tif, uint32 w, uint32 h, int nc)
 	unsigned char *cp, c;
 
 	(void) w;
-	tf_buf = (unsigned char *) _TIFFmalloc(tf_bytesperrow);
+	tf_buf = (unsigned char *) limitMalloc(tf_bytesperrow);
 	if (tf_buf == NULL) {
 		TIFFError(filename, "No space for scanline buffer");
 		return;
@@ -2528,7 +2593,7 @@ PSDataPalette(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 		return;
 	}
 	nc = 3 * (8 / bitspersample);
-	tf_buf = (unsigned char *) _TIFFmalloc(tf_bytesperrow);
+	tf_buf = (unsigned char *) limitMalloc(tf_bytesperrow);
 	if (tf_buf == NULL) {
 		TIFFError(filename, "No space for scanline buffer");
 		return;
@@ -2593,7 +2658,7 @@ PSDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 #endif
 
 	(void) w; (void) h;
-	tf_buf = (unsigned char *) _TIFFmalloc(stripsize);
+	tf_buf = (unsigned char *) limitMalloc(stripsize);
 	if (tf_buf == NULL) {
 		TIFFError(filename, "No space for scanline buffer");
 		return;
@@ -2613,7 +2678,7 @@ PSDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 	     * 5*stripsize/4.
 	     */
 
-	    ascii85_p = _TIFFmalloc( (stripsize+(stripsize/2)) + 8 );
+	    ascii85_p = limitMalloc( (stripsize+(stripsize/2)) + 8 );
 
 	    if ( !ascii85_p ) {
 		_TIFFfree( tf_buf );
@@ -2650,7 +2715,7 @@ PSDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 #if defined( EXP_ASCII85ENCODER )
 			if (alpha) {
 				int adjust, i;
-				for (i = 0; i < cc; i+=2) {
+				for (i = 0; i < (cc - 1); i+=2) {
 					adjust = 255 - cp[i + 1];
 				    cp[i / 2] = cp[i] + adjust;
 				}
@@ -2670,7 +2735,7 @@ PSDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 
 			if (alpha) {
 				int adjust;
-				while (cc-- > 0) {
+				while (cc-- > 1) {
 					DOBREAK(breaklen, 1, fd);
 					/*
 					 * For images with alpha, matte against
@@ -2735,12 +2800,12 @@ PSRawDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 
 	bufsize = (uint32) bc[0];
 
-	for ( s = 0; ++s < (tstrip_t)tf_numberstrips; ) {
+	for ( s = 0; ++s < tf_numberstrips; ) {
 		if ( bc[s] > bufsize )
 			bufsize = (uint32) bc[s];
 	}
 
-	tf_buf = (unsigned char*) _TIFFmalloc(bufsize);
+	tf_buf = (unsigned char*) limitMalloc(bufsize);
 	if (tf_buf == NULL) {
 		TIFFError(filename, "No space for strip buffer");
 		return;
@@ -2757,7 +2822,7 @@ PSRawDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 	     * 5*bufsize/4.
 	     */
 
-	    ascii85_p = _TIFFmalloc( (bufsize+(bufsize/2)) + 8 );
+	    ascii85_p = limitMalloc( (bufsize+(bufsize/2)) + 8 );
 
 	    if ( !ascii85_p ) {
 		_TIFFfree( tf_buf );
@@ -2768,7 +2833,7 @@ PSRawDataBW(FILE* fd, TIFF* tif, uint32 w, uint32 h)
 	}
 #endif
 
-	for (s = 0; s < (tstrip_t) tf_numberstrips; s++) {
+	for (s = 0; s < tf_numberstrips; s++) {
 		cc = TIFFReadRawStrip(tif, s, tf_buf, (tmsize_t) bc[s]);
 		if (cc < 0) {
 			TIFFError(filename, "Can't read strip");
@@ -2935,10 +3000,10 @@ tsize_t Ascii85EncodeBlock( uint8 * ascii85_p, unsigned f_eod, const uint8 * raw
 
         for ( ; raw_l > 3; raw_l -= 4 )
         {
-            val32  = *(++raw_p) << 24;
-            val32 += *(++raw_p) << 16;
-            val32 += *(++raw_p) <<  8;
-            val32 += *(++raw_p);
+            val32  = (uint32)*(++raw_p) << 24;
+            val32 += (uint32)*(++raw_p) << 16;
+            val32 += (uint32)*(++raw_p) <<  8;
+            val32 += (uint32)*(++raw_p);
     
             if ( val32 == 0 )                   /* Special case */
             {
@@ -2983,7 +3048,7 @@ tsize_t Ascii85EncodeBlock( uint8 * ascii85_p, unsigned f_eod, const uint8 * raw
             tsize_t         len;                /* Output this many bytes */
     
             len = raw_l + 1;
-            val32 = *++raw_p << 24;             /* Prime the pump */
+            val32 = (uint32)*++raw_p << 24;             /* Prime the pump */
     
             if ( --raw_l > 0 )  val32 += *(++raw_p) << 16;
             if ( --raw_l > 0 )  val32 += *(++raw_p) <<  8;
@@ -3022,7 +3087,7 @@ tsize_t Ascii85EncodeBlock( uint8 * ascii85_p, unsigned f_eod, const uint8 * raw
 #endif	/* EXP_ASCII85ENCODER */
 
 
-char* stuff[] = {
+const char* stuff[] = {
 "usage: tiff2ps [options] input.tif ...",
 "where options are:",
 " -1            generate PostScript Level 1 (default)",
@@ -3032,21 +3097,23 @@ char* stuff[] = {
 " -a            convert all directories in file (default is first), Not EPS",
 " -b #          set the bottom margin to # inches",
 " -c            center image (-b and -l still add to this)",
+" -C name       set postscript document creator name",
 " -d #          set initial directory to # counting from zero",
 " -D            enable duplex printing (two pages per sheet of paper)",
 " -e            generate Encapsulated PostScript (EPS) (implies -z)",
 " -h #          set printed page height to # inches (no default)",
 " -w #          set printed page width to # inches (no default)",
 " -H #          split image if height is more than # inches",
-" -P L or P     set optional PageOrientation DSC comment to Landscape or Portrait",
 " -W #          split image if width is more than # inches",
 " -L #          overLap split images by # inches",
 " -i #          enable/disable (Nz/0) pixel interpolation (default: enable)",
 " -l #          set the left margin to # inches",
 " -m            use \"imagemask\" operator instead of \"image\"",
+" -M size       set the memory allocation limit in MiB. 0 to disable limit",
 " -o #          convert directory at file offset # bytes",
 " -O file       write PostScript to file instead of standard output",
-" -p            generate regular PostScript",
+" -p            generate regular (non-encapsulated) PostScript",
+" -P L or P     set optional PageOrientation DSC comment to Landscape or Portrait",
 " -r # or auto  rotate by 90, 180, 270 degrees or auto",
 " -s            generate PostScript for a single image",
 " -t name       set postscript document title. Otherwise the filename is used",
@@ -3060,13 +3127,12 @@ NULL
 static void
 usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+	fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
+		fprintf(out, "%s\n", stuff[i]);
 	exit(code);
 }
 

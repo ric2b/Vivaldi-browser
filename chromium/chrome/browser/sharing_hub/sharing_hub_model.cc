@@ -18,6 +18,8 @@
 #include "chrome/browser/share/core/share_targets.h"
 #include "chrome/browser/share/proto/share_target.pb.h"
 #include "chrome/browser/sharing_hub/sharing_hub_features.h"
+#include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
@@ -89,6 +91,11 @@ void SharingHubModel::GetFirstPartyActionList(
               IsGeneratorAvailable(web_contents->GetLastCommittedURL())) {
         list->push_back(action);
       }
+    } else if (action.command_id == IDC_SAVE_PAGE) {
+      if (chrome::CanSavePage(
+              chrome::FindBrowserWithWebContents(web_contents))) {
+        list->push_back(action);
+      }
     } else {
       list->push_back(action);
     }
@@ -153,7 +160,7 @@ void SharingHubModel::PopulateFirstPartyActions() {
        &kCopyIcon, true, gfx::ImageSkia(),
        "SharingHubDesktop.CopyURLSelected"});
 
-  if (DesktopScreenshotsFeatureEnabled()) {
+  if (DesktopScreenshotsFeatureEnabled(context_)) {
     first_party_action_list_.push_back(
         {IDC_SHARING_HUB_SCREENSHOT,
          l10n_util::GetStringUTF16(IDS_SHARING_HUB_SCREENSHOT_LABEL),
@@ -189,6 +196,10 @@ void SharingHubModel::PopulateFirstPartyActions() {
 }
 
 void SharingHubModel::PopulateThirdPartyActions() {
+  // Clear the action list in the case where the action list is repopulated.
+  if (third_party_action_list_.size()) {
+    third_party_action_list_.clear();
+  }
   // Note: The third party action id must be greater than 0, otherwise the
   // action will be disabled in the app menu.
   int id = 1;

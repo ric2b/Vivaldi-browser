@@ -14,7 +14,7 @@
 #include "base/json/json_reader.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "google_apis/common/request_sender.h"
@@ -72,12 +72,13 @@ absl::optional<std::string> MapJsonErrorToReason(
 
     // Returns the reason of the first error.
     const base::ListValue* errors = nullptr;
-    const base::DictionaryValue* first_error = nullptr;
-    if (error->GetListWithoutPathExpansion(kErrorErrorsKey, &errors) &&
-        errors->GetDictionary(0, &first_error)) {
-      const std::string* reason = first_error->FindStringKey(kErrorReasonKey);
-      if (reason)
-        return *reason;
+    if (error->GetListWithoutPathExpansion(kErrorErrorsKey, &errors)) {
+      const base::Value& first_error = errors->GetList()[0];
+      if (first_error.is_dict()) {
+        const std::string* reason = first_error.FindStringKey(kErrorReasonKey);
+        if (reason)
+          return *reason;
+      }
     }
   }
   return absl::nullopt;

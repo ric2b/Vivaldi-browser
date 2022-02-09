@@ -83,7 +83,7 @@ const base::FilePath::CharType kModuleListComponentRelativePath[] =
 
 uint32_t CalculateTimeDateStamp(base::Time time) {
   const auto delta = time.ToDeltaSinceWindowsEpoch();
-  return delta < base::TimeDelta() ? 0 : static_cast<uint32_t>(delta.InHours());
+  return delta.is_negative() ? 0 : static_cast<uint32_t>(delta.InHours());
 }
 
 ReadResult ReadModuleBlocklistCache(
@@ -97,7 +97,7 @@ ReadResult ReadModuleBlocklistCache(
 
   base::File file(module_blocklist_cache_path,
                   base::File::FLAG_OPEN | base::File::FLAG_READ |
-                      base::File::FLAG_SHARE_DELETE);
+                      base::File::FLAG_WIN_SHARE_DELETE);
   if (!file.IsValid())
     return ReadResult::kFailOpenFile;
 

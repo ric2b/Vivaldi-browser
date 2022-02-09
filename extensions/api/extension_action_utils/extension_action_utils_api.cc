@@ -57,7 +57,6 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/vivaldi_document_loader.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -338,7 +337,6 @@ void ExtensionActionUtil::Shutdown() {
   ExtensionRegistry::Get(profile_)->RemoveObserver(this);
   ExtensionActionAPI::Get(profile_)->RemoveObserver(this);
   CommandService::Get(profile_)->RemoveObserver(this);
-  vivaldi_document_loader_.reset();
 }
 
 void ExtensionActionUtil::OnExtensionActionUpdated(
@@ -415,13 +413,6 @@ void ExtensionActionUtil::OnExtensionLoaded(
   // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
   // not stored profile_? See VB-52519.
 
-  // temp; move this to a separate service. Gets two calls on startup via added
-  // and TriggerOnLoaded
-  if (extension->id() == ::vivaldi::kVivaldiAppId &&
-      !vivaldi_document_loader_) {
-    vivaldi_document_loader_ =
-        std::make_unique<VivaldiDocumentLoader>(profile_, extension);
-  }
 
   extensions::ExtensionActionManager* action_manager =
       extensions::ExtensionActionManager::Get(profile_);

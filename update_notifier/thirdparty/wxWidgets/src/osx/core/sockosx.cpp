@@ -61,8 +61,14 @@ public:
     }
 
 private:
-    virtual void DoClose()
+    virtual void DoClose() wxOVERRIDE
     {
+        // No need to do anything if we had never created the underlying
+        // socket: this avoids creating it from Uninstall_Callback() completely
+        // unnecessarily.
+        if ( !m_socket )
+            return;
+
         wxSocketManager * const manager = wxSocketManager::Get();
         if ( manager )
         {
@@ -183,16 +189,16 @@ private:
 class wxSocketManagerMac : public wxSocketManager
 {
 public:
-    virtual bool OnInit();
-    virtual void OnExit();
+    virtual bool OnInit() wxOVERRIDE;
+    virtual void OnExit() wxOVERRIDE;
 
-    virtual wxSocketImpl *CreateSocket(wxSocketBase& wxsocket)
+    virtual wxSocketImpl *CreateSocket(wxSocketBase& wxsocket) wxOVERRIDE
     {
         return new wxSocketImplMac(wxsocket);
     }
 
-    virtual void Install_Callback(wxSocketImpl *socket, wxSocketNotify event);
-    virtual void Uninstall_Callback(wxSocketImpl *socket, wxSocketNotify event);
+    virtual void Install_Callback(wxSocketImpl *socket, wxSocketNotify event) wxOVERRIDE;
+    virtual void Uninstall_Callback(wxSocketImpl *socket, wxSocketNotify event) wxOVERRIDE;
 
 private:
     // return CFSocket callback mask corresponding to the given event (the
@@ -257,7 +263,8 @@ void wxSocketManagerMac::Install_Callback(wxSocketImpl *socket_,
 {
     wxSocketImplMac * const socket = static_cast<wxSocketImplMac *>(socket_);
 
-    CFSocketEnableCallBacks(socket->GetSocket(), GetCFCallback(socket, event));
+    if ( socket->GetSocket() )
+        CFSocketEnableCallBacks(socket->GetSocket(), GetCFCallback(socket, event));
 }
 
 void wxSocketManagerMac::Uninstall_Callback(wxSocketImpl *socket_,
@@ -265,7 +272,8 @@ void wxSocketManagerMac::Uninstall_Callback(wxSocketImpl *socket_,
 {
     wxSocketImplMac * const socket = static_cast<wxSocketImplMac *>(socket_);
 
-    CFSocketDisableCallBacks(socket->GetSocket(), GetCFCallback(socket, event));
+    if ( socket->GetSocket() )
+        CFSocketDisableCallBacks(socket->GetSocket(), GetCFCallback(socket, event));
 }
 
 // set the wxBase variable to point to CF wxSocketManager implementation so

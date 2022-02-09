@@ -45,6 +45,8 @@ const std::string GetHistogramSuffix(AccuracyTipInteraction interaction) {
       return "Closed";
     case AccuracyTipInteraction::kIgnore:
       return "Ignore";
+    case AccuracyTipInteraction::kPermissionRequested:
+      return "PermissionRequested";
     case AccuracyTipInteraction::kDisabledByExperiment:
       NOTREACHED();  // We don't need specific histograms for this.
       return "";
@@ -184,7 +186,8 @@ void AccuracyService::MaybeShowSurvey() {
     const bool ukm_enabled = pref_service_->GetBoolean(
         unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
     std::string url_parameter_for_hats =
-        ukm_enabled ? url_for_last_shown_tip_.GetOrigin().spec() : "";
+        ukm_enabled ? url_for_last_shown_tip_.DeprecatedGetOriginAsURL().spec()
+                    : "";
     delegate_->ShowSurvey(
         {}, {{"Tip shown for URL", url_parameter_for_hats},
              {"UI interaction", base::NumberToString(last_interaction)}});
@@ -207,7 +210,7 @@ void AccuracyService::OnURLsDeleted(
     }
   } else {
     if (deletion_info.deleted_urls_origin_map().count(
-            url_for_last_shown_tip_.GetOrigin())) {
+            url_for_last_shown_tip_.DeprecatedGetOriginAsURL())) {
       url_for_last_shown_tip_ = GURL();
     }
   }

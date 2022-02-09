@@ -9,7 +9,6 @@
 
 #include <map>
 
-#include "base/macros.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
@@ -45,6 +44,11 @@ class ServiceWorkerDevToolsAgentHost : public DevToolsAgentHostImpl,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter,
       const base::UnguessableToken& devtools_worker_token);
+
+  ServiceWorkerDevToolsAgentHost(const ServiceWorkerDevToolsAgentHost&) =
+      delete;
+  ServiceWorkerDevToolsAgentHost& operator=(
+      const ServiceWorkerDevToolsAgentHost&) = delete;
 
   // DevToolsAgentHost overrides.
   BrowserContext* GetBrowserContext() override;
@@ -147,8 +151,6 @@ class ServiceWorkerDevToolsAgentHost : public DevToolsAgentHostImpl,
       coep_reporter_;
   base::ScopedObservation<RenderProcessHost, RenderProcessHostObserver>
       process_observation_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerDevToolsAgentHost);
 };
 
 }  // namespace content

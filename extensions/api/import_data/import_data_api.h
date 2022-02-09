@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <fstream>
 
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -61,6 +62,15 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<ImportDataAPI>* GetFactoryInstance();
 
+  // Open ifstream to Thunderbird mailbox and set seek position.
+  bool OpenThunderbirdMailbox(std::string path, int seek_pos);
+
+  // Read message from Thunderbird mailbox and return seek position after
+  // reading. On failure return false and leave seek_pos unchanged.
+  bool ReadThunderbirdMessage(std::string& content, int& seek_pos);
+
+  std::string GetThunderbirdPath() { return thunderbird_mailbox_path_; }
+
  private:
   friend class BrowserContextKeyedAPIFactory<ImportDataAPI>;
 
@@ -78,6 +88,10 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   // Keeps count of successful imported items. If not 0 when import ends, one
   // import failed.  Lousy error checking in Chromium forces this.
   int import_succeeded_count_;
+
+  // For reading huge Thunderbird mailbox files.
+  std::string thunderbird_mailbox_path_;
+  std::ifstream thunderbird_mailbox_;
 };
 
 class ImportDataGetProfilesFunction : public ExtensionFunction {
@@ -115,6 +129,31 @@ class ImportDataStartImportFunction : public ExtensionFunction {
 
   // The importer type, need to select correct dialog
   importer::ImporterType importer_type_ = importer::TYPE_UNKNOWN;
+};
+
+class ImportDataOpenThunderbirdMailboxFunction : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("importData.openThunderbirdMailbox",
+                              IMPORTDATA_OPENTHUNDERBIRDMAILBOX)
+   ImportDataOpenThunderbirdMailboxFunction() = default;
+
+  private:
+   ~ImportDataOpenThunderbirdMailboxFunction() override = default;
+
+   ResponseAction Run() override;
+};
+
+class ImportDataReadMessageFromThunderbirdMailboxFunction
+  : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("importData.readMessageFromThunderbirdMailbox",
+                              IMPORTDATA_READMESSAGEFROMTHUNDERBIRMAILBOX)
+   ImportDataReadMessageFromThunderbirdMailboxFunction() = default;
+
+  private:
+   ~ImportDataReadMessageFromThunderbirdMailboxFunction() override = default;
+
+   ResponseAction Run() override;
 };
 
 }  // namespace extensions

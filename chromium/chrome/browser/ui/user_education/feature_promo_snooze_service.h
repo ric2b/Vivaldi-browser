@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_USER_EDUCATION_FEATURE_PROMO_SNOOZE_SERVICE_H_
 #define CHROME_BROWSER_UI_USER_EDUCATION_FEATURE_PROMO_SNOOZE_SERVICE_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -33,14 +34,6 @@ class FeaturePromoSnoozeService {
   // Maximum count of snoozes to track in UMA histogram.
   // Snooze counts that are equal or larger than this value will be conflated.
   static constexpr int kUmaMaxSnoozeCount = 10;
-
-  // The amount of time the promo should stay onscreen if the user
-  // never hovers over it.
-  static constexpr base::TimeDelta kTimeoutNoInteraction = base::Seconds(300);
-
-  // The amount of time the promo should stay onscreen after the
-  // user stops hovering over it.
-  static constexpr base::TimeDelta kTimeoutAfterInteraction = base::Seconds(3);
 
   explicit FeaturePromoSnoozeService(Profile* profile);
 
@@ -96,7 +89,7 @@ class FeaturePromoSnoozeService {
   void SaveSnoozeData(const base::Feature& iph_feature,
                       const SnoozeData& snooze_data);
 
-  Profile* const profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 #endif  // CHROME_BROWSER_UI_USER_EDUCATION_FEATURE_PROMO_SNOOZE_SERVICE_H_

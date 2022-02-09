@@ -4,10 +4,12 @@
 
 #include "base/files/file_util.h"
 
-// windows.h includes winsock.h which isn't compatible with winsock2.h. To use winsock2.h
-// you have to include it first.
+// windows.h includes winsock.h which isn't compatible with winsock2.h. To use
+// winsock2.h you have to include it first.
+// clang-format off
 #include <winsock2.h>
 #include <windows.h>
+// clang-format on
 
 #include <io.h>
 #include <psapi.h>
@@ -27,7 +29,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"

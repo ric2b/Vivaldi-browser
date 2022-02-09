@@ -78,11 +78,8 @@ class TestObserver : public RmadClient::Observer {
     return last_calibration_overall_status_;
   }
   int num_provisioning_progress() const { return num_provisioning_progress_; }
-  rmad::ProvisionDeviceState::ProvisioningStep last_provisioning_step() const {
-    return last_provisioning_step_;
-  }
-  float last_provisioning_progress() const {
-    return last_provisioning_progress_;
+  rmad::ProvisionStatus last_provisioning_status() const {
+    return last_provisioning_status_;
   }
   int num_hardware_write_protection_state() {
     return num_hardware_write_protection_state_;
@@ -98,6 +95,12 @@ class TestObserver : public RmadClient::Observer {
   const rmad::HardwareVerificationResult& last_hardware_verification_result()
       const {
     return last_hardware_verification_result_;
+  }
+  int num_ro_firmware_update_progress() const {
+    return num_ro_firmware_update_progress_;
+  }
+  rmad::UpdateRoFirmwareStatus last_ro_firmware_update_progress() const {
+    return last_ro_firmware_update_progress_;
   }
 
   // Called when an error occurs outside of state transitions.
@@ -122,11 +125,9 @@ class TestObserver : public RmadClient::Observer {
   }
 
   // Called when provisioning progress is updated.
-  void ProvisioningProgress(rmad::ProvisionDeviceState::ProvisioningStep step,
-                            double progress) override {
+  void ProvisioningProgress(const rmad::ProvisionStatus& status) override {
     num_provisioning_progress_++;
-    last_provisioning_step_ = step;
-    last_provisioning_progress_ = progress;
+    last_provisioning_status_ = status;
   }
 
   // Called when hardware write protection state changes.
@@ -149,6 +150,12 @@ class TestObserver : public RmadClient::Observer {
     last_hardware_verification_result_ = last_hardware_verification_result;
   }
 
+  // Called when overall calibration progress is updated.
+  void RoFirmwareUpdateProgress(rmad::UpdateRoFirmwareStatus status) override {
+    num_ro_firmware_update_progress_++;
+    last_ro_firmware_update_progress_ = status;
+  }
+
  private:
   RmadClient* client_;  // Not owned.
   int num_error_ = 0;
@@ -159,16 +166,16 @@ class TestObserver : public RmadClient::Observer {
   rmad::CalibrationOverallStatus last_calibration_overall_status_ =
       rmad::CalibrationOverallStatus::RMAD_CALIBRATION_OVERALL_UNKNOWN;
   int num_provisioning_progress_ = 0;
-  rmad::ProvisionDeviceState::ProvisioningStep last_provisioning_step_ =
-      rmad::ProvisionDeviceState::RMAD_PROVISIONING_STEP_UNKNOWN;
-  float last_provisioning_progress_ = 0.0f;
+  rmad::ProvisionStatus last_provisioning_status_;
   int num_hardware_write_protection_state_ = 0;
   bool last_hardware_write_protection_state_ = true;
   int num_power_cable_state_ = 0;
   bool last_power_cable_state_ = true;
   int num_hardware_verification_result_ = 0;
   rmad::HardwareVerificationResult last_hardware_verification_result_;
-};  // namespace chromeos
+  int num_ro_firmware_update_progress_ = 0;
+  rmad::UpdateRoFirmwareStatus last_ro_firmware_update_progress_;
+};
 
 rmad::RmadState CreateWelcomeState() {
   rmad::RmadState state;
@@ -198,6 +205,32 @@ rmad::GetStateReply CreateDeviceDestinationStateReply(
       new rmad::DeviceDestinationState());
   reply.set_error(error);
   return reply;
+}
+
+TEST_F(FakeRmadClientTest, CheckInRma_Default_False) {
+  base::RunLoop run_loop;
+  client_->CheckInRma(
+      base::BindLambdaForTesting([&](absl::optional<bool> response) {
+        EXPECT_TRUE(response.has_value());
+        EXPECT_FALSE(*response);
+        run_loop.Quit();
+      }));
+  run_loop.RunUntilIdle();
+}
+
+TEST_F(FakeRmadClientTest, CheckInRma_WithState_True) {
+  std::vector<rmad::GetStateReply> fake_states;
+  fake_states.push_back(CreateWelcomeStateReply(rmad::RMAD_ERROR_OK));
+  fake_client_()->SetFakeStateReplies(std::move(fake_states));
+
+  base::RunLoop run_loop;
+  client_->CheckInRma(
+      base::BindLambdaForTesting([&](absl::optional<bool> response) {
+        EXPECT_TRUE(response.has_value());
+        EXPECT_TRUE(*response);
+        run_loop.Quit();
+      }));
+  run_loop.RunUntilIdle();
 }
 
 TEST_F(FakeRmadClientTest, GetCurrentState_Default_RmaNotRequired) {
@@ -474,12 +507,17 @@ TEST_F(FakeRmadClientTest, Abortable_SetTrue_Ok) {
   run_loop.RunUntilIdle();
 }
 
-TEST_F(FakeRmadClientTest, GetLogPath) {
+TEST_F(FakeRmadClientTest, GetLog) {
   base::RunLoop run_loop;
-  client_->GetLogPath(
+  client_->GetLog(
       base::BindLambdaForTesting([&](absl::optional<std::string> response) {
         EXPECT_TRUE(response.has_value());
-        EXPECT_EQ(*response, "fake/log/path.log");
+        EXPECT_EQ(
+            *response,
+            "This is a log.\nIt has multiple lines.\nSome of which are very, "
+            "very long so that the log window can be tested. I mean really "
+            "long, much longer than you expect. It just keeps going on and "
+            "on, until it just stops.");
         run_loop.Quit();
       }));
   run_loop.RunUntilIdle();
@@ -492,9 +530,9 @@ TEST_F(FakeRmadClientTest, ErrorObservation) {
 
   fake_client_()->TriggerErrorObservation(
       rmad::RmadErrorCode::RMAD_ERROR_REIMAGING_UNKNOWN_FAILURE);
-  EXPECT_EQ(1, observer_1.num_error());
-  EXPECT_EQ(rmad::RmadErrorCode::RMAD_ERROR_REIMAGING_UNKNOWN_FAILURE,
-            observer_1.last_error());
+  EXPECT_EQ(observer_1.num_error(), 1);
+  EXPECT_EQ(observer_1.last_error(),
+            rmad::RmadErrorCode::RMAD_ERROR_REIMAGING_UNKNOWN_FAILURE);
 }
 
 // Tests that synchronous observers are notified about component calibration
@@ -505,12 +543,12 @@ TEST_F(FakeRmadClientTest, CalibrationProgressObservation) {
   fake_client_()->TriggerCalibrationProgressObservation(
       rmad::RmadComponent::RMAD_COMPONENT_LID_ACCELEROMETER,
       rmad::CalibrationComponentStatus::RMAD_CALIBRATION_IN_PROGRESS, 0.5);
-  EXPECT_EQ(1, observer_1.num_calibration_progress());
-  EXPECT_EQ(rmad::RmadComponent::RMAD_COMPONENT_LID_ACCELEROMETER,
-            observer_1.last_calibration_component_status().component());
-  EXPECT_EQ(rmad::CalibrationComponentStatus::RMAD_CALIBRATION_IN_PROGRESS,
-            observer_1.last_calibration_component_status().status());
-  EXPECT_EQ(0.5, observer_1.last_calibration_component_status().progress());
+  EXPECT_EQ(observer_1.num_calibration_progress(), 1);
+  EXPECT_EQ(observer_1.last_calibration_component_status().component(),
+            rmad::RmadComponent::RMAD_COMPONENT_LID_ACCELEROMETER);
+  EXPECT_EQ(observer_1.last_calibration_component_status().status(),
+            rmad::CalibrationComponentStatus::RMAD_CALIBRATION_IN_PROGRESS);
+  EXPECT_EQ(observer_1.last_calibration_component_status().progress(), 0.5);
 }
 
 // Tests that synchronous observers are notified about overall calibration
@@ -521,10 +559,10 @@ TEST_F(FakeRmadClientTest, CalibrationOverallProgressObservation) {
   fake_client_()->TriggerCalibrationOverallProgressObservation(
       rmad::CalibrationOverallStatus::
           RMAD_CALIBRATION_OVERALL_CURRENT_ROUND_COMPLETE);
-  EXPECT_EQ(1, observer_1.num_calibration_overall_progress());
-  EXPECT_EQ(rmad::CalibrationOverallStatus::
-                RMAD_CALIBRATION_OVERALL_CURRENT_ROUND_COMPLETE,
-            observer_1.last_calibration_overall_status());
+  EXPECT_EQ(observer_1.num_calibration_overall_progress(), 1);
+  EXPECT_EQ(observer_1.last_calibration_overall_status(),
+            rmad::CalibrationOverallStatus::
+                RMAD_CALIBRATION_OVERALL_CURRENT_ROUND_COMPLETE);
 }
 
 // Tests that synchronous observers are notified about provisioning progress.
@@ -532,11 +570,11 @@ TEST_F(FakeRmadClientTest, ProvisioningProgressObservation) {
   TestObserver observer_1(client_);
 
   fake_client_()->TriggerProvisioningProgressObservation(
-      rmad::ProvisionDeviceState::RMAD_PROVISIONING_STEP_IN_PROGRESS, 0.25);
-  EXPECT_EQ(1, observer_1.num_provisioning_progress());
-  EXPECT_EQ(rmad::ProvisionDeviceState::RMAD_PROVISIONING_STEP_IN_PROGRESS,
-            observer_1.last_provisioning_step());
-  EXPECT_EQ(0.25, observer_1.last_provisioning_progress());
+      rmad::ProvisionStatus::RMAD_PROVISION_STATUS_IN_PROGRESS, 0.25);
+  EXPECT_EQ(observer_1.num_provisioning_progress(), 1);
+  EXPECT_EQ(observer_1.last_provisioning_status().status(),
+            rmad::ProvisionStatus::RMAD_PROVISION_STATUS_IN_PROGRESS);
+  EXPECT_EQ(observer_1.last_provisioning_status().progress(), 0.25);
 }
 
 // Tests that synchronous observers are notified about provisioning progress.
@@ -544,12 +582,12 @@ TEST_F(FakeRmadClientTest, HardwareWriteProtectionStateObservation) {
   TestObserver observer_1(client_);
 
   fake_client_()->TriggerHardwareWriteProtectionStateObservation(false);
-  EXPECT_EQ(1, observer_1.num_hardware_write_protection_state());
-  EXPECT_EQ(false, observer_1.last_hardware_write_protection_state());
+  EXPECT_EQ(observer_1.num_hardware_write_protection_state(), 1);
+  EXPECT_FALSE(observer_1.last_hardware_write_protection_state());
 
   fake_client_()->TriggerHardwareWriteProtectionStateObservation(true);
-  EXPECT_EQ(2, observer_1.num_hardware_write_protection_state());
-  EXPECT_EQ(true, observer_1.last_hardware_write_protection_state());
+  EXPECT_EQ(observer_1.num_hardware_write_protection_state(), 2);
+  EXPECT_TRUE(observer_1.last_hardware_write_protection_state());
 }
 
 // Tests that synchronous observers are notified about provisioning progress.
@@ -557,12 +595,12 @@ TEST_F(FakeRmadClientTest, PowerCableStateObservation) {
   TestObserver observer_1(client_);
 
   fake_client_()->TriggerPowerCableStateObservation(false);
-  EXPECT_EQ(1, observer_1.num_power_cable_state());
-  EXPECT_EQ(false, observer_1.last_power_cable_state());
+  EXPECT_EQ(observer_1.num_power_cable_state(), 1);
+  EXPECT_FALSE(observer_1.last_power_cable_state());
 
   fake_client_()->TriggerPowerCableStateObservation(true);
-  EXPECT_EQ(2, observer_1.num_power_cable_state());
-  EXPECT_EQ(true, observer_1.last_power_cable_state());
+  EXPECT_EQ(observer_1.num_power_cable_state(), 2);
+  EXPECT_TRUE(observer_1.last_power_cable_state());
 }
 
 // Tests that synchronous observers are notified about hardware verification
@@ -572,17 +610,33 @@ TEST_F(FakeRmadClientTest, HardwareVerificationResultObservation) {
 
   fake_client_()->TriggerHardwareVerificationResultObservation(false,
                                                                "fatal error");
-  EXPECT_EQ(1, observer_1.num_hardware_verification_result());
-  EXPECT_EQ(false,
-            observer_1.last_hardware_verification_result().is_compliant());
-  EXPECT_EQ("fatal error",
-            observer_1.last_hardware_verification_result().error_str());
+  EXPECT_EQ(observer_1.num_hardware_verification_result(), 1);
+  EXPECT_FALSE(observer_1.last_hardware_verification_result().is_compliant());
+  EXPECT_EQ(observer_1.last_hardware_verification_result().error_str(),
+            "fatal error");
 
   fake_client_()->TriggerHardwareVerificationResultObservation(true, "ok");
-  EXPECT_EQ(2, observer_1.num_hardware_verification_result());
-  EXPECT_EQ(true,
-            observer_1.last_hardware_verification_result().is_compliant());
-  EXPECT_EQ("ok", observer_1.last_hardware_verification_result().error_str());
+  EXPECT_EQ(observer_1.num_hardware_verification_result(), 2);
+  EXPECT_TRUE(observer_1.last_hardware_verification_result().is_compliant());
+  EXPECT_EQ(observer_1.last_hardware_verification_result().error_str(), "ok");
+}
+
+// Tests that synchronous observers are notified about ro firmware update
+// progress.
+TEST_F(FakeRmadClientTest, RoFirmwareUpdateProgressObservation) {
+  TestObserver observer_1(client_);
+
+  fake_client_()->TriggerRoFirmwareUpdateProgressObservation(
+      rmad::UpdateRoFirmwareStatus::RMAD_UPDATE_RO_FIRMWARE_UPDATING);
+  EXPECT_EQ(observer_1.num_ro_firmware_update_progress(), 1);
+  EXPECT_EQ(observer_1.last_ro_firmware_update_progress(),
+            rmad::UpdateRoFirmwareStatus::RMAD_UPDATE_RO_FIRMWARE_UPDATING);
+
+  fake_client_()->TriggerRoFirmwareUpdateProgressObservation(
+      rmad::UpdateRoFirmwareStatus::RMAD_UPDATE_RO_FIRMWARE_REBOOTING);
+  EXPECT_EQ(observer_1.num_ro_firmware_update_progress(), 2);
+  EXPECT_EQ(observer_1.last_ro_firmware_update_progress(),
+            rmad::UpdateRoFirmwareStatus::RMAD_UPDATE_RO_FIRMWARE_REBOOTING);
 }
 
 }  // namespace

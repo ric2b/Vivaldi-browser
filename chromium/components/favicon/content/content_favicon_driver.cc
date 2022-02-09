@@ -59,13 +59,14 @@ GURL ContentFaviconDriver::GetManifestURL(content::RenderFrameHost* rfh) {
 ContentFaviconDriver::ContentFaviconDriver(content::WebContents* web_contents,
                                            CoreFaviconService* favicon_service)
     : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<ContentFaviconDriver>(*web_contents),
       FaviconDriverImpl(favicon_service) {}
 
 ContentFaviconDriver::~ContentFaviconDriver() = default;
 
 ContentFaviconDriver::DocumentManifestData::DocumentManifestData(
     content::RenderFrameHost* rfh)
-    : content::RenderDocumentHostUserData<DocumentManifestData>(rfh) {}
+    : content::DocumentUserData<DocumentManifestData>(rfh) {}
 ContentFaviconDriver::DocumentManifestData::~DocumentManifestData() = default;
 
 ContentFaviconDriver::NavigationManifestData::NavigationManifestData(
@@ -261,8 +262,7 @@ void ContentFaviconDriver::DidFinishNavigation(
 
 NAVIGATION_HANDLE_USER_DATA_KEY_IMPL(
     ContentFaviconDriver::NavigationManifestData);
-RENDER_DOCUMENT_HOST_USER_DATA_KEY_IMPL(
-    ContentFaviconDriver::DocumentManifestData);
+DOCUMENT_USER_DATA_KEY_IMPL(ContentFaviconDriver::DocumentManifestData);
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ContentFaviconDriver);
 
 }  // namespace favicon

@@ -33,7 +33,8 @@
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_client.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/member.h"
 
 namespace blink {
 
@@ -50,7 +51,7 @@ class CORE_EXPORT CaretDisplayItemClient final
   CaretDisplayItemClient(const CaretDisplayItemClient&) = delete;
   CaretDisplayItemClient& operator=(const CaretDisplayItemClient&) = delete;
   ~CaretDisplayItemClient() override;
-  void Trace(Visitor* visitor) const;
+  void Trace(Visitor* visitor) const override;
 
   // Called indirectly from LayoutBlock::willBeDestroyed().
   void LayoutBlockWillBeDestroyed(const LayoutBlock&);

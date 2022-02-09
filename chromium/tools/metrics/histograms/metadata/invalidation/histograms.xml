@@ -12,10 +12,11 @@ each one.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -113,25 +114,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     For each subcription request to the FCM Per-User-Topic server, log the
     response received from the server.
   </summary>
-</histogram>
-
-<histogram
-    name="FCMInvalidations.SubscriptionResponseCodeForTopic{FCMInvalidationNonSyncPerUserTopics}"
-    enum="HttpResponseCode" expires_after="never">
-<!-- expires-never: For monitoring FCM based invalidations. -->
-
-  <owner>melandory@chromium.org</owner>
-  <owner>treib@chromium.org</owner>
-  <summary>
-    For each subcription request to the FCM Per-User-Topic server, log the
-    response received from the server per topic. Note: This is only recorded
-    with a data type suffix. The base version is never recorded.
-    {FCMInvalidationNonSyncPerUserTopics}
-  </summary>
-  <token key="FCMInvalidationNonSyncPerUserTopics">
-    <variant name=""/>
-    <variant name=".OTHER" summary="OTHER"/>
-  </token>
 </histogram>
 
 <histogram name="FCMInvalidations.TokenStateOnRegistrationRequest2"

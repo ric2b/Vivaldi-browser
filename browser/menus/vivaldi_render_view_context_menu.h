@@ -25,10 +25,13 @@ class ProfileMenuController;
 class SpeechMenuController;
 
 class VivaldiRenderViewContextMenu : public RenderViewContextMenu {
+protected:
+  friend class VivaldiContextMenuViews;
+  friend class ContextMenuController;
  public:
   using Container = extensions::vivaldi::context_menu::Container;
 
-  VivaldiRenderViewContextMenu(content::RenderFrameHost* render_frame_host,
+  VivaldiRenderViewContextMenu(content::RenderFrameHost& render_frame_host,
                                const content::ContextMenuParams& params,
                                gfx::NativeView parent_view);
   ~VivaldiRenderViewContextMenu() override;
@@ -41,7 +44,7 @@ class VivaldiRenderViewContextMenu : public RenderViewContextMenu {
 
   // Called by the owner of this controller.
   static VivaldiRenderViewContextMenu* Create(
-      content::RenderFrameHost* render_frame_host,
+      content::RenderFrameHost& render_frame_host,
       const content::ContextMenuParams& params,
       gfx::NativeView parent_view);
   // Called by the JS api request.
@@ -89,8 +92,6 @@ class VivaldiRenderViewContextMenu : public RenderViewContextMenu {
   int GetStaticIdForAction(std::string command);
   ui::ImageModel GetImageForAction(std::string command);
 
-  void SetToolkitDelegate(
-      RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate);
   void ContainerWillOpen(ui::SimpleMenuModel* menu_model);
   bool HasContainerContent(const Container& container);
   void PopulateContainer(const Container& container,
@@ -146,7 +147,6 @@ class VivaldiRenderViewContextMenu : public RenderViewContextMenu {
   bool is_executing_command_ = false;
   ui::SimpleMenuModel* populating_menu_model_ = nullptr;
 
-  RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate_ = nullptr;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   std::unique_ptr<ProfileMenuController> link_profile_controller_;
   std::unique_ptr<ProfileMenuController> image_profile_controller_;

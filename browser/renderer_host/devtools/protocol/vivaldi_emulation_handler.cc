@@ -7,7 +7,7 @@ namespace protocol {
 
 bool EmulationHandler::IsTouchEmulationRequiredByOthers() {
   for (WebContentsImpl* contents : GetWebContents()->GetAllWebContents()) {
-    for (FrameTreeNode* node : contents->GetFrameTree()->Nodes()) {
+    for (FrameTreeNode* node : contents->GetPrimaryFrameTree().Nodes()) {
       RenderWidgetHostViewBase* rwhvb = static_cast<RenderWidgetHostViewBase*>(
           node->render_manager()->GetRenderWidgetHostView());
       if (rwhvb) {

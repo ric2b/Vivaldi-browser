@@ -38,7 +38,7 @@ const char kVivaldiInstallDir[] = "vivaldi-install-dir";
 const char kVivaldiLanguage[] = "vivaldi-language";
 
 // Installer runs from the mini installer.
-const char kVivaldiMini[] = "vivaldi-mini";
+const char kVivaldiMini[] = VIVALDI_INSTALLER_SWITCH_MINI;
 
 // Attempt to register a browser as a default even for a stand-alone
 // installation.
@@ -49,6 +49,10 @@ const char kVivaldiSilent[] = "vivaldi-silent";
 
 // Install a stand-alone browser.
 const char kVivaldiStandalone[] = "vivaldi-standalone";
+
+// The installer or mini_installer shall just unpack/uncompress files without
+// installing anything.
+const char kVivaldiUnpack[] = VIVALDI_INSTALLER_SWITCH_UNPACK;
 
 // The installation is to update the existing browser.
 const char kVivaldiUpdate[] = "vivaldi-update";

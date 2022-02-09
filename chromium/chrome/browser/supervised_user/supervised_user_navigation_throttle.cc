@@ -10,7 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_interstitial.h"
@@ -125,7 +125,7 @@ SupervisedUserNavigationThrottle::MaybeCreateThrottleFor(
   Profile* profile = Profile::FromBrowserContext(
       navigation_handle->GetWebContents()->GetBrowserContext());
 
-  if (!profile->IsSupervised())
+  if (!profile->IsChild())
     return nullptr;
 
   // Can't use std::make_unique because the constructor is private.
@@ -163,7 +163,7 @@ SupervisedUserNavigationThrottle::CheckURL() {
           navigation_handle()->GetWebContents()->GetOutermostWebContents());
   bool got_result = false;
 
-  if (navigation_handle()->IsInMainFrame()) {
+  if (navigation_handle()->IsInPrimaryMainFrame()) {
     got_result = url_filter_->GetFilteringBehaviorForURLWithAsyncChecks(
         url,
         base::BindOnce(&SupervisedUserNavigationThrottle::OnCheckDone,
@@ -253,7 +253,7 @@ void SupervisedUserNavigationThrottle::OnCheckDone(
     RecordFilterResultEvent(true, behavior, reason, uncertain, transition);
   }
 
-  if (navigation_handle()->IsInMainFrame()) {
+  if (navigation_handle()->IsInPrimaryMainFrame()) {
     // Update navigation observer about the navigation state of the main frame.
     auto* navigation_observer =
         SupervisedUserNavigationObserver::FromWebContents(

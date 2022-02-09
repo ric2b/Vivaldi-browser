@@ -19,13 +19,13 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -98,7 +98,7 @@
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_v8_value_converter.h"
 #include "third_party/blink/public/platform/web_vector.h"
-#include "third_party/blink/public/web/modules/media/audio/web_audio_device_factory.h"
+#include "third_party/blink/public/web/modules/media/audio/audio_device_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_media_inspector.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -140,7 +140,7 @@ media::AudioParameters GetAudioHardwareParams() {
   if (!render_frame)
     return media::AudioParameters::UnavailableDeviceParams();
 
-  return blink::WebAudioDeviceFactory::GetOutputDeviceInfo(
+  return blink::AudioDeviceFactory::GetOutputDeviceInfo(
              render_frame->GetWebFrame()->GetLocalFrameToken(),
              media::AudioSinkParameters())
       .output_params();
@@ -216,6 +216,14 @@ RendererBlinkPlatformImpl::~RendererBlinkPlatformImpl() {
 void RendererBlinkPlatformImpl::Shutdown() {}
 
 //------------------------------------------------------------------------------
+
+std::string RendererBlinkPlatformImpl::GetNameForHistogram(const char* name) {
+  RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
+  // render_thread_impl can be null in tests.
+  return render_thread_impl ? render_thread_impl->histogram_customizer()
+                                  ->ConvertToCustomHistogramName(name)
+                            : std::string{name};
+}
 
 std::unique_ptr<blink::WebURLLoaderFactory>
 RendererBlinkPlatformImpl::WrapURLLoaderFactory(
@@ -513,17 +521,6 @@ cc::TaskGraphRunner* RendererBlinkPlatformImpl::GetTaskGraphRunner() {
   return thread ? thread->GetTaskGraphRunner() : nullptr;
 }
 
-gfx::RenderingPipeline* RendererBlinkPlatformImpl::GetMainThreadPipeline() {
-  RenderThreadImpl* thread = RenderThreadImpl::current();
-  return thread ? thread->GetMainThreadPipeline() : nullptr;
-}
-
-gfx::RenderingPipeline*
-RendererBlinkPlatformImpl::GetCompositorThreadPipeline() {
-  RenderThreadImpl* thread = RenderThreadImpl::current();
-  return thread ? thread->GetCompositorThreadPipeline() : nullptr;
-}
-
 bool RendererBlinkPlatformImpl::IsThreadedAnimationEnabled() {
   RenderThreadImpl* thread = RenderThreadImpl::current();
   return thread ? thread->IsThreadedAnimationEnabled() : true;
@@ -577,7 +574,7 @@ scoped_refptr<media::AudioCapturerSource>
 RendererBlinkPlatformImpl::NewAudioCapturerSource(
     blink::WebLocalFrame* web_frame,
     const media::AudioSourceParameters& params) {
-  return blink::WebAudioDeviceFactory::NewAudioCapturerSource(
+  return blink::AudioDeviceFactory::NewAudioCapturerSource(
       web_frame->GetLocalFrameToken(), params);
 }
 
@@ -622,14 +619,14 @@ RendererBlinkPlatformImpl::NewAudioRendererSink(
     blink::WebAudioDeviceSourceType source_type,
     blink::WebLocalFrame* web_frame,
     const media::AudioSinkParameters& params) {
-  return blink::WebAudioDeviceFactory::NewAudioRendererSink(
+  return blink::AudioDeviceFactory::NewAudioRendererSink(
       source_type, web_frame->GetLocalFrameToken(), params);
 }
 
 media::AudioLatency::LatencyType
 RendererBlinkPlatformImpl::GetAudioSourceLatencyType(
     blink::WebAudioDeviceSourceType source_type) {
-  return blink::WebAudioDeviceFactory::GetSourceLatencyType(source_type);
+  return blink::AudioDeviceFactory::GetSourceLatencyType(source_type);
 }
 
 bool RendererBlinkPlatformImpl::ShouldEnforceWebRTCRoutingPreferences() {
@@ -945,13 +942,6 @@ RendererBlinkPlatformImpl::GetProtocolHandlerSecurityLevel() {
   return GetContentClient()->renderer()->GetProtocolHandlerSecurityLevel();
 }
 
-bool RendererBlinkPlatformImpl::IsExcludedHeaderForServiceWorkerFetchEvent(
-    const blink::WebString& header_name) {
-  return GetContentClient()
-      ->renderer()
-      ->IsExcludedHeaderForServiceWorkerFetchEvent(header_name.Ascii());
-}
-
 bool RendererBlinkPlatformImpl::OriginCanAccessServiceWorkers(
     const blink::WebURL& url) {
   return content::OriginCanAccessServiceWorkers(url);
@@ -1116,6 +1106,12 @@ void RendererBlinkPlatformImpl::AppendContentSecurityPolicy(
     const blink::WebURL& url,
     blink::WebVector<blink::WebContentSecurityPolicyHeader>* csp) {
   GetContentClient()->renderer()->AppendContentSecurityPolicy(url, csp);
+}
+
+base::PlatformThreadId RendererBlinkPlatformImpl::GetIOThreadId() const {
+  return RenderThreadImpl::current()
+             ? RenderThreadImpl::current()->GetIOPlatformThreadId()
+             : base::kInvalidThreadId;
 }
 
 }  // namespace content

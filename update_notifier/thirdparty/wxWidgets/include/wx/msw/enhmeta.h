@@ -11,10 +11,14 @@
 #ifndef _WX_MSW_ENHMETA_H_
 #define _WX_MSW_ENHMETA_H_
 
+#include "wx/defs.h"
+
+#if wxUSE_ENH_METAFILE
+
 #include "wx/dc.h"
 #include "wx/gdiobj.h"
 
-#if wxUSE_DRAG_AND_DROP
+#if wxUSE_DATAOBJ
     #include "wx/dataobj.h"
 #endif
 
@@ -39,7 +43,7 @@ public:
     bool Play(wxDC *dc, wxRect *rectBound = NULL);
 
     // accessors
-    virtual bool IsOk() const { return m_hMF != 0; }
+    virtual bool IsOk() const wxOVERRIDE { return m_hMF != NULL; }
 
     wxSize GetSize() const;
     int GetWidth() const { return GetSize().x; }
@@ -52,25 +56,33 @@ public:
     // this method
     bool SetClipboard(int width = 0, int height = 0);
 
+    // Detach the HENHMETAFILE from this object, i.e. don't delete the handle
+    // in the dtor -- the caller is now responsible for doing this, e.g. using
+    // Free() method below.
+    WXHANDLE Detach() { WXHANDLE h = m_hMF; m_hMF = NULL; return h; }
+
+    // Destroy the given HENHMETAFILE object.
+    static void Free(WXHANDLE handle);
+
     // implementation
     WXHANDLE GetHENHMETAFILE() const { return m_hMF; }
     void SetHENHMETAFILE(WXHANDLE hMF) { Free(); m_hMF = hMF; }
 
 protected:
     void Init();
-    void Free();
+    void Free() { Free(m_hMF); }
     void Assign(const wxEnhMetaFile& mf);
 
     // we don't use these functions (but probably should) but have to implement
     // them as they're pure virtual in the base class
-    virtual wxGDIRefData *CreateGDIRefData() const;
-    virtual wxGDIRefData *CloneGDIRefData(const wxGDIRefData *data) const;
+    virtual wxGDIRefData *CreateGDIRefData() const wxOVERRIDE;
+    virtual wxGDIRefData *CloneGDIRefData(const wxGDIRefData *data) const wxOVERRIDE;
 
 private:
     wxString m_filename;
     WXHANDLE m_hMF;
 
-    DECLARE_DYNAMIC_CLASS(wxEnhMetaFile)
+    wxDECLARE_DYNAMIC_CLASS(wxEnhMetaFile);
 };
 
 // ----------------------------------------------------------------------------
@@ -88,7 +100,7 @@ public:
 
     // as above, but takes reference DC as first argument to take resolution,
     // size, font metrics etc. from
-    wxEXPLICIT
+    explicit
     wxEnhMetaFileDC(const wxDC& referenceDC,
                     const wxString& filename = wxEmptyString,
                     int width = 0, int height = 0,
@@ -98,10 +110,10 @@ public:
     wxEnhMetaFile *Close();
 
 private:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxEnhMetaFileDC)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxEnhMetaFileDC);
 };
 
-#if wxUSE_DRAG_AND_DROP
+#if wxUSE_DATAOBJ
 
 // ----------------------------------------------------------------------------
 // wxEnhMetaFileDataObject is a specialization of wxDataObject for enh metafile
@@ -125,13 +137,13 @@ public:
         { return m_metafile; }
 
     // implement base class pure virtuals
-    virtual wxDataFormat GetPreferredFormat(Direction dir) const;
-    virtual size_t GetFormatCount(Direction dir) const;
-    virtual void GetAllFormats(wxDataFormat *formats, Direction dir) const;
-    virtual size_t GetDataSize(const wxDataFormat& format) const;
-    virtual bool GetDataHere(const wxDataFormat& format, void *buf) const;
+    virtual wxDataFormat GetPreferredFormat(Direction dir) const wxOVERRIDE;
+    virtual size_t GetFormatCount(Direction dir) const wxOVERRIDE;
+    virtual void GetAllFormats(wxDataFormat *formats, Direction dir) const wxOVERRIDE;
+    virtual size_t GetDataSize(const wxDataFormat& format) const wxOVERRIDE;
+    virtual bool GetDataHere(const wxDataFormat& format, void *buf) const wxOVERRIDE;
     virtual bool SetData(const wxDataFormat& format, size_t len,
-                         const void *buf);
+                         const void *buf) wxOVERRIDE;
 
 protected:
     wxEnhMetaFile m_metafile;
@@ -163,17 +175,17 @@ public:
         { return m_metafile; }
 
     // implement base class pure virtuals
-    virtual size_t GetDataSize() const;
-    virtual bool GetDataHere(void *buf) const;
-    virtual bool SetData(size_t len, const void *buf);
+    virtual size_t GetDataSize() const wxOVERRIDE;
+    virtual bool GetDataHere(void *buf) const wxOVERRIDE;
+    virtual bool SetData(size_t len, const void *buf) wxOVERRIDE;
 
-    virtual size_t GetDataSize(const wxDataFormat& WXUNUSED(format)) const
+    virtual size_t GetDataSize(const wxDataFormat& WXUNUSED(format)) const wxOVERRIDE
         { return GetDataSize(); }
     virtual bool GetDataHere(const wxDataFormat& WXUNUSED(format),
-                             void *buf) const
+                             void *buf) const wxOVERRIDE
         { return GetDataHere(buf); }
     virtual bool SetData(const wxDataFormat& WXUNUSED(format),
-                         size_t len, const void *buf)
+                         size_t len, const void *buf) wxOVERRIDE
         { return SetData(len, buf); }
 
 protected:
@@ -182,6 +194,8 @@ protected:
     wxDECLARE_NO_COPY_CLASS(wxEnhMetaFileSimpleDataObject);
 };
 
-#endif // wxUSE_DRAG_AND_DROP
+#endif // wxUSE_DATAOBJ
+
+#endif // wxUSE_ENH_METAFILE
 
 #endif // _WX_MSW_ENHMETA_H_

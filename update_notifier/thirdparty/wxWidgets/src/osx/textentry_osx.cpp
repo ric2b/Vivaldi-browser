@@ -34,11 +34,7 @@
 #endif
 
 #if wxUSE_STD_IOSTREAM
-    #if wxUSE_IOSTREAMH
-        #include <fstream.h>
-    #else
-        #include <fstream>
-    #endif
+    #include <fstream>
 #endif
 
 #include "wx/filefn.h"
@@ -79,6 +75,23 @@ void wxTextEntry::SetMaxLength(unsigned long len)
     if ( GetTextPeer()->CanClipMaxLength() )
         GetTextPeer()->SetMaxLength(len);
     m_maxLength = len ;
+}
+
+void wxTextEntry::ForceUpper()
+{
+    wxTextWidgetImpl* const textPeer = GetTextPeer();
+
+    wxCHECK_RET( textPeer, "Must create the control first" );
+
+    if ( textPeer->CanForceUpper() )
+    {
+        ConvertToUpperCase();
+        textPeer->ForceUpper();
+    }
+    else
+    {
+        wxTextEntryBase::ForceUpper();
+    }
 }
 
 // Clipboard operations

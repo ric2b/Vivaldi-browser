@@ -7,37 +7,14 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_impl.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_stream.h"
 #include "third_party/blink/renderer/core/css/parser/css_selector_parser.h"
+#include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 
 namespace blink {
 
-namespace {
-
-// https://drafts.csswg.org/css-syntax/#typedef-any-value
-bool IsNextTokenAllowedForAnyValue(CSSParserTokenRange& range) {
-  switch (range.Peek().GetType()) {
-    case kBadStringToken:
-    case kEOFToken:
-    case kBadUrlToken:
-      return false;
-    case kRightParenthesisToken:
-    case kRightBracketToken:
-    case kRightBraceToken:
-      return range.Peek().GetBlockType() == CSSParserToken::kBlockEnd;
-    default:
-      return true;
-  }
-}
-
-// https://drafts.csswg.org/css-syntax/#typedef-any-value
-bool ConsumeAnyValue(CSSParserTokenRange& range) {
-  DCHECK(!range.AtEnd());
-  while (IsNextTokenAllowedForAnyValue(range))
-    range.Consume();
-  return range.AtEnd();
-}
-
-}  // namespace
+using css_parsing_utils::AtIdent;
+using css_parsing_utils::ConsumeAnyValue;
+using css_parsing_utils::ConsumeIfIdent;
 
 CSSSupportsParser::Result CSSSupportsParser::ConsumeSupportsCondition(
     CSSParserTokenStream& stream,
@@ -45,20 +22,6 @@ CSSSupportsParser::Result CSSSupportsParser::ConsumeSupportsCondition(
   stream.ConsumeWhitespace();
   CSSSupportsParser supports_parser(parser);
   return supports_parser.ConsumeSupportsCondition(stream);
-}
-
-bool CSSSupportsParser::AtIdent(const CSSParserToken& token,
-                                const char* ident) {
-  return token.GetType() == kIdentToken &&
-         EqualIgnoringASCIICase(token.Value(), ident);
-}
-
-bool CSSSupportsParser::ConsumeIfIdent(CSSParserTokenStream& stream,
-                                       const char* ident) {
-  if (!AtIdent(stream.Peek(), ident))
-    return false;
-  stream.ConsumeIncludingWhitespace();
-  return true;
 }
 
 // <supports-condition> = not <supports-in-parens>
@@ -202,10 +165,8 @@ CSSSupportsParser::Result CSSSupportsParser::ConsumeGeneralEnclosed(
     CSSParserTokenStream& stream) {
   if (IsGeneralEnclosed(first_token)) {
     auto block = stream.ConsumeUntilPeekedTypeIs<kRightParenthesisToken>();
-    // Note that <any-value> matches a sequence of one or more tokens, hence the
-    // block-range can't be empty.
-    // https://drafts.csswg.org/css-syntax-3/#typedef-any-value
-    if (block.AtEnd() || !ConsumeAnyValue(block))
+    // TODO(crbug.com/1269284): We should allow empty values here.
+    if (!ConsumeAnyValue(block) || !block.AtEnd())
       return Result::kParseFailure;
 
     stream.ConsumeWhitespace();

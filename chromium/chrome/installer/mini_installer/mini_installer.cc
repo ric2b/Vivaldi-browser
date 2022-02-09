@@ -47,6 +47,12 @@
 #include "chrome/installer/mini_installer/pe_resource.h"
 #include "chrome/installer/mini_installer/regkey.h"
 
+#ifdef VIVALDI_BUILD
+#include "installer/util/vivaldi_install_constants.h"
+
+extern bool g_vivaldi_has_unpack_switch;
+#endif
+
 namespace mini_installer {
 
 // This structure passes data back and forth for the processing
@@ -587,10 +593,12 @@ ProcessExitResult RunSetup(const Configuration& configuration,
     return ProcessExitResult(COMMAND_STRING_OVERFLOW);
   }
 
+#ifdef VIVALDI_BUILD
   // Tell Vivaldi full installer that it was invoked from mini.
-  if (!cmd_line.append(L" --") || !cmd_line.append(L"vivaldi-mini")) {
+  if (!cmd_line.append(L" --" VIVALDI_INSTALLER_SWITCH_MINI)) {
     return ProcessExitResult(COMMAND_STRING_OVERFLOW);
   }
+#endif
 
   // Get any command line option specified for mini_installer and pass them
   // on to setup.exe
@@ -803,6 +811,16 @@ bool CreateWorkDir(const wchar_t* base_path,
 bool GetWorkDir(HMODULE module,
                 PathString* work_dir,
                 ProcessExitResult* exit_code) {
+#ifdef VIVALDI_BUILD
+  if (g_vivaldi_has_unpack_switch) {
+    // The unpack action puts files into the directory of the installer.
+    if (!GetModuleDir(module, work_dir)) {
+      *exit_code = ProcessExitResult(UNABLE_TO_GET_WORK_DIRECTORY);
+      return false;
+    }
+    return true;
+  }
+#endif
   PathString base_path;
 
   // Try to create a directory next to the current module.
@@ -849,6 +867,12 @@ ProcessExitResult WMain(HMODULE module) {
   exit_code =
       UnpackBinaryResources(configuration, module, base_path.get(),
                             &archive_path, &setup_path, max_delete_attempts);
+#ifdef VIVALDI_BUILD
+  if (g_vivaldi_has_unpack_switch) {
+    // Exit now as we unpacked the files.
+    return exit_code;
+  }
+#endif
 
   // While unpacking the binaries, we paged in a whole bunch of memory that
   // we don't need anymore.  Let's give it back to the pool before running

@@ -4,9 +4,12 @@
 
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_view.h"
 
+#include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_constants.h"
 #import "ios/chrome/browser/ui/commerce/price_card/resources/semantic_color_names.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/grit/ios_strings.h"
+#include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -45,7 +48,7 @@
 
   currentPriceLabel.translatesAutoresizingMaskIntoConstraints = NO;
   currentPriceLabel.font =
-      [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+      [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   currentPriceLabel.textColor = [UIColor colorNamed:kGreen700Color];
   currentPriceLabel.backgroundColor = [UIColor colorNamed:kGreen50Color];
   currentPriceLabel.adjustsFontForContentSizeCategory = YES;
@@ -54,7 +57,7 @@
   UILabel* previousPriceLabel = [[UILabel alloc] init];
   previousPriceLabel.translatesAutoresizingMaskIntoConstraints = NO;
   previousPriceLabel.font =
-      [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+      [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   previousPriceLabel.textColor =
       [UIColor colorNamed:kPriceDropPreviousPriceTextColor];
   previousPriceLabel.adjustsFontForContentSizeCategory = YES;
@@ -99,7 +102,14 @@
                                       attributes:attributes];
   self.previousPriceLabel.attributedText = attrText;
   _previousPrice = previousPrice;
+  self.accessibilityLabel = l10n_util::GetNSStringF(
+      IDS_IOS_TAB_SWITCHER_PRICE_CARD, base::SysNSStringToUTF16(currentPrice),
+      base::SysNSStringToUTF16(previousPrice));
   self.hidden = FALSE;
+}
+
+- (BOOL)isAccessibilityElement {
+  return YES;
 }
 
 @end

@@ -713,7 +713,7 @@ void VrShell::UpdateWebInputIndices(
 }
 
 content::WebContents* VrShell::GetNonNativePageWebContents() const {
-  return !web_contents_is_native_page_ ? web_contents_ : nullptr;
+  return !web_contents_is_native_page_ ? web_contents_.get() : nullptr;
 }
 
 void VrShell::OnUnsupportedMode(UiUnsupportedMode mode) {
@@ -975,7 +975,7 @@ content::WebContents* VrShell::GetActiveWebContents() const {
 
 bool VrShell::ShouldDisplayURL() const {
   content::NavigationEntry* entry = GetNavigationEntry();
-  if (!entry) {
+  if (!entry || entry->IsInitialEntry()) {
     return ChromeLocationBarModelDelegate::ShouldDisplayURL();
   }
   GURL url = entry->GetVirtualURL();
@@ -1172,7 +1172,7 @@ std::unique_ptr<PageInfo> VrShell::CreatePageInfo() {
   auto page_info = std::make_unique<PageInfo>(
       std::make_unique<ChromePageInfoDelegate>(web_contents_), web_contents_,
       entry->GetVirtualURL());
-  page_info->InitializeUiState(this);
+  page_info->InitializeUiState(this, base::DoNothing());
   return page_info;
 }
 

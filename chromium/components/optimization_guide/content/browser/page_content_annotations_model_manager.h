@@ -6,9 +6,16 @@
 #define COMPONENTS_OPTIMIZATION_GUIDE_CONTENT_BROWSER_PAGE_CONTENT_ANNOTATIONS_MODEL_MANAGER_H_
 
 #include "components/history/core/browser/url_row.h"
-#include "components/optimization_guide/core/bert_model_executor.h"
+#include "components/optimization_guide/content/browser/page_content_annotator.h"
+#include "components/optimization_guide/core/bert_model_handler.h"
 #include "components/optimization_guide/core/entity_metadata.h"
+#include "components/optimization_guide/core/model_info.h"
+#include "components/optimization_guide/core/page_content_annotation_job.h"
+#include "components/optimization_guide/core/page_content_annotations_common.h"
+#include "components/optimization_guide/core/page_topics_model_executor.h"
+#include "components/optimization_guide/core/page_visibility_model_executor.h"
 #include "components/optimization_guide/proto/page_topics_model_metadata.pb.h"
+#include "net/base/priority_queue.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace optimization_guide {
@@ -26,13 +33,12 @@ using EntityMetadataRetrievedCallback =
     base::OnceCallback<void(const absl::optional<EntityMetadata>&)>;
 
 // Manages the loading and execution of models used to annotate page content.
-//
-// TODO(crbug/1249632): Implement |PageContentAnnotator|.
-class PageContentAnnotationsModelManager {
+class PageContentAnnotationsModelManager : public PageContentAnnotator {
  public:
-  explicit PageContentAnnotationsModelManager(
+  PageContentAnnotationsModelManager(
+      const std::string& application_locale,
       OptimizationGuideModelProvider* optimization_guide_model_provider);
-  ~PageContentAnnotationsModelManager();
+  ~PageContentAnnotationsModelManager() override;
   PageContentAnnotationsModelManager(
       const PageContentAnnotationsModelManager&) = delete;
   PageContentAnnotationsModelManager& operator=(
@@ -40,9 +46,27 @@ class PageContentAnnotationsModelManager {
 
   // Requests to annotate |text|, will invoke |callback| when completed.
   //
-  // This will execute all supported models based on the models_to_execute
-  // param on the PageContentAnnotationsService feature.
+  // This will execute all supported models of the PageContentAnnotationsService
+  // feature and is only used by the History service code path. See the below
+  // |Annotate| for the publicly available Annotation code path.
   void Annotate(const std::string& text, PageContentAnnotatedCallback callback);
+
+  // PageContentAnnotator:
+  void Annotate(BatchAnnotationCallback callback,
+                const std::vector<std::string>& inputs,
+                AnnotationType annotation_type) override;
+
+  // Runs |callback| with true when the model that powers |BatchAnnotate| for
+  // the given annotation type is ready to execute. If the model is ready now,
+  // the callback is run immediately. If the model will never become ready, due
+  // to feature flags for example, the callback run with false.
+  void NotifyWhenModelAvailable(AnnotationType type,
+                                base::OnceCallback<void(bool)> callback);
+
+  // Returns the model info associated with the given AnnotationType, if it is
+  // available and loaded.
+  // TODO(crbug/1249632): Add support for more than just page topics.
+  absl::optional<ModelInfo> GetModelInfoForType(AnnotationType type) const;
 
   // Returns the version of the page topics model that is currently being used
   // to annotate page content. Will return |absl::nullopt| if no model is being
@@ -56,6 +80,33 @@ class PageContentAnnotationsModelManager {
 
  private:
   friend class PageContentAnnotationsModelManagerTest;
+
+  // The supported priorities of jobs in |job_queue_|. Higher values correspond
+  // to higher priorities (that is, more urgent).
+  //
+  // These values are not persisted anywhere and may be changed in code at any
+  // time.
+  enum class JobPriority {
+    kUnknown = 0,
+
+    // All publicly posted jobs will have this priority level.
+    kNormal = 1,
+
+    // TODO(crbug/1249632): Add a kHigh value for internal jobs.
+
+    // Always keep this last and as the highest priority + 1. This value is
+    // passed to the priority queue ctor as "how many level of priorities are
+    // supported" by the queue.
+    kCount = 2,
+  };
+
+  // Enumerated state machine of job execution.
+  enum class JobExecutionState {
+    kUnknown = 0,
+    kIdle = 1,
+    kRunning = 2,
+    kComplete = 3,
+  };
 
   // Runs the next model on |text| based on |current_model_index|. If the
   // last model in |ordered_models_to_execute_| has executed, it will invoke
@@ -102,11 +153,23 @@ class PageContentAnnotationsModelManager {
       base::TimeTicks execution_start,
       PageContentAnnotatedCallback callback,
       size_t current_model_index,
-      const absl::optional<std::vector<tflite::task::core::Category>>& output);
+      const absl::optional<std::vector<ScoredEntityMetadata>>& output);
 
   // Set up the machinery for execution of the page topics model. This should
   // only be run at construction.
   void SetUpPageTopicsModel(
+      OptimizationGuideModelProvider* optimization_guide_model_provider);
+
+  // Set up the machinery for execution of the page topics v2 model. This should
+  // only be run at construction.
+  // TODO(crbug/1266504): Actually call this based on a separate feature flag.
+  void SetUpPageTopicsV2Model(
+      OptimizationGuideModelProvider* optimization_guide_model_provider);
+
+  // Set up the machinery for execution of the page visibility model. This
+  // should only be run at construction.
+  // TODO(crbug/1266504): Actually call this based on a separate feature flag.
+  void SetUpPageVisibilityModel(
       OptimizationGuideModelProvider* optimization_guide_model_provider);
 
   // Requests to execute the page topics model with |text|, populate
@@ -149,11 +212,29 @@ class PageContentAnnotationsModelManager {
   void OverridePageEntitiesModelExecutorForTesting(
       std::unique_ptr<PageEntitiesModelExecutor> page_entities_model_executor);
 
+  // Runs the next job in |job_queue_| if there is any.
+  void MaybeStartNextAnnotationJob();
+
+  // Called when a job finishes executing.
+  void OnJobExecutionComplete();
+
   // The model executor responsible for executing the page topics model.
   //
   // Can be nullptr if the page topics model will not be running for the
   // session.
-  std::unique_ptr<BertModelExecutorHandle> page_topics_model_executor_handle_;
+  // TODO(crbug/1266504): Deprecate this in favor of
+  // |on_demand_page_topics_model_executor_|.
+  std::unique_ptr<BertModelHandler> page_topics_model_handler_;
+
+  // The model executor responsible for executing the on demand page topics
+  // model.
+  // TODO(crbug/1266504): Replace |page_topics_model_handler_| with
+  // this.
+  std::unique_ptr<PageTopicsModelExecutor>
+      on_demand_page_topics_model_executor_;
+
+  // The model executor responsible for executing the page visibility model.
+  std::unique_ptr<PageVisibilityModelExecutor> page_visibility_model_executor_;
 
   // The model executor responsible for executing the page entities model.
   //
@@ -163,6 +244,15 @@ class PageContentAnnotationsModelManager {
 
   // The ordering of models to execute on the page content of each page load.
   std::vector<proto::OptimizationTarget> ordered_models_to_execute_;
+
+  // The queue of all jobs to be executed. This data structure supports FIFO
+  // ordering for elements of the same priority.
+  using JobQueue =
+      net::PriorityQueue<std::unique_ptr<PageContentAnnotationJob>>;
+  JobQueue job_queue_{static_cast<size_t>(JobPriority::kCount)};
+
+  // The current state of the running job, if any.
+  JobExecutionState job_state_ = JobExecutionState::kIdle;
 
   base::WeakPtrFactory<PageContentAnnotationsModelManager> weak_ptr_factory_{
       this};

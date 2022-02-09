@@ -124,6 +124,9 @@ suite('OsBluetoothDevicesSubpageTest', function() {
   test('Device lists states', async function() {
     init();
 
+    const getNoDeviceText = () =>
+        bluetoothDevicesSubpage.shadowRoot.querySelector('#noDevices');
+
     const getDeviceList = (connected) => {
       return bluetoothDevicesSubpage.shadowRoot.querySelector(
           connected ? '#connectedDeviceList' : '#unconnectedDeviceList');
@@ -131,11 +134,19 @@ suite('OsBluetoothDevicesSubpageTest', function() {
     // No lists should be showing at first.
     assertFalse(!!getDeviceList(/*connected=*/ true));
     assertFalse(!!getDeviceList(/*connected=*/ false));
+    assertTrue(!!getNoDeviceText());
+    assertEquals(
+        getNoDeviceText().textContent.trim(),
+        bluetoothDevicesSubpage.i18n('bluetoothDeviceListNoConnectedDevices'));
 
     const connectedDevice = createDefaultBluetoothDevice(
-        /*id=*/ '123456789', /*publicName=*/ 'BeatsX', /*connected=*/ true);
+        /*id=*/ '123456789', /*publicName=*/ 'BeatsX',
+        /*connectionState=*/
+        chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected);
     const unconnectedDevice = createDefaultBluetoothDevice(
-        /*id=*/ '987654321', /*publicName=*/ 'MX 3', /*connected=*/ false);
+        /*id=*/ '987654321', /*publicName=*/ 'MX 3',
+        /*connectionState=*/
+        chromeos.bluetoothConfig.mojom.DeviceConnectionState.kNotConnected);
 
     // Pair connected device.
     bluetoothConfig.appendToPairedDeviceList([connectedDevice]);
@@ -144,6 +155,7 @@ suite('OsBluetoothDevicesSubpageTest', function() {
     assertTrue(!!getDeviceList(/*connected=*/ true));
     assertEquals(getDeviceList(/*connected=*/ true).devices.length, 1);
     assertFalse(!!getDeviceList(/*connected=*/ false));
+    assertFalse(!!getNoDeviceText());
 
     // Pair unconnected device
     bluetoothConfig.appendToPairedDeviceList([unconnectedDevice]);
@@ -153,5 +165,6 @@ suite('OsBluetoothDevicesSubpageTest', function() {
     assertEquals(getDeviceList(/*connected=*/ true).devices.length, 1);
     assertTrue(!!getDeviceList(/*connected=*/ false));
     assertEquals(getDeviceList(/*connected=*/ false).devices.length, 1);
+    assertFalse(!!getNoDeviceText());
   });
 });

@@ -53,6 +53,7 @@
 #include "content/public/common/content_descriptor_keys.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/main_function_params.h"
 #include "device/base/features.h"
 #include "gin/public/isolate_holder.h"
 #include "gin/v8_initializer.h"
@@ -134,11 +135,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // metadata and controls.
   cl->AppendSwitch(switches::kDisableMediaSessionAPI);
 
-  // WebView does not support origin trials and so needs to force appcache
-  // to be enabled during the removal origin trial, until it is finally
-  // removed entirely.  See: http://crbug.com/582750
-  cl->AppendSwitch(switches::kAppCacheForceEnabled);
-
   // We have crash dumps to diagnose regressions in remote font analysis or cc
   // serialization errors but most of their utility is in identifying URLs where
   // the regression occurs. This info is not available for webview so there
@@ -166,19 +162,16 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     if (AwDrawFnImpl::IsUsingVulkan())
       cl->AppendSwitch(switches::kWebViewDrawFunctorUsesVulkan);
 
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
-    gin::V8Initializer::V8SnapshotFileType file_type =
-        gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
-#else
-    gin::V8Initializer::V8SnapshotFileType file_type =
-        gin::V8Initializer::V8SnapshotFileType::kDefault;
-#endif
+#if !defined(USE_V8_CONTEXT_SNAPSHOT) || defined(INCLUDE_BOTH_V8_SNAPSHOTS)
+    // The snapshot for USE_V8_CONTEXT_SNAPSHOT is handled in the renderer.
+    const gin::V8SnapshotFileType file_type = gin::V8SnapshotFileType::kDefault;
     base::android::RegisterApkAssetWithFileDescriptorStore(
         content::kV8Snapshot32DataDescriptor,
         gin::V8Initializer::GetSnapshotFilePath(true, file_type));
     base::android::RegisterApkAssetWithFileDescriptorStore(
         content::kV8Snapshot64DataDescriptor,
         gin::V8Initializer::GetSnapshotFilePath(false, file_type));
+#endif
   }
 
   if (cl->HasSwitch(switches::kWebViewSandboxedRenderer)) {
@@ -338,20 +331,18 @@ void AwMainDelegate::PreSandboxStartup() {
   sdk_int_key.Set(base::NumberToString(android_build_info->sdk_int()));
 }
 
-int AwMainDelegate::RunProcess(
+absl::variant<int, content::MainFunctionParams> AwMainDelegate::RunProcess(
     const std::string& process_type,
-    const content::MainFunctionParams& main_function_params) {
+    content::MainFunctionParams main_function_params) {
   // Defer to the default main method outside the browser process.
   if (!process_type.empty())
-    return -1;
+    return std::move(main_function_params);
 
   browser_runner_ = content::BrowserMainRunner::Create();
-  int exit_code = browser_runner_->Initialize(main_function_params);
+  int exit_code = browser_runner_->Initialize(std::move(main_function_params));
   // We do not expect Initialize() to ever fail in AndroidWebView. On success
   // it returns a negative value but we do not want to use that on Android.
   DCHECK_LT(exit_code, 0);
-  // Return 0 so that we do NOT trigger the default behavior. On Android, the
-  // UI message loop is managed by the Java application.
   return 0;
 }
 

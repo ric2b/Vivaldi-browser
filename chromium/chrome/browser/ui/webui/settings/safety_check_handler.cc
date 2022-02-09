@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/i18n/number_formatting.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -373,8 +372,7 @@ void SafetyCheckHandler::HandlePerformSafetyCheck(const base::ListValue* args) {
 
 void SafetyCheckHandler::HandleGetParentRanDisplayString(
     const base::ListValue* args) {
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
+  const base::Value& callback_id = args->GetList()[0];
 
   // Send updated timestamp-based display strings to all SC children who have
   // such strings.
@@ -393,7 +391,7 @@ void SafetyCheckHandler::HandleGetParentRanDisplayString(
 
   // String update for the parent.
   ResolveJavascriptCallback(
-      *callback_id,
+      callback_id,
       base::Value(GetStringForParentRan(safety_check_completion_time_)));
 }
 
@@ -413,10 +411,11 @@ void SafetyCheckHandler::CheckPasswords() {
   // on the same page. Normally this should not happen, but if it does, the
   // browser should not crash.
   observed_leak_check_.Reset();
-  observed_leak_check_.Observe(leak_service_);
+  observed_leak_check_.Observe(leak_service_.get());
   // Start observing the InsecureCredentialsManager.
   observed_insecure_credentials_manager_.Reset();
-  observed_insecure_credentials_manager_.Observe(insecure_credentials_manager_);
+  observed_insecure_credentials_manager_.Observe(
+      insecure_credentials_manager_.get());
   passwords_delegate_->StartPasswordCheck(base::BindOnce(
       &SafetyCheckHandler::OnStateChanged, weak_ptr_factory_.GetWeakPtr()));
 }

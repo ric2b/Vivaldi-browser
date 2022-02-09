@@ -16,6 +16,7 @@
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/style_util.h"
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "extensions/common/constants.h"
@@ -42,15 +43,15 @@ constexpr int kIconSize = 20;
 constexpr int kCircleRadius = 18;
 
 constexpr int kBetweenChildPadding = 16;
-constexpr gfx::Insets kInteriorMargin(7, 8, 7, 16);
+constexpr gfx::Insets kInteriorMarginClamshell(7, 8, 7, 16);
+constexpr gfx::Insets kInteriorMarginTablet(13, 16, 13, 20);
 
-constexpr int kViewCornerRadius = 8;
+constexpr int kViewCornerRadiusClamshell = 8;
+constexpr int kViewCornerRadiusTablet = 20;
+constexpr int kTaskMinWidth = 204;
+constexpr int kTaskMaxWidth = 264;
 
 gfx::ImageSkia CreateIconWithCircleBackground(const gfx::ImageSkia& icon) {
-  // The icon with circular background should only be styled when dark light
-  // mode is enabled. Otherwise, use the default chip icon.
-  if (!features::IsDarkLightModeEnabled())
-    return icon;
   return gfx::ImageSkiaOperations::CreateImageWithCircleBackground(
       kCircleRadius,
       ColorProvider::Get()->GetControlsLayerColor(
@@ -58,16 +59,21 @@ gfx::ImageSkia CreateIconWithCircleBackground(const gfx::ImageSkia& icon) {
       icon);
 }
 
+int GetCornerRadius(bool tablet_mode) {
+  return tablet_mode ? kViewCornerRadiusTablet : kViewCornerRadiusClamshell;
+}
+
 }  // namespace
 
-ContinueTaskView::ContinueTaskView(AppListViewDelegate* view_delegate)
+ContinueTaskView::ContinueTaskView(AppListViewDelegate* view_delegate,
+                                   bool tablet_mode)
     : view_delegate_(view_delegate) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetCallback(base::BindRepeating(&ContinueTaskView::OnButtonPressed,
                                   base::Unretained(this)));
   auto ink_drop_highlight_path =
       std::make_unique<views::RoundRectHighlightPathGenerator>(
-          gfx::Insets(), kViewCornerRadius);
+          gfx::Insets(), GetCornerRadius(tablet_mode));
   ink_drop_highlight_path->set_use_contents_bounds(true);
   ink_drop_highlight_path->set_use_mirrored_rect(true);
   views::HighlightPathGenerator::Install(this,
@@ -81,14 +87,19 @@ ContinueTaskView::ContinueTaskView(AppListViewDelegate* view_delegate)
   views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
   SetHasInkDropActionOnClick(true);
 
-  auto ripple_attributes = ColorProvider::Get()->GetRippleAttributes();
-  views::InkDrop::Get(this)->SetBaseColor(ripple_attributes.base_color);
-  views::InkDrop::Get(this)->SetVisibleOpacity(
-      ripple_attributes.inkdrop_opacity);
+  StyleUtil::ConfigureInkDropAttributes(
+      this, StyleUtil::kBaseColor | StyleUtil::kInkDropOpacity);
+  if (tablet_mode) {
+    SetBackground(views::CreateRoundedRectBackground(
+        ColorProvider::Get()->GetBaseLayerColor(
+            ColorProvider::BaseLayerType::kTransparent80),
+        GetCornerRadius(/*tablet_mode=*/true)));
+  }
 
   views::BoxLayout* layout_manager =
       SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, kInteriorMargin,
+          views::BoxLayout::Orientation::kHorizontal,
+          tablet_mode ? kInteriorMarginTablet : kInteriorMarginClamshell,
           kBetweenChildPadding));
   layout_manager->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
@@ -107,11 +118,15 @@ ContinueTaskView::ContinueTaskView(AppListViewDelegate* view_delegate)
       std::make_unique<views::Label>(std::u16string()));
   title_->SetAccessibleName(std::u16string());
   title_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  title_->SetElideBehavior(gfx::ElideBehavior::ELIDE_MIDDLE);
   subtitle_ = label_container->AddChildView(
       std::make_unique<views::Label>(std::u16string()));
   subtitle_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
-  UpdateResult();
+  subtitle_->SetElideBehavior(gfx::ElideBehavior::ELIDE_MIDDLE);
 
+  layout_manager->SetFlexForView(label_container, 1);
+
+  UpdateResult();
   set_context_menu_controller(this);
 }
 ContinueTaskView::~ContinueTaskView() {}
@@ -120,6 +135,20 @@ void ContinueTaskView::OnThemeChanged() {
   views::View::OnThemeChanged();
   bubble_utils::ApplyStyle(title_, bubble_utils::LabelStyle::kBody);
   bubble_utils::ApplyStyle(subtitle_, bubble_utils::LabelStyle::kSubtitle);
+}
+
+gfx::Size ContinueTaskView::GetMaximumSize() const {
+  return gfx::Size(kTaskMaxWidth,
+                   GetLayoutManager()->GetPreferredSize(this).height());
+}
+
+gfx::Size ContinueTaskView::GetMinimumSize() const {
+  return gfx::Size(kTaskMinWidth,
+                   GetLayoutManager()->GetPreferredSize(this).height());
+}
+
+gfx::Size ContinueTaskView::CalculatePreferredSize() const {
+  return GetMinimumSize();
 }
 
 void ContinueTaskView::OnButtonPressed(const ui::Event& event) {
@@ -201,7 +230,7 @@ void ContinueTaskView::ExecuteCommand(int command_id, int event_flags) {
       OpenResult(event_flags);
       break;
     case ContinueTaskCommandId::kRemoveResult:
-      // TODO(anasalar): Implement Remove Suggestion.
+      RemoveResult();
       break;
     default:
       NOTREACHED();
@@ -229,9 +258,17 @@ void ContinueTaskView::OpenResult(int event_flags) {
   DCHECK(result());
   view_delegate_->OpenSearchResult(
       result()->id(), result()->result_type(), event_flags,
-      AppListLaunchedFrom::kLaunchedFromSuggestionChip,
-      AppListLaunchType::kAppSearchResult, index_in_container(),
+      AppListLaunchedFrom::kLaunchedFromContinueTask,
+      AppListLaunchType::kSearchResult, index_in_container(),
       false /* launch_as_default */);
+}
+
+void ContinueTaskView::RemoveResult() {
+  // TODO(crbug.com/1264530): The ML service may change the way Search Results
+  // are removed.
+  DCHECK(result());
+  view_delegate_->InvokeSearchResultAction(result()->id(),
+                                           SearchResultActionType::kRemove);
 }
 
 bool ContinueTaskView::IsMenuShowing() const {

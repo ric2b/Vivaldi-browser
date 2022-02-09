@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -23,7 +24,6 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
@@ -361,7 +361,7 @@ class FetchEventServiceWorker : public FakeServiceWorker {
     kHeaders
   };
 
-  BrowserTaskEnvironment* const task_environment_;
+  const raw_ptr<BrowserTaskEnvironment> task_environment_;
 
   ResponseMode response_mode_ = ResponseMode::kDefault;
   scoped_refptr<network::ResourceRequestBody> request_body_;
@@ -387,7 +387,8 @@ class FetchEventServiceWorker : public FakeServiceWorker {
   bool has_received_fetch_event_ = false;
   base::OnceClosure quit_closure_for_fetch_event_;
 
-  FakeEmbeddedWorkerInstanceClient* const embedded_worker_instance_client_;
+  const raw_ptr<FakeEmbeddedWorkerInstanceClient>
+      embedded_worker_instance_client_;
 
   network::mojom::FetchResponseSource response_source_ =
       network::mojom::FetchResponseSource::kUnspecified;
@@ -589,7 +590,7 @@ class ServiceWorkerMainResourceLoaderTest : public testing::Test {
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
-  FetchEventServiceWorker* service_worker_;
+  raw_ptr<FetchEventServiceWorker> service_worker_;
   storage::BlobStorageContext blob_context_;
   network::TestURLLoaderClient client_;
   std::unique_ptr<ServiceWorkerMainResourceLoader> loader_;
@@ -1132,6 +1133,28 @@ TEST_F(ServiceWorkerMainResourceLoaderTest, TimingInfo) {
   EXPECT_EQ(base::Seconds(1),
             info->load_timing.service_worker_respond_with_settled -
                 info->load_timing.service_worker_start_time);
+}
+
+TEST_F(ServiceWorkerMainResourceLoaderTest, FencedFrameNavigationPreload) {
+  registration_->EnableNavigationPreload(true);
+
+  std::unique_ptr<network::ResourceRequest> request = CreateRequest();
+  request->destination = network::mojom::RequestDestination::kFencedframe;
+
+  // Perform the request.
+  StartRequest(std::move(request));
+  client_.RunUntilComplete();
+
+  EXPECT_EQ(net::OK, client_.completion_status().error_code);
+  const auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  EXPECT_FALSE(info->load_timing.receive_headers_start.is_null());
+  EXPECT_FALSE(info->load_timing.receive_headers_end.is_null());
+  EXPECT_LE(info->load_timing.receive_headers_start,
+            info->load_timing.receive_headers_end);
+  auto expected_info = CreateResponseInfoFromServiceWorker();
+  expected_info->did_service_worker_navigation_preload = true;
+  ExpectResponseInfo(*info, *expected_info);
 }
 
 }  // namespace service_worker_main_resource_loader_unittest

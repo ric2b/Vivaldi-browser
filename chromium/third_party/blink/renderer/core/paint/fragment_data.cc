@@ -166,7 +166,7 @@ void FragmentData::InvalidateClipPathCache() {
   rare_data_->clip_path_path = nullptr;
 }
 
-void FragmentData::SetClipPathCache(const IntRect& bounding_box,
+void FragmentData::SetClipPathCache(const gfx::Rect& bounding_box,
                                     scoped_refptr<const RefCountedPath> path) {
   EnsureRareData().is_clip_path_cache_valid = true;
   rare_data_->clip_path_bounding_box = bounding_box;
@@ -179,9 +179,9 @@ void FragmentData::MapRectToFragment(const FragmentData& fragment,
     return;
   const auto& from_transform = LocalBorderBoxProperties().Transform();
   const auto& to_transform = fragment.LocalBorderBoxProperties().Transform();
-  rect.Offset(gfx::Vector2d(RoundedIntPoint(PaintOffset())));
+  rect.Offset(ToRoundedPoint(PaintOffset()).OffsetFromOrigin());
   GeometryMapper::SourceToDestinationRect(from_transform, to_transform, rect);
-  rect.Offset(gfx::Vector2d(-RoundedIntPoint(fragment.PaintOffset())));
+  rect.Offset(-ToRoundedPoint(fragment.PaintOffset()).OffsetFromOrigin());
 }
 
 }  // namespace blink

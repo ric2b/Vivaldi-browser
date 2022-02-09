@@ -226,8 +226,8 @@ bool UpdateNotifierWindow::HandleMessage(UINT message,
       if (HIWORD(lparam) != kNotificationUid)
         break;
 
-      UINT message = LOWORD(lparam);
-      switch (message) {
+      UINT message_p = LOWORD(lparam);
+      switch (message_p) {
         case WM_LBUTTONUP:
         case NIN_BALLOONUSERCLICK: {
           UpdateNotifierManager::OnNotificationAcceptance();

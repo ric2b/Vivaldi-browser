@@ -406,7 +406,7 @@ NoteModelMerger::NoteModelMerger(UpdateResponseDataList updates,
                                  SyncedNoteTracker* note_tracker)
     : notes_model_(notes_model),
       note_tracker_(note_tracker),
-      remote_forest_(BuildRemoteForest(std::move(updates))),
+      remote_forest_(BuildRemoteForest(std::move(updates), note_tracker)),
       guid_to_match_map_(
           FindGuidMatchesOrReassignLocal(remote_forest_, notes_model_)) {
   DCHECK(note_tracker_->IsEmpty());
@@ -454,7 +454,10 @@ void NoteModelMerger::Merge() {
 
 // static
 NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
-    syncer::UpdateResponseDataList updates) {
+    syncer::UpdateResponseDataList updates,
+    SyncedNoteTracker* tracker_for_recording_ignored_updates) {
+  DCHECK(tracker_for_recording_ignored_updates);
+
   // Filter out invalid remote updates and group the valid ones by the server ID
   // of their parent.
   GroupedUpdates grouped_updates = GroupValidUpdates(std::move(updates));
@@ -475,6 +478,19 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
         RemoteTreeNode::BuildTree(std::move(permanent_node_update),
                                   kMaxNoteTreeDepth,
                                   &grouped_updates.updates_per_parent_id));
+  }
+
+  // All remaining entries in |updates_per_parent_id| must be unreachable from
+  // permanent entities, since otherwise they would have been moved away.
+  for (const auto& parent_id_and_updates :
+       grouped_updates.updates_per_parent_id) {
+    for (const UpdateResponseData& update : parent_id_and_updates.second) {
+      if (update.entity.specifics.has_notes()) {
+        tracker_for_recording_ignored_updates
+            ->RecordIgnoredServerUpdateDueToMissingParent(
+                update.response_version);
+      }
+    }
   }
 
   return update_forest;

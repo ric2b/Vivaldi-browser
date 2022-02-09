@@ -9,6 +9,10 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/sync/sync_setup_service.h"
+#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -74,8 +78,25 @@
 }
 
 - (void)start {
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  DCHECK(authenticationService);
+  NSString* syncingUserEmail = nil;
+  ChromeIdentity* chromeIdentity =
+      authenticationService->GetPrimaryIdentity(signin::ConsentLevel::kSync);
+  if (chromeIdentity) {
+    SyncSetupService* syncSetupService =
+        SyncSetupServiceFactory::GetForBrowserState(
+            self.browser->GetBrowserState());
+    if (syncSetupService->IsDataTypeActive(syncer::PASSWORDS)) {
+      syncingUserEmail = chromeIdentity.userEmail;
+    }
+  }
+
   self.viewController = [[PasswordDetailsTableViewController alloc]
-      initWithCredentialType:CredentialTypeNew];
+      initWithCredentialType:CredentialTypeNew
+            syncingUserEmail:syncingUserEmail];
 
   self.mediator = [[AddPasswordMediator alloc] initWithDelegate:self
                                            passwordCheckManager:_manager];
@@ -107,44 +128,15 @@
   [self.delegate passwordDetailsTableViewControllerDidFinish:self];
 }
 
-- (void)showReplacePasswordAlert:(NSString*)username
-                         hostUrl:(NSString*)hostUrl {
-  // TODO(crbug.com/1226006): Use i18n strings for title, message and the
-  // buttons.
-  NSString* title = @"Replace Password?";
-  NSString* message = [NSString
-      stringWithFormat:@"You already saved a password for \"%@\" at %@. "
-                       @"Do you want to replace it?",
-                       username, hostUrl];
-  self.alertCoordinator =
-      [[AlertCoordinator alloc] initWithBaseViewController:self.viewController
-                                                   browser:self.browser
-                                                     title:title
-                                                   message:message];
-
-  __weak __typeof(self) weakSelf = self;
-
-  [self.alertCoordinator addItemWithTitle:@"Cancel"
-                                   action:nil
-                                    style:UIAlertActionStyleCancel];
-
-  [self.alertCoordinator
-      addItemWithTitle:@"Replace"
-                action:^{
-                  if (!weakSelf) {
-                    return;
-                  }
-                  [weakSelf.viewController
-                          validateUserAndReplaceExistingCredential];
-                }
-                 style:UIAlertActionStyleDestructive];
-
-  [self.alertCoordinator start];
-}
-
 - (void)setUpdatedPasswordForm:
     (const password_manager::PasswordForm&)passwordForm {
   [self.delegate setMostRecentlyUpdatedPasswordDetails:passwordForm];
+}
+
+- (void)showPasswordDetailsControllerWithForm:
+    (const password_manager::PasswordForm&)passwordForm {
+  [self.delegate dismissAddViewControllerAndShowPasswordDetails:passwordForm
+                                                    coordinator:self];
 }
 
 #pragma mark - AddPasswordHandler

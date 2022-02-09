@@ -2,17 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
-import {ReimagingCalibrationRunPageElement} from 'chrome://shimless-rma/reimaging_calibration_run_page.js';
+import {ReimagingCalibrationRunPage} from 'chrome://shimless-rma/reimaging_calibration_run_page.js';
+import {ShimlessRma} from 'chrome://shimless-rma/shimless_rma.js';
 import {CalibrationOverallStatus, CalibrationStatus, ComponentType} from 'chrome://shimless-rma/shimless_rma_types.js';
 
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 import {flushTasks} from '../../test_util.js';
 
 export function reimagingCalibrationRunPageTest() {
-  /** @type {?ReimagingCalibrationRunPageElement} */
+  /**
+   * ShimlessRma is needed to handle the 'transition-state' event used
+   * when handling calibration overall progress signals.
+   * @type {?ShimlessRma}
+   */
+  let shimless_rma_component = null;
+
+  /** @type {?ReimagingCalibrationRunPage} */
   let component = null;
 
   /** @type {?FakeShimlessRmaService} */
@@ -30,6 +39,8 @@ export function reimagingCalibrationRunPageTest() {
   teardown(() => {
     component.remove();
     component = null;
+    shimless_rma_component.remove();
+    shimless_rma_component = null;
     service.reset();
   });
 
@@ -39,7 +50,12 @@ export function reimagingCalibrationRunPageTest() {
   function initializeCalibrationRunPage() {
     assertFalse(!!component);
 
-    component = /** @type {!ReimagingCalibrationRunPageElement} */ (
+    shimless_rma_component =
+        /** @type {!ShimlessRma} */ (document.createElement('shimless-rma'));
+    assertTrue(!!shimless_rma_component);
+    document.body.appendChild(shimless_rma_component);
+
+    component = /** @type {!ReimagingCalibrationRunPage} */ (
         document.createElement('reimaging-calibration-run-page'));
     assertTrue(!!component);
     document.body.appendChild(component);
@@ -154,17 +170,22 @@ export function reimagingCalibrationRunPageTest() {
   test('CalibrationProgressUpdatesStatusMessage', async () => {
     await initializeCalibrationRunPage();
     const statusMessage = component.shadowRoot.querySelector('#calibration');
-    let message = statusMessage.innerHTML;
+    assertEquals(
+        loadTimeData.getString('runCalibrationStartingText'),
+        statusMessage.textContent.trim());
     service.triggerCalibrationObserver(
         {
-          component: ComponentType.kGyroscope,
+          component: ComponentType.kBaseGyroscope,
           status: CalibrationStatus.kCalibrationInProgress,
           progress: 0.5
         },
         0);
     await flushTasks();
-    let message2 = statusMessage.innerHTML;
-    assertNotEquals(message, statusMessage.innerHTML);
+    assertEquals(
+        loadTimeData.getStringF(
+            'runCalibrationCalibratingComponent',
+            loadTimeData.getString('componentBaseGyroscope')),
+        statusMessage.textContent.trim());
     service.triggerCalibrationObserver(
         {
           component: ComponentType.kLidAccelerometer,
@@ -173,7 +194,10 @@ export function reimagingCalibrationRunPageTest() {
         },
         0);
     await flushTasks();
-    assertNotEquals(message, statusMessage.innerHTML);
-    assertNotEquals(message2, statusMessage.innerHTML);
+    assertEquals(
+        loadTimeData.getStringF(
+            'runCalibrationCalibratingComponent',
+            loadTimeData.getString('componentLidAccelerometer')),
+        statusMessage.textContent.trim());
   });
 }

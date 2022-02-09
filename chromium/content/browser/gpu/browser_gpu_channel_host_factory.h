@@ -12,12 +12,10 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "content/common/content_export.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/message_filter.h"
 
@@ -27,12 +25,15 @@ class GpuMemoryBufferManager;
 
 namespace content {
 
-class CONTENT_EXPORT BrowserGpuChannelHostFactory
-    : public gpu::GpuChannelEstablishFactory {
+class BrowserGpuChannelHostFactory : public gpu::GpuChannelEstablishFactory {
  public:
   static void Initialize(bool establish_gpu_channel);
   static void Terminate();
   static BrowserGpuChannelHostFactory* instance() { return instance_; }
+
+  BrowserGpuChannelHostFactory(const BrowserGpuChannelHostFactory&) = delete;
+  BrowserGpuChannelHostFactory& operator=(const BrowserGpuChannelHostFactory&) =
+      delete;
 
   gpu::GpuChannelHost* GetGpuChannel();
   int GetGpuChannelId() { return gpu_client_id_; }
@@ -87,8 +88,6 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   base::OneShotTimer timeout_;
 
   static BrowserGpuChannelHostFactory* instance_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserGpuChannelHostFactory);
 };
 
 }  // namespace content

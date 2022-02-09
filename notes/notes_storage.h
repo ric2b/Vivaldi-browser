@@ -10,7 +10,6 @@
 
 #include "base/files/file_path.h"
 #include "base/files/important_file_writer.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "notes/note_node.h"
@@ -29,8 +28,7 @@ class NotesModel;
 class NotesStorage : public base::ImportantFileWriter::DataSerializer {
  public:
   // How often the file is saved at most.
-  static constexpr base::TimeDelta kSaveDelay =
-      base::TimeDelta::FromMilliseconds(2500);
+  static constexpr base::TimeDelta kSaveDelay = base::Milliseconds(2500);
 
   // Creates a NotesStorage for the specified model. The data will saved to a
   // location derived from |profile_path|. The disk writes will be executed as a

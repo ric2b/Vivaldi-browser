@@ -56,9 +56,8 @@ DevToolsAgentHost* TargetAutoAttacher::AutoAttachToFrame(
 
   if (needs_host_attached) {
     if (!agent_host) {
-      agent_host =
-          RenderFrameDevToolsAgentHost::CreateForLocalRootOrPortalNavigation(
-              navigation_request);
+      agent_host = RenderFrameDevToolsAgentHost::
+          CreateForLocalRootOrEmbeddedPageNavigation(navigation_request);
     }
     return DispatchAutoAttach(agent_host.get(), wait_for_debugger_on_start)
                ? agent_host.get()
@@ -81,16 +80,10 @@ void TargetAutoAttacher::UpdateAutoAttach(base::OnceClosure callback) {
 void TargetAutoAttacher::AddClient(Client* client,
                                    bool wait_for_debugger_on_start,
                                    base::OnceClosure callback) {
-  bool need_update = clients_.empty();
   clients_.AddObserver(client);
-  if (wait_for_debugger_on_start) {
-    need_update = need_update || clients_requesting_wait_for_debugger_.empty();
+  if (wait_for_debugger_on_start)
     clients_requesting_wait_for_debugger_.insert(client);
-  }
-  if (need_update)
-    UpdateAutoAttach(std::move(callback));
-  else
-    std::move(callback).Run();
+  UpdateAutoAttach(std::move(callback));
 }
 
 void TargetAutoAttacher::UpdateWaitForDebuggerOnStart(
@@ -98,15 +91,11 @@ void TargetAutoAttacher::UpdateWaitForDebuggerOnStart(
     bool wait_for_debugger_on_start,
     base::OnceClosure callback) {
   DCHECK(clients_.HasObserver(client));
-  bool was_empty = clients_requesting_wait_for_debugger_.empty();
   if (wait_for_debugger_on_start)
     clients_requesting_wait_for_debugger_.insert(client);
   else
     clients_requesting_wait_for_debugger_.erase(client);
-  if (clients_requesting_wait_for_debugger_.empty() != was_empty)
-    UpdateAutoAttach(std::move(callback));
-  else
-    std::move(callback).Run();
+  UpdateAutoAttach(std::move(callback));
 }
 
 void TargetAutoAttacher::RemoveClient(Client* client) {

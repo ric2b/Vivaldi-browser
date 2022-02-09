@@ -16,7 +16,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
@@ -98,7 +98,7 @@ std::vector<RenderFrameHostImpl*>
 CollectAllRenderFrameHostsIncludingSpeculative(WebContentsImpl* web_contents);
 
 // Open a new popup passing no URL to window.open, which results in a blank page
-// and no last committed entry. Returns the newly created shell. Also saves the
+// and only the initial entry. Returns the newly created shell. Also saves the
 // reference to the opened window in the "last_opened_window" variable in JS.
 Shell* OpenBlankWindow(WebContentsImpl* web_contents);
 
@@ -204,14 +204,16 @@ class FrameTestNavigationManager : public TestNavigationManager {
                              WebContents* web_contents,
                              const GURL& url);
 
+  FrameTestNavigationManager(const FrameTestNavigationManager&) = delete;
+  FrameTestNavigationManager& operator=(const FrameTestNavigationManager&) =
+      delete;
+
  private:
   // TestNavigationManager:
   bool ShouldMonitorNavigation(NavigationHandle* handle) override;
 
   // Notifications are filtered so only this frame is monitored.
   int filtering_frame_tree_node_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(FrameTestNavigationManager);
 };
 
 // An observer that can wait for a specific URL to be committed in a specific
@@ -258,6 +260,11 @@ class RenderProcessHostBadIpcMessageWaiter {
   explicit RenderProcessHostBadIpcMessageWaiter(
       RenderProcessHost* render_process_host);
 
+  RenderProcessHostBadIpcMessageWaiter(
+      const RenderProcessHostBadIpcMessageWaiter&) = delete;
+  RenderProcessHostBadIpcMessageWaiter& operator=(
+      const RenderProcessHostBadIpcMessageWaiter&) = delete;
+
   // Waits until the renderer process exits.  Returns the bad message that made
   // //content kill the renderer.  |absl::nullopt| is returned if the renderer
   // was killed outside of //content or exited normally.
@@ -265,8 +272,6 @@ class RenderProcessHostBadIpcMessageWaiter {
 
  private:
   RenderProcessHostKillWaiter internal_waiter_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderProcessHostBadIpcMessageWaiter);
 };
 
 class ShowPopupWidgetWaiter
@@ -308,16 +313,19 @@ class ShowPopupWidgetWaiter
   gfx::Rect initial_rect_;
   int32_t routing_id_ = MSG_ROUTING_NONE;
   int32_t process_id_ = 0;
-  RenderFrameHostImpl* frame_host_;
+  raw_ptr<RenderFrameHostImpl> frame_host_;
 #if defined(OS_MAC) || defined(OS_ANDROID)
-  WebContentsImpl* web_contents_;
+  raw_ptr<WebContentsImpl> web_contents_;
 #endif
 };
 
-// A BrowserMessageFilter that drops a blacklisted message.
+// A BrowserMessageFilter that drops a pre-specified message.
 class DropMessageFilter : public BrowserMessageFilter {
  public:
   DropMessageFilter(uint32_t message_class, uint32_t drop_message_id);
+
+  DropMessageFilter(const DropMessageFilter&) = delete;
+  DropMessageFilter& operator=(const DropMessageFilter&) = delete;
 
  protected:
   ~DropMessageFilter() override;
@@ -327,8 +335,6 @@ class DropMessageFilter : public BrowserMessageFilter {
   bool OnMessageReceived(const IPC::Message& message) override;
 
   const uint32_t drop_message_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(DropMessageFilter);
 };
 
 // A BrowserMessageFilter that observes a message without handling it, and
@@ -336,6 +342,9 @@ class DropMessageFilter : public BrowserMessageFilter {
 class ObserveMessageFilter : public BrowserMessageFilter {
  public:
   ObserveMessageFilter(uint32_t message_class, uint32_t watch_message_id);
+
+  ObserveMessageFilter(const ObserveMessageFilter&) = delete;
+  ObserveMessageFilter& operator=(const ObserveMessageFilter&) = delete;
 
   bool has_received_message() { return received_; }
 
@@ -354,8 +363,6 @@ class ObserveMessageFilter : public BrowserMessageFilter {
   const uint32_t watch_message_id_;
   bool received_ = false;
   base::OnceClosure quit_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(ObserveMessageFilter);
 };
 
 // This observer waits until WebContentsObserver::OnRendererUnresponsive
@@ -376,7 +383,7 @@ class UnresponsiveRendererObserver : public WebContentsObserver {
   // WebContentsObserver:
   void OnRendererUnresponsive(RenderProcessHost* render_process_host) override;
 
-  RenderProcessHost* captured_render_process_host_ = nullptr;
+  raw_ptr<RenderProcessHost> captured_render_process_host_ = nullptr;
   base::RunLoop run_loop_;
 };
 
@@ -421,7 +428,7 @@ class BeforeUnloadBlockingDelegate : public JavaScriptDialogManager,
   void CancelDialogs(WebContents* web_contents, bool reset_state) override {}
 
  private:
-  WebContentsImpl* web_contents_;
+  raw_ptr<WebContentsImpl> web_contents_;
 
   DialogClosedCallback callback_;
 
@@ -592,7 +599,7 @@ class RenderFrameHostCreatedObserver : public WebContentsObserver {
   base::RunLoop run_loop_;
 
   // The last RenderFrameHost created.
-  RenderFrameHost* last_rfh_ = nullptr;
+  raw_ptr<RenderFrameHost> last_rfh_ = nullptr;
 
   // The callback to call when a RenderFrameCreated call is observed.
   OnRenderFrameHostCreatedCallback on_rfh_created_;

@@ -80,7 +80,7 @@ public class BookmarkModel extends BookmarkBridge {
      * Vivaldi specific: Move one or multiple bookmarks to the Trash folder. For Vivaldi, 'undo'
      * is disabled.
      */
-     void deleteBookmarks(BookmarkId... bookmarks) {
+    public void deleteBookmarks(BookmarkId... bookmarks) {
         if (ChromeApplicationImpl.isVivaldi()) { deleteBookmarksPublic(bookmarks); return; }
         assert bookmarks != null && bookmarks.length > 0;
         // Store all titles of bookmarks.

@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "gn/input_file.h"
 #include "gn/parse_tree.h"
@@ -169,7 +168,8 @@ class InputFileManager : public base::RefCountedThreadSafe<InputFileManager> {
   // Used by unit tests to mock out SyncLoadFile().
   SyncLoadFileCallback load_file_callback_;
 
-  DISALLOW_COPY_AND_ASSIGN(InputFileManager);
+  InputFileManager(const InputFileManager&) = delete;
+  InputFileManager& operator=(const InputFileManager&) = delete;
 };
 
 #endif  // TOOLS_GN_INPUT_FILE_MANAGER_H_

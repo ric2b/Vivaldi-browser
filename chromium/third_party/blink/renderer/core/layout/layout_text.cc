@@ -145,7 +145,9 @@ class SelectionDisplayItemClient
       public DisplayItemClient {
  public:
   String DebugName() const final { return "Selection"; }
-  void Trace(Visitor* visitor) const {}
+  void Trace(Visitor* visitor) const override {
+    DisplayItemClient::Trace(visitor);
+  }
 };
 
 using SelectionDisplayItemClientMap =
@@ -543,15 +545,15 @@ static LayoutRect LocalQuadForTextBox(InlineTextBox* box,
   return LayoutRect();
 }
 
-static IntRect EllipsisRectForBox(InlineTextBox* box,
-                                  unsigned start_pos,
-                                  unsigned end_pos) {
+static gfx::Rect EllipsisRectForBox(InlineTextBox* box,
+                                    unsigned start_pos,
+                                    unsigned end_pos) {
   if (!box)
-    return IntRect();
+    return gfx::Rect();
 
   uint16_t truncation = box->Truncation();
   if (truncation == kCNoTruncation)
-    return IntRect();
+    return gfx::Rect();
 
   if (EllipsisBox* ellipsis = box->Root().GetEllipsisBox()) {
     int ellipsis_start_position = std::max<int>(start_pos - box->Start(), 0);
@@ -566,7 +568,7 @@ static IntRect EllipsisRectForBox(InlineTextBox* box,
       return ellipsis->SelectionRect();
   }
 
-  return IntRect();
+  return gfx::Rect();
 }
 
 template <typename PhysicalRectCollector>
@@ -591,14 +593,14 @@ void LayoutText::CollectLineBoxRects(const PhysicalRectCollector& yield,
       UNLIKELY(HasFlippedBlocksWritingMode()) ? ContainingBlock() : nullptr;
   for (InlineTextBox* box : TextBoxes()) {
     LayoutRect boundaries = box->FrameRect();
-    const IntRect ellipsis_rect = (option == kClipToEllipsis)
-                                      ? EllipsisRectForBox(box, 0, TextLength())
-                                      : IntRect();
+    const gfx::Rect ellipsis_rect =
+        (option == kClipToEllipsis) ? EllipsisRectForBox(box, 0, TextLength())
+                                    : gfx::Rect();
     if (!ellipsis_rect.IsEmpty()) {
       if (IsHorizontalWritingMode())
-        boundaries.SetWidth(ellipsis_rect.MaxX() - boundaries.X());
+        boundaries.SetWidth(ellipsis_rect.right() - boundaries.X());
       else
-        boundaries.SetHeight(ellipsis_rect.MaxY() - boundaries.Y());
+        boundaries.SetHeight(ellipsis_rect.bottom() - boundaries.Y());
     }
     yield(FlipForWritingMode(boundaries, block_for_flipping));
   }
@@ -721,9 +723,10 @@ void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
         rect = text_combine->AdjustRectForBoundingBox(rect);
       FloatQuad quad;
       if (item.Type() == NGFragmentItem::kSvgText) {
-        FloatRect float_rect(rect);
-        float_rect.MoveBy(item.SvgFragmentData()->rect.Location());
-        quad = item.BuildSvgTransformForBoundingBox().MapQuad(float_rect);
+        gfx::RectF float_rect(rect);
+        float_rect.Offset(item.SvgFragmentData()->rect.OffsetFromOrigin());
+        quad = item.BuildSvgTransformForBoundingBox().MapQuad(
+            FloatRect(float_rect));
         const float scaling_factor = item.SvgScalingFactor();
         quad.Scale(1 / scaling_factor, 1 / scaling_factor);
         quad = LocalToAbsoluteQuad(quad);
@@ -795,7 +798,7 @@ FloatRect LayoutText::LocalBoundingBoxRectForAccessibility() const {
   CollectLineBoxRects(
       [this, &result, block_for_flipping](const PhysicalRect& r) {
         LayoutRect rect = FlipForWritingMode(r, block_for_flipping);
-        result.Unite(FloatRect(rect));
+        result.Union(FloatRect(rect));
       },
       kClipToEllipsis);
   // TODO(wangxianzhu): This is one of a few cases that a FloatRect is required
@@ -942,8 +945,8 @@ PositionWithAffinity LayoutText::PositionForPoint(
               text_combine->AdjustOffsetForHitTest(point_in_container_fragment);
         }
       }
-      if (!EnclosingIntRect(cursor.Current().RectInContainerFragment())
-               .Contains(FlooredIntPoint(point_in_container_fragment)))
+      if (!ToEnclosingRect(cursor.Current().RectInContainerFragment())
+               .Contains(ToFlooredPoint(point_in_container_fragment)))
         continue;
       if (auto position_with_affinity =
               cursor.PositionForPointInChild(point_in_container_fragment)) {
@@ -1109,8 +1112,8 @@ LayoutRect LayoutText::LocalCaretRect(
 
   return LayoutRect(
       StyleRef().IsHorizontalWritingMode()
-          ? IntRect(left.ToInt(), top, caret_width.ToInt(), height)
-          : IntRect(top, left.ToInt(), height, caret_width.ToInt()));
+          ? gfx::Rect(left.ToInt(), top, caret_width.ToInt(), height)
+          : gfx::Rect(top, left.ToInt(), height, caret_width.ToInt()));
 }
 
 ALWAYS_INLINE float LayoutText::WidthFromFont(
@@ -1121,7 +1124,7 @@ ALWAYS_INLINE float LayoutText::WidthFromFont(
     float text_width_so_far,
     TextDirection text_direction,
     HashSet<const SimpleFontData*>* fallback_fonts,
-    FloatRect* glyph_bounds_accumulation,
+    gfx::RectF* glyph_bounds_accumulation,
     float expansion) const {
   NOT_DESTROYED();
   if (StyleRef().HasTextCombine() && IsCombineText()) {
@@ -1138,13 +1141,13 @@ ALWAYS_INLINE float LayoutText::WidthFromFont(
   run.SetXPos(lead_width + text_width_so_far);
   run.SetExpansion(expansion);
 
-  FloatRect new_glyph_bounds;
+  gfx::RectF new_glyph_bounds;
   float result =
       f.Width(run, fallback_fonts,
               glyph_bounds_accumulation ? &new_glyph_bounds : nullptr);
   if (glyph_bounds_accumulation) {
-    new_glyph_bounds.Move(text_width_so_far, 0);
-    glyph_bounds_accumulation->Unite(new_glyph_bounds);
+    new_glyph_bounds.Offset(text_width_so_far, 0);
+    glyph_bounds_accumulation->Union(new_glyph_bounds);
   }
   return result;
 }
@@ -1282,7 +1285,7 @@ float LayoutText::MaxLogicalWidth() const {
 void LayoutText::ComputePreferredLogicalWidths(float lead_width) {
   NOT_DESTROYED();
   HashSet<const SimpleFontData*> fallback_fonts;
-  FloatRect glyph_bounds;
+  gfx::RectF glyph_bounds;
   ComputePreferredLogicalWidths(lead_width, fallback_fonts, glyph_bounds);
 }
 
@@ -1369,7 +1372,7 @@ static float MaxWordFragmentWidth(LayoutText* layout_text,
 void LayoutText::ComputePreferredLogicalWidths(
     float lead_width,
     HashSet<const SimpleFontData*>& fallback_fonts,
-    FloatRect& glyph_bounds) {
+    gfx::RectF& glyph_bounds) {
   NOT_DESTROYED();
   DCHECK(has_tab_ || IntrinsicLogicalWidthsDirty() ||
          !known_to_have_no_overflow_and_no_fallback_fonts_);
@@ -1972,7 +1975,7 @@ void LayoutText::SetTextWithOffset(scoped_refptr<StringImpl> text,
     TextRun text_run = TextRun(String(text));
     text_run.SetTabSize(!style_to_use->CollapseWhiteSpace(),
                         style_to_use->GetTabSize());
-    FloatRect glyph_bounds;
+    gfx::RectF glyph_bounds;
     float text_width =
         style_to_use->GetFont().Width(text_run, nullptr, &glyph_bounds);
     // TODO(rego): Ideally we could avoid measuring text width in some specific
@@ -2311,7 +2314,7 @@ float LayoutText::Width(unsigned from,
                         TextDirection text_direction,
                         bool first_line,
                         HashSet<const SimpleFontData*>* fallback_fonts,
-                        FloatRect* glyph_bounds,
+                        gfx::RectF* glyph_bounds,
                         float expansion) const {
   NOT_DESTROYED();
   if (from >= TextLength())
@@ -2330,7 +2333,7 @@ float LayoutText::Width(unsigned from,
                         LayoutUnit x_pos,
                         TextDirection text_direction,
                         HashSet<const SimpleFontData*>* fallback_fonts,
-                        FloatRect* glyph_bounds,
+                        gfx::RectF* glyph_bounds,
                         float expansion) const {
   NOT_DESTROYED();
   DCHECK_LE(from + len, TextLength());
@@ -2353,8 +2356,8 @@ float LayoutText::Width(unsigned from,
               0, *fallback_fonts, *glyph_bounds);
         } else {
           *glyph_bounds =
-              FloatRect(0, -font_data->GetFontMetrics().FloatAscent(),
-                        max_width_, font_data->GetFontMetrics().FloatHeight());
+              gfx::RectF(0, -font_data->GetFontMetrics().FloatAscent(),
+                         max_width_, font_data->GetFontMetrics().FloatHeight());
         }
         w = max_width_;
       } else {
@@ -2474,7 +2477,7 @@ PhysicalRect LayoutText::LocalSelectionVisualRect() const {
       if (svg_inline_text) {
         FloatRect float_rect(item_rect);
         const NGFragmentItem& item = *cursor.CurrentItem();
-        float_rect.MoveBy(item.SvgFragmentData()->rect.Location());
+        float_rect.MoveBy(item.SvgFragmentData()->rect.origin());
         if (item.HasSvgTransformForBoundingBox()) {
           float_rect =
               item.BuildSvgTransformForBoundingBox().MapRect(float_rect);
@@ -2862,7 +2865,7 @@ const DisplayItemClient* LayoutText::GetSelectionDisplayItemClient() const {
 
 PhysicalRect LayoutText::DebugRect() const {
   NOT_DESTROYED();
-  return PhysicalRect(EnclosingIntRect(PhysicalLinesBoundingBox()));
+  return PhysicalRect(ToEnclosingRect(PhysicalLinesBoundingBox()));
 }
 
 DOMNodeId LayoutText::EnsureNodeId() {

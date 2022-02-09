@@ -58,7 +58,7 @@ const cryptauth::GcmDeviceInfo& GcmDeviceInfoProviderImpl::GetGcmDeviceInfo()
     cryptauth::GcmDeviceInfo gcm_device_info;
 
     gcm_device_info.set_long_device_id(
-        cryptauth::CryptAuthDeviceIdProviderImpl::GetInstance()->GetDeviceId());
+        CryptAuthDeviceIdProviderImpl::GetInstance()->GetDeviceId());
     gcm_device_info.set_device_type(cryptauth::CHROME);
     gcm_device_info.set_device_software_version(
         version_info::GetVersionNumber());
@@ -105,6 +105,12 @@ const cryptauth::GcmDeviceInfo& GcmDeviceInfoProviderImpl::GetGcmDeviceInfo()
     if (features::IsEcheSWAEnabled()) {
       gcm_device_info.add_supported_software_features(
           cryptauth::SoftwareFeature::ECHE_CLIENT);
+    }
+
+    // Camera Roll is only supported if the associated flag is enabled.
+    if (features::IsPhoneHubCameraRollEnabled()) {
+      gcm_device_info.add_supported_software_features(
+          cryptauth::SoftwareFeature::PHONE_HUB_CAMERA_ROLL_CLIENT);
     }
 
     return gcm_device_info;

@@ -26,22 +26,27 @@ private:
     wxDECLARE_EVENT_TABLE();
 };
 
+enum
+{
+    ID_ACTION = wxID_HIGHEST+1
+};
+
 wxBEGIN_EVENT_TABLE(MyFrame, wxFrame)
-    EVT_MENU(wxID_HIGHEST+1, MyFrame::OnAction)
+    EVT_MENU(ID_ACTION, MyFrame::OnAction)
     EVT_PG_CHANGED( -1, MyFrame::OnPropertyGridChange )
     EVT_PG_CHANGING( -1, MyFrame::OnPropertyGridChanging )
 wxEND_EVENT_TABLE()
 
 MyFrame::MyFrame(wxWindow* parent)
-    : wxFrame(parent, wxID_ANY, wxT("PropertyGrid Test"))
+    : wxFrame(parent, wxID_ANY, "PropertyGrid Test")
 {
     wxMenu *Menu = new wxMenu;
-    Menu->Append(wxID_HIGHEST+1, wxT("Action"));
+    Menu->Append(ID_ACTION, "Action");
     wxMenuBar *MenuBar = new wxMenuBar();
-    MenuBar->Append(Menu, wxT("Action"));
+    MenuBar->Append(Menu, "Action");
     SetMenuBar(MenuBar);
 
-    wxPropertyGrid *pg = new wxPropertyGrid(this,-1,wxDefaultPosition,wxSize(400,400),
+    wxPropertyGrid *pg = new wxPropertyGrid(this,wxID_ANY,wxDefaultPosition,wxSize(400,400),
                         wxPG_SPLITTER_AUTO_CENTER |
                         wxPG_BOLD_MODIFIED );
     m_pg = pg;
@@ -60,7 +65,7 @@ void MyFrame::OnPropertyGridChange(wxPropertyGridEvent &event)
     if ( p )
     {
         wxLogVerbose("OnPropertyGridChange(%s, value=%s)",
-                   p->GetName().c_str(), p->GetValueAsString().c_str());
+                   p->GetName(), p->GetValueAsString());
     }
     else
     {
@@ -72,7 +77,7 @@ void MyFrame::OnPropertyGridChanging(wxPropertyGridEvent &event)
 {
     wxPGProperty* p = event.GetProperty();
 
-    wxLogVerbose("OnPropertyGridChanging(%s)", p->GetName().c_str());
+    wxLogVerbose("OnPropertyGridChanging(%s)", p->GetName());
 }
 
 void MyFrame::OnAction(wxCommandEvent &)

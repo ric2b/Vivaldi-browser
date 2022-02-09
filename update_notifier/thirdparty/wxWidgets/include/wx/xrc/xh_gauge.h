@@ -18,10 +18,10 @@ class WXDLLIMPEXP_XRC wxGaugeXmlHandler : public wxXmlResourceHandler
 {
 public:
     wxGaugeXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
-    DECLARE_DYNAMIC_CLASS(wxGaugeXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxGaugeXmlHandler);
 };
 
 #endif // wxUSE_XRC && wxUSE_GAUGE

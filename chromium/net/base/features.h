@@ -34,9 +34,6 @@ NET_EXPORT extern const base::Feature kAvoidH2Reprioritization;
 // origin requests are restricted to contain at most the source origin.
 NET_EXPORT extern const base::Feature kCapReferrerToOriginOnCrossOrigin;
 
-// Enables TLS 1.3 early data.
-NET_EXPORT extern const base::Feature kEnableTLS13EarlyData;
-
 // Support for altering the parameters used for DNS transaction timeout. See
 // ResolveContext::SecureTransactionTimeout().
 NET_EXPORT extern const base::Feature kDnsTransactionDynamicTimeouts;
@@ -147,6 +144,16 @@ NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kUseDnsHttpsSvcbExtraTimeAbsolute;
 NET_EXPORT extern const base::FeatureParam<int>
     kUseDnsHttpsSvcbExtraTimePercent;
+
+// Enables TLS 1.3 early data.
+NET_EXPORT extern const base::Feature kEnableTLS13EarlyData;
+
+// Enables the TLS Encrypted ClientHello feature.
+// https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-13
+//
+// TODO(https://crbug.com/1091403): This flag does not currently do much yet.
+// ECH is still in development.
+NET_EXPORT extern const base::Feature kEncryptedClientHello;
 
 // Enables optimizing the network quality estimation algorithms in network
 // quality estimator (NQE).
@@ -288,31 +295,9 @@ NET_EXPORT extern const base::Feature kTurnOffStreamingMediaCachingOnBattery;
 // Turns off streaming media caching to disk always.
 NET_EXPORT extern const base::Feature kTurnOffStreamingMediaCachingAlways;
 
-// When enabled, sites that use TLS versions below the |version_min_warn|
-// threshold are marked with the LEGACY_TLS CertStatus and return an
-// ERR_SSL_OBSOLETE_VERSION error. This is used to trigger an interstitial
-// warning for these pages.
-NET_EXPORT extern const base::Feature kLegacyTLSEnforced;
-
 // When enabled this feature will cause same-site calculations to take into
 // account the scheme of the site-for-cookies and the request/response url.
 NET_EXPORT extern const base::Feature kSchemefulSameSite;
-
-// When enabled, TLS connections will initially not offer 3DES and SHA-1 but
-// enable them on fallback. This is used to improve metrics around usage of
-// those algorithms. If disabled, the algorithms will always be offered.
-NET_EXPORT extern const base::Feature kTLSLegacyCryptoFallbackForMetrics;
-
-// When enabled, the Network Quality Estimator (NQE) will notify the operating
-// system whenever it detects that the current default network may have
-// significantly degraded connectivity. Currently only effective on Android.
-NET_EXPORT extern const base::Feature kReportPoorConnectivity;
-
-// When enabled, the NQE may preemptively request that the OS activate a mobile
-// network when requests on the active Wi-Fi connection are stalled. This can be
-// used to warm the radio for a faster transition if/when the OS chooses to drop
-// the Wi-Fi connection.
-NET_EXPORT extern const base::Feature kPreemptiveMobileNetworkActivation;
 
 // Enables a process-wide limit on "open" UDP sockets. See
 // udp_socket_global_limits.h for details on what constitutes an "open" socket.
@@ -395,6 +380,14 @@ NET_EXPORT extern const base::Feature kPartitionedCookies;
 // TODO(crbug.com/1243852) Eventually enable this permanently and remove the
 // feature flag, assuming no breakage occurs with it enabled.
 NET_EXPORT extern const base::Feature kExtraCookieValidityChecks;
+
+// When enabled, the client will opt in to the V2 component format for the
+// First-Party Sets component.
+NET_EXPORT extern const base::Feature kFirstPartySetsV2ComponentFormat;
+
+// Enable recording UMAs for network activities which can wake-up radio on
+// Android.
+NET_EXPORT extern const base::Feature kRecordRadioWakeupTrigger;
 
 }  // namespace features
 }  // namespace net

@@ -130,6 +130,19 @@ void SecurePaymentConfirmationController::
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&SecurePaymentConfirmationController::OnCancel,
                      weak_ptr_factory_.GetWeakPtr()));
+
+  // For automated testing, SPC can be placed in an 'autoaccept' or
+  // 'autoreject' mode, where the dialog should immediately be
+  // accepted/rejected without user interaction. We deliberately wait until
+  // after the dialog is created and shown to handle this, in order to keep the
+  // automation codepath as close to the 'real' one as possible.
+  if (request_->spc_transaction_mode() != SPCTransactionMode::NONE) {
+    if (request_->spc_transaction_mode() == SPCTransactionMode::AUTOACCEPT) {
+      OnConfirm();
+    } else {
+      OnCancel();
+    }
+  }
 }
 
 void SecurePaymentConfirmationController::RetryDialog() {

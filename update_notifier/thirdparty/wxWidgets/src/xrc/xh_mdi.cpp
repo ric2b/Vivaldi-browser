@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_MDI
 
@@ -25,7 +22,7 @@
     #include "wx/dialog.h" // to get wxDEFAULT_DIALOG_STYLE
 #endif
 
-IMPLEMENT_DYNAMIC_CLASS(wxMdiXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxMdiXmlHandler, wxXmlResourceHandler);
 
 wxMdiXmlHandler::wxMdiXmlHandler() : wxXmlResourceHandler()
 {
@@ -33,16 +30,9 @@ wxMdiXmlHandler::wxMdiXmlHandler() : wxXmlResourceHandler()
     XRC_ADD_STYLE(wxCAPTION);
     XRC_ADD_STYLE(wxDEFAULT_DIALOG_STYLE);
     XRC_ADD_STYLE(wxDEFAULT_FRAME_STYLE);
-#if WXWIN_COMPATIBILITY_2_6
-    XRC_ADD_STYLE(wxTHICK_FRAME);
-#endif // WXWIN_COMPATIBILITY_2_6
     XRC_ADD_STYLE(wxSYSTEM_MENU);
     XRC_ADD_STYLE(wxRESIZE_BORDER);
-#if WXWIN_COMPATIBILITY_2_6
-    XRC_ADD_STYLE(wxRESIZE_BOX);
-#endif // WXWIN_COMPATIBILITY_2_6
     XRC_ADD_STYLE(wxCLOSE_BOX);
-
     XRC_ADD_STYLE(wxFRAME_NO_TASKBAR);
     XRC_ADD_STYLE(wxFRAME_SHAPED);
     XRC_ADD_STYLE(wxFRAME_TOOL_WINDOW);
@@ -50,10 +40,6 @@ wxMdiXmlHandler::wxMdiXmlHandler() : wxXmlResourceHandler()
     XRC_ADD_STYLE(wxMAXIMIZE_BOX);
     XRC_ADD_STYLE(wxMINIMIZE_BOX);
     XRC_ADD_STYLE(wxSTAY_ON_TOP);
-
-#if WXWIN_COMPATIBILITY_2_6
-    XRC_ADD_STYLE(wxNO_3D);
-#endif // WXWIN_COMPATIBILITY_2_6
     XRC_ADD_STYLE(wxTAB_TRAVERSAL);
     XRC_ADD_STYLE(wxWS_EX_VALIDATE_RECURSIVELY);
     XRC_ADD_STYLE(wxFRAME_EX_METAL);
@@ -70,7 +56,7 @@ wxWindow *wxMdiXmlHandler::CreateFrame()
 {
     if (m_class == wxT("wxMDIParentFrame"))
     {
-        XRC_MAKE_INSTANCE(frame, wxMDIParentFrame);
+        XRC_MAKE_INSTANCE(frame, wxMDIParentFrame)
 
         frame->Create(m_parentAsWindow,
                       GetID(),
@@ -91,7 +77,7 @@ wxWindow *wxMdiXmlHandler::CreateFrame()
             return NULL;
         }
 
-        XRC_MAKE_INSTANCE(frame, wxMDIChildFrame);
+        XRC_MAKE_INSTANCE(frame, wxMDIChildFrame)
 
         frame->Create(mdiParent,
                       GetID(),

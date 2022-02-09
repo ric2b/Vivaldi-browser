@@ -4,26 +4,25 @@
 
 #include "chrome/browser/ui/side_search/side_search_tab_contents_helper.h"
 
+#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
+#include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
-#include "chrome/common/webui_url_constants.h"
-#include "components/google/core/common/google_util.h"
+#include "chrome/browser/ui/side_search/side_search_config.h"
+#include "chrome/browser/ui/side_search/side_search_utils.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/web_contents.h"
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
-
-namespace {
-
-// A flag to track whether the last call to `TestSRPAvailability()` returned
-// successfully. Currently only called once per browser session.
-bool g_is_side_panel_srp_available = false;
-
-}  // namespace
 
 SideSearchTabContentsHelper::~SideSearchTabContentsHelper() = default;
 
@@ -36,7 +35,7 @@ void SideSearchTabContentsHelper::NavigateInTabContents(
 }
 
 void SideSearchTabContentsHelper::LastSearchURLUpdated(const GURL& url) {
-  DCHECK(google_util::IsGoogleSearchUrl(url));
+  DCHECK(GetConfig()->ShouldNavigateInSidePanel(url));
   last_search_url_ = url;
 }
 
@@ -61,8 +60,9 @@ void SideSearchTabContentsHelper::DidFinishNavigation(
   }
 
   const auto& url = navigation_handle->GetURL();
+  auto* config = GetConfig();
 
-  if (google_util::IsGoogleSearchUrl(url)) {
+  if (config->ShouldNavigateInSidePanel(url)) {
     returned_to_previous_srp_ = navigation_handle->GetPageTransition() &
                                 ui::PAGE_TRANSITION_FORWARD_BACK;
 
@@ -70,7 +70,7 @@ void SideSearchTabContentsHelper::DidFinishNavigation(
     // navigation completes.
     last_search_url_ = url;
 
-    if (!g_is_side_panel_srp_available)
+    if (!config->is_side_panel_srp_available())
       TestSRPAvailability();
 
     if (side_panel_contents_)
@@ -105,10 +105,7 @@ void SideSearchTabContentsHelper::ClearSidePanelContents() {
 
 bool SideSearchTabContentsHelper::CanShowSidePanelForCommittedNavigation() {
   const GURL& url = web_contents()->GetLastCommittedURL();
-  return last_search_url_ && g_is_side_panel_srp_available &&
-         !google_util::IsGoogleSearchUrl(url) &&
-         !google_util::IsGoogleHomePageUrl(url) &&
-         url.spec() != chrome::kChromeUINewTabURL;
+  return last_search_url_ && GetConfig()->CanShowSidePanelForURL(url);
 }
 
 void SideSearchTabContentsHelper::SetDelegate(
@@ -124,14 +121,11 @@ void SideSearchTabContentsHelper::SetSidePanelContentsForTesting(
   GetSideContentsHelper()->SetDelegate(this);
 }
 
-void SideSearchTabContentsHelper::SetIsSidePanelSRPAvailableForTesting(
-    bool is_side_panel_srp_available) {
-  g_is_side_panel_srp_available = is_side_panel_srp_available;
-}
-
 SideSearchTabContentsHelper::SideSearchTabContentsHelper(
     content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
+    : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<SideSearchTabContentsHelper>(*web_contents) {
+}
 
 SideSearchSideContentsHelper*
 SideSearchTabContentsHelper::GetSideContentsHelper() {
@@ -147,7 +141,11 @@ void SideSearchTabContentsHelper::CreateSidePanelContents() {
           web_contents()->GetBrowserContext(), nullptr));
   task_manager::WebContentsTags::CreateForTabContents(
       side_panel_contents_.get());
+
+  // Sets helpers required for the side contents.
   PrefsTabHelper::CreateForWebContents(side_panel_contents_.get());
+  extensions::TabHelper::CreateForWebContents(side_panel_contents_.get());
+
   SideSearchSideContentsHelper::CreateForWebContents(
       side_panel_contents_.get());
   GetSideContentsHelper()->SetDelegate(this);
@@ -156,18 +154,20 @@ void SideSearchTabContentsHelper::CreateSidePanelContents() {
 void SideSearchTabContentsHelper::UpdateSideContentsNavigation() {
   DCHECK(side_panel_contents_);
   // Only update the side panel contents with the latest `last_search_url_` if
-  // present
-  if (last_search_url_ && g_is_side_panel_srp_available)
+  // present.
+  if (last_search_url_ && GetConfig()->is_side_panel_srp_available()) {
     GetSideContentsHelper()->LoadURL(last_search_url_.value());
+    side_search::MaybeSaveSideSearchTabSessionData(web_contents());
+  }
 }
 
 void SideSearchTabContentsHelper::TestSRPAvailability() {
-  if (g_is_side_panel_srp_available)
+  if (GetConfig()->is_side_panel_srp_available())
     return;
   // TODO(tluk): Add rate limiting to the SRP test to permanently disable the
   // feature for a given session if the availability check fails enough times.
   DCHECK(last_search_url_.has_value());
-  DCHECK(google_util::IsGoogleSearchUrl(last_search_url_.value()));
+  DCHECK(GetConfig()->ShouldNavigateInSidePanel(last_search_url_.value()));
   auto traffic_annotation =
       net::DefineNetworkTrafficAnnotation("side_search_availability_test", R"(
         semantics {
@@ -211,13 +211,18 @@ void SideSearchTabContentsHelper::TestSRPAvailability() {
 
 void SideSearchTabContentsHelper::OnResponseLoaded(
     scoped_refptr<net::HttpResponseHeaders> headers) {
-  g_is_side_panel_srp_available = simple_loader_->NetError() == net::OK;
+  GetConfig()->set_is_side_panel_srp_available(simple_loader_->NetError() ==
+                                               net::OK);
 
   // The test for availability is performed async so alert `delegate_` that the
   // side panel SRP is available to give it the opportunity to update
   // appropriately.
   if (delegate_)
     delegate_->SidePanelAvailabilityChanged(false);
+}
+
+SideSearchConfig* SideSearchTabContentsHelper::GetConfig() {
+  return SideSearchConfig::Get(web_contents()->GetBrowserContext());
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(SideSearchTabContentsHelper);

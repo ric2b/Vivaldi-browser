@@ -51,6 +51,14 @@ InterestGroup::Ad::Ad(GURL render_url, absl::optional<std::string> metadata)
 
 InterestGroup::Ad::~Ad() = default;
 
+size_t InterestGroup::Ad::EstimateSize() const {
+  size_t size = 0u;
+  size += render_url.spec().length();
+  if (metadata)
+    size += metadata->size();
+  return size;
+}
+
 bool InterestGroup::Ad::operator==(const Ad& other) const {
   return render_url == other.render_url && metadata == other.metadata;
 }
@@ -118,7 +126,34 @@ bool InterestGroup::IsValid() const {
     }
   }
 
-  return true;
+  return EstimateSize() < blink::mojom::kMaxInterestGroupSize;
+}
+
+size_t InterestGroup::EstimateSize() const {
+  size_t size = 0u;
+  size += owner.Serialize().size();
+  size += name.size();
+  if (bidding_url)
+    size += bidding_url->spec().length();
+  if (update_url)
+    size += update_url->spec().length();
+  if (trusted_bidding_signals_url)
+    size += trusted_bidding_signals_url->spec().length();
+  if (trusted_bidding_signals_keys) {
+    for (const std::string& key : *trusted_bidding_signals_keys)
+      size += key.size();
+  }
+  if (user_bidding_signals)
+    size += user_bidding_signals->size();
+  if (ads) {
+    for (const Ad& ad : *ads)
+      size += ad.EstimateSize();
+  }
+  if (ad_components) {
+    for (const Ad& ad : *ad_components)
+      size += ad.EstimateSize();
+  }
+  return size;
 }
 
 bool InterestGroup::IsEqualForTesting(const InterestGroup& other) const {

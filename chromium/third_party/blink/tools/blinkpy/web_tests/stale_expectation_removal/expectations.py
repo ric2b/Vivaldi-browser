@@ -5,13 +5,12 @@
 
 import os
 
+from blinkpy.web_tests.stale_expectation_removal import constants
+
 from unexpected_passes_common import expectations
 
-WEB_TEST_ROOT_DIR = os.path.realpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', '..', '..',
-                 'web_tests'))
-
-MAIN_EXPECTATION_FILE = os.path.join(WEB_TEST_ROOT_DIR, 'TestExpectations')
+MAIN_EXPECTATION_FILE = os.path.join(constants.WEB_TEST_ROOT_DIR,
+                                     'TestExpectations')
 
 TOP_LEVEL_EXPECTATION_FILES = {
     'ASANExpectations',
@@ -20,10 +19,11 @@ TOP_LEVEL_EXPECTATION_FILES = {
     # NeverFixTests omitted since they're never expected to be
     # unsuppressed.
     'SlowTests',
+    'TestExpectations',
     'W3CImportExpectations',
-    'WPTOverrideExpectations',
-    'WebDriverExpectations',
-    'WebGPUExpectations',
+    # WebDriver and WPTOverride omitted since we do not get ResultDB data for
+    # those suites. WebGPU omitted since that suite is currently not supported
+    # by this script.
 }
 
 
@@ -31,7 +31,7 @@ class WebTestExpectations(expectations.Expectations):
     def __init__(self):
         super(WebTestExpectations, self).__init__()
         self._expectation_filepaths = None
-        self._expectation_file_tag_header = None
+        self._expectation_file_tag_headers = {}
         self._flag_specific_expectation_files = None
 
     def GetExpectationFilepaths(self):
@@ -43,8 +43,8 @@ class WebTestExpectations(expectations.Expectations):
             self._expectation_filepaths = []
             for ef in self._GetTopLevelExpectationFiles():
                 self._expectation_filepaths.append(
-                    os.path.join(WEB_TEST_ROOT_DIR, ef))
-            flag_directory = os.path.join(WEB_TEST_ROOT_DIR,
+                    os.path.join(constants.WEB_TEST_ROOT_DIR, ef))
+            flag_directory = os.path.join(constants.WEB_TEST_ROOT_DIR,
                                           'FlagExpectations')
             for ef in self._GetFlagSpecificExpectationFiles():
                 self._expectation_filepaths.append(
@@ -58,23 +58,24 @@ class WebTestExpectations(expectations.Expectations):
     def _GetFlagSpecificExpectationFiles(self):
         if self._flag_specific_expectation_files is None:
             self._flag_specific_expectation_files = set()
-            flag_directory = os.path.join(WEB_TEST_ROOT_DIR,
+            flag_directory = os.path.join(constants.WEB_TEST_ROOT_DIR,
                                           'FlagExpectations')
             for ef in os.listdir(flag_directory):
                 if ef != 'README.txt':
                     self._flag_specific_expectation_files.add(ef)
         return self._flag_specific_expectation_files
 
-    def _GetExpectationFileTagHeader(self):
-        if self._expectation_file_tag_header is None:
+    def _GetExpectationFileTagHeader(self, expectation_file):
+        if expectation_file not in self._expectation_file_tag_headers:
             # Copy all the comments and blank lines at the top of the file,
             # which constitutes the header.
-            self._expectation_file_tag_header = ''
-            with open(MAIN_EXPECTATION_FILE) as f:
+            header = ''
+            with open(expectation_file) as f:
                 contents = f.read()
             for line in contents.splitlines(True):
                 line = line.lstrip()
                 if line and not line.startswith('#'):
                     break
-                self._expectation_file_tag_header += line
-        return self._expectation_file_tag_header
+                header += line
+            self._expectation_file_tag_headers[expectation_file] = header
+        return self._expectation_file_tag_headers[expectation_file]

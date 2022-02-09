@@ -39,11 +39,11 @@ habit of adding these macros for all classes.
 Variations on these macros are used for multiple inheritance, and abstract
 classes that cannot be instantiated dynamically or otherwise.
 
-wxDECLARE_DYNAMIC_CLASS inserts a static wxClassInfo declaration into the class,
-initialized by wxIMPLEMENT_DYNAMIC_CLASS. When initialized, the wxClassInfo
-object inserts itself into a linked list (accessed through wxClassInfo::first
-and wxClassInfo::next pointers). The linked list is fully created by the time
-all global initialisation is done.
+wxDECLARE_DYNAMIC_CLASS inserts a static wxClassInfo declaration into the
+class, initialized by wxIMPLEMENT_DYNAMIC_CLASS. When initialized, the
+wxClassInfo object inserts itself into a linked list (accessed through
+wxClassInfo::first and wxClassInfo::next pointers). The linked list is fully
+created by the time all global initialisation is done.
 
 wxIMPLEMENT_DYNAMIC_CLASS is a macro that not only initialises the static
 wxClassInfo member, but defines a global function capable of creating a dynamic
@@ -63,9 +63,9 @@ wxClassInfo object instead, then you can simply call wxClassInfo::CreateObject.
 
 @section overview_rtti_classinfo wxClassInfo
 
-This class stores meta-information about classes. An application may use macros
-such as wxDECLARE_DYNAMIC_CLASS and wxIMPLEMENT_DYNAMIC_CLASS to record runtime
-information about a class, including:
+This class stores meta-information about classes. An application may use
+macros such as wxDECLARE_DYNAMIC_CLASS and wxIMPLEMENT_DYNAMIC_CLASS to
+record runtime information about a class, including:
 
 @li Its position in the inheritance hierarchy.
 @li The base class name(s) (up to two base classes are permitted).

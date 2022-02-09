@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/bind.h"
@@ -22,8 +23,8 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/test/history_service_test_util.h"
+#include "components/history_clusters/core/features.h"
 #include "components/history_clusters/core/history_clusters_service_test_api.h"
-#include "components/history_clusters/core/memories_features.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -54,18 +55,20 @@ class HistoryClustersTabHelperTest : public ChromeRenderViewHostTestHarness {
       delete;
 
  protected:
-  HistoryClustersTabHelperTest() = default;
+  HistoryClustersTabHelperTest() {
+    // This needs to be initialized as early as possible to avoid data races
+    // with tasks on other threads checking if features are enabled.
+    feature_list_.InitAndEnableFeature(history_clusters::internal::kJourneys);
+  }
 
   // ChromeRenderViewHostTestHarness:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    feature_list_.InitAndEnableFeature(history_clusters::kJourneys);
 
     HistoryClustersTabHelper::CreateForWebContents(web_contents());
     helper_ = HistoryClustersTabHelper::FromWebContents(web_contents());
     ASSERT_TRUE(helper_);
 
-    ASSERT_TRUE(profile()->CreateHistoryService());
     ASSERT_TRUE(history_service_ = HistoryServiceFactory::GetForProfile(
                     profile(), ServiceAccessType::IMPLICIT_ACCESS));
 
@@ -85,6 +88,11 @@ class HistoryClustersTabHelperTest : public ChromeRenderViewHostTestHarness {
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
 
     run_loop_quit_ = run_loop_.QuitClosure();
+  }
+
+  TestingProfile::TestingFactories GetTestingFactories() const override {
+    return {{HistoryServiceFactory::GetInstance(),
+             HistoryServiceFactory::GetDefaultFactory()}};
   }
 
   std::vector<history::AnnotatedVisit> GetVisits() const {
@@ -107,15 +115,15 @@ class HistoryClustersTabHelperTest : public ChromeRenderViewHostTestHarness {
 
   base::test::ScopedFeatureList feature_list_;
 
-  HistoryClustersTabHelper* helper_;
+  raw_ptr<HistoryClustersTabHelper> helper_;
 
   std::unique_ptr<history_clusters::HistoryClustersServiceTestApi>
       history_clusters_service_test_api_;
 
   base::CancelableTaskTracker tracker_;
-  history::HistoryService* history_service_;
+  raw_ptr<history::HistoryService> history_service_;
 
-  bookmarks::BookmarkModel* bookmark_model_;
+  raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
 
   // Used to verify the async callback is invoked.
   base::RunLoop run_loop_;

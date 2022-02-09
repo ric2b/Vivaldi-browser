@@ -9,10 +9,15 @@
 #include "build/branding_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/side_search/side_search_utils.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/side_panel.h"
+#include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
 #include "chrome/grit/generated_resources.h"
@@ -32,8 +37,8 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view_class_properties.h"
@@ -41,7 +46,6 @@
 namespace {
 
 constexpr int kSidePanelWidth = 380;
-constexpr int kDefaultIconSize = 16;
 constexpr int kDefaultTouchableIconSize = 24;
 
 // Below are hardcoded color constants for the side panel. This is a UX decision
@@ -58,50 +62,80 @@ constexpr SkColor kIconColor = gfx::kGoogleGrey700;
 // Default light mode separator color.
 constexpr SkColor kSeparatorColor = gfx::kGoogleGrey300;
 
-// Close button used in the header of the side panel. Responds appropriately to
-// touch ui changes.
-class CloseButton : public views::ImageButton {
+// Base header button class. Responds appropriately to touch ui changes.
+class HeaderButton : public views::ImageButton {
  public:
-  METADATA_HEADER(CloseButton);
-  explicit CloseButton(base::RepeatingClosure callback)
-      : ImageButton(std::move(callback)) {
+  METADATA_HEADER(HeaderButton);
+  HeaderButton(const gfx::VectorIcon& icon, base::RepeatingClosure callback)
+      : ImageButton(std::move(callback)), icon_(icon) {
     views::ConfigureVectorImageButton(this);
-    views::InstallCircleHighlightPathGenerator(this);
 
     SetBorder(views::CreateEmptyBorder(
         gfx::Insets(views::LayoutProvider::Get()->GetDistanceMetric(
             views::DISTANCE_CLOSE_BUTTON_MARGIN))));
-    SetID(SideSearchBrowserController::SideSearchViewID::
-              VIEW_ID_SIDE_PANEL_CLOSE_BUTTON);
-    SetAccessibleName(
-        l10n_util::GetStringUTF16(IDS_ACCNAME_SIDE_SEARCH_CLOSE_BUTTON));
-    SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_SEARCH_CLOSE_BUTTON));
 
     UpdateIcon();
   }
-  ~CloseButton() override = default;
+  ~HeaderButton() override = default;
 
   void UpdateIcon() {
-    const int icon_size = ui::TouchUiController::Get()->touch_ui()
-                              ? kDefaultTouchableIconSize
-                              : kDefaultIconSize;
-    views::SetImageFromVectorIconWithColor(this, vector_icons::kCloseIcon,
-                                           icon_size, kIconColor);
+    const int icon_size =
+        ui::TouchUiController::Get()->touch_ui()
+            ? kDefaultTouchableIconSize
+            : ChromeLayoutProvider::Get()->GetDistanceMetric(
+                  ChromeDistanceMetric::
+                      DISTANCE_SIDE_PANEL_HEADER_VECTOR_ICON_SIZE);
+    views::SetImageFromVectorIconWithColor(this, icon_, icon_size, kIconColor);
   }
+
+ private:
+  const gfx::VectorIcon& icon_;
 };
 
-BEGIN_METADATA(CloseButton, views::ImageButton)
+BEGIN_METADATA(HeaderButton, views::ImageButton)
 END_METADATA
 
 // Header view used to house the close control at the top of the side panel.
 class HeaderView : public views::View {
  public:
   METADATA_HEADER(HeaderView);
-  explicit HeaderView(base::RepeatingClosure callback)
-      : close_button_(
-            AddChildView(std::make_unique<CloseButton>(std::move(callback)))),
+  explicit HeaderView(base::RepeatingClosure callback, Browser* browser)
+      : close_button_(AddChildView(
+            std::make_unique<HeaderButton>(vector_icons::kCloseIcon,
+                                           std::move(callback)))),
         layout_(SetLayoutManager(std::make_unique<views::BoxLayout>())) {
+    views::InstallCircleHighlightPathGenerator(close_button_);
+    close_button_->SetID(SideSearchBrowserController::SideSearchViewID::
+                             VIEW_ID_SIDE_PANEL_CLOSE_BUTTON);
+    close_button_->SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_ACCNAME_SIDE_SEARCH_CLOSE_BUTTON));
+    close_button_->SetTooltipText(
+        l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_SEARCH_CLOSE_BUTTON));
+
+    if (base::FeatureList::IsEnabled(features::kSideSearchFeedback)) {
+      base::RepeatingClosure feedback_callback = base::BindRepeating(
+          [](Browser* browser) {
+            chrome::ShowFeedbackPage(
+                browser, chrome::FeedbackSource::kFeedbackSourceChromeLabs,
+                std::string() /* description_template */,
+                l10n_util::GetStringFUTF8(
+                    IDS_CHROMELABS_SEND_FEEDBACK_DESCRIPTION_PLACEHOLDER,
+                    l10n_util::GetStringUTF16(IDS_ACCNAME_SIDE_SEARCH_TOOL)),
+                std::string("chrome-labs-side-search"),
+                std::string() /* extra_diagnostics */);
+          },
+          browser);
+
+      feedback_button_ =
+          AddChildViewAt(std::make_unique<HeaderButton>(
+                             kSubmitFeedbackIcon, std::move(feedback_callback)),
+                         0);
+      feedback_button_->SetAccessibleName(
+          l10n_util::GetStringUTF16(IDS_ACCNAME_SIDE_SEARCH_FEEDBACK_BUTTON));
+      feedback_button_->SetTooltipText(
+          l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_SEARCH_FEEDBACK_BUTTON));
+    }
+
     SetProperty(
         views::kFlexBehaviorKey,
         views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
@@ -115,11 +149,16 @@ class HeaderView : public views::View {
  private:
   void UpdateSpacing() {
     close_button_->UpdateIcon();
+
+    if (feedback_button_)
+      feedback_button_->UpdateIcon();
+
     layout_->set_inside_border_insets(
         GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN));
   }
 
-  CloseButton* const close_button_;
+  HeaderButton* const close_button_;
+  HeaderButton* feedback_button_ = nullptr;
   views::BoxLayout* const layout_;
 
   base::CallbackListSubscription subscription_ =
@@ -139,27 +178,34 @@ std::unique_ptr<views::Separator> CreateSeparator() {
 
 views::WebView* ConfigureSidePanel(views::View* side_panel,
                                    Profile* profile,
+                                   Browser* browser,
                                    base::RepeatingClosure callback) {
   // BrowserViewLayout will layout the SidePanel to match the height of the
   // content area.
   side_panel->SetPreferredSize(gfx::Size(kSidePanelWidth, 1));
 
-  auto* layout =
-      side_panel->SetLayoutManager(std::make_unique<views::FlexLayout>());
-  layout->SetOrientation(views::LayoutOrientation::kVertical);
-  layout->SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
-
-  side_panel->AddChildView(std::make_unique<HeaderView>(std::move(callback)));
-  side_panel->AddChildView(CreateSeparator());
+  auto container = std::make_unique<views::FlexLayoutView>();
+  container->SetOrientation(views::LayoutOrientation::kVertical);
+  container->SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
+  container->AddChildView(
+      std::make_unique<HeaderView>(std::move(callback), browser));
+  container->AddChildView(CreateSeparator());
 
   // The WebView will fill the remaining space after the header view has been
   // laid out.
   auto* web_view =
-      side_panel->AddChildView(std::make_unique<views::WebView>(profile));
+      container->AddChildView(std::make_unique<views::WebView>(profile));
   web_view->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
+
+  side_panel->AddChildView(std::move(container));
+
+  // The side panel should not start visible to avoid having it participate in
+  // initial layout calculations. Its visibility state will be updated later on
+  // in UpdateSidePanel().
+  side_panel->SetVisible(false);
 
   return web_view;
 }
@@ -174,10 +220,16 @@ SideSearchBrowserController::SideSearchBrowserController(
       web_view_(ConfigureSidePanel(
           side_panel,
           browser_view_->GetProfile(),
+          browser_view_->browser(),
           base::BindRepeating(
               &SideSearchBrowserController::SidePanelCloseButtonPressed,
               base::Unretained(this)))),
       focus_tracker_(side_panel_, browser_view_->GetFocusManager()) {
+  web_view_visibility_subscription_ =
+      web_view_->AddVisibleChangedCallback(base::BindRepeating(
+          &SideSearchBrowserController::OnWebViewVisibilityChanged,
+          base::Unretained(this)));
+
   browser_view_observation_.Observe(browser_view_);
   UpdateSidePanelForContents(browser_view_->GetActiveWebContents(), nullptr);
 }
@@ -271,6 +323,8 @@ SideSearchBrowserController::CreateToolbarButton() {
       IDS_ACCNAME_SIDE_SEARCH_TOOLBAR_BUTTON_NOT_ACTIVATED));
   toolbar_button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_SEARCH_TOOLBAR_BUTTON));
+  toolbar_button->SetProperty(views::kElementIdentifierKey,
+                              kSideSearchButtonElementId);
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   toolbar_button->SetVectorIcon(kGoogleGLogoMonochromeIcon);
@@ -326,9 +380,9 @@ void SideSearchBrowserController::OpenSidePanel() {
   SetSidePanelToggledOpen(true);
   UpdateSidePanel();
 
-  // After showing the side panel have the side contents request focus.
-  DCHECK(side_panel_->GetVisible());
-  web_view_->web_contents()->Focus();
+  // After showing the side panel if the web_view_ is visible request focus.
+  if (web_view_->GetVisible())
+    web_view_->web_contents()->Focus();
 }
 
 void SideSearchBrowserController::CloseSidePanel(
@@ -375,6 +429,7 @@ void SideSearchBrowserController::SetSidePanelToggledOpen(bool toggled_open) {
     if (auto* active_contents = browser_view_->GetActiveWebContents()) {
       SideSearchTabContentsHelper::FromWebContents(active_contents)
           ->set_toggled_open(toggled_open);
+      side_search::MaybeSaveSideSearchTabSessionData(active_contents);
     }
   } else {
     toggled_open_ = toggled_open;
@@ -400,11 +455,6 @@ void SideSearchBrowserController::UpdateSidePanel() {
 
   const bool can_show_side_panel_for_page =
       tab_contents_helper->CanShowSidePanelForCommittedNavigation();
-  if (can_show_side_panel_for_page &&
-      tab_contents_helper->returned_to_previous_srp()) {
-    browser_view_->feature_promo_controller()->MaybeShowPromo(
-        feature_engagement::kIPHSideSearchFeature);
-  }
   const bool will_show_side_panel =
       can_show_side_panel_for_page && GetSidePanelToggledOpen();
 
@@ -428,4 +478,24 @@ void SideSearchBrowserController::UpdateSidePanel() {
             ? SideSearchAvailabilityChangeType::kBecomeAvailable
             : SideSearchAvailabilityChangeType::kBecomeUnavailable);
   }
+
+  // Once the anchor element is visible, maybe show promo.
+  if (can_show_side_panel_for_page &&
+      tab_contents_helper->returned_to_previous_srp()) {
+    browser_view_->feature_promo_controller()->MaybeShowPromo(
+        feature_engagement::kIPHSideSearchFeature);
+  }
+
+  browser_view_->InvalidateLayout();
+}
+
+void SideSearchBrowserController::OnWebViewVisibilityChanged() {
+  // After the web_view_ becomes visible have the side contents request focus.
+  // We need to do this in the web_view_'s visibility changed listener as the
+  // web_view_'s visibility state could be updated by the layout manager during
+  // layout and we should not do this until the web_view_ is visible. Layout is
+  // invalidated when we call UpdateSidePanel() but is scheduled asynchronously
+  // by the hosting Widget.
+  if (web_view_->GetVisible())
+    web_view_->web_contents()->Focus();
 }

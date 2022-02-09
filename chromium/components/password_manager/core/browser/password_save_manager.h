@@ -5,7 +5,6 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_SAVE_MANAGER_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_SAVE_MANAGER_H_
 
-#include "base/macros.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
 
 namespace autofill {
@@ -102,6 +101,11 @@ class PasswordSaveManager {
   // profile store. This is relevant only for account store users.
   virtual void BlockMovingToAccountStoreFor(
       const autofill::GaiaIdHash& gaia_id_hash) = 0;
+
+  // Updates the submission indicator event for pending credentials at the
+  // moment of submisison detection.
+  virtual void UpdateSubmissionIndicatorEvent(
+      autofill::mojom::SubmissionIndicatorEvent event) = 0;
 
   virtual bool IsNewLogin() const = 0;
   virtual bool IsPasswordUpdate() const = 0;

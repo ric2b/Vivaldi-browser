@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
-
 class BuildSettings;
 class Builder;
 class Err;
@@ -61,7 +59,8 @@ class EclipseWriter {
   // The defines of all the targets which use the default toolchain.
   std::map<std::string, std::string> defines_;
 
-  DISALLOW_COPY_AND_ASSIGN(EclipseWriter);
+  EclipseWriter(const EclipseWriter&) = delete;
+  EclipseWriter& operator=(const EclipseWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_ECLIPSE_WRITER_H_

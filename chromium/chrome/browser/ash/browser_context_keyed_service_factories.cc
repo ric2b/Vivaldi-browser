@@ -12,6 +12,7 @@
 #include "chrome/browser/ash/borealis/borealis_service_factory.h"
 #include "chrome/browser/ash/cert_provisioning/cert_provisioning_scheduler_user_service.h"
 #include "chrome/browser/ash/crostini/crostini_engagement_metrics_service.h"
+#include "chrome/browser/ash/eche_app/eche_app_manager_factory.h"
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
 #include "chrome/browser/ash/file_system_provider/service_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
@@ -21,9 +22,10 @@
 #include "chrome/browser/ash/nearby/nearby_process_manager_factory.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
 #include "chrome/browser/ash/phonehub/phone_hub_manager_factory.h"
+#include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_service_factory.h"
+#include "chrome/browser/ash/platform_keys/key_permissions/user_private_token_kpm_service_factory.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_engagement_metrics_service.h"
 #include "chrome/browser/ash/policy/core/user_cloud_policy_token_forwarder_factory.h"
-#include "chrome/browser/ash/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/ash/policy/networking/policy_cert_service_factory.h"
 #include "chrome/browser/ash/policy/networking/user_network_configuration_updater_factory.h"
 #include "chrome/browser/ash/printing/history/print_job_history_service_factory.h"
@@ -33,15 +35,11 @@
 #include "chrome/browser/ash/smb_client/smb_service_factory.h"
 #include "chrome/browser/ash/tether/tether_service_factory.h"
 #include "chrome/browser/ash/web_applications/crosh_loader_factory.h"
-#include "chrome/browser/chromeos/eche_app/eche_app_manager_factory.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
 #include "chrome/browser/chromeos/extensions/input_method_api.h"
-#include "chrome/browser/chromeos/extensions/login_screen/login_state/session_state_changed_event_dispatcher.h"
 #include "chrome/browser/chromeos/extensions/media_player_api.h"
 #include "chrome/browser/chromeos/extensions/printing_metrics/print_job_finished_event_dispatcher.h"
 #include "chrome/browser/chromeos/fileapi/file_change_service_factory.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/user_private_token_kpm_service_factory.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/ui/ash/calendar/calendar_keyed_service_factory.h"
@@ -52,16 +50,14 @@
 #include "chrome/browser/extensions/api/printing/printing_api_handler.h"
 #endif
 
-namespace chromeos {
-
-using ::ash::AuthPolicyCredentialsManagerFactory;
+namespace ash {
 
 void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   android_sms::AndroidSmsServiceFactory::GetInstance();
   arc::ArcAccessibilityHelperBridge::CreateFactory();
-  ash::CalendarKeyedServiceFactory::GetInstance();
-  ash::full_restore::FullRestoreServiceFactory::GetInstance();
-  ash::HoldingSpaceKeyedServiceFactory::GetInstance();
+  CalendarKeyedServiceFactory::GetInstance();
+  full_restore::FullRestoreServiceFactory::GetInstance();
+  HoldingSpaceKeyedServiceFactory::GetInstance();
   AuthPolicyCredentialsManagerFactory::GetInstance();
   bluetooth::DebugLogsManagerFactory::GetInstance();
   borealis::BorealisServiceFactory::GetInstance();
@@ -69,10 +65,10 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   CroshLoaderFactory::GetInstance();
   crostini::CrostiniEngagementMetricsService::Factory::GetInstance();
 #if defined(USE_CUPS)
-  CupsProxyServiceManagerFactory::GetInstance();
+  chromeos::CupsProxyServiceManagerFactory::GetInstance();
 #endif
-  CupsPrintersManagerFactory::GetInstance();
-  CupsPrintJobManagerFactory::GetInstance();
+  chromeos::CupsPrintersManagerFactory::GetInstance();
+  chromeos::CupsPrintJobManagerFactory::GetInstance();
   EasyUnlockServiceFactory::GetInstance();
   eche_app::EcheAppManagerFactory::GetInstance();
   extensions::InputMethodAPI::GetFactoryInstance();
@@ -81,7 +77,6 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::PrintingAPIHandler::GetFactoryInstance();
   extensions::PrintJobFinishedEventDispatcher::GetFactoryInstance();
 #endif
-  extensions::SessionStateChangedEventDispatcher::GetFactoryInstance();
   FileChangeServiceFactory::GetInstance();
   file_manager::EventRouterFactory::GetInstance();
   file_manager::VolumeManagerFactory::GetInstance();
@@ -96,16 +91,15 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   platform_keys::UserPrivateTokenKeyPermissionsManagerServiceFactory::
       GetInstance();
   plugin_vm::PluginVmEngagementMetricsService::Factory::GetInstance();
-  policy::DlpRulesManagerFactory::GetInstance();
   policy::PolicyCertServiceFactory::GetInstance();
   policy::UserCloudPolicyTokenForwarderFactory::GetInstance();
   policy::UserNetworkConfigurationUpdaterFactory::GetInstance();
-  ash::printing::print_management::PrintingManagerFactory::GetInstance();
-  ash::PrintJobHistoryServiceFactory::GetInstance();
+  printing::print_management::PrintingManagerFactory::GetInstance();
+  PrintJobHistoryServiceFactory::GetInstance();
   secure_channel::NearbyConnectorFactory::GetInstance();
   smb_client::SmbServiceFactory::GetInstance();
-  ash::SyncedPrintersManagerFactory::GetInstance();
-  ash::tether::TetherServiceFactory::GetInstance();
+  SyncedPrintersManagerFactory::GetInstance();
+  tether::TetherServiceFactory::GetInstance();
 }
 
-}  // namespace chromeos
+}  // namespace ash

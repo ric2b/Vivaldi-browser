@@ -19,11 +19,8 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
-#if wxUSE_CHOICE && !(defined(__SMARTPHONE__) && defined(__WXWINCE__))
+#if wxUSE_CHOICE
 
 #include "wx/choice.h"
 
@@ -199,28 +196,6 @@ wxChoice::~wxChoice()
     Clear();
 }
 
-bool wxChoice::MSWGetComboBoxInfo(tagCOMBOBOXINFO* info) const
-{
-    // TODO-Win9x: Get rid of this once we officially drop support for Win9x
-    //             and just call the function directly.
-#if wxUSE_DYNLIB_CLASS
-    typedef BOOL (WINAPI *GetComboBoxInfo_t)(HWND, tagCOMBOBOXINFO*);
-    static GetComboBoxInfo_t s_pfnGetComboBoxInfo = NULL;
-    static bool s_triedToLoad = false;
-    if ( !s_triedToLoad )
-    {
-        s_triedToLoad = true;
-        wxLoadedDLL dllUser32("user32.dll");
-        wxDL_INIT_FUNC(s_pfn, GetComboBoxInfo, dllUser32);
-    }
-
-    if ( s_pfnGetComboBoxInfo )
-        return (*s_pfnGetComboBoxInfo)(GetHwnd(), info) != 0;
-#endif // wxUSE_DYNLIB_CLASS
-
-    return false;
-}
-
 // ----------------------------------------------------------------------------
 // adding/deleting items to/from the list
 // ----------------------------------------------------------------------------
@@ -322,19 +297,6 @@ unsigned int wxChoice::GetCount() const
 
 int wxChoice::FindString(const wxString& s, bool bCase) const
 {
-#if defined(__WATCOMC__) && defined(__WIN386__)
-    // For some reason, Watcom in WIN386 mode crashes in the CB_FINDSTRINGEXACT message.
-    // wxChoice::Do it the long way instead.
-    unsigned int count = GetCount();
-    for ( unsigned int i = 0; i < count; i++ )
-    {
-        // as CB_FINDSTRINGEXACT is case insensitive, be case insensitive too
-        if (GetString(i).IsSameAs(s, bCase))
-            return i;
-    }
-
-    return wxNOT_FOUND;
-#else // !Watcom
    //TODO:  Evidently some MSW versions (all?) don't like empty strings
    //passed to SendMessage, so we have to do it ourselves in that case
    if ( s.empty() )
@@ -360,7 +322,6 @@ int wxChoice::FindString(const wxString& s, bool bCase) const
 
        return pos == LB_ERR ? wxNOT_FOUND : pos;
    }
-#endif // Watcom/!Watcom
 }
 
 void wxChoice::SetString(unsigned int n, const wxString& s)
@@ -401,10 +362,13 @@ void wxChoice::SetString(unsigned int n, const wxString& s)
 
 wxString wxChoice::GetString(unsigned int n) const
 {
-    int len = (int)::SendMessage(GetHwnd(), CB_GETLBTEXTLEN, n, 0);
+    const int len = (int)::SendMessage(GetHwnd(), CB_GETLBTEXTLEN, n, 0);
 
     wxString str;
-    if ( len != CB_ERR && len > 0 )
+
+    wxCHECK_MSG( len != CB_ERR, str, wxS("Invalid index") );
+
+    if ( len > 0 )
     {
         if ( ::SendMessage
                (
@@ -494,9 +458,18 @@ void wxChoice::MSWEndDeferWindowPos()
 
 void wxChoice::MSWUpdateDropDownHeight()
 {
+    int flags = wxSIZE_USE_EXISTING;
+    if ( wxApp::GetComCtl32Version() < 600 )
+    {
+        // Make sure our DoMoveWindow() will get called to update the dropdown
+        // height, this happens automatically with comctl32.dll v6, but not
+        // with earlier versions.
+        flags |= wxSIZE_FORCE;
+    }
+
     // be careful to not change the width here
     DoSetSize(wxDefaultCoord, wxDefaultCoord, wxDefaultCoord, GetSize().y,
-              wxSIZE_USE_EXISTING);
+              flags);
 }
 
 void wxChoice::DoMoveWindow(int x, int y, int width, int height)
@@ -514,7 +487,37 @@ void wxChoice::DoMoveWindow(int x, int y, int width, int height)
     if ( width < 0 )
         return;
 
-    wxControl::DoMoveWindow(x, y, width, height);
+    // the height which we must pass to Windows should be the total height of
+    // the control including the drop down list while the height given to us
+    // is, of course, just the height of the permanently visible part of it so
+    // add the drop down height to it
+
+    // don't make the drop down list too tall, arbitrarily limit it to 30
+    // items max and also don't make it too small if it's currently empty
+    size_t nItems = GetCount();
+    if (!HasFlag(wxCB_SIMPLE))
+    {
+        if (!nItems)
+            nItems = 9;
+        else if (nItems > 30)
+            nItems = 30;
+    }
+
+    int heightWithItems = 0;
+    if (!HasFlag(wxCB_SIMPLE))
+    {
+        // The extra item (" + 1") is required to prevent a vertical
+        // scrollbar from appearing with comctl32.dll versions earlier
+        // than 6.0 (such as found in Win2k).
+        const int hItem = SendMessage(GetHwnd(), CB_GETITEMHEIGHT, 0, 0);
+        heightWithItems = height + hItem*(nItems + 1);
+    }
+    else
+    {
+        heightWithItems = SetHeightSimpleComboBox(nItems);
+    }
+
+    wxControl::DoMoveWindow(x, y, width, heightWithItems);
 }
 
 void wxChoice::DoGetSize(int *w, int *h) const
@@ -533,21 +536,13 @@ void wxChoice::DoSetSize(int x, int y,
                          int width, int height,
                          int sizeFlags)
 {
-    const int heightBest = GetBestSize().y;
-
-    // we need the real height below so get the current one if it's not given
-    if ( height == wxDefaultCoord )
-    {
-        // height not specified, use the same as before
-        DoGetSize(NULL, &height);
-    }
-    else if ( height == heightBest )
+    if ( height == GetBestSize().y )
     {
         // we don't need to manually manage our height, let the system use the
         // default one
         m_heightOwn = wxDefaultCoord;
     }
-    else // non-default height specified
+    else if ( height != wxDefaultCoord ) // non-default height specified
     {
         // set our new own height but be careful not to make it too big: the
         // native control apparently stores it as a single byte and so setting
@@ -562,36 +557,8 @@ void wxChoice::DoSetSize(int x, int y,
             m_heightOwn = COMBO_HEIGHT_ADJ;
     }
 
-
-    // the height which we must pass to Windows should be the total height of
-    // the control including the drop down list while the height given to us
-    // is, of course, just the height of the permanently visible part of it so
-    // add the drop down height to it
-
-    // don't make the drop down list too tall, arbitrarily limit it to 30
-    // items max and also don't make it too small if it's currently empty
-    size_t nItems = GetCount();
-    if (!HasFlag(wxCB_SIMPLE))
-    {
-        if ( !nItems )
-            nItems = 9;
-        else if ( nItems > 30 )
-            nItems = 30;
-    }
-
-    const int hItem = SendMessage(GetHwnd(), CB_GETITEMHEIGHT, 0, 0);
-    int heightWithItems = 0;
-    if (!HasFlag(wxCB_SIMPLE))
-        // The extra item (" + 1") is required to prevent a vertical
-        // scrollbar from appearing with comctl32.dll versions earlier
-        // than 6.0 (such as found in Win2k).
-        heightWithItems = height + hItem*(nItems + 1);
-    else
-        heightWithItems = SetHeightSimpleComboBox(nItems);
-
-
     // do resize the native control
-    wxControl::DoSetSize(x, y, width, heightWithItems, sizeFlags);
+    wxControl::DoSetSize(x, y, width, height, sizeFlags);
 
 
     // make the control itself of the requested height: notice that this
@@ -639,17 +606,13 @@ wxSize wxChoice::DoGetSizeFromTextSize(int xlen, int ylen) const
     // and its child part. I.e. arrow, separators, etc.
     wxSize tsize(xlen, 0);
 
-    // FIXME-VC6: Only VC6 needs this guard, see WINVER definition in
-    //            include/wx/msw/wrapwin.h
-#if defined(WINVER) && WINVER >= 0x0500
     WinStruct<COMBOBOXINFO> info;
-    if ( MSWGetComboBoxInfo(&info) )
+    if ( ::GetComboBoxInfo(GetHwnd(), &info) )
     {
         tsize.x += info.rcItem.left + info.rcButton.right - info.rcItem.right
                     + info.rcItem.left + 3; // right and extra margins
     }
     else // Just use some rough approximation.
-#endif // WINVER >= 0x0500
     {
         tsize.x += 4*cHeight;
     }
@@ -838,4 +801,4 @@ WXHBRUSH wxChoice::MSWControlColor(WXHDC hDC, WXHWND hWnd)
     return wxChoiceBase::MSWControlColor(hDC, hWnd);
 }
 
-#endif // wxUSE_CHOICE && !(__SMARTPHONE__ && __WXWINCE__)
+#endif // wxUSE_CHOICE

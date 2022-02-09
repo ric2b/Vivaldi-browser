@@ -42,6 +42,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustExecutable) {
   target.source_types_used().Set(SourceFile::SOURCE_RS);
   target.rust_values().set_crate_root(main);
   target.rust_values().crate_name() = "foo_bar";
+  target.config_values().ldflags().push_back("-fsanitize=address");
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
@@ -65,6 +66,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustExecutable) {
         "../../foo/main.rs\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags = -fsanitize=address\n"
         "  sources = ../../foo/input3.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -107,6 +109,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "../../bar/mylib.rs ../../bar/lib.rs\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -158,6 +161,104 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDeps) {
         "../../foo/main.rs obj/foo/libdirect.rlib\n"
         "  externs = --extern direct=obj/foo/libdirect.rlib\n"
         "  rustdeps = -Ldependency=obj/foo -Ldependency=obj/bar\n"
+        "  ldflags =\n"
+        "  sources = ../../foo/source.rs ../../foo/main.rs\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+}
+
+TEST_F(NinjaRustBinaryTargetWriterTest, DylibDeps) {
+  Err err;
+  TestWithScope setup;
+
+  Target dylib(setup.settings(), Label(SourceDir("//bar/"), "mylib"));
+  dylib.set_output_type(Target::SHARED_LIBRARY);
+  dylib.visibility().SetPublic();
+  SourceFile barlib("//bar/lib.rs");
+  dylib.sources().push_back(SourceFile("//bar/mylib.rs"));
+  dylib.sources().push_back(barlib);
+  dylib.source_types_used().Set(SourceFile::SOURCE_RS);
+  dylib.rust_values().set_crate_type(RustValues::CRATE_DYLIB); // TODO
+  dylib.rust_values().set_crate_root(barlib);
+  dylib.rust_values().crate_name() = "mylib";
+  dylib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(dylib.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaRustBinaryTargetWriter writer(&dylib, out);
+    writer.Run();
+
+    const char expected[] =
+        "crate_name = mylib\n"
+        "crate_type = dylib\n"
+        "output_extension = .so\n"
+        "output_dir = \n"
+        "rustflags =\n"
+        "rustenv =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/bar\n"
+        "target_output_name = libmylib\n"
+        "\n"
+        "build obj/bar/libmylib.so: rust_dylib ../../bar/lib.rs | "
+        "../../bar/mylib.rs ../../bar/lib.rs\n"
+        "  externs =\n"
+        "  rustdeps =\n"
+        "  ldflags =\n"
+        "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+
+  Target another_dylib(setup.settings(), Label(SourceDir("//foo/"), "direct"));
+  another_dylib.set_output_type(Target::SHARED_LIBRARY);
+  another_dylib.visibility().SetPublic();
+  SourceFile lib("//foo/main.rs");
+  another_dylib.sources().push_back(SourceFile("//foo/direct.rs"));
+  another_dylib.sources().push_back(lib);
+  another_dylib.source_types_used().Set(SourceFile::SOURCE_RS);
+  another_dylib.rust_values().set_crate_type(RustValues::CRATE_DYLIB);
+  another_dylib.rust_values().set_crate_root(lib);
+  another_dylib.rust_values().crate_name() = "direct";
+  another_dylib.SetToolchain(setup.toolchain());
+  another_dylib.private_deps().push_back(LabelTargetPair(&dylib));
+  ASSERT_TRUE(another_dylib.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  SourceFile main("//foo/main.rs");
+  target.sources().push_back(SourceFile("//foo/source.rs"));
+  target.sources().push_back(main);
+  target.source_types_used().Set(SourceFile::SOURCE_RS);
+  target.rust_values().set_crate_root(main);
+  target.rust_values().crate_name() = "foo_bar";
+  target.private_deps().push_back(LabelTargetPair(&another_dylib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaRustBinaryTargetWriter writer(&target, out);
+    writer.Run();
+
+    const char expected[] =
+        "crate_name = foo_bar\n"
+        "crate_type = bin\n"
+        "output_extension = \n"
+        "output_dir = \n"
+        "rustflags =\n"
+        "rustenv =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/foo\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
+        "../../foo/main.rs obj/foo/libdirect.so\n"
+        "  externs = --extern direct=obj/foo/libdirect.so\n"
+        "  rustdeps = -Ldependency=obj/foo -Ldependency=obj/bar\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -201,6 +302,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "../../bar/mylib.rs ../../bar/lib.rs\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -247,6 +349,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "obj/baz/group.stamp\n"
         "  externs = --extern mymacro=obj/bar/libmymacro.so\n"
         "  rustdeps = -Ldependency=obj/bar\n"
+        "  ldflags =\n"
         "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -285,6 +388,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RlibDepsAcrossGroups) {
         "../../foo/source.rs ../../foo/main.rs obj/bar/libmylib.rlib\n"
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
         "  rustdeps = -Ldependency=obj/bar\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -341,6 +445,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RenamedDeps) {
         "../../foo/main.rs obj/foo/libdirect.rlib\n"
         "  externs = --extern direct_renamed=obj/foo/libdirect.rlib\n"
         "  rustdeps = -Ldependency=obj/foo\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -440,9 +545,10 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
         "  rustdeps = -Ldependency=obj/bar "
         "-Lnative=obj/baz -Lnative=obj/foo -Lnative=. "
-        "-Clink-arg=obj/baz/sourceset.csourceset.o "
+        "-Clink-arg=-Bdynamic -Clink-arg=obj/baz/sourceset.csourceset.o "
         "-Clink-arg=obj/foo/libstatic.a -Clink-arg=./libshared.so "
         "-Clink-arg=./libshared_with_toc.so\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -479,7 +585,9 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/source.rs "
         "../../foo/main.rs obj/foo/libstatic.a\n"
         "  externs =\n"
-        "  rustdeps = -Lnative=obj/foo -Clink-arg=obj/foo/libstatic.a\n"
+        "  rustdeps = -Lnative=obj/foo -Clink-arg=-Bdynamic "
+        "-Clink-arg=obj/foo/libstatic.a\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -517,7 +625,9 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "../../baz/lib.rs "
         "obj/foo/libstatic.a\n"
         "  externs =\n"
-        "  rustdeps = -Lnative=obj/foo -Clink-arg=obj/foo/libstatic.a\n"
+        "  rustdeps = -Lnative=obj/foo -Clink-arg=-Bdynamic "
+        "-Clink-arg=obj/foo/libstatic.a\n"
+        "  ldflags =\n"
         "  sources = ../../baz/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -562,6 +672,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustOutputExtensionAndDir) {
         "../../foo/main.rs\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../foo/input3.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -607,6 +718,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, LibsAndLibDirs) {
         "../../foo/main.rs\n"
         "  externs =\n"
         "  rustdeps = -Lnative=../../baz -lquux\n"
+        "  ldflags =\n"
         "  sources = ../../foo/input.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -666,6 +778,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustProcMacro) {
         "../../bar/mylib.rs ../../bar/lib.rs obj/baz/libmymacrodep.rlib\n"
         "  externs = --extern mymacrodep=obj/baz/libmymacrodep.rlib\n"
         "  rustdeps = -Ldependency=obj/baz\n"
+        "  ldflags =\n"
         "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -704,6 +817,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, RustProcMacro) {
         "../../foo/main.rs obj/bar/libmymacro.so\n"
         "  externs = --extern mymacro=obj/bar/libmymacro.so\n"
         "  rustdeps = -Ldependency=obj/bar\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -746,6 +860,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, GroupDeps) {
         "../../bar/mylib.rs ../../bar/lib.rs\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../bar/mylib.rs ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -791,6 +906,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, GroupDeps) {
         "../../foo/main.rs obj/bar/libmylib.rlib || obj/baz/group.stamp\n"
         "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
         "  rustdeps = -Ldependency=obj/bar\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -810,10 +926,14 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Externs) {
   target.source_types_used().Set(SourceFile::SOURCE_RS);
   target.rust_values().set_crate_root(main);
   target.rust_values().crate_name() = "foo_bar";
+
+  const char* lib = "lib1";
   target.config_values().externs().push_back(
-      std::pair("lib1", LibFile(SourceFile("//foo/lib1.rlib"))));
+      std::pair(lib, LibFile(SourceFile("//foo/lib1.rlib"))));
+  lib = "lib2";
   target.config_values().externs().push_back(
-      std::pair("lib2", LibFile("lib2.rlib")));
+      std::pair(lib, LibFile("lib2.rlib")));
+
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
@@ -838,6 +958,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Externs) {
         "  externs = --extern lib1=../../foo/lib1.rlib --extern "
         "lib2=lib2.rlib\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -884,6 +1005,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, Inputs) {
         "|| obj/foo/bar.inputs.stamp\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs "
         "../../foo/config.json ../../foo/template.h\n";
     std::string out_str = out.str();
@@ -924,6 +1046,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, CdylibDeps) {
         "../../bar/lib.rs\n"
         "  externs =\n"
         "  rustdeps =\n"
+        "  ldflags =\n"
         "  sources = ../../bar/lib.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -961,8 +1084,84 @@ TEST_F(NinjaRustBinaryTargetWriterTest, CdylibDeps) {
         "../../foo/main.rs obj/bar/libmylib.so\n"
         "  externs =\n"
         "  rustdeps = -Ldependency=obj/bar -Lnative=obj/bar "
-        "-Clink-arg=obj/bar/libmylib.so\n"
+        "-Clink-arg=-Bdynamic -Clink-arg=obj/bar/libmylib.so\n"
+        "  ldflags =\n"
         "  sources = ../../foo/source.rs ../../foo/main.rs\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+}
+
+TEST_F(NinjaRustBinaryTargetWriterTest, TransitivePublicNonRustDeps) {
+  Err err;
+  TestWithScope setup;
+
+  // This test verifies that the Rust binary "target" links against this lib.
+  Target implicitlib(setup.settings(), Label(SourceDir("//foo/"), "implicit"));
+  implicitlib.set_output_type(Target::SHARED_LIBRARY);
+  implicitlib.visibility().SetPublic();
+  implicitlib.sources().push_back(SourceFile("//foo/implicit.cpp"));
+  implicitlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  implicitlib.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(implicitlib.OnResolved(&err));
+
+  Target sharedlib(setup.settings(), Label(SourceDir("//foo/"), "shared"));
+  sharedlib.set_output_type(Target::SHARED_LIBRARY);
+  sharedlib.visibility().SetPublic();
+  sharedlib.sources().push_back(SourceFile("//foo/shared.cpp"));
+  sharedlib.source_types_used().Set(SourceFile::SOURCE_CPP);
+  sharedlib.SetToolchain(setup.toolchain());
+  sharedlib.public_deps().push_back(LabelTargetPair(&implicitlib));
+  ASSERT_TRUE(sharedlib.OnResolved(&err));
+
+  Target rlib(setup.settings(), Label(SourceDir("//bar/"), "mylib"));
+  rlib.set_output_type(Target::RUST_LIBRARY);
+  rlib.visibility().SetPublic();
+  SourceFile barlib("//bar/lib.rs");
+  rlib.sources().push_back(SourceFile("//bar/mylib.rs"));
+  rlib.sources().push_back(barlib);
+  rlib.source_types_used().Set(SourceFile::SOURCE_RS);
+  rlib.rust_values().set_crate_root(barlib);
+  rlib.rust_values().crate_name() = "mylib";
+  rlib.SetToolchain(setup.toolchain());
+  rlib.private_deps().push_back(LabelTargetPair(&sharedlib));
+  ASSERT_TRUE(rlib.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  SourceFile main("//foo/main.rs");
+  target.sources().push_back(main);
+  target.source_types_used().Set(SourceFile::SOURCE_RS);
+  target.rust_values().set_crate_root(main);
+  target.rust_values().crate_name() = "foo_bar";
+  target.private_deps().push_back(LabelTargetPair(&rlib));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  {
+    std::ostringstream out;
+    NinjaRustBinaryTargetWriter writer(&target, out);
+    writer.Run();
+
+    const char expected[] =
+        "crate_name = foo_bar\n"
+        "crate_type = bin\n"
+        "output_extension = \n"
+        "output_dir = \n"
+        "rustflags =\n"
+        "rustenv =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/foo\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build ./foo_bar: rust_bin ../../foo/main.rs | ../../foo/main.rs "
+        "obj/bar/libmylib.rlib ./libshared.so ./libimplicit.so\n"
+        "  externs = --extern mylib=obj/bar/libmylib.rlib\n"
+        "  rustdeps = -Ldependency=obj/bar -Lnative=. -Clink-arg=-Bdynamic "
+        "-Clink-arg=./libshared.so -Clink-arg=./libimplicit.so\n"
+        "  ldflags =\n"
+        "  sources = ../../foo/main.rs\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }

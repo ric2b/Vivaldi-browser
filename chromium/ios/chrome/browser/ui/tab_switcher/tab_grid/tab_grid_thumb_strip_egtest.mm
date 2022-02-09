@@ -92,10 +92,6 @@ id<GREYMatcher> cellWithLabel(NSString* label) {
 // plus button as the last item in the tab grid or a floating plus button on
 // the trailing edge of the thumb strip if the last item is offscreen.
 - (void)testBasicPlusButtonBehavior {
-  // TODO(crbug.com/1220137): This test is failing on iOS 15.
-  if (@available(iOS 15, *)) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 15 as it is failing.");
-  }
   // The feature only works on iPad.
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Thumb strip is not enabled on iPhone");
@@ -175,11 +171,6 @@ id<GREYMatcher> cellWithLabel(NSString* label) {
 }
 
 - (void)testTappingBackgroundClosesThumbStrip {
-  // TODO(crbug.com/1220137): This test is failing on iOS 15.
-  if (@available(iOS 15, *)) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 15 as it is failing.");
-  }
-
   // The feature only works on iPad.
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Thumb strip is not enabled on iPhone");
@@ -231,14 +222,41 @@ id<GREYMatcher> cellWithLabel(NSString* label) {
       assertWithMatcher:grey_notVisible()];
 }
 
+- (void)testSwappingUpBackgroundClosesThumbStrip {
+  // The feature only works on iPad.
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Thumb strip is not enabled on iPhone");
+  }
+
+  [self setUpTestServer];
+
+  const GURL URL = self.testServer->GetURL("/querytitle?Tab1");
+  [ChromeEarlGrey loadURL:URL];
+  [ChromeEarlGrey waitForWebStateContainingText:"Tab1"];
+
+  // Swipe down to reveal the thumb strip.
+  [[EarlGrey selectElementWithMatcher:PrimaryToolbar()]
+      performAction:grey_swipeSlowInDirection(kGREYDirectionDown)];
+
+  // Make sure that the entire tab thumbnail is fully visible and not covered.
+  // This acts as a good proxy to the entire thumbstrip being visible.
+  [[EarlGrey selectElementWithMatcher:cellWithLabel(@"Tab1")]
+      assertWithMatcher:grey_minimumVisiblePercent(1)];
+
+  // Now swipe up the background. This should dismiss the thumb strip.
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(TabGridBackground(),
+                                          grey_ancestor(RegularTabGrid()), nil)]
+      performAction:grey_swipeSlowInDirection(kGREYDirectionUp)];
+
+  // Check that the thumb strip is indeed dismissed.
+  [[EarlGrey selectElementWithMatcher:cellWithLabel(@"Tab1")]
+      assertWithMatcher:grey_notVisible()];
+}
+
 // After scrolling the thumb strip so the currently selected tab is offscreen,
 // when opening the thumb strip again, the selected tab should be back onscreen.
 - (void)testThumbnailVisibleWhenThumbStripOpens {
-  // TODO(crbug.com/1220137): This test is failing on iOS 15.
-  if (@available(iOS 15, *)) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 15 as it is failing.");
-  }
-
   // The feature only works on iPad.
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Thumb strip is not enabled on iPhone");
@@ -306,11 +324,6 @@ id<GREYMatcher> cellWithLabel(NSString* label) {
 // Tests that the plus button in the collection view actually opens a new tab
 // when pressed.
 - (void)testGridPlusButtonOpensNewTab {
-  // TODO(crbug.com/1220137): This test is failing on iOS 15.
-  if (@available(iOS 15, *)) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 15 as it is failing.");
-  }
-
   // The feature only works on iPad.
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Thumb strip is not enabled on iPhone");
@@ -352,11 +365,6 @@ id<GREYMatcher> cellWithLabel(NSString* label) {
 
 // Tests that the floating plus button actually opens a new tab when pressed.
 - (void)testFloatingPlusButtonOpensNewTab {
-  // TODO(crbug.com/1220137): This test is failing on iOS 15.
-  if (@available(iOS 15, *)) {
-    EARL_GREY_TEST_DISABLED(@"Disabled on iOS 15 as it is failing.");
-  }
-
   // The feature only works on iPad.
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Thumb strip is not enabled on iPhone");

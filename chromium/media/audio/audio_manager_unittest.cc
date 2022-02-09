@@ -14,11 +14,11 @@
 #include "base/environment.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/test_message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -348,7 +348,7 @@ class AudioManagerTest : public ::testing::Test {
 #endif  // defined(USE_CRAS) && BUILDFLAG(IS_CHROMEOS_ASH)
 
  protected:
-  AudioManagerTest() {
+  AudioManagerTest() : message_loop_(base::MessagePumpType::IO) {
     CreateAudioManagerForTesting();
   }
   ~AudioManagerTest() override { audio_manager_->Shutdown(); }

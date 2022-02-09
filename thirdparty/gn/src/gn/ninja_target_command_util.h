@@ -92,7 +92,8 @@ struct IncludeWriter {
 // The tool_type indicates the corresponding tool for flags that are
 // tool-specific (e.g. "cflags_c"). For non-tool-specific flags (e.g.
 // "defines") tool_type should be TYPE_NONE.
-void WriteOneFlag(const Target* target,
+void WriteOneFlag(RecursiveWriterConfig config,
+                  const Target* target,
                   const Substitution* subst_enum,
                   bool has_precompiled_headers,
                   const char* tool_name,

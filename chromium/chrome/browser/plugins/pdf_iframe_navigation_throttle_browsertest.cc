@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/ui/browser.h"
@@ -32,10 +33,7 @@ using content::test::PrerenderHostRegistryObserver;
 class BlockAllPluginServiceFilter : public content::PluginServiceFilter {
  public:
   bool IsPluginAvailable(int render_process_id,
-                         int render_view_id,
-                         const GURL& url,
-                         const url::Origin& main_frame_origin,
-                         content::WebPluginInfo* plugin) override {
+                         const content::WebPluginInfo& plugin) override {
     return false;
   }
 
@@ -82,7 +80,7 @@ class PDFIFrameNavigationThrottleBrowserTest : public InProcessBrowserTest {
 
  protected:
   content::test::PrerenderTestHelper prerender_helper_;
-  content::PluginServiceFilter* old_plugin_service_filter_;
+  raw_ptr<content::PluginServiceFilter> old_plugin_service_filter_;
   BlockAllPluginServiceFilter block_all_plugins_;
 };
 

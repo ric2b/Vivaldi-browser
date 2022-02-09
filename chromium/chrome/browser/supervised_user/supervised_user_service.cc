@@ -60,9 +60,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/settings/cros_settings_names.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/supervised_user_manager.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "components/user_manager/user_manager.h"
 #endif
 
@@ -119,12 +119,6 @@ const char* const kCustodianInfoPrefs[] = {
     prefs::kSupervisedUserSecondCustodianProfileImageURL,
     prefs::kSupervisedUserSecondCustodianProfileURL,
 };
-
-void CreateURLAccessRequest(const GURL& url,
-                            PermissionRequestCreator* creator,
-                            SupervisedUserService::SuccessCallback callback) {
-  creator->CreateURLAccessRequest(url, std::move(callback));
-}
 
 base::FilePath GetDenylistPath(base::StringPiece filePrefix) {
   base::FilePath denylist_dir;
@@ -212,21 +206,6 @@ SupervisedUserURLFilter* SupervisedUserService::GetURLFilter() {
   return &url_filter_;
 }
 
-bool SupervisedUserService::AccessRequestsEnabled() {
-  return FindEnabledPermissionRequestCreator(0) < permissions_creators_.size();
-}
-
-void SupervisedUserService::AddURLAccessRequest(const GURL& url,
-                                                SuccessCallback callback) {
-  GURL effective_url = policy::url_util::GetEmbeddedURL(url);
-  if (!effective_url.is_valid())
-    effective_url = url;
-  AddPermissionRequestInternal(
-      base::BindRepeating(CreateURLAccessRequest,
-                          policy::url_util::Normalize(effective_url)),
-      std::move(callback), 0);
-}
-
 // static
 std::string SupervisedUserService::GetExtensionRequestId(
     const std::string& extension_id,
@@ -298,9 +277,7 @@ std::u16string SupervisedUserService::GetExtensionsLockedMessage() const {
 
 // static
 std::string SupervisedUserService::GetEduCoexistenceLoginUrl() {
-  return base::FeatureList::IsEnabled(supervised_users::kEduCoexistenceFlowV2)
-             ? chrome::kChromeUIEDUCoexistenceLoginURLV2
-             : chrome::kChromeUIEDUCoexistenceLoginURLV1;
+  return chrome::kChromeUIEDUCoexistenceLoginURLV2;
 }
 
 bool SupervisedUserService::IsChild() const {
@@ -322,11 +299,6 @@ void SupervisedUserService::RemoveObserver(
   observer_list_.RemoveObserver(observer);
 }
 
-void SupervisedUserService::AddPermissionRequestCreator(
-    std::unique_ptr<PermissionRequestCreator> creator) {
-  permissions_creators_.push_back(std::move(creator));
-}
-
 SupervisedUserService::SupervisedUserService(Profile* profile)
     : profile_(profile),
       active_(false),
@@ -339,18 +311,6 @@ SupervisedUserService::SupervisedUserService(Profile* profile)
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   registry_observation_.Observe(extensions::ExtensionRegistry::Get(profile));
 #endif
-}
-
-void SupervisedUserService::SetPrimaryPermissionCreatorForTest(
-    std::unique_ptr<PermissionRequestCreator> permission_creator) {
-  if (permissions_creators_.empty()) {
-    permissions_creators_.push_back(std::move(permission_creator));
-    return;
-  }
-
-  // Else there are other permission creators.
-  permissions_creators_.insert(permissions_creators_.begin(),
-                               std::move(permission_creator));
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -521,7 +481,7 @@ void SupervisedUserService::SetActive(bool active) {
     BrowserList::AddObserver(this);
 #endif
   } else {
-    permissions_creators_.clear();
+    web_approvals_manager_.ClearRemoteApprovalRequestsCreators();
 
     pref_change_registrar_.Remove(
         prefs::kDefaultSupervisedUserFilteringBehavior);
@@ -560,46 +520,6 @@ PrefService* SupervisedUserService::GetPrefService() {
   PrefService* pref_service = profile_->GetPrefs();
   DCHECK(pref_service) << "PrefService not found";
   return pref_service;
-}
-
-size_t SupervisedUserService::FindEnabledPermissionRequestCreator(
-    size_t start) {
-  for (size_t i = start; i < permissions_creators_.size(); ++i) {
-    if (permissions_creators_[i]->IsEnabled())
-      return i;
-  }
-  return permissions_creators_.size();
-}
-
-void SupervisedUserService::AddPermissionRequestInternal(
-    const CreatePermissionRequestCallback& create_request,
-    SuccessCallback callback,
-    size_t index) {
-  // Find a permission request creator that is enabled.
-  size_t next_index = FindEnabledPermissionRequestCreator(index);
-  if (next_index >= permissions_creators_.size()) {
-    std::move(callback).Run(false);
-    return;
-  }
-
-  create_request.Run(
-      permissions_creators_[next_index].get(),
-      base::BindOnce(&SupervisedUserService::OnPermissionRequestIssued,
-                     weak_ptr_factory_.GetWeakPtr(), create_request,
-                     std::move(callback), next_index));
-}
-
-void SupervisedUserService::OnPermissionRequestIssued(
-    const CreatePermissionRequestCallback& create_request,
-    SuccessCallback callback,
-    size_t index,
-    bool success) {
-  if (success) {
-    std::move(callback).Run(true);
-    return;
-  }
-
-  AddPermissionRequestInternal(create_request, std::move(callback), index + 1);
 }
 
 void SupervisedUserService::OnSupervisedUserIdChanged() {

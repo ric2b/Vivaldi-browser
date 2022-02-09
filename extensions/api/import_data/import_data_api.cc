@@ -11,6 +11,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -110,6 +111,44 @@ bool ProfileSingletonFactory::getProfileRequested() {
 }
 
 namespace {
+
+// A getline function that deals with cross-platform line endings. See:
+// https://stackoverflow.com/questions/6089231/getting-std-ifstream-to-handle-lf-cr-and-crlf
+// Also tells us wheter line ended with both cr and lf.
+std::istream& safeGetline(std::istream& is, std::string& line, bool& crlf) {
+  line.clear();
+
+  // The characters in the stream are read one-by-one using a std::streambuf.
+  // That is faster than reading them one-by-one using the std::istream.
+  // Code that uses streambuf this way must be guarded by a sentry object.
+  // The sentry object performs various tasks,
+  // such as thread synchronization and updating the stream state.
+
+  std::istream::sentry se(is, true);
+  std::streambuf* sb = is.rdbuf();
+
+  crlf = false;
+  for(;;) {
+    int c = sb->sbumpc();
+    switch (c) {
+    case '\n':
+      return is;
+    case '\r':
+      if(sb->sgetc() == '\n') {
+        crlf = true;
+        sb->sbumpc();
+      }
+      return is;
+    case std::streambuf::traits_type::eof():
+      // Also handle the case when the last line has no line ending
+      if (line.empty())
+        is.setstate(std::ios::eofbit);
+      return is;
+    default:
+      line += (char)c;
+    }
+  }
+}
 
 // These are really flags, but never sent as flags.
 static struct ImportItemToStringMapping {
@@ -221,6 +260,90 @@ void ImportDataAPI::ImportEnded() {
       browser_context_);
 }
 
+bool ImportDataAPI::OpenThunderbirdMailbox(std::string path, int seek_pos) {
+  if (!thunderbird_mailbox_path_.empty()) {
+    if (thunderbird_mailbox_path_ == path) {
+      // This mailbox already open. Only seek.
+      thunderbird_mailbox_.seekg(seek_pos);
+      return true;
+    } else {
+      //New path. close the old one.
+      thunderbird_mailbox_.close();
+      if (path.empty()) {
+        return true;
+      }
+    }
+  }
+  thunderbird_mailbox_path_ = path;
+
+#if defined(OS_WIN)
+  std::wstring wpath;
+  base::UTF8ToWide(path.c_str(), path.size(), &wpath);
+  thunderbird_mailbox_.open(wpath.c_str(), std::ios::binary);
+#else
+  thunderbird_mailbox_.open(path, std::ios::binary);
+#endif  // defined(OS_WIN)
+
+  thunderbird_mailbox_.seekg(seek_pos);
+  if (thunderbird_mailbox_.fail()) {
+    return false;
+  }
+  return true;
+}
+
+bool ImportDataAPI::ReadThunderbirdMessage(std::string& content,
+                                           int& seek_pos) {
+  if (thunderbird_mailbox_path_.empty()) {
+    return false;
+  }
+  std::string line;
+  bool first_pass = true;
+  bool crlf_ending;
+
+  while (safeGetline(thunderbird_mailbox_, line, crlf_ending)) {
+    // Message must start with 'From '.
+    if (first_pass && line.rfind("From ", 0) != 0) {
+      break;
+    }
+
+    // Saves a little bit of time.
+    if (line.length() > 0 && line[0] == 'F') {
+
+      // Test whether line begin with "From " and is a potential header.
+      if (line.rfind("From ", 0) == 0 && !first_pass) {
+
+        // Keep this line in case of false positive.
+        std::string from_buffer = line;
+
+        // Keep track of header length, i.e. backwards seek for next read.
+        int seek = line.length() + (crlf_ending ? 2 : 1);
+
+        if (safeGetline(thunderbird_mailbox_, line, crlf_ending)) {
+          // Found start of next message. Put the header back and bail.
+          if (line.rfind("X-", 0) == 0) {
+            seek += line.length() + (crlf_ending ? 2 : 1);
+            thunderbird_mailbox_.seekg(-seek, std::ios::cur);
+            break;
+          // False positive. Innocent 'From ' spotted in message.
+          } else {
+            content += from_buffer;
+            content += '\n';
+            seek = line.length() + (crlf_ending ? 2 : 1);
+            thunderbird_mailbox_.seekg(-seek, std::ios::cur);
+            continue;
+          }
+        }
+      }
+    }
+    first_pass = false;
+    content += line;
+    content += '\n';
+  }
+
+  seek_pos = thunderbird_mailbox_.tellg();
+  return true;
+}
+
 static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI>>::
     DestructorAtExit g_factory_import = LAZY_INSTANCE_INITIALIZER;
 
@@ -228,6 +351,85 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI>>::
 BrowserContextKeyedAPIFactory<ImportDataAPI>*
 ImportDataAPI::GetFactoryInstance() {
   return g_factory_import.Pointer();
+}
+
+vivaldi::import_data::ImportTypes MapImportType(
+    const importer::ImporterType& importer_type) {
+  vivaldi::import_data::ImportTypes type;
+  switch (importer_type) {
+#if defined(OS_WIN)
+    case importer::TYPE_IE:
+      type = vivaldi::import_data::IMPORT_TYPES_INTERNET_EXPLORER;
+      break;
+#endif
+    case importer::TYPE_FIREFOX:
+      type = vivaldi::import_data::IMPORT_TYPES_FIREFOX;
+      break;
+#if defined(OS_MAC)
+    case importer::TYPE_SAFARI:
+      type = vivaldi::import_data::IMPORT_TYPES_SAFARI;
+      break;
+#endif
+    case importer::TYPE_BOOKMARKS_FILE:
+      type = vivaldi::import_data::IMPORT_TYPES_BOOKMARKS_FILE;
+      break;
+
+    case importer::TYPE_OPERA:
+      type = vivaldi::import_data::IMPORT_TYPES_OPERA;
+      break;
+
+    case importer::TYPE_OPERA_BOOKMARK_FILE:
+      type = vivaldi::import_data::IMPORT_TYPES_OPERA_BOOKMARK;
+      break;
+
+    case importer::TYPE_CHROME:
+      type = vivaldi::import_data::IMPORT_TYPES_CHROME;
+      break;
+
+    case importer::TYPE_CHROMIUM:
+      type = vivaldi::import_data::IMPORT_TYPES_CHROMIUM;
+      break;
+
+    case importer::TYPE_VIVALDI:
+      type = vivaldi::import_data::IMPORT_TYPES_VIVALDI;
+      break;
+
+    case importer::TYPE_YANDEX:
+      type = vivaldi::import_data::IMPORT_TYPES_YANDEX;
+      break;
+
+    case importer::TYPE_OPERA_OPIUM_BETA:
+      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM_BETA;
+      break;
+
+    case importer::TYPE_OPERA_OPIUM_DEV:
+      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM_DEV;
+      break;
+    case importer::TYPE_BRAVE:
+      type = vivaldi::import_data::IMPORT_TYPES_BRAVE;
+      break;
+#if defined(OS_WIN)
+    case importer::TYPE_EDGE:
+      type = vivaldi::import_data::IMPORT_TYPES_EDGE;
+      break;
+#endif
+    case importer::TYPE_EDGE_CHROMIUM:
+      type = vivaldi::import_data::IMPORT_TYPES_EDGE_CHROMIUM;
+      break;
+
+    case importer::TYPE_THUNDERBIRD:
+      type = vivaldi::import_data::IMPORT_TYPES_THUNDERBIRD;
+      break;
+
+    case importer::TYPE_OPERA_OPIUM:
+      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM;
+      break;
+
+    case importer::TYPE_UNKNOWN:
+      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM;
+      break;
+  }
+  return type;
 }
 
 ImportDataGetProfilesFunction::ImportDataGetProfilesFunction() {}
@@ -276,6 +478,7 @@ void ImportDataGetProfilesFunction::Finished() {
 #else
         source_profile.source_path.value();
 #endif  // defined(OS_WIN)
+    profile->import_type = MapImportType(source_profile.importer_type);
 
     profile->mail_path =
 #if defined(OS_WIN)
@@ -418,6 +621,44 @@ void ImportDataStartImportFunction::StartImport(
   ImportDataAPI::GetFactoryInstance()
       ->Get(browser_context())
       ->StartImport(source_profile, imported_items_);
+}
+
+ExtensionFunction::ResponseAction
+ImportDataOpenThunderbirdMailboxFunction::Run() {
+  using vivaldi::import_data::OpenThunderbirdMailbox::Params;
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  bool success = ImportDataAPI::GetFactoryInstance()
+      ->Get(browser_context())
+      ->OpenThunderbirdMailbox(params->path, *params->seek_position.get());
+
+  if (!success) {
+    return RespondNow(Error(base::StringPrintf("Couldn't open file %s",
+        params->path.c_str())));
+  }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+ImportDataReadMessageFromThunderbirdMailboxFunction::Run() {
+  namespace Results =
+    vivaldi::import_data::ReadMessageFromThunderbirdMailbox::Results;
+  std::string content;
+  int seek_pos;
+  bool success = ImportDataAPI::GetFactoryInstance()
+      ->Get(browser_context())
+      ->ReadThunderbirdMessage(content, seek_pos);
+  if (!success) {
+    std::string path = ImportDataAPI::GetFactoryInstance()
+      ->Get(browser_context())->GetThunderbirdPath();
+    if (path.empty()) {
+      return RespondNow(Error(base::StringPrintf("Mailbox not open.")));
+    } else {
+      return RespondNow(Error(base::StringPrintf("Couldn't read file %s",
+          path.c_str())));
+    }
+  }
+  return RespondNow(ArgumentList(Results::Create(content, seek_pos)));
 }
 
 }  // namespace extensions

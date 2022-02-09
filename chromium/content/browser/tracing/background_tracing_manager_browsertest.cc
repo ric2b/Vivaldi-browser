@@ -12,7 +12,6 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
@@ -398,6 +397,11 @@ class BackgroundTracingManagerBrowserTest : public ContentBrowserTest {
     tracing::PerfettoTracedProcess::SetSystemProducerEnabledForTesting(true);
   }
 
+  BackgroundTracingManagerBrowserTest(
+      const BackgroundTracingManagerBrowserTest&) = delete;
+  BackgroundTracingManagerBrowserTest& operator=(
+      const BackgroundTracingManagerBrowserTest&) = delete;
+
   void PreRunTestOnMainThread() override {
     BackgroundTracingManagerImpl::GetInstance()
         ->InvalidateTriggerHandlesForTesting();
@@ -410,8 +414,6 @@ class BackgroundTracingManagerBrowserTest : public ContentBrowserTest {
  private:
   base::ScopedTempDir tmp_dir_;
   base::test::ScopedFeatureList feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(BackgroundTracingManagerBrowserTest);
 };
 
 std::unique_ptr<BackgroundTracingConfig> CreatePreemptiveConfig() {

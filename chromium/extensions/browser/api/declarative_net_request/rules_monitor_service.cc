@@ -88,8 +88,7 @@ bool ShouldReleaseAllocationOnUnload(const ExtensionPrefs* prefs,
                                      UnloadedExtensionReason reason) {
   if (reason == UnloadedExtensionReason::DISABLE) {
     static constexpr int kReleaseAllocationDisableReasons =
-        disable_reason::DISABLE_BLOCKED_BY_POLICY |
-        disable_reason::DISABLE_REMOTELY_FOR_MALWARE;
+        disable_reason::DISABLE_BLOCKED_BY_POLICY;
 
     // Release allocation on reload of an unpacked extension and treat it as a
     // new install since the extension directory's contents may have changed.
@@ -406,7 +405,7 @@ RulesMonitorService::RulesMonitorService(
       ruleset_manager_(browser_context),
       action_tracker_(browser_context),
       global_rules_tracker_(prefs_, extension_registry_) {
-  registry_observation_.Observe(extension_registry_);
+  registry_observation_.Observe(extension_registry_.get());
 }
 
 RulesMonitorService::~RulesMonitorService() = default;

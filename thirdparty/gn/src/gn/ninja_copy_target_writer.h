@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_COPY_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_COPY_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/ninja_target_writer.h"
 
 // Writes a .ninja file for a copy target type.
@@ -21,7 +20,8 @@ class NinjaCopyTargetWriter : public NinjaTargetWriter {
   // name(s) into the given vector.
   void WriteCopyRules(std::vector<OutputFile>* output_files);
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaCopyTargetWriter);
+  NinjaCopyTargetWriter(const NinjaCopyTargetWriter&) = delete;
+  NinjaCopyTargetWriter& operator=(const NinjaCopyTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_COPY_TARGET_WRITER_H_

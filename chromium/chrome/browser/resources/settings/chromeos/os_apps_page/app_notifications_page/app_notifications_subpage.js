@@ -9,18 +9,20 @@ import 'chrome://resources/mojo/skia/public/mojom/bitmap.mojom-lite.js';
 import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
 import '/app-management/file_path.mojom-lite.js';
 import '/app-management/image.mojom-lite.js';
+import '/app-management/safe_base_name.mojom-lite.js';
 import '/app-management/types.mojom-lite.js';
 import '/os_apps_page/app_notification_handler.mojom-lite.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, RouteObserverBehaviorInterface, Router} from '../../../router.js';
+import {Route, Router} from '../../../router.js';
 import {DeepLinkingBehavior, DeepLinkingBehaviorInterface} from '../../deep_linking_behavior.m.js';
 import {recordSettingChange} from '../../metrics_recorder.m.js';
 import {routes} from '../../os_route.m.js';
-
+import {RouteObserverBehavior, RouteObserverBehaviorInterface} from '../../route_observer_behavior.js';
 import {isAppInstalled} from '../os_apps_page.js';
+
 import {getAppNotificationProvider} from './mojo_interface_provider.js';
 
 /**
@@ -104,7 +106,9 @@ export class AppNotificationsSubpage extends AppNotificationsSubpageBase {
   connectedCallback() {
     super.connectedCallback();
     this.startObservingAppNotifications_();
-    this.mojoInterfaceProvider_.notifyPageReady();
+    this.mojoInterfaceProvider_.getQuietMode().then((result) => {
+      this.isDndEnabled_ = result.enabled;
+    });
     this.mojoInterfaceProvider_.getApps().then((result) => {
       this.appList_ = result.apps;
     });

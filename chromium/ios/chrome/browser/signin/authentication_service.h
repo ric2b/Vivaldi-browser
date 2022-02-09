@@ -13,8 +13,8 @@
 #include "base/scoped_observation.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
-#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/user_approved_account_list_manager.h"
@@ -178,8 +178,11 @@ class AuthenticationService : public KeyedService,
   //
   // |should_prompt| indicates whether the user should be prompted with the
   // resign-in infobar if the method signs out.
+  // |device_restore| should be true only when called from |Initialize()| and
+  // Chrome is started after a device restore.
   void HandleForgottenIdentity(ChromeIdentity* invalid_identity,
-                               bool should_prompt);
+                               bool should_prompt,
+                               bool device_restore);
 
   // Checks if the authenticated identity was removed by calling
   // |HandleForgottenIdentity|. Reloads the OAuth2 token service accounts if the

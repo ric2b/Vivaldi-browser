@@ -5,7 +5,7 @@
 /**
  * @fileoverview
  * 'settings-prefs' exposes a singleton model of Chrome settings and
- * preferences, which listens to changes to Chrome prefs whitelisted in
+ * preferences, which listens to changes to Chrome prefs allowed in
  * chrome.settingsPrivate. When changing prefs in this element's 'prefs'
  * property via the UI, the singleton model tries to set those preferences in
  * Chrome. Whether or not the calls to settingsPrivate.setPref succeed, 'prefs'
@@ -13,7 +13,7 @@
  */
 
 import {assert} from '//resources/js/assert.m.js';
-import {html, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {CrSettingsPrefs} from './prefs_types.js';
 
@@ -350,6 +350,12 @@ export class SettingsPrefsElement extends PolymerElement {
     // Remove the listener added in initialize().
     this.settingsApi_.onPrefsChanged.removeListener(this.boundPrefsChanged_);
     this.settingsApi_ = chrome.settingsPrivate;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-prefs': SettingsPrefsElement;
   }
 }
 

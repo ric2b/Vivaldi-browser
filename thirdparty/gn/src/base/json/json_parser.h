@@ -16,7 +16,6 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
 
 namespace base {
 
@@ -248,7 +247,8 @@ class JSONParser {
   FRIEND_TEST_ALL_PREFIXES(JSONParserTest, ReplaceInvalidCharacters);
   FRIEND_TEST_ALL_PREFIXES(JSONParserTest, ReplaceInvalidUTF16EscapeSequence);
 
-  DISALLOW_COPY_AND_ASSIGN(JSONParser);
+  JSONParser(const JSONParser&) = delete;
+  JSONParser& operator=(const JSONParser&) = delete;
 };
 
 // Used when decoding and an invalid utf-8 sequence is encountered.

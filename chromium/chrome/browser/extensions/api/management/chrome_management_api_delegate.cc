@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -61,13 +61,14 @@
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/arc/arc_util.h"
+#include "ash/components/arc/mojom/intent_helper.mojom.h"
+#include "ash/components/arc/session/arc_bridge_service.h"
+#include "ash/components/arc/session/arc_service_manager.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "components/arc/arc_service_manager.h"
-#include "components/arc/arc_util.h"
-#include "components/arc/mojom/intent_helper.mojom.h"
-#include "components/arc/session/arc_bridge_service.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -221,7 +222,7 @@ class ManagementUninstallFunctionUninstallDialogDelegate
   }
 
  private:
-  extensions::ManagementUninstallFunctionBase* function_;
+  raw_ptr<extensions::ManagementUninstallFunctionBase> function_;
   std::unique_ptr<extensions::ExtensionUninstallDialog>
       extension_uninstall_dialog_;
 };
@@ -253,7 +254,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     // Avoid accessing the WebAppProvider when web apps are enabled in Lacros
     // (and thus disabled in Ash).
-    if (base::FeatureList::IsEnabled(features::kWebAppsCrosapi)) {
+    if (web_app::IsWebAppsCrosapiEnabled()) {
       function->FinishCreateWebApp(std::string(),
                                    /*install_success=*/false);
       return;
@@ -368,7 +369,7 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
       ->BrowserAppLauncher()
       ->LaunchAppWithParams(apps::AppLaunchParams(
           app_id, launch_container, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          apps::mojom::AppLaunchSource::kSourceManagementApi));
+          apps::mojom::LaunchSource::kFromManagementApi));
 }
 
 void OnWebAppInstallCompleted(InstallOrLaunchWebAppCallback callback,
@@ -439,10 +440,10 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   }
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      ->LaunchAppWithParams(apps::AppLaunchParams(
-          extension->id(), launch_container,
-          WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          apps::mojom::AppLaunchSource::kSourceManagementApi));
+      ->LaunchAppWithParams(
+          apps::AppLaunchParams(extension->id(), launch_container,
+                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                apps::mojom::LaunchSource::kFromManagementApi));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::DemoSession::RecordAppLaunchSourceIfInDemoMode(
@@ -553,7 +554,7 @@ void ChromeManagementAPIDelegate::InstallOrLaunchReplacementWebApp(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Avoid accessing the WebAppProvider when web apps are enabled in Lacros (and
   // thus disabled in Ash).
-  if (base::FeatureList::IsEnabled(features::kWebAppsCrosapi)) {
+  if (web_app::IsWebAppsCrosapiEnabled()) {
     std::move(callback).Run(InstallOrLaunchWebAppResult::kUnknownError);
     return;
   }

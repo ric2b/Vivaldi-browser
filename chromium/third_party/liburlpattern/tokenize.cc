@@ -5,9 +5,11 @@
 
 #include "third_party/liburlpattern/tokenize.h"
 
+#include "base/compiler_specific.h"
 #include "third_party/abseil-cpp/absl/strings/str_format.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/utf8.h"
+#include "third_party/liburlpattern/utils.h"
 
 // The following code is a translation from the path-to-regexp typescript at:
 //
@@ -23,24 +25,6 @@ bool IsASCII(UChar32 c) {
   return c >= 0x00 && c <= 0x7f;
 }
 
-bool IsNameCodepoint(UChar32 c, bool first_codepoint) {
-  // Require group names to follow the same character restrictions as
-  // javascript identifiers.  This code originates from v8 at:
-  //
-  // https://source.chromium.org/chromium/chromium/src/+/master:v8/src/strings/char-predicates.cc;l=17-34;drc=be014256adea1552d4a044ef80616cdab6a7d549
-  //
-  // We deviate from js identifiers, however, in not support the backslash
-  // character.  This is mainly used in js identifiers to allow escaped
-  // unicode sequences to be written in ascii.  The js engine, however,
-  // should take care of this long before we reach this level of code.  So
-  // we don't need to handle it here.
-  if (first_codepoint) {
-    return u_hasBinaryProperty(c, UCHAR_ID_START) || c == '$' || c == '_';
-  }
-  return u_hasBinaryProperty(c, UCHAR_ID_CONTINUE) || c == '$' || c == '_' ||
-         c == 0x200c || c == 0x200d;
-}
-
 class Tokenizer {
  public:
   Tokenizer(absl::string_view pattern, TokenizePolicy policy)
@@ -53,7 +37,10 @@ class Tokenizer {
       if (!status_.ok())
         return std::move(status_);
 
-      NextAt(index_);
+      if (!NextAt(index_)) {
+        Error(absl::StrFormat("Invalid UTF-8 codepoint at index %d.", index_));
+        continue;
+      }
       if (codepoint_ == '*') {
         AddToken(TokenType::kAsterisk);
         continue;
@@ -73,7 +60,12 @@ class Tokenizer {
           continue;
         }
         size_t escaped_i = next_index_;
-        Next();
+        if (!Next()) {
+          Error(absl::StrFormat("Invalid UTF-8 codepoint at index %d.",
+                                next_index_));
+          continue;
+        }
+
         AddToken(TokenType::kEscapedChar, next_index_, escaped_i);
         continue;
       }
@@ -94,7 +86,12 @@ class Tokenizer {
 
         // Iterate over codepoints until we find the first non-name codepoint.
         while (pos < pattern_.size()) {
-          NextAt(pos);
+          if (!status_.ok())
+            return std::move(status_);
+          if (!NextAt(pos)) {
+            Error(absl::StrFormat("Invalid UTF-8 codepoint at index %d.", pos));
+            continue;
+          }
           if (!IsNameCodepoint(codepoint_, pos == name_start))
             break;
           pos = next_index_;
@@ -117,7 +114,11 @@ class Tokenizer {
         bool error = false;
 
         while (j < pattern_.size()) {
-          NextAt(j);
+          if (!NextAt(j)) {
+            Error(absl::StrFormat("Invalid UTF-8 codepoint at index %d.", j));
+            error = true;
+            break;
+          }
 
           if (!IsASCII(codepoint_)) {
             Error(absl::StrFormat(
@@ -149,7 +150,12 @@ class Tokenizer {
               break;
             }
             size_t escaped_j = next_index_;
-            Next();
+            if (!Next()) {
+              Error(absl::StrFormat("Invalid UTF-8 codepoint at index %d.",
+                                    next_index_));
+              error = true;
+              break;
+            }
             if (!IsASCII(codepoint_)) {
               Error(absl::StrFormat(
                         "Invalid non-ASCII character 0x%02x at index %d.",
@@ -177,7 +183,12 @@ class Tokenizer {
               break;
             }
             size_t tmp_j = next_index_;
-            Next();
+            if (!Next()) {
+              Error(absl::StrFormat("Invalid UTF-8 codepoint at index %d.",
+                                    next_index_));
+              error = true;
+              break;
+            }
             // Require the the first character after an open paren is `?`.  This
             // permits assertions, named capture groups, and non-capturing
             // groups. It blocks, however, unnamed capture groups.
@@ -229,17 +240,20 @@ class Tokenizer {
  private:
   // Read the codepoint at `next_index_` in `pattern_` and store it in
   // `codepoint_`.  In addition, `next_index_` is updated to the codepoint to be
-  // read next.
-  void Next() {
+  // read next.  Returns true iff the codepoint was read successfully. On
+  // success, `codepoint_` is non-negative.
+  bool Next() WARN_UNUSED_RESULT {
     U8_NEXT(pattern_.data(), next_index_, pattern_.size(), codepoint_);
+    return codepoint_ >= 0;
   }
 
   // Read the codepoint at the specified `index` in `pattern_` and store it in
   // `codepoint_`.  In addition, `next_index_` is updated to the codepoint to be
-  // read next.
-  void NextAt(size_t index) {
+  // read next.  Returns true iff the codepoint was read successfully. On
+  // success, `codepoint_` is non-negative.
+  bool NextAt(size_t index) WARN_UNUSED_RESULT {
     next_index_ = index;
-    Next();
+    return Next();
   }
 
   // Append a Token to our list of the given `type` and with a value consisting

@@ -5,13 +5,19 @@
 #ifndef ASH_APP_LIST_VIEWS_SEARCH_BOX_VIEW_H_
 #define ASH_APP_LIST_VIEWS_SEARCH_BOX_VIEW_H_
 
+#include <stdint.h>
+
 #include <vector>
 
+#include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/app_list_view_delegate.h"
+#include "ash/app_list/model/search/search_box_model.h"
 #include "ash/app_list/model/search/search_box_model_observer.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/search_box/search_box_view_base.h"
+#include "base/scoped_observation.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace views {
 class Textfield;
@@ -24,7 +30,6 @@ class AppListView;
 class AppListViewDelegate;
 class ContentsView;
 class ResultSelectionController;
-class SearchModel;
 class SearchResultBaseView;
 
 // Subclass of SearchBoxViewBase. SearchBoxModel is its data model
@@ -32,6 +37,7 @@ class SearchResultBaseView;
 // Textfield. The text and selection model part could be set to change the
 // contents and selection model of the Textfield.
 class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
+                                 public AppListModelProvider::Observer,
                                  public SearchBoxModelObserver {
  public:
   SearchBoxView(SearchBoxViewDelegate* delegate,
@@ -59,9 +65,10 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
 
   // Overridden from SearchBoxViewBase:
   void Init(const InitParams& params) override;
+  void UpdateSearchTextfieldAccessibleNodeData(
+      ui::AXNodeData* node_data) override;
   void ClearSearch() override;
   void HandleSearchBoxEvent(ui::LocatedEvent* located_event) override;
-  void ModelChanged() override;
   void UpdateKeyboardVisibility() override;
   void UpdateModel(bool initiated_by_user) override;
   void UpdateSearchIcon() override;
@@ -73,7 +80,12 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
   void RecordSearchBoxActivationHistogram(ui::EventType event_type) override;
   void OnSearchBoxActiveChanged(bool active) override;
 
+  // AppListModelProvider::Observer:
+  void OnActiveAppListModelsChanged(AppListModel* model,
+                                    SearchModel* search_model) override;
+
   // Overridden from views::View:
+  void OnKeyEvent(ui::KeyEvent* event) override;
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
@@ -108,14 +120,17 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
   // Clears the search query and de-activate the search box.
   void ClearSearchAndDeactivateSearchBox();
 
+  // Sets the view accessibility ID of the search box's active descendant.
+  // The active descendant should be the currently selected result view in the
+  // search results list.
+  // `nullopt` indicates no active descendant, i.e. that no result is selected.
+  void SetA11yActiveDescendant(
+      const absl::optional<int32_t>& active_descendant);
+
   void set_contents_view(ContentsView* contents_view) {
     contents_view_ = contents_view;
   }
   ContentsView* contents_view() { return contents_view_; }
-
-  void set_a11y_selection_on_search_result(bool value) {
-    a11y_selection_on_search_result_ = value;
-  }
 
   ResultSelectionController* result_selection_controller_for_test() {
     return result_selection_controller_;
@@ -189,7 +204,6 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
   ui::KeyboardCode last_key_pressed_ = ui::VKEY_UNKNOWN;
 
   AppListViewDelegate* const view_delegate_;
-  SearchModel* search_model_ = nullptr;  // Owned by the profile-keyed service.
 
   // Owned by views hierarchy. May be null for bubble launcher.
   AppListView* const app_list_view_;
@@ -204,12 +218,16 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
   bool is_tablet_mode_;
 
   // Set by SearchResultPageView when the accessibility selection moves to a
-  // search result view.
-  bool a11y_selection_on_search_result_ = false;
+  // search result view - the value is the ID of the currently selected result
+  // view.
+  absl::optional<int32_t> a11y_active_descendant_;
 
   // Owned by SearchResultPageView (for fullscreen launcher) or
-  // AppListBubbleSearchPage (for bubble launcher).
+  // ProductivityLauncherSearchPage (for bubble launcher).
   ResultSelectionController* result_selection_controller_ = nullptr;
+
+  base::ScopedObservation<SearchBoxModel, SearchBoxModelObserver>
+      search_box_model_observer_{this};
 
   base::WeakPtrFactory<SearchBoxView> weak_ptr_factory_{this};
 };

@@ -18,7 +18,7 @@
 #include "base/files/file.h"
 #include "base/location.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "storage/browser/file_system/file_system_backend.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/common/file_system/file_system_types.h"
@@ -165,7 +165,7 @@ void FileSystemQuotaClient::GetStorageKeyUsage(
           base::BindOnce(
               &FileSystemQuotaUtil::GetStorageKeyUsageOnFileTaskRunner,
               base::Unretained(quota_util),
-              base::RetainedRef(file_system_context_), storage_key, type),
+              base::RetainedRef(file_system_context_.get()), storage_key, type),
           barrier);
     } else {
       barrier.Run(0);
@@ -192,7 +192,7 @@ void FileSystemQuotaClient::GetStorageKeysForType(
     file_task_runner()->PostTaskAndReplyWithResult(
         FROM_HERE,
         base::BindOnce(&GetStorageKeysForTypeOnFileTaskRunner,
-                       base::RetainedRef(file_system_context_), type),
+                       base::RetainedRef(file_system_context_.get()), type),
         barrier);
   }
 }
@@ -217,7 +217,8 @@ void FileSystemQuotaClient::GetStorageKeysForHost(
     file_task_runner()->PostTaskAndReplyWithResult(
         FROM_HERE,
         base::BindOnce(&GetStorageKeysForHostOnFileTaskRunner,
-                       base::RetainedRef(file_system_context_), type, host),
+                       base::RetainedRef(file_system_context_.get()), type,
+                       host),
         barrier);
   }
 }
@@ -248,8 +249,8 @@ void FileSystemQuotaClient::DeleteStorageKeyData(
     file_task_runner()->PostTaskAndReplyWithResult(
         FROM_HERE,
         base::BindOnce(&DeleteStorageKeyOnFileTaskRunner,
-                       base::RetainedRef(file_system_context_), storage_key,
-                       fs_type),
+                       base::RetainedRef(file_system_context_.get()),
+                       storage_key, fs_type),
         barrier);
   }
 }
@@ -270,7 +271,7 @@ void FileSystemQuotaClient::PerformStorageCleanup(
     file_task_runner()->PostTaskAndReply(
         FROM_HERE,
         base::BindOnce(&PerformStorageCleanupOnFileTaskRunner,
-                       base::RetainedRef(file_system_context_), fs_type),
+                       base::RetainedRef(file_system_context_.get()), fs_type),
         barrier);
   }
 }

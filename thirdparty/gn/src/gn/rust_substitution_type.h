@@ -23,5 +23,6 @@ extern const Substitution kRustSubstitutionRustFlags;
 extern const Substitution kRustSubstitutionSources;
 
 bool IsValidRustSubstitution(const Substitution* type);
+bool IsValidRustLinkerSubstitution(const Substitution* type);
 
 #endif  // TOOLS_GN_RUST_SUBSTITUTION_TYPE_H_

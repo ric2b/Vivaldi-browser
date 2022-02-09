@@ -9,6 +9,7 @@
 #include "chromecast/shared/platform_info_serializer.h"
 #include "components/cast_streaming/browser/public/receiver_session.h"
 #include "components/cast_streaming/public/mojom/cast_streaming_session.mojom.h"
+#include "components/cast_streaming/public/mojom/renderer_controller.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -29,7 +30,8 @@ class MockReceiverSession : public cast_streaming::ReceiverSession {
   ~MockReceiverSession() override = default;
 
   MOCK_METHOD1(SetCastStreamingReceiver,
-               void(mojo::AssociatedRemote<::mojom::CastStreamingReceiver>));
+               void(mojo::AssociatedRemote<
+                    cast_streaming::mojom::CastStreamingReceiver>));
 };
 
 class MockStreamingReceiverSessionHandler
@@ -64,7 +66,7 @@ class StreamingReceiverSessionClientTest : public testing::Test {
         base::BindOnce(
             &StreamingReceiverSessionClientTest::CreateReceiverSession,
             base::Unretained(this), std::move(receiver_session)),
-        &handler_);
+        &handler_, true, true);
     receiver_session_client_.reset(client);
   }
 
@@ -120,7 +122,7 @@ TEST_F(StreamingReceiverSessionClientTest, OnSingleValidMessageEmpty) {
   EXPECT_FALSE(receiver_session_client_->has_received_av_settings());
   EXPECT_CALL(*receiver_session_, SetCastStreamingReceiver(_));
   EXPECT_CALL(handler_, OnStreamingSessionStarted());
-  EXPECT_TRUE(PostMessage(serializer.ToJson()));
+  EXPECT_TRUE(PostMessage(serializer.Serialize()));
   EXPECT_TRUE(receiver_session_client_->has_received_av_settings());
 
   cast_streaming::ReceiverSession::AVConstraints defaults;
@@ -138,7 +140,7 @@ TEST_F(StreamingReceiverSessionClientTest, OnSingleValidMessageNoCodecs) {
   EXPECT_FALSE(receiver_session_client_->has_received_av_settings());
   EXPECT_CALL(*receiver_session_, SetCastStreamingReceiver(_));
   EXPECT_CALL(handler_, OnStreamingSessionStarted());
-  EXPECT_TRUE(PostMessage(serializer.ToJson()));
+  EXPECT_TRUE(PostMessage(serializer.Serialize()));
   EXPECT_TRUE(receiver_session_client_->has_received_av_settings());
 
   ASSERT_EQ(session_constraints_.audio_limits.size(), size_t{1});
@@ -181,7 +183,7 @@ TEST_F(StreamingReceiverSessionClientTest, OnSingleValidMessageWithCodecs) {
   EXPECT_FALSE(receiver_session_client_->has_received_av_settings());
   EXPECT_CALL(*receiver_session_, SetCastStreamingReceiver(_));
   EXPECT_CALL(handler_, OnStreamingSessionStarted());
-  EXPECT_TRUE(PostMessage(serializer.ToJson()));
+  EXPECT_TRUE(PostMessage(serializer.Serialize()));
   EXPECT_TRUE(receiver_session_client_->has_received_av_settings());
 
   ASSERT_GE(session_constraints_.audio_codecs.size(), size_t{1});
@@ -217,12 +219,12 @@ TEST_F(StreamingReceiverSessionClientTest, OnCapabilitiesDecrease) {
   EXPECT_FALSE(receiver_session_client_->has_received_av_settings());
   EXPECT_CALL(*receiver_session_, SetCastStreamingReceiver(_));
   EXPECT_CALL(handler_, OnStreamingSessionStarted());
-  EXPECT_TRUE(PostMessage(serializer.ToJson()));
+  EXPECT_TRUE(PostMessage(serializer.Serialize()));
   EXPECT_TRUE(receiver_session_client_->has_received_av_settings());
 
   serializer.SetMaxChannels(8);
   EXPECT_CALL(handler_, OnError());
-  EXPECT_FALSE(PostMessage(serializer.ToJson()));
+  EXPECT_FALSE(PostMessage(serializer.Serialize()));
 }
 
 TEST_F(StreamingReceiverSessionClientTest, FailureWhenNoAvSettingsAfterLaunch) {
@@ -256,7 +258,7 @@ TEST_F(StreamingReceiverSessionClientTest, LaunchWhenAvSettingsReceived) {
 
   EXPECT_CALL(*receiver_session_, SetCastStreamingReceiver(_));
   PlatformInfoSerializer serializer;
-  EXPECT_TRUE(PostMessage(serializer.ToJson()));
+  EXPECT_TRUE(PostMessage(serializer.Serialize()));
   EXPECT_TRUE(receiver_session_client_->is_streaming_launch_pending());
   EXPECT_TRUE(receiver_session_client_->has_streaming_launched());
   EXPECT_TRUE(receiver_session_client_->has_received_av_settings());

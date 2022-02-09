@@ -300,8 +300,6 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
 
   if (file_.IsValid()) {
     error_details_ = FILE_OK;
-    if (flags & FLAG_CREATE_ALWAYS)
-      created_ = true;
   } else {
     error_details_ = GetLastFileError();
   }

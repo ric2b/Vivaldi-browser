@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
 
 #include "base/barrier_closure.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -45,6 +46,13 @@ class WebAppUiManagerImplBrowserTest : public InProcessBrowserTest {
             base::Unretained(this))) {}
 
  protected:
+  // InProcessBrowserTest:
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+    web_app::test::WaitUntilReady(
+        web_app::WebAppProvider::GetForTest(browser()->profile()));
+  }
+
   Profile* profile() { return browser()->profile(); }
 
   const AppId InstallWebApp(const GURL& start_url) {
@@ -67,8 +75,8 @@ class WebAppUiManagerImplBrowserTest : public InProcessBrowserTest {
     return WebAppProvider::GetForTest(profile())->ui_manager();
   }
 
-  TestShortcutManager* shortcut_manager_;
-  FakeOsIntegrationManager* os_integration_manager_;
+  raw_ptr<TestShortcutManager> shortcut_manager_;
+  raw_ptr<FakeOsIntegrationManager> os_integration_manager_;
 
  private:
   std::unique_ptr<KeyedService> CreateFakeWebAppProvider(Profile* profile) {
@@ -125,7 +133,7 @@ IN_PROC_BROWSER_TEST_F(WebAppUiManagerImplBrowserTest,
         run_loop.Quit();
       }));
   run_loop.Run();
-  web_app::WaitForBrowserToBeClosed(app_browser);
+  web_app::BrowserWaiter(app_browser).AwaitRemoved();
 
   EXPECT_EQ(0u, BrowserList::GetInstance()->size());
 }

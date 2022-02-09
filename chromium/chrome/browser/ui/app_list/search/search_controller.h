@@ -14,7 +14,7 @@
 
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
+#include "base/logging.h"
 #include "base/observer_list_types.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/ranking/launch_data.h"
@@ -33,12 +33,6 @@ enum class RankingItemType;
 
 // Common types used throughout result ranking.
 
-// The type of a particular result.
-using ResultType = ash::AppListSearchResultType;
-// The type of a search provider as a whole. This is currently just the 'main'
-// ResultType returned by the provider.
-using ProviderType = ash::AppListSearchResultType;
-
 using Results = std::vector<std::unique_ptr<ChromeSearchResult>>;
 using ResultsMap = base::flat_map<ProviderType, Results>;
 
@@ -46,7 +40,7 @@ using ResultsMap = base::flat_map<ProviderType, Results>;
 // to all search providers, then invokes the mixer to mix and to publish the
 // results to the given SearchResults UI model.
 //
-// // TODO(crbug.com/1199206): The SearchController is being reimplemented with
+// TODO(crbug.com/1199206): The SearchController is being reimplemented with
 // a different ranking system. Once this reimplementation is finished, this pure
 // virtual class can be removed and replaced with SearchControllerImplNew.
 class SearchController {
@@ -73,7 +67,7 @@ class SearchController {
 
   virtual ~SearchController() {}
 
-  virtual void InitializeRankers() = 0;
+  virtual void InitializeRankers() {}
 
   virtual void Start(const std::u16string& query) = 0;
   // TODO(crbug.com/1199206): We should rename this to AppListClosing for
@@ -82,7 +76,7 @@ class SearchController {
 
   virtual void OpenResult(ChromeSearchResult* result, int event_flags) = 0;
   virtual void InvokeResultAction(ChromeSearchResult* result,
-                                  int action_index) = 0;
+                                  ash::SearchResultActionType action) = 0;
 
   // Adds a new mixer group. See Mixer::AddGroup.
   virtual size_t AddGroup(size_t max_results) = 0;

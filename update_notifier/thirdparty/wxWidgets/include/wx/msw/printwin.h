@@ -19,17 +19,17 @@
 
 class WXDLLIMPEXP_CORE wxWindowsPrinter : public wxPrinterBase
 {
-    DECLARE_DYNAMIC_CLASS(wxWindowsPrinter)
+    wxDECLARE_DYNAMIC_CLASS(wxWindowsPrinter);
 
 public:
     wxWindowsPrinter(wxPrintDialogData *data = NULL);
 
     virtual bool Print(wxWindow *parent,
                        wxPrintout *printout,
-                       bool prompt = true);
+                       bool prompt = true) wxOVERRIDE;
 
-    virtual wxDC *PrintDialog(wxWindow *parent);
-    virtual bool Setup(wxWindow *parent);
+    virtual wxDC *PrintDialog(wxWindow *parent) wxOVERRIDE;
+    virtual bool Setup(wxWindow *parent) wxOVERRIDE;
 
 private:
     wxDECLARE_NO_COPY_CLASS(wxWindowsPrinter);
@@ -51,15 +51,15 @@ public:
                           wxPrintData *data);
     virtual ~wxWindowsPrintPreview();
 
-    virtual bool Print(bool interactive);
-    virtual void DetermineScaling();
+    virtual bool Print(bool interactive) wxOVERRIDE;
+    virtual void DetermineScaling() wxOVERRIDE;
 
 protected:
 #if wxUSE_ENH_METAFILE
-    virtual bool RenderPageIntoBitmap(wxBitmap& bmp, int pageNum);
+    virtual bool RenderPageIntoBitmap(wxBitmap& bmp, int pageNum) wxOVERRIDE;
 #endif
 
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxWindowsPrintPreview)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxWindowsPrintPreview);
 };
 
 #endif

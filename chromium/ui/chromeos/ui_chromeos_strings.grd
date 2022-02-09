@@ -152,7 +152,7 @@
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
-      <!-- Files app strings. It's shared with ARC++ (//components/arc). -->
+      <!-- Files app strings. It's shared with ARC++ (//ash/components/arc). -->
       <part file="file_manager_strings.grdp" />
 
       <!-- Default user profile images. -->
@@ -1452,6 +1452,12 @@
       </message>
       <message name="IDS_NETWORK_LIST_ITEM_ACTIVATING" desc="Loading text indicating that the SIM network is currently being set up so that the user can connect to it to access the Internet.">
         Activating...
+      </message>
+      <message name="IDS_NETWORK_LIST_ITEM_CELLULAR_BLOCKED_A11Y_LABEL" desc="A11y label for a cellular network in a list in settings and oobe that is blocked by the administrator. Clicking the network navigates to the details page.">
+        Network <ph name="NETWORK_INDEX">$1<ex>1</ex></ph> of <ph name="NETWORK_COUNT">$2<ex>10</ex></ph>, <ph name="NETWORK_NAME">$3<ex>Verizon Wireless</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$4<ex>80</ex></ph>%, Blocked by your Administrator, Details
+      </message>
+      <message name="IDS_NETWORK_LIST_ITEM_CELLULAR_BLOCKED_WITH_CONNECTION_STATUS_A11Y_LABEL" desc="A11y label for a cellular network in a list in settings and oobe that is blocked by the administrator. Includes connection status. Clicking the network navigates to the details page.">
+        Network <ph name="NETWORK_INDEX">$1<ex>1</ex></ph> of <ph name="NETWORK_COUNT">$2<ex>10</ex></ph>, <ph name="NETWORK_NAME">$3<ex>Verizon Wireless</ex></ph>, <ph name="CONNECTION_STATUS">$4<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$5<ex>80</ex></ph>%, Blocked by your Administrator, Details
       </message>
       <message name="IDS_NETWORK_LIST_ITEM_UNAVAILABLE_SIM_NETWORK" desc="Text for label displayed for SIM networks that are not available to be setup.">
         Not activated. Contact your carrier.

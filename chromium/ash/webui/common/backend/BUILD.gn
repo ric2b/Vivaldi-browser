@@ -2,15 +2,21 @@
 # Use of this source code is governed by a BSD - style license that can be
 # found in the LICENSE file.
 
-assert(is_chromeos, "Non-ChromeOS builds cannot depend on //chromeos")
+import("//build/config/chromeos/ui_mode.gni")
+
+assert(is_chromeos_ash, "Non-ChromeOS builds cannot depend on //ash")
 
 static_library("backend") {
   sources = [
+    "accessibility_features.cc",
+    "accessibility_features.h",
     "plural_string_handler.cc",
     "plural_string_handler.h",
   ]
 
   deps = [
+    "//ash",
+    "//ash/webui/common/mojom",
     "//base",
     "//chromeos/strings/",
     "//content/public/browser",
@@ -22,10 +28,16 @@ static_library("backend") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "plural_string_handler_unittest.cc" ]
+  sources = [
+    "accessibility_features_unittest.cc",
+    "plural_string_handler_unittest.cc",
+  ]
 
   deps = [
     ":backend",
+    "//ash",
+    "//ash:test_support",
+    "//ash/webui/common/mojom",
     "//base",
     "//base/test:test_support",
     "//chromeos/strings/",

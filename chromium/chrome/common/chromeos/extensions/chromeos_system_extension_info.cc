@@ -9,8 +9,18 @@
 #include <string>
 
 #include "base/check.h"
+#include "base/command_line.h"
 
 namespace chromeos {
+
+namespace switches {
+
+// Overrides |pwa_origin| field of the ChromeOSSystemExtensionInfo structure.
+// Used for development/testing.
+const char kTelemetryExtensionPwaOriginOverrideForTesting[] =
+    "telemetry-extension-pwa-origin-override-for-testing";
+
+}  // namespace switches
 
 namespace {
 
@@ -21,8 +31,10 @@ const ChromeOSSystemExtensionInfos& getMap() {
   static const ChromeOSSystemExtensionInfos kExtensionIdToExtensionInfoMap{
       // TODO(b/200920331): replace google.com with OEM-specific origin.
       {/*extension_id=*/"gogonhoemckpdpadfnjnpgbjpbjnodgc",
-       {/*manufacturer=*/"HP", /*pwa_origin=*/"*://www.google.com/*",
-        /*host=*/"www.google.com"}}};
+       {/*manufacturer=*/"HP", /*pwa_origin=*/"*://www.google.com/*"}},
+      {/*extension_id=*/"alnedpmllcfpgldkagbfbjkloonjlfjb",
+       {/*manufacturer=*/"HP",
+        /*pwa_origin=*/"*://hpcs-appschr.hpcloud.hp.com/*"}}};
 
   return kExtensionIdToExtensionInfoMap;
 }
@@ -31,9 +43,8 @@ const ChromeOSSystemExtensionInfos& getMap() {
 
 ChromeOSSystemExtensionInfo::ChromeOSSystemExtensionInfo(
     const std::string& manufacturer,
-    const std::string& pwa_origin,
-    const std::string& host)
-    : manufacturer(manufacturer), pwa_origin(pwa_origin), host(host) {}
+    const std::string& pwa_origin)
+    : manufacturer(manufacturer), pwa_origin(pwa_origin) {}
 ChromeOSSystemExtensionInfo::ChromeOSSystemExtensionInfo(
     const ChromeOSSystemExtensionInfo& other) = default;
 ChromeOSSystemExtensionInfo::~ChromeOSSystemExtensionInfo() = default;
@@ -42,11 +53,20 @@ size_t GetChromeOSSystemExtensionInfosSize() {
   return getMap().size();
 }
 
-const ChromeOSSystemExtensionInfo& GetChromeOSExtensionInfoForId(
+ChromeOSSystemExtensionInfo GetChromeOSExtensionInfoForId(
     const std::string& id) {
   CHECK(IsChromeOSSystemExtension(id));
 
-  return getMap().at(id);
+  auto info = getMap().at(id);
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(
+          switches::kTelemetryExtensionPwaOriginOverrideForTesting)) {
+    info.pwa_origin = command_line->GetSwitchValueASCII(
+        switches::kTelemetryExtensionPwaOriginOverrideForTesting);
+  }
+
+  return info;
 }
 
 bool IsChromeOSSystemExtension(const std::string& id) {

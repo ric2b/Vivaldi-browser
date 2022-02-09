@@ -5,13 +5,13 @@
 #ifndef COMPONENTS_BACKGROUND_SYNC_BACKGROUND_SYNC_CONTROLLER_IMPL_H_
 #define COMPONENTS_BACKGROUND_SYNC_BACKGROUND_SYNC_CONTROLLER_IMPL_H_
 
+#include "base/memory/raw_ptr.h"
 #include "content/public/browser/background_sync_controller.h"
 
 #include <stdint.h>
 
 #include <set>
 
-#include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/background_sync/background_sync_delegate.h"
@@ -99,9 +99,10 @@ class BackgroundSyncControllerImpl : public content::BackgroundSyncController,
   void RemoveFromTrackedOrigins(const url::Origin& origin) override;
 
   // content_settings::Observer overrides.
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override;
 
   bool IsOriginTracked(const url::Origin& origin) {
     return periodic_sync_origins_.find(origin) != periodic_sync_origins_.end();
@@ -126,7 +127,7 @@ class BackgroundSyncControllerImpl : public content::BackgroundSyncController,
   // KeyedService implementation.
   void Shutdown() override;
 
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
 
   std::unique_ptr<background_sync::BackgroundSyncDelegate> delegate_;
   std::unique_ptr<BackgroundSyncMetrics> background_sync_metrics_;

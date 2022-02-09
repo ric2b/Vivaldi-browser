@@ -333,7 +333,6 @@
 <translation id="6892812721183419409">Opna hlekk sem <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunnsforrit: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Hafna skráaraðgengi</translation>
-<translation id="6916590542764765824">Vinna með viðbætur</translation>
 <translation id="6945221475159498467">Veljið</translation>
 <translation id="6955446738988643816">Rannsaka sprettiglugga</translation>
 <translation id="6970856801391541997">Prenta ákveðnar síður</translation>
@@ -401,7 +400,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8032244173881942855">Gat ekki varpað flipa.</translation>
 <translation id="8071432093239591881">Prenta sem mynd</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
-<translation id="8137559199583651773">Vinna með viðbætur</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Niðurhal í gangi} other {Niðurhöl í gangi}}</translation>
 <translation id="8230134520748321204">Vista lykilorð fyrir <ph name="ORIGIN" />?</translation>

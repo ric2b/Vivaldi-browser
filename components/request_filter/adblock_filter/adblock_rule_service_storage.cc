@@ -465,7 +465,7 @@ RuleServiceStorage::RuleServiceStorage(
       rule_service_(rule_service),
       writer_(context->GetPath().Append(kSourcesFileName),
               file_io_task_runner_,
-              base::TimeDelta::FromSeconds(kSaveDelay)),
+              base::Seconds(kSaveDelay)),
       weak_factory_(this) {
   DCHECK(rule_service_);
   file_io_task_runner_->PostTask(

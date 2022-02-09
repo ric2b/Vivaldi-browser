@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_STATUSBAR
 
@@ -38,11 +35,11 @@
 // implementation
 // ============================================================================
 
-BEGIN_EVENT_TABLE(wxStatusBarUniv, wxStatusBarBase)
+wxBEGIN_EVENT_TABLE(wxStatusBarUniv, wxStatusBarBase)
     EVT_SIZE(wxStatusBarUniv::OnSize)
 
     WX_EVENT_TABLE_INPUT_CONSUMER(wxStatusBarUniv)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 WX_FORWARD_TO_INPUT_CONSUMER(wxStatusBarUniv)
 

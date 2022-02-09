@@ -27,10 +27,9 @@ class VivaldiFrameHostServiceImpl
 
   // Mojo methods
   void NotifyMediaElementAdded() override;
-  void DidChangeLoadProgressExtended(double load_progress,
-                                     double loaded_bytes,
-                                     int loaded_elements,
-                                     int total_elements) override;
+  void DidChangeLoadProgressExtended(int64_t loaded_bytes_delta,
+                                     int loaded_resource_delta,
+                                     int started_resource_delta) override;
 
  private:
   // Owner

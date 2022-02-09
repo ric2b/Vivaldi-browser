@@ -986,21 +986,21 @@ String CSSSelector::SelectorText() const {
     StringBuilder builder;
     compound = compound->SerializeCompound(builder);
     if (!compound)
-      return builder.ToString() + result;
+      return builder.ReleaseString() + result;
 
     DCHECK(compound->Relation() != kSubSelector);
     switch (compound->Relation()) {
       case kDescendant:
-        result = " " + builder.ToString() + result;
+        result = " " + builder.ReleaseString() + result;
         break;
       case kChild:
-        result = " > " + builder.ToString() + result;
+        result = " > " + builder.ReleaseString() + result;
         break;
       case kDirectAdjacent:
-        result = " + " + builder.ToString() + result;
+        result = " + " + builder.ReleaseString() + result;
         break;
       case kIndirectAdjacent:
-        result = " ~ " + builder.ToString() + result;
+        result = " ~ " + builder.ReleaseString() + result;
         break;
       case kSubSelector:
         NOTREACHED();
@@ -1008,16 +1008,16 @@ String CSSSelector::SelectorText() const {
       case kShadowPart:
       case kUAShadow:
       case kShadowSlot:
-        result = builder.ToString() + result;
+        result = builder.ReleaseString() + result;
         break;
       case kRelativeDescendant:
-        return builder.ToString() + result;
+        return builder.ReleaseString() + result;
       case kRelativeChild:
-        return "> " + builder.ToString() + result;
+        return "> " + builder.ReleaseString() + result;
       case kRelativeDirectAdjacent:
-        return "+ " + builder.ToString() + result;
+        return "+ " + builder.ReleaseString() + result;
       case kRelativeIndirectAdjacent:
-        return "~ " + builder.ToString() + result;
+        return "~ " + builder.ReleaseString() + result;
     }
   }
   NOTREACHED();
@@ -1208,19 +1208,18 @@ static bool ForAnyInTagHistory(const Functor& functor,
   return false;
 }
 
-bool CSSSelector::HasSlottedPseudo() const {
-  return ForAnyInTagHistory(
-      [](const CSSSelector& selector) -> bool {
-        return selector.GetPseudoType() == CSSSelector::kPseudoSlotted;
-      },
-      *this);
-}
-
 bool CSSSelector::FollowsPart() const {
   const CSSSelector* previous = TagHistory();
   if (!previous)
     return false;
   return previous->GetPseudoType() == kPseudoPart;
+}
+
+bool CSSSelector::FollowsSlotted() const {
+  const CSSSelector* previous = TagHistory();
+  if (!previous)
+    return false;
+  return previous->GetPseudoType() == kPseudoSlotted;
 }
 
 String CSSSelector::FormatPseudoTypeForDebugging(PseudoType type) {
@@ -1235,7 +1234,7 @@ String CSSSelector::FormatPseudoTypeForDebugging(PseudoType type) {
   StringBuilder builder;
   builder.Append("pseudo-");
   builder.AppendNumber(static_cast<int>(type));
-  return builder.ToString();
+  return builder.ReleaseString();
 }
 
 CSSSelector::RareData::RareData(const AtomicString& value)

@@ -7,7 +7,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -110,6 +109,10 @@ class ServiceWorkerObjectHostTest : public testing::Test {
  public:
   ServiceWorkerObjectHostTest()
       : task_environment_(BrowserTaskEnvironment::IO_MAINLOOP) {}
+
+  ServiceWorkerObjectHostTest(const ServiceWorkerObjectHostTest&) = delete;
+  ServiceWorkerObjectHostTest& operator=(const ServiceWorkerObjectHostTest&) =
+      delete;
 
   void Initialize(std::unique_ptr<EmbeddedWorkerTestHelper> helper) {
     helper_ = std::move(helper);
@@ -234,9 +237,6 @@ class ServiceWorkerObjectHostTest : public testing::Test {
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerObjectHostTest);
 };
 
 TEST_F(ServiceWorkerObjectHostTest, OnVersionStateChanged) {

@@ -8,6 +8,7 @@
 #include <climits>
 #include <map>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/feed/core/v2/enums.h"
@@ -119,6 +120,16 @@ class MetricsReporter {
                                           WebFeedRefreshStatus status,
                                           int subscribed_web_feed_count);
 
+  // Notice events.
+  void OnNoticeCreated(const StreamType& stream_type, const std::string& key);
+  void OnNoticeViewed(const StreamType& stream_type, const std::string& key);
+  void OnNoticeOpenAction(const StreamType& stream_type,
+                          const std::string& key);
+  void OnNoticeDismissed(const StreamType& stream_type, const std::string& key);
+  void OnNoticeAcknowledged(const StreamType& stream_type,
+                            const std::string& key,
+                            NoticeAcknowledgementPath acknowledgement_path);
+
  private:
   // State replicated for reporting per-stream-type metrics.
   struct StreamStats {
@@ -165,8 +176,8 @@ class MetricsReporter {
 
   StreamStats& ForStream(const StreamType& stream_type);
 
-  PrefService* profile_prefs_;
-  Delegate* delegate_ = nullptr;
+  raw_ptr<PrefService> profile_prefs_;
+  raw_ptr<Delegate> delegate_ = nullptr;
 
   StreamStats for_you_stats_;
   StreamStats web_feed_stats_;

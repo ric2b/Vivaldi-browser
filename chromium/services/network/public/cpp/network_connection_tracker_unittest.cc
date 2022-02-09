@@ -8,7 +8,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
+#include "base/ignore_result.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
@@ -95,7 +96,7 @@ class TestNetworkConnectionObserver
   }
 
   size_t num_notifications_;
-  NetworkConnectionTracker* tracker_;
+  raw_ptr<NetworkConnectionTracker> tracker_;
   // May be null.
   std::unique_ptr<base::RunLoop> run_loop_;
   network::mojom::ConnectionType expected_connection_type_;
@@ -110,6 +111,11 @@ class TestLeakyNetworkConnectionObserver
         connection_type_(network::mojom::ConnectionType::CONNECTION_UNKNOWN) {
     tracker->AddLeakyNetworkConnectionObserver(this);
   }
+
+  TestLeakyNetworkConnectionObserver(
+      const TestLeakyNetworkConnectionObserver&) = delete;
+  TestLeakyNetworkConnectionObserver& operator=(
+      const TestLeakyNetworkConnectionObserver&) = delete;
 
   // NetworkConnectionObserver implementation:
   void OnConnectionChanged(network::mojom::ConnectionType type) override {
@@ -129,8 +135,6 @@ class TestLeakyNetworkConnectionObserver
  private:
   std::unique_ptr<base::RunLoop> run_loop_;
   network::mojom::ConnectionType connection_type_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestLeakyNetworkConnectionObserver);
 };
 
 // A helper class to call NetworkConnectionTracker::GetConnectionType().
@@ -172,7 +176,7 @@ class ConnectionTypeGetter {
   }
 
   base::RunLoop run_loop_;
-  NetworkConnectionTracker* tracker_;
+  raw_ptr<NetworkConnectionTracker> tracker_;
   network::mojom::ConnectionType connection_type_;
   THREAD_CHECKER(thread_checker_);
 };

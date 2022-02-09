@@ -40,12 +40,13 @@ enum ImporterType {
   TYPE_OPERA_OPIUM_DEV = 14,
   TYPE_BRAVE           = 15,
   TYPE_EDGE_CHROMIUM   = 16,
+  TYPE_THUNDERBIRD     = 17,
 
   // NOTE, any addition here must be reflected in SUPPORTED_IMPORT_BROWSERS in
   // WelcomePageImport.jsx
 
   // Must be last due to profile_import_process_param_traits_macros.h
-  TYPE_OPERA_OPIUM = 17,        // Chromium-based Opera
+  TYPE_OPERA_OPIUM = 18,        // Chromium-based Opera
 };
 
 }  // namespace importer

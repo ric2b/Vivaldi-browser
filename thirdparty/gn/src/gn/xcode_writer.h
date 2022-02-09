@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
-
 class Builder;
 class BuildSettings;
 class Err;
@@ -77,7 +75,8 @@ class XcodeWriter {
                                Err* err);
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(XcodeWriter);
+  XcodeWriter(const XcodeWriter&) = delete;
+  XcodeWriter& operator=(const XcodeWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_XCODE_WRITER_H_

@@ -41,24 +41,43 @@ class Tutorial {
  public:
   ~Tutorial();
 
-  class StepBuilder : public TutorialDescription::Step {
+  // Step Builder provides an interface for constructing an
+  // InteractionSequence::Step from a TutorialDescription::Step.
+  // TutorialDescription is used as the basis for the StepBuilder since all
+  // parameters of the Description will be needed to create the bubble or build
+  // the interaction sequence step. In order to use the The StepBuilder should
+  // only be used by Tutorial::Builder to construct the steps in the tutorial.
+  class StepBuilder {
    public:
     StepBuilder();
+    explicit StepBuilder(const TutorialDescription::Step& step);
+    StepBuilder(const StepBuilder&) = delete;
+    StepBuilder& operator=(const StepBuilder&) = delete;
     ~StepBuilder();
 
+    // Constructs the InteractionSequenceStepDirectly from the
+    // TutorialDescriptionStep. This method is used by
+    // Tutorial::Builder::BuildFromDescription to create tutorials.
     static std::unique_ptr<ui::InteractionSequence::Step>
     BuildFromDescriptionStep(
-        TutorialDescription::Step step,
+        const TutorialDescription::Step& step,
         absl::optional<std::pair<int, int>> progress,
+        bool is_last_step,
         TutorialService* tutorial_service,
         TutorialBubbleFactoryRegistry* bubble_factory_registry);
 
-    StepBuilder& SetAnchorElementID(ui::ElementIdentifier anchor_element_);
+    StepBuilder& SetAnchorElementID(ui::ElementIdentifier anchor_element_id);
+    StepBuilder& SetAnchorElementName(std::string anchor_element_name);
     StepBuilder& SetTitleText(absl::optional<std::u16string> title_text_);
     StepBuilder& SetBodyText(absl::optional<std::u16string> body_text_);
     StepBuilder& SetStepType(ui::InteractionSequence::StepType step_type_);
-    StepBuilder& SetProgress(absl::optional<std::pair<int, int>> progress_);
     StepBuilder& SetArrow(TutorialDescription::Step::Arrow arrow_);
+    StepBuilder& SetProgress(absl::optional<std::pair<int, int>> progress_);
+    StepBuilder& SetIsLastStep(bool is_last_step_);
+    StepBuilder& SetMustRemainVisible(bool must_remain_visible_);
+    StepBuilder& SetTransitionOnlyOnEvent(bool transition_only_on_event_);
+    StepBuilder& SetNameElementsCallback(
+        TutorialDescription::NameElementsCallback name_elements_callback_);
 
     std::unique_ptr<ui::InteractionSequence::Step> Build(
         TutorialService* tutorial_service,
@@ -66,13 +85,19 @@ class Tutorial {
 
    private:
     absl::optional<std::pair<int, int>> progress;
-    ui::InteractionSequence::StepStartCallback BuildShowBubbleCallback(
+    bool is_last_step = false;
+
+    ui::InteractionSequence::StepStartCallback BuildStartCallback(
         TutorialService* tutorial_service,
         TutorialBubbleFactoryRegistry* bubble_factory_registry);
+
+    ui::InteractionSequence::StepStartCallback BuildMaybeShowBubbleCallback(
+        TutorialService* tutorial_service,
+        TutorialBubbleFactoryRegistry* bubble_factory_registry);
+
     ui::InteractionSequence::StepEndCallback BuildHideBubbleCallback(
         TutorialService* tutorial_service);
-
-    std::unique_ptr<ui::InteractionSequence::StepBuilder> step_builder_;
+    TutorialDescription::Step step_;
   };
 
   class Builder {

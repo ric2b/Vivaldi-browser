@@ -258,7 +258,6 @@ class VivaldiBrowserWindow final
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
   void FocusInactivePopupForAccessibility() override {}
-  void FocusHelpBubble() override {}
   void RotatePaneFocus(bool forwards) override {}
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
@@ -312,6 +311,7 @@ class VivaldiBrowserWindow final
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) const override;
   ui::NativeTheme* GetNativeTheme() override;
+  const ui::ColorProvider* GetColorProvider() const override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override {}
   bool CanUserExitFullscreen() const override;

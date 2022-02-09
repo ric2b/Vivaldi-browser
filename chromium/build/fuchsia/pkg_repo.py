@@ -14,16 +14,19 @@ import time
 from six.moves import urllib
 
 # Maximum amount of time to block while waiting for "pm serve" to come up.
-_PM_SERVE_LIVENESS_TIMEOUT_SECS = 10
+_PM_SERVE_LISTEN_TIMEOUT_SECS = 10
 
-_MANAGED_REPO_NAME = 'chrome-runner'
+# Amount of time to sleep in between busywaits for "pm serve"'s port file.
+_PM_SERVE_POLL_INTERVAL = 0.1
+
+_MANAGED_REPO_NAME = 'chromium-test-package-server'
 
 
 class PkgRepo(object):
   """Abstract interface for a repository used to serve packages to devices."""
 
-  def __init__(self, target):
-    self._target = target
+  def __init__(self):
+    pass
 
   def PublishPackage(self, package_path):
     pm_tool = common.GetHostToolPathFromPlatform('pm')
@@ -39,8 +42,7 @@ class PkgRepo(object):
     subprocess.check_call([
         pm_tool, 'publish', '-a', '-f', package_path, '-r',
         self.GetPath(), '-vt', '-v'
-    ],
-                          stderr=subprocess.STDOUT)
+    ], stderr=subprocess.STDOUT)
 
   def GetPath(self):
     pass
@@ -50,41 +52,43 @@ class ManagedPkgRepo(PkgRepo):
   """Creates and serves packages from an ephemeral repository."""
 
   def __init__(self, target):
-    PkgRepo.__init__(self, target)
+    super(ManagedPkgRepo, self).__init__()
     self._with_count = 0
+    self._target = target
 
     self._pkg_root = tempfile.mkdtemp()
     pm_tool = common.GetHostToolPathFromPlatform('pm')
     subprocess.check_call([pm_tool, 'newrepo', '-repo', self._pkg_root])
-    logging.info('Creating and serving temporary package root: {}.'.format(
+    logging.debug('Creating and serving temporary package root: {}.'.format(
         self._pkg_root))
 
-    serve_port = common.GetAvailableTcpPort()
-    # Flags for `pm serve`:
-    # https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/src/sys/pkg/bin/pm/cmd/pm/serve/serve.go
-    # -l <port>: Port to listen on
-    # -c 2: Use config.json format v2, the default for pkgctl
-    # -q: Don't print out information about requests
-    self._pm_serve_task = subprocess.Popen([
-        pm_tool, 'serve', '-d',
-        os.path.join(self._pkg_root, 'repository'), '-l',
-        ':%d' % serve_port, '-c', '2', '-q'
-    ])
+    with tempfile.NamedTemporaryFile() as pm_port_file:
+        # Flags for `pm serve`:
+        # https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/src/sys/pkg/bin/pm/cmd/pm/serve/serve.go
+        self._pm_serve_task = subprocess.Popen([
+            pm_tool, 'serve',
+            '-d', os.path.join(self._pkg_root, 'repository'),
+            '-c', '2',  # Use config.json format v2, the default for pkgctl.
+            '-q',  # Don't log transfer activity.
+            '-l', ':0',  # Bind to ephemeral port.
+            '-f', pm_port_file.name  # Publish port number to |pm_port_file|.
+        ])
 
-    # Block until "pm serve" starts serving HTTP traffic at |serve_port|.
-    timeout = time.time() + _PM_SERVE_LIVENESS_TIMEOUT_SECS
-    while True:
-      try:
-        urllib.request.urlopen('http://localhost:%d' % serve_port,
-                               timeout=1).read()
-        break
-      except urllib.error.URLError:
-        logging.info('Waiting until \'pm serve\' is up...')
+        # Busywait until 'pm serve' starts the server and publishes its port to
+        # a temporary file.
+        timeout = time.time() + _PM_SERVE_LISTEN_TIMEOUT_SECS
+        serve_port = None
+        while not serve_port:
+          if time.time() > timeout:
+            raise Exception('Timeout waiting for \'pm serve\' to publish its port.')
 
-      if time.time() >= timeout:
-        raise Exception('Timed out while waiting for \'pm serve\'.')
+          with open(pm_port_file.name, 'r', encoding='utf8') as serve_port_file:
+            serve_port = serve_port_file.read()
 
-      time.sleep(1)
+          time.sleep(_PM_SERVE_POLL_INTERVAL)
+
+        serve_port = int(serve_port)
+        logging.debug('pm serve is active on port {}.'.format(serve_port))
 
     remote_port = common.ConnectPortForwardingTask(target, serve_port, 0)
     self._RegisterPkgRepository(self._pkg_root, remote_port)
@@ -192,8 +196,12 @@ class ExternalPkgRepo(PkgRepo):
   """Publishes packages to a package repository located and served externally
   (ie. located under a Fuchsia build directory and served by "fx serve"."""
 
-  def __init__(self, pkg_root):
+  def __init__(self, pkg_root, symbol_root):
+    super(PkgRepo, self).__init__()
+
     self._pkg_root = pkg_root
+    self._symbol_root = symbol_root
+
     logging.info('Using existing package root: {}'.format(pkg_root))
     logging.info(
         'ATTENTION: This will not start a package server. Please run "fx serve" manually.'
@@ -202,8 +210,35 @@ class ExternalPkgRepo(PkgRepo):
   def GetPath(self):
     return self._pkg_root
 
+  def PublishPackage(self, package_path):
+    super(ExternalPkgRepo, self).PublishPackage(package_path)
+
+    self._InstallSymbols(os.path.join(os.path.dirname(package_path), 'ids.txt'))
+
   def __enter__(self):
     return self
 
   def __exit__(self, type, value, tb):
     pass
+
+  def _InstallSymbols(self, package_path):
+    """Installs debug symbols for a packageinto the GDB-standard symbol
+    directory located at |self.symbol_root|."""
+
+    ids_txt_path = os.path.join(os.path.dirname(package_path), 'ids.txt')
+    for entry in open(ids_txt_path, 'r'):
+      build_id, binary_relpath = entry.strip().split(' ')
+      binary_abspath = os.path.abspath(
+          os.path.join(os.path.dirname(ids_txt_path), binary_relpath))
+      symbol_dir = os.path.join(self._symbol_root, build_id[:2])
+      symbol_file = os.path.join(symbol_dir, build_id[2:] + '.debug')
+
+      if not os.path.exists(symbol_dir):
+        os.makedirs(symbol_dir)
+
+      if os.path.islink(symbol_file) or os.path.exists(symbol_file):
+        # Clobber the existing entry to ensure that the symlink's target is
+        # up to date.
+        os.unlink(symbol_file)
+
+      os.symlink(os.path.relpath(binary_abspath, symbol_dir), symbol_file)

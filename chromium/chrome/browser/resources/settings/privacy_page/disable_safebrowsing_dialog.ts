@@ -9,11 +9,14 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 
+import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 export interface SettingsDisableSafebrowsingDialogElement {
   $: {
+    cancel: CrButtonElement,
+    confirm: CrButtonElement,
     dialog: CrDialogElement,
   };
 }
@@ -33,7 +36,7 @@ export class SettingsDisableSafebrowsingDialogElement extends PolymerElement {
     this.$.dialog.showModal();
   }
 
-  /** @return {boolean} Whether the user confirmed the dialog. */
+  /** @return Whether the user confirmed the dialog. */
   wasConfirmed(): boolean {
     return this.$.dialog.getNative().returnValue === 'success';
   }

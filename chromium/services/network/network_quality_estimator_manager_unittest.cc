@@ -8,12 +8,12 @@
 #include <memory>
 #include <utility>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "net/log/test_net_log.h"
+#include "net/log/net_log.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "services/network/public/mojom/network_quality_estimator_manager.mojom.h"
@@ -85,7 +85,7 @@ class TestNetworkQualityEstimatorManagerClient
   int32_t downlink_bandwidth_kbps() const { return downlink_bandwidth_kbps_; }
 
  private:
-  NetworkQualityEstimatorManager* network_quality_estimator_manager_;
+  raw_ptr<NetworkQualityEstimatorManager> network_quality_estimator_manager_;
   size_t num_network_quality_changed_;
   std::unique_ptr<base::RunLoop> run_loop_;
   net::EffectiveConnectionType run_loop_wait_effective_connection_type_;
@@ -101,10 +101,9 @@ class TestNetworkQualityEstimatorManagerClient
 class NetworkQualityEstimatorManagerTest : public testing::Test {
  public:
   NetworkQualityEstimatorManagerTest()
-      : net_log_(std::make_unique<net::RecordingBoundTestNetLog>()),
-        network_quality_estimator_manager_(
+      : network_quality_estimator_manager_(
             std::make_unique<NetworkQualityEstimatorManager>(
-                net_log_->bound().net_log())) {
+                net::NetLog::Get())) {
     // Change the network quality to UNKNOWN to prevent any spurious
     // notifications.
     SimulateNetworkQualityChange(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN);
@@ -136,7 +135,6 @@ class NetworkQualityEstimatorManagerTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
-  std::unique_ptr<net::RecordingBoundTestNetLog> net_log_;
   std::unique_ptr<NetworkQualityEstimatorManager>
       network_quality_estimator_manager_;
   std::unique_ptr<TestNetworkQualityEstimatorManagerClient>

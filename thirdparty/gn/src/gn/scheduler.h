@@ -12,7 +12,6 @@
 
 #include "base/atomic_ref_count.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "gn/input_file_manager.h"
 #include "gn/label.h"
 #include "gn/source_file.h"
@@ -148,7 +147,8 @@ class Scheduler {
   std::multimap<SourceFile, const Target*> unknown_generated_inputs_;
   std::map<SourceFile, bool> generated_files_;
 
-  DISALLOW_COPY_AND_ASSIGN(Scheduler);
+  Scheduler(const Scheduler&) = delete;
+  Scheduler& operator=(const Scheduler&) = delete;
 };
 
 extern Scheduler* g_scheduler;

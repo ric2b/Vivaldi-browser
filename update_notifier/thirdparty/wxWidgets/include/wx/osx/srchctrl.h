@@ -27,7 +27,7 @@ public:
                const wxSize& size = wxDefaultSize,
                long style = 0,
                const wxValidator& validator = wxDefaultValidator,
-               const wxString& name = wxSearchCtrlNameStr);
+               const wxString& name = wxASCII_STR(wxSearchCtrlNameStr));
 
     virtual ~wxSearchCtrl();
 
@@ -37,44 +37,51 @@ public:
                 const wxSize& size = wxDefaultSize,
                 long style = 0,
                 const wxValidator& validator = wxDefaultValidator,
-                const wxString& name = wxSearchCtrlNameStr);
+                const wxString& name = wxASCII_STR(wxSearchCtrlNameStr));
 
+#if wxUSE_MENUS
     // get/set search button menu
     // --------------------------
-    virtual void SetMenu( wxMenu* menu );
-    virtual wxMenu* GetMenu();
+    virtual void SetMenu( wxMenu* menu ) wxOVERRIDE;
+    virtual wxMenu* GetMenu() wxOVERRIDE;
+#endif  // wxUSE_MENUS
 
     // get/set search options
     // ----------------------
-    virtual void ShowSearchButton( bool show );
-    virtual bool IsSearchButtonVisible() const;
+    virtual void ShowSearchButton( bool show ) wxOVERRIDE;
+    virtual bool IsSearchButtonVisible() const wxOVERRIDE;
 
-    virtual void ShowCancelButton( bool show );
-    virtual bool IsCancelButtonVisible() const;
+    virtual void ShowCancelButton( bool show ) wxOVERRIDE;
+    virtual bool IsCancelButtonVisible() const wxOVERRIDE;
 
-    // TODO: In 2.9 these should probably be virtual, and declared in the base class...
-    void        SetDescriptiveText(const wxString& text);
-    wxString    GetDescriptiveText() const;
+    virtual void SetDescriptiveText(const wxString& text) wxOVERRIDE;
+    virtual wxString GetDescriptiveText() const wxOVERRIDE;
 
     virtual bool    HandleSearchFieldSearchHit() ;
     virtual bool    HandleSearchFieldCancelHit() ;
 
     wxSearchWidgetImpl * GetSearchPeer() const;
 
+#if wxUSE_MENUS
+    virtual void OSXAfterMenuEvent() wxOVERRIDE;
+#endif  // wxUSE_MENUS
+
 protected:
 
-    wxSize DoGetBestSize() const;
+    wxSize DoGetBestSize() const wxOVERRIDE;
 
     void Init();
 
+#if wxUSE_MENUS
     wxMenu *m_menu;
+#endif  // wxUSE_MENUS
 
     wxString m_descriptiveText;
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxSearchCtrl)
+    wxDECLARE_DYNAMIC_CLASS(wxSearchCtrl);
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif // wxUSE_SEARCHCTRL

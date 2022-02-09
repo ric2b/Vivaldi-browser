@@ -13,8 +13,9 @@ import '../../../settings_shared_css.js';
 import {assert, assertNotReached} from '//resources/js/assert.m.js';
 import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, Router} from '../../../router.js';
+import {Route, Router} from '../../../router.js';
 import {routes} from '../../os_route.m.js';
+import {RouteObserverBehavior} from '../../route_observer_behavior.js';
 
 import {updateSelectedAppId} from './actions.js';
 import {AppManagementUserAction, AppType} from './constants.js';
@@ -107,9 +108,9 @@ Polymer({
     switch (selectedAppType) {
       case (AppType.kWeb):
         return 'pwa-detail-view';
-      case (AppType.kExtension):
+      case (AppType.kChromeApp):
       case (AppType.kStandaloneBrowser):
-      case (AppType.kStandaloneBrowserExtension):
+      case (AppType.kStandaloneBrowserChromeApp):
         // TODO(https://crbug.com/1225848): Figure out appropriate behavior for
         // Lacros-hosted chrome-apps.
         return 'chrome-app-detail-view';

@@ -12,6 +12,7 @@
 #define __PROGDLGH_G__
 
 #include "wx/dialog.h"
+#include "wx/weakref.h"
 
 class WXDLLIMPEXP_FWD_CORE wxButton;
 class WXDLLIMPEXP_FWD_CORE wxEventLoop;
@@ -43,23 +44,23 @@ public:
     virtual bool Update(int value, const wxString& newmsg = wxEmptyString, bool *skip = NULL);
     virtual bool Pulse(const wxString& newmsg = wxEmptyString, bool *skip = NULL);
 
-    void Resume();
+    virtual void Resume();
 
-    int GetValue() const;
-    int GetRange() const;
-    wxString GetMessage() const;
+    virtual int GetValue() const;
+    virtual int GetRange() const;
+    virtual wxString GetMessage() const;
 
-    void SetRange(int maximum);
+    virtual void SetRange(int maximum);
 
     // Return whether "Cancel" or "Skip" button was pressed, always return
     // false if the corresponding button is not shown.
-    bool WasCancelled() const;
-    bool WasSkipped() const;
+    virtual bool WasCancelled() const;
+    virtual bool WasSkipped() const;
 
     // Must provide overload to avoid hiding it (and warnings about it)
-    virtual void Update() { wxDialog::Update(); }
+    virtual void Update() wxOVERRIDE { wxDialog::Update(); }
 
-    virtual bool Show( bool show = true );
+    virtual bool Show( bool show = true ) wxOVERRIDE;
 
     // This enum is an implementation detail and should not be used
     // by user code.
@@ -104,6 +105,9 @@ protected:
     // Converts seconds to HH:mm:ss format.
     static wxString GetFormattedTime(unsigned long timeInSec);
 
+    // Create a new event loop if there is no currently running one.
+    void EnsureActiveEventLoopExists();
+
     // callback for optional abort button
     void OnCancel(wxCommandEvent&);
 
@@ -116,12 +120,12 @@ protected:
     // called to disable the other windows while this dialog is shown
     void DisableOtherWindows();
 
-    // must be called to reenable the other windows temporarily disabled while
+    // must be called to re-enable the other windows temporarily disabled while
     // the dialog was shown
     void ReenableOtherWindows();
 
-    // Set the top level parent we store from the parent window provided when
-    // creating the dialog.
+    // Store the parent window as wxWindow::m_parent and also set the top level
+    // parent reference we store in this class itself.
     void SetTopParent(wxWindow* parent);
 
     // return the top level parent window of this dialog (may be NULL)
@@ -134,7 +138,7 @@ protected:
     // the maximum value
     int m_maximum;
 
-#if defined(__WXMSW__ ) || defined(__WXPM__)
+#if defined(__WXMSW__)
     // the factor we use to always keep the value in 16 bit range as the native
     // control only supports ranges from 0 to 65,535
     size_t m_factor;
@@ -183,8 +187,9 @@ private:
                  *m_estimated,
                  *m_remaining;
 
-    // parent top level window (may be NULL)
-    wxWindow *m_parentTop;
+    // Reference to the parent top level window, automatically becomes NULL if
+    // it it is destroyed and could be always NULL if it's not given at all.
+    wxWindowRef m_parentTop;
 
     // Progress dialog styles: this is not the same as m_windowStyle because
     // wxPD_XXX constants clash with the existing TLW styles so to be sure we
@@ -195,11 +200,9 @@ private:
     // skip some portion
     bool m_skip;
 
-#if !defined(__SMARTPHONE__)
     // the abort and skip buttons (or NULL if none)
     wxButton *m_btnAbort;
     wxButton *m_btnSkip;
-#endif
 
     // saves the time when elapsed time was updated so there is only one
     // update per second
@@ -222,7 +225,7 @@ private:
     wxEventLoop *m_tempEventLoop;
 
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
     wxDECLARE_NO_COPY_CLASS(wxGenericProgressDialog);
 };
 

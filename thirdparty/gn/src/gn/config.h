@@ -6,7 +6,6 @@
 #define TOOLS_GN_CONFIG_H_
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/config_values.h"
 #include "gn/item.h"
 #include "gn/label_ptr.h"
@@ -63,7 +62,8 @@ class Config : public Item {
 
   UniqueVector<LabelConfigPair> configs_;
 
-  DISALLOW_COPY_AND_ASSIGN(Config);
+  Config(const Config&) = delete;
+  Config& operator=(const Config&) = delete;
 };
 
 #endif  // TOOLS_GN_CONFIG_H_

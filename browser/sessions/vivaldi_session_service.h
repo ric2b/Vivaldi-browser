@@ -44,7 +44,7 @@ class VivaldiSessionService {
   VivaldiSessionService(const VivaldiSessionService&) = delete;
   VivaldiSessionService& operator=(const VivaldiSessionService&) = delete;
 
-  bool ShouldTrackWindow(Browser* browser, Profile* profile);
+  bool ShouldTrackWindow(Browser* browser);
   void ScheduleCommand(std::unique_ptr<sessions::SessionCommand> command);
   void BuildCommandsForTab(const SessionID& window_id,
                            content::WebContents* tab,

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/macros.h"
+#include "base/ignore_result.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -30,6 +30,10 @@ class TouchAccessibilityBrowserTest : public ContentBrowserTest {
  public:
   TouchAccessibilityBrowserTest() {}
 
+  TouchAccessibilityBrowserTest(const TouchAccessibilityBrowserTest&) = delete;
+  TouchAccessibilityBrowserTest& operator=(
+      const TouchAccessibilityBrowserTest&) = delete;
+
  protected:
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -56,8 +60,6 @@ class TouchAccessibilityBrowserTest : public ContentBrowserTest {
                            ui::EventTimeForNow(), flags, 0));
     ignore_result(sink->OnEventFromSource(mouse_move_event.get()));
   }
-
-  DISALLOW_COPY_AND_ASSIGN(TouchAccessibilityBrowserTest);
 };
 
 IN_PROC_BROWSER_TEST_F(TouchAccessibilityBrowserTest,

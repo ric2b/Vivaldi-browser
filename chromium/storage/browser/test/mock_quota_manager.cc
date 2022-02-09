@@ -12,8 +12,9 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "storage/browser/quota/quota_client_type.h"
 
 using ::blink::StorageKey;
@@ -57,6 +58,11 @@ void MockQuotaManager::GetOrCreateBucket(
     const blink::StorageKey& storage_key,
     const std::string& bucket_name,
     base::OnceCallback<void(QuotaErrorOr<BucketInfo>)> callback) {
+  if (db_disabled_) {
+    std::move(callback).Run(QuotaError::kDatabaseError);
+    return;
+  }
+
   QuotaErrorOr<BucketInfo> bucketOr = FindBucket(
       storage_key, bucket_name, blink::mojom::StorageType::kTemporary);
   if (bucketOr.ok()) {
@@ -138,11 +144,13 @@ void MockQuotaManager::GetBucketsModifiedBetween(StorageType type,
                                                  base::Time begin,
                                                  base::Time end,
                                                  GetBucketsCallback callback) {
-  auto buckets_to_return = std::make_unique<std::set<BucketInfo>>();
+  auto buckets_to_return = std::make_unique<std::set<BucketLocator>>();
   for (const auto& info : buckets_) {
     if (info.bucket.type == type && info.modified >= begin &&
         info.modified < end)
-      buckets_to_return->insert(info.bucket);
+      buckets_to_return->insert(BucketLocator(
+          info.bucket.id, info.bucket.storage_key, info.bucket.type,
+          info.bucket.name == kDefaultBucketName));
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -151,11 +159,11 @@ void MockQuotaManager::GetBucketsModifiedBetween(StorageType type,
                                 std::move(buckets_to_return), type));
 }
 
-void MockQuotaManager::DeleteBucketData(const BucketInfo& bucket,
+void MockQuotaManager::DeleteBucketData(const BucketLocator& bucket,
                                         QuotaClientTypes quota_client_types,
                                         StatusCallback callback) {
   for (auto current = buckets_.begin(); current != buckets_.end(); ++current) {
-    if (current->bucket == bucket) {
+    if (current->bucket.id == bucket.id) {
       // Modify the mask: if it's 0 after "deletion", remove the storage key.
       for (QuotaClientType type : quota_client_types)
         current->quota_client_types.erase(type);
@@ -166,9 +174,27 @@ void MockQuotaManager::DeleteBucketData(const BucketInfo& bucket,
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&MockQuotaManager::DidDeleteStorageKeyData,
+      FROM_HERE, base::BindOnce(&MockQuotaManager::DidDeleteBucketData,
                                 weak_factory_.GetWeakPtr(), std::move(callback),
                                 blink::mojom::QuotaStatusCode::kOk));
+}
+
+void MockQuotaManager::FindAndDeleteBucketData(const StorageKey& storage_key,
+                                               const std::string& bucket_name,
+                                               StatusCallback callback) {
+  QuotaErrorOr<BucketInfo> result = FindBucket(
+      storage_key, bucket_name, blink::mojom::StorageType::kTemporary);
+  if (!result.ok()) {
+    if (result.error() == QuotaError::kNotFound) {
+      std::move(callback).Run(blink::mojom::QuotaStatusCode::kOk);
+    } else {
+      std::move(callback).Run(blink::mojom::QuotaStatusCode::kUnknown);
+    }
+    return;
+  }
+
+  DeleteBucketData(result->ToBucketLocator(), AllQuotaClientTypes(),
+                   std::move(callback));
 }
 
 void MockQuotaManager::NotifyWriteFailed(const StorageKey& storage_key) {
@@ -211,12 +237,12 @@ void MockQuotaManager::DidGetBucket(
 
 void MockQuotaManager::DidGetModifiedInTimeRange(
     GetBucketsCallback callback,
-    std::unique_ptr<std::set<BucketInfo>> buckets,
+    std::unique_ptr<std::set<BucketLocator>> buckets,
     StorageType storage_type) {
   std::move(callback).Run(*buckets, storage_type);
 }
 
-void MockQuotaManager::DidDeleteStorageKeyData(
+void MockQuotaManager::DidDeleteBucketData(
     StatusCallback callback,
     blink::mojom::QuotaStatusCode status) {
   std::move(callback).Run(status);

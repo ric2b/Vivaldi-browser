@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/page_action/pwa_install_view.h"
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -23,6 +24,7 @@
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/web_applications/install_bounce_metric.h"
 #include "chrome/browser/web_applications/os_integration_manager.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
@@ -48,12 +50,14 @@
 #include "ui/views/view_observer.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/arc/test/arc_util_test_support.h"
+#include "ash/components/arc/test/connection_holder_util.h"
+#include "ash/components/arc/test/fake_app_instance.h"
+#include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "components/arc/test/arc_util_test_support.h"
-#include "components/arc/test/connection_holder_util.h"
-#include "components/arc/test/fake_app_instance.h"
+#include "chrome/common/chrome_features.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
@@ -113,7 +117,14 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
           {{feature_engagement::kIPHDemoModeFeatureChoiceParam,
             feature_engagement::kIPHDesktopPwaInstallFeature.name}}},
          {feature_engagement::kIPHDesktopPwaInstallFeature, {}}},
-        {});
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+        {
+          {features::kWebAppsCrosapi, chromeos::features::kLacrosPrimary}, {}
+        }
+#else
+        {}
+#endif
+    );
   }
 
   PwaInstallViewBrowserTest(const PwaInstallViewBrowserTest&) = delete;
@@ -142,7 +153,7 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
 
     command_line->AppendSwitchASCII(
         network::switches::kUnsafelyTreatInsecureOriginAsSecure,
-        GetInstallableAppURL().GetOrigin().spec());
+        GetInstallableAppURL().DeprecatedGetOriginAsURL().spec());
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -166,6 +177,8 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
     web_contents_ = GetCurrentTab();
     app_banner_manager_ =
         webapps::TestAppBannerManagerDesktop::FromWebContents(web_contents_);
+    web_app::test::WaitUntilReady(
+        web_app::WebAppProvider::GetForTest(browser()->profile()));
   }
 
   std::unique_ptr<net::test_server::HttpResponse> RequestInterceptor(
@@ -184,8 +197,8 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
   }
 
   struct OpenTabResult {
-    content::WebContents* web_contents;
-    webapps::TestAppBannerManagerDesktop* app_banner_manager;
+    raw_ptr<content::WebContents> web_contents;
+    raw_ptr<webapps::TestAppBannerManagerDesktop> app_banner_manager;
     bool installable;
   };
 
@@ -285,9 +298,9 @@ class PwaInstallViewBrowserTest : public extensions::ExtensionBrowserTest {
   std::string intercept_request_path_;
   std::string intercept_request_response_;
 
-  PageActionIconView* pwa_install_view_ = nullptr;
-  content::WebContents* web_contents_ = nullptr;
-  webapps::TestAppBannerManagerDesktop* app_banner_manager_ = nullptr;
+  raw_ptr<PageActionIconView> pwa_install_view_ = nullptr;
+  raw_ptr<content::WebContents> web_contents_ = nullptr;
+  raw_ptr<webapps::TestAppBannerManagerDesktop> app_banner_manager_ = nullptr;
 
  private:
   web_app::ScopedOsHooksSuppress os_hooks_suppress_;

@@ -331,7 +331,6 @@
 <translation id="6892812721183419409">Բացել հղումը որպես <ph name="USER" /></translation>
 <translation id="6900284862687837908">Հետին հավելված. <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Արգելել մոտեցումը ֆայլերին</translation>
-<translation id="6916590542764765824">Կառավարել ընդլայնումները</translation>
 <translation id="6945221475159498467">Ընտրել</translation>
 <translation id="6955446738988643816">Հետազոտել թռուցիկը</translation>
 <translation id="6970856801391541997">Տպել որոշակի էջեր</translation>
@@ -399,7 +398,6 @@
 <translation id="8032244173881942855">Չի հաջողվում հեռարձակել ներդիրը։</translation>
 <translation id="8071432093239591881">Տպել որպես պատկեր</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ԿԲ</translation>
-<translation id="8137559199583651773">Կառավարել ընդլայնումները</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Ընթանում է ներբեռնում} other {Ընթանում են ներբեռնումներ}}</translation>
 <translation id="8230134520748321204">Գաղտնաբառը <ph name="ORIGIN" />-ի համար պահպանե՞լ։</translation>

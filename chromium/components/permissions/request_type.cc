@@ -75,8 +75,6 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
       return vector_icons::kContentPasteIcon;
     case RequestType::kDiskQuota:
       return vector_icons::kFolderIcon;
-    case RequestType::kFileHandling:
-      return vector_icons::kDescriptionIcon;
     case RequestType::kFontAccess:
       return vector_icons::kFontDownloadIcon;
     case RequestType::kGeolocation:
@@ -111,6 +109,32 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
   NOTREACHED();
   return gfx::kNoneIcon;
 }
+
+const gfx::VectorIcon& GetBlockedIconIdDesktop(RequestType type) {
+  switch (type) {
+    case RequestType::kGeolocation:
+      return vector_icons::kLocationOffIcon;
+    case RequestType::kNotifications:
+      return vector_icons::kNotificationsOffIcon;
+    case RequestType::kArSession:
+    case RequestType::kVrSession:
+      return vector_icons::kVrHeadsetOffIcon;
+    case RequestType::kCameraStream:
+      return vector_icons::kVideocamOffIcon;
+    case RequestType::kClipboard:
+      return vector_icons::kContentPasteOffIcon;
+    case RequestType::kIdleDetection:
+      return vector_icons::kDevicesOffIcon;
+    case RequestType::kMicStream:
+      return vector_icons::kMicOffIcon;
+    case RequestType::kMidiSysex:
+      return vector_icons::kMidiOffIcon;
+    default:
+      NOTREACHED();
+  }
+  NOTREACHED();
+  return gfx::kNoneIcon;
+}
 #endif  // !defined(OS_ANDROID)
 
 absl::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
@@ -129,8 +153,6 @@ absl::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
     case ContentSettingsType::CLIPBOARD_READ_WRITE:
       return RequestType::kClipboard;
 #if !defined(OS_ANDROID)
-    case ContentSettingsType::FILE_HANDLING:
-      return RequestType::kFileHandling;
     case ContentSettingsType::FONT_ACCESS:
       return RequestType::kFontAccess;
 #endif
@@ -243,6 +265,12 @@ IconId GetIconId(RequestType type) {
 #endif
 }
 
+#if !defined(OS_ANDROID)
+IconId GetBlockedIconId(RequestType type) {
+  return GetBlockedIconIdDesktop(type);
+}
+#endif
+
 const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
   switch (request_type) {
     case permissions::RequestType::kAccessibilityEvents:
@@ -260,8 +288,6 @@ const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
     case permissions::RequestType::kDiskQuota:
       return "disk_quota";
 #if !defined(OS_ANDROID)
-    case permissions::RequestType::kFileHandling:
-      return "file_handling";
     case permissions::RequestType::kFontAccess:
       return "font_access";
 #endif

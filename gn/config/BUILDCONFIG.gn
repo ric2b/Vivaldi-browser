@@ -2,6 +2,11 @@ declare_args() {
   is_vivaldi = true
   is_vivaldi_polestar = false
 }
+
+declare_args() {
+  is_vivaldi_automotive = is_vivaldi_polestar
+}
+
 assert (is_vivaldi)
 
 import ("//build/config/BUILDCONFIG.gn")

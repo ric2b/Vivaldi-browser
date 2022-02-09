@@ -292,8 +292,8 @@ bool WandReadEncryptedField(std::string::iterator* buffer,
                                "Opera Email Password Verification", out_data))
       return false;
   } else {
-    uint8_t buffer[EVP_MAX_MD_SIZE * 2];
-    unsigned int len = 0;
+    uint8_t digest_buffer[EVP_MAX_MD_SIZE * 2];
+    unsigned int digest_used_len = 0;
 
     EVP_MD_CTX ctx;
     EVP_MD_CTX_init(&ctx);
@@ -302,21 +302,23 @@ bool WandReadEncryptedField(std::string::iterator* buffer,
     EVP_DigestUpdate(&ctx, OperaObfuscationPass, sizeof(OperaObfuscationPass));
     EVP_DigestUpdate(&ctx, reinterpret_cast<const uint8_t*>(iv.data()),
                      iv.size());
-    EVP_DigestFinal(&ctx, buffer, &len);
+    EVP_DigestFinal(&ctx, digest_buffer, &digest_used_len);
 
     EVP_DigestInit(&ctx, EVP_md5());
-    EVP_DigestUpdate(&ctx, buffer, len);
+    EVP_DigestUpdate(&ctx, digest_buffer, digest_used_len);
     EVP_DigestUpdate(&ctx, OperaObfuscationPass, sizeof(OperaObfuscationPass));
     EVP_DigestUpdate(&ctx, reinterpret_cast<const uint8_t*>(iv.data()),
                      iv.size());
-    EVP_DigestFinal(&ctx, buffer + len, &len);
+    EVP_DigestFinal(&ctx, digest_buffer + digest_used_len, &digest_used_len);
 
     EVP_MD_CTX_cleanup(&ctx);
 
     EVP_CIPHER_CTX decryptor;
-    EVP_CipherInit(&decryptor, EVP_des_ede3_cbc(), buffer, buffer + 24, 0);
+    EVP_CipherInit(&decryptor, EVP_des_ede3_cbc(), digest_buffer,
+                   digest_buffer + 24,
+                   0);
 
-    OPENSSL_cleanse(buffer, sizeof(buffer));
+    OPENSSL_cleanse(digest_buffer, sizeof(digest_buffer));
     out_data.resize(in_data.length());
 
     int out_len = 0;
@@ -470,7 +472,7 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
   if (!password.url.is_valid())
     return true;  // Ignore this entry, no URL
 
-  password.signon_realm = password.url.GetOrigin().spec();
+  password.signon_realm = password.url.DeprecatedGetOriginAsURL().spec();
   password.blocked_by_user = (field_count == 0);
 
   if (first_field >= 0) {
@@ -555,7 +557,7 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
     password.scheme = importer::ImportedPasswordForm::Scheme::kBasic;
 
   password.url = GURL(url8).ReplaceComponents(rep);
-  password.signon_realm = password.url.GetOrigin().spec();
+  password.signon_realm = password.url.DeprecatedGetOriginAsURL().spec();
   password.blocked_by_user = (field_count == 0);
 
   if (first_field >= 0) {

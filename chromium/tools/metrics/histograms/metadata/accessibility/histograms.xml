@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -29,7 +30,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.ActiveTime" units="ms"
     expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <summary>
     The amount of time accessibility was enabled and actively used. Reported
@@ -42,7 +43,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Removed 10/2020, having expired in M85.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>smcgruer@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -57,7 +58,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.Android.OnDemand.EventsDropped" units="count"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>mschillaci@google.com</owner>
   <owner>abigailbklein@google.com</owner>
   <summary>
@@ -78,7 +79,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.Android.OnDemand.PercentageDropped" units="%"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>mschillaci@google.com</owner>
   <owner>abigailbklein@google.com</owner>
   <summary>
@@ -139,8 +140,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.AndroidServiceInfo"
-    enum="AccessibilityAndroidServiceInfoEnum" expires_after="M99">
-  <owner>dmazzoni@chromium.org</owner>
+    enum="AccessibilityAndroidServiceInfoEnum" expires_after="2022-11-18">
+  <owner>aleventhal@chromium.org</owner>
+  <owner>mschillaci@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Tracks flags and capabilities of enabled accessibility services. Recorded
@@ -154,14 +156,13 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.ATK-APIs" enum="AccessibilityATKAPIEnum"
-    expires_after="M95">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-11-18">
+  <owner>jdiggs@chromium.org</owner>
   <owner>jkim@igalia.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
-    Tracks usage of ATK APIs on Linux Desktop. Recorded when ATK APIs that were
-    supposed to trigger AX mode enabled is called. The feature to turn on AX
-    mode through ATK APIs is disabled for now; see http://crbug.com/1086506.
+    Tracks usage of ATK APIs on Linux Desktop. Recorded when ATK APIs that are
+    supposed to trigger AX mode enabled is called.
   </summary>
 </histogram>
 
@@ -197,7 +198,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CaptionSettingsLoadedFromPrefs"
-    enum="BooleanEnabled" expires_after="2021-12-01">
+    enum="BooleanEnabled" expires_after="2022-10-18">
   <owner>evliu@google.com</owner>
   <owner>media-dev@chromium.org</owner>
   <summary>
@@ -207,7 +208,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CaptionSettingsLoadedFromSystemSettings"
-    enum="BooleanEnabled" expires_after="2021-12-01">
+    enum="BooleanEnabled" expires_after="2022-10-18">
   <owner>evliu@google.com</owner>
   <owner>media-dev@chromium.org</owner>
   <summary>
@@ -228,8 +229,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosAlwaysShowA11yMenu" enum="BooleanEnabled"
-    expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-11-18">
+  <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -240,7 +241,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosAutoclick" enum="BooleanEnabled"
     expires_after="2021-12-31">
-  <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -254,7 +254,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="AutoclickActionType" expires_after="2022-04-24">
   <owner>katie@chromium.org</owner>
   <owner>dtseng@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Recorded when a user has picked a new autoclick action type from the bubble
@@ -264,7 +263,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosCaretHighlight" enum="BooleanEnabled"
     expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether the Chrome OS caret highlighting is on (logged once 45 secs after
@@ -278,7 +277,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Marked obsolete in 07/2021, since ChromeVox Next has been default for a long
     time, and the code that output this histogram was previously removed.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Set when a Chrome OS user has spoken feedback enabled, recorded once each
@@ -290,7 +289,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosCursorColor" enum="BooleanEnabled"
     expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -300,8 +299,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosCursorHighlight" enum="BooleanEnabled"
-    expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-11-18">
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether the Chrome OS cursor highlighting is on (logged once 45 secs after
@@ -375,7 +374,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosDockedMagnifier" enum="BooleanEnabled"
     expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -386,7 +385,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosFocusHighlight" enum="BooleanEnabled"
     expires_after="2022-05-01">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether the Chrome OS focus highlighting is on (logged once 45 secs after
@@ -396,7 +395,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosHighContrast" enum="BooleanEnabled"
     expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -406,8 +405,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosLargeCursor" enum="BooleanEnabled"
-    expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-11-21">
+  <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -417,9 +416,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosLargeCursorSize" units="dip"
-    expires_after="2021-11-21">
+    expires_after="2022-11-21">
   <owner>sarakato@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Cursor size of the Chrome OS Large Cursor (logged once 45 secs after
@@ -428,8 +427,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosScreenMagnifier" enum="BooleanEnabled"
-    expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-11-18">
+  <owner>dtseng@chromium.org</owner>
+  <owner>josiahk@google.com</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -440,7 +440,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosSelectToSpeak" enum="BooleanEnabled"
     expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -591,8 +591,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosSpokenFeedback{AccessibilityEveryReport}"
-    enum="BooleanEnabled" expires_after="2021-12-05">
-  <owner>dmazzoni@chromium.org</owner>
+    enum="BooleanEnabled" expires_after="2022-11-18">
+  <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>aleventhal@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -608,8 +608,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosStickyKeys" enum="BooleanEnabled"
-    expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-11-18">
+  <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>tengs@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -621,7 +621,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosSwitchAccess" enum="BooleanEnabled"
     expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>anastasi@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -632,7 +632,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.CrosVirtualKeyboard" enum="BooleanEnabled"
     expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -642,8 +642,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.FocusHighlight.ToggleEnabled"
-    enum="BooleanEnabled" expires_after="2021-03-31">
-  <owner>aboxhall@chromium.org</owner>
+    enum="BooleanEnabled" expires_after="never">
+  <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     The value of the &quot;show a quick focus highlight&quot; setting, logged
@@ -655,7 +655,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.ImageLabels" enum="BooleanEnabled"
     expires_after="2022-04-17">
   <owner>katie@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether the Chrome accessibility image label setting is on (logged once 45
@@ -665,7 +664,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.ImageLabels.Android" enum="BooleanEnabled"
     expires_after="M105">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>mschillaci@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -676,7 +675,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.ImageLabels.Android.DialogOption"
     enum="AccessibilityImageLabelModeAndroid" expires_after="M105">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>mschillaci@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -687,7 +686,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.ImageLabels.Android.OnlyOnWifi"
     enum="BooleanEnabled" expires_after="M105">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>mschillaci@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -697,9 +696,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.ImageLabels.ModalDialogAccepted"
-    enum="BooleanAccepted" expires_after="2021-12-12">
+    enum="BooleanAccepted" expires_after="2022-05-12">
   <owner>katie@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     Whether a user accepts or does not accept a modal dialog enabling the image
     labels option. If the user does not accept it this does not track whether
@@ -711,7 +710,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.ImageLabels.PageLanguage" enum="LanguageName"
     expires_after="2022-04-10">
   <owner>katie@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     The language of a web page where image labels were requested, as detected by
@@ -722,7 +721,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.ImageLabels.RequestLanguage" enum="LanguageName"
     expires_after="2022-04-17">
   <owner>katie@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     The language that was requested for image descriptions, based on the page
@@ -732,9 +731,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.ImageLabels.{Result}By{Dimension}"
-    units="pixels" expires_after="2021-12-12">
-  <owner>dmazzoni@chromium.org</owner>
+    units="pixels" expires_after="2022-06-12">
+  <owner>dtseng@chromium.org</owner>
   <owner>mschillaci@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Counts the number of images that got a certain result from automatic image
     labeling (empty, error, or success), as a function of the function of one of
@@ -752,9 +752,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.ImageLabels.{Result}By{Length}"
-    units="characters" expires_after="2021-12-12">
-  <owner>dmazzoni@chromium.org</owner>
+    units="characters" expires_after="2022-06-12">
+  <owner>dtseng@chromium.org</owner>
   <owner>mschillaci@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Counts the number of images that got a certain result from automatic image
     labeling (empty, error, or success), as a function of the function of the
@@ -774,7 +775,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.InactiveTime" units="ms"
     expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
+  <owner>abigailbklein@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <summary>
     The amount of time accessibility was enabled but not actively used. Reported
@@ -801,8 +803,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.LanguageDetection.CountDetectionAttempted"
     units="count" expires_after="2021-11-19">
   <owner>chrishall@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     The number of nodes on this page for which language detection was attempted.
   </summary>
@@ -811,8 +812,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.LanguageDetection.CountLabelled" units="count"
     expires_after="2021-11-19">
   <owner>chrishall@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     The number of nodes on this page for which a detected language was
     successfully assigned.
@@ -822,8 +822,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.LanguageDetection.LangsPerPage" units="count"
     expires_after="2022-05-01">
   <owner>chrishall@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     The number of unique languages which were detected to be the most probable
     language for at least one node on the page, regardless of whether a detected
@@ -834,8 +833,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.LanguageDetection.PercentageLabelledWithTop"
     units="%" expires_after="2021-11-19">
   <owner>chrishall@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     Of the nodes which had a detected language assigned, the percentage for
     which the assigned language was the language detected as having the highest
@@ -846,8 +844,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.LanguageDetection.PercentageLanguageDetected"
     units="%" expires_after="2021-11-19">
   <owner>chrishall@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     Of the nodes for which language detection was attempted, the percentage for
     which a language was successfully assigned.
@@ -857,8 +854,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Accessibility.LanguageDetection.PercentageOverridden"
     units="%" expires_after="2021-11-19">
   <owner>chrishall@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <summary>
     Of the nodes for which a detected language was successfully assigned, the
     percentage where the assigned language differs from the author-provided
@@ -1068,7 +1064,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     No longer gathered after 2021-06.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>abigailbklein@chromium.org</owner>
   <owner>smcgruer@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1111,7 +1107,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.ManuallyEnabled" enum="BooleanEnabled"
     expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1123,8 +1119,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.ModeFlag" enum="AccessibilityModeFlagEnum"
     expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
-  <owner>aboxhall@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether individual accessibility mode flags are set. Tracked when each mode
@@ -1151,9 +1146,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.Performance.HandleAXEvents" units="ms"
-    expires_after="M95">
-  <owner>dmazzoni@chromium.org</owner>
-  <owner>delphick@chromium.org</owner>
+    expires_after="2022-11-18">
+  <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Tracks time spent on the browser main thread handling accessibility events
@@ -1164,7 +1158,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.Performance.ProcessDeferredAccessibilityEvents"
     units="ms" expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1176,7 +1170,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.Performance.SendPendingAccessibilityEvents"
     units="ms" expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1187,7 +1181,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.Performance.Tree.Unserialize" units="ms"
     expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1197,13 +1191,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.Performance.WinAPIs.{API}" units="microseconds"
-    expires_after="M96">
-  <owner>dmazzoni@chromium.org</owner>
+    expires_after="2022-04-24">
+  <owner>aleventhal@chromium.org</owner>
+  <owner>kschmi@microsoft.com</owner>
   <owner>janewman@microsoft.com</owner>
+  <owner>dlibby@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Tracks time taken to execute the public Windows API that {API}. This is
     recorded for all Windows users that call into our public APIs.
+
+    Warning: This metric may include reports from clients with low-resolution
+    clocks (i.e. on Windows, ref. |TimeTicks::IsHighResolution()|). Such reports
+    will cause this metric to have an abnormal distribution. When considering
+    revising this histogram, see UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES for the
+    solution.
   </summary>
   <token key="API">
     <variant name="UMA_API_ELEMENT_PROVIDER_FROM_POINT"
@@ -1249,8 +1251,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.Reliability.Tree.UnserializeError"
-    enum="AccessibilityTreeUnserializeError" expires_after="M96">
-  <owner>dmazzoni@chromium.org</owner>
+    enum="AccessibilityTreeUnserializeError" expires_after="2022-11-18">
+  <owner>aleventhal@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1302,7 +1304,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.VTTContainsStyleBlock" enum="BooleanEnabled"
-    expires_after="2021-12-01">
+    expires_after="2022-10-18">
   <owner>evliu@google.com</owner>
   <owner>media-dev@chromium.org</owner>
   <summary>
@@ -1312,7 +1314,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.WebSpeech.Duration" units="ms"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>evliu@google.com</owner>
   <owner>chrome-media-ux@google.com</owner>
   <summary>
@@ -1323,7 +1325,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.Win.AnimationsEnabled" enum="BooleanEnabled"
     expires_after="M85">
-  <owner>dmazzoni@chromium.org</owner>
+  <obsolete>
+    Obsolete as of M85 because we no longer need the data.
+  </obsolete>
+  <owner>aleventhal@chromium.org</owner>
+  <owner>dlibby@microsoft.com</owner>
   <owner>smcgruer@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1336,7 +1342,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.WinAPIs" enum="AccessibilityWinAPIEnum"
     expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>nektar@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>Tracks usage of all public Windows accessibility APIs.</summary>
@@ -1344,7 +1350,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.WinAPIs.GetPropertyValue"
     enum="AccessibilityWinAPIGetPropertyValueEnum" expires_after="2022-03-19">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>nektar@chromium.org</owner>
   <owner>kbabbitt@microsoft.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1355,7 +1361,12 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.WinAudioDescription" enum="BooleanEnabled"
     expires_after="2021-09-19">
-  <owner>dmazzoni@chromium.org</owner>
+  <obsolete>
+    Removed 11-12-2022, because we don't think we need the data right now. This
+    may change in the future.
+  </obsolete>
+  <owner>abigailbklein@chromium.org</owner>
+  <owner>dlibby@microsoft.com</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -1366,7 +1377,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.WinHighContrastTheme"
     enum="AccessibilityHighContrastColorScheme" expires_after="2022-04-10">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>aleventhal@chromium.org</owner>
   <owner>almaher@microsoft.com</owner>
   <owner>weblayoutdev@microsoft.com</owner>
   <summary>
@@ -1380,7 +1391,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="BooleanEnabled" expires_after="never">
 <!-- expires-never: usage drives a11y prioritization in browser and content. -->
 
-  <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1399,7 +1409,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="BooleanEnabled" expires_after="never">
 <!-- expires-never: usage drives a11y prioritization in browser and content. -->
 
-  <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1416,7 +1425,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.WinScreenReader" enum="BooleanEnabled"
     expires_after="2020-02-23">
-  <owner>dmazzoni@chromium.org</owner>
+  <obsolete>
+    Removed 11-12-2022, as it is not a good indicator of whether a screen reader
+    is running. For example, Narrator does not set it, and applications that are
+    not screen readers can and do.
+  </obsolete>
+  <owner>aleventhal@chromium.org</owner>
+  <owner>dlibby@microsoft.com</owner>
+  <owner>kschmi@microsoft.com</owner>
   <owner>kenjibaheux@google.com</owner>
   <summary>
     Whether Windows system settings show that a screen reader is running (logged
@@ -1448,7 +1464,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     expires_after="never">
 <!-- expires-never: usage drives a11y prioritization in browser and content. -->
 
-  <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1461,7 +1476,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="BooleanEnabled" expires_after="never">
 <!-- expires-never: usage drives a11y prioritization in browser and content. -->
 
-  <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1480,7 +1494,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="BooleanEnabled" expires_after="never">
 <!-- expires-never: usage drives a11y prioritization in browser and content. -->
 
-  <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>aleventhal@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -1744,7 +1757,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Obsolete as of M73 because we decided to remove gender from the API.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance spoken via synthesized text-to-speech requested a
     specific gender.
@@ -1756,7 +1769,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Obsolete as of M93 because data is not needed any longer.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance spoken via synthesized text-to-speech specified a
@@ -1769,7 +1781,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Obsolete as of M93 because data is not needed any longer.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance spoken via synthesized text-to-speech requested a
@@ -1782,7 +1793,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Obsolete as of M93 because data is not needed any longer.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance spoken via synthesized text-to-speech requested a
@@ -1792,7 +1802,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="TextToSpeech.Utterance.HasVoiceName"
     enum="TextToSpeechHasVoiceName" expires_after="2022-04-17">
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance spoken via synthesized text-to-speech requested a
@@ -1805,7 +1814,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Obsolete as of M93 because data is not needed any longer.
   </obsolete>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance spoken via synthesized text-to-speech requested a
@@ -1815,7 +1823,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="TextToSpeech.Utterance.Native" enum="TextToSpeechNative"
     expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     True if an utterance is spoken with native speech provided by the operating
@@ -1827,7 +1834,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="TextToSpeech.Utterance.Source" enum="TextToSpeechSource"
     expires_after="M103">
   <owner>joelriley@google.com</owner>
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     ChromeOS source that triggered text-to-speech utterance via extension API,
@@ -1837,7 +1843,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="TextToSpeech.Utterance.TextLength" units="bytes"
     expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
   <owner>katie@chromium.org</owner>
   <summary>
     The length of an utterance to be spoken via synthesized text-to-speech.

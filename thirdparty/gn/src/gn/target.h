@@ -11,7 +11,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/action_values.h"
 #include "gn/bundle_data.h"
 #include "gn/config_values.h"
@@ -21,8 +20,8 @@
 #include "gn/label_ptr.h"
 #include "gn/lib_file.h"
 #include "gn/metadata.h"
-#include "gn/ordered_set.h"
 #include "gn/output_file.h"
+#include "gn/pointer_set.h"
 #include "gn/rust_values.h"
 #include "gn/source_file.h"
 #include "gn/swift_values.h"
@@ -31,7 +30,10 @@
 
 class DepsIteratorRange;
 class Settings;
+class Target;
 class Toolchain;
+
+using TargetSet = PointerSet<const Target>;
 
 class Target : public Item {
  public:
@@ -163,8 +165,9 @@ class Target : public Item {
   }
 
   // Metadata. Target takes ownership of the resulting scope.
-  const Metadata& metadata() const { return metadata_; }
-  Metadata& metadata() { return metadata_; }
+  const Metadata& metadata() const;
+  Metadata& metadata();
+  bool has_metadata() const { return metadata_.get(); }
 
   // Get metadata from this target and its dependencies. This is intended to
   // be called after the target is resolved.
@@ -173,24 +176,43 @@ class Target : public Item {
                    const SourceDir& rebase_dir,
                    bool deps_only,
                    std::vector<Value>* result,
-                   std::set<const Target*>* targets_walked,
+                   TargetSet* targets_walked,
                    Err* err) const;
 
   // GeneratedFile-related methods.
   bool GenerateFile(Err* err) const;
 
-  const Value& contents() const { return contents_; }
-  void set_contents(const Value& value) { contents_ = value; }
-  const Value& output_conversion() const { return output_conversion_; }
-  void set_output_conversion(const Value& value) { output_conversion_ = value; }
-
   // Metadata collection methods for GeneratedFile targets.
-  const SourceDir& rebase() const { return rebase_; }
-  void set_rebase(const SourceDir& value) { rebase_ = value; }
-  const std::vector<std::string>& data_keys() const { return data_keys_; }
-  std::vector<std::string>& data_keys() { return data_keys_; }
-  const std::vector<std::string>& walk_keys() const { return walk_keys_; }
-  std::vector<std::string>& walk_keys() { return walk_keys_; }
+  struct GeneratedFile {
+    Value output_conversion_;
+    Value contents_;  // Value::NONE if metadata collection should occur.
+    SourceDir rebase_;
+    std::vector<std::string> data_keys_;
+    std::vector<std::string> walk_keys_;
+  };
+  const GeneratedFile& generated_file() const;
+  GeneratedFile& generated_file();
+  bool has_generated_file() const { return generated_file_.get(); }
+
+  const Value& contents() const { return generated_file().contents_; }
+  void set_contents(const Value& value) { generated_file().contents_ = value; }
+  const Value& output_conversion() const {
+    return generated_file().output_conversion_;
+  }
+  void set_output_conversion(const Value& value) {
+    generated_file().output_conversion_ = value;
+  }
+
+  const SourceDir& rebase() const { return generated_file().rebase_; }
+  void set_rebase(const SourceDir& value) { generated_file().rebase_ = value; }
+  const std::vector<std::string>& data_keys() const {
+    return generated_file().data_keys_;
+  }
+  std::vector<std::string>& data_keys() { return generated_file().data_keys_; }
+  const std::vector<std::string>& walk_keys() const {
+    return generated_file().walk_keys_;
+  }
+  std::vector<std::string>& walk_keys() { return generated_file().walk_keys_; }
 
   bool testonly() const { return testonly_; }
   void set_testonly(bool value) { testonly_ = value; }
@@ -210,8 +232,9 @@ class Target : public Item {
 
   // Information about the bundle. Only valid for CREATE_BUNDLE target after
   // they have been resolved.
-  const BundleData& bundle_data() const { return bundle_data_; }
-  BundleData& bundle_data() { return bundle_data_; }
+  const BundleData& bundle_data() const;
+  BundleData& bundle_data();
+  bool has_bundle_data() const { return bundle_data_.get(); }
 
   // Returns true if targets depending on this one should have an order
   // dependency.
@@ -219,7 +242,7 @@ class Target : public Item {
     return output_type_ == ACTION || output_type_ == ACTION_FOREACH ||
            output_type_ == COPY_FILES || output_type_ == CREATE_BUNDLE ||
            output_type_ == BUNDLE_DATA || output_type_ == GENERATED_FILE ||
-           (IsBinary() && swift_values().builds_module());
+           (IsBinary() && has_swift_values() && swift_values().builds_module());
   }
 
   // Returns the iterator range which can be used in range-based for loops
@@ -238,6 +261,11 @@ class Target : public Item {
   // Non-linked dependencies.
   const LabelTargetVector& data_deps() const { return data_deps_; }
   LabelTargetVector& data_deps() { return data_deps_; }
+
+  // gen_deps only propagate the "should_generate" flag. These dependencies can
+  // have cycles so care should be taken if iterating over them recursively.
+  const LabelTargetVector& gen_deps() const { return gen_deps_; }
+  LabelTargetVector& gen_deps() { return gen_deps_; }
 
   // List of configs that this class inherits settings from. Once a target is
   // resolved, this will also list all-dependent and public configs.
@@ -274,34 +302,42 @@ class Target : public Item {
   }
 
   // This config represents the configuration set directly on this target.
-  ConfigValues& config_values() { return config_values_; }
-  const ConfigValues& config_values() const { return config_values_; }
+  ConfigValues& config_values();
+  const ConfigValues& config_values() const;
+  bool has_config_values() const { return config_values_.get(); }
 
-  ActionValues& action_values() { return action_values_; }
-  const ActionValues& action_values() const { return action_values_; }
+  ActionValues& action_values();
+  const ActionValues& action_values() const;
+  bool has_action_values() const { return action_values_.get(); }
 
-  SwiftValues& swift_values() { return swift_values_; }
-  const SwiftValues& swift_values() const { return swift_values_; }
+  SwiftValues& swift_values();
+  const SwiftValues& swift_values() const;
+  bool has_swift_values() const { return swift_values_.get(); }
 
-  RustValues& rust_values() { return rust_values_; }
-  const RustValues& rust_values() const { return rust_values_; }
+  RustValues& rust_values();
+  const RustValues& rust_values() const;
+  bool has_rust_values() const { return rust_values_.get(); }
 
-  const OrderedSet<SourceDir>& all_lib_dirs() const { return all_lib_dirs_; }
-  const OrderedSet<LibFile>& all_libs() const { return all_libs_; }
+  // Transitive closure of libraries that are depended on by this target
+  InheritedLibraries& rust_transitive_libs() { return rust_transitive_libs_; }
+  const InheritedLibraries& rust_transitive_libs() const {
+    return rust_transitive_libs_;
+  }
 
-  const OrderedSet<SourceDir>& all_framework_dirs() const {
+  const UniqueVector<SourceDir>& all_lib_dirs() const { return all_lib_dirs_; }
+  const UniqueVector<LibFile>& all_libs() const { return all_libs_; }
+
+  const UniqueVector<SourceDir>& all_framework_dirs() const {
     return all_framework_dirs_;
   }
-  const OrderedSet<std::string>& all_frameworks() const {
+  const UniqueVector<std::string>& all_frameworks() const {
     return all_frameworks_;
   }
-  const OrderedSet<std::string>& all_weak_frameworks() const {
+  const UniqueVector<std::string>& all_weak_frameworks() const {
     return all_weak_frameworks_;
   }
 
-  const std::set<const Target*>& recursive_hard_deps() const {
-    return recursive_hard_deps_;
-  }
+  const TargetSet& recursive_hard_deps() const { return recursive_hard_deps_; }
 
   std::vector<LabelPattern>& friends() { return friends_; }
   const std::vector<LabelPattern>& friends() const { return friends_; }
@@ -440,12 +476,13 @@ class Target : public Item {
   bool complete_static_lib_ = false;
   bool testonly_ = false;
   std::vector<std::string> data_;
-  BundleData bundle_data_;
+  std::unique_ptr<BundleData> bundle_data_;
   OutputFile write_runtime_deps_output_;
 
   LabelTargetVector private_deps_;
   LabelTargetVector public_deps_;
   LabelTargetVector data_deps_;
+  LabelTargetVector gen_deps_;
 
   // See getters for more info.
   UniqueVector<LabelConfigPair> configs_;
@@ -460,18 +497,18 @@ class Target : public Item {
 
   // These libs and dirs are inherited from statically linked deps and all
   // configs applying to this target.
-  OrderedSet<SourceDir> all_lib_dirs_;
-  OrderedSet<LibFile> all_libs_;
+  UniqueVector<SourceDir> all_lib_dirs_;
+  UniqueVector<LibFile> all_libs_;
 
   // These frameworks and dirs are inherited from statically linked deps and
   // all configs applying to this target.
-  OrderedSet<SourceDir> all_framework_dirs_;
-  OrderedSet<std::string> all_frameworks_;
-  OrderedSet<std::string> all_weak_frameworks_;
+  UniqueVector<SourceDir> all_framework_dirs_;
+  UniqueVector<std::string> all_frameworks_;
+  UniqueVector<std::string> all_weak_frameworks_;
 
   // All hard deps from this target and all dependencies. Filled in when this
   // target is marked resolved. This will not include the current target.
-  std::set<const Target*> recursive_hard_deps_;
+  TargetSet recursive_hard_deps_;
 
   std::vector<LabelPattern> friends_;
   std::vector<LabelPattern> assert_no_deps_;
@@ -479,16 +516,19 @@ class Target : public Item {
   // Used for all binary targets, and for inputs in regular targets. The
   // precompiled header values in this struct will be resolved to the ones to
   // use for this target, if precompiled headers are used.
-  ConfigValues config_values_;
+  std::unique_ptr<ConfigValues> config_values_;
 
   // Used for action[_foreach] targets.
-  ActionValues action_values_;
+  std::unique_ptr<ActionValues> action_values_;
 
   // Used for Rust targets.
-  RustValues rust_values_;
+  std::unique_ptr<RustValues> rust_values_;
+
+  // Used by all targets, only useful to generate Rust targets though.
+  InheritedLibraries rust_transitive_libs_;
 
   // User for Swift targets.
-  SwiftValues swift_values_;
+  std::unique_ptr<SwiftValues> swift_values_;
 
   // Toolchain used by this target. Null until target is resolved.
   const Toolchain* toolchain_ = nullptr;
@@ -499,18 +539,13 @@ class Target : public Item {
   OutputFile dependency_output_file_;
   std::vector<OutputFile> runtime_outputs_;
 
-  Metadata metadata_;
-
-  // GeneratedFile values.
-  Value output_conversion_;
-  Value contents_;  // Value::NONE if metadata collection should occur.
+  std::unique_ptr<Metadata> metadata_;
 
   // GeneratedFile as metadata collection values.
-  SourceDir rebase_;
-  std::vector<std::string> data_keys_;
-  std::vector<std::string> walk_keys_;
+  std::unique_ptr<GeneratedFile> generated_file_;
 
-  DISALLOW_COPY_AND_ASSIGN(Target);
+  Target(const Target&) = delete;
+  Target& operator=(const Target&) = delete;
 };
 
 extern const char kExecution_Help[];

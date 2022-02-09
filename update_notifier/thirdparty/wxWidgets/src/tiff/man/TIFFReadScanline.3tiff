@@ -90,4 +90,4 @@ tile-based interfaces to read these formats.
 .BR libtiff (3TIFF)
 .PP
 Libtiff library home page:
-.BR http://www.remotesensing.org/libtiff/
+.BR http://www.simplesystems.org/libtiff/

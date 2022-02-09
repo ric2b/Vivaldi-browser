@@ -16,6 +16,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "pdf/document_attachment_info.h"
 #include "pdf/document_layout.h"
 #include "pdf/document_metadata.h"
@@ -652,6 +653,42 @@ TEST_F(PDFiumEngineTest, HandleInputEventRawKeyDown) {
   EXPECT_TRUE(engine->HandleInputEvent(raw_key_down_event));
 }
 
+TEST_F(PDFiumEngineTest, SelectText) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("hello_world2.pdf"));
+  ASSERT_TRUE(engine);
+
+  EXPECT_THAT(engine->GetSelectedText(), IsEmpty());
+
+  engine->SelectAll();
+#if defined(OS_WIN)
+  constexpr char kExpectedText[] =
+      "Hello, world!\r\nGoodbye, world!\r\nHello, world!\r\nGoodbye, world!";
+#else
+  constexpr char kExpectedText[] =
+      "Hello, world!\nGoodbye, world!\nHello, world!\nGoodbye, world!";
+#endif
+  EXPECT_EQ(kExpectedText, engine->GetSelectedText());
+}
+
+TEST_F(PDFiumEngineTest, SelectCroppedText) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("hello_world_cropped.pdf"));
+  ASSERT_TRUE(engine);
+
+  EXPECT_THAT(engine->GetSelectedText(), IsEmpty());
+
+  engine->SelectAll();
+#if defined(OS_WIN)
+  constexpr char kExpectedText[] = "world!\r\n";
+#else
+  constexpr char kExpectedText[] = "world!\n";
+#endif
+  EXPECT_EQ(kExpectedText, engine->GetSelectedText());
+}
+
 using PDFiumEngineDeathTest = PDFiumEngineTest;
 
 TEST_F(PDFiumEngineDeathTest, RequestThumbnailRedundant) {
@@ -689,7 +726,7 @@ class PDFiumEngineTabbingTest : public PDFiumTestBase {
   }
 
   PDFiumEngine::FocusElementType GetFocusedElementType(PDFiumEngine* engine) {
-    return engine->focus_item_type_;
+    return engine->focus_element_type_;
   }
 
   int GetLastFocusedPage(PDFiumEngine* engine) {
@@ -698,15 +735,15 @@ class PDFiumEngineTabbingTest : public PDFiumTestBase {
 
   PDFiumEngine::FocusElementType GetLastFocusedElementType(
       PDFiumEngine* engine) {
-    return engine->last_focused_item_type_;
+    return engine->last_focused_element_type_;
   }
 
   int GetLastFocusedAnnotationIndex(PDFiumEngine* engine) {
     return engine->last_focused_annot_index_;
   }
 
-  bool IsInFormTextArea(PDFiumEngine* engine) {
-    return engine->in_form_text_area_;
+  PDFEngine::FocusFieldType FormFocusFieldType(PDFiumEngine* engine) {
+    return engine->focus_field_type_;
   }
 
   size_t GetSelectionSize(PDFiumEngine* engine) {
@@ -981,7 +1018,7 @@ TEST_F(PDFiumEngineTabbingTest, TabbingWithModifiers) {
       HandleTabEvent(engine.get(), blink::WebInputEvent::Modifiers::kAltKey));
 }
 
-TEST_F(PDFiumEngineTabbingTest, NoFocusableItemTabbingTest) {
+TEST_F(PDFiumEngineTabbingTest, NoFocusableElementTabbingTest) {
   /*
    * Document structure
    * Document
@@ -1139,24 +1176,29 @@ TEST_F(PDFiumEngineTabbingTest, VerifyFormFieldStatesOnTabbing) {
   ASSERT_TRUE(engine);
   ASSERT_EQ(1, engine->GetNumberOfPages());
 
+  // Bring focus to the document.
   ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
   EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
             GetFocusedElementType(engine.get()));
+  EXPECT_EQ(PDFEngine::FocusFieldType::kNoFocus,
+            FormFocusFieldType(engine.get()));
+  EXPECT_FALSE(engine->CanEditText());
 
-  // Bring focus to the text field.
+  // Bring focus to the text field on the page.
   ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
   EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
             GetFocusedElementType(engine.get()));
   EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
-  EXPECT_TRUE(IsInFormTextArea(engine.get()));
+  EXPECT_EQ(PDFEngine::FocusFieldType::kText, FormFocusFieldType(engine.get()));
   EXPECT_TRUE(engine->CanEditText());
 
-  // Bring focus to the button.
+  // Bring focus to the button on the page.
   ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
   EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
             GetFocusedElementType(engine.get()));
   EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
-  EXPECT_FALSE(IsInFormTextArea(engine.get()));
+  EXPECT_EQ(PDFEngine::FocusFieldType::kNonText,
+            FormFocusFieldType(engine.get()));
   EXPECT_FALSE(engine->CanEditText());
 }
 
@@ -1328,7 +1370,10 @@ class ReadOnlyTestClient : public TestClient {
   ReadOnlyTestClient& operator=(const ReadOnlyTestClient&) = delete;
 
   // Mock PDFEngine::Client methods.
-  MOCK_METHOD(void, FormTextFieldFocusChange, (bool), (override));
+  MOCK_METHOD(void,
+              FormFieldFocusChange,
+              (PDFEngine::FocusFieldType),
+              (override));
   MOCK_METHOD(void, SetSelectedText, (const std::string&), (override));
 };
 
@@ -1342,13 +1387,15 @@ TEST_F(PDFiumEngineReadOnlyTest, KillFormFocus) {
 
   // Setting read-only mode should kill form focus.
   EXPECT_FALSE(engine->IsReadOnly());
-  EXPECT_CALL(client, FormTextFieldFocusChange(false));
+  EXPECT_CALL(client,
+              FormFieldFocusChange(PDFEngine::FocusFieldType::kNoFocus));
   engine->SetReadOnly(true);
 
   // Attempting to focus during read-only mode should once more trigger a
   // killing of form focus.
   EXPECT_TRUE(engine->IsReadOnly());
-  EXPECT_CALL(client, FormTextFieldFocusChange(false));
+  EXPECT_CALL(client,
+              FormFieldFocusChange(PDFEngine::FocusFieldType::kNoFocus));
   engine->UpdateFocus(true);
 }
 

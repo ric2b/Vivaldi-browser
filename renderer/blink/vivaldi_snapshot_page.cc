@@ -47,7 +47,7 @@ bool ToSkBitmap(sk_sp<SkImage> image, SkBitmap* bitmap) {
 
 bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
                          bool full_page,
-                         const blink::IntRect& rect,
+                         const gfx::Rect& rect,
                          SkBitmap* bitmap) {
   // This is based on DragController::DragImageForSelection.
   //
@@ -71,14 +71,14 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     return false;
   }
 
-  blink::IntRect visible_content_rect =
+  gfx::Rect visible_content_rect =
       local_frame->View()->LayoutViewport()->VisibleContentRect();
   if (visible_content_rect.IsEmpty()) {
     LOG(ERROR) << "empty visible content rect";
     return false;
   }
 
-  blink::IntRect page_rect;
+  gfx::Rect page_rect;
   if (full_page) {
     blink::LayoutView* layout_view = document->GetLayoutView();
     if (!layout_view) {
@@ -86,23 +86,23 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
       return false;
     }
     blink::PhysicalRect document_rect = layout_view->DocumentRect();
-    blink::FloatSize float_page_size = local_frame->ResizePageRectsKeepingRatio(
-        blink::FloatSize(document_rect.Width(), document_rect.Height()),
-        blink::FloatSize(document_rect.Width(), document_rect.Height()));
-    float_page_size.SetHeight(
-        std::min(float_page_size.Height(), static_cast<float>(rect.Height())));
-    blink::IntSize page_size = ExpandedIntSize(float_page_size);
-    page_rect.SetWidth(page_size.Width());
-    page_rect.SetHeight(page_size.Height());
+    gfx::SizeF float_page_size = local_frame->ResizePageRectsKeepingRatio(
+        gfx::SizeF(document_rect.Width(), document_rect.Height()),
+        gfx::SizeF(document_rect.Width(), document_rect.Height()));
+    float_page_size.set_height(
+        std::min(float_page_size.height(), static_cast<float>(rect.height())));
+    gfx::Size page_size = ToCeiledSize(float_page_size);
+    page_rect.set_width(page_size.width());
+    page_rect.set_height(page_size.height());
 
     // page_rect is relative to the visible scroll area. To include the
     // document top we must use negative offsets for the upper left
     // corner.
-    page_rect.SetX(-visible_content_rect.X());
-    page_rect.SetY(-visible_content_rect.Y());
+    page_rect.set_x(-visible_content_rect.x());
+    page_rect.set_y(-visible_content_rect.y());
   } else {
-    page_rect.SetWidth(visible_content_rect.Width());
-    page_rect.SetHeight(visible_content_rect.Height());
+    page_rect.set_width(visible_content_rect.width());
+    page_rect.set_height(visible_content_rect.height());
   }
 
   local_frame->View()->UpdateAllLifecyclePhasesExceptPaint(
@@ -138,10 +138,10 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
 
   SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);
   sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
-      page_rect.Width(), page_rect.Height(), &surface_props);
+      page_rect.width(), page_rect.height(), &surface_props);
   if (!surface) {
-    LOG(ERROR) << "failed to allocate surface width=" << page_rect.Width()
-               << " height=" << page_rect.Height();
+    LOG(ERROR) << "failed to allocate surface width=" << page_rect.width()
+               << " height=" << page_rect.height();
     return false;
   }
 
@@ -150,7 +150,7 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
   if (full_page) {
     // Translate scroll view coordinates into page-relative ones.
     blink::AffineTransform transform;
-    transform.Translate(visible_content_rect.X(), visible_content_rect.Y());
+    transform.Translate(visible_content_rect.x(), visible_content_rect.y());
     canvas.concat(blink::AffineTransformToSkMatrix(transform));
 
     // Prepare PaintChunksToCcLayer called deep under EndRecording
@@ -179,7 +179,7 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
   if (rect.IsEmpty() || full_page) {
     snapshot = surface->makeImageSnapshot();
   } else {
-    snapshot = surface->makeImageSnapshot(SkIRect(rect));
+    snapshot = surface->makeImageSnapshot(gfx::RectToSkIRect(rect));
   }
   if (!snapshot) {
     LOG(ERROR) << "failed to create image snapshot";

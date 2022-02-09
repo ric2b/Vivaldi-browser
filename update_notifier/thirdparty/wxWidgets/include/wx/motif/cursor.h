@@ -11,13 +11,12 @@
 #ifndef _WX_CURSOR_H_
 #define _WX_CURSOR_H_
 
-#include "wx/gdiobj.h"
 #include "wx/gdicmn.h"
 
 class WXDLLIMPEXP_FWD_CORE wxImage;
 
 // Cursor
-class WXDLLIMPEXP_CORE wxCursor : public wxGDIObject
+class WXDLLIMPEXP_CORE wxCursor : public wxCursorBase
 {
 public:
     wxCursor();
@@ -61,10 +60,8 @@ private:
     // Make a cursor from standard id
     WXCursor MakeCursor(WXDisplay* display, wxStockCursor id) const;
 
-    DECLARE_DYNAMIC_CLASS(wxCursor)
+    wxDECLARE_DYNAMIC_CLASS(wxCursor);
 };
-
-extern WXDLLIMPEXP_CORE void wxSetCursor(const wxCursor& cursor);
 
 #endif
 // _WX_CURSOR_H_

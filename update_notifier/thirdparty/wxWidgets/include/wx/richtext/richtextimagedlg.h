@@ -1,10 +1,9 @@
 /////////////////////////////////////////////////////////////////////////////
 // Name:        wx/richtext/richtextimagedlg.h
-// Purpose:
+// Purpose:     A dialog for editing image properties.
 // Author:      Mingquan Yang
 // Modified by: Julian Smart
 // Created:     Wed 02 Jun 2010 11:27:23 CST
-// RCS-ID:
 // Copyright:   (c) Mingquan Yang, Julian Smart
 // Licence:     wxWindows licence
 /////////////////////////////////////////////////////////////////////////////
@@ -45,9 +44,9 @@ class WXDLLIMPEXP_FWD_CORE wxTextCtrl;
  */
 
 class WXDLLIMPEXP_RICHTEXT wxRichTextObjectPropertiesDialog: public wxRichTextFormattingDialog
-{    
-    DECLARE_DYNAMIC_CLASS( wxRichTextObjectPropertiesDialog )
-    DECLARE_EVENT_TABLE()
+{
+    wxDECLARE_DYNAMIC_CLASS(wxRichTextObjectPropertiesDialog);
+    wxDECLARE_EVENT_TABLE();
 
 public:
     /// Constructors

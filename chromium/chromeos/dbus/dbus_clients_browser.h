@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/component_export.h"
-#include "base/macros.h"
 
 namespace dbus {
 class Bus;
@@ -27,6 +26,7 @@ class ChunneldClient;
 class CrosDisksClient;
 class DebugDaemonClient;
 class EasyUnlockClient;
+class FwupdClient;
 class GnubbyClient;
 class ImageBurnerClient;
 class ImageLoaderClient;
@@ -70,6 +70,7 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) DBusClientsBrowser {
   std::unique_ptr<CrosDisksClient> cros_disks_client_;
   std::unique_ptr<DebugDaemonClient> debug_daemon_client_;
   std::unique_ptr<EasyUnlockClient> easy_unlock_client_;
+  std::unique_ptr<FwupdClient> fwupd_client_;
   std::unique_ptr<GnubbyClient> gnubby_client_;
   std::unique_ptr<ImageBurnerClient> image_burner_client_;
   std::unique_ptr<ImageLoaderClient> image_loader_client_;

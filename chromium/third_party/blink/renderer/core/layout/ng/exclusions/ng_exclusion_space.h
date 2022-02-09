@@ -13,6 +13,8 @@
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_bfc_rect.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -24,6 +26,8 @@ typedef HeapVector<NGLayoutOpportunity, 8> LayoutOpportunityVector;
 // see NGExclusionSpace below. NGExclusionSpace was designed to be cheap
 // to construct and cheap to copy if empty.
 class CORE_EXPORT NGExclusionSpaceInternal final {
+  USING_FAST_MALLOC(NGExclusionSpaceInternal);
+
  public:
   NGExclusionSpaceInternal();
   NGExclusionSpaceInternal(const NGExclusionSpaceInternal&);

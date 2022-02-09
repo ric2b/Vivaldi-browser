@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "content/public/browser/browsing_data_remover.h"
 
 #include <memory>
@@ -199,7 +200,9 @@ class BrowsingDataRemoverImplBrowserTest : public ContentBrowserTest {
     bool login_requested = false;
     ShellContentBrowserClient::Get()->set_login_request_callback(
         base::BindLambdaForTesting(
-            [&](bool is_main_frame /* unused */) { login_requested = true; }));
+            [&](bool is_primary_main_frame /* unused */) {
+              login_requested = true;
+            }));
 
     GURL url = ssl_server_.GetURL(kHttpAuthPath);
     bool navigation_suceeded = NavigateToURL(shell(), url);
@@ -397,7 +400,7 @@ class TrustTokensTester {
   }
 
  private:
-  network::mojom::NetworkContext* network_context_;
+  raw_ptr<network::mojom::NetworkContext> network_context_;
 };
 
 }  // namespace

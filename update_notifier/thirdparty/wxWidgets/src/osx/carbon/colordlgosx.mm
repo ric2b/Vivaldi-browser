@@ -30,7 +30,7 @@
 //Mac OSX 10.2+ only
 #if USE_NATIVE_FONT_DIALOG_FOR_MACOSX && wxUSE_COLOURDLG
 
-IMPLEMENT_DYNAMIC_CLASS(wxColourDialog, wxDialog)
+wxIMPLEMENT_DYNAMIC_CLASS(wxColourDialog, wxDialog);
 
 #include "wx/osx/private.h"
 
@@ -41,7 +41,7 @@ IMPLEMENT_DYNAMIC_CLASS(wxColourDialog, wxDialog)
 // wxCPWCDelegate - Window Closed delegate
 // ---------------------------------------------------------------------------
 
-@interface wxCPWCDelegate : NSObject wxOSX_10_6_AND_LATER(<NSWindowDelegate>)
+@interface wxCPWCDelegate : NSObject <NSWindowDelegate>
 {
     bool m_bIsClosed;
 }
@@ -56,9 +56,10 @@ IMPLEMENT_DYNAMIC_CLASS(wxColourDialog, wxDialog)
 
 - (id)init
 {
-    self = [super init];
-    m_bIsClosed = false;
-
+    if ( self = [super init] )
+    {
+        m_bIsClosed = false;
+    }
     return self;
 }
 
@@ -89,12 +90,12 @@ wxColourDialog::wxColourDialog()
     m_dialogParent = NULL;
 }
 
-wxColourDialog::wxColourDialog(wxWindow *parent, wxColourData *data)
+wxColourDialog::wxColourDialog(wxWindow *parent, const wxColourData *data)
 {
     Create(parent, data);
 }
 
-bool wxColourDialog::Create(wxWindow *parent, wxColourData *data)
+bool wxColourDialog::Create(wxWindow *parent, const wxColourData *data)
 {
     m_dialogParent = parent;
 
@@ -105,14 +106,9 @@ bool wxColourDialog::Create(wxWindow *parent, wxColourData *data)
     NSAutoreleasePool *thePool;
     thePool = [[NSAutoreleasePool alloc] init];
 
-    [[NSColorPanel sharedColorPanel] setShowsAlpha:YES];
+    [[NSColorPanel sharedColorPanel] setShowsAlpha:m_colourData.GetChooseAlpha() ? YES : NO];
     if(m_colourData.GetColour().IsOk())
-        [[NSColorPanel sharedColorPanel] setColor:
-            [NSColor colorWithCalibratedRed:(CGFloat) (m_colourData.GetColour().Red() / 255.0)
-                                        green:(CGFloat) (m_colourData.GetColour().Green() / 255.0)
-                                        blue:(CGFloat) (m_colourData.GetColour().Blue() / 255.0)
-                                        alpha:(CGFloat) (m_colourData.GetColour().Alpha() / 255.0)]
-        ];
+        [[NSColorPanel sharedColorPanel] setColor:m_colourData.GetColour().OSXGetNSColor()];
     else
         [[NSColorPanel sharedColorPanel] setColor:[NSColor blackColor]];
 
@@ -142,9 +138,9 @@ int wxColourDialog::ShowModal()
     [theColorPanel setDelegate:theCPDelegate];
 
             //
-            //	Start the color panel modal loop
+            // Start the color panel modal loop
             //
-            wxDialog::OSXBeginModalDialog();
+            OSXBeginModalDialog();
             NSModalSession session = [NSApp beginModalSessionForWindow:theColorPanel];
             for (;;)
             {
@@ -155,21 +151,14 @@ int wxColourDialog::ShowModal()
                     break;
             }
             [NSApp endModalSession:session];
-            wxDialog::OSXEndModalDialog();
+            OSXEndModalDialog();
 
     //free up the memory for the delegates - we don't need them anymore
     [theColorPanel setDelegate:nil];
     [theCPDelegate release];
 
     //Get the shared color panel along with the chosen color and set the chosen color
-    NSColor* theColor = [[theColorPanel color] colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-
-    m_colourData.GetColour().Set(
-                                (unsigned char) ([theColor redComponent] * 255.0),
-                                (unsigned char) ([theColor greenComponent] * 255.0),
-                                (unsigned char) ([theColor blueComponent] * 255.0),
-                                (unsigned char) ([theColor alphaComponent] * 255.0)
-                                 );
+    m_colourData.GetColour() = wxColour([theColorPanel color]);
 
     //Release the pool, we're done :)
     [thePool release];

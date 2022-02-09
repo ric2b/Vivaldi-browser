@@ -13,9 +13,9 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/google/core/common/google_util.h"
 #include "components/language/core/browser/url_language_histogram.h"
@@ -129,10 +129,8 @@ void PerFrameContentTranslateDriver::PendingRequestStats::Report() {
 
 PerFrameContentTranslateDriver::PerFrameContentTranslateDriver(
     content::WebContents& web_contents,
-    content::NavigationController* nav_controller,
     language::UrlLanguageHistogram* url_language_histogram)
     : ContentTranslateDriver(web_contents,
-                             nav_controller,
                              url_language_histogram,
                              /*translate_model_service=*/nullptr) {}
 

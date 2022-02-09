@@ -462,6 +462,12 @@ FilePath NSStringToFilePath(NSString* str) {
   return FilePath([str fileSystemRepresentation]);
 }
 
+FilePath NSURLToFilePath(NSURL* url) {
+  if (![url isFileURL])
+    return FilePath();
+  return NSStringToFilePath([url path]);
+}
+
 base::ScopedCFTypeRef<CFURLRef> FilePathToCFURL(const FilePath& path) {
   DCHECK(!path.empty());
 

@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/containers/id_map.h"
-#include "base/macros.h"
 #include "components/guest_view/browser/guest_view.h"
 #include "extensions/browser/guest_view/app_view/app_view_guest_delegate.h"
 #include "extensions/browser/lazy_context_task_queue.h"
@@ -63,7 +62,7 @@ class AppViewGuest : public guest_view::GuestView<AppViewGuest> {
   int GetTaskPrefix() const final;
 
   // content::WebContentsDelegate implementation.
-  bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) final;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,

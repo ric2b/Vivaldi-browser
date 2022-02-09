@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -25,6 +24,10 @@
 
 #ifndef _TIFFDIR_
 #define	_TIFFDIR_
+
+#include "tiff.h"
+#include "tiffio.h"
+
 /*
  * ``Library-private'' Directory-related Definitions.
  */
@@ -55,6 +58,7 @@ typedef struct {
 		uint32 toff_long;
 		uint64 toff_long8;
 	} tdir_offset;		/* either offset or the data itself if fits */
+	uint8  tdir_ignore;	/* flag status to ignore tag when parsing tags in tif_dirread.c */
 } TIFFDirEntry;
 
 /*
@@ -94,13 +98,14 @@ typedef struct {
 	 * number of striles */
 	uint32  td_stripsperimage;  
 	uint32  td_nstrips;              /* size of offset & bytecount arrays */
-	uint64* td_stripoffset;
-	uint64* td_stripbytecount;
+	uint64* td_stripoffset_p;        /* should be accessed with TIFFGetStrileOffset */
+	uint64* td_stripbytecount_p;     /* should be accessed with TIFFGetStrileByteCount */
+        uint32  td_stripoffsetbyteallocsize; /* number of elements currently allocated for td_stripoffset/td_stripbytecount. Only used if TIFF_LAZYSTRILELOAD is set */
+#ifdef STRIPBYTECOUNTSORTED_UNUSED
 	int     td_stripbytecountsorted; /* is the bytecount array sorted ascending? */
-#if defined(DEFER_STRILE_LOAD)
+#endif
         TIFFDirEntry td_stripoffset_entry;    /* for deferred loading */
         TIFFDirEntry td_stripbytecount_entry; /* for deferred loading */
-#endif
 	uint16  td_nsubifd;
 	uint64* td_subifd;
 	/* YCbCr parameters */
@@ -115,6 +120,8 @@ typedef struct {
 
 	int     td_customValueCount;
         TIFFTagValue *td_customValues;
+
+        unsigned char td_deferstrilearraywriting; /* see TIFFDeferStrileArrayWriting() */
 } TIFFDirectory;
 
 /*
@@ -254,6 +261,7 @@ extern "C" {
 
 extern const TIFFFieldArray* _TIFFGetFields(void);
 extern const TIFFFieldArray* _TIFFGetExifFields(void);
+extern const TIFFFieldArray* _TIFFGetGpsFields(void);
 extern void _TIFFSetupFields(TIFF* tif, const TIFFFieldArray* infoarray);
 extern void _TIFFPrintFieldInfo(TIFF*, FILE*);
 
@@ -262,6 +270,7 @@ extern int _TIFFFillStriles(TIFF*);
 typedef enum {
 	tfiatImage,
 	tfiatExif,
+	tfiatGps,		/* EXIF-GPS fields array type */
 	tfiatOther
 } TIFFFieldArrayType;
 
@@ -290,6 +299,7 @@ struct _TIFFField {
 extern int _TIFFMergeFields(TIFF*, const TIFFField[], uint32);
 extern const TIFFField* _TIFFFindOrRegisterField(TIFF *, uint32, TIFFDataType);
 extern  TIFFField* _TIFFCreateAnonField(TIFF *, uint32, TIFFDataType);
+extern int _TIFFCheckFieldIsValidForCodec(TIFF *tif, ttag_t tag);
 
 #if defined(__cplusplus)
 }

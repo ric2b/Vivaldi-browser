@@ -1,0 +1,141 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "readingListPrivate",
+    "description": "Use the <code>vivaldi.readingListPrivate</code> API to manipulate the reading list.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/reading_list/reading_list_api.h"
+    },
+    "types": [
+      {
+        "id": "ReadingListEntry",
+        "type": "object",
+        "description": "Object passed to the update and returned in the get function.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The url of the entry. This is also the unique key."
+          },
+          "title": {
+            "type": "string",
+            "description": "The title of the entry."
+          },
+          "read": {
+            "type": "boolean",
+            "description": "Has entry been read."
+          },
+          "lastUpdate": {
+            "type": "number",
+            "description": "Last updated in micro seconds since Jan 1st 1970."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "add",
+        "type": "function",
+        "description": "Add a new entry to the reading list.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "url",
+            "description": "The url of the entry. This is also the unique key. Only http/https urls are supported."
+          },
+          {
+            "type": "string",
+            "name": "title",
+            "description": "The title of the entry."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type":  "boolean",
+              "name": "success",
+              "description": "true for success, otherwise false if invalid or unsupported url."
+            }
+          ]
+        }
+      },
+      {
+        "name": "remove",
+        "type": "function",
+        "description": "Remove an entry from the reading list.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "url",
+            "description": "The url of the entry."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type":  "boolean",
+              "name": "success",
+              "description": "true for success, otherwise false if url was not found in the list."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getAll",
+        "type": "function",
+        "description": "Returns all reading list entries.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "items",
+              "type": "array",
+              "items": { "$ref": "ReadingListEntry" },
+              "description": "All the reading list entries."
+            }
+          ]
+        }
+      },
+      {
+        "name": "setReadStatus",
+        "type": "function",
+        "description": "Sets the read status on a url.",
+        "parameters": [
+          {
+            "type":  "string",
+            "name": "url",
+            "description": "url to set read status on."
+          },
+          {
+            "type":  "boolean",
+            "name": "read",
+            "description": "true for read, false for unread."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type":  "boolean",
+              "name": "success",
+              "description": "true for success, otherwise false if url was not found in the list."
+            }
+          ]
+        }
+      }
+    ],
+    "events": [
+      {
+        "name": "onModelChanged",
+        "type": "function",
+        "description": "Fired when the reading list data model has changed.",
+        "parameters": [
+        ]
+      }
+    ]
+  }
+]

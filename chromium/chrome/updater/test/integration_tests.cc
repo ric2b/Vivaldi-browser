@@ -4,26 +4,25 @@
 
 #include <cstdlib>
 #include <memory>
+#include <string>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/checked_math.h"
-#include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
 #include "base/version.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "chrome/common/chrome_paths.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
@@ -39,7 +38,13 @@
 #include "url/gurl.h"
 
 #if defined(OS_WIN)
+#include <shlobj.h>
+
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/registry.h"
+#include "chrome/updater/app/server/win/updater_legacy_idl.h"
+#include "chrome/updater/win/win_constants.h"
+#include "chrome/updater/win/win_util.h"
 #endif  // OS_WIN
 
 namespace updater {
@@ -48,83 +53,12 @@ namespace {
 
 #if defined(OS_WIN) || !defined(COMPONENT_BUILD)
 
-#if defined(OS_MAC)
-constexpr char kDoNothingCRXName[] = "updater_qualification_app_dmg.crx";
-constexpr char kDoNothingCRXRun[] = "updater_qualification_app_dmg.dmg";
-constexpr char kDoNothingCRXHash[] =
-    "c9eeadf63732f3259e2ad1cead6298f90a3ef4b601b1ba1cbb0f37b6112a632c";
-#elif defined(OS_WIN)
-constexpr char kDoNothingCRXName[] = "updater_qualification_app_exe.crx";
-constexpr char kDoNothingCRXRun[] = "qualification_app.exe";
-constexpr char kDoNothingCRXHash[] =
-    "0705f7eedb0427810db76dfc072c8cbc302fbeb9b2c56fa0de3752ed8d6f9164";
-#else
-static_assert(false, "Unsupported platform for IntegrationTest.*");
-#endif
-
-std::string GetUpdateResponse(const std::string& app_id,
-                              const std::string& codebase,
-                              const base::Version& version) {
-  return base::StringPrintf(
-      ")]}'\n"
-      R"({"response":{)"
-      R"(  "protocol":"3.1",)"
-      R"(  "app":[)"
-      R"(    {)"
-      R"(      "appid":"%s",)"
-      R"(      "status":"ok",)"
-      R"(      "updatecheck":{)"
-      R"(        "status":"ok",)"
-      R"(        "urls":{"url":[{"codebase":"%s"}]},)"
-      R"(        "manifest":{)"
-      R"(          "version":"%s",)"
-      R"(          "run":"%s",)"
-      R"(          "packages":{)"
-      R"(            "package":[)"
-      R"(              {"name":"%s","hash_sha256":"%s"})"
-      R"(            ])"
-      R"(          })"
-      R"(        })"
-      R"(      })"
-      R"(    })"
-      R"(  ])"
-      R"(}})",
-      app_id.c_str(), codebase.c_str(), version.GetString().c_str(),
-      kDoNothingCRXRun, kDoNothingCRXName, kDoNothingCRXHash);
-}
-
-void ExpectUpdateSequence(ScopedServer* test_server,
-                          const std::string& app_id,
-                          const base::Version& from_version,
-                          const base::Version& to_version) {
-  // First request: update check.
-  test_server->ExpectOnce(
-      base::StringPrintf(R"(.*"appid":"%s".*)", app_id.c_str()),
-      GetUpdateResponse(app_id, test_server->base_url().spec(), to_version));
-
-  // Second request: update download.
-  base::FilePath test_data_path;
-  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_path));
-  base::FilePath crx_path = test_data_path.Append(FILE_PATH_LITERAL("updater"))
-                                .AppendASCII(kDoNothingCRXName);
-  ASSERT_TRUE(base::PathExists(crx_path));
-  std::string crx_bytes;
-  base::ReadFileToString(crx_path, &crx_bytes);
-  test_server->ExpectOnce("", crx_bytes);
-
-  // Third request: event ping.
-  test_server->ExpectOnce(
-      base::StringPrintf(R"(.*"eventresult":1,"eventtype":3,)"
-                         R"("nextversion":"%s","previousversion":"%s".*)",
-                         to_version.GetString().c_str(),
-                         from_version.GetString().c_str()),
-      ")]}'\n");
-}
-
 void ExpectNoUpdateSequence(ScopedServer* test_server,
                             const std::string& app_id) {
   test_server->ExpectOnce(
-      base::StringPrintf(R"(.*"appid":"%s".*)", app_id.c_str()),
+      {base::BindRepeating(
+          RequestMatcherRegex,
+          base::StringPrintf(R"(.*"appid":"%s".*)", app_id.c_str()))},
       base::StringPrintf(")]}'\n"
                          R"({"response":{)"
                          R"(  "protocol":"3.1",)"
@@ -144,8 +78,6 @@ void ExpectNoUpdateSequence(ScopedServer* test_server,
 #endif  // defined(OS_WIN) || !defined(COMPONENT_BUILD)
 
 }  // namespace
-
-// TODO(crbug.com/1096654): Enable for system integration tests for Win.
 
 class IntegrationTest : public ::testing::Test {
  public:
@@ -215,10 +147,18 @@ class IntegrationTest : public ::testing::Test {
     test_commands_->ExpectInterfacesRegistered();
   }
 
-  void ExpectLegacyUpdate3WebSucceeds(const std::string& app_id) {
-    test_commands_->ExpectLegacyUpdate3WebSucceeds(app_id);
+  void ExpectLegacyUpdate3WebSucceeds(const std::string& app_id,
+                                      int expected_final_state,
+                                      int expected_error_code) {
+    test_commands_->ExpectLegacyUpdate3WebSucceeds(app_id, expected_final_state,
+                                                   expected_error_code);
   }
 
+  void ExpectLegacyProcessLauncherSucceeds() {
+    test_commands_->ExpectLegacyProcessLauncherSucceeds();
+  }
+
+  void RunUninstallCmdLine() { test_commands_->RunUninstallCmdLine(); }
 #endif  // OS_WIN
 
   void SetupFakeUpdaterHigherVersion() {
@@ -285,6 +225,32 @@ class IntegrationTest : public ::testing::Test {
 #endif  // OS_WIN
   }
 
+  void ExpectUpdateSequence(ScopedServer* test_server,
+                            const std::string& app_id,
+                            const base::Version& from_version,
+                            const base::Version& to_version) {
+    test_commands_->ExpectUpdateSequence(test_server, app_id, from_version,
+                                         to_version);
+  }
+
+  void ExpectRegistrationEvent(ScopedServer* test_server,
+                               const std::string& app_id) {
+    test_server->ExpectOnce(
+        {base::BindRepeating(
+            RequestMatcherRegex,
+            base::StrCat({R"(.*"appid":")", app_id, R"(","enabled":true,")",
+                          R"(event":\[{"eventresult":1,"eventtype":2,.*)"}))},
+        "");
+  }
+
+  void StressUpdateService() { test_commands_->StressUpdateService(); }
+
+  void CallServiceUpdate(
+      const std::string& app_id,
+      UpdateService::PolicySameVersionUpdate policy_same_version_update) {
+    test_commands_->CallServiceUpdate(app_id, policy_same_version_update);
+  }
+
   scoped_refptr<IntegrationTestCommands> test_commands_;
 
  private:
@@ -299,6 +265,7 @@ class IntegrationTest : public ::testing::Test {
 
 TEST_F(IntegrationTest, InstallUninstall) {
   Install();
+  WaitForServerExit();
   ExpectInstalled();
   ExpectVersionActive(kUpdaterVersion);
   ExpectActiveUpdater();
@@ -336,12 +303,14 @@ TEST_F(IntegrationTest, SelfUninstallOutdatedUpdater) {
 
 TEST_F(IntegrationTest, QualifyUpdater) {
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
   ExpectInstalled();
   WaitForServerExit();
   SetupFakeUpdaterLowerVersion();
   ExpectVersionNotActive(kUpdaterVersion);
 
+  ExpectRegistrationEvent(&test_server, kQualificationAppId);
   ExpectUpdateSequence(&test_server, kQualificationAppId, base::Version("0.1"),
                        base::Version("0.2"));
 
@@ -350,7 +319,10 @@ TEST_F(IntegrationTest, QualifyUpdater) {
 
   // This instance is now qualified and should activate itself and check itself
   // for updates on the next check.
-  test_server.ExpectOnce(base::StringPrintf(".*%s.*", kUpdaterAppId), ")]}'\n");
+  test_server.ExpectOnce(
+      {base::BindRepeating(RequestMatcherRegex,
+                           base::StringPrintf(".*%s.*", kUpdaterAppId))},
+      ")]}'\n");
   RunWake(0);
   WaitForServerExit();
   ExpectVersionActive(kUpdaterVersion);
@@ -361,6 +333,7 @@ TEST_F(IntegrationTest, QualifyUpdater) {
 
 TEST_F(IntegrationTest, SelfUpdate) {
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   base::Version next_version(base::StringPrintf("%s1", kUpdaterVersion));
@@ -383,12 +356,14 @@ TEST_F(IntegrationTest, ReportsActive) {
   base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(18));
 
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
   ExpectInstalled();
 
   // Register apps test1 and test2. Expect registration pings for each.
-  // TODO(crbug.com/1159525): Registration pings are currently not being sent.
+  ExpectRegistrationEvent(&test_server, "test1");
   RegisterApp("test1");
+  ExpectRegistrationEvent(&test_server, "test2");
   RegisterApp("test2");
 
   // Set test1 to be active and do a background updatecheck.
@@ -396,7 +371,9 @@ TEST_F(IntegrationTest, ReportsActive) {
   ExpectActive("test1");
   ExpectNotActive("test2");
   test_server.ExpectOnce(
-      R"(.*"appid":"test1","enabled":true,"ping":{"a":-2,.*)",
+      {base::BindRepeating(
+          RequestMatcherRegex,
+          R"(.*"appid":"test1","enabled":true,"ping":{"a":-2,.*)")},
       R"()]}')"
       "\n"
       R"({"response":{"protocol":"3.1","daystart":{"elapsed_)"
@@ -414,9 +391,11 @@ TEST_F(IntegrationTest, ReportsActive) {
 
 TEST_F(IntegrationTest, UpdateApp) {
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   const std::string kAppId("test");
+  ExpectRegistrationEvent(&test_server, kAppId);
   RegisterApp(kAppId);
   base::Version v1("1");
   ExpectUpdateSequence(&test_server, kAppId, base::Version("0.1"), v1);
@@ -434,6 +413,7 @@ TEST_F(IntegrationTest, UpdateApp) {
 
 TEST_F(IntegrationTest, MultipleWakesOneNetRequest) {
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   // Only one sequence visible to the server despite multiple wakes.
@@ -447,6 +427,7 @@ TEST_F(IntegrationTest, MultipleWakesOneNetRequest) {
 
 TEST_F(IntegrationTest, MultipleUpdateAllsMultipleNetRequests) {
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   ExpectNoUpdateSequence(&test_server, kUpdaterAppId);
@@ -458,24 +439,74 @@ TEST_F(IntegrationTest, MultipleUpdateAllsMultipleNetRequests) {
   Clean();
 }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 TEST_F(IntegrationTest, LegacyUpdate3Web) {
   ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
   Install();
 
   const char kAppId[] = "test1";
+  ExpectRegistrationEvent(&test_server, kAppId);
   RegisterApp(kAppId);
 
   ExpectNoUpdateSequence(&test_server, kAppId);
-  ExpectLegacyUpdate3WebSucceeds(kAppId);
+  ExpectLegacyUpdate3WebSucceeds(kAppId, STATE_NO_UPDATE, S_OK);
 
   ExpectUpdateSequence(&test_server, kAppId, base::Version("0.1"),
                        base::Version("0.2"));
-  ExpectLegacyUpdate3WebSucceeds(kAppId);
+  ExpectLegacyUpdate3WebSucceeds(kAppId, STATE_INSTALL_COMPLETE, S_OK);
+
+  // TODO(crbug.com/1272853) - Need administrative access to be able to write
+  // under the policies key.
+  if (::IsUserAnAdmin()) {
+    base::win::RegKey key(HKEY_LOCAL_MACHINE, UPDATER_POLICIES_KEY,
+                          Wow6432(KEY_ALL_ACCESS));
+
+    EXPECT_EQ(ERROR_SUCCESS,
+              key.WriteValue(
+                  base::StrCat({L"Update", base::UTF8ToWide(kAppId)}).c_str(),
+                  kPolicyAutomaticUpdatesOnly));
+    ExpectLegacyUpdate3WebSucceeds(
+        kAppId, STATE_ERROR, GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY_MANUAL);
+
+    EXPECT_EQ(ERROR_SUCCESS,
+              key.WriteValue(
+                  base::StrCat({L"Update", base::UTF8ToWide(kAppId)}).c_str(),
+                  static_cast<DWORD>(kPolicyDisabled)));
+    ExpectLegacyUpdate3WebSucceeds(kAppId, STATE_ERROR,
+                                   GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY);
+
+    EXPECT_EQ(ERROR_SUCCESS,
+              base::win::RegKey(HKEY_LOCAL_MACHINE, L"", Wow6432(DELETE))
+                  .DeleteKey(UPDATER_POLICIES_KEY));
+  }
 
   Uninstall();
 }
-#endif  // OS_WIN
+
+TEST_F(IntegrationTest, LegacyProcessLauncher) {
+  Install();
+  ExpectLegacyProcessLauncherSucceeds();
+  Uninstall();
+}
+
+TEST_F(IntegrationTest, UninstallCmdLine) {
+  Install();
+  ExpectInstalled();
+
+  // TODO(crbug.com/1270520) - use a switch that can uninstall immediately if
+  // unused, instead of requiring server starts.
+  SetServerStarts(24);
+
+  ExpectVersionActive(kUpdaterVersion);
+  ExpectActiveUpdater();
+
+  RunUninstallCmdLine();
+  WaitForServerExit();
+  SleepFor(2);
+  ExpectClean();
+}
+#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 TEST_F(IntegrationTest, UnregisterUninstalledApp) {
   Install();
@@ -548,6 +579,54 @@ TEST_F(IntegrationTest, UnregisterUnownedApp) {
   Uninstall();
 }
 #endif  // defined(OS_MAC)
+
+TEST_F(IntegrationTest, UpdateServiceStress) {
+  Install();
+  ExpectInstalled();
+  StressUpdateService();
+  Uninstall();
+}
+
+TEST_F(IntegrationTest, SameVersionUpdate) {
+  ScopedServer test_server(test_commands_);
+  ExpectRegistrationEvent(&test_server, kUpdaterAppId);
+  Install();
+  ExpectInstalled();
+
+  const std::string app_id = "test-appid";
+  ExpectRegistrationEvent(&test_server, app_id);
+  RegisterApp(app_id);
+
+  const std::string response = base::StringPrintf(
+      ")]}'\n"
+      R"({"response":{)"
+      R"(  "protocol":"3.1",)"
+      R"(  "app":[)"
+      R"(    {)"
+      R"(      "appid":"%s",)"
+      R"(      "status":"ok",)"
+      R"(      "updatecheck":{)"
+      R"(        "status":"noupdate")"
+      R"(      })"
+      R"(    })"
+      R"(  ])"
+      R"(}})",
+      app_id.c_str());
+  test_server.ExpectOnce(
+      {base::BindRepeating(
+          RequestMatcherRegex,
+          R"(.*"updatecheck":{"sameversionupdate":true},"version":"0.1"}.*)")},
+      response);
+  CallServiceUpdate(app_id, UpdateService::PolicySameVersionUpdate::kAllowed);
+
+  test_server.ExpectOnce(
+      {base::BindRepeating(RequestMatcherRegex,
+                           R"(.*"updatecheck":{},"version":"0.1"}.*)")},
+      response);
+  CallServiceUpdate(app_id,
+                    UpdateService::PolicySameVersionUpdate::kNotAllowed);
+  Uninstall();
+}
 
 #endif  // defined(OS_WIN) || !defined(COMPONENT_BUILD)
 

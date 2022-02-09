@@ -15,7 +15,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/json/string_escape.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -168,23 +167,6 @@ class MediaRouterMojoImplTest : public MediaRouterMojoTest {
   std::unique_ptr<MediaRouterMojoImpl> CreateMediaRouter() override {
     return std::unique_ptr<MediaRouterMojoImpl>(
         new MediaRouterMojoImpl(profile()));
-  }
-
-  // Helper methods for interacting with private properties of the MediaRouter.
-  // This is a rather large list of methods. When writing tests that need
-  // additional private access to the Media Router, consider refactoring the
-  // Media Router into more testable classes with more cleanly defined
-  // responsibilities.
-  void SetSinkAvailabilityAvailable() {
-    router()->OnSinkAvailabilityUpdated(
-        mojom::MediaRouteProviderId::CAST,
-        mojom::MediaRouter::SinkAvailability::AVAILABLE);
-  }
-
-  void SetSinkAvailabilityUnavailable() {
-    router()->OnSinkAvailabilityUpdated(
-        mojom::MediaRouteProviderId::CAST,
-        mojom::MediaRouter::SinkAvailability::UNAVAILABLE);
   }
 
   void ReceiveSinks(mojom::MediaRouteProviderId provider_id,
@@ -492,78 +474,6 @@ TEST_F(MediaRouterMojoImplTest, JoinRouteIncognitoMismatchFails) {
                               RouteRequestResult::OFF_THE_RECORD_MISMATCH, 1);
 }
 
-TEST_F(MediaRouterMojoImplTest, ConnectRouteByRouteId) {
-  TestConnectRouteByRouteId();
-  ExpectCastResultBucketCount("JoinRoute", RouteRequestResult::OK, 1);
-}
-
-TEST_F(MediaRouterMojoImplTest, ConnectRouteByRouteIdFails) {
-  ProvideTestRoute(mojom::MediaRouteProviderId::CAST, kRouteId);
-  EXPECT_CALL(mock_cast_provider_,
-              ConnectRouteByRouteIdInternal(
-                  kSource, kRouteId, _, url::Origin::Create(GURL(kOrigin)),
-                  kInvalidTabId, base::Milliseconds(kTimeoutMillis), true, _))
-      .WillOnce(Invoke(
-          [](const std::string& source, const std::string& route_id,
-             const std::string& presentation_id, const url::Origin& origin,
-             int tab_id, base::TimeDelta timeout, bool off_the_record,
-             mojom::MediaRouteProvider::JoinRouteCallback& cb) {
-            std::move(cb).Run(absl::nullopt, nullptr, std::string(kError),
-                              RouteRequestResult::TIMED_OUT);
-          }));
-
-  RouteResponseCallbackHandler handler;
-  base::RunLoop run_loop;
-  EXPECT_CALL(handler,
-              DoInvoke(nullptr, "", kError, RouteRequestResult::TIMED_OUT, _))
-      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
-  router()->ConnectRouteByRouteId(
-      kSource, kRouteId, url::Origin::Create(GURL(kOrigin)), nullptr,
-      base::BindOnce(&RouteResponseCallbackHandler::Invoke,
-                     base::Unretained(&handler)),
-      base::Milliseconds(kTimeoutMillis), true);
-  run_loop.Run();
-  ExpectCastResultBucketCount("JoinRoute", RouteRequestResult::TIMED_OUT, 1);
-}
-
-TEST_F(MediaRouterMojoImplTest, ConnectRouteByIdIncognitoMismatchFails) {
-  MediaRoute route = CreateMediaRoute();
-  ProvideTestRoute(mojom::MediaRouteProviderId::CAST, kRouteId);
-
-  // Use a lambda function as an invocation target here to work around
-  // a limitation with GMock::Invoke that prevents it from using move-only types
-  // in runnable parameter lists.
-  EXPECT_CALL(mock_cast_provider_,
-              ConnectRouteByRouteIdInternal(
-                  kSource, kRouteId, _, url::Origin::Create(GURL(kOrigin)),
-                  kInvalidTabId, base::Milliseconds(kTimeoutMillis), true, _))
-      .WillOnce(Invoke(
-          [&route](const std::string& source, const std::string& route_id,
-                   const std::string& presentation_id,
-                   const url::Origin& origin, int tab_id,
-                   base::TimeDelta timeout, bool off_the_record,
-                   mojom::MediaRouteProvider::JoinRouteCallback& cb) {
-            std::move(cb).Run(route, nullptr, std::string(),
-                              RouteRequestResult::OK);
-          }));
-
-  RouteResponseCallbackHandler handler;
-  base::RunLoop run_loop;
-  std::string error(
-      "Mismatch in OffTheRecord status: request = 1, response = 0");
-  EXPECT_CALL(handler, DoInvoke(nullptr, "", error,
-                                RouteRequestResult::OFF_THE_RECORD_MISMATCH, _))
-      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
-  router()->ConnectRouteByRouteId(
-      kSource, kRouteId, url::Origin::Create(GURL(kOrigin)), nullptr,
-      base::BindOnce(&RouteResponseCallbackHandler::Invoke,
-                     base::Unretained(&handler)),
-      base::Milliseconds(kTimeoutMillis), true);
-  run_loop.Run();
-  ExpectCastResultBucketCount("JoinRoute",
-                              RouteRequestResult::OFF_THE_RECORD_MISMATCH, 1);
-}
-
 TEST_F(MediaRouterMojoImplTest, DetachRoute) {
   TestDetachRoute();
 }
@@ -613,7 +523,6 @@ TEST_F(MediaRouterMojoImplTest, HandleIssue) {
 }
 
 TEST_F(MediaRouterMojoImplTest, RegisterAndUnregisterMediaSinksObserver) {
-  SetSinkAvailabilityAvailable();
   MediaSource media_source(kSource);
 
   // These should only be called once even if there is more than one observer
@@ -667,7 +576,6 @@ TEST_F(MediaRouterMojoImplTest, RegisterAndUnregisterMediaSinksObserver) {
 }
 
 TEST_F(MediaRouterMojoImplTest, TabSinksObserverIsShared) {
-  SetSinkAvailabilityAvailable();
   MediaSource tab_source_one(kTabSourceOne);
   MediaSource tab_source_two(kTabSourceTwo);
 
@@ -733,56 +641,6 @@ TEST_F(MediaRouterMojoImplTest, TabSinksObserverIsShared) {
   second_tab_sinks_observer.reset();
   cached_sinks_observer.reset();
   cached_sinks_observer2.reset();
-  base::RunLoop().RunUntilIdle();
-}
-
-TEST_F(MediaRouterMojoImplTest,
-       RegisterMediaSinksObserverWithAvailabilityChange) {
-  // When availability is UNAVAILABLE, no calls should be made to MRPM.
-  SetSinkAvailabilityUnavailable();
-  MediaSource media_source(kSource);
-  auto sinks_observer = std::make_unique<MockMediaSinksObserver>(
-      router(), media_source, url::Origin::Create(GURL(kOrigin)));
-  EXPECT_CALL(*sinks_observer, OnSinksReceived(IsEmpty()));
-  EXPECT_TRUE(sinks_observer->Init());
-  MediaSource media_source2(kSource2);
-  auto sinks_observer2 = std::make_unique<MockMediaSinksObserver>(
-      router(), media_source2, url::Origin::Create(GURL(kOrigin)));
-  EXPECT_CALL(*sinks_observer2, OnSinksReceived(IsEmpty()));
-  EXPECT_TRUE(sinks_observer2->Init());
-  EXPECT_CALL(mock_cast_provider_, StartObservingMediaSinks(kSource)).Times(0);
-  EXPECT_CALL(mock_cast_provider_, StartObservingMediaSinks(kSource2)).Times(0);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(Mock::VerifyAndClearExpectations(&mock_cast_provider_));
-
-  // When availability transitions AVAILABLE, existing sink queries should be
-  // sent to MRPM.
-  SetSinkAvailabilityAvailable();
-  EXPECT_CALL(mock_cast_provider_, StartObservingMediaSinks(kSource)).Times(1);
-  EXPECT_CALL(mock_cast_provider_, StartObservingMediaSinks(kSource2)).Times(1);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(Mock::VerifyAndClearExpectations(&mock_cast_provider_));
-
-  // No change in availability status; no calls should be made to MRPM.
-  SetSinkAvailabilityAvailable();
-  EXPECT_CALL(mock_cast_provider_, StartObservingMediaSinks(kSource)).Times(0);
-  EXPECT_CALL(mock_cast_provider_, StartObservingMediaSinks(kSource2)).Times(0);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(Mock::VerifyAndClearExpectations(&mock_cast_provider_));
-
-  // When availability is UNAVAILABLE, queries are already removed from MRPM.
-  // Unregistering observer won't result in call to MRPM to remove query.
-  SetSinkAvailabilityUnavailable();
-  EXPECT_CALL(mock_cast_provider_, StopObservingMediaSinks(kSource)).Times(0);
-  sinks_observer.reset();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(Mock::VerifyAndClearExpectations(&mock_cast_provider_));
-
-  // When availability is AVAILABLE, call is made to MRPM to remove query when
-  // observer is unregistered.
-  SetSinkAvailabilityAvailable();
-  EXPECT_CALL(mock_cast_provider_, StopObservingMediaSinks(kSource2));
-  sinks_observer2.reset();
   base::RunLoop().RunUntilIdle();
 }
 

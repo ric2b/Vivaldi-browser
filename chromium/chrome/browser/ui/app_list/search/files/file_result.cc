@@ -17,7 +17,7 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
-#include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -92,6 +92,7 @@ FileResult::FileResult(const std::string& schema,
     : filepath_(filepath), type_(type), profile_(profile) {
   DCHECK(profile);
   set_id(schema + filepath.value());
+  SetCategory(Category::kFiles);
 
   SetResultType(result_type);
   switch (result_type) {
@@ -150,6 +151,14 @@ FileResult::FileResult(const std::string& schema,
   switch (display_type) {
     case DisplayType::kChip:
       SetChipIcon(ash::GetChipIconForPath(filepath, dark_background));
+      break;
+    case DisplayType::kContinue:
+      // For Continue Section, if dark/light mode is disabled, we should use
+      // dark background as default.
+      if (!ash::features::IsDarkLightModeEnabled())
+        SetChipIcon(ash::GetIconForPath(filepath, /*dark_background=*/true));
+      else
+        SetChipIcon(ash::GetChipIconForPath(filepath, dark_background));
       break;
     case DisplayType::kList:
       SetIcon(IconInfo(ash::GetIconForPath(filepath, dark_background)));
@@ -251,7 +260,9 @@ void FileResult::OnThumbnailLoaded(const SkBitmap* bitmap,
                                    base::File::Error error) {
   if (!bitmap) {
     DCHECK_NE(error, base::File::Error::FILE_OK);
-    // TODO(crbug.com/1225161): Record error metrics.
+    base::UmaHistogramExactLinear(
+        "Apps.AppList.FileResult.ThumbnailLoadedError", -error,
+        -base::File::FILE_ERROR_MAX);
     return;
   }
 

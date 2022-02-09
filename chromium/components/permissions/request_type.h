@@ -29,7 +29,6 @@ enum class RequestType {
   kClipboard,
   kDiskQuota,
 #if !defined(OS_ANDROID)
-  kFileHandling,
   kFontAccess,
 #endif
   kGeolocation,
@@ -79,6 +78,11 @@ absl::optional<ContentSettingsType> RequestTypeToContentSettingsType(
 
 // Returns the icon to display.
 IconId GetIconId(RequestType type);
+
+#if !defined(OS_ANDROID)
+// Returns the blocked icon to display.
+IconId GetBlockedIconId(RequestType type);
+#endif
 
 // Returns a unique human-readable string that can be used in dictionaries that
 // are keyed by the RequestType.

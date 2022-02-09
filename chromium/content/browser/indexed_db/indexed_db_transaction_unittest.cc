@@ -11,7 +11,6 @@
 #include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/debug/stack_trace.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -44,13 +43,15 @@ class AbortObserver {
  public:
   AbortObserver() = default;
 
+  AbortObserver(const AbortObserver&) = delete;
+  AbortObserver& operator=(const AbortObserver&) = delete;
+
   void AbortTask() { abort_task_called_ = true; }
 
   bool abort_task_called() const { return abort_task_called_; }
 
  private:
   bool abort_task_called_ = false;
-  DISALLOW_COPY_AND_ASSIGN(AbortObserver);
 };
 
 class IndexedDBTransactionTest : public testing::Test {
@@ -60,6 +61,9 @@ class IndexedDBTransactionTest : public testing::Test {
         backing_store_(std::make_unique<IndexedDBFakeBackingStore>()),
         factory_(std::make_unique<MockIndexedDBFactory>()),
         lock_manager_(kIndexedDBLockLevelCount) {}
+
+  IndexedDBTransactionTest(const IndexedDBTransactionTest&) = delete;
+  IndexedDBTransactionTest& operator=(const IndexedDBTransactionTest&) = delete;
 
   void SetUp() override {
     // DB is created here instead of the constructor to workaround a
@@ -137,8 +141,6 @@ class IndexedDBTransactionTest : public testing::Test {
 
  private:
   DisjointRangeLockManager lock_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(IndexedDBTransactionTest);
 };
 
 class IndexedDBTransactionTestMode
@@ -147,8 +149,9 @@ class IndexedDBTransactionTestMode
  public:
   IndexedDBTransactionTestMode() = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(IndexedDBTransactionTestMode);
+  IndexedDBTransactionTestMode(const IndexedDBTransactionTestMode&) = delete;
+  IndexedDBTransactionTestMode& operator=(const IndexedDBTransactionTestMode&) =
+      delete;
 };
 
 TEST_F(IndexedDBTransactionTest, Timeout) {

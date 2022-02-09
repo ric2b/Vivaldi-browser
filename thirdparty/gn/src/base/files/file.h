@@ -12,7 +12,6 @@
 #include "base/files/file_path.h"
 #include "base/files/platform_file.h"
 #include "base/files/scoped_file.h"
-#include "base/macros.h"
 #include "util/build_config.h"
 #include "util/ticks.h"
 
@@ -23,7 +22,8 @@
 namespace base {
 
 #if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ANDROID) && __ANDROID_API__ < 21
+    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ZOS) ||  \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
 typedef struct stat stat_wrapper_t;
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 typedef struct stat64 stat_wrapper_t;
@@ -44,8 +44,8 @@ class File {
   // of the five (possibly combining with other flags) when opening or creating
   // a file.
   enum Flags {
-    FLAG_OPEN = 1 << 0,            // Opens a file, only if it exists.
-    FLAG_CREATE_ALWAYS = 1 << 3,   // May overwrite an old file.
+    FLAG_OPEN = 1 << 0,           // Opens a file, only if it exists.
+    FLAG_CREATE_ALWAYS = 1 << 3,  // May overwrite an old file.
     FLAG_READ = 1 << 4,
     FLAG_WRITE = 1 << 5,
   };
@@ -96,14 +96,14 @@ class File {
 #endif
 
     // The size of the file in bytes.  Undefined when is_directory is true.
-    int64_t size;
+    int64_t size = 0;
 
     // True if the file corresponds to a directory.
-    bool is_directory;
+    bool is_directory = false;
 
     // True if the file corresponds to a symbolic link.  For Windows currently
     // not supported and thus always false.
-    bool is_symbolic_link;
+    bool is_symbolic_link = false;
 
     // The last modified time of a file.
     Ticks last_modified;
@@ -140,11 +140,6 @@ class File {
   // method doesn't interact with the file system (and is safe to be called from
   // ThreadRestrictions::SetIOAllowed(false) threads).
   bool IsValid() const;
-
-  // Returns true if a new file was created (or an old one truncated to zero
-  // length to simulate a new file, which can happen with
-  // FLAG_CREATE_ALWAYS), and false otherwise.
-  bool created() const { return created_; }
 
   // Returns the OS result of opening this file. Note that the way to verify
   // the success of the operation is to use IsValid(), not this method:
@@ -278,10 +273,10 @@ class File {
 
   ScopedPlatformFile file_;
 
-  Error error_details_;
-  bool created_;
+  Error error_details_ = FILE_ERROR_FAILED;
 
-  DISALLOW_COPY_AND_ASSIGN(File);
+  File(const File&) = delete;
+  File& operator=(const File&) = delete;
 };
 
 }  // namespace base

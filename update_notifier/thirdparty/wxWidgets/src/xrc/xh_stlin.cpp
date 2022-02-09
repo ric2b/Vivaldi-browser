@@ -10,16 +10,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_STATLINE
 
 #include "wx/xrc/xh_stlin.h"
 #include "wx/statline.h"
 
-IMPLEMENT_DYNAMIC_CLASS(wxStaticLineXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxStaticLineXmlHandler, wxXmlResourceHandler);
 
 wxStaticLineXmlHandler::wxStaticLineXmlHandler()
 : wxXmlResourceHandler()

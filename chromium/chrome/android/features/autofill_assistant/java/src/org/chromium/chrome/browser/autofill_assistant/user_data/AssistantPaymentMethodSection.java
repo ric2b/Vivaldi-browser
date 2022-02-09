@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.settings.CardEditor;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataModel.PaymentInstrumentModel;
 import org.chromium.chrome.browser.payments.AutofillAddress;
+import org.chromium.chrome.browser.payments.AutofillAddress.CompletenessCheckType;
 import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
 
 import java.util.List;
@@ -53,7 +54,8 @@ public class AssistantPaymentMethodSection
         for (PaymentInstrumentModel item : getItems()) {
             AutofillProfile profile = item.mOption.getBillingProfile();
             if (profile != null) {
-                addAutocompleteInformationToEditor(new AutofillAddress(mContext, profile));
+                addAutocompleteInformationToEditor(
+                        new AutofillAddress(mContext, profile, CompletenessCheckType.IGNORE_PHONE));
             }
         }
     }
@@ -175,11 +177,6 @@ public class AssistantPaymentMethodSection
         // TODO(crbug.com/806868): Implement better check for the case where PDM is disabled, we
         //  won't have IDs.
         return TextUtils.equals(profileA.getGUID(), profileB.getGUID());
-    }
-
-    @Override
-    protected boolean shouldNotifySelectionWhenSettingItems() {
-        return false;
     }
 
     void onAddressesChanged(List<AutofillAddress> addresses) {

@@ -4,11 +4,15 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/apps_section.h"
 
+#include "ash/components/arc/arc_features.h"
+#include "ash/components/arc/arc_prefs.h"
+#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/ash/app_restore/full_restore_service_factory.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
@@ -24,7 +28,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/os_settings_resources.h"
 #include "components/app_restore/features.h"
-#include "components/arc/arc_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -274,7 +277,7 @@ AppsSection::AppsSection(Profile* profile,
                          SearchTagRegistry* search_tag_registry,
                          PrefService* pref_service,
                          ArcAppListPrefs* arc_app_list_prefs,
-                         apps::AppServiceProxyChromeOs* app_service_proxy)
+                         apps::AppServiceProxy* app_service_proxy)
     : OsSettingsSection(profile, search_tag_registry),
       pref_service_(pref_service),
       arc_app_list_prefs_(arc_app_list_prefs),
@@ -333,6 +336,8 @@ void AppsSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_APP_NOTIFICATIONS_LINK_TO_BROWSER_SETTINGS_DESCRIPTION},
       {"appNotificationsCountDescription",
        IDS_SETTINGS_APP_NOTIFICATIONS_SUBLABEL_TEXT},
+      {"appNotificationsDoNotDisturbDescription",
+       IDS_SETTINGS_APP_NOTIFICATIONS_DND_ENABLED_SUBLABEL_TEXT},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -354,6 +359,10 @@ void AppsSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "showOsSettingsAppNotificationsRow",
       base::FeatureList::IsEnabled(
           chromeos::features::kOsSettingsAppNotificationsPage));
+  html_source->AddBoolean(
+      "showArcvmManageUsb",
+      arc::IsArcVmEnabled() &&
+          base::FeatureList::IsEnabled(arc::kUsbDeviceDefaultAttachToArcVm));
 
   AddAppManagementStrings(html_source);
   AddGuestOsStrings(html_source);
@@ -367,6 +376,9 @@ void AppsSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(
       std::make_unique<chromeos::settings::AndroidAppsHandler>(
           profile(), app_service_proxy_));
+  if (arc::IsArcVmEnabled() &&
+      base::FeatureList::IsEnabled(arc::kUsbDeviceDefaultAttachToArcVm))
+    web_ui->AddMessageHandler(std::make_unique<GuestOsHandler>(profile()));
 
   if (ShowPluginVm(profile(), *pref_service_)) {
     web_ui->AddMessageHandler(std::make_unique<GuestOsHandler>(profile()));
@@ -451,6 +463,13 @@ void AppsSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                             kGooglePlayStoreSettings, generator);
   generator->RegisterTopLevelAltSetting(
       mojom::Setting::kManageAndroidPreferences);
+
+  generator->RegisterNestedSubpage(
+      IDS_SETTINGS_GUEST_OS_SHARED_USB_DEVICES_LABEL,
+      mojom::Subpage::kArcVmUsbPreferences, mojom::Subpage::kGooglePlayStore,
+      mojom::SearchResultIcon::kGooglePlay,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kArcVmUsbPreferencesSubpagePath);
 }
 
 void AppsSection::OnAppRegistered(const std::string& app_id,
@@ -471,6 +490,8 @@ void AppsSection::AddAndroidAppStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_MESSAGE},
       {"androidAppsDisableDialogRemove",
        IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE},
+      {"arcvmSharedUsbDevicesDescription",
+       IDS_SETTINGS_APPS_ARC_VM_SHARED_USB_DEVICES_DESCRIPTION},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
   html_source->AddLocalizedString("androidAppsPageTitle",

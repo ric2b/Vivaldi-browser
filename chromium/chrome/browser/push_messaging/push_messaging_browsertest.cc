@@ -13,6 +13,7 @@
 #include "base/base64url.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -389,15 +390,15 @@ class PushMessagingBrowserTestBase : public InProcessBrowserTest {
   gcm::GCMProfileServiceFactory::ScopedTestingFactoryInstaller
       scoped_testing_factory_installer_;
 
-  gcm::FakeGCMProfileService* gcm_service_;
-  instance_id::FakeGCMDriverForInstanceID* gcm_driver_;
+  raw_ptr<gcm::FakeGCMProfileService> gcm_service_;
+  raw_ptr<instance_id::FakeGCMDriverForInstanceID> gcm_driver_;
   base::HistogramTester histogram_tester_;
 
   std::unique_ptr<NotificationDisplayServiceTester> notification_tester_;
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
-  PushMessagingServiceImpl* push_service_;
+  raw_ptr<PushMessagingServiceImpl> push_service_;
 };
 
 void PushMessagingBrowserTestBase::RequestAndAcceptPermission() {
@@ -456,7 +457,8 @@ void PushMessagingBrowserTestBase::SubscribeSuccessfully(
 void PushMessagingBrowserTestBase::SetupOrphanedPushSubscription(
     std::string* out_app_id) {
   ASSERT_NO_FATAL_FAILURE(RequestAndAcceptPermission());
-  GURL requesting_origin = https_server()->GetURL("/").GetOrigin();
+  GURL requesting_origin =
+      https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   // Use 1234LL as it's unlikely to collide with an active service worker
   // registration id (they increment from 0).
   const int64_t service_worker_registration_id = 1234LL;
@@ -493,7 +495,8 @@ void PushMessagingBrowserTestBase::LegacySubscribeSuccessfully(
 
   ASSERT_NO_FATAL_FAILURE(RequestAndAcceptPermission());
 
-  GURL requesting_origin = https_server()->GetURL("/").GetOrigin();
+  GURL requesting_origin =
+      https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   int64_t service_worker_registration_id = 0LL;
   PushMessagingAppIdentifier app_identifier =
       PushMessagingAppIdentifier::LegacyGenerateForTesting(
@@ -545,7 +548,7 @@ void PushMessagingBrowserTestBase::EndpointToToken(const std::string& endpoint,
 PushMessagingAppIdentifier
 PushMessagingBrowserTestBase::GetAppIdentifierForServiceWorkerRegistration(
     int64_t service_worker_registration_id) {
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   PushMessagingAppIdentifier app_identifier =
       PushMessagingAppIdentifier::FindByServiceWorker(
           GetBrowser()->profile(), origin, service_worker_registration_id);
@@ -720,7 +723,8 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, SubscribeWithInvalidation) {
 
   PushMessagingAppIdentifier app_identifier =
       PushMessagingAppIdentifier::FindByServiceWorker(
-          GetBrowser()->profile(), https_server()->GetURL("/").GetOrigin(),
+          GetBrowser()->profile(),
+          https_server()->GetURL("/").DeprecatedGetOriginAsURL(),
           0LL /* service_worker_registration_id */);
 
   ASSERT_FALSE(app_identifier.is_null());
@@ -1464,7 +1468,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest, PushEventWithoutPermission) {
   EXPECT_EQ(app_identifier.app_id(), gcm_driver_->last_deletetoken_app_id());
   ASSERT_TRUE(RunScript("hasSubscription()", &script_result));
   EXPECT_EQ("false - not subscribed", script_result);
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   PushMessagingAppIdentifier app_identifier_afterwards =
       PushMessagingAppIdentifier::FindByServiceWorker(GetBrowser()->profile(),
                                                       origin, 0LL);
@@ -1719,9 +1723,11 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_EQ("true - is controlled", script_result);
 
   // Add an origin to blocking lists after service worker is registered.
-  AddToPreloadDataBlocklist(https_server()->GetURL("/").GetOrigin(),
-                            SiteReputation::ABUSIVE_CONTENT);
-  AddToSafeBrowsingBlocklist(https_server()->GetURL("/").GetOrigin());
+  AddToPreloadDataBlocklist(
+      https_server()->GetURL("/").DeprecatedGetOriginAsURL(),
+      SiteReputation::ABUSIVE_CONTENT);
+  AddToSafeBrowsingBlocklist(
+      https_server()->GetURL("/").DeprecatedGetOriginAsURL());
 
   gcm::IncomingMessage message;
   message.sender_id = GetTestApplicationServerKey();
@@ -1748,7 +1754,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(app_identifier.app_id(), gcm_driver_->last_deletetoken_app_id());
   ASSERT_TRUE(RunScript("hasSubscription()", &script_result));
   EXPECT_EQ("false - not subscribed", script_result);
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   PushMessagingAppIdentifier app_identifier_afterwards =
       PushMessagingAppIdentifier::FindByServiceWorker(GetBrowser()->profile(),
                                                       origin, 0LL);
@@ -1776,8 +1782,9 @@ IN_PROC_BROWSER_TEST_F(
 
   // The origin should be marked as |ABUSIVE_CONTENT| on |CrowdDenyPreloadData|
   // otherwise the permission revocation logic will not be triggered.
-  AddToPreloadDataBlocklist(https_server()->GetURL("/").GetOrigin(),
-                            SiteReputation::ABUSIVE_CONTENT);
+  AddToPreloadDataBlocklist(
+      https_server()->GetURL("/").DeprecatedGetOriginAsURL(),
+      SiteReputation::ABUSIVE_CONTENT);
 
   ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully());
   PushMessagingAppIdentifier app_identifier =
@@ -2332,7 +2339,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
       1);
 
   // We should not be able to look up the app id.
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   PushMessagingAppIdentifier app_identifier =
       PushMessagingAppIdentifier::FindByServiceWorker(
           GetBrowser()->profile(), origin,
@@ -2375,7 +2382,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
 
   ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully());
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   PushMessagingAppIdentifier app_identifier1 =
       PushMessagingAppIdentifier::FindByServiceWorker(
           GetBrowser()->profile(), origin,
@@ -2465,7 +2472,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   push_service()->SetContentSettingChangedCallbackForTesting(
       base::BarrierClosure(1, message_loop_runner->QuitClosure()));
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetContentSettingDefaultScope(origin, origin,
                                       ContentSettingsType::NOTIFICATIONS,
@@ -2503,7 +2510,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   push_service()->SetContentSettingChangedCallbackForTesting(
       base::BarrierClosure(1, message_loop_runner->QuitClosure()));
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetContentSettingDefaultScope(origin, origin,
                                       ContentSettingsType::NOTIFICATIONS,
@@ -2576,7 +2583,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   push_service()->SetContentSettingChangedCallbackForTesting(
       base::BarrierClosure(1, message_loop_runner->QuitClosure()));
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetContentSettingDefaultScope(origin, GURL(),
                                       ContentSettingsType::NOTIFICATIONS,
@@ -2614,7 +2621,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   push_service()->SetContentSettingChangedCallbackForTesting(
       base::BarrierClosure(1, message_loop_runner->QuitClosure()));
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetContentSettingDefaultScope(origin, GURL(),
                                       ContentSettingsType::NOTIFICATIONS,
@@ -2652,7 +2659,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   push_service()->SetContentSettingChangedCallbackForTesting(
       base::BarrierClosure(1, message_loop_runner->QuitClosure()));
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetContentSettingDefaultScope(origin, GURL(),
                                       ContentSettingsType::NOTIFICATIONS,
@@ -2690,7 +2697,7 @@ IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTest,
   push_service()->SetContentSettingChangedCallbackForTesting(
       base::BarrierClosure(2, message_loop_runner->QuitClosure()));
 
-  GURL origin = https_server()->GetURL("/").GetOrigin();
+  GURL origin = https_server()->GetURL("/").DeprecatedGetOriginAsURL();
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetDefaultContentSetting(ContentSettingsType::NOTIFICATIONS,
                                  CONTENT_SETTING_ALLOW);
@@ -2812,7 +2819,7 @@ class PushMessagingIncognitoBrowserTest : public PushMessagingBrowserTestBase {
 
  protected:
   content::test::PrerenderTestHelper prerender_helper_;
-  Browser* incognito_browser_ = nullptr;
+  raw_ptr<Browser> incognito_browser_ = nullptr;
 };
 
 // Regression test for https://crbug.com/476474

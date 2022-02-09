@@ -12,8 +12,6 @@
 #error "This file requires ARC support."
 #endif
 
-GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeMatchersAppInterface)
-
 namespace chrome_test_util {
 
 id<GREYMatcher> WindowWithNumber(int window_number) {
@@ -170,6 +168,10 @@ id<GREYMatcher> LocationViewContainingText(const std::string& text) {
 
 id<GREYMatcher> ToolsMenuButton() {
   return [ChromeMatchersAppInterface toolsMenuButton];
+}
+
+id<GREYMatcher> NewTabButton() {
+  return [ChromeMatchersAppInterface openNewTabButton];
 }
 
 id<GREYMatcher> ShareButton() {
@@ -356,6 +358,10 @@ id<GREYMatcher> GoogleServicesSettingsButton() {
   return [ChromeMatchersAppInterface googleServicesSettingsButton];
 }
 
+id<GREYMatcher> ManageSyncSettingsButton() {
+  return [ChromeMatchersAppInterface manageSyncSettingsButton];
+}
+
 id<GREYMatcher> GoogleServicesSettingsView() {
   return [ChromeMatchersAppInterface googleServicesSettingsView];
 }
@@ -423,6 +429,18 @@ id<GREYMatcher> ContentSuggestionsCollectionView() {
 
 id<GREYMatcher> NTPCollectionView() {
   return [ChromeMatchersAppInterface ntpCollectionView];
+}
+
+id<GREYMatcher> NTPIncognitoView() {
+  return [ChromeMatchersAppInterface ntpIncognitoView];
+}
+
+id<GREYMatcher> NTPFeedMenuEnableButton() {
+  return [ChromeMatchersAppInterface ntpFeedMenuEnableButton];
+}
+
+id<GREYMatcher> NTPFeedMenuDisableButton() {
+  return [ChromeMatchersAppInterface ntpFeedMenuDisableButton];
 }
 
 id<GREYMatcher> WarningMessageView() {

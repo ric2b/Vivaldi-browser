@@ -18,6 +18,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -31,7 +32,7 @@
 #include "sql/transaction.h"
 
 #if defined(OS_MAC)
-#include "base/mac/mac_util.h"
+#include "base/mac/backup_util.h"
 #endif
 
 namespace mail_client {
@@ -95,7 +96,7 @@ sql::InitStatus MailClientDatabase::Init(
 
 #if defined(OS_MAC)
   // Exclude the mail db file from backups.
-  base::mac::SetFileBackupExclusion(mail_client_name);
+  base::mac::SetBackupExclusion(mail_client_name);
 #endif
 
   // Prime the cache.

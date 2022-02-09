@@ -12,34 +12,31 @@
 
 namespace base {
 
-File::Info::Info() : size(0), is_directory(false), is_symbolic_link(false) {}
+File::Info::Info() = default;
 
 File::Info::~Info() = default;
 
-File::File()
-    : error_details_(FILE_ERROR_FAILED), created_(false) {}
+File::File() = default;
 
 File::File(const FilePath& path, uint32_t flags)
-    : error_details_(FILE_OK), created_(false) {
+    : error_details_(FILE_OK) {
   Initialize(path, flags);
 }
 
 File::File(PlatformFile platform_file)
     : file_(platform_file),
-      error_details_(FILE_OK),
-      created_(false) {
+      error_details_(FILE_OK) {
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
   DCHECK_GE(platform_file, -1);
 #endif
 }
 
 File::File(Error error_details)
-    : error_details_(error_details), created_(false) {}
+    : error_details_(error_details) {}
 
 File::File(File&& other)
     : file_(other.TakePlatformFile()),
-      error_details_(other.error_details()),
-      created_(other.created()) {}
+      error_details_(other.error_details()) {}
 
 File::~File() {
   // Go through the AssertIOAllowed logic.
@@ -50,7 +47,6 @@ File& File::operator=(File&& other) {
   Close();
   SetPlatformFile(other.TakePlatformFile());
   error_details_ = other.error_details();
-  created_ = other.created();
   return *this;
 }
 

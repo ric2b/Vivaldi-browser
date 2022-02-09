@@ -52,19 +52,6 @@ public:
 
     wxFont(const wxNativeFontInfo& info);
 
-#if FUTURE_WXWIN_COMPATIBILITY_3_0
-    wxFont(int size,
-           int family,
-           int style,
-           int weight,
-           bool underlined = false,
-           const wxString& face = wxEmptyString,
-           wxFontEncoding encoding = wxFONTENCODING_DEFAULT)
-    {
-        (void)Create(size, (wxFontFamily)family, (wxFontStyle)style, (wxFontWeight)weight, underlined, face, encoding);
-    }
-#endif
-
     wxFont(int size,
            wxFontFamily family,
            wxFontStyle style,
@@ -103,24 +90,36 @@ public:
     virtual ~wxFont();
 
     // implement base class pure virtuals
-    virtual int GetPointSize() const;
+    virtual double GetFractionalPointSize() const;
     virtual wxFontStyle GetStyle() const;
-    virtual wxFontWeight GetWeight() const;
+    virtual int GetNumericWeight() const;
     virtual wxString GetFaceName() const;
     virtual bool GetUnderlined() const;
     virtual wxFontEncoding GetEncoding() const;
     virtual const wxNativeFontInfo *GetNativeFontInfo() const;
     virtual bool IsFixedWidth() const;
 
-    virtual void SetPointSize( int pointSize );
+    virtual void SetFractionalPointSize(double pointSize);
     virtual void SetFamily(wxFontFamily family);
     virtual void SetStyle(wxFontStyle style);
-    virtual void SetWeight(wxFontWeight weight);
+    virtual void SetNumericWeight(int weight);
     virtual bool SetFaceName( const wxString& faceName );
     virtual void SetUnderlined( bool underlined );
     virtual void SetEncoding(wxFontEncoding encoding);
 
     wxDECLARE_COMMON_FONT_METHODS();
+
+    wxDEPRECATED_MSG("use wxFONT{FAMILY,STYLE,WEIGHT}_XXX constants")
+    wxFont(int size,
+           int family,
+           int style,
+           int weight,
+           bool underlined = false,
+           const wxString& face = wxEmptyString,
+           wxFontEncoding encoding = wxFONTENCODING_DEFAULT)
+    {
+        (void)Create(size, (wxFontFamily)family, (wxFontStyle)style, (wxFontWeight)weight, underlined, face, encoding);
+    }
 
     // implementation from now on
     void Unshare();
@@ -135,7 +134,7 @@ protected:
     virtual wxFontFamily DoGetFamily() const;
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxFont)
+    wxDECLARE_DYNAMIC_CLASS(wxFont);
 };
 
 #endif // __GTKFONTH__

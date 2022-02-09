@@ -24,8 +24,10 @@
 namespace device {
 
 ChromeOSAuthenticator::ChromeOSAuthenticator(
-    base::RepeatingCallback<uint32_t()> generate_request_id_callback)
+    base::RepeatingCallback<uint32_t()> generate_request_id_callback,
+    ChromeOSAuthenticator::Config config)
     : generate_request_id_callback_(std::move(generate_request_id_callback)),
+      config_(config),
       weak_factory_(this) {}
 
 ChromeOSAuthenticator::~ChromeOSAuthenticator() {}
@@ -73,10 +75,11 @@ void ChromeOSAuthenticator::MakeCredential(
     MakeCredentialOptions request_options,
     MakeCredentialCallback callback) {
   u2f::MakeCredentialRequest req;
-  // Requests with UserPresence get upgraded to UserVerification unless
-  // verification is explicitly discouraged.
+  // Requests will be UserPresence if uv is not available or discouraged,
+  // and be UserVerification otherwise.
   req.set_verification_type(
-      (request.user_verification == UserVerificationRequirement::kDiscouraged)
+      (request.user_verification == UserVerificationRequirement::kDiscouraged &&
+       config_.power_button_enabled)
           ? u2f::VERIFICATION_USER_PRESENCE
           : u2f::VERIFICATION_USER_VERIFICATION);
   req.set_rp_id(request.rp.id);
@@ -120,8 +123,8 @@ void ChromeOSAuthenticator::MakeCredential(
   req.set_request_id(current_request_id_);
 
   for (const PublicKeyCredentialDescriptor& descriptor : request.exclude_list) {
-    const std::vector<uint8_t>& id = descriptor.id();
-    req.add_excluded_credential_id(std::string(id.begin(), id.end()));
+    req.add_excluded_credential_id(
+        std::string(descriptor.id.begin(), descriptor.id.end()));
   }
   if (request.app_id_exclude) {
     req.set_app_id_exclude(*request.app_id_exclude);
@@ -185,10 +188,11 @@ void ChromeOSAuthenticator::GetAssertion(CtapGetAssertionRequest request,
                                          CtapGetAssertionOptions options,
                                          GetAssertionCallback callback) {
   u2f::GetAssertionRequest req;
-  // Requests with UserPresence get upgraded to UserVerification unless
-  // verification is explicitly discouraged.
+  // Requests will be UserPresence if uv is not available or discouraged,
+  // and be UserVerification otherwise.
   req.set_verification_type(
-      (request.user_verification == UserVerificationRequirement::kDiscouraged)
+      (request.user_verification == UserVerificationRequirement::kDiscouraged &&
+       config_.power_button_enabled)
           ? u2f::VERIFICATION_USER_PRESENCE
           : u2f::VERIFICATION_USER_VERIFICATION);
   req.set_rp_id(request.rp_id);
@@ -203,8 +207,8 @@ void ChromeOSAuthenticator::GetAssertion(CtapGetAssertionRequest request,
   req.set_request_id(current_request_id_);
 
   for (const PublicKeyCredentialDescriptor& descriptor : request.allow_list) {
-    const std::vector<uint8_t>& id = descriptor.id();
-    req.add_allowed_credential_id(std::string(id.begin(), id.end()));
+    req.add_allowed_credential_id(
+        std::string(descriptor.id.begin(), descriptor.id.end()));
   }
 
   chromeos::U2FClient::Get()->GetAssertion(
@@ -267,8 +271,8 @@ void ChromeOSAuthenticator::HasCredentialForGetAssertionRequest(
   }
 
   for (const PublicKeyCredentialDescriptor& descriptor : request.allow_list) {
-    const std::vector<uint8_t>& id = descriptor.id();
-    req.add_credential_id(std::string(id.begin(), id.end()));
+    req.add_credential_id(
+        std::string(descriptor.id.begin(), descriptor.id.end()));
   }
 
   chromeos::U2FClient::Get()->HasCredentials(
@@ -295,8 +299,8 @@ void ChromeOSAuthenticator::HasLegacyU2fCredentialForGetAssertionRequest(
   }
 
   for (const PublicKeyCredentialDescriptor& descriptor : request.allow_list) {
-    const std::vector<uint8_t>& id = descriptor.id();
-    req.add_credential_id(std::string(id.begin(), id.end()));
+    req.add_credential_id(
+        std::string(descriptor.id.begin(), descriptor.id.end()));
   }
 
   chromeos::U2FClient::Get()->HasLegacyU2FCredentials(

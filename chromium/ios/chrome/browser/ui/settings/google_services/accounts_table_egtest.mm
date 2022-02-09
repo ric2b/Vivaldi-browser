@@ -4,10 +4,8 @@
 
 #import <UIKit/UIKit.h>
 
-#import "components/signin/ios/browser/features.h"
-#import "components/signin/public/base/account_consistency_method.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
-#import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
+#import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
@@ -516,7 +514,7 @@ const NSTimeInterval kSyncOperationTimeout = 10.0;
   [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];
 }
 
-// Tests that the sign-out header is not shown when the user is not syncing.
+// Tests that the sign-out footer is not shown when the user is not syncing.
 - (void)testSignOutFooterForSignInOnlyUser {
   FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
@@ -532,7 +530,7 @@ const NSTimeInterval kSyncOperationTimeout = 10.0;
       assertWithMatcher:grey_nil()];
 }
 
-// Tests that the sign-out header is shown when the user is syncing.
+// Tests that the sign-out footer is shown when the user is syncing.
 - (void)testSignOutFooterForSignInAndSyncUser {
   FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
@@ -542,7 +540,7 @@ const NSTimeInterval kSyncOperationTimeout = 10.0;
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
   [[EarlGrey
       selectElementWithMatcher:
-          grey_allOf(grey_accessibilityLabel(l10n_util::GetNSString(
+          grey_allOf(grey_text(l10n_util::GetNSString(
                          IDS_IOS_DISCONNECT_DIALOG_SYNCING_FOOTER_INFO_MOBILE)),
                      grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];

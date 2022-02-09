@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/extension_allowlist.h"
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -91,7 +92,7 @@ class ExtensionAllowlistUnitTestBase : public ExtensionServiceTestBase {
   ExtensionPrefs* extension_prefs() { return extension_prefs_; }
 
  private:
-  ExtensionPrefs* extension_prefs_;
+  raw_ptr<ExtensionPrefs> extension_prefs_;
 };
 
 class ExtensionAllowlistUnitTest : public ExtensionAllowlistUnitTestBase {
@@ -147,10 +148,12 @@ TEST_F(ExtensionAllowlistUnitTest, AllowlistEnforcement) {
   EXPECT_EQ(ALLOWLIST_NOT_ALLOWLISTED,
             allowlist()->GetExtensionAllowlistState(kExtensionId1));
   EXPECT_EQ(BitMapBlocklistState::BLOCKLISTED_MALWARE,
-            blocklist_prefs::GetSafeBrowsingExtensionBlocklistState(
-                kExtensionId1, extension_prefs()));
-  EXPECT_EQ(disable_reason::DISABLE_REMOTELY_FOR_MALWARE |
-                disable_reason::DISABLE_NOT_ALLOWLISTED,
+            blocklist_prefs::GetExtensionBlocklistState(kExtensionId1,
+                                                        extension_prefs()));
+  EXPECT_TRUE(blocklist_prefs::HasOmahaBlocklistState(
+      kExtensionId1, BitMapBlocklistState::BLOCKLISTED_MALWARE,
+      extension_prefs()));
+  EXPECT_EQ(disable_reason::DISABLE_NOT_ALLOWLISTED,
             extension_prefs()->GetDisableReasons(kExtensionId1));
   EXPECT_TRUE(IsBlocklisted(kExtensionId1));
 
@@ -162,9 +165,12 @@ TEST_F(ExtensionAllowlistUnitTest, AllowlistEnforcement) {
   EXPECT_EQ(ALLOWLIST_ALLOWLISTED,
             allowlist()->GetExtensionAllowlistState(kExtensionId1));
   EXPECT_EQ(BitMapBlocklistState::BLOCKLISTED_MALWARE,
-            blocklist_prefs::GetSafeBrowsingExtensionBlocklistState(
-                kExtensionId1, extension_prefs()));
-  EXPECT_EQ(disable_reason::DISABLE_REMOTELY_FOR_MALWARE,
+            blocklist_prefs::GetExtensionBlocklistState(kExtensionId1,
+                                                        extension_prefs()));
+  EXPECT_TRUE(blocklist_prefs::HasOmahaBlocklistState(
+      kExtensionId1, BitMapBlocklistState::BLOCKLISTED_MALWARE,
+      extension_prefs()));
+  EXPECT_EQ(disable_reason::DISABLE_NONE,
             extension_prefs()->GetDisableReasons(kExtensionId1));
   EXPECT_TRUE(IsBlocklisted(kExtensionId1));
 

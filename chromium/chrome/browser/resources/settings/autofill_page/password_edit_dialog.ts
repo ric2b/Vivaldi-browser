@@ -24,14 +24,19 @@ import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+// <if expr="chromeos or lacros">
+import {BlockingRequestManager} from './blocking_request_manager.js';
+// </if>
 import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
 import {PasswordManagerImpl} from './password_manager_proxy.js';
 
-interface PasswordEditDialogElement {
+export interface PasswordEditDialogElement {
   $: {
     dialog: CrDialogElement,
-    usernameInput: CrInputElement,
     passwordInput: CrInputElement,
+    storePicker: HTMLSelectElement,
+    usernameInput: CrInputElement,
+    websiteInput: CrInputElement,
   };
 }
 
@@ -49,8 +54,33 @@ enum PasswordDialogMode {
   ADD = 'add',
 }
 
+/**
+ * Represents different user interactions related to adding credential from the
+ * settings. Should be kept in sync with
+ * |metrics_util::AddCredentialFromSettingsUserInteractions|. These values are
+ * persisted to logs. Entries should not be renumbered and numeric values should
+ * never be reused.
+ */
+export enum AddCredentialFromSettingsUserInteractions {
+  // Used when the add credential dialog is opened from the settings.
+  Add_Dialog_Opened = 0,
+  // Used when the add credential dialog is closed from the settings.
+  Add_Dialog_Closed = 1,
+  // Used when a new credential is added from the settings .
+  Credential_Added = 2,
+  // Used when a new credential is being added from the add credential dialog in
+  // settings and another credential exists with the same username/website
+  // combination.
+  Duplicated_Credential_Entered = 3,
+  // Used when an existing credential is viewed while adding a new credential
+  // from the settings.
+  Duplicate_Credential_Viewed = 4,
+  // Must be last.
+  COUNT = 5,
+}
+
 /* TODO(crbug.com/1255127): Revisit usage for 3 different modes. */
-class PasswordEditDialogElement extends PasswordEditDialogElementBase {
+export class PasswordEditDialogElement extends PasswordEditDialogElementBase {
   static get is() {
     return 'password-edit-dialog';
   }
@@ -68,7 +98,11 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
 
       isAccountStoreUser: {type: Boolean, value: false},
 
-      accountEmail: {stype: String, value: null},
+      accountEmail: {type: String, value: null},
+
+      storeOptionAccountValue: {type: String, value: 'account', readonly: true},
+
+      storeOptionDeviceValue: {type: String, value: 'device', readonly: true},
 
       /**
        * Saved passwords after deduplicating versions that are repeated in the
@@ -79,14 +113,12 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
         value: () => [],
       },
 
+      // <if expr="chromeos or lacros">
       /**
-       * Usernames for the same website. Used for the fast check whether edited
-       * username is already used.
+       * Used for authentication when switching from ADD to EDIT mode.
        */
-      usernamesForSameOrigin_: {
-        type: Object,
-        value: null,
-      },
+      tokenRequestManager: {type: Object, value: null},
+      // </if>
 
       dialogMode_: {
         type: String,
@@ -110,55 +142,96 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
       },
 
       /**
+       * Has value if entered website is a valid url.
+       */
+      websiteUrls_: {type: Object, value: null},
+
+      /**
+       * Whether the website input is invalid.
+       */
+      websiteInputInvalid_: {type: Boolean, value: false},
+
+      /**
+       * Error message if the website input is invalid.
+       */
+      websiteInputErrorMessage_: {type: String, value: null},
+
+      /**
+       * Current value in username input.
+       */
+      username_: {type: String, value: ''},
+
+      /**
        * Whether the username input is invalid.
        */
-      usernameInputInvalid_: Boolean,
+      usernameInputInvalid_: {
+        type: Boolean,
+        computed:
+            'computeUsernameInputInvalid_(username_, websiteUrls_.origin)',
+      },
 
       /**
-       * Whether the password input is invalid.
+       * Current value in password input.
        */
-      passwordInputInvalid_: Boolean,
+      password_: {type: String, value: ''},
 
       /**
-       * If either username or password entered incorrectly the save button will
-       * be disabled.
+       * If either website, username or password entered incorrectly the save
+       * button will be disabled.
        * */
       isSaveButtonDisabled_: {
         type: Boolean,
         computed:
-            'computeIsSaveButtonDisabled_(usernameInputInvalid_, passwordInputInvalid_)'
+            'computeIsSaveButtonDisabled_(websiteUrls_, websiteInputInvalid_, ' +
+            'usernameInputInvalid_, password_)'
       }
-
     };
   }
 
   existingEntry: MultiStorePasswordUiEntry|null;
   isAccountStoreUser: boolean;
   accountEmail: string|null;
+  readonly storeOptionAccountValue: string;
+  readonly storeOptionDeviceValue: string;
   savedPasswords: Array<MultiStorePasswordUiEntry>;
-  private usernamesForSameOrigin_: Set<string>|null;
+  // <if expr="chromeos or lacros">
+  tokenRequestManager: BlockingRequestManager|null;
+  // </if>
+  private usernamesByOrigin_: Map<string, Set<string>>|null = null;
   private dialogMode_: PasswordDialogMode;
   private isInViewMode_: boolean;
   private isPasswordVisible_: boolean;
+  private websiteUrls_: chrome.passwordsPrivate.UrlCollection|null;
+  private websiteInputInvalid_: boolean;
+  private websiteInputErrorMessage_: string|null;
+  private username_: string;
   private usernameInputInvalid_: boolean;
-  private passwordInputInvalid_: boolean;
+  private password_: string;
   private isSaveButtonDisabled_: boolean;
 
   connectedCallback() {
     super.connectedCallback();
+    this.initDialog_();
+  }
 
-    this.$.dialog.showModal();
-    if (this.dialogMode_ === PasswordDialogMode.EDIT) {
-      this.usernamesForSameOrigin_ = new Set(
-          this.savedPasswords
-              .filter(
-                  item => item.urls.shown === this.existingEntry!.urls.shown &&
-                      (item.isPresentOnDevice() ===
-                           this.existingEntry!.isPresentOnDevice() ||
-                       item.isPresentInAccount() ===
-                           this.existingEntry!.isPresentInAccount()))
-              .map(item => item.username));
+  private initDialog_() {
+    if (this.existingEntry) {
+      this.websiteUrls_ = this.existingEntry.urls;
+      this.username_ = this.existingEntry.username;
     }
+    this.password_ = this.getPassword_();
+    if (!this.isInViewMode_) {
+      this.usernamesByOrigin_ = this.getUsernamesByOrigin_();
+    }
+    if (this.shouldShowStorePicker_()) {
+      PasswordManagerImpl.getInstance().isAccountStoreDefault().then(
+          isAccountStoreDefault => {
+            this.$.storePicker.value = isAccountStoreDefault ?
+                this.storeOptionAccountValue :
+                this.storeOptionDeviceValue;
+          });
+    }
+    this.isPasswordVisible_ = false;
   }
 
   /** Closes the dialog. */
@@ -177,6 +250,11 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
 
   private computeIsInViewMode_(): boolean {
     return this.dialogMode_ === PasswordDialogMode.VIEW;
+  }
+
+  private computeIsSaveButtonDisabled_(): boolean {
+    return !this.websiteUrls_ || this.websiteInputInvalid_ ||
+        this.usernameInputInvalid_ || !this.password_.length;
   }
 
   /**
@@ -227,15 +305,6 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
   }
 
   /**
-   * Gets the initial text to show in the username input.
-   */
-  private getUsername_(): string {
-    return this.dialogMode_ === PasswordDialogMode.ADD ?
-        '' :
-        this.existingEntry!.username;
-  }
-
-  /**
    * Gets the initial text to show in the password input: the password for a
    * regular credential, the federation text for a federated credential or empty
    * string in the ADD mode.
@@ -258,7 +327,7 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
   /**
    * Handler for tapping the show/hide button.
    */
-  private onShowPasswordButtonTap_() {
+  private onShowPasswordButtonClick_() {
     assert(!this.isInViewMode_);
     this.isPasswordVisible_ = !this.isPasswordVisible_;
   }
@@ -268,40 +337,76 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
    * For 'save' button it should save new password. After pressing action button
    * the edit dialog should be closed.
    */
-  private onActionButtonTap_() {
-    // TODO(crbug.com/1236053): handle PasswordDialogMode.ADD.
-    if (this.dialogMode_ === PasswordDialogMode.EDIT) {
-      const idsToChange = [];
-      const accountId = this.existingEntry!.accountId;
-      const deviceId = this.existingEntry!.deviceId;
-      if (accountId !== null) {
-        idsToChange.push(accountId);
-      }
-      if (deviceId !== null) {
-        idsToChange.push(deviceId);
-      }
-
-      PasswordManagerImpl.getInstance()
-          .changeSavedPassword(
-              idsToChange, this.$.usernameInput.value,
-              this.$.passwordInput.value)
-          .finally(() => {
-            this.close();
-          });
-    } else {
-      this.close();
+  private onActionButtonClick_() {
+    switch (this.dialogMode_) {
+      case PasswordDialogMode.VIEW:
+        this.close();
+        return;
+      case PasswordDialogMode.EDIT:
+        this.changePassword_();
+        return;
+      case PasswordDialogMode.ADD:
+        this.addPassword_();
+        return;
+      default:
+        assertNotReached();
     }
+  }
+
+  private addPassword_() {
+    const useAccountStore = !this.$.storePicker.hidden ?
+        (this.$.storePicker.value === this.storeOptionAccountValue) :
+        false;
+    if (!this.$.storePicker.hidden) {
+      chrome.metricsPrivate.recordBoolean(
+          'PasswordManager.AddCredentialFromSettings.AccountStoreUsed',
+          useAccountStore);
+    }
+    PasswordManagerImpl.getInstance()
+        .addPassword({
+          url: this.$.websiteInput.value,
+          username: this.username_,
+          password: this.password_,
+          useAccountStore: useAccountStore
+        })
+        .finally(() => {
+          this.close();
+        });
+  }
+
+  private changePassword_() {
+    const idsToChange = [];
+    const accountId = this.existingEntry!.accountId;
+    const deviceId = this.existingEntry!.deviceId;
+    if (accountId !== null) {
+      idsToChange.push(accountId);
+    }
+    if (deviceId !== null) {
+      idsToChange.push(deviceId);
+    }
+
+    PasswordManagerImpl.getInstance()
+        .changeSavedPassword(idsToChange, this.username_, this.password_)
+        .finally(() => {
+          this.close();
+        });
   }
 
   private getActionButtonName_(): string {
     return this.isInViewMode_ ? this.i18n('done') : this.i18n('save');
   }
 
-  /**
-   * Manually de-select texts for readonly inputs.
-   */
-  private onInputBlur_() {
-    this.shadowRoot!.getSelection()!.removeAllRanges();
+  private onWebsiteInputBlur_() {
+    if (!this.isWebsiteEditable_()) {
+      // Manually de-select text when input is readonly.
+      this.shadowRoot!.getSelection()!.removeAllRanges();
+      return;
+    }
+    if (this.websiteUrls_ && !this.$.websiteInput.value.includes('.')) {
+      this.websiteInputErrorMessage_ =
+          this.i18n('missingTLD', `${this.$.websiteInput.value}.com`);
+      this.websiteInputInvalid_ = true;
+    }
   }
 
   /**
@@ -359,6 +464,11 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
     return this.dialogMode_ === PasswordDialogMode.ADD;
   }
 
+  private shouldAutofocusWebsiteInput_(): boolean {
+    return this.dialogMode_ === PasswordDialogMode.ADD &&
+        !this.isAccountStoreUser;
+  }
+
   /**
    * @return The text to be displayed as the dialog's footnote.
    */
@@ -368,29 +478,148 @@ class PasswordEditDialogElement extends PasswordEditDialogElementBase {
         this.i18n('editPasswordFootnote', this.existingEntry!.urls.shown);
   }
 
-  /**
-   * Helper function that checks if save button should be disabled.
-   */
-  private computeIsSaveButtonDisabled_(): boolean {
-    return this.usernameInputInvalid_ || this.passwordInputInvalid_;
+  private getClassForWebsiteInput_(): string {
+    // If website input is empty, it is invalid, but has no error message.
+    // To handle this, the error is shown only if 'has-error-message' is set.
+    return this.websiteInputErrorMessage_ ? 'has-error-message' : '';
   }
 
   /**
-   * Helper function that checks whether edited username is not used for the
-   * same website.
+   * Helper function that checks whether the entered url is valid.
    */
-  private validateUsername_() {
-    assert(!this.isInViewMode_);
-    if (this.dialogMode_ === PasswordDialogMode.ADD) {
-      // TODO(crbug.com/1236053): handle duplicates in ADD mode.
+  private validateWebsite_() {
+    assert(this.dialogMode_ === PasswordDialogMode.ADD);
+    if (!this.$.websiteInput.value.length) {
+      this.websiteUrls_ = null;
+      this.websiteInputErrorMessage_ = null;
+      this.websiteInputInvalid_ = true;
       return;
     }
-    if (this.existingEntry!.username !== this.$.usernameInput.value) {
-      this.usernameInputInvalid_ =
-          this.usernamesForSameOrigin_!.has(this.$.usernameInput.value);
-    } else {
-      this.usernameInputInvalid_ = false;
+    PasswordManagerImpl.getInstance()
+        .getUrlCollection(this.$.websiteInput.value)
+        .then(urlCollection => {
+          if (urlCollection) {
+            this.websiteUrls_ = urlCollection;
+            this.websiteInputErrorMessage_ = null;
+            this.websiteInputInvalid_ = false;
+          } else {
+            this.websiteUrls_ = null;
+            this.websiteInputErrorMessage_ = this.i18n('notValidWebAddress');
+            this.websiteInputInvalid_ = true;
+          }
+        });
+  }
+
+  private getUsernameErrorMessage_(): string {
+    return this.websiteUrls_ ?
+        this.i18n('usernameAlreadyUsed', this.websiteUrls_.shown) :
+        '';
+  }
+
+  private getViewExistingPasswordAriaDescription_(): string {
+    return this.websiteUrls_ ? this.i18n(
+                                   'viewExistingPasswordAriaDescription',
+                                   this.username_, this.websiteUrls_.shown) :
+                               '';
+  }
+
+  private onViewExistingPasswordClick_() {
+    chrome.metricsPrivate.recordEnumerationValue(
+        'PasswordManager.AddCredentialFromSettings.UserAction',
+        AddCredentialFromSettingsUserInteractions.Duplicate_Credential_Viewed,
+        AddCredentialFromSettingsUserInteractions.COUNT);
+    const existingEntry = this.savedPasswords.find(entry => {
+      return entry.urls.origin === this.websiteUrls_!.origin &&
+          entry.username === this.username_;
+    })!;
+    this.requestPlaintextPasswordForEditing_(existingEntry.getAnyId())
+        .then(password => {
+          existingEntry.password = password;
+          this.switchToEditMode_(existingEntry);
+        });
+  }
+
+  private requestPlaintextPasswordForEditing_(id: number): Promise<string> {
+    return new Promise(resolve => {
+      PasswordManagerImpl.getInstance()
+          .requestPlaintextPassword(
+              id, chrome.passwordsPrivate.PlaintextReason.EDIT)
+          .then(password => resolve(password), () => {
+            // <if expr="chromeos or lacros">
+            // If no password was found, refresh auth token and retry.
+            this.tokenRequestManager!.request(() => {
+              this.requestPlaintextPasswordForEditing_(id).then(resolve);
+            });
+            // </if>
+          });
+    });
+  }
+
+  private switchToEditMode_(existingEntry: MultiStorePasswordUiEntry) {
+    this.existingEntry = existingEntry;
+    this.initDialog_();
+    this.$.dialog.focus();
+  }
+
+  /**
+   * Checks whether edited username is not used for the same website.
+   */
+  private computeUsernameInputInvalid_(): boolean {
+    if (this.isInViewMode_ || !this.websiteUrls_ || !this.usernamesByOrigin_) {
+      return false;
     }
+    if (this.dialogMode_ === PasswordDialogMode.EDIT &&
+        this.username_ === this.existingEntry!.username) {
+      // The value hasn't changed.
+      return false;
+    }
+    // TODO(crbug.com/1264468): Consider moving duplication check to backend.
+    const isDuplicate = this.usernamesByOrigin_.has(this.websiteUrls_.origin) &&
+        this.usernamesByOrigin_.get(this.websiteUrls_.origin)!.has(
+            this.username_);
+
+    if (isDuplicate && this.dialogMode_ === PasswordDialogMode.ADD) {
+      chrome.metricsPrivate.recordEnumerationValue(
+          'PasswordManager.AddCredentialFromSettings.UserAction',
+          AddCredentialFromSettingsUserInteractions
+              .Duplicated_Credential_Entered,
+          AddCredentialFromSettingsUserInteractions.COUNT);
+    }
+
+    return isDuplicate;
+  }
+
+  /**
+   * Used for the fast check whether edited username is already used.
+   */
+  private getUsernamesByOrigin_(): Map<string, Set<string>> {
+    assert(!this.isInViewMode_);
+    const relevantPasswords = this.dialogMode_ === PasswordDialogMode.EDIT ?
+        // In EDIT mode entries considered duplicates only if in the same store.
+        this.savedPasswords.filter(item => {
+          return item.isPresentOnDevice() ===
+              this.existingEntry!.isPresentOnDevice() ||
+              item.isPresentInAccount() ===
+              this.existingEntry!.isPresentInAccount();
+        }) :
+        // In ADD mode entries considered duplicates irrespective of the store.
+        this.savedPasswords;
+
+    // Group existing usernames by origin.
+    return relevantPasswords.reduce(function(usernamesByOrigin, entry) {
+      const origin = entry.urls.origin;
+      if (!usernamesByOrigin.has(origin)) {
+        usernamesByOrigin.set(origin, new Set());
+      }
+      usernamesByOrigin.get(origin).add(entry.username);
+      return usernamesByOrigin;
+    }, new Map());
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'password-edit-dialog': PasswordEditDialogElement;
   }
 }
 

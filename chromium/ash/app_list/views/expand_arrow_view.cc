@@ -14,15 +14,16 @@
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -155,8 +156,8 @@ ExpandArrowView::ExpandArrowView(ContentsView* contents_view,
         return std::make_unique<views::FloodFillInkDropRipple>(
             host->size(), host->GetLocalBounds().InsetsFrom(GetCircleBounds()),
             views::InkDrop::Get(host)->GetInkDropCenterBasedOnLastEvent(),
-            color_provider->GetRippleAttributesBaseColor(),
-            color_provider->GetRippleAttributesInkDropOpacity());
+            color_provider->GetInkDropBaseColor(),
+            color_provider->GetInkDropOpacity());
       },
       this));
 
@@ -384,7 +385,7 @@ void ExpandArrowView::MaybeEnableHintingAnimation(bool enabled) {
   // crash when spoken feedback is enabled (See https://crbug.com/926038).
   if (enabled && !app_list_view_->is_side_shelf() &&
       !app_list_view_->is_tablet_mode() &&
-      !AppListView::ShortAnimationsForTesting()) {
+      !ui::ScopedAnimationDurationScaleMode::is_zero()) {
     ScheduleHintingAnimation(true);
   } else {
     hinting_animation_timer_.Stop();

@@ -30,7 +30,8 @@ import './crostini_confirmation_dialog.js';
 import {PrefsBehavior} from '../prefs_behavior.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {routes} from '../os_route.m.js';
-import {Router, Route, RouteObserverBehavior} from '../../router.js';
+import {Router, Route} from '../../router.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 import {RouteOriginBehaviorImpl, RouteOriginBehavior} from '../route_origin_behavior.m.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import '../../settings_shared_css.js';
@@ -38,6 +39,7 @@ import {recordSettingChange, recordSearch, setUserActionRecorderForTesting, reco
 import './crostini_disk_resize_dialog.js';
 import './crostini_disk_resize_confirmation_dialog.js';
 import './crostini_port_forwarding.js';
+import './crostini_extra_containers.js';
 
 Polymer({
   _template: html`{__html_template__}`,
@@ -87,6 +89,14 @@ Polymer({
       type: Boolean,
       value() {
         return loadTimeData.getBoolean('showCrostiniPortForwarding');
+      },
+    },
+
+    /** @private {boolean} */
+    showCrostiniExtraContainers_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('showCrostiniExtraContainers');
       },
     },
 
@@ -256,6 +266,8 @@ Polymer({
     this.addFocusConfig_(r.CROSTINI_ANDROID_ADB, '#crostini-enable-arc-adb');
     this.addFocusConfig_(
         r.CROSTINI_PORT_FORWARDING, '#crostini-port-forwarding');
+    this.addFocusConfig_(
+        r.CROSTINI_EXTRA_CONTAINERS, '#crostini-extra-containers');
   },
 
   /**
@@ -411,6 +423,11 @@ Polymer({
   /** @private */
   onPortForwardingClick_() {
     Router.getInstance().navigateTo(routes.CROSTINI_PORT_FORWARDING);
+  },
+
+  /** @private */
+  onExtraContainersClick_() {
+    Router.getInstance().navigateTo(routes.CROSTINI_EXTRA_CONTAINERS);
   },
 
   /**

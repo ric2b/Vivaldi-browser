@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#if defined(__BORLANDC__)
-    #pragma hdrstop
-#endif
 
 #if wxUSE_PALETTE
 
@@ -61,7 +58,7 @@ wxPaletteRefData::~wxPaletteRefData()
 
 #define M_PALETTEDATA ((wxPaletteRefData *)m_refData)
 
-IMPLEMENT_DYNAMIC_CLASS(wxPalette,wxGDIObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxPalette,wxGDIObject);
 
 wxPalette::wxPalette()
 {

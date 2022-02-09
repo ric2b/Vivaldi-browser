@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -49,12 +48,16 @@ class CONTENT_EXPORT NavigationURLLoaderDelegate {
     EarlyHints(const EarlyHints& other) = delete;
     EarlyHints& operator=(const EarlyHints& other) = delete;
 
-    // True when at least one preload Link header was received during a
-    // main frame navigation.
-    bool was_preload_link_header_received = false;
+    // True when at least one preload or preconnect Link header was received
+    // during a main frame navigation.
+    bool was_resource_hints_received = false;
     // Non-null when at least one preload is actually requested.
     std::unique_ptr<NavigationEarlyHintsManager> manager;
   };
+
+  NavigationURLLoaderDelegate(const NavigationURLLoaderDelegate&) = delete;
+  NavigationURLLoaderDelegate& operator=(const NavigationURLLoaderDelegate&) =
+      delete;
 
   // Called when the request is redirected. Call FollowRedirect to continue
   // processing the request.
@@ -73,8 +76,7 @@ class CONTENT_EXPORT NavigationURLLoaderDelegate {
   // |navigation_data| is passed to the NavigationHandle.
   // |subresource_loader_params| is used in the network service only for passing
   // necessary info to create a custom subresource loader in the renderer
-  // process if the navigated context is controlled by a request interceptor
-  // like AppCache or ServiceWorker.
+  // process if the navigated context is controlled by a request interceptor.
   //
   // |is_download| is true if the request must be downloaded, if it isn't
   // disallowed.
@@ -112,9 +114,6 @@ class CONTENT_EXPORT NavigationURLLoaderDelegate {
  protected:
   NavigationURLLoaderDelegate() {}
   virtual ~NavigationURLLoaderDelegate() {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NavigationURLLoaderDelegate);
 };
 
 }  // namespace content

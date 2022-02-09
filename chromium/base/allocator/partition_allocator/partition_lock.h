@@ -19,17 +19,21 @@ namespace base {
 namespace internal {
 
 template <bool thread_safe>
-class LOCKABLE MaybeSpinLock {
+class LOCKABLE MaybeLock {
  public:
   void Lock() EXCLUSIVE_LOCK_FUNCTION() {}
   void Unlock() UNLOCK_FUNCTION() {}
   void AssertAcquired() const ASSERT_EXCLUSIVE_LOCK() {}
+  // Re-initializes the lock. Only to be used after fork() in child processes.
+  // Marked UNLOCK_FUNCTION() as a lock starts unlocked, even though it's called
+  // from a NO_THREAD_SAFETY_ANALYSIS context.
+  void Reinit() UNLOCK_FUNCTION();
 };
 
 template <bool thread_safe>
 class SCOPED_LOCKABLE ScopedGuard {
  public:
-  explicit ScopedGuard(MaybeSpinLock<thread_safe>& lock)
+  explicit ScopedGuard(MaybeLock<thread_safe>& lock)
       EXCLUSIVE_LOCK_FUNCTION(lock)
       : lock_(lock) {
     lock_.Lock();
@@ -37,27 +41,26 @@ class SCOPED_LOCKABLE ScopedGuard {
   ~ScopedGuard() UNLOCK_FUNCTION() { lock_.Unlock(); }
 
  private:
-  MaybeSpinLock<thread_safe>& lock_;
+  MaybeLock<thread_safe>& lock_;
 };
 
 template <bool thread_safe>
 class SCOPED_LOCKABLE ScopedUnlockGuard {
  public:
-  explicit ScopedUnlockGuard(MaybeSpinLock<thread_safe>& lock)
-      UNLOCK_FUNCTION(lock)
+  explicit ScopedUnlockGuard(MaybeLock<thread_safe>& lock) UNLOCK_FUNCTION(lock)
       : lock_(lock) {
     lock_.Unlock();
   }
   ~ScopedUnlockGuard() EXCLUSIVE_LOCK_FUNCTION() { lock_.Lock(); }
 
  private:
-  MaybeSpinLock<thread_safe>& lock_;
+  MaybeLock<thread_safe>& lock_;
 };
 
 template <>
-class LOCKABLE MaybeSpinLock<true> {
+class LOCKABLE MaybeLock<true> {
  public:
-  constexpr MaybeSpinLock() : lock_() {}
+  constexpr MaybeLock() = default;
   void Lock() EXCLUSIVE_LOCK_FUNCTION() {
 #if DCHECK_IS_ON()
     // When PartitionAlloc is malloc(), it can easily become reentrant. For
@@ -109,6 +112,14 @@ class LOCKABLE MaybeSpinLock<true> {
 #endif
   }
 
+  void Reinit() UNLOCK_FUNCTION() {
+    lock_.AssertAcquired();
+#if DCHECK_IS_ON()
+    owning_thread_ref_.store(PlatformThreadRef(), std::memory_order_release);
+#endif
+    lock_.Reinit();
+  }
+
  private:
   SpinningMutex lock_;
 
@@ -120,23 +131,24 @@ class LOCKABLE MaybeSpinLock<true> {
 };
 // We want PartitionRoot to not have a global destructor, so this should not
 // have one.
-static_assert(std::is_trivially_destructible<MaybeSpinLock<true>>::value, "");
+static_assert(std::is_trivially_destructible<MaybeLock<true>>::value, "");
 
 template <>
-class LOCKABLE MaybeSpinLock<false> {
+class LOCKABLE MaybeLock<false> {
  public:
   void Lock() EXCLUSIVE_LOCK_FUNCTION() {}
   void Unlock() UNLOCK_FUNCTION() {}
   void AssertAcquired() const ASSERT_EXCLUSIVE_LOCK() {}
+  void Reinit() UNLOCK_FUNCTION() {}
 
-  char padding_[sizeof(MaybeSpinLock<true>)];
+  char padding_[sizeof(MaybeLock<true>)];
 };
 
 static_assert(
-    sizeof(MaybeSpinLock<true>) == sizeof(MaybeSpinLock<false>),
+    sizeof(MaybeLock<true>) == sizeof(MaybeLock<false>),
     "Sizes should be equal to ensure identical layout of PartitionRoot");
 
-using PartitionLock = MaybeSpinLock<true>;
+using PartitionLock = MaybeLock<true>;
 using PartitionAutoLock = ScopedGuard<true>;
 
 }  // namespace internal

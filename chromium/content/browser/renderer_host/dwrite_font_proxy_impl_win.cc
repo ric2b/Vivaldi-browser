@@ -136,6 +136,8 @@ void DWriteFontProxyImpl::FindFamily(const std::u16string& family_name,
   TRACE_EVENT0("dwrite,fonts", "FontProxyHost::OnFindFamily");
   UINT32 family_index = UINT32_MAX;
   if (collection_) {
+    SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+        "DirectWrite.Fonts.Content.FindFamilyTime");
     BOOL exists = FALSE;
     UINT32 index = UINT32_MAX;
     HRESULT hr = collection_->FindFamilyName(base::as_wcstr(family_name),
@@ -151,6 +153,8 @@ void DWriteFontProxyImpl::FindFamily(const std::u16string& family_name,
 void DWriteFontProxyImpl::GetFamilyCount(GetFamilyCountCallback callback) {
   InitializeDirectWrite();
   TRACE_EVENT0("dwrite,fonts", "FontProxyHost::OnGetFamilyCount");
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "DirectWrite.Fonts.Content.GetFamilyCountTime");
   std::move(callback).Run(collection_ ? collection_->GetFontFamilyCount() : 0);
 }
 
@@ -163,6 +167,8 @@ void DWriteFontProxyImpl::GetFamilyNames(UINT32 family_index,
   if (!collection_)
     return;
 
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "DirectWrite.Fonts.Content.GetFamilyNamesTime");
   TRACE_EVENT0("dwrite,fonts", "FontProxyHost::DoGetFamilyNames");
 
   mswr::ComPtr<IDWriteFontFamily> family;
@@ -225,6 +231,8 @@ void DWriteFontProxyImpl::GetFontFiles(uint32_t family_index,
   if (!collection_)
     return;
 
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "DirectWrite.Fonts.Content.GetFontFilesTime");
   mswr::ComPtr<IDWriteFontFamily> family;
   HRESULT hr = collection_->GetFontFamily(family_index, &family);
   if (FAILED(hr)) {
@@ -266,12 +274,12 @@ void DWriteFontProxyImpl::GetFontFiles(uint32_t family_index,
   // due to sandbox policy (it would get ERROR_ACCESS_DENIED instead). Passing
   // handles allows the renderer to bypass the restriction and use the fonts.
   for (const auto& custom_font_path : custom_font_path_set) {
-    // Specify FLAG_EXCLUSIVE_WRITE to prevent base::File from opening the file
-    // with FILE_SHARE_WRITE access. FLAG_EXCLUSIVE_WRITE doesn't actually open
-    // the file for write access.
+    // Specify FLAG_WIN_EXCLUSIVE_WRITE to prevent base::File from opening the
+    // file with FILE_SHARE_WRITE access. FLAG_WIN_EXCLUSIVE_WRITE doesn't
+    // actually open the file for write access.
     base::File file(base::FilePath(custom_font_path),
                     base::File::FLAG_OPEN | base::File::FLAG_READ |
-                        base::File::FLAG_EXCLUSIVE_WRITE);
+                        base::File::FLAG_WIN_EXCLUSIVE_WRITE);
     if (file.IsValid()) {
       file_handles.push_back(std::move(file));
     }
@@ -308,6 +316,8 @@ void DWriteFontProxyImpl::MapCharacters(
     }
   }
 
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "DirectWrite.Fonts.Content.MapCharactersTime");
   mswr::ComPtr<IDWriteFont> mapped_font;
 
   mswr::ComPtr<IDWriteNumberSubstitution> number_substitution;
@@ -517,6 +527,8 @@ void DWriteFontProxyImpl::FallbackFamilyAndStyleForCodepoint(
   if (!codepoint || !collection_ || !factory_)
     return;
 
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "DirectWrite.Fonts.Content.FallbackFamilyAndStyleForCodepointTime");
   sk_sp<SkFontMgr> font_mgr(
       SkFontMgr_New_DirectWrite(factory_.Get(), collection_.Get()));
 
@@ -548,6 +560,7 @@ void DWriteFontProxyImpl::FallbackFamilyAndStyleForCodepoint(
 void DWriteFontProxyImpl::InitializeDirectWrite() {
   if (direct_write_initialized_)
     return;
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("DirectWrite.Fonts.Content.InitializeTime");
   direct_write_initialized_ = true;
 
   TRACE_EVENT0("dwrite,fonts", "DWriteFontProxyImpl::InitializeDirectWrite");

@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////
 // Name:        wx/richtext/richtextstylepage.h
-// Purpose:
+// Purpose:     Declares the rich text formatting dialog style page.
 // Author:      Julian Smart
 // Modified by:
 // Created:     10/5/2006 11:34:55 AM
@@ -31,8 +31,8 @@
 
 class WXDLLIMPEXP_RICHTEXT wxRichTextStylePage: public wxRichTextDialogPage
 {
-    DECLARE_DYNAMIC_CLASS( wxRichTextStylePage )
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_DYNAMIC_CLASS(wxRichTextStylePage);
+    wxDECLARE_EVENT_TABLE();
     DECLARE_HELP_PROVISION()
 
 public:
@@ -50,11 +50,15 @@ public:
     void CreateControls();
 
     /// Transfer data from/to window
-    virtual bool TransferDataFromWindow();
-    virtual bool TransferDataToWindow();
+    virtual bool TransferDataFromWindow() wxOVERRIDE;
+    virtual bool TransferDataToWindow() wxOVERRIDE;
 
     /// Gets the attributes associated with the main formatting dialog
     wxRichTextAttr* GetAttributes();
+
+    /// Determines whether the style name can be edited
+    bool GetNameIsEditable() const { return m_nameIsEditable; }
+    void SetNameIsEditable(bool editable) { m_nameIsEditable = editable; }
 
 ////@begin wxRichTextStylePage event handler declarations
 
@@ -87,6 +91,8 @@ public:
         ID_RICHTEXTSTYLEPAGE_NEXT_STYLE = 10406
     };
 ////@end wxRichTextStylePage member variables
+
+    bool m_nameIsEditable;
 };
 
 #endif

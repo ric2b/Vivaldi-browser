@@ -36,11 +36,15 @@ TEST(ConfigValuesExtractors, IncludeOrdering) {
 
   // Set up dep2, direct and all dependent configs.
   Config dep2_all(setup.settings(), Label(SourceDir("//dep2/"), "all"));
+  dep2_all.visibility().SetPublic();
   dep2_all.own_values().cflags().push_back("--dep2-all");
+  dep2_all.own_values().cflags().push_back("--dep2-all");
+  dep2_all.own_values().include_dirs().push_back(SourceDir("//dep2/all/"));
   dep2_all.own_values().include_dirs().push_back(SourceDir("//dep2/all/"));
   ASSERT_TRUE(dep2_all.OnResolved(&err));
 
   Config dep2_direct(setup.settings(), Label(SourceDir("//dep2/"), "direct"));
+  dep2_direct.visibility().SetPublic();
   dep2_direct.own_values().cflags().push_back("--dep2-direct");
   dep2_direct.own_values().include_dirs().push_back(
       SourceDir("//dep2/direct/"));
@@ -56,16 +60,19 @@ TEST(ConfigValuesExtractors, IncludeOrdering) {
   // Set up dep1, direct and all dependent configs. Also set up a subconfig
   // on "dep1_all" to test sub configs.
   Config dep1_all_sub(setup.settings(), Label(SourceDir("//dep1"), "allch"));
+  dep1_all_sub.visibility().SetPublic();
   dep1_all_sub.own_values().cflags().push_back("--dep1-all-sub");
   ASSERT_TRUE(dep1_all_sub.OnResolved(&err));
 
   Config dep1_all(setup.settings(), Label(SourceDir("//dep1/"), "all"));
+  dep1_all.visibility().SetPublic();
   dep1_all.own_values().cflags().push_back("--dep1-all");
   dep1_all.own_values().include_dirs().push_back(SourceDir("//dep1/all/"));
   dep1_all.configs().push_back(LabelConfigPair(&dep1_all_sub));
   ASSERT_TRUE(dep1_all.OnResolved(&err));
 
   Config dep1_direct(setup.settings(), Label(SourceDir("//dep1/"), "direct"));
+  dep1_direct.visibility().SetPublic();
   dep1_direct.own_values().cflags().push_back("--dep1-direct");
   dep1_direct.own_values().include_dirs().push_back(
       SourceDir("//dep1/direct/"));
@@ -124,16 +131,18 @@ TEST(ConfigValuesExtractors, IncludeOrdering) {
   std::ostringstream flag_out;
   FlagWriter flag_writer;
   RecursiveTargetConfigToStream<std::string, FlagWriter>(
-      &target, &ConfigValues::cflags, flag_writer, flag_out);
+      kRecursiveWriterKeepDuplicates, &target, &ConfigValues::cflags,
+      flag_writer, flag_out);
   EXPECT_EQ(flag_out.str(),
             "--target --target-config --target-all --target-direct "
-            "--dep1-all --dep1-all-sub --dep2-all --dep1-direct ");
+            "--dep1-all --dep1-all-sub --dep2-all --dep2-all --dep1-direct ");
 
   // Verify include dirs by serializing.
   std::ostringstream include_out;
   IncludeWriter include_writer;
   RecursiveTargetConfigToStream<SourceDir, IncludeWriter>(
-      &target, &ConfigValues::include_dirs, include_writer, include_out);
+      kRecursiveWriterSkipDuplicates, &target, &ConfigValues::include_dirs,
+      include_writer, include_out);
   EXPECT_EQ(include_out.str(),
             "//target/ //target/config/ //target/all/ //target/direct/ "
             "//dep1/all/ //dep2/all/ //dep1/direct/ ");

@@ -12,7 +12,6 @@
 
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/gpu/codec_picture.h"
 #include "media/gpu/media_gpu_export.h"
@@ -39,6 +38,9 @@ class MEDIA_GPU_EXPORT H264Picture : public CodecPicture {
   };
 
   H264Picture();
+
+  H264Picture(const H264Picture&) = delete;
+  H264Picture& operator=(const H264Picture&) = delete;
 
   virtual V4L2H264Picture* AsV4L2H264Picture();
   virtual VaapiH264Picture* AsVaapiH264Picture();
@@ -96,9 +98,6 @@ class MEDIA_GPU_EXPORT H264Picture : public CodecPicture {
 
  protected:
   ~H264Picture() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(H264Picture);
 };
 
 // DPB - Decoded Picture Buffer.

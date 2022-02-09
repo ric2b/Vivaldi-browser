@@ -37,8 +37,11 @@ class CONTENT_EXPORT BackForwardCacheDisable {
     // MediaSession's service is used (crbug.com/1243599).
     kMediaSessionService = 11,
 
-    // A media (a video or an audio) plays (crbug.com/1246240).
-    kMediaPlay = 12,
+    // kMediaPlay = 12, Removed after allowing media play (crbug.com/1246240).
+
+    // TODO(crbug.com/1271450): Screen readers do not recognize a navigation
+    // when the page is served from bfcache.
+    kScreenReader = 13,
 
     // New reasons should be accompanied by a comment as to why BackForwardCache
     // cannot be used in this case and a link to a bug to fix that if it is

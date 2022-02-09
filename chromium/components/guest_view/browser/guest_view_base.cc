@@ -9,8 +9,8 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -98,7 +98,8 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
     Destroy();
   }
 
-  void RenderProcessGone(base::TerminationStatus status) override {
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override {
     if (destroyed_)
       return;
     // If the embedder process is destroyed, then destroy the guest.
@@ -114,7 +115,7 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
     guest_->EmbedderFullscreenToggled(is_fullscreen_);
   }
 
-  void MainFrameWasResized(bool width_changed) override {
+  void PrimaryMainFrameWasResized(bool width_changed) override {
     if (destroyed_ || !web_contents()->GetDelegate())
       return;
 
@@ -142,7 +143,7 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
  private:
   bool is_fullscreen_;
   bool destroyed_;
-  GuestViewBase* guest_;
+  raw_ptr<GuestViewBase> guest_;
 
   void Destroy() {
     if (destroyed_)
@@ -180,7 +181,7 @@ class GuestViewBase::OpenerLifetimeObserver : public WebContentsObserver {
   }
 
  private:
-  GuestViewBase* guest_;
+  raw_ptr<GuestViewBase> guest_;
 };
 
 GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
@@ -706,12 +707,12 @@ bool GuestViewBase::HandleKeyboardEvent(
 }
 
 void GuestViewBase::LoadingStateChanged(WebContents* source,
-                                        bool to_different_document) {
+                                        bool should_show_loading_ui) {
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return;
 
   embedder_web_contents()->GetDelegate()->LoadingStateChanged(
-      embedder_web_contents(), to_different_document);
+      embedder_web_contents(), should_show_loading_ui);
 }
 
 void GuestViewBase::ResizeDueToAutoResize(WebContents* web_contents,
@@ -910,8 +911,9 @@ double GuestViewBase::GetEmbedderZoomFactor() const {
 
 void GuestViewBase::SetUpSizing(const base::DictionaryValue& params) {
   // Read the autosize parameters passed in from the embedder.
-  bool auto_size_enabled = auto_size_enabled_;
-  params.GetBoolean(kAttributeAutoSize, &auto_size_enabled);
+  absl::optional<bool> auto_size_enabled_opt =
+      params.FindBoolKey(kAttributeAutoSize);
+  bool auto_size_enabled = auto_size_enabled_opt.value_or(auto_size_enabled_);
 
   int max_height = max_auto_size_.height();
   int max_width = max_auto_size_.width();
@@ -932,8 +934,9 @@ void GuestViewBase::SetUpSizing(const base::DictionaryValue& params) {
   int normal_width = normal_size_.width();
   // If the element size was provided in logical units (versus physical), then
   // it will be converted to physical units.
-  bool element_size_is_logical = false;
-  params.GetBoolean(kElementSizeIsLogical, &element_size_is_logical);
+  absl::optional<bool> element_size_is_logical_opt =
+      params.FindBoolKey(kElementSizeIsLogical);
+  bool element_size_is_logical = element_size_is_logical_opt.value_or(false);
   if (element_size_is_logical) {
     // Convert the element size from logical pixels to physical pixels.
     normal_height = LogicalPixelsToPhysicalPixels(element_height);

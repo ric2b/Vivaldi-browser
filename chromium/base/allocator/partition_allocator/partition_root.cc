@@ -12,7 +12,6 @@
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_bucket.h"
 #include "base/allocator/partition_allocator/partition_cookie.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
@@ -20,8 +19,8 @@
 #include "base/allocator/partition_allocator/reservation_offset_table.h"
 #include "base/allocator/partition_allocator/starscan/pcscan.h"
 #include "base/bits.h"
-#include "base/feature_list.h"
 #include "base/memory/nonscannable_memory.h"
+#include "base/memory/tagging.h"
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
@@ -70,37 +69,47 @@ void BeforeForkInParent() NO_THREAD_SAFETY_ANALYSIS {
   internal::ThreadCacheRegistry::GetLock().Lock();
 }
 
-void ReleaseLocks() NO_THREAD_SAFETY_ANALYSIS {
+template <typename T>
+void UnlockOrReinit(T& lock, bool in_child) NO_THREAD_SAFETY_ANALYSIS {
+  // Only re-init the locks in the child process, in the parent can unlock
+  // normally.
+  if (in_child)
+    lock.Reinit();
+  else
+    lock.Unlock();
+}
+
+void ReleaseLocks(bool in_child) NO_THREAD_SAFETY_ANALYSIS {
   // In reverse order, even though there are no lock ordering dependencies.
-  internal::ThreadCacheRegistry::GetLock().Unlock();
+  UnlockOrReinit(internal::ThreadCacheRegistry::GetLock(), in_child);
 
   if (auto* nonquarantinable_root =
           internal::NonQuarantinableAllocator::Instance().root())
-    nonquarantinable_root->lock_.Unlock();
+    UnlockOrReinit(nonquarantinable_root->lock_, in_child);
 
   if (auto* nonscannable_root =
           internal::NonScannableAllocator::Instance().root())
-    nonscannable_root->lock_.Unlock();
+    UnlockOrReinit(nonscannable_root->lock_, in_child);
 
   auto* regular_root = internal::PartitionAllocMalloc::Allocator();
 
   auto* aligned_root = internal::PartitionAllocMalloc::AlignedAllocator();
   if (aligned_root != regular_root)
-    aligned_root->lock_.Unlock();
+    UnlockOrReinit(aligned_root->lock_, in_child);
 
   auto* original_root = internal::PartitionAllocMalloc::OriginalAllocator();
   if (original_root)
-    original_root->lock_.Unlock();
+    UnlockOrReinit(original_root->lock_, in_child);
 
-  regular_root->lock_.Unlock();
+  UnlockOrReinit(regular_root->lock_, in_child);
 }
 
 void AfterForkInParent() {
-  ReleaseLocks();
+  ReleaseLocks(/* in_child = */ false);
 }
 
 void AfterForkInChild() {
-  ReleaseLocks();
+  ReleaseLocks(/* in_child = */ true);
   // Unsafe, as noted in the name. This is fine here however, since at this
   // point there is only one thread, this one (unless another post-fork()
   // handler created a thread, but it would have needed to allocate, which would
@@ -226,10 +235,12 @@ static size_t PartitionPurgeSlotSpan(
       internal::SlotSpanMetadata<thread_safe>::ToSlotSpanStartPtr(slot_span));
   // First, walk the freelist for this slot span and make a bitmap of which
   // slots are not in use.
-  for (internal::PartitionFreelistEntry* entry = slot_span->freelist_head;
+  for (internal::PartitionFreelistEntry* entry = slot_span->get_freelist_head();
        entry;
        /**/) {
-    size_t slot_index = (reinterpret_cast<char*>(entry) - ptr) / slot_size;
+    size_t slot_index =
+        (reinterpret_cast<char*>(base::memory::UnmaskPtr(entry)) - ptr) /
+        slot_size;
     PA_DCHECK(slot_index < num_slots);
     slot_usage[slot_index] = 0;
     entry = entry->GetNext(slot_size);
@@ -446,8 +457,8 @@ static void PartitionDumpBucketStats(
 }
 
 #if DCHECK_IS_ON()
-void DCheckIfManagedByPartitionAllocBRPPool(void* ptr) {
-  PA_DCHECK(IsManagedByPartitionAllocBRPPool(ptr));
+void DCheckIfManagedByPartitionAllocBRPPool(uintptr_t address) {
+  PA_DCHECK(IsManagedByPartitionAllocBRPPool(address));
 }
 #endif
 
@@ -456,10 +467,10 @@ void DCheckIfManagedByPartitionAllocBRPPool(void* ptr) {
 template <bool thread_safe>
 [[noreturn]] NOINLINE void PartitionRoot<thread_safe>::OutOfMemory(
     size_t size) {
-#if !defined(ARCH_CPU_64_BITS)
   const size_t virtual_address_space_size =
       total_size_of_super_pages.load(std::memory_order_relaxed) +
       total_size_of_direct_mapped_pages.load(std::memory_order_relaxed);
+#if !defined(ARCH_CPU_64_BITS)
   const size_t uncommitted_size =
       virtual_address_space_size -
       total_size_of_committed_pages.load(std::memory_order_relaxed);
@@ -481,7 +492,7 @@ template <bool thread_safe>
   // stacks, and other allocators will also consume address space).
   const size_t kReasonableVirtualSize = (is_wow_64 ? 2800 : 1024) * 1024 * 1024;
   // Make it obvious whether we are running on 64-bit Windows.
-  base::debug::Alias(&is_wow_64);
+  PA_DEBUG_DATA_ON_STACK("is_wow_64", static_cast<size_t>(is_wow_64));
 #else
   constexpr size_t kReasonableVirtualSize =
       // 1.5GiB elsewhere, since address space is typically 3GiB.
@@ -491,11 +502,21 @@ template <bool thread_safe>
     internal::PartitionOutOfMemoryWithLargeVirtualSize(
         virtual_address_space_size);
   }
+#endif  // #if !defined(ARCH_CPU_64_BITS)
 
-  // Make the virtual size visible to crash reports all the time.
-  base::debug::Alias(&virtual_address_space_size);
+  // Out of memory can be due to multiple causes, such as:
+  // - Out of GigaCage virtual address space
+  // - Out of commit due to either our process, or another one
+  // - Excessive allocations in the current process
+  //
+  // Saving these values make it easier to distinguish between these. See the
+  // documentation in PA_DEBUG_DATA_ON_STACK() on how to get these from
+  // minidumps.
+  PA_DEBUG_DATA_ON_STACK("va_size", virtual_address_space_size);
+  PA_DEBUG_DATA_ON_STACK("alloc", get_total_size_of_allocated_bytes());
+  PA_DEBUG_DATA_ON_STACK("commit", get_total_size_of_committed_pages());
+  PA_DEBUG_DATA_ON_STACK("size", size);
 
-#endif
   if (internal::g_oom_handling_function)
     (*internal::g_oom_handling_function)(size);
   OOM_CRASH(size);
@@ -503,11 +524,7 @@ template <bool thread_safe>
 
 template <bool thread_safe>
 void PartitionRoot<thread_safe>::DecommitEmptySlotSpans() {
-  for (SlotSpan*& slot_span : global_empty_slot_span_ring) {
-    if (slot_span)
-      slot_span->DecommitIfPossible(this);
-    slot_span = nullptr;
-  }
+  ShrinkEmptySlotSpansRing(0);
   // Just decommitted everything, and holding the lock, should be exactly 0.
   PA_DCHECK(empty_slot_spans_dirty_bytes == 0);
 }
@@ -515,9 +532,20 @@ void PartitionRoot<thread_safe>::DecommitEmptySlotSpans() {
 template <bool thread_safe>
 void PartitionRoot<thread_safe>::Init(PartitionOptions opts) {
   {
+#if defined(OS_APPLE)
+    // Needed to statically bound page size, which is a runtime constant on
+    // apple OSes.
+    PA_CHECK((SystemPageSize() == (size_t{1} << 12)) ||
+             (SystemPageSize() == (size_t{1} << 14)));
+#endif
+
     ScopedGuard guard{lock_};
     if (initialized)
       return;
+
+    // Swaps out the active no-op tagging intrinsics with MTE-capable ones, if
+    // running on the right hardware.
+    memory::InitializeMTESupportIfNeeded();
 
 #if defined(PA_HAS_64_BITS_POINTERS)
     // Reserve address space for partition alloc.
@@ -660,16 +688,13 @@ void PartitionRoot<thread_safe>::EnableThreadCacheIfSupported() {
 }
 
 template <bool thread_safe>
-void PartitionRoot<thread_safe>::ConfigureLazyCommit() {
+void PartitionRoot<thread_safe>::ConfigureLazyCommit(bool enabled) {
 #if defined(OS_WIN)
-  bool new_value =
-      base::FeatureList::IsEnabled(features::kPartitionAllocLazyCommit);
-
   internal::ScopedGuard<thread_safe> guard{lock_};
-  if (use_lazy_commit != new_value) {
+  if (use_lazy_commit != enabled) {
     // Lazy commit can be turned off, but turning on isn't supported.
     PA_DCHECK(use_lazy_commit);
-    use_lazy_commit = new_value;
+    use_lazy_commit = enabled;
 
     for (auto* super_page_extent = first_extent; super_page_extent;
          super_page_extent = super_page_extent->next) {
@@ -698,7 +723,8 @@ void PartitionRoot<thread_safe>::ConfigureLazyCommit() {
                 char* slot_span_start = reinterpret_cast<char*>(
                     SlotSpan::ToSlotSpanStartPtr(slot_span));
                 RecommitSystemPagesForData(
-                    slot_span_start + already_committed_size,
+                    reinterpret_cast<uintptr_t>(slot_span_start +
+                                                already_committed_size),
                     size_to_commit - already_committed_size,
                     PageUpdatePermissions);
               }
@@ -715,7 +741,8 @@ bool PartitionRoot<thread_safe>::TryReallocInPlaceForDirectMap(
     internal::SlotSpanMetadata<thread_safe>* slot_span,
     size_t requested_size) {
   PA_DCHECK(slot_span->bucket->is_direct_mapped());
-  PA_DCHECK(internal::IsManagedByDirectMap(slot_span));
+  PA_DCHECK(
+      internal::IsManagedByDirectMap(reinterpret_cast<uintptr_t>(slot_span)));
 
   size_t raw_size = AdjustSizeForExtrasAdd(requested_size);
   auto* extent = DirectMapExtent::FromSlotSpan(slot_span);
@@ -753,16 +780,16 @@ bool PartitionRoot<thread_safe>::TryReallocInPlaceForDirectMap(
   size_t current_slot_size = slot_span->bucket->slot_size;
   char* slot_start =
       static_cast<char*>(SlotSpan::ToSlotSpanStartPtr(slot_span));
+  uintptr_t slot_start_as_uintptr = reinterpret_cast<uintptr_t>(slot_start);
   // This is the available part of the reservation up to which the new
   // allocation can grow.
   size_t available_reservation_size =
       current_reservation_size - extent->padding_for_alignment -
       PartitionRoot<thread_safe>::GetDirectMapMetadataAndGuardPagesSize();
 #if DCHECK_IS_ON()
-  char* reservation_start = reinterpret_cast<char*>(
-      reinterpret_cast<uintptr_t>(slot_start) & kSuperPageBaseMask);
+  uintptr_t reservation_start = slot_start_as_uintptr & kSuperPageBaseMask;
   PA_DCHECK(internal::IsReservationStart(reservation_start));
-  PA_DCHECK(slot_start + available_reservation_size ==
+  PA_DCHECK(slot_start_as_uintptr + available_reservation_size ==
             reservation_start + current_reservation_size -
                 GetDirectMapMetadataAndGuardPagesSize() + PartitionPageSize());
 #endif
@@ -773,15 +800,15 @@ bool PartitionRoot<thread_safe>::TryReallocInPlaceForDirectMap(
   } else if (new_slot_size < current_slot_size) {
     // Shrink by decommitting unneeded pages and making them inaccessible.
     size_t decommit_size = current_slot_size - new_slot_size;
-    DecommitSystemPagesForData(slot_start + new_slot_size, decommit_size,
-                               PageUpdatePermissions);
+    DecommitSystemPagesForData(slot_start_as_uintptr + new_slot_size,
+                               decommit_size, PageUpdatePermissions);
     // Since the decommited system pages are still reserved, we don't need to
     // change the entries for decommitted pages in the reservation offset table.
   } else if (new_slot_size <= available_reservation_size) {
     // Grow within the actually reserved address space. Just need to make the
     // pages accessible again.
     size_t recommit_slot_size_growth = new_slot_size - current_slot_size;
-    RecommitSystemPagesForData(slot_start + current_slot_size,
+    RecommitSystemPagesForData(slot_start_as_uintptr + current_slot_size,
                                recommit_slot_size_growth,
                                PageUpdatePermissions);
     // The recommited system pages had been already reserved and all the
@@ -798,8 +825,12 @@ bool PartitionRoot<thread_safe>::TryReallocInPlaceForDirectMap(
     return false;
   }
 
+  total_size_of_allocated_bytes -= slot_span->bucket->slot_size;
   slot_span->SetRawSize(raw_size);
   slot_span->bucket->slot_size = new_slot_size;
+  total_size_of_allocated_bytes += slot_span->bucket->slot_size;
+  max_size_of_allocated_bytes =
+      std::max(max_size_of_allocated_bytes, total_size_of_allocated_bytes);
 
 #if DCHECK_IS_ON()
   // Write a new trailing cookie.
@@ -819,7 +850,8 @@ bool PartitionRoot<thread_safe>::TryReallocInPlaceForNormalBuckets(
     void* ptr,
     SlotSpan* slot_span,
     size_t new_size) {
-  PA_DCHECK(internal::IsManagedByNormalBuckets(ptr));
+  PA_DCHECK(
+      internal::IsManagedByNormalBuckets(reinterpret_cast<uintptr_t>(ptr)));
 
   // TODO: note that tcmalloc will "ignore" a downsizing realloc() unless the
   // new size is a significant percentage smaller. We could do the same if we
@@ -905,7 +937,7 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
     bool tried_in_place_for_direct_map = false;
     {
       internal::ScopedGuard<thread_safe> guard{old_root->lock_};
-      // TODO(palmer): See if we can afford to make this a CHECK.
+      // TODO(crbug.com/1257655): See if we can afford to make this a CHECK.
       PA_DCHECK(IsValidSlotSpan(slot_span));
       old_usable_size = slot_span->GetUsableSize(old_root);
 
@@ -942,7 +974,7 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
   }
 
   memcpy(ret, ptr, std::min(old_usable_size, new_size));
-  Free(ptr);
+  Free(ptr);  // Implicitly protects the old ptr on MTE systems.
   return ret;
 #endif
 }
@@ -961,9 +993,39 @@ void PartitionRoot<thread_safe>::PurgeMemory(int flags) {
       DecommitEmptySlotSpans();
     if (flags & PartitionPurgeDiscardUnusedSystemPages) {
       for (Bucket& bucket : buckets) {
+        if (bucket.slot_size == kInvalidBucketSize)
+          continue;
+
         if (bucket.slot_size >= SystemPageSize())
           internal::PartitionPurgeBucket(&bucket);
+        else
+          bucket.SortSlotSpanFreelists();
       }
+    }
+  }
+}
+
+template <bool thread_safe>
+void PartitionRoot<thread_safe>::ShrinkEmptySlotSpansRing(size_t limit) {
+  int16_t index = global_empty_slot_span_ring_index;
+  int16_t starting_index = index;
+  while (empty_slot_spans_dirty_bytes > limit) {
+    SlotSpan* slot_span = global_empty_slot_span_ring[index];
+    // The ring is not always full, may be nullptr.
+    if (slot_span) {
+      slot_span->DecommitIfPossible(this);
+      global_empty_slot_span_ring[index] = nullptr;
+    }
+    index += 1;
+    if (index == kMaxFreeableSpans)
+      index = 0;
+
+    // Went around the whole ring, since this is locked,
+    // empty_slot_spans_dirty_bytes should be exactly 0.
+    if (index == starting_index) {
+      PA_DCHECK(empty_slot_spans_dirty_bytes == 0);
+      // Metrics issue, don't crash, return.
+      break;
     }
   }
 }
@@ -1156,4 +1218,7 @@ static_assert(offsetof(PartitionRoot<internal::ThreadSafe>, sentinel_bucket) ==
                           sizeof(PartitionRoot<internal::ThreadSafe>::Bucket),
               "sentinel_bucket must be just after the regular buckets.");
 
+static_assert(
+    offsetof(PartitionRoot<internal::ThreadSafe>, lock_) >= 64,
+    "The lock should not be on the same cacheline as the read-mostly flags");
 }  // namespace base

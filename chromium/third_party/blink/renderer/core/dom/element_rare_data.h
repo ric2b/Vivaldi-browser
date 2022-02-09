@@ -23,7 +23,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_RARE_DATA_H_
 
 #include <memory>
-#include "base/unguessable_token.h"
+#include "base/token.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/css/container_query_data.h"
@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/core/html/custom/custom_element_definition.h"
 #include "third_party/blink/renderer/core/intersection_observer/element_intersection_observer_data.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/region_capture_crop_id.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
@@ -53,10 +54,6 @@ class HTMLElement;
 class ResizeObservation;
 class ResizeObserver;
 
-// Element rare data is intended to store values that are not frequently
-// set on elements, but need to be associated with them still.
-// IMPORTANT NOTE: do NOT use element rare data to store boolean values,
-// instead favoring the |ElementFlags| class defined in element.h.
 class ElementRareData final : public NodeRareData {
  public:
   explicit ElementRareData(NodeRenderingData*);
@@ -145,22 +142,46 @@ class ElementRareData final : public NodeRareData {
   }
   void SetIsValue(const AtomicString& is_value) { is_value_ = is_value; }
   const AtomicString& IsValue() const { return is_value_; }
+  void SetDidAttachInternals() { did_attach_internals_ = true; }
+  bool DidAttachInternals() const { return did_attach_internals_; }
   ElementInternals& EnsureElementInternals(HTMLElement& target);
   const ElementInternals* GetElementInternals() const {
     return element_internals_;
   }
 
-  // There is no meaningful difference between a nullptr token and a Null
-  // token, so we simplify the return type here.
-  base::UnguessableToken RegionCaptureCropId() const {
-    return region_capture_crop_id_ ? *region_capture_crop_id_
-                                   : base::UnguessableToken::Null();
+  // Returns the crop-ID if one was set, or nullptr otherwise.
+  const RegionCaptureCropId* GetRegionCaptureCropId() const {
+    return region_capture_crop_id_.get();
   }
-  void SetRegionCaptureCropId(std::unique_ptr<base::UnguessableToken> value) {
-    if (!value || value->is_empty()) {
-      region_capture_crop_id_ = nullptr;
-    }
-    region_capture_crop_id_ = std::move(value);
+
+  // Sets a crop-ID on the item. Must be called at most once. Cannot be used
+  // to unset a previously set crop-ID.
+  void SetRegionCaptureCropId(std::unique_ptr<RegionCaptureCropId> crop_id) {
+    DCHECK(!GetRegionCaptureCropId());
+    DCHECK(crop_id);
+    DCHECK(!crop_id->value().is_zero());
+    region_capture_crop_id_ = std::move(crop_id);
+  }
+
+  void SetStyleShouldForceLegacyLayout(bool force) {
+    style_should_force_legacy_layout_ = force;
+  }
+  bool StyleShouldForceLegacyLayout() const {
+    return style_should_force_legacy_layout_;
+  }
+  void SetShouldForceLegacyLayoutForChild(bool force) {
+    should_force_legacy_layout_for_child_ = force;
+  }
+  bool ShouldForceLegacyLayoutForChild() const {
+    return should_force_legacy_layout_for_child_;
+  }
+  bool HasUndoStack() const { return has_undo_stack_; }
+  void SetHasUndoStack(bool value) { has_undo_stack_ = value; }
+  bool ScrollbarPseudoElementStylesDependOnFontMetrics() const {
+    return scrollbar_pseudo_element_styles_depend_on_font_metrics_;
+  }
+  void SetScrollbarPseudoElementStylesDependOnFontMetrics(bool value) {
+    scrollbar_pseudo_element_styles_depend_on_font_metrics_ = value;
   }
 
   AccessibleNode* GetAccessibleNode() const { return accessible_node_.Get(); }
@@ -208,6 +229,7 @@ class ElementRareData final : public NodeRareData {
   }
 
   ContainerQueryData& EnsureContainerQueryData() {
+    DCHECK(RuntimeEnabledFeatures::CSSContainerQueriesEnabled());
     if (!container_query_data_)
       container_query_data_ = MakeGarbageCollected<ContainerQueryData>();
     return *container_query_data_;
@@ -230,6 +252,14 @@ class ElementRareData final : public NodeRareData {
 
   const AtomicString& GetNonce() const { return nonce_; }
   void SetNonce(const AtomicString& nonce) { nonce_ = nonce; }
+
+  void SaveLastIntrinsicSize(ResizeObserverSize* size) {
+    last_intrinsic_size_ = size;
+  }
+
+  const ResizeObserverSize* LastIntrinsicSize() const {
+    return last_intrinsic_size_;
+  }
 
   void TraceAfterDispatch(blink::Visitor*) const;
 
@@ -257,12 +287,19 @@ class ElementRareData final : public NodeRareData {
   Member<ElementInternals> element_internals_;
 
   Member<PseudoElementData> pseudo_element_data_;
+  Member<ResizeObserverSize> last_intrinsic_size_;
 
   Member<AccessibleNode> accessible_node_;
 
   Member<DisplayLockContext> display_lock_context_;
   Member<ContainerQueryData> container_query_data_;
-  std::unique_ptr<base::UnguessableToken> region_capture_crop_id_;
+  std::unique_ptr<RegionCaptureCropId> region_capture_crop_id_;
+
+  unsigned did_attach_internals_ : 1;
+  unsigned should_force_legacy_layout_for_child_ : 1;
+  unsigned style_should_force_legacy_layout_ : 1;
+  unsigned has_undo_stack_ : 1;
+  unsigned scrollbar_pseudo_element_styles_depend_on_font_metrics_ : 1;
 };
 
 inline LayoutSize DefaultMinimumSizeForResizing() {

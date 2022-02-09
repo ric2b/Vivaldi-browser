@@ -7,6 +7,7 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/supports_user_data.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -188,7 +189,7 @@ class ProxyingURLLoaderFactory::InProgressRequest
   }
 
   // Back pointer to the factory which owns this class.
-  ProxyingURLLoaderFactory* const factory_;
+  const raw_ptr<ProxyingURLLoaderFactory> factory_;
 
   // Information about the current request.
   GURL request_url_;
@@ -256,7 +257,7 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyRequestAdapter
   }
 
  private:
-  InProgressRequest* const in_progress_request_;
+  const raw_ptr<InProgressRequest> in_progress_request_;
 };
 
 class ProxyingURLLoaderFactory::InProgressRequest::ProxyResponseAdapter
@@ -284,7 +285,7 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyResponseAdapter
   }
 
   GURL GetOrigin() const override {
-    return in_progress_request_->response_url_.GetOrigin();
+    return in_progress_request_->response_url_.DeprecatedGetOriginAsURL();
   }
 
   const net::HttpResponseHeaders* GetHeaders() const override {
@@ -306,8 +307,8 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyResponseAdapter
   }
 
  private:
-  InProgressRequest* const in_progress_request_;
-  net::HttpResponseHeaders* const headers_;
+  const raw_ptr<InProgressRequest> in_progress_request_;
+  const raw_ptr<net::HttpResponseHeaders> headers_;
 };
 
 ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
@@ -321,7 +322,7 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
     : factory_(factory),
       request_url_(request.url),
       response_url_(request.url),
-      referrer_origin_(request.referrer.GetOrigin()),
+      referrer_origin_(request.referrer.DeprecatedGetOriginAsURL()),
       request_destination_(request.destination),
       is_main_frame_(request.is_main_frame),
       is_fetch_like_api_(request.is_fetch_like_api),
@@ -392,7 +393,8 @@ void ProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
                                  modified_cors_exempt_headers, opt_new_url);
 
   request_url_ = redirect_info_.new_url;
-  referrer_origin_ = GURL(redirect_info_.new_referrer).GetOrigin();
+  referrer_origin_ =
+      GURL(redirect_info_.new_referrer).DeprecatedGetOriginAsURL();
 }
 
 void ProxyingURLLoaderFactory::InProgressRequest::OnReceiveResponse(

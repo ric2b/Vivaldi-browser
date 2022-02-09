@@ -34,9 +34,7 @@ class FrameSite;
 #include <oleidl.h>
 #include <olectl.h>
 
-#if !defined(__WXWINCE__) || defined(__WINCE_STANDARDSDK__)
 #include <exdisp.h>
-#endif
 
 #include <docobj.h>
 
@@ -167,7 +165,7 @@ public:
     void OnPaint(wxPaintEvent&);
     void OnSetFocus(wxFocusEvent&);
     void OnKillFocus(wxFocusEvent&);
-    virtual bool MSWTranslateMessage(WXMSG* pMsg);
+    virtual bool MSWTranslateMessage(WXMSG* pMsg) wxOVERRIDE;
     virtual bool QueryClientSiteInterface(REFIID iid, void **_interface, const char *&desc);
 
 protected:
@@ -222,7 +220,7 @@ private:
     DISPID m_dispid;
 
 public:
-    virtual wxEvent *Clone() const
+    virtual wxEvent *Clone() const wxOVERRIDE
     { return new wxActiveXEvent(*this); }
 
     size_t ParamCount() const;

@@ -6,7 +6,6 @@
 #define COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_MOCK_WEBSITE_LOGIN_MANAGER_H_
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "components/autofill_assistant/browser/website_login_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -46,7 +45,7 @@ class MockWebsiteLoginManager : public WebsiteLoginManager {
                base::OnceCallback<void(bool)> callback),
               (override));
 
-  MOCK_METHOD(std::string,
+  MOCK_METHOD(absl::optional<std::string>,
               GeneratePassword,
               (autofill::FormSignature form_signature,
                autofill::FieldSignature field_signature,
@@ -60,6 +59,15 @@ class MockWebsiteLoginManager : public WebsiteLoginManager {
                const autofill::FormData& form_data,
                base::OnceCallback<void()> callback),
               (override));
+
+  MOCK_METHOD(void,
+              GetGetLastTimePasswordUsed,
+              (const Login& login,
+               base::OnceCallback<void(absl::optional<base::Time>)> callback),
+              (override));
+
+  MOCK_METHOD2(OnDeletePasswordForLogin,
+               void(const Login& login, base::OnceCallback<void(bool)>&));
 
   MOCK_METHOD(bool, ReadyToCommitGeneratedPassword, (), (override));
 

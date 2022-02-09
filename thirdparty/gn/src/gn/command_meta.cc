@@ -113,7 +113,7 @@ int RunMeta(const std::vector<std::string>& args) {
   std::vector<std::string> walk_keys = base::SplitString(
       walk_keys_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   Err err;
-  std::set<const Target*> targets_walked;
+  TargetSet targets_walked;
   SourceDir rebase_source_dir(rebase_dir);
   // When SourceDir constructor is supplied with an empty string,
   // a trailing slash will be added. This prevent SourceDir::is_null()

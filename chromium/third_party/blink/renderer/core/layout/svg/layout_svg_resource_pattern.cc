@@ -35,7 +35,8 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 
 namespace blink {
 
@@ -121,7 +122,7 @@ bool LayoutSVGResourcePattern::FindCycleFromSelf() const {
 }
 
 std::unique_ptr<PatternData> LayoutSVGResourcePattern::BuildPatternData(
-    const FloatRect& object_bounding_box) {
+    const gfx::RectF& object_bounding_box) {
   NOT_DESTROYED();
   auto pattern_data = std::make_unique<PatternData>();
 
@@ -139,7 +140,7 @@ std::unique_ptr<PatternData> LayoutSVGResourcePattern::BuildPatternData(
     return pattern_data;
 
   // Compute tile metrics.
-  FloatRect tile_bounds = SVGLengthContext::ResolveRectangle(
+  gfx::RectF tile_bounds = SVGLengthContext::ResolveRectangle(
       GetElement(), attributes.PatternUnits(), object_bounding_box,
       *attributes.X(), *attributes.Y(), *attributes.Width(),
       *attributes.Height());
@@ -153,22 +154,22 @@ std::unique_ptr<PatternData> LayoutSVGResourcePattern::BuildPatternData(
       return pattern_data;
     tile_transform = SVGFitToViewBox::ViewBoxToViewTransform(
         attributes.ViewBox(), attributes.PreserveAspectRatio(),
-        tile_bounds.Size());
+        tile_bounds.size());
   } else {
     // A viewBox overrides patternContentUnits, per spec.
     if (attributes.PatternContentUnits() ==
         SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
-      tile_transform.Scale(object_bounding_box.Width(),
-                           object_bounding_box.Height());
+      tile_transform.Scale(object_bounding_box.width(),
+                           object_bounding_box.height());
     }
   }
 
   pattern_data->pattern = Pattern::CreatePaintRecordPattern(
-      AsPaintRecord(tile_bounds.Size(), tile_transform),
-      FloatRect(FloatPoint(), tile_bounds.Size()));
+      AsPaintRecord(tile_bounds.size(), tile_transform),
+      gfx::RectF(tile_bounds.size()));
 
   // Compute pattern space transformation.
-  pattern_data->transform.Translate(tile_bounds.X(), tile_bounds.Y());
+  pattern_data->transform.Translate(tile_bounds.x(), tile_bounds.y());
   pattern_data->transform.PreMultiply(attributes.PatternTransform());
 
   return pattern_data;
@@ -176,8 +177,9 @@ std::unique_ptr<PatternData> LayoutSVGResourcePattern::BuildPatternData(
 
 bool LayoutSVGResourcePattern::ApplyShader(
     const SVGResourceClient& client,
-    const FloatRect& reference_box,
+    const gfx::RectF& reference_box,
     const AffineTransform* additional_transform,
+    const AutoDarkMode&,
     PaintFlags& flags) {
   NOT_DESTROYED();
   ClearInvalidationMask();
@@ -200,7 +202,7 @@ bool LayoutSVGResourcePattern::ApplyShader(
 }
 
 sk_sp<PaintRecord> LayoutSVGResourcePattern::AsPaintRecord(
-    const FloatSize& size,
+    const gfx::SizeF& size,
     const AffineTransform& tile_transform) const {
   NOT_DESTROYED();
   DCHECK(!should_collect_pattern_attributes_);
@@ -210,9 +212,10 @@ sk_sp<PaintRecord> LayoutSVGResourcePattern::AsPaintRecord(
       SVGUnitTypes::kSvgUnitTypeObjectboundingbox)
     content_transform = tile_transform;
 
-  FloatRect bounds(FloatPoint(), size);
+  gfx::RectF bounds(size);
   PaintRecorder paint_recorder;
-  cc::PaintCanvas* canvas = paint_recorder.beginRecording(bounds);
+  cc::PaintCanvas* canvas =
+      paint_recorder.beginRecording(gfx::RectFToSkRect(bounds));
 
   auto* pattern_content_element = Attributes().PatternContentElement();
   DCHECK(pattern_content_element);

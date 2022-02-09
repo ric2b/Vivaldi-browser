@@ -91,7 +91,8 @@ void NewTabUI::RegisterProfilePrefs(
 
 // static
 bool NewTabUI::IsNewTab(const GURL& url) {
-  return url.GetOrigin() == GURL(chrome::kChromeUINewTabURL).GetOrigin();
+  return url.DeprecatedGetOriginAsURL() ==
+         GURL(chrome::kChromeUINewTabURL).DeprecatedGetOriginAsURL();
 }
 
 // static
@@ -170,7 +171,7 @@ void NewTabUI::NewTabHTMLSource::StartDataRequest(
   Profile* profile_for_window_type =
       web_contents
           ? Profile::FromBrowserContext(web_contents->GetBrowserContext())
-          : profile_;
+          : profile_.get();
 
   NTPResourceCache::WindowType win_type =
       NTPResourceCache::GetWindowType(profile_for_window_type);

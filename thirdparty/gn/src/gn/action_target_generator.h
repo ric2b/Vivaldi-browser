@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_ACTION_TARGET_GENERATOR_H_
 #define TOOLS_GN_ACTION_TARGET_GENERATOR_H_
 
-#include "base/macros.h"
 #include "gn/target.h"
 #include "gn/target_generator.h"
 
@@ -35,7 +34,8 @@ class ActionTargetGenerator : public TargetGenerator {
 
   Target::OutputType output_type_;
 
-  DISALLOW_COPY_AND_ASSIGN(ActionTargetGenerator);
+  ActionTargetGenerator(const ActionTargetGenerator&) = delete;
+  ActionTargetGenerator& operator=(const ActionTargetGenerator&) = delete;
 };
 
 #endif  // TOOLS_GN_ACTION_TARGET_GENERATOR_H_

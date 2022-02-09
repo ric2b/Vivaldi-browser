@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/files/scoped_file.h"
-#include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -28,6 +27,9 @@ struct UsbDeviceDescriptor;
 
 class UsbDeviceLinux : public UsbDevice {
  public:
+  UsbDeviceLinux(const UsbDeviceLinux&) = delete;
+  UsbDeviceLinux& operator=(const UsbDeviceLinux&) = delete;
+
 // UsbDevice implementation:
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   void CheckUsbAccess(ResultCallback callback) override;
@@ -73,8 +75,6 @@ class UsbDeviceLinux : public UsbDevice {
   SEQUENCE_CHECKER(sequence_checker_);
 
   const std::string device_path_;
-
-  DISALLOW_COPY_AND_ASSIGN(UsbDeviceLinux);
 };
 
 }  // namespace device

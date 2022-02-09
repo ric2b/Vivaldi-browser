@@ -8,18 +8,14 @@
 #include <map>
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/extension_id.h"
 
 namespace content {
 class BrowserContext;
-class NotificationDetails;
-class NotificationSource;
 }
 
 namespace extensions {
@@ -27,8 +23,7 @@ class Extension;
 class ExtensionPrefs;
 class ExternalInstallError;
 
-class ExternalInstallManager : public ExtensionRegistryObserver,
-                               public content::NotificationObserver {
+class ExternalInstallManager : public ExtensionRegistryObserver {
  public:
   ExternalInstallManager(content::BrowserContext* browser_context,
                          bool is_first_run);
@@ -85,11 +80,6 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
                               const Extension* extension,
                               extensions::UninstallReason reason) override;
 
-  // content::NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // Adds a global error informing the user that an external extension was
   // installed. If |is_new_profile| is true, then this error is from the first
   // time our profile checked for new extensions.
@@ -100,13 +90,13 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
   bool IsUnacknowledgedExternalExtension(const Extension& extension) const;
 
   // The associated BrowserContext.
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
 
   // Whether or not this is the first run for the profile.
   bool is_first_run_;
 
   // The associated ExtensionPrefs.
-  ExtensionPrefs* extension_prefs_;
+  raw_ptr<ExtensionPrefs> extension_prefs_;
 
   // The collection of ExternalInstallErrors.
   std::map<std::string, std::unique_ptr<ExternalInstallError>> errors_;
@@ -120,9 +110,7 @@ class ExternalInstallManager : public ExtensionRegistryObserver,
   std::set<ExtensionId> shown_ids_;
 
   // The error that is currently showing an alert dialog/bubble.
-  ExternalInstallError* currently_visible_install_alert_;
-
-  content::NotificationRegistrar registrar_;
+  raw_ptr<ExternalInstallError> currently_visible_install_alert_;
 
   base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
       extension_registry_observation_{this};

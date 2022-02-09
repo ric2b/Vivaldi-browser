@@ -28,11 +28,8 @@ void LayoutNGTableColumn::StyleDidChange(StyleDifference diff,
     if (LayoutNGTable* table = Table()) {
       if (old_style && diff.NeedsPaintInvalidation()) {
         // Regenerate table borders if needed
-        if (!old_style->BorderVisuallyEqual(StyleRef()) ||
-            (diff.TextDecorationOrColorChanged() &&
-             StyleRef().HasBorderColorReferencingCurrentColor())) {
+        if (!old_style->BorderVisuallyEqual(StyleRef()))
           table->GridBordersChanged();
-        }
         // Table paints column background. Tell table to repaint.
         if (StyleRef().HasBackground() || old_style->HasBackground())
           table->SetBackgroundNeedsFullPaintInvalidation();
@@ -40,12 +37,13 @@ void LayoutNGTableColumn::StyleDidChange(StyleDifference diff,
       if (diff.NeedsLayout()) {
         table->SetIntrinsicLogicalWidthsDirty();
         if (old_style &&
-            NGTableTypes::CreateColumn(*old_style,
-                                       /* default_inline_size */ absl::nullopt,
-                                       table->IsFixedTableLayout()) !=
+            NGTableTypes::CreateColumn(
+                *old_style,
+                /* default_inline_size */ absl::nullopt,
+                table->StyleRef().IsFixedTableLayout()) !=
                 NGTableTypes::CreateColumn(
                     StyleRef(), /* default_inline_size */ absl::nullopt,
-                    table->IsFixedTableLayout())) {
+                    table->StyleRef().IsFixedTableLayout())) {
           table->GridBordersChanged();
         }
       }

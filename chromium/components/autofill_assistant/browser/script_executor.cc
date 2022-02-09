@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -456,13 +456,6 @@ void ScriptExecutor::Prompt(
   }
 
   if (user_actions != nullptr) {
-    for (auto& user_action : *user_actions) {
-      if (!user_action.HasCallback())
-        continue;
-
-      user_action.AddInterceptor(base::BindOnce(
-          &ScriptExecutor::OnChosen, weak_ptr_factory_.GetWeakPtr()));
-    }
     delegate_->SetUserActions(std::move(user_actions));
   }
 }
@@ -484,14 +477,6 @@ void ScriptExecutor::SetBrowseDomainsAllowlist(
   delegate_->SetBrowseDomainsAllowlist(std::move(domains));
 }
 
-void ScriptExecutor::OnChosen(UserAction::Callback callback,
-                              std::unique_ptr<TriggerContext> context) {
-  if (context->GetDirectAction()) {
-    current_action_data_.direct_action = true;
-  }
-  std::move(callback).Run(std::move(context));
-}
-
 void ScriptExecutor::RetrieveElementFormAndFieldData(
     const Selector& selector,
     base::OnceCallback<void(const ClientStatus&,
@@ -510,10 +495,6 @@ void ScriptExecutor::SetTouchableElementArea(
     const ElementAreaProto& touchable_element_area) {
   touchable_element_area_ =
       std::make_unique<ElementAreaProto>(touchable_element_area);
-}
-
-void ScriptExecutor::SetProgress(int progress) {
-  delegate_->SetProgress(progress);
 }
 
 bool ScriptExecutor::SetProgressActiveStepIdentifier(
@@ -645,6 +626,10 @@ WebController* ScriptExecutor::GetWebController() const {
 
 std::string ScriptExecutor::GetEmailAddressForAccessTokenAccount() const {
   return delegate_->GetEmailAddressForAccessTokenAccount();
+}
+
+ukm::UkmRecorder* ScriptExecutor::GetUkmRecorder() const {
+  return delegate_->GetUkmRecorder();
 }
 
 void ScriptExecutor::SetDetails(std::unique_ptr<Details> details,
@@ -998,7 +983,6 @@ void ScriptExecutor::OnProcessedAction(
 
   auto& processed_action = processed_actions_.back();
   processed_action.set_run_time_ms(run_time.InMilliseconds());
-  processed_action.set_direct_action(current_action_data_.direct_action);
   *processed_action.mutable_navigation_info() =
       current_action_data_.navigation_info;
 
@@ -1264,6 +1248,8 @@ void ScriptExecutor::WaitForDomOperation::RunInterrupt(
       /* listener= */ this, &no_interrupts_, delegate_);
   delegate_->EnterState(AutofillAssistantState::RUNNING);
   delegate_->SetUserActions(nullptr);
+  // Note that we don't clear the touchable area in the delegate here.
+  // TODO(b/209732258): check whether this is a bug.
   interrupt_executor_->Run(
       main_script_->user_data_,
       base::BindOnce(&ScriptExecutor::WaitForDomOperation::OnInterruptDone,
@@ -1281,7 +1267,7 @@ void ScriptExecutor::WaitForDomOperation::OnInterruptDone(
   if (observer_)
     observer_->OnInterruptFinished();
 
-  RestoreStatusMessage();
+  RestorePreInterruptState();
   RestorePreInterruptScroll();
 
   // Restart. We use the original wait time since the interruption could have
@@ -1316,15 +1302,21 @@ void ScriptExecutor::WaitForDomOperation::SavePreInterruptState() {
   if (saved_pre_interrupt_state_)
     return;
 
-  pre_interrupt_status_ = delegate_->GetStatusMessage();
-  saved_pre_interrupt_state_ = true;
+  ExecutorState pre_interrupt_state;
+  pre_interrupt_state.status_message = delegate_->GetStatusMessage();
+  pre_interrupt_state.controller_state = delegate_->GetState();
+  saved_pre_interrupt_state_ = pre_interrupt_state;
 }
 
-void ScriptExecutor::WaitForDomOperation::RestoreStatusMessage() {
+void ScriptExecutor::WaitForDomOperation::RestorePreInterruptState() {
   if (!saved_pre_interrupt_state_)
     return;
 
-  delegate_->SetStatusMessage(pre_interrupt_status_);
+  delegate_->SetStatusMessage(saved_pre_interrupt_state_->status_message);
+  delegate_->EnterState(saved_pre_interrupt_state_->controller_state);
+  if (main_script_->touchable_element_area_) {
+    delegate_->SetTouchableElementArea(*main_script_->touchable_element_area_);
+  }
 }
 
 void ScriptExecutor::WaitForDomOperation::RestorePreInterruptScroll() {
@@ -1367,6 +1359,10 @@ std::ostream& operator<<(std::ostream& out,
   result.success ? out << "succeeded. " : out << "failed. ";
   out << "at_end = " << result.at_end;
   return out;
+}
+
+ProcessedActionStatusDetailsProto& ScriptExecutor::GetLogInfo() {
+  return delegate_->GetLogInfo();
 }
 
 }  // namespace autofill_assistant

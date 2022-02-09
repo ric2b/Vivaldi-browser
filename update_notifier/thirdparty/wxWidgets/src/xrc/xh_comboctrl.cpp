@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_COMBOCTRL
 
@@ -26,7 +23,7 @@
 #include "wx/combo.h"
 
 
-IMPLEMENT_DYNAMIC_CLASS(wxComboCtrlXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxComboCtrlXmlHandler, wxXmlResourceHandler);
 
 wxComboCtrlXmlHandler::wxComboCtrlXmlHandler()
                      : wxXmlResourceHandler()

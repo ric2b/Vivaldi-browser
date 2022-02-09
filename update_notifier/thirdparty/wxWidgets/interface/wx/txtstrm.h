@@ -38,11 +38,11 @@
     wxTextInputStream text( input );
     wxUint8 i1;
     float f2;
-    wxString line;
+    wxString word;
 
     text >> i1;       // read a 8 bit integer.
     text >> i1 >> f2; // read a 8 bit integer followed by float.
-    text >> line;     // read a text line
+    text >> word;     // read a word
     @endcode
 
     @library{wxbase}
@@ -64,7 +64,7 @@ public:
             <b>In Unicode build only:</b> The encoding converter used to
             convert the bytes in the underlying input stream to characters.
     */
-    wxTextInputStream(wxInputStream& stream, const wxString& sep = " \t",
+    wxTextInputStream(wxInputStream& stream, const wxString& sep = " \\ t",
                       const wxMBConv& conv = wxConvAuto());
 
     /**
@@ -86,7 +86,7 @@ public:
     wxChar GetChar();
 
     /**
-        Reads a unsigned 16 bit integer from the stream.
+        Reads an unsigned 16 bit integer from the stream.
 
         See Read8() for the description of the @a base parameter.
     */
@@ -112,6 +112,24 @@ public:
         See Read8() for the description of the @a base parameter.
     */
     wxInt32 Read32S(int base = 10);
+
+    /**
+        Reads a 64 bit unsigned integer from the stream.
+
+        See Read8() for the description of the @a base parameter.
+
+        @since 3.1.0
+    */
+    wxUint64 Read64(int base = 10);
+
+    /**
+        Reads a 64 bit signed integer from the stream.
+
+        See Read8() for the description of the @a base parameter.
+
+        @since 3.1.0
+    */
+    wxInt64 Read64S(int base = 10);
 
     /**
         Reads a single unsigned byte from the stream, given in base @a base.
@@ -166,13 +184,74 @@ public:
         The default separators are the @c space and @c TAB characters.
     */
     void SetStringSeparators(const wxString& sep);
+
+    /**
+        Uses ReadWord() to extract @a word.
+    */
+    wxTextInputStream& operator>>(wxString& word);
+
+    /**
+        Extracts the next char in the stream.
+    */
+    wxTextInputStream& operator>>(char& c);
+
+    /**
+        Uses GetChar() to extract @a wc.
+        @note Only available in Unicode builds.
+    */
+    wxTextInputStream& operator>>(wchar_t& wc);
+
+    /**
+        Uses Read16S() to extract @a i.
+    */
+    wxTextInputStream& operator>>(wxInt16& i);
+
+    /**
+        Uses Read32S() to extract @a i.
+    */
+    wxTextInputStream& operator>>(wxInt32& i);
+
+    /**
+        Uses Read64S() to extract @a i.
+    */
+    wxTextInputStream& operator>>(wxInt64& i);
+
+    /**
+        Uses Read16() to extract @a i.
+    */
+    wxTextInputStream& operator>>(wxUint16& i);
+
+    /**
+        Uses Read32() to extract @a i.
+    */
+    wxTextInputStream& operator>>(wxUint32& i);
+
+    /**
+        Uses Read64() to extract @a i.
+    */
+    wxTextInputStream& operator>>(wxUint64& i);
+
+    /**
+        Uses ReadDouble() to extract @a i.
+    */
+    wxTextInputStream& operator>>(double& i);
+
+    /**
+        Uses truncated result of ReadDouble() to extract @a f.
+    */
+    wxTextInputStream& operator>>(float& f);
+
+    /**
+        Calls @c func(*this).
+    */
+    wxTextInputStream& operator>>(__wxTextInputManip func);
 };
 
 
 /**
     Specifies the end-of-line characters to use with wxTextOutputStream.
 */
-typedef enum
+enum wxEOL
 {
     /**
         Specifies wxTextOutputStream to use the native end-of-line characters.
@@ -193,7 +272,7 @@ typedef enum
         Specifies wxTextOutputStream to use DOS end-of-line characters.
     */
     wxEOL_DOS
-} wxEOL;
+};
 
 
 /**
@@ -213,8 +292,8 @@ typedef enum
     cout << 1.23456;
     @endcode
 
-    The wxTextOutputStream writes text files (or streams) on DOS, Macintosh and
-    Unix in their native formats (concerning the line ending).
+    The wxTextOutputStream writes text files (or streams) on Windows or Unix in
+    their native formats (concerning the line ending).
 
     @library{wxbase}
     @category{streams}
@@ -283,17 +362,32 @@ public:
     void SetMode(wxEOL mode = wxEOL_NATIVE);
 
     /**
-        Writes the 16 bit integer @a i16 to the stream.
+        Writes @a i to the stream using wxString::operator<<().
+
+        @since 3.1.0
     */
-    void Write16(wxUint16 i16);
+    template<typename T>
+    void Write(const T& i);
+
+     /**
+        Writes the 64 bit unsigned integer @a i64 to the stream.
+
+        @since 3.1.0
+    */
+    void Write64(wxUint64 i64);
 
     /**
-        Writes the 32 bit integer @a i32 to the stream.
+        Writes the 32 bit unsigned integer @a i32 to the stream.
     */
     void Write32(wxUint32 i32);
 
     /**
-        Writes the single byte @a i8 to the stream.
+        Writes the 16 bit unsigned integer @a i16 to the stream.
+    */
+    void Write16(wxUint16 i16);
+
+    /**
+        Writes the single unsigned byte @a i8 to the stream.
     */
     void Write8(wxUint8 i8);
 
@@ -308,5 +402,78 @@ public:
         ending terminator.
     */
     virtual void WriteString(const wxString& string);
+
+    /**
+        Uses WriteString() to insert @a string.
+    */
+    wxTextOutputStream& operator<<(const wxString& string);
+
+    /**
+        Uses WriteString() to insert @a c as ASCII.
+    */
+    wxTextOutputStream& operator<<(char c);
+
+    /**
+        Uses PutChar() to insert @a wc.
+        @note Only available in Unicode builds.
+    */
+    wxTextOutputStream& operator<<(wchar_t wc);
+
+    /**
+        Uses Write() to insert @a c.
+    */
+    wxTextOutputStream& operator<<(wxInt16 c);
+
+    /**
+        Uses Write() to insert @a c.
+    */
+    wxTextOutputStream& operator<<(wxInt32 c);
+
+    /**
+        Uses Write() to insert @a c.
+    */
+    wxTextOutputStream& operator<<(wxInt64 c);
+
+    /**
+        Uses Write() to insert @a c.
+    */
+    wxTextOutputStream& operator<<(wxUint16 c);
+
+    /**
+        Uses Write() to insert @a c.
+    */
+    wxTextOutputStream& operator<<(wxUint32 c);
+
+    /**
+        Uses Write() to insert @a c.
+    */
+    wxTextOutputStream& operator<<(wxUint64 c);
+
+    /**
+        Uses Write() to insert @a f.
+    */
+    wxTextOutputStream& operator<<(double f);
+
+    /**
+        Uses Write() to insert @a f.
+    */
+    wxTextOutputStream& operator<<(float f);
+
+    /**
+        Calls @c func(*this).
+    */
+    wxTextOutputStream& operator<<(__wxTextOutputManip func);
 };
 
+
+/** @addtogroup group_funcmacro_misc */
+//@{
+
+/**
+    Writes @c '\\n' to @a stream.
+
+    @header{wx/textstrm.h}
+*/
+wxTextOutputStream& endl(wxTextOutputStream& stream);
+
+//@}

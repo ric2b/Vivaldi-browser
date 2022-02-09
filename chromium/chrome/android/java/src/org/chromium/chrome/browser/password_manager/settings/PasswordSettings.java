@@ -35,7 +35,6 @@ import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_check.PasswordCheckReferrer;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
-import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
@@ -567,7 +566,7 @@ public class PasswordSettings extends PreferenceFragmentCompat
         mTrustedVaultOptIn.setSummary(R.string.android_trusted_vault_opt_in_sub_label);
         mTrustedVaultOptIn.setOnPreferenceClickListener(preference -> {
             assert SyncService.get() != null;
-            CoreAccountInfo accountInfo = SyncService.get().getAuthenticatedAccountInfo();
+            CoreAccountInfo accountInfo = SyncService.get().getAccountInfo();
             assert accountInfo != null;
             SyncSettingsUtils.openTrustedVaultOptInDialog(
                     this, accountInfo, REQUEST_CODE_TRUSTED_VAULT_OPT_IN);
@@ -580,7 +579,8 @@ public class PasswordSettings extends PreferenceFragmentCompat
     private void displayManageAccountLink() {
         if (ChromeApplicationImpl.isVivaldi())
             return; // Vivaldi: Don't add the Manage Account link.
-        if (!PasswordManagerLauncher.isSyncingPasswordsWithoutCustomPassphrase()) {
+
+        if (!PasswordManagerHelper.isSyncingPasswordsWithNoCustomPassphrase(SyncService.get())) {
             return;
         }
         if (mSearchQuery != null && !mNoPasswords) {

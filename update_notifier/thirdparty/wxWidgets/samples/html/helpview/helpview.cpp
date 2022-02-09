@@ -14,9 +14,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-#pragma hdrstop
-#endif
 
 // for all others, include the necessary headers (this file is usually all you
 // need because it includes almost all "standard" wxWidgets headers
@@ -46,15 +43,15 @@ public:
     // initialization (doing it here and not in the ctor allows to have an error
     // return: if OnInit() returns false, the application terminates)
 
-    virtual bool OnInit();
-    virtual int OnExit();
+    virtual bool OnInit() wxOVERRIDE;
+    virtual int OnExit() wxOVERRIDE;
 
 private:
     wxHtmlHelpController *help;
 };
 
 
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 
 bool MyApp::OnInit()
@@ -66,15 +63,15 @@ bool MyApp::OnInit()
     wxInitAllImageHandlers();
     wxFileSystem::AddHandler(new wxZipFSHandler);
 
-    SetVendorName(wxT("wxWidgets"));
-    SetAppName(wxT("wxHTMLHelp"));
+    SetVendorName("wxWidgets");
+    SetAppName("wxHTMLHelp");
     wxConfig::Get(); // create an instance
 
     help = new wxHtmlHelpController;
 
     if (argc < 2) {
-        wxLogError(wxT("Usage : helpview <helpfile> [<more helpfiles>]"));
-        wxLogError(wxT("  helpfile may be .hhp, .zip or .htb"));
+        wxLogError("Usage : helpview <helpfile> [<more helpfiles>]");
+        wxLogError("  helpfile may be .hhp, .zip or .htb");
         return false;
     }
 

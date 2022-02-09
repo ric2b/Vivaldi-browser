@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/prefinalizer.h"
 
 namespace blink {
 
@@ -313,6 +314,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
     return compositor_property_animations_have_no_effect_;
   }
   bool AnimationHasNoEffect() const { return animation_has_no_effect_; }
+  bool AtScrollTimelineBoundary();
 
  protected:
   DispatchEventResult DispatchEventInternal(Event&) override;
@@ -348,7 +350,8 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   absl::optional<AnimationTimeDelta> CalculateCurrentTime() const;
   TimelinePhase CalculateCurrentPhase() const;
 
-  V8CSSNumberish* ConvertTimeToCSSNumberish(AnimationTimeDelta) const;
+  V8CSSNumberish* ConvertTimeToCSSNumberish(
+      absl::optional<AnimationTimeDelta>) const;
   // Failure to convert results in a thrown exception and returning false.
   bool ConvertCSSNumberishToTime(const V8CSSNumberish* numberish,
                                  absl::optional<AnimationTimeDelta>& time,
@@ -398,7 +401,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   void PlayInternal(AutoRewind auto_rewind, ExceptionState& exception_state);
 
   void ResetPendingTasks();
-  absl::optional<double> TimelineTime() const;
+  absl::optional<AnimationTimeDelta> TimelineTime() const;
 
   void ScheduleAsyncFinish();
   void AsyncFinishMicrotask();

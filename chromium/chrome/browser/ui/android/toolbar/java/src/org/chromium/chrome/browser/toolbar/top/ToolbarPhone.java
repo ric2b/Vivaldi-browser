@@ -305,7 +305,8 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
      * A global layout listener used to capture a new texture when the experimental toolbar button
      * is added or removed.
      */
-    private ViewTreeObserver.OnGlobalLayoutListener mOptionalButtonLayoutListener;
+    private ViewTreeObserver.OnGlobalLayoutListener mOptionalButtonLayoutListener =
+            () -> requestLayoutHostUpdateForOptionalButton();
 
     // The following are some properties used during animation.  We use explicit property classes
     // to avoid the cost of reflection for each animation setup.
@@ -2633,7 +2634,6 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         } else {
             ApiCompatibilityUtils.setImageTintList(mOptionalButton, null);
         }
-        mOptionalButtonLayoutListener = () -> requestLayoutHostUpdateForOptionalButton();
         if (mTabSwitcherState == STATIC_TAB) {
             if (!mUrlFocusChangeInProgress && !urlHasFocus()
                     && mOptionalButton.getVisibility() == View.GONE) {

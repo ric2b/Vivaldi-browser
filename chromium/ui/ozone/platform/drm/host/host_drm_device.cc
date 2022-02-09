@@ -10,8 +10,8 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
-#include "base/task_runner.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -234,13 +234,18 @@ bool HostDrmDevice::GpuSetGammaCorrection(
   return true;
 }
 
-bool HostDrmDevice::GpuSetPrivacyScreen(int64_t display_id, bool enabled) {
+void HostDrmDevice::GpuSetPrivacyScreen(
+    int64_t display_id,
+    bool enabled,
+    display::SetPrivacyScreenCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(on_ui_thread_);
-  if (!IsConnected())
-    return false;
-
-  drm_device_->SetPrivacyScreen(display_id, enabled);
-  return true;
+  if (IsConnected()) {
+    drm_device_->SetPrivacyScreen(display_id, enabled, std::move(callback));
+  } else {
+    // There's no connection to the DRM device, so trigger Chrome's callback
+    // with a failed state.
+    std::move(callback).Run(/*success=*/false);
+  }
 }
 
 void HostDrmDevice::GpuRefreshNativeDisplaysCallback(

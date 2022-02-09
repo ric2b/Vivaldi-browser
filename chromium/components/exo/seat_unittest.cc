@@ -36,7 +36,11 @@ class TestSeatObserver : public SeatObserver {
       : callback_(callback) {}
 
   // Overridden from SeatObserver:
-  void OnSurfaceFocused(Surface* gained_focus) override { callback_.Run(); }
+  void OnSurfaceFocused(Surface* gained_focus,
+                        Surface* lost_focus,
+                        bool has_focused_surface) override {
+    callback_.Run();
+  }
 
  private:
   base::RepeatingClosure callback_;

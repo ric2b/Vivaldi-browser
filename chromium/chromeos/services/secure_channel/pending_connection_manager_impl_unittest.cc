@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/test/task_environment.h"
 #include "chromeos/services/secure_channel/ble_initiator_connection_attempt.h"
 #include "chromeos/services/secure_channel/ble_listener_connection_attempt.h"
@@ -459,6 +458,12 @@ std::vector<ClientConnectionParameters*> ClientParamsListToRawPtrs(
 }  // namespace
 
 class SecureChannelPendingConnectionManagerImplTest : public testing::Test {
+ public:
+  SecureChannelPendingConnectionManagerImplTest(
+      const SecureChannelPendingConnectionManagerImplTest&) = delete;
+  SecureChannelPendingConnectionManagerImplTest& operator=(
+      const SecureChannelPendingConnectionManagerImplTest&) = delete;
+
  protected:
   SecureChannelPendingConnectionManagerImplTest() = default;
   ~SecureChannelPendingConnectionManagerImplTest() override = default;
@@ -896,8 +901,6 @@ class SecureChannelPendingConnectionManagerImplTest : public testing::Test {
   scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>> mock_adapter_;
 
   std::unique_ptr<PendingConnectionManager> manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(SecureChannelPendingConnectionManagerImplTest);
 };
 
 TEST_F(SecureChannelPendingConnectionManagerImplTest,

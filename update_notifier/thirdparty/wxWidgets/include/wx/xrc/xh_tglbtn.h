@@ -16,16 +16,16 @@
 
 class WXDLLIMPEXP_XRC wxToggleButtonXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxToggleButtonXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxToggleButtonXmlHandler);
 
 public:
     wxToggleButtonXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
 protected:
     virtual void DoCreateToggleButton(wxObject *control);
-#if !defined(__WXUNIVERSAL__) && !defined(__WXMOTIF__) && !defined(__WXPM__) && !(defined(__WXGTK__) && !defined(__WXGTK20__))
+#if !defined(__WXUNIVERSAL__) && !defined(__WXMOTIF__) && !(defined(__WXGTK__) && !defined(__WXGTK20__))
     virtual void DoCreateBitmapToggleButton(wxObject *control);
 #endif
 };

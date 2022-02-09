@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
+#include "base/containers/flat_map.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "components/autofill_assistant/browser/batch_element_checker.h"
@@ -22,7 +22,6 @@ namespace {
 
 using ::base::test::RunOnceCallback;
 using ::testing::_;
-using ::testing::Invoke;
 using ::testing::WithArgs;
 
 // A callback that expects to be called immediately.
@@ -188,7 +187,7 @@ TEST_F(ScriptPreconditionTest, ParameterMustExist) {
 
   trigger_context_ = std::make_unique<TriggerContext>(
       std::make_unique<ScriptParameters>(
-          std::map<std::string, std::string>{{"param", "exists"}}),
+          base::flat_map<std::string, std::string>{{"param", "exists"}}),
       TriggerContext::Options{});
 
   EXPECT_TRUE(Check(proto));
@@ -204,7 +203,7 @@ TEST_F(ScriptPreconditionTest, ParameterMustNotExist) {
 
   trigger_context_ = std::make_unique<TriggerContext>(
       std::make_unique<ScriptParameters>(
-          std::map<std::string, std::string>{{"param", "exists"}}),
+          base::flat_map<std::string, std::string>{{"param", "exists"}}),
       TriggerContext::Options{});
 
   EXPECT_FALSE(Check(proto));
@@ -220,13 +219,13 @@ TEST_F(ScriptPreconditionTest, ParameterMustHaveValue) {
 
   trigger_context_ = std::make_unique<TriggerContext>(
       std::make_unique<ScriptParameters>(
-          std::map<std::string, std::string>{{"param", "another"}}),
+          base::flat_map<std::string, std::string>{{"param", "another"}}),
       TriggerContext::Options{});
   EXPECT_FALSE(Check(proto));
 
   trigger_context_ = std::make_unique<TriggerContext>(
       std::make_unique<ScriptParameters>(
-          std::map<std::string, std::string>{{"param", "value"}}),
+          base::flat_map<std::string, std::string>{{"param", "value"}}),
       TriggerContext::Options{});
   EXPECT_TRUE(Check(proto));
 }

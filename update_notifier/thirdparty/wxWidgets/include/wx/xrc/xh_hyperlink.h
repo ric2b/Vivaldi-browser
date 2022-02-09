@@ -18,17 +18,17 @@
 class WXDLLIMPEXP_XRC wxHyperlinkCtrlXmlHandler : public wxXmlResourceHandler
 {
     // Register with wxWindows' dynamic class subsystem.
-    DECLARE_DYNAMIC_CLASS(wxHyperlinkCtrlXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxHyperlinkCtrlXmlHandler);
 
 public:
     // Constructor.
     wxHyperlinkCtrlXmlHandler();
 
     // Creates the control and returns a pointer to it.
-    virtual wxObject *DoCreateResource();
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
 
     // Returns true if we know how to create a control for the given node.
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 };
 
 #endif // wxUSE_XRC && wxUSE_HYPERLINKCTRL

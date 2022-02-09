@@ -13,8 +13,11 @@
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/constants/app_types.h"
+#include "ash/constants/ash_features.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
+#include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/keyboard/ui/test/keyboard_test_util.h"
 #include "ash/public/cpp/fps_counter.h"
 #include "ash/public/cpp/presentation_time_recorder.h"
 #include "ash/public/cpp/shelf_config.h"
@@ -31,6 +34,7 @@
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_window_builder.h"
+#include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -39,6 +43,7 @@
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/overview/overview_test_util.h"
+#include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_divider.h"
 #include "ash/wm/splitview/split_view_drag_indicators.h"
 #include "ash/wm/splitview/split_view_metrics_controller.h"
@@ -54,6 +59,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/containers/contains.h"
+#include "base/ignore_result.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -62,6 +68,7 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/ime/dummy_text_input_client.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/test_utils.h"
 #include "ui/compositor_extra/shadow.h"
@@ -76,6 +83,8 @@
 namespace ash {
 
 namespace {
+
+constexpr int kCaretHeightForTest = 8;
 
 // The observer to observe the overview states in |root_window_|.
 class OverviewStatesObserver : public OverviewObserver {
@@ -124,6 +133,57 @@ class TestBubbleDialogDelegateView : public views::BubbleDialogDelegateView {
       delete;
 
   ~TestBubbleDialogDelegateView() override {}
+};
+
+// Helper class to simulate the text input field in a window. When the text
+// input field is focused, the attached window will also be focused and show the
+// virtual keyboard. If the text input field is unfocused, it will hide the
+// virtual keyboard.
+class TestTextInputClient : public ui::DummyTextInputClient {
+ public:
+  explicit TestTextInputClient(aura::Window* window)
+      : ui::DummyTextInputClient(ui::TEXT_INPUT_TYPE_TEXT), window_(window) {
+    DCHECK(window_);
+  }
+  TestTextInputClient(const TestTextInputClient&) = delete;
+  TestTextInputClient& operator=(const TestTextInputClient&) = delete;
+  ~TestTextInputClient() override {
+    auto* ime = keyboard::KeyboardUIController::Get()->GetInputMethodForTest();
+    ime->DetachTextInputClient(this);
+  }
+
+  // ui::DummyTextInputClient:
+  gfx::Rect GetCaretBounds() const override { return caret_bounds_; }
+
+  void set_caret_bounds(gfx::Rect caret_bounds) {
+    caret_bounds_ = caret_bounds;
+  }
+
+  // When the text client is focused, the attached window will also be focused
+  // and the virtual keyboard is enabled.
+  void Focus() {
+    auto* ime = keyboard::KeyboardUIController::Get()->GetInputMethodForTest();
+    ime->SetFocusedTextInputClient(this);
+
+    if (window_)
+      window_->Focus();
+
+    ime->ShowVirtualKeyboardIfEnabled();
+    ASSERT_TRUE(keyboard::WaitUntilShown());
+  }
+
+  // When the text client is unfocused, hide the virtual keyboard.
+  void UnFocus() {
+    auto* ime = keyboard::KeyboardUIController::Get()->GetInputMethodForTest();
+    ime->DetachTextInputClient(this);
+    keyboard::KeyboardUIController::Get()->HideKeyboardExplicitlyBySystem();
+  }
+
+ private:
+  // The window to which the text client attaches to.
+  aura::Window* window_;
+  // The bounds of the caret.
+  gfx::Rect caret_bounds_;
 };
 
 bool IsTabletMode() {
@@ -626,6 +686,34 @@ TEST_F(SplitViewControllerTest, ExitOverviewTest) {
   EXPECT_EQ(split_view_controller()->right_window(), window3.get());
   EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
   CheckOverviewEnterExitHistogram("ExitInSplitView", {1, 0}, {0, 1});
+}
+
+// Tests that in split view with a single overview window, when overview is
+// ended, the wallpaper stays blurred until the window finishes animating.
+TEST_F(SplitViewControllerTest,
+       WallpaperUnblurredAfterLoneOverviewWindowSnapAnimationCompleted) {
+  const gfx::Rect bounds(400, 400);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
+  ToggleOverview();
+  split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
+
+  WallpaperWidgetController* wallpaper_widget_controller =
+      Shell::GetPrimaryRootWindowController()->wallpaper_widget_controller();
+  EXPECT_GT(wallpaper_widget_controller->GetWallpaperBlur(), 0);
+  EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
+
+  ui::ScopedAnimationDurationScaleMode animation_scale(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  ToggleOverview();
+  EXPECT_GT(wallpaper_widget_controller->GetWallpaperBlur(), 0);
+  EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
+
+  WaitForOverviewExitAnimation();
+  // The wallpaper is unblurred without animation, because the wallpaper is
+  // covered by the windows and the split view divider.
+  EXPECT_EQ(wallpaper_widget_controller->GetWallpaperBlur(), 0);
+  EXPECT_FALSE(wallpaper_widget_controller->IsAnimating());
 }
 
 // Tests that if split view mode is active when entering overview, the overview
@@ -3487,7 +3575,7 @@ TEST_F(SplitViewTabDraggingTest, DragMaximizedWindow) {
       display::Screen::GetScreen()->GetDisplayNearestWindow(window1.get());
   const gfx::Rect work_area_bounds = display.work_area();
   EXPECT_EQ(window2->GetBoundsInScreen(), work_area_bounds);
-  EXPECT_TRUE(window1->GetProperty(kCanAttachToAnotherWindowKey));
+  EXPECT_TRUE(window1->GetProperty(chromeos::kCanAttachToAnotherWindowKey));
 
   // 2.a. Drag the window a small amount of distance and release will maximize
   // the window.
@@ -3501,13 +3589,13 @@ TEST_F(SplitViewTabDraggingTest, DragMaximizedWindow) {
             GetWindowDraggingState(resizer.get()));
   // The source window should also have been scaled.
   EXPECT_NE(window2->GetBoundsInScreen(), work_area_bounds);
-  EXPECT_FALSE(window1->GetProperty(kCanAttachToAnotherWindowKey));
+  EXPECT_FALSE(window1->GetProperty(chromeos::kCanAttachToAnotherWindowKey));
   CompleteDrag(std::move(resizer));
   EXPECT_TRUE(WindowState::Get(window1.get())->IsMaximized());
   EXPECT_TRUE(WindowState::Get(window2.get())->IsMaximized());
   // The source window should have restored its bounds.
   EXPECT_EQ(window2->GetBoundsInScreen(), work_area_bounds);
-  EXPECT_TRUE(window1->GetProperty(kCanAttachToAnotherWindowKey));
+  EXPECT_TRUE(window1->GetProperty(chromeos::kCanAttachToAnotherWindowKey));
 
   // 2.b. Drag the window long enough to snap the window. The source window will
   // snap to the other side of the splitscreen.
@@ -3521,7 +3609,7 @@ TEST_F(SplitViewTabDraggingTest, DragMaximizedWindow) {
   EXPECT_EQ(window2->GetBoundsInScreen(),
             split_view_controller()->GetSnappedWindowBoundsInScreen(
                 SplitViewController::LEFT, window2.get()));
-  EXPECT_FALSE(window1->GetProperty(kCanAttachToAnotherWindowKey));
+  EXPECT_FALSE(window1->GetProperty(chromeos::kCanAttachToAnotherWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(0, 300));
   EXPECT_EQ(SplitViewDragIndicators::WindowDraggingState::kToSnapLeft,
             GetWindowDraggingState(resizer.get()));
@@ -3530,7 +3618,7 @@ TEST_F(SplitViewTabDraggingTest, DragMaximizedWindow) {
   EXPECT_EQ(window2->GetBoundsInScreen(),
             split_view_controller()->GetSnappedWindowBoundsInScreen(
                 SplitViewController::RIGHT, window2.get()));
-  EXPECT_FALSE(window1->GetProperty(kCanAttachToAnotherWindowKey));
+  EXPECT_FALSE(window1->GetProperty(chromeos::kCanAttachToAnotherWindowKey));
 
   CompleteDrag(std::move(resizer));
   EXPECT_TRUE(split_view_controller()->InSplitViewMode());
@@ -3539,7 +3627,7 @@ TEST_F(SplitViewTabDraggingTest, DragMaximizedWindow) {
   EXPECT_EQ(split_view_controller()->state(),
             SplitViewController::State::kBothSnapped);
   EXPECT_FALSE(Shell::Get()->overview_controller()->InOverviewSession());
-  EXPECT_TRUE(window1->GetProperty(kCanAttachToAnotherWindowKey));
+  EXPECT_TRUE(window1->GetProperty(chromeos::kCanAttachToAnotherWindowKey));
   EXPECT_EQ(window1.get(), window_util::GetActiveWindow());
 
   EndSplitView();
@@ -4555,34 +4643,34 @@ TEST_F(SplitViewTabDraggingTest, MergeBackToSourceWindow) {
   std::unique_ptr<WindowResizer> resizer =
       StartDrag(dragged_window.get(), source_window.get());
   ASSERT_TRUE(resizer.get());
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(300, 200));
   CompleteDrag(std::move(resizer));
-  EXPECT_TRUE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
-  source_window->ClearProperty(kIsDeferredTabDraggingTargetWindowKey);
+  EXPECT_TRUE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
+  source_window->ClearProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey);
 
   // b. Drag the window to more than half of the display height and not in the
   // snap preview area.
   resizer = StartDrag(dragged_window.get(), source_window.get());
   ASSERT_TRUE(resizer.get());
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(300, 500));
   CompleteDrag(std::move(resizer));
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
 
   // c. Drag the window to the snap preview area.
   resizer = StartDrag(dragged_window.get(), source_window.get());
   ASSERT_TRUE(resizer.get());
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(0, 200));
   CompleteDrag(std::move(resizer));
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   EndSplitView();
 
   // 2. If splitview is active and the dragged window is not the source window.
@@ -4591,26 +4679,26 @@ TEST_F(SplitViewTabDraggingTest, MergeBackToSourceWindow) {
   split_view_controller()->SnapWindow(source_window.get(),
                                       SplitViewController::LEFT);
   resizer = StartDrag(dragged_window.get(), source_window.get());
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(0, 200));
   CompleteDrag(std::move(resizer));
-  EXPECT_TRUE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_TRUE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   EndSplitView();
-  source_window->ClearProperty(kIsDeferredTabDraggingTargetWindowKey);
+  source_window->ClearProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey);
 
   // b. Drag the window to less than half of the display height, in the
   // different split of the source window, and not in the snap preview area.
   split_view_controller()->SnapWindow(source_window.get(),
                                       SplitViewController::LEFT);
   resizer = StartDrag(dragged_window.get(), source_window.get());
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(500, 200));
   CompleteDrag(std::move(resizer));
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   EndSplitView();
 
   // c. Drag the window to move a small distance, but is still in the different
@@ -4618,12 +4706,12 @@ TEST_F(SplitViewTabDraggingTest, MergeBackToSourceWindow) {
   split_view_controller()->SnapWindow(source_window.get(),
                                       SplitViewController::LEFT);
   resizer = StartDrag(dragged_window.get(), source_window.get());
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   DragWindowTo(resizer.get(), gfx::Point(500, 20));
   CompleteDrag(std::move(resizer));
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
   EndSplitView();
 }
 
@@ -4640,14 +4728,14 @@ TEST_F(SplitViewTabDraggingTest, FlingTest) {
       StartDrag(dragged_window.get(), source_window.get());
   ASSERT_TRUE(resizer.get());
   Fling(std::move(resizer), /*velocity_y=*/3000.f);
-  EXPECT_FALSE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
 
   resizer = StartDrag(dragged_window.get(), source_window.get());
   ASSERT_TRUE(resizer.get());
   Fling(std::move(resizer), /*velocity_y=*/1000.f);
-  EXPECT_TRUE(
-      source_window->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_TRUE(source_window->GetProperty(
+      chromeos::kIsDeferredTabDraggingTargetWindowKey));
 }
 
 // Tests that in various cases, after the tab drag ends, the dragged window and
@@ -4692,9 +4780,10 @@ TEST_F(SplitViewTabDraggingTest, BoundsTest) {
   // As in this case the dragged window should merge back to source window,
   // which we can't test here. We only test the source window's bounds restore
   // to its maximized window size.
-  EXPECT_TRUE(window2->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_TRUE(
+      window2->GetProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey));
   EXPECT_EQ(window2->bounds(), bounds2);
-  window2->ClearProperty(kIsDeferredTabDraggingTargetWindowKey);
+  window2->ClearProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey);
 
   // b) Drag the window far enough so that the dragged window doesn't merge back
   // into the source window.
@@ -4703,7 +4792,8 @@ TEST_F(SplitViewTabDraggingTest, BoundsTest) {
   EXPECT_NE(window1->bounds(), bounds1);
   EXPECT_NE(window2->bounds(), bounds2);
   CompleteDrag(std::move(resizer));
-  EXPECT_FALSE(window2->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(
+      window2->GetProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey));
   EXPECT_EQ(window1->bounds(), bounds1);
   EXPECT_EQ(window2->bounds(), bounds2);
 
@@ -4743,8 +4833,9 @@ TEST_F(SplitViewTabDraggingTest, BoundsTest) {
   // |window1|, so we only test the source window's bounds here.
   EXPECT_EQ(window1->bounds(), snapped_bounds1);
   EXPECT_EQ(window2->bounds(), snapped_bounds2);
-  EXPECT_TRUE(window1->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
-  window1->ClearProperty(kIsDeferredTabDraggingTargetWindowKey);
+  EXPECT_TRUE(
+      window1->GetProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey));
+  window1->ClearProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey);
   EXPECT_EQ(split_view_controller()->state(),
             SplitViewController::State::kBothSnapped);
 
@@ -4755,7 +4846,8 @@ TEST_F(SplitViewTabDraggingTest, BoundsTest) {
   EXPECT_EQ(window1->bounds(), snapped_bounds1);
   EXPECT_EQ(window2->bounds(), snapped_bounds2);
   CompleteDrag(std::move(resizer));
-  EXPECT_FALSE(window1->GetProperty(kIsDeferredTabDraggingTargetWindowKey));
+  EXPECT_FALSE(
+      window1->GetProperty(chromeos::kIsDeferredTabDraggingTargetWindowKey));
   // |window3| replaced |window1| as the left snapped window.
   EXPECT_EQ(window3->bounds(), snapped_bounds1);
   EXPECT_EQ(window2->bounds(), snapped_bounds2);
@@ -5412,6 +5504,289 @@ TEST_F(SplitViewAppDraggingTest, BackdropBoundsDuringDrag) {
     backdrop_window = *(--it);
   DCHECK(backdrop_window);
   EXPECT_EQ(backdrop_window->bounds(), active_desk_container->bounds());
+}
+
+// The test class that enables the feature flag of portrait mode split view
+// virtual keyboard improvement and the virtual keyboard.
+class SplitViewKeyboardTest : public SplitViewControllerTest {
+ public:
+  SplitViewKeyboardTest() = default;
+
+  SplitViewKeyboardTest(const SplitViewKeyboardTest&) = delete;
+  SplitViewKeyboardTest& operator=(const SplitViewKeyboardTest&) = delete;
+
+  ~SplitViewKeyboardTest() override = default;
+
+  // SplitViewControllerTest:
+  void SetUp() override {
+    SplitViewControllerTest::SetUp();
+    scoped_feature_list_.InitAndEnableFeature(features::kAdjustSplitViewForVK);
+    SetVirtualKeyboardEnabled(true);
+  }
+
+  keyboard::KeyboardUIController* keyboard_controller() {
+    return keyboard::KeyboardUIController::Get();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests that when the input field in the bottom window is blocked by the
+// virtual keyboard (the bottom of the caret is less than
+// `kMinCaretKeyboardDist` above the virtual keyboard), the bottom window will
+// be pushed above the virtual keyboard.
+TEST_F(SplitViewKeyboardTest, PushUpBottomWindow) {
+  UpdateDisplay("1200x800");
+
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  display::test::ScopedSetInternalDisplayId set_internal(display_manager,
+                                                         display_id);
+  ScreenOrientationControllerTestApi test_api(
+      Shell::Get()->screen_orientation_controller());
+  ASSERT_EQ(chromeos::OrientationType::kLandscapePrimary,
+            test_api.GetCurrentOrientation());
+
+  gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> bottom_window(CreateWindow(bounds));
+  auto bottom_client =
+      std::make_unique<TestTextInputClient>(bottom_window.get());
+  split_view_controller()->SnapWindow(bottom_window.get(),
+                                      SplitViewController::RIGHT);
+
+  test_api.SetDisplayRotation(display::Display::ROTATE_270,
+                              display::Display::RotationSource::ACTIVE);
+  EXPECT_EQ(chromeos::OrientationType::kPortraitPrimary,
+            test_api.GetCurrentOrientation());
+  EXPECT_FALSE(split_view_controller()->IsPhysicalLeftOrTop(
+      SplitViewController::RIGHT, bottom_window.get()));
+
+  const gfx::Rect keyboard_bounds =
+      keyboard_controller()->GetKeyboardWindow()->GetBoundsInScreen();
+  const gfx::Rect orig_bottom_bounds = bottom_window->GetBoundsInScreen();
+  const gfx::Rect orig_divider_bounds = split_view_controller()
+                                            ->split_view_divider()
+                                            ->divider_widget()
+                                            ->GetWindowBoundsInScreen();
+
+  // Set the caret position in bottom window above the upper bounds of the
+  // virtual keyboard. When the virtual keyboard is enabled, the bottom window
+  // will not shift.
+  bottom_client->set_caret_bounds(gfx::Rect(
+      keyboard_bounds.top_center() +
+          gfx::Vector2d(0, -kMinCaretKeyboardDist - kCaretHeightForTest - 10),
+      gfx::Size(0, kCaretHeightForTest)));
+  bottom_client->Focus();
+  EXPECT_TRUE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(orig_bottom_bounds, bottom_window->GetBoundsInScreen());
+  // The split view divider is adjustable and not moved.
+  EXPECT_EQ(orig_divider_bounds, split_view_controller()
+                                     ->split_view_divider()
+                                     ->divider_widget()
+                                     ->GetWindowBoundsInScreen());
+  EXPECT_TRUE(split_view_controller()->split_view_divider()->IsAdjustable());
+
+  // Disable the keyboard.
+  bottom_client->UnFocus();
+  EXPECT_FALSE(keyboard_controller()->IsKeyboardVisible());
+
+  const gfx::Rect shift_bottom_bounds(
+      keyboard_bounds.origin() + gfx::Vector2d(0, -orig_bottom_bounds.height()),
+      orig_bottom_bounds.size());
+  const gfx::Rect shift_divider_bounds(
+      shift_bottom_bounds.origin() +
+          gfx::Vector2d(0, -orig_divider_bounds.height()),
+      orig_divider_bounds.size());
+  // Set the caret position in bottom window below the upper bounds of the
+  // virtual keyboard. When the virtual keyboard is enabled, the bottom window
+  // will shift above the virtual keyboard.
+  bottom_client->set_caret_bounds(
+      gfx::Rect(keyboard_bounds.top_center() + gfx::Vector2d(0, 10),
+                gfx::Size(0, kCaretHeightForTest)));
+  bottom_client->Focus();
+  EXPECT_TRUE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(shift_bottom_bounds, bottom_window->GetBoundsInScreen());
+  // The split view divider will also be shifted and become unadjustable.
+  EXPECT_EQ(shift_divider_bounds, split_view_controller()
+                                      ->split_view_divider()
+                                      ->divider_widget()
+                                      ->GetWindowBoundsInScreen());
+  EXPECT_FALSE(split_view_controller()->split_view_divider()->IsAdjustable());
+
+  // Disable the keyboard. The bottom window will restore to original bounds.
+  // The split view divider will also be adjustable and restore to original
+  // bounds.
+  bottom_client->UnFocus();
+  EXPECT_FALSE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(orig_bottom_bounds, bottom_window->GetBoundsInScreen());
+  EXPECT_EQ(orig_divider_bounds, split_view_controller()
+                                     ->split_view_divider()
+                                     ->divider_widget()
+                                     ->GetWindowBoundsInScreen());
+  EXPECT_TRUE(split_view_controller()->split_view_divider()->IsAdjustable());
+}
+
+// When the bottom window is pushed up due to the virtual keyboard and the
+// shifted window position cannot exceed `1 - kMinDividerPositionRatio` of the
+// screen height.
+TEST_F(SplitViewKeyboardTest, PushUpBottomWindowLimitHeight) {
+  UpdateDisplay("1200x800");
+
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  display::test::ScopedSetInternalDisplayId set_internal(display_manager,
+                                                         display_id);
+  ScreenOrientationControllerTestApi test_api(
+      Shell::Get()->screen_orientation_controller());
+  ASSERT_EQ(chromeos::OrientationType::kLandscapePrimary,
+            test_api.GetCurrentOrientation());
+
+  gfx::Rect bounds(0, 0, 200, 200);
+  std::unique_ptr<aura::Window> bottom_window(CreateWindow(bounds));
+  auto bottom_client =
+      std::make_unique<TestTextInputClient>(bottom_window.get());
+  split_view_controller()->SnapWindow(bottom_window.get(),
+                                      SplitViewController::RIGHT);
+
+  test_api.SetDisplayRotation(display::Display::ROTATE_270,
+                              display::Display::RotationSource::ACTIVE);
+  EXPECT_EQ(chromeos::OrientationType::kPortraitPrimary,
+            test_api.GetCurrentOrientation());
+  EXPECT_FALSE(split_view_controller()->IsPhysicalLeftOrTop(
+      SplitViewController::RIGHT, bottom_window.get()));
+
+  const gfx::Rect keyboard_bounds =
+      keyboard_controller()->GetKeyboardWindow()->GetBoundsInScreen();
+  const gfx::Rect divider_bounds =
+      split_view_divider()->GetDividerBoundsInScreen(false /* is_dragging */);
+  const gfx::Rect screen_bounds =
+      screen_util::GetDisplayWorkAreaBoundsInParent(bottom_window.get());
+  const int screen_height = screen_bounds.height();
+  const int limit_y = screen_height * kMinDividerPositionRatio;
+
+  // Resize divider to a position that when the bottom window is pushed up, its
+  // position will exceeds `1-kMinDividerPositionRatio` of screen height.
+  split_view_controller()->StartResize(divider_bounds.CenterPoint());
+  split_view_controller()->Resize(gfx::Point(0, screen_height * 0.15f));
+
+  const gfx::Rect orig_bottom_bounds = bottom_window->GetBoundsInScreen();
+  EXPECT_LT(keyboard_bounds.y() - orig_bottom_bounds.height(), limit_y);
+
+  const gfx::Rect orig_divider_bounds = split_view_controller()
+                                            ->split_view_divider()
+                                            ->divider_widget()
+                                            ->GetWindowBoundsInScreen();
+
+  // Set the caret position in bottom window below the upper bounds of the
+  // virtual keyboard. When the virtual keyboard is enabled, the bottom window
+  // will shift above the virtual keyboard but the upper bounds will be limited
+  // to `kMinDividerPositionRatio` of the screen height.
+  const gfx::Rect shift_bottom_bounds(0, limit_y, keyboard_bounds.width(),
+                                      keyboard_bounds.y() - limit_y);
+  const gfx::Rect shift_divider_bounds(
+      shift_bottom_bounds.origin() +
+          gfx::Vector2d(0, -orig_divider_bounds.height()),
+      orig_divider_bounds.size());
+
+  bottom_client->set_caret_bounds(gfx::Rect(keyboard_bounds.top_center(),
+                                            gfx::Size(0, kCaretHeightForTest)));
+  bottom_client->Focus();
+  EXPECT_TRUE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(shift_bottom_bounds, bottom_window->GetBoundsInScreen());
+  // The split view divider will also be shifted and become unadjustable.
+  EXPECT_EQ(shift_divider_bounds, split_view_controller()
+                                      ->split_view_divider()
+                                      ->divider_widget()
+                                      ->GetWindowBoundsInScreen());
+  EXPECT_FALSE(split_view_controller()->split_view_divider()->IsAdjustable());
+
+  // Disable the keyboard. The bottom window will restore to original bounds.
+  // The split view divider will also be adjustable and restore to original
+  // bounds.
+  bottom_client->UnFocus();
+  EXPECT_FALSE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(orig_bottom_bounds, bottom_window->GetBoundsInScreen());
+  EXPECT_EQ(orig_divider_bounds, split_view_controller()
+                                     ->split_view_divider()
+                                     ->divider_widget()
+                                     ->GetWindowBoundsInScreen());
+  EXPECT_TRUE(split_view_controller()->split_view_divider()->IsAdjustable());
+}
+
+// Tests that when the bottom window is pushed up due to the virtual keyboard
+// and the top window is activated, then the bottom window should restore to the
+// original layout.
+TEST_F(SplitViewKeyboardTest, RestoreByActivatingTopWindow) {
+  UpdateDisplay("1200x800");
+
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  display::test::ScopedSetInternalDisplayId set_internal(display_manager,
+                                                         display_id);
+  ScreenOrientationControllerTestApi test_api(
+      Shell::Get()->screen_orientation_controller());
+  ASSERT_EQ(chromeos::OrientationType::kLandscapePrimary,
+            test_api.GetCurrentOrientation());
+
+  gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> top_window(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> bottom_window(CreateWindow(bounds));
+  auto top_client = std::make_unique<TestTextInputClient>(top_window.get());
+  auto bottom_client =
+      std::make_unique<TestTextInputClient>(bottom_window.get());
+  split_view_controller()->SnapWindow(top_window.get(),
+                                      SplitViewController::LEFT);
+  split_view_controller()->SnapWindow(bottom_window.get(),
+                                      SplitViewController::RIGHT);
+
+  test_api.SetDisplayRotation(display::Display::ROTATE_270,
+                              display::Display::RotationSource::ACTIVE);
+  EXPECT_EQ(chromeos::OrientationType::kPortraitPrimary,
+            test_api.GetCurrentOrientation());
+  EXPECT_TRUE(split_view_controller()->IsPhysicalLeftOrTop(
+      SplitViewController::LEFT, top_window.get()));
+
+  const gfx::Rect keyboard_bounds =
+      keyboard_controller()->GetKeyboardWindow()->GetBoundsInScreen();
+  const gfx::Rect orig_bottom_bounds = bottom_window->GetBoundsInScreen();
+  const gfx::Rect shift_bottom_bounds(
+      keyboard_bounds.origin() + gfx::Vector2d(0, -orig_bottom_bounds.height()),
+      orig_bottom_bounds.size());
+  const gfx::Rect orig_divider_bounds = split_view_controller()
+                                            ->split_view_divider()
+                                            ->divider_widget()
+                                            ->GetWindowBoundsInScreen();
+  const gfx::Rect shift_divider_bounds(
+      shift_bottom_bounds.origin() +
+          gfx::Vector2d(0, -orig_divider_bounds.height()),
+      orig_divider_bounds.size());
+
+  // Set the caret position in bottom window below the upper bounds of the
+  // virtual keyboard. When the virtual keyboard is enabled, the bottom window
+  // will shift.
+  bottom_client->set_caret_bounds(
+      gfx::Rect(keyboard_bounds.top_center() + gfx::Vector2d(0, 10),
+                gfx::Size(0, kCaretHeightForTest)));
+  bottom_client->Focus();
+  EXPECT_TRUE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(shift_bottom_bounds, bottom_window->GetBoundsInScreen());
+  // The split view divider will also be shifted and become unadjustable.
+  EXPECT_EQ(shift_divider_bounds, split_view_controller()
+                                      ->split_view_divider()
+                                      ->divider_widget()
+                                      ->GetWindowBoundsInScreen());
+  EXPECT_FALSE(split_view_controller()->split_view_divider()->IsAdjustable());
+
+  // Activate the top window. The bottom window will restore to original bounds.
+  top_client->Focus();
+  EXPECT_TRUE(keyboard_controller()->IsKeyboardVisible());
+  EXPECT_EQ(orig_bottom_bounds, bottom_window->GetBoundsInScreen());
+  EXPECT_EQ(orig_divider_bounds, split_view_controller()
+                                     ->split_view_divider()
+                                     ->divider_widget()
+                                     ->GetWindowBoundsInScreen());
+  EXPECT_TRUE(split_view_controller()->split_view_divider()->IsAdjustable());
 }
 
 }  // namespace ash

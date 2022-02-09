@@ -16,7 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -35,6 +35,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "printing/printed_document.h"
@@ -54,12 +55,13 @@ const int kRetryMax = 6;
 
 // Enumeration of print job results for histograms.  Do not modify!
 enum JobResultForHistogram {
-  UNKNOWN = 0,         // unidentified result
-  FINISHED = 1,        // successful completion of job
-  TIMEOUT_CANCEL = 2,  // cancelled due to timeout
-  PRINTER_CANCEL = 3,  // cancelled by printer
-  LOST = 4,            // final state never received
-  FILTER_FAILED = 5,   // filter failed
+  UNKNOWN = 0,              // unidentified result
+  FINISHED = 1,             // successful completion of job
+  TIMEOUT_CANCEL = 2,       // cancelled due to timeout
+  PRINTER_CANCEL = 3,       // cancelled by printer
+  LOST = 4,                 // final state never received
+  FILTER_FAILED = 5,        // filter failed
+  CLIENT_UNAUTHORIZED = 6,  // cancelled due to client unauthorized
   RESULT_MAX
 };
 
@@ -280,7 +282,12 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager,
           NotifyJobStateUpdate(print_job->GetWeakPtr());
         }
 
-        if (print_job->IsExpired()) {
+        if (print_job->error_code() == PrinterErrorCode::CLIENT_UNAUTHORIZED) {
+          // Job needs to be forcibly cancelled, CUPS will keep the job in held
+          // and the job cannot be resumed in chromeos.
+          FinishPrintJob(print_job);
+          RecordJobResult(CLIENT_UNAUTHORIZED);
+        } else if (print_job->IsExpired()) {
           // Job needs to be forcibly cancelled.
           RecordJobResult(TIMEOUT_CANCEL);
           FinishPrintJob(print_job);

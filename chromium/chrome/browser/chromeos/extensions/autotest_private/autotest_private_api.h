@@ -12,7 +12,6 @@
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
-#include "base/compiler_specific.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
@@ -1329,6 +1328,10 @@ class AutotestPrivateSetWindowBoundsFunction : public ExtensionFunction {
 class AutotestPrivateStartSmoothnessTrackingFunction
     : public ExtensionFunction {
  public:
+  // Default sampling interval to collect display smoothness.
+  static constexpr base::TimeDelta kDefaultThroughputInterval =
+      base::Seconds(5);
+
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.startSmoothnessTracking",
                              AUTOTESTPRIVATE_STARTSMOOTHNESSTRACKING)
 
@@ -1346,7 +1349,9 @@ class AutotestPrivateStopSmoothnessTrackingFunction : public ExtensionFunction {
   ~AutotestPrivateStopSmoothnessTrackingFunction() override;
   ResponseAction Run() override;
 
-  void OnReportData(const cc::FrameSequenceMetrics::CustomReportData& data);
+  void OnReportData(
+      const cc::FrameSequenceMetrics::CustomReportData& frame_data,
+      std::vector<int>&& throughput);
   void OnTimeOut(int64_t display_id);
 
   base::OneShotTimer timeout_timer_;
@@ -1417,6 +1422,28 @@ class AutotestPrivateStopThroughputTrackerDataCollectionFunction
 
  private:
   ~AutotestPrivateStopThroughputTrackerDataCollectionFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateGetDisplaySmoothnessFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateGetDisplaySmoothnessFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getDisplaySmoothness",
+                             AUTOTESTPRIVATE_GETDISPLAYSMOOTHNESS)
+
+ private:
+  ~AutotestPrivateGetDisplaySmoothnessFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateResetHoldingSpaceFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateResetHoldingSpaceFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.resetHoldingSpace",
+                             AUTOTESTPRIVATE_RESETHOLDINGSPACE)
+
+ private:
+  ~AutotestPrivateResetHoldingSpaceFunction() override;
   ResponseAction Run() override;
 };
 

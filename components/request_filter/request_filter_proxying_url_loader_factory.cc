@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
@@ -216,7 +215,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       has_any_extra_headers_listeners_ &&
       factory_->url_loader_header_client_receiver_.is_bound() &&
       (request_.url.SchemeIsHTTPOrHTTPS() ||
-       request_.url.SchemeIs(url::kUrnScheme)) &&
+       request_.url.SchemeIs(url::kUrnScheme) ||
+       request_.url.SchemeIs(url::kUuidInPackageScheme)) &&
       (for_cors_preflight_ || network_service_request_id_ != 0) &&
       factory_->request_handler_->WantsExtraHeadersForRequest(&info_.value());
 }

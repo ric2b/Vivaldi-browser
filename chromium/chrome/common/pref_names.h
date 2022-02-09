@@ -91,7 +91,6 @@ extern const char kWebKitSerifFontFamily[];
 extern const char kWebKitSansSerifFontFamily[];
 extern const char kWebKitCursiveFontFamily[];
 extern const char kWebKitFantasyFontFamily[];
-extern const char kWebKitPictographFontFamily[];
 
 // ISO 15924 four-letter script codes that per-script font prefs are supported
 // for.
@@ -105,7 +104,6 @@ extern const char kWebKitSerifFontFamilyMap[];
 extern const char kWebKitSansSerifFontFamilyMap[];
 extern const char kWebKitCursiveFontFamilyMap[];
 extern const char kWebKitFantasyFontFamilyMap[];
-extern const char kWebKitPictographFontFamilyMap[];
 
 // Per-script font prefs that have defaults, for easy reference when registering
 // the defaults.
@@ -224,6 +222,8 @@ extern const char kMouseScrollAcceleration[];
 extern const char kPointingStickAcceleration[];
 extern const char kTouchpadAcceleration[];
 extern const char kTouchpadScrollAcceleration[];
+extern const char kTouchpadHapticFeedback[];
+extern const char kTouchpadHapticClickSensitivity[];
 extern const char kMouseSensitivity[];
 extern const char kMouseScrollSensitivity[];
 extern const char kTouchpadSensitivity[];
@@ -281,12 +281,18 @@ extern const char kUnifiedDesktopEnabledByDefault[];
 extern const char kHatsLastInteractionTimestamp[];
 extern const char kHatsSurveyCycleEndTimestamp[];
 extern const char kHatsDeviceIsSelected[];
+extern const char kHatsStabilitySurveyCycleEndTs[];
+extern const char kHatsStabilityDeviceIsSelected[];
+extern const char kHatsPerformanceSurveyCycleEndTs[];
+extern const char kHatsPerformanceDeviceIsSelected[];
 extern const char kHatsOnboardingSurveyCycleEndTs[];
 extern const char kHatsOnboardingDeviceIsSelected[];
 extern const char kHatsUnlockDeviceIsSelected[];
 extern const char kHatsUnlockSurveyCycleEndTs[];
 extern const char kHatsSmartLockDeviceIsSelected[];
 extern const char kHatsSmartLockSurveyCycleEndTs[];
+extern const char kHatsArcGamesDeviceIsSelected[];
+extern const char kHatsArcGamesSurveyCycleEndTs[];
 extern const char kEolStatus[];
 extern const char kEndOfLifeDate[];
 extern const char kEolNotificationDismissed[];
@@ -678,7 +684,6 @@ extern const char kWebAppsDailyMetricsDate[];
 extern const char kWebAppsExtensionIDs[];
 extern const char kWebAppsAppAgnosticIphState[];
 extern const char kWebAppsLastPreinstallSynchronizeVersion[];
-extern const char kWebAppsMigratedPreinstalledApps[];
 extern const char kWebAppsDidMigrateDefaultChromeApps[];
 extern const char kWebAppsUninstalledDefaultChromeApps[];
 extern const char kWebAppsPreferences[];
@@ -759,7 +764,6 @@ extern const char kDeviceEnrollmentSubOrganization[];
 extern const char kDeviceEnrollmentAutoStart[];
 extern const char kDeviceEnrollmentCanExit[];
 extern const char kDeviceDMToken[];
-extern const char kTimesHIDDialogShown[];
 extern const char kUsersLastInputMethod[];
 extern const char kEchoCheckedOffers[];
 extern const char kCachedMultiProfileUserBehavior[];
@@ -810,8 +814,6 @@ extern const char kChromeOsReleaseChannel[];
 
 extern const char kPerformanceTracingEnabled[];
 
-extern const char kTabStripStackedLayout[];
-
 extern const char kRegisteredBackgroundContents[];
 
 extern const char kTotalMemoryLimitMb[];
@@ -848,18 +850,11 @@ extern const char kCipherSuiteBlacklist[];
 extern const char kH2ClientCertCoalescingHosts[];
 extern const char kHSTSPolicyBypassList[];
 extern const char kCECPQ2Enabled[];
-extern const char kTripleDESEnabled[];
 
 extern const char kBuiltInDnsClientEnabled[];
 extern const char kDnsOverHttpsMode[];
 extern const char kDnsOverHttpsTemplates[];
 extern const char kAdditionalDnsQueryTypesEnabled[];
-
-extern const char kRegisteredProtocolHandlers[];
-extern const char kIgnoredProtocolHandlers[];
-extern const char kPolicyRegisteredProtocolHandlers[];
-extern const char kPolicyIgnoredProtocolHandlers[];
-extern const char kCustomHandlersEnabled[];
 
 #if defined(OS_MAC)
 extern const char kUserRemovedLoginItem[];
@@ -906,6 +901,10 @@ extern const char kRelaunchHeadsUpPeriod[];
 extern const char kMacRestoreLocationPermissionsExperimentCount[];
 #endif  // defined(OS_MAC)
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+extern const char kEnrollmentIdUploadedOnChromad[];
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 #if !defined(OS_ANDROID)
 extern const char kAttemptedToEnableAutoupdate[];
 
@@ -929,6 +928,7 @@ extern const char kShortcutMigrationVersion[];
 extern const char kRLZBrand[];
 extern const char kRLZDisabled[];
 extern const char kAppListLocalState[];
+extern const char kAppListPreferredOrder[];
 #endif
 
 extern const char kAppShortcutsVersion[];
@@ -992,8 +992,6 @@ extern const char kLatestVersionWhenClickedUpdateMenuItem[];
 #if defined(OS_ANDROID)
 extern const char kCommerceMerchantViewerMessagesShownTime[];
 #endif
-
-extern const char kComponentUpdatesEnabled[];
 
 #if defined(OS_ANDROID)
 extern const char kSearchGeolocationDisclosureDismissed[];
@@ -1096,7 +1094,7 @@ extern const char kAllowSyncXHRInPageDismissal[];
 extern const char kUsageStatsEnabled[];
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
 extern const char kClientCertificateManagementAllowed[];
 extern const char kCACertificateManagementAllowed[];
 #endif
@@ -1134,8 +1132,6 @@ extern const char kPromptOnMultipleMatchingCertificates[];
 extern const char kMediaFeedsBackgroundFetching[];
 extern const char kMediaFeedsSafeSearchEnabled[];
 extern const char kMediaFeedsAutoSelectEnabled[];
-
-extern const char kAppCacheForceEnabled[];
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const char kAdbSideloadingDisallowedNotificationShown[];
@@ -1178,6 +1174,8 @@ extern const char kFetchKeepaliveDurationOnShutdown[];
 
 extern const char kSuppressDifferentOriginSubframeJSDialogs[];
 
+extern const char kUserAgentReduction[];
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const char kPdfAnnotationsEnabled[];
 #endif
@@ -1199,6 +1197,11 @@ extern const char kLastWhatsNewVersion[];
 #if !defined(OS_ANDROID)
 extern const char kLensRegionSearchEnabled[];
 #endif
+
+extern const char kPrivacyReviewShowWelcomeCard[];
+extern const char kPrivacyGuideViewed[];
+
+extern const char kCorsNonWildcardRequestHeadersSupport[];
 
 }  // namespace prefs
 

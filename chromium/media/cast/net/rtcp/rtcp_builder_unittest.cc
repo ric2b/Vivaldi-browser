@@ -9,7 +9,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/cast/cast_environment.h"
 #include "media/cast/net/cast_transport_config.h"
@@ -46,6 +45,10 @@ RtcpReportBlock GetReportBlock() {
 
 
 class RtcpBuilderTest : public ::testing::Test {
+ public:
+  RtcpBuilderTest(const RtcpBuilderTest&) = delete;
+  RtcpBuilderTest& operator=(const RtcpBuilderTest&) = delete;
+
  protected:
   RtcpBuilderTest()
       : rtcp_builder_(new RtcpBuilder(kSendingSsrc)) {}
@@ -93,8 +96,6 @@ class RtcpBuilderTest : public ::testing::Test {
   }
 
   std::unique_ptr<RtcpBuilder> rtcp_builder_;
-
-  DISALLOW_COPY_AND_ASSIGN(RtcpBuilderTest);
 };
 
 TEST_F(RtcpBuilderTest, RtcpReceiverReport) {

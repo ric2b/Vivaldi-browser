@@ -9,6 +9,8 @@
 #include <set>
 #include <utility>
 
+#include "ash/components/arc/arc_prefs.h"
+#include "ash/components/arc/arc_util.h"
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -26,13 +28,13 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -50,10 +52,10 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/md_icon_normalizer.h"
 #include "chrome/browser/ui/apps/app_info_dialog.h"
+#include "chrome/browser/ui/ash/app_icon_color_cache.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
-#include "chrome/browser/ui/ash/notification_badge_color_cache.h"
 #include "chrome/browser/ui/ash/session_controller_client_impl.h"
 #include "chrome/browser/ui/ash/shelf/app_service/app_service_app_window_arc_tracker.h"
 #include "chrome/browser/ui/ash/shelf/app_service/app_service_app_window_shelf_controller.h"
@@ -62,6 +64,7 @@
 #include "chrome/browser/ui/ash/shelf/app_window_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/app_window_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/browser_app_shelf_controller.h"
+#include "chrome/browser/ui/ash/shelf/browser_app_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/browser_shortcut_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/browser_status_monitor.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
@@ -79,6 +82,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/settings/chromeos/app_management/app_management_uma.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
@@ -88,8 +92,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
-#include "components/arc/arc_prefs.h"
-#include "components/arc/arc_util.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/strings/grit/components_strings.h"
@@ -253,11 +255,12 @@ ChromeShelfController::ChromeShelfController(Profile* profile,
       std::make_unique<AppServiceAppWindowShelfController>(this);
   app_service_app_window_controller_ = app_service_controller.get();
   app_window_controllers_.emplace_back(std::move(app_service_controller));
-  // Create the browser monitor which will inform the shelf of status changes.
-  browser_status_monitor_ = std::make_unique<BrowserStatusMonitor>(this);
-  if (base::FeatureList::IsEnabled(features::kWebAppsCrosapi)) {
+  if (web_app::IsWebAppsCrosapiEnabled()) {
     browser_app_shelf_controller_ = std::make_unique<BrowserAppShelfController>(
         profile, *model_, *shelf_item_factory_, *shelf_spinner_controller_);
+  } else {
+    // Create the browser monitor which will inform the shelf of status changes.
+    browser_status_monitor_ = std::make_unique<BrowserStatusMonitor>(this);
   }
 }
 
@@ -304,7 +307,9 @@ void ChromeShelfController::Init() {
   }
 
   UpdatePinnedAppsFromSync();
-  browser_status_monitor_->Initialize();
+  if (browser_status_monitor_) {
+    browser_status_monitor_->Initialize();
+  }
 }
 
 ash::ShelfID ChromeShelfController::CreateAppItem(
@@ -385,16 +390,7 @@ bool ChromeShelfController::ShouldSyncItemWithReentrancy(
 }
 
 bool ChromeShelfController::ShouldSyncItem(const ash::ShelfItem& item) {
-  // Syncing is only enabled for pinned items.
-  if (!ItemTypeIsPinned(item))
-    return false;
-
-  // Syncing is disabled for standalone-browser based chrome apps for now.
-  // See https://crbug.com/1250480.
-  apps::AppServiceProxyChromeOs* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(profile());
-  auto app_type = proxy->AppRegistryCache().GetAppType(item.id.app_id);
-  return app_type != apps::mojom::AppType::kStandaloneBrowserExtension;
+  return ItemTypeIsPinned(item);
 }
 
 bool ChromeShelfController::IsPinned(const ash::ShelfID& id) {
@@ -459,7 +455,7 @@ void ChromeShelfController::SetItemImage(const ash::ShelfID& shelf_id,
     ash::ShelfItem new_item = *item;
     new_item.image = image;
     new_item.notification_badge_color =
-        ash::NotificationBadgeColorCache::GetInstance().GetBadgeColorForApp(
+        ash::AppIconColorCache::GetInstance().GetLightVibrantColorForApp(
             new_item.id.app_id, image);
     model_->Set(model_->ItemIndexByID(shelf_id), new_item);
   }
@@ -564,8 +560,10 @@ void ChromeShelfController::ActiveUserChanged(const AccountId& account_id) {
   // When coming here, the active user has already be changed so that we can
   // set it as active.
   AttachProfile(ProfileManager::GetActiveUserProfile());
-  // Update the V1 applications.
-  browser_status_monitor_->ActiveUserChanged(account_id.GetUserEmail());
+  if (browser_status_monitor_) {
+    // Update the V1 applications.
+    browser_status_monitor_->ActiveUserChanged(account_id.GetUserEmail());
+  }
   // Save/restore spinners belonging to the old/new user. Must be called before
   // notifying the AppWindowControllers, as some of them assume spinners owned
   // by the new user have already been added to the shelf.
@@ -835,7 +833,7 @@ bool ChromeShelfController::CanDoShowAppInfoFlow(
 
 void ChromeShelfController::DoShowAppInfoFlow(Profile* profile,
                                               const std::string& app_id) {
-  apps::AppServiceProxyChromeOs* proxy =
+  apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
 
   auto app_type = proxy->AppRegistryCache().GetAppType(app_id);
@@ -955,7 +953,7 @@ void ChromeShelfController::OnAppUninstalledPrepared(
   if (IsAppPinned(app_id) && profile == this->profile()) {
     bool show_in_shelf_changed = false;
     bool is_app_disabled = false;
-    apps::AppServiceProxyChromeOs* proxy =
+    apps::AppServiceProxy* proxy =
         apps::AppServiceProxyFactory::GetForProfile(this->profile());
     proxy->AppRegistryCache().ForOneApp(
         app_id, [&show_in_shelf_changed,
@@ -1026,8 +1024,8 @@ void ChromeShelfController::UpdateAppImage(const std::string& app_id,
     item.image = image;
     shelf_spinner_controller_->MaybeApplySpinningEffect(app_id, &item.image);
     item.notification_badge_color =
-        ash::NotificationBadgeColorCache::GetInstance().GetBadgeColorForApp(
-            app_id, image);
+        ash::AppIconColorCache::GetInstance().GetLightVibrantColorForApp(app_id,
+                                                                         image);
     model_->Set(index, item);
     // It's possible we're waiting on more than one item, so don't break.
   }
@@ -1162,7 +1160,7 @@ void ChromeShelfController::UpdatePinnedAppsFromSync() {
   // cyclically trigger sync changes (eg. ShelfItemAdded calls SyncPinPosition).
   ScopedPinSyncDisabler scoped_pin_sync_disabler = GetScopedPinSyncDisabler();
 
-  apps::AppServiceProxyChromeOs* proxy =
+  apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile());
 
   const std::vector<ash::ShelfID> pinned_apps =
@@ -1274,7 +1272,6 @@ ash::ShelfID ChromeShelfController::InsertAppItem(
   if (GetItem(item_delegate->shelf_id())) {
     // TODO(crbug.com/1090134): try and identify why this would be called when
     // there is an already existing shelf item for this ID.
-    base::debug::DumpWithoutCrashing();
     return item_delegate->shelf_id();
   }
 
@@ -1302,7 +1299,7 @@ void ChromeShelfController::CreateBrowserShortcutItem(bool pinned) {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   browser_shortcut.image = *rb.GetImageSkiaNamed(IDR_CHROME_APP_ICON_192);
   browser_shortcut.notification_badge_color =
-      ash::NotificationBadgeColorCache::GetInstance().GetBadgeColorForApp(
+      ash::AppIconColorCache::GetInstance().GetLightVibrantColorForApp(
           kChromeAppId, browser_shortcut.image);
   browser_shortcut.title = l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
 
@@ -1462,10 +1459,13 @@ void ChromeShelfController::ShelfItemAdded(int index) {
       item.title =
           ShelfControllerHelper::GetAppTitle(latest_active_profile_, id.app_id);
     }
-    ash::ShelfItemStatus status = GetAppState(id.app_id);
-    if (status != item.status && status != ash::STATUS_CLOSED) {
-      needs_update = true;
-      item.status = status;
+    if (!BrowserAppShelfControllerShouldHandleApp(id.app_id,
+                                                  latest_active_profile_)) {
+      ash::ShelfItemStatus status = GetAppState(id.app_id);
+      if (status != item.status && status != ash::STATUS_CLOSED) {
+        needs_update = true;
+        item.status = status;
+      }
     }
 
     ash::AppStatus app_status =

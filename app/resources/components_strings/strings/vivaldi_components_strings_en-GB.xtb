@@ -107,6 +107,7 @@
 <translation id="4744603770635761495">Executable Path</translation>
 <translation id="4750917950439032686">Your information (for example, passwords or credit card numbers) is private when it is sent to this site.</translation>
 <translation id="4764776831041365478">The web page at <ph name="URL" /> might be temporarily down or it may have moved permanently to a new web address.</translation>
+<translation id="483241715238664915">Turn on warnings</translation>
 <translation id="4943872375798546930">No results</translation>
 <translation id="5023310440958281426">Check your administrator's policies</translation>
 <translation id="5039804452771397117">Allow</translation>
@@ -158,6 +159,7 @@
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7079718277001814089">This site contains malware</translation>
+<translation id="7096937462164235847">The identity of this website isn't verified.</translation>
 <translation id="7108819624672055576">Allowed by an extension</translation>
 <translation id="7111012039238467737">(Valid)</translation>
 <translation id="7113310725918019676">Allow <ph name="BLOCKED_TYPE" /> from <ph name="DOMAIN" /></translation>
@@ -212,6 +214,7 @@
 <translation id="9039213469156557790">Furthermore, this page includes other resources which are not secure. These resources can be viewed by others while in transit, and can be modified by an attacker to change the behaviour of the page.</translation>
 <translation id="9062620674789239642">It may have been moved, edited, or deleted.</translation>
 <translation id="9069693763241529744">Blocked by an extension</translation>
+<translation id="9073799351042754113">You have chosen to turn off security warnings for this site.</translation>
 <translation id="910924428752220542">Vivaldi Passwords</translation>
 <translation id="9169664750068251925">Always block on this site</translation>
 <translation id="9180553614777056266">Ad Blocker</translation>

@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/bindings/v8_value_cache.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/heap_traits.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
 #include "v8/include/v8.h"
@@ -76,7 +77,7 @@ class XPathNSResolver;
 // JavaScript value being converted is either undefined or null, kNullable will
 // stop the conversion attempt and the union's IsNull() method will return true.
 // If kNotNullable is used, the other conversion steps listed in
-// https://heycam.github.io/webidl/#es-union will continue being attempted.
+// https://webidl.spec.whatwg.org/#es-union will continue being attempted.
 enum class UnionTypeConversionMode {
   kNullable,
   kNotNullable,
@@ -246,7 +247,7 @@ inline uint64_t ToUInt64(v8::Isolate* isolate,
 }
 
 // NaNs and +/-Infinity should be 0, otherwise modulo 2^64.
-// Step 8 - 12 of https://heycam.github.io/webidl/#abstract-opdef-converttoint
+// Step 8 - 12 of https://webidl.spec.whatwg.org/#abstract-opdef-converttoint
 inline uint64_t DoubleToInteger(double d) {
   if (std::isnan(d) || std::isinf(d))
     return 0;

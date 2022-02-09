@@ -14,7 +14,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/id_map.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/browser/media/session/audio_focus_delegate.h"
@@ -140,6 +140,10 @@ class MediaSessionImpl : public MediaSession,
       RenderFrameHost* rfh,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates) override;
   void MediaPictureInPictureChanged(bool is_picture_in_picture) override;
+  void RenderFrameHostStateChanged(
+      RenderFrameHost* host,
+      RenderFrameHost::LifecycleState old_state,
+      RenderFrameHost::LifecycleState new_state) override;
 
   // MediaSessionService-related methods
 
@@ -482,6 +486,11 @@ class MediaSessionImpl : public MediaSession,
   // WebAudio or MediaStream).
   base::flat_set<PlayerIdentifier> one_shot_players_;
 
+  // Players that are removed from |normal_players_| temporarily when the page
+  // goes to back-forward cache. When the page is restored from the cache, these
+  // players are also restored to |normal_players_|.
+  base::flat_set<PlayerIdentifier> hidden_players_;
+
   State audio_focus_state_ = State::INACTIVE;
   MediaSession::SuspendType suspend_type_;
 
@@ -538,7 +547,7 @@ class MediaSessionImpl : public MediaSession,
   // unregistered on destroy.
   ServicesMap services_;
   // The currently routed service (non-owned pointer).
-  MediaSessionServiceImpl* routed_service_;
+  raw_ptr<MediaSessionServiceImpl> routed_service_;
 
   // Bindings for Mojo pointers to |this| held by media route providers.
   mojo::ReceiverSet<media_session::mojom::MediaSession> receivers_;

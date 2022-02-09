@@ -14,11 +14,11 @@
 #include "base/bind.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -72,6 +72,9 @@ class FakeAudioInputCallback : public AudioInputStream::AudioInputCallback {
                     base::WaitableEvent::InitialState::NOT_SIGNALED),
         error_(false) {}
 
+  FakeAudioInputCallback(const FakeAudioInputCallback&) = delete;
+  FakeAudioInputCallback& operator=(const FakeAudioInputCallback&) = delete;
+
   bool error() const { return error_; }
   int num_received_audio_frames() const { return num_received_audio_frames_; }
 
@@ -92,8 +95,6 @@ class FakeAudioInputCallback : public AudioInputStream::AudioInputCallback {
   int num_received_audio_frames_;
   base::WaitableEvent data_event_;
   bool error_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeAudioInputCallback);
 };
 
 // This audio sink implementation should be used for manual tests only since
@@ -155,7 +156,7 @@ class WriteToFileAudioSink : public AudioInputStream::AudioInputCallback {
 
  private:
   media::SeekableBuffer buffer_;
-  FILE* binary_file_;
+  raw_ptr<FILE> binary_file_;
   size_t bytes_to_write_;
 };
 
@@ -225,7 +226,7 @@ class AudioInputStreamWrapper {
     return ais;
   }
 
-  AudioManager* audio_man_;
+  raw_ptr<AudioManager> audio_man_;
   AudioParameters default_params_;
   std::string device_id_ = AudioDeviceDescription::kDefaultDeviceId;
   int frames_per_buffer_;
@@ -267,7 +268,7 @@ class ScopedAudioInputStream {
   }
 
  private:
-  AudioInputStream* stream_;
+  raw_ptr<AudioInputStream> stream_;
 };
 
 class WinAudioInputTest : public ::testing::Test,

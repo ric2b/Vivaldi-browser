@@ -30,6 +30,7 @@
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/renderer_context_menu/context_menu_content_type_factory.h"
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
+#include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -138,7 +139,7 @@ int VivaldiRenderViewContextMenu::active_id_counter_ = 0;
 
 // static
 VivaldiRenderViewContextMenu* VivaldiRenderViewContextMenu::Create(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params,
     gfx::NativeView parent_view) {
   return new VivaldiRenderViewContextMenu(render_frame_host, params,
@@ -164,9 +165,9 @@ bool VivaldiRenderViewContextMenu::Supports(
   if (browser && browser->is_type_app()) {
     return false;
   }
-  // kVivaldiAppURLDomain match for areas in UI where we have no JS handler
+  // kVivaldiAppId match for areas in UI where we have no JS handler
   // and for editable fields in UI.
-  if (params.page_url.GetOrigin() == GURL(vivaldi::kVivaldiAppURLDomain)) {
+  if (params.page_url.host() == vivaldi::kVivaldiAppId) {
     return params.is_editable;
   }
   // We leave devtools alone for chromion to set up except for the edit menu.
@@ -191,7 +192,7 @@ bool VivaldiRenderViewContextMenu::Supports(
 }
 
 VivaldiRenderViewContextMenu::VivaldiRenderViewContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params,
     gfx::NativeView parent_view)
     : RenderViewContextMenu(render_frame_host, params),
@@ -215,8 +216,8 @@ VivaldiRenderViewContextMenu::~VivaldiRenderViewContextMenu() {
 }
 
 bool VivaldiRenderViewContextMenu::SupportsInspectTools() {
-  // kVivaldiAppURLDomain: A vivaldi document (typically edit menus).
-  return params_.page_url.GetOrigin() == GURL(::vivaldi::kVivaldiAppURLDomain);
+  // kVivaldiAppId: A vivaldi document (typically edit menus).
+  return params_.page_url.host() == vivaldi::kVivaldiAppId;
 }
 
 void VivaldiRenderViewContextMenu::InitMenu() {
@@ -237,8 +238,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   std::unique_ptr<ContextMenuContentType> content_type =
       ContextMenuContentTypeFactory::Create(embedder_web_contents_, params_);
 
-  bool is_vivaldi_origin =
-      params_.page_url.GetOrigin() == GURL(::vivaldi::kVivaldiAppURLDomain);
+  bool is_vivaldi_origin = params_.page_url.host() == vivaldi::kVivaldiAppId;
   bool is_chrome_extension = params_.page_url.SchemeIs("chrome-extension");
 
   extensions::vivaldi::context_menu::DocumentParams request;
@@ -295,9 +295,9 @@ void VivaldiRenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
   request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
       browser->tab_strip_model()->GetActiveWebContents());
-  request.support.sendlinktodevices =
-      send_tab_to_self::ShouldOfferFeatureForLink(
-          browser->tab_strip_model()->GetActiveWebContents(), params_.link_url);
+  request.support.sendlinktodevices = send_tab_to_self::ShouldOfferToShareUrl(
+      SendTabToSelfSyncServiceFactory::GetForProfile(browser->profile()),
+      params_.link_url);
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
   request.support.emoji =
       DoesInputFieldTypeSupportEmoji(params_.input_field_type) &&
@@ -442,8 +442,8 @@ void VivaldiRenderViewContextMenu::UpdateMenuItem(int command_id,
     menu_model->SetLabel(index, title);
     menu_model->SetEnabledAt(index, enabled);
     menu_model->SetVisibleAt(index, !hidden);
-    if (toolkit_delegate_) {
-      toolkit_delegate_->RebuildMenu();
+    if (toolkit_delegate()) {
+      toolkit_delegate()->RebuildMenu();
     }
   } else {
     RenderViewContextMenu::UpdateMenuItem(command_id, enabled, hidden, title);
@@ -472,8 +472,8 @@ void VivaldiRenderViewContextMenu::RemoveMenuItem(int command_id) {
       return;
     }
     menu_model->RemoveItemAt(index);
-    if (toolkit_delegate_) {
-      toolkit_delegate_->RebuildMenu();
+    if (toolkit_delegate()) {
+      toolkit_delegate()->RebuildMenu();
     }
   } else {
     RenderViewContextMenu::RemoveMenuItem(command_id);
@@ -869,19 +869,15 @@ void VivaldiRenderViewContextMenu::AddNotesController(
     ui::SimpleMenuModel* menu_model,
     int id,
     bool is_folder) {
+
   if (!note_submenu_observer_) {
     note_submenu_observer_.reset(
-        new NotesSubMenuObserver(this, toolkit_delegate_));
+        new NotesSubMenuObserver(this, toolkit_delegate()));
   }
 
   note_submenu_observer_->SetRootModel(menu_model, id, is_folder);
   note_submenu_observer_->InitMenu(params_);
   observers_.AddObserver(note_submenu_observer_.get());
-}
-
-void VivaldiRenderViewContextMenu::SetToolkitDelegate(
-    RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate) {
-  toolkit_delegate_ = toolkit_delegate;
 }
 
 void VivaldiRenderViewContextMenu::ContainerWillOpen(

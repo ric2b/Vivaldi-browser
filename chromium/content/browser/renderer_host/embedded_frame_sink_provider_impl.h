@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -73,6 +74,10 @@ class CONTENT_EXPORT EmbeddedFrameSinkProviderImpl
   void ConnectToEmbedder(const viz::FrameSinkId& child_frame_sink_id,
                          mojo::PendingReceiver<blink::mojom::SurfaceEmbedder>
                              surface_embedder_receiver) override;
+  void RegisterFrameSinkHierarchy(
+      const viz::FrameSinkId& frame_sink_id) override;
+  void UnregisterFrameSinkHierarchy(
+      const viz::FrameSinkId& frame_sink_id) override;
 
  private:
   friend class EmbeddedFrameSinkProviderImplTest;
@@ -81,7 +86,7 @@ class CONTENT_EXPORT EmbeddedFrameSinkProviderImpl
   // a callback to each EmbeddedFrameSinkImpl so they can destroy themselves.
   void DestroyEmbeddedFrameSink(viz::FrameSinkId frame_sink_id);
 
-  viz::HostFrameSinkManager* const host_frame_sink_manager_;
+  const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
 
   // FrameSinkIds for embedded frame sinks must use the renderer client id.
   const uint32_t renderer_client_id_;

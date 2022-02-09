@@ -5,12 +5,13 @@
 #ifndef CHROME_BROWSER_UI_FRAME_WINDOW_FRAME_UTIL_H_
 #define CHROME_BROWSER_UI_FRAME_WINDOW_FRAME_UTIL_H_
 
-#include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace gfx {
 class Size;
 }
+
+class Browser;
 
 // Static-only class containing values and helper functions for frame classes
 // that need to be accessible outside of /browser/ui/views.
@@ -31,6 +32,9 @@ class WindowFrameUtil {
   // Returns the size of the area occupied by the caption buttons in the glass
   // browser frame view.
   static gfx::Size GetWindows10GlassCaptionButtonAreaSize();
+
+  // Returns true if the windows 10 caption button is enabled.
+  static bool IsWin10TabSearchCaptionButtonEnabled(const Browser* browser);
 
  private:
   WindowFrameUtil() {}

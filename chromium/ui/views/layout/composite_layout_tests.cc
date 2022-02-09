@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "base/containers/contains.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/animation/animation_container.h"
@@ -367,8 +368,8 @@ class SimulatedToolbar : public View {
   // views::View:
   const char* GetClassName() const override { return "SimulatedToolbar"; }
 
-  SimulatedExtensionsContainer* extensions_;
-  SimulatedAvatarButton* avatar_;
+  raw_ptr<SimulatedExtensionsContainer> extensions_;
+  raw_ptr<SimulatedAvatarButton> avatar_;
 };
 
 }  // anonymous namespace
@@ -379,6 +380,13 @@ class SimulatedToolbar : public View {
 class CompositeLayoutTest : public testing::Test {
  public:
   void SetUp() override {
+    // In case the user is running these tests manually on a machine where
+    // animation is disabled for accessibility or visual reasons (e.g. on a
+    // Windows system via Chrome Remote Desktop), force animation on for the
+    // purposes of testing these layout configurations.
+    animation_lock_ = gfx::AnimationTestApi::SetRichAnimationRenderMode(
+        gfx::Animation::RichAnimationRenderMode::FORCE_ENABLED);
+
     toolbar_ = std::make_unique<SimulatedToolbar>();
     toolbar_->SetSize(kDefaultToolbarSize);
     extensions_test_api_ = std::make_unique<gfx::AnimationContainerTestApi>(
@@ -454,6 +462,8 @@ class CompositeLayoutTest : public testing::Test {
   std::unique_ptr<gfx::AnimationContainerTestApi> extensions_test_api_;
   std::unique_ptr<gfx::AnimationContainerTestApi> avatar_test_api_;
   std::unique_ptr<SimulatedToolbar> toolbar_;
+  std::unique_ptr<base::AutoReset<gfx::Animation::RichAnimationRenderMode>>
+      animation_lock_;
 };
 
 // ------------

@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -436,7 +437,7 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
   base::FilePath extension_dir_;
   std::unique_ptr<ChromeTestExtensionLoader> loader_;
   scoped_refptr<const Extension> extension_;
-  const ExtensionPrefs* extension_prefs_ = nullptr;
+  raw_ptr<const ExtensionPrefs> extension_prefs_ = nullptr;
 
   // Override the various API rule limits to prevent a timeout.
   base::AutoReset<int> guaranteed_minimum_override_ =
@@ -578,7 +579,7 @@ TEST_P(SingleRulesetTest, NoApplicableResourceTypes) {
   rule.condition->excluded_resource_types = std::vector<std::string>(
       {"main_frame", "sub_frame", "stylesheet", "script", "image", "font",
        "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket",
-       "webtransport", "other"});
+       "webtransport", "webbundle", "other"});
   AddRule(rule);
   LoadAndExpectParseFailure(ParseResult::ERROR_NO_APPLICABLE_RESOURCE_TYPES,
                             *rule.id);
@@ -2249,10 +2250,7 @@ TEST_P(MultipleRulesetsTest, ReclaimAllocationOnUnload) {
       disable_reason::DISABLE_BLOCKED_BY_POLICY, true);
 
   disable_extension_and_check_allocation(
-      disable_reason::DISABLE_REMOTELY_FOR_MALWARE, true);
-
-  disable_extension_and_check_allocation(
-      disable_reason::DISABLE_REMOTELY_FOR_MALWARE |
+      disable_reason::DISABLE_BLOCKED_BY_POLICY |
           disable_reason::DISABLE_USER_ACTION,
       true);
 

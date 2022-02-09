@@ -12,9 +12,9 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/audio/cras/audio_manager_cras_base.h"
+#include "media/audio/cras/cras_util.h"
 
 namespace media {
 
@@ -50,6 +50,9 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerCrasBase {
   AudioParameters GetPreferredOutputStreamParameters(
       const std::string& output_device_id,
       const AudioParameters& input_params) override;
+
+ protected:
+  std::unique_ptr<CrasUtil> cras_util_;
 
  private:
   uint64_t GetPrimaryActiveInputNode();

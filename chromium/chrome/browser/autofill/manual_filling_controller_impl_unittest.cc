@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_callback.h"
@@ -56,7 +57,7 @@ AccessorySheetData empty_passwords_sheet() {
 
 AccessorySheetData filled_passwords_sheet() {
   return AccessorySheetData::Builder(AccessoryTabType::PASSWORDS, u"Pwds")
-      .AddUserInfo("example.com", autofill::UserInfo::IsPslMatch(false))
+      .AddUserInfo("example.com", autofill::UserInfo::IsExactMatch(true))
       .AppendField(u"Ben", u"Ben", false, true)
       .AppendField(u"S3cur3", u"Ben's PW", true, false)
       .Build();
@@ -132,7 +133,7 @@ class ManualFillingControllerTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   TestingProfile profile_;
   content::TestWebContentsFactory web_contents_factory_;
-  content::WebContents* web_contents_ =
+  raw_ptr<content::WebContents> web_contents_ =
       web_contents_factory_.CreateWebContents(&profile_);
 
   NiceMock<MockPasswordAccessoryController> mock_pwd_controller_;

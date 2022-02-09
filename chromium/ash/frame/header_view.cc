@@ -71,16 +71,18 @@ HeaderView::HeaderView(views::Widget* target_widget,
           target_widget_));
   caption_button_container_->UpdateCaptionButtonState(false /*=animate*/);
 
-  aura::Window* window = target_widget->GetNativeWindow();
   frame_header_ = std::make_unique<DefaultFrameHeader>(
       target_widget,
       (frame_view ? static_cast<views::View*>(frame_view) : this),
       caption_button_container_);
+}
 
+void HeaderView::Init() {
   UpdateBackButton();
   UpdateCenterButton();
-
   frame_header_->UpdateFrameColors();
+
+  aura::Window* window = target_widget_->GetNativeWindow();
   window_observation_.Observe(window);
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
@@ -343,10 +345,12 @@ void HeaderView::UpdateCenterButton() {
   auto* center_button = frame_header_->GetCenterButton();
   if (!center_button)
     return;
-  if (is_center_button_visible && !center_button->parent()) {
-    AddChildView(center_button);
-  } else if (!is_center_button_visible && center_button->parent()) {
-    RemoveChildView(center_button);
+  if (is_center_button_visible) {
+    if (!center_button->parent())
+      AddChildView(center_button);
+    center_button->SetVisible(true);
+  } else {
+    center_button->SetVisible(false);
   }
 }
 

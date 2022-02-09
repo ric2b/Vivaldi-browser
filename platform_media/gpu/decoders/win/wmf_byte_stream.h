@@ -13,7 +13,7 @@
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 
 #include "base/callback.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_checker.h"
 
 // Windows Media Foundation headers

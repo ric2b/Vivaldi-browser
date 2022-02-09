@@ -41,7 +41,8 @@ OutputFile GetWindowsPCHFile(const Target* target, const char* tool_name) {
   return ret;
 }
 
-void WriteOneFlag(const Target* target,
+void WriteOneFlag(RecursiveWriterConfig config,
+                  const Target* target,
                   const Substitution* subst_enum,
                   bool has_precompiled_headers,
                   const char* tool_name,
@@ -67,16 +68,16 @@ void WriteOneFlag(const Target* target,
       // Enables precompiled headers and names the .h file. It's a string
       // rather than a file name (so no need to rebase or use path_output).
       out << " /Yu" << target->config_values().precompiled_header();
-      RecursiveTargetConfigStringsToStream(target, getter, flag_escape_options,
-                                           out);
+      RecursiveTargetConfigStringsToStream(config, target, getter,
+                                           flag_escape_options, out);
     } else if (tool && tool->precompiled_header_type() == CTool::PCH_GCC) {
       // The targets to build the .gch files should omit the -include flag
       // below. To accomplish this, each substitution flag is overwritten in
       // the target rule and these values are repeated. The -include flag is
       // omitted in place of the required -x <header lang> flag for .gch
       // targets.
-      RecursiveTargetConfigStringsToStream(target, getter, flag_escape_options,
-                                           out);
+      RecursiveTargetConfigStringsToStream(config, target, getter,
+                                           flag_escape_options, out);
 
       // Compute the gch file (it will be language-specific).
       std::vector<OutputFile> outputs;
@@ -90,12 +91,12 @@ void WriteOneFlag(const Target* target,
         out << " -include " << pch_file;
       }
     } else {
-      RecursiveTargetConfigStringsToStream(target, getter, flag_escape_options,
-                                           out);
+      RecursiveTargetConfigStringsToStream(config, target, getter,
+                                           flag_escape_options, out);
     }
   } else {
-    RecursiveTargetConfigStringsToStream(target, getter, flag_escape_options,
-                                         out);
+    RecursiveTargetConfigStringsToStream(config, target, getter,
+                                         flag_escape_options, out);
   }
 
   if (write_substitution)

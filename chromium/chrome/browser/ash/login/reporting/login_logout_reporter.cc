@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ash/login/reporting/login_logout_reporter.h"
 
-#include "base/bind_post_task.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/bind_post_task.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -64,7 +64,7 @@ LoginFailureReason GetLoginFailureReasonForReport(
     case AuthFailure::ALLOWLIST_CHECK_FAILED:
     case AuthFailure::AUTH_DISABLED:
     case AuthFailure::NUM_FAILURE_REASONS:
-      return LoginFailureReason::UNKNOWN;
+      return LoginFailureReason::UNKNOWN_LOGIN_FAILURE_REASON;
   }
 }
 }  // namespace
@@ -112,11 +112,11 @@ std::unique_ptr<LoginLogoutReporter> LoginLogoutReporter::CreateForTest(
 
 void LoginLogoutReporter::MaybeReportEvent(LoginLogoutRecord record,
                                            const AccountId& account_id) {
-  if (!reporter_helper_->ReportingEnabled(chromeos::kReportDeviceLoginLogout)) {
+  if (!reporter_helper_->ReportingEnabled(kReportDeviceLoginLogout)) {
     return;
   }
 
-  record.set_event_timestamp(base::Time::Now().ToTimeT());
+  record.set_event_timestamp_sec(base::Time::Now().ToTimeT());
   const std::string& user_email = account_id.GetUserEmail();
 
   if (IsManagedGuestSession(account_id)) {

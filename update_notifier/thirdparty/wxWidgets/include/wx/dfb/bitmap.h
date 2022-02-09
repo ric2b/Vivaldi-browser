@@ -31,7 +31,7 @@ public:
     wxBitmap(const wxString &filename, wxBitmapType type = wxBITMAP_DEFAULT_TYPE);
     wxBitmap(const char* const* bits);
 #if wxUSE_IMAGE
-    wxBitmap(const wxImage& image, int depth = -1);
+    wxBitmap(const wxImage& image, int depth = -1, double WXUNUSED(scale) = 1.0);
 #endif
 
     bool Create(const wxIDirectFBSurfacePtr& surface);
@@ -75,9 +75,11 @@ public:
     bool HasAlpha() const;
 
     // implementation:
-    virtual void SetHeight(int height);
-    virtual void SetWidth(int width);
-    virtual void SetDepth(int depth);
+#if WXWIN_COMPATIBILITY_3_0
+    wxDEPRECATED(virtual void SetHeight(int height));
+    wxDEPRECATED(virtual void SetWidth(int width));
+    wxDEPRECATED(virtual void SetDepth(int depth));
+#endif
 
     // get underlying native representation:
     wxIDirectFBSurfacePtr GetDirectFBSurface() const;
@@ -88,7 +90,7 @@ protected:
 
     bool CreateWithFormat(int width, int height, int dfbFormat);
 
-    DECLARE_DYNAMIC_CLASS(wxBitmap)
+    wxDECLARE_DYNAMIC_CLASS(wxBitmap);
 };
 
 #endif // _WX_DFB_BITMAP_H_

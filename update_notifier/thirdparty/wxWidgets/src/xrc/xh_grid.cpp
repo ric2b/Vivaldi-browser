@@ -10,16 +10,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_GRID
 
 #include "wx/xrc/xh_grid.h"
 #include "wx/grid.h"
 
-IMPLEMENT_DYNAMIC_CLASS(wxGridXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxGridXmlHandler, wxXmlResourceHandler);
 
 wxGridXmlHandler::wxGridXmlHandler()
                 : wxXmlResourceHandler()

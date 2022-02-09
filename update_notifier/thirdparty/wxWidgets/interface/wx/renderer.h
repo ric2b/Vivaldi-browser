@@ -12,6 +12,13 @@
 */
 enum
 {
+    /**
+        Default state, no special flags.
+
+        @since 3.1.0
+     */
+    wxCONTROL_NONE       = 0x00000000,
+
     /** Control is disabled. */
     wxCONTROL_DISABLED   = 0x00000001,
 
@@ -30,7 +37,7 @@ enum
     /** Only for the menu items. */
     wxCONTROL_ISSUBMENU  = wxCONTROL_SPECIAL,
 
-    /** Only for the tree items. */
+    /** Only for the tree items and collapse buttons. */
     wxCONTROL_EXPANDED   = wxCONTROL_SPECIAL,
 
     /** Only for the status bar panes. */
@@ -38,6 +45,9 @@ enum
 
     /** Checkboxes only: flat border. */
     wxCONTROL_FLAT       = wxCONTROL_SPECIAL,
+
+    /** Item selection rect only: cell inside selection. */
+    wxCONTROL_CELL       = wxCONTROL_SPECIAL,
 
     /** Mouse is currently over the control. */
     wxCONTROL_CURRENT    = 0x00000010,
@@ -224,7 +234,14 @@ public:
     virtual void DrawCheckBox(wxWindow *win, wxDC& dc,
                               const wxRect& rect, int flags = 0 );
 
-    virtual wxSize GetCheckBoxSize(wxWindow *win);
+    virtual void DrawCheckMark(wxWindow *win, wxDC& dc,
+                               const wxRect& rect, int flags = 0 );
+
+    virtual wxSize GetCheckBoxSize(wxWindow *win, int flags = 0);
+
+    virtual wxSize GetCheckMarkSize(wxWindow *win);
+
+    virtual wxSize GetExpanderSize(wxWindow* win);
 
     virtual void DrawPushButton(wxWindow *win, wxDC& dc,
                                 const wxRect& rect, int flags = 0 );
@@ -343,6 +360,24 @@ public:
                                int flags = 0) = 0;
 
     /**
+        Draw a progress bar in the specified rectangle.
+
+        The @a value and @a max arguments determine the part of the progress
+        bar that is drawn as being filled in, @a max must be strictly positive
+        and @a value must be between 0 and @a max.
+
+        @c wxCONTROL_SPECIAL must be set in @a flags for the vertical gauges.
+
+        @since 3.1.0
+     */
+    virtual void DrawGauge(wxWindow* win,
+                           wxDC& dc,
+                           const wxRect& rect,
+                           int value,
+                           int max,
+                           int flags = 0) = 0;
+
+    /**
         Draw the header control button (used, for example, by wxListCtrl).
 
         Depending on platforms the @a flags parameter may support the @c wxCONTROL_SELECTED
@@ -381,10 +416,35 @@ public:
         @c wxCONTROL_FOCUSED may be used to indicate if the control has the focus
         (otherwise the selection rectangle is e.g. often grey and not blue).
         This may be ignored by the renderer or deduced by the code directly from
-        the @a win.
+        the @a win. Additionally @c wxCONTROL_CELL may be used to draw a cell inside
+        a bigger selection area.
+
+        @see DrawItemText()
     */
     virtual void DrawItemSelectionRect(wxWindow* win, wxDC& dc,
                                        const wxRect& rect, int flags = 0) = 0;
+
+
+    /**
+        Draw item text in the correct color based on selection status.
+
+        Background of the text should be painted with DrawItemSelectionRect().
+
+        The supported @a flags are @c wxCONTROL_SELECTED for items
+        which are selected.
+        @c wxCONTROL_FOCUSED may be used to indicate if the control has the focus.
+        @c wxCONTROL_DISABLED may be used to indicate if the control is disabled.
+
+        @since 3.1.0
+        @see DrawItemSelectionRect()
+    */
+    virtual void DrawItemText(wxWindow* win,
+                              wxDC& dc,
+                              const wxString& text,
+                              const wxRect& rect,
+                              int align = wxALIGN_LEFT | wxALIGN_TOP,
+                              int flags = 0,
+                              wxEllipsizeMode ellipsizeMode = wxELLIPSIZE_END) = 0;
 
     /**
         Draw a blank push button that looks very similar to wxButton.
@@ -394,6 +454,24 @@ public:
     */
     virtual void DrawPushButton(wxWindow* win, wxDC& dc, const wxRect& rect,
                                 int flags = 0) = 0;
+
+    /**
+        Draw a collapse button.
+
+        @a flags may have the @c wxCONTROL_EXPANDED or @c wxCONTROL_CURRENT
+        bit set, see @ref wxCONTROL_FLAGS.
+
+        @since 3.1.0
+    */
+    virtual void DrawCollapseButton(wxWindow *win, wxDC& dc,
+                                    const wxRect& rect, int flags = 0) = 0;
+
+    /**
+        Returns the size of a collapse button.
+
+        @since 3.1.0
+    */
+    virtual wxSize GetCollapseButtonSize(wxWindow *win, wxDC& dc) = 0;
 
     /**
         Draw the border for sash window: this border must be such that the sash
@@ -442,7 +520,7 @@ public:
     /**
         Draw a title bar button in the given state.
 
-        This function is currently only available under MSW and OS X (and only
+        This function is currently only available under MSW and macOS (and only
         for wxTITLEBAR_BUTTON_CLOSE under the latter), its best replacement for
         the other platforms is to use wxArtProvider to retrieve the bitmaps for
         @c wxART_HELP and @c wxART_CLOSE (but not any other title bar buttons
@@ -451,10 +529,6 @@ public:
         The presence of this function is indicated by @c
         wxHAS_DRAW_TITLE_BAR_BITMAP symbol being defined.
 
-        Also notice that PNG handler must be enabled using wxImage::AddHandler()
-        to use this function under OS X currently as the bitmaps are embedded
-        in the library itself in PNG format.
-
         @since 2.9.1
      */
     virtual void DrawTitleBarBitmap(wxWindow *win,
@@ -462,6 +536,17 @@ public:
                                     const wxRect& rect,
                                     wxTitleBarButton button,
                                     int flags = 0) = 0;
+
+    /**
+        Draw a check mark.
+
+        @a flags may have the @c wxCONTROL_DISABLED bit set, see
+        @ref wxCONTROL_FLAGS.
+
+        @since 3.1.3
+    */
+    virtual void DrawCheckMark(wxWindow* win, wxDC& dc, const wxRect& rect,
+                               int flags = 0) = 0;
 
     /**
         Return the currently used renderer.
@@ -485,9 +570,36 @@ public:
 
     /**
         Returns the size of a check box.
-        The @a win parameter is not used currently and can be @NULL.
+
+        @param win A valid, i.e. non-null, window pointer which is used to get
+            the theme defining the checkbox size under some platforms.
+
+        @param flags The only acceptable flag is @c wxCONTROL_CELL which means
+            that just the size of the checkbox itself is returned, without any
+            margins that are included by default. This parameter is only
+            available in wxWidgets 3.1.4 or later.
     */
-    virtual wxSize GetCheckBoxSize(wxWindow* win) = 0;
+    virtual wxSize GetCheckBoxSize(wxWindow* win, int flags = 0) = 0;
+
+    /**
+        Returns the size of a check mark.
+
+        @param win A valid, i.e. non-null, window pointer which is used to get
+            the theme defining the checkmark size under some platforms.
+
+        @since 3.1.3
+    */
+    virtual wxSize GetCheckMarkSize(wxWindow* win) = 0;
+
+    /**
+        Returns the size of the expander used in tree-like controls.
+
+        @param win A valid, i.e. non-null, window pointer which is used to get
+            the theme defining the expander size under some platforms.
+
+        @since 3.1.3
+     */
+    virtual wxSize GetExpanderSize(wxWindow* win) = 0;
 
     /**
         Returns the height of a header button, either a fixed platform height if
@@ -566,7 +678,7 @@ public:
 struct wxRendererVersion
 {
     wxRendererVersion(int version_, int age_);
-    
+
     /**
         Checks if the main program is compatible with the renderer having the version
         @e ver, returns @true if it is and @false otherwise.

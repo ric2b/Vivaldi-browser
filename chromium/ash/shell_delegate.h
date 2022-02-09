@@ -6,11 +6,9 @@
 #define ASH_SHELL_DELEGATE_H_
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
 #include "chromeos/ui/base/window_pin_type.h"
@@ -28,20 +26,13 @@ namespace ui {
 class OSExchangeData;
 }
 
-namespace app_restore {
-struct AppLaunchInfo;
-}
-
-namespace desks_storage {
-class DeskModel;
-}
-
 namespace ash {
 
 class AccessibilityDelegate;
-class CaptureModeDelegate;
-class BackGestureContextualNudgeDelegate;
 class BackGestureContextualNudgeController;
+class BackGestureContextualNudgeDelegate;
+class CaptureModeDelegate;
+class DesksTemplatesDelegate;
 class NearbyShareController;
 class NearbyShareDelegate;
 
@@ -70,11 +61,14 @@ class ASH_EXPORT ShellDelegate {
   virtual std::unique_ptr<NearbyShareDelegate> CreateNearbyShareDelegate(
       NearbyShareController* controller) const = 0;
 
+  virtual std::unique_ptr<DesksTemplatesDelegate> CreateDesksTemplatesDelegate()
+      const = 0;
+
   // Check whether the current tab of the browser window can go back.
   virtual bool CanGoBack(gfx::NativeWindow window) const = 0;
 
   // Sets the tab scrubber |enabled_| field to |enabled|.
-  virtual void SetTabScrubberEnabled(bool enabled) = 0;
+  virtual void SetTabScrubberChromeOSEnabled(bool enabled) = 0;
 
   // Returns true if |window| allows default touch behaviors. If false, it means
   // no default touch behavior is allowed (i.e., the touch action of window is
@@ -115,10 +109,8 @@ class ASH_EXPORT ShellDelegate {
   // Returns if window browser sessions are restoring.
   virtual bool IsSessionRestoreInProgress() const = 0;
 
-  // Pin or unpin a window. This is used for Quiz modes and called from another
-  // client (e.g. Lacros) through Exo.
-  virtual void SetPinnedFromExo(aura::Window* window,
-                                chromeos::WindowPinType type) = 0;
+  // Adjust system configuration for a Locked Fullscreen window.
+  virtual void SetUpEnvironmentForLockedFullscreen(bool locked) = 0;
 
   // Ui Dev Tools control.
   virtual bool IsUiDevToolsStarted() const;
@@ -137,18 +129,6 @@ class ASH_EXPORT ShellDelegate {
   // persistent desks bar. Note, this will be removed once the feature is fully
   // launched or removed.
   virtual void OpenFeedbackPageForPersistentDesksBar() = 0;
-
-  // Returns the app launch data that's associated with a particular |window| in
-  // order to construct a desk template. Return nullptr if no such app launch
-  // data can be constructed, which can happen if the |window| does not have
-  // an app id associated with it, or we're not in the primary active user
-  // session.
-  virtual std::unique_ptr<app_restore::AppLaunchInfo>
-  GetAppLaunchDataForDeskTemplate(aura::Window* window) const = 0;
-
-  // Returns either the local desk storage backend or Chrome sync desk storage
-  // backend depending on the feature flag DeskTemplateSync.
-  virtual desks_storage::DeskModel* GetDeskModel();
 };
 
 }  // namespace ash

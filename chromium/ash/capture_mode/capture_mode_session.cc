@@ -11,14 +11,19 @@
 #include "ash/capture_mode/capture_mode_bar_view.h"
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/capture_mode_menu_group.h"
 #include "ash/capture_mode/capture_mode_session_focus_cycler.h"
 #include "ash/capture_mode/capture_mode_settings_view.h"
 #include "ash/capture_mode/capture_mode_toggle_button.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/capture_window_observer.h"
+#include "ash/capture_mode/folder_selection_dialog_controller.h"
+#include "ash/capture_mode/user_nudge_controller.h"
 #include "ash/constants/ash_features.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/screen_orientation_controller.h"
+#include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
@@ -27,17 +32,20 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_dimmer.h"
+#include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "cc/paint/paint_flags.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
+#include "ui/aura/cursor/cursor_util.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/base/cursor/cursor_factory.h"
-#include "ui/base/cursor/cursor_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -251,7 +259,7 @@ ui::Cursor GetCursorForFullscreenOrWindowCapture(bool capture_image) {
       SK_ColorBLACK);
   SkBitmap bitmap = *icon.bitmap();
   gfx::Point hotspot(bitmap.width() / 2, bitmap.height() / 2);
-  ui::ScaleAndRotateCursorBitmapAndHotpoint(
+  aura::ScaleAndRotateCursorBitmapAndHotpoint(
       device_scale_factor, display.panel_rotation(), &bitmap, &hotspot);
   auto* cursor_factory = ui::CursorFactory::GetInstance();
   cursor.SetPlatformCursor(
@@ -477,34 +485,6 @@ class CaptureModeSession::CursorSetter {
 };
 
 // -----------------------------------------------------------------------------
-// CaptureModeSession::ScopedA11yOverrideWindowSetter:
-
-// Scoped class that sets the capture mode bar widget window as the window for
-// accessibility focus for the duration of a capture mode session. Clears the
-// accessibility focus window when destructed.
-class CaptureModeSession::ScopedA11yOverrideWindowSetter
-    : public aura::WindowObserver {
- public:
-  explicit ScopedA11yOverrideWindowSetter(aura::Window* a11y_focus_window) {
-    SetA11yOverrideWindow(a11y_focus_window);
-  }
-  ScopedA11yOverrideWindowSetter(const ScopedA11yOverrideWindowSetter&) =
-      delete;
-  ScopedA11yOverrideWindowSetter& operator=(
-      const ScopedA11yOverrideWindowSetter&) = delete;
-  ~ScopedA11yOverrideWindowSetter() override { SetA11yOverrideWindow(nullptr); }
-
- private:
-  // Sets a window as the a11y override window. Accessiblity features will check
-  // for a a11y override window to focus before getting the window with actual
-  // focus.
-  void SetA11yOverrideWindow(aura::Window* a11y_override_window) {
-    Shell::Get()->accessibility_controller()->SetA11yOverrideWindow(
-        a11y_override_window);
-  }
-};
-
-// -----------------------------------------------------------------------------
 // CaptureModeSession:
 
 CaptureModeSession::CaptureModeSession(CaptureModeController* controller,
@@ -565,10 +545,9 @@ void CaptureModeSession::Initialize() {
                          "CaptureModeBarWidget"));
   capture_mode_bar_view_ = capture_mode_bar_widget_->SetContentsView(
       std::make_unique<CaptureModeBarView>(is_in_projector_mode_));
+  capture_mode_bar_widget_->GetNativeWindow()->SetTitle(
+      l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_A11Y_TITLE));
   capture_mode_bar_widget_->Show();
-
-  scoped_a11y_overrider_ = std::make_unique<ScopedA11yOverrideWindowSetter>(
-      capture_mode_bar_widget_->GetNativeWindow());
 
   // Advance focus once if spoken feedback is on so that the capture bar takes
   // spoken feedback focus.
@@ -594,6 +573,8 @@ void CaptureModeSession::Initialize() {
       this, ui::EventTarget::Priority::kSystem);
 
   UpdateAutoclickMenuBoundsIfNeeded();
+
+  MaybeCreateUserNudge();
 }
 
 void CaptureModeSession::Shutdown() {
@@ -613,22 +594,21 @@ void CaptureModeSession::Shutdown() {
   if (old_mouse_warp_status_)
     SetMouseWarpEnabled(*old_mouse_warp_status_);
 
-  // Close these widgets immediately to avoid having them show up in the
-  // captured screenshots or video.
-  if (capture_label_widget_)
-    capture_label_widget_->CloseNow();
-  if (dimensions_label_widget_)
-    dimensions_label_widget_->CloseNow();
-  if (capture_mode_settings_widget_)
-    capture_mode_settings_widget_->CloseNow();
-  DCHECK(capture_mode_bar_widget_);
-  capture_mode_bar_widget_->CloseNow();
+  // Close all widgets immediately to avoid having them show up in the captured
+  // screenshots or video.
+  for (auto* widget : GetAvailableWidgets())
+    widget->CloseNow();
 
   if (a11y_alert_on_session_exit_) {
     capture_mode_util::TriggerAccessibilityAlert(
         IDS_ASH_SCREEN_CAPTURE_ALERT_CLOSE);
   }
   UpdateAutoclickMenuBoundsIfNeeded();
+
+  // Stopping the session for any reason other than starting video recording
+  // means a cancellation to an ongoing projector session (if any).
+  if (is_in_projector_mode_ && !is_stopping_to_start_video_recording_)
+    ProjectorControllerImpl::Get()->OnRecordingStartAborted();
 }
 
 aura::Window* CaptureModeSession::GetSelectedWindow() const {
@@ -673,6 +653,29 @@ void CaptureModeSession::OnCaptureTypeChanged(CaptureModeType new_type) {
           : IDS_ASH_SCREEN_CAPTURE_ALERT_SELECT_TYPE_VIDEO);
 }
 
+void CaptureModeSession::OnWaitingForDlpConfirmationStarted() {
+  is_waiting_for_dlp_confirmation_ = true;
+
+  HideAllUis();
+}
+
+void CaptureModeSession::OnWaitingForDlpConfirmationEnded(bool will_proceed) {
+  is_waiting_for_dlp_confirmation_ = false;
+
+  if (!will_proceed) {
+    // If the capture operation is aborting, we don't need to undo the work done
+    // in OnWaitingForDlpConfirmationStarted(). The session is about to shutdown
+    // anyways, so it's better to avoid any wasted effort.
+    return;
+  }
+
+  // If `will_proceed` is true, which means we'll soon end the session to
+  // continue the capture operation, it doesn't always mean the session is
+  // ending immediately, since we may proceed to the 3-second countdown, for
+  // which the capture mode UIs need to be returned back to normal.
+  ShowAllUis();
+}
+
 void CaptureModeSession::SetSettingsMenuShown(bool shown) {
   capture_mode_bar_view_->SetSettingsMenuShown(shown);
 
@@ -691,13 +694,17 @@ void CaptureModeSession::SetSettingsMenuShown(bool shown) {
     auto* parent = GetParentContainer(current_root_);
     capture_mode_settings_widget_ = std::make_unique<views::Widget>();
     if (features::AreImprovedScreenCaptureSettingsEnabled()) {
+      MaybeDismissUserNudgeForever();
+
       capture_mode_settings_widget_->Init(CreateWidgetParams(
           parent,
           CaptureModeAdvancedSettingsView::GetBounds(capture_mode_bar_view_),
           "CaptureModeSettingsWidget"));
       capture_mode_advanced_settings_view_ =
           capture_mode_settings_widget_->SetContentsView(
-              std::make_unique<CaptureModeAdvancedSettingsView>());
+              std::make_unique<CaptureModeAdvancedSettingsView>(
+                  this, is_in_projector_mode_));
+      OnCaptureFolderMayHaveChanged();
     } else {
       capture_mode_settings_widget_->Init(CreateWidgetParams(
           parent, CaptureModeSettingsView::GetBounds(capture_mode_bar_view_),
@@ -716,6 +723,8 @@ void CaptureModeSession::SetSettingsMenuShown(bool shown) {
         capture_label_widget_->Hide();
       }
     }
+    capture_mode_settings_widget_->GetNativeWindow()->SetTitle(
+        l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_SETTINGS_A11Y_TITLE));
     capture_mode_settings_widget_->Show();
   }
 }
@@ -731,7 +740,8 @@ void CaptureModeSession::ReportSessionHistograms() {
   num_capture_region_adjusted_ = 0;
 
   RecordCaptureModeSwitchesFromInitialMode(capture_source_changed_);
-  RecordCaptureModeConfiguration(controller_->type(), controller_->source());
+  RecordCaptureModeConfiguration(controller_->type(), controller_->source(),
+                                 controller_->enable_audio_recording());
 }
 
 void CaptureModeSession::StartCountDown(
@@ -770,6 +780,13 @@ void CaptureModeSession::StartCountDown(
   }
 }
 
+void CaptureModeSession::OpenFolderSelectionDialog() {
+  DCHECK(!folder_selection_dialog_controller_);
+  folder_selection_dialog_controller_ =
+      std::make_unique<FolderSelectionDialogController>(/*delegate=*/this,
+                                                        current_root_);
+}
+
 bool CaptureModeSession::IsInCountDownAnimation() const {
   if (is_shutting_down_)
     return false;
@@ -779,7 +796,30 @@ bool CaptureModeSession::IsInCountDownAnimation() const {
   return label_view->IsInCountDownAnimation();
 }
 
+void CaptureModeSession::OnCaptureFolderMayHaveChanged() {
+  if (!capture_mode_settings_widget_)
+    return;
+
+  DCHECK(capture_mode_advanced_settings_view_);
+  capture_mode_advanced_settings_view_->OnCaptureFolderMayHaveChanged();
+  capture_mode_settings_widget_->SetBounds(
+      CaptureModeAdvancedSettingsView::GetBounds(
+          capture_mode_bar_view_, capture_mode_advanced_settings_view_));
+}
+
+void CaptureModeSession::OnDefaultCaptureFolderSelectionChanged() {
+  if (!capture_mode_settings_widget_)
+    return;
+
+  DCHECK(capture_mode_advanced_settings_view_);
+  capture_mode_advanced_settings_view_
+      ->OnDefaultCaptureFolderSelectionChanged();
+}
+
 void CaptureModeSession::OnPaintLayer(const ui::PaintContext& context) {
+  if (!is_all_uis_visible_)
+    return;
+
   ui::PaintRecorder recorder(context, layer()->size());
 
   auto* color_provider = AshColorProvider::Get();
@@ -791,6 +831,17 @@ void CaptureModeSession::OnPaintLayer(const ui::PaintContext& context) {
 }
 
 void CaptureModeSession::OnKeyEvent(ui::KeyEvent* event) {
+  // We don't consume any events while a DLP system-modal dialog might be shown,
+  // so that the user may interact with it.
+  if (is_waiting_for_dlp_confirmation_)
+    return;
+
+  if (folder_selection_dialog_controller_) {
+    if (folder_selection_dialog_controller_->ShouldConsumeEvent(event))
+      event->StopPropagation();
+    return;
+  }
+
   if (event->type() != ui::ET_KEY_PRESSED)
     return;
 
@@ -812,7 +863,7 @@ void CaptureModeSession::OnKeyEvent(ui::KeyEvent* event) {
     case ui::VKEY_RETURN: {
       event->StopPropagation();
       if (!IsInCountDownAnimation())
-        controller_->PerformCapture();  // |this| is destroyed here.
+        DoPerformCapture();  // `this` can be deleted after this.
       return;
     }
 
@@ -862,10 +913,20 @@ void CaptureModeSession::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 void CaptureModeSession::OnMouseEvent(ui::MouseEvent* event) {
+  // We don't consume any events while a DLP system-modal dialog might be shown,
+  // so that the user may interact with it.
+  if (is_waiting_for_dlp_confirmation_)
+    return;
+
   OnLocatedEvent(event, /*is_touch=*/false);
 }
 
 void CaptureModeSession::OnTouchEvent(ui::TouchEvent* event) {
+  // We don't consume any events while a DLP system-modal dialog might be shown,
+  // so that the user may interact with it.
+  if (is_waiting_for_dlp_confirmation_)
+    return;
+
   OnLocatedEvent(event, /*is_touch=*/true);
 }
 
@@ -913,17 +974,52 @@ void CaptureModeSession::OnDisplayMetricsChanged(
   DCHECK_EQ(parent->layer(), layer()->parent());
   layer()->SetBounds(parent->bounds());
 
-  DCHECK(capture_mode_bar_widget_);
-  capture_mode_bar_widget_->SetBounds(
-      CaptureModeBarView::GetBounds(current_root_));
+  RefreshBarWidgetBounds();
   if (capture_label_widget_)
     UpdateCaptureLabelWidget(CaptureLabelAnimation::kNone);
   layer()->SchedulePaint(layer()->bounds());
 }
 
+void CaptureModeSession::OnFolderSelected(const base::FilePath& path) {
+  CaptureModeController::Get()->SetCustomCaptureFolder(path);
+  if (controller_->GetCurrentCaptureFolder().is_default_downloads_folder) {
+    RecordSwitchToDefaultFolderReason(
+        CaptureModeSwitchToDefaultReason::
+            kUserSelectedFromFolderSelectionDialog);
+  }
+}
+
+void CaptureModeSession::OnSelectionWindowAdded() {
+  // Hide all the capture session UIs so that they don't show on top of the
+  // selection dialog window and block it.
+  HideAllUis();
+}
+
+void CaptureModeSession::OnSelectionWindowClosed() {
+  DCHECK(folder_selection_dialog_controller_);
+
+  ShowAllUis();
+
+  const bool did_user_select_a_folder =
+      folder_selection_dialog_controller_->did_user_select_a_folder();
+  folder_selection_dialog_controller_.reset();
+
+  // If the selection window is closed by user selecting a folder, no need to
+  // update the capture folder settings menu here, since it's covered by
+  // `SetCustomCaptureFolder` via `OnFolderSelected`.
+  if (!did_user_select_a_folder)
+    OnCaptureFolderMayHaveChanged();
+
+  // Explicitly hide any virtual keyboard that may have remained open from
+  // interacting with the dialog selection window.
+  keyboard::KeyboardUIController::Get()->HideKeyboardExplicitlyBySystem();
+}
+
 void CaptureModeSession::UpdateCursor(const gfx::Point& location_in_screen,
                                       bool is_touch) {
-  if (is_shutting_down_)
+  // No need to update cursor if `cursor_setter_` has been reset because of
+  // OpenFolderSelectionDialog.
+  if (is_shutting_down_ || !cursor_setter_)
     return;
 
   // Hide mouse cursor in tablet mode.
@@ -999,6 +1095,107 @@ void CaptureModeSession::HighlightWindowForTab(aura::Window* window) {
   DCHECK_EQ(CaptureModeSource::kWindow, controller_->source());
   MaybeChangeRoot(window->GetRootWindow());
   capture_window_observer_->SetSelectedWindow(window);
+}
+
+std::vector<views::Widget*> CaptureModeSession::GetAvailableWidgets() {
+  std::vector<views::Widget*> result;
+  DCHECK(capture_mode_bar_widget_);
+  result.push_back(capture_mode_bar_widget_.get());
+  if (capture_label_widget_)
+    result.push_back(capture_label_widget_.get());
+  if (capture_mode_settings_widget_)
+    result.push_back(capture_mode_settings_widget_.get());
+  if (dimensions_label_widget_)
+    result.push_back(dimensions_label_widget_.get());
+  return result;
+}
+
+void CaptureModeSession::HideAllUis() {
+  is_all_uis_visible_ = false;
+  cursor_setter_.reset();
+
+  for (auto* widget : GetAvailableWidgets()) {
+    // The order here matters. We need to disable the animation before we hide
+    // to avoid any hide animation here, or until the widgets are shown (also
+    // without animation) when ShowAllUis() is called.
+    widget->GetNativeWindow()->SetProperty(aura::client::kAnimationsDisabledKey,
+                                           true);
+    // The layer's opacity could be less than 1.f if the widget was hidden
+    // before we disabled the animations above. We need to reset the opacity
+    // back to 1.f as we will hide the widget without animation.
+    widget->GetLayer()->SetOpacity(1.f);
+    widget->Hide();
+  }
+
+  // Refresh painting the layer, since we don't paint anything while a DLP
+  // dialog might be shown.
+  layer()->SchedulePaint(layer()->bounds());
+}
+
+void CaptureModeSession::ShowAllUis() {
+  is_all_uis_visible_ = true;
+  cursor_setter_ = std::make_unique<CursorSetter>();
+
+  for (auto* widget : GetAvailableWidgets()) {
+    // The order here matters. See HideAllUis() above.
+    // At this point the animation is still disabled, so we show the window now
+    // before we re-enable the animations. This is to avoid having those widgets
+    // show up in the captured images or videos in case this is used right
+    // before ending the session to perform the capture.
+    if (CanShowWidget(widget))
+      widget->Show();
+    widget->GetNativeWindow()->SetProperty(aura::client::kAnimationsDisabledKey,
+                                           false);
+  }
+
+  layer()->SchedulePaint(layer()->bounds());
+}
+
+bool CaptureModeSession::CanShowWidget(views::Widget* widget) const {
+  // If widget is the capture label widget, we will show it only if it doesn't
+  // intersect with the settings widget.
+  return !(capture_label_widget_ && capture_mode_settings_widget_ &&
+           capture_label_widget_.get() == widget &&
+           capture_mode_settings_widget_->GetWindowBoundsInScreen().Intersects(
+               capture_label_widget_->GetWindowBoundsInScreen()));
+}
+
+void CaptureModeSession::RefreshBarWidgetBounds() {
+  DCHECK(capture_mode_bar_widget_);
+  capture_mode_bar_widget_->SetBounds(
+      CaptureModeBarView::GetBounds(current_root_));
+  auto* parent = GetParentContainer(current_root_);
+  parent->StackChildAtTop(capture_mode_bar_widget_->GetNativeWindow());
+  if (user_nudge_controller_)
+    user_nudge_controller_->Reposition();
+}
+
+void CaptureModeSession::MaybeCreateUserNudge() {
+  user_nudge_controller_.reset();
+
+  if (!features::AreImprovedScreenCaptureSettingsEnabled())
+    return;
+
+  if (is_in_projector_mode_)
+    return;
+
+  if (!controller_->CanShowFolderSelectionNudge())
+    return;
+
+  user_nudge_controller_ = std::make_unique<UserNudgeController>(
+      capture_mode_bar_view_->settings_button());
+  user_nudge_controller_->SetVisible(true);
+}
+
+void CaptureModeSession::MaybeDismissUserNudgeForever() {
+  if (user_nudge_controller_)
+    user_nudge_controller_->set_should_dismiss_nudge_forever(true);
+  user_nudge_controller_.reset();
+}
+
+void CaptureModeSession::DoPerformCapture() {
+  MaybeDismissUserNudgeForever();
+  controller_->PerformCapture();  // `this` can be deleted after this.
 }
 
 gfx::Rect CaptureModeSession::GetSelectedWindowBounds() const {
@@ -1127,6 +1324,12 @@ void CaptureModeSession::PaintCaptureRegion(gfx::Canvas* canvas) {
 
 void CaptureModeSession::OnLocatedEvent(ui::LocatedEvent* event,
                                         bool is_touch) {
+  if (folder_selection_dialog_controller_) {
+    if (folder_selection_dialog_controller_->ShouldConsumeEvent(event))
+      event->StopPropagation();
+    return;
+  }
+
   // If we're currently in countdown animation, don't further handle any
   // located events. However we should stop the event propagation here to
   // prevent other event handlers from handling this event.
@@ -1189,10 +1392,7 @@ void CaptureModeSession::OnLocatedEvent(ui::LocatedEvent* event,
   if (is_release_event && source == CaptureModeSource::kRegion &&
       current_root_ !=
           capture_mode_bar_widget_->GetNativeWindow()->GetRootWindow()) {
-    capture_mode_bar_widget_->SetBounds(
-        CaptureModeBarView::GetBounds(current_root_));
-    auto* parent = GetParentContainer(current_root_);
-    parent->StackChildAtTop(capture_mode_bar_widget_->GetNativeWindow());
+    RefreshBarWidgetBounds();
   }
 
   const bool is_event_on_settings_menu =
@@ -1254,7 +1454,7 @@ void CaptureModeSession::OnLocatedEvent(ui::LocatedEvent* event,
       case ui::ET_MOUSE_RELEASED:
       case ui::ET_TOUCH_RELEASED:
         if (is_capture_fullscreen || (is_capture_window && GetSelectedWindow()))
-          controller_->PerformCapture();
+          DoPerformCapture();  // `this` can be deleted after this.
         break;
       default:
         break;
@@ -1375,6 +1575,9 @@ void CaptureModeSession::OnLocatedEventPressed(
   is_drag_in_progress_ = true;
   Shell::Get()->UpdateCursorCompositingEnabled();
 
+  if (user_nudge_controller_)
+    user_nudge_controller_->SetVisible(false);
+
   if (!is_event_on_capture_bar_or_menu)
     UpdateCaptureBarWidgetOpacity(0.f, /*on_release=*/false);
 
@@ -1467,6 +1670,9 @@ void CaptureModeSession::OnLocatedEventDragged(
 void CaptureModeSession::OnLocatedEventReleased(
     bool is_event_on_capture_bar_or_menu,
     bool region_intersects_capture_bar) {
+  if (user_nudge_controller_ && !region_intersects_capture_bar)
+    user_nudge_controller_->SetVisible(true);
+
   EndSelection(is_event_on_capture_bar_or_menu, region_intersects_capture_bar);
 
   // Do a repaint to show the affordance circles.
@@ -1635,8 +1841,11 @@ void CaptureModeSession::UpdateCaptureLabelWidget(
     auto* parent = GetParentContainer(current_root_);
     capture_label_widget_->Init(
         CreateWidgetParams(parent, gfx::Rect(), "CaptureLabel"));
-    capture_label_widget_->SetContentsView(
-        std::make_unique<CaptureLabelView>(this));
+    capture_label_widget_->SetContentsView(std::make_unique<CaptureLabelView>(
+        this, base::BindRepeating(&CaptureModeSession::DoPerformCapture,
+                                  base::Unretained(this))));
+    capture_label_widget_->GetNativeWindow()->SetTitle(
+        l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_A11Y_TITLE));
     capture_label_widget_->Show();
   }
 
@@ -1883,10 +2092,8 @@ void CaptureModeSession::MaybeChangeRoot(aura::Window* new_root) {
   // Update the bounds of the widgets after setting the new root. For region
   // capture, the capture bar will move at a later time, when the mouse is
   // released.
-  if (controller_->source() != CaptureModeSource::kRegion) {
-    capture_mode_bar_widget_->SetBounds(
-        CaptureModeBarView::GetBounds(current_root_));
-  }
+  if (controller_->source() != CaptureModeSource::kRegion)
+    RefreshBarWidgetBounds();
 
   // Because we use custom cursors for region and full screen capture, we need
   // to update the cursor in case the display DSF changes.

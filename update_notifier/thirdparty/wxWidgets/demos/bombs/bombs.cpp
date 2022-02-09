@@ -10,9 +10,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-#   pragma hdrstop
-#endif
 
 #ifndef  WX_PRECOMP
 #   include "wx/wx.h"
@@ -24,28 +21,18 @@
 
 #include <stdlib.h>
 
-#ifndef __WXWINCE__
-#   include <time.h>
-#endif
+#include <time.h>
 
 #ifndef wxHAS_IMAGES_IN_RESOURCES
 #   include "bombs.xpm"
 #endif
 
-IMPLEMENT_APP(BombsApp)
-
-#ifdef __WXWINCE__
-    STDAPI_(__int64) CeGetRandomSeed();
-#endif
+wxIMPLEMENT_APP(BombsApp);
 
 // Called to initialize the program
 bool BombsApp::OnInit()
 {
-#ifdef __WXWINCE__
-    srand((unsigned) CeGetRandomSeed());
-#else
     srand((unsigned) time(NULL));
-#endif
 
     m_frame = new BombsFrame(&m_game);
 
@@ -54,7 +41,7 @@ bool BombsApp::OnInit()
     return true;
 }
 
-BEGIN_EVENT_TABLE(BombsFrame, wxFrame)
+wxBEGIN_EVENT_TABLE(BombsFrame, wxFrame)
     EVT_MENU(wxID_NEW,           BombsFrame::OnNewGame)
     EVT_MENU(bombsID_EASY,       BombsFrame::OnEasyGame)
     EVT_MENU(bombsID_MEDIUM,     BombsFrame::OnMediumGame)
@@ -62,7 +49,7 @@ BEGIN_EVENT_TABLE(BombsFrame, wxFrame)
     EVT_MENU(bombsID_EASYCORNER, BombsFrame::OnEasyCorner)
     EVT_MENU(wxID_EXIT,          BombsFrame::OnExit)
     EVT_MENU(wxID_ABOUT,         BombsFrame::OnAbout)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 BombsFrame::BombsFrame(BombsGame *game)
     : wxFrame(NULL, wxID_ANY, wxT("wxBombs"), wxDefaultPosition,
@@ -216,11 +203,11 @@ void BombsFrame::OnEasyCorner(wxCommandEvent& WXUNUSED(event))
     NewGame(m_lastLevel, true);
 }
 
-BEGIN_EVENT_TABLE(BombsCanvas, wxPanel)
+wxBEGIN_EVENT_TABLE(BombsCanvas, wxPanel)
     EVT_PAINT(BombsCanvas::OnPaint)
     EVT_MOUSE_EVENTS(BombsCanvas::OnMouseEvent)
     EVT_CHAR(BombsCanvas::OnChar)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 BombsCanvas::BombsCanvas(wxFrame *parent, BombsGame *game)
     : wxPanel(parent, wxID_ANY)
@@ -228,8 +215,7 @@ BombsCanvas::BombsCanvas(wxFrame *parent, BombsGame *game)
     m_game = game;
     int sx, sy;
     wxClientDC dc(this);
-    wxFont font= BOMBS_FONT;
-    dc.SetFont(font);
+    dc.SetFont(BOMBS_FONT);
 
     wxCoord chw, chh;
     wxString buf = wxT("M");

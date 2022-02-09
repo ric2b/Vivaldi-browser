@@ -113,6 +113,10 @@ class TokenPreloadScanner {
   class StartTagScanner;
 
   template <typename Token>
+  void HandleMetaNameAttribute(const Token& token,
+                               absl::optional<ViewportDescription>* viewport);
+
+  template <typename Token>
   inline void ScanCommon(const Token&,
                          const SegmentedString&,
                          PreloadRequestStream& requests,
@@ -127,17 +131,20 @@ class TokenPreloadScanner {
         const KURL& predicted_base_element_url,
         bool in_style,
         bool in_script,
+        bool in_script_web_bundle,
         size_t template_count,
         scoped_refptr<const PreloadRequest::ExclusionInfo> exclusion_info)
         : predicted_base_element_url(predicted_base_element_url),
           in_style(in_style),
           in_script(in_script),
+          in_script_web_bundle(in_script_web_bundle),
           template_count(template_count),
           exclusion_info(std::move(exclusion_info)) {}
 
     KURL predicted_base_element_url;
     bool in_style;
     bool in_script;
+    bool in_script_web_bundle;
     size_t template_count;
     scoped_refptr<const PreloadRequest::ExclusionInfo> exclusion_info;
   };
@@ -157,6 +164,7 @@ class TokenPreloadScanner {
   bool in_style_;
   bool in_picture_;
   bool in_script_;
+  bool in_script_web_bundle_;
   bool seen_body_;
   bool seen_img_;
   PictureData picture_data_;

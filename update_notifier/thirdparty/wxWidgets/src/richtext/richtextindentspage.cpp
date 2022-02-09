@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////
 // Name:        src/richtext/richtextindentspage.cpp
-// Purpose:
+// Purpose:     Implements the rich text formatting dialog indents page.
 // Author:      Julian Smart
 // Modified by:
 // Created:     10/3/2006 2:28:21 PM
@@ -16,13 +16,13 @@
  * wxRichTextIndentsSpacingPage type definition
  */
 
-IMPLEMENT_DYNAMIC_CLASS( wxRichTextIndentsSpacingPage, wxRichTextDialogPage )
+wxIMPLEMENT_DYNAMIC_CLASS(wxRichTextIndentsSpacingPage, wxRichTextDialogPage);
 
 /*!
  * wxRichTextIndentsSpacingPage event table definition
  */
 
-BEGIN_EVENT_TABLE( wxRichTextIndentsSpacingPage, wxRichTextDialogPage )
+wxBEGIN_EVENT_TABLE( wxRichTextIndentsSpacingPage, wxRichTextDialogPage )
 
 ////@begin wxRichTextIndentsSpacingPage event table entries
     EVT_RADIOBUTTON( ID_RICHTEXTINDENTSSPACINGPAGE_ALIGNMENT_LEFT, wxRichTextIndentsSpacingPage::OnAlignmentLeftSelected )
@@ -39,7 +39,7 @@ BEGIN_EVENT_TABLE( wxRichTextIndentsSpacingPage, wxRichTextDialogPage )
     EVT_COMBOBOX( ID_RICHTEXTINDENTSSPACINGPAGE_SPACING_LINE, wxRichTextIndentsSpacingPage::OnSpacingLineSelected )
 ////@end wxRichTextIndentsSpacingPage event table entries
 
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 IMPLEMENT_HELP_PROVISION(wxRichTextIndentsSpacingPage)
 
@@ -319,7 +319,7 @@ void wxRichTextIndentsSpacingPage::CreateControls()
     outlineLevelCtrlStrings.Add("8");
     outlineLevelCtrlStrings.Add("9");
     outlineLevelCtrlStrings.Add("10");
-    
+
     m_outlineLevelCtrl->Freeze();
     m_outlineLevelCtrl->Append(outlineLevelCtrlStrings);
     m_outlineLevelCtrl->Thaw();

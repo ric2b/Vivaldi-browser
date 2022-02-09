@@ -63,7 +63,6 @@ import org.chromium.components.component_updater.ComponentLoaderPolicyBridge;
 import org.chromium.components.component_updater.EmbeddedComponentLoader;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.components.embedder_support.application.FirebaseConfig;
-import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.payments.PaymentDetailsUpdateService;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.ChildProcessCreationParams;
@@ -137,6 +136,9 @@ public final class WebLayerImpl extends IWebLayer.Stub {
     // resources. If this value changes make sure to change _SHARED_LIBRARY_HARDCODED_ID in
     // //build/android/gyp/util/protoresources.py and WebViewChromiumFactoryProvider.java.
     private static final int REQUIRED_PACKAGE_IDENTIFIER = 36;
+
+    // 0 results in using the default value.
+    private static int sMaxNavigationsForInstanceState = 0;
 
     private final ProfileManager mProfileManager = new ProfileManager();
 
@@ -547,6 +549,16 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         return ObjectWrapper.wrap(ContextUtils.getApplicationContext());
     }
 
+    public static int getMaxNavigationsPerTabForInstanceState() {
+        try {
+            return (WebLayerFactoryImpl.getClientMajorVersion() >= 98)
+                    ? sClient.getMaxNavigationsPerTabForInstanceState()
+                    : 0;
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     public static Intent createIntent() {
         if (sClient == null) {
             throw new IllegalStateException("WebLayer should have been initialized already.");
@@ -637,13 +649,6 @@ public final class WebLayerImpl extends IWebLayer.Stub {
                 .append(context.getPackageManager().getApplicationLabel(
                         context.getApplicationInfo()))
                 .toString();
-    }
-
-    public static boolean isLocationPermissionManaged(Origin origin) {
-        if (origin == null) {
-            return false;
-        }
-        return WebLayerImplJni.get().isLocationPermissionManaged(origin.toString());
     }
 
     /**
@@ -1003,7 +1008,6 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         void setIsWebViewCompatMode(boolean value);
         String getUserAgentString();
         void registerExternalExperimentIDs(int[] experimentIDs);
-        boolean isLocationPermissionManaged(String origin);
         ComponentLoaderPolicyBridge[] getComponentLoaderPolicies();
     }
 }

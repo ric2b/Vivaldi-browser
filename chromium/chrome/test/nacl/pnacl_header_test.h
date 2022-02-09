@@ -8,8 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "chrome/test/base/in_process_browser_test.h"
 
 namespace net {
@@ -39,7 +37,6 @@ delete;
 
   void RequestBeginning(net::URLRequest* request,
                         content::ResourceContext* resource_context,
-                        content::AppCacheService* appcache_service,
                         blink::mojom::ResourceType resource_type,
                         std::vector<std::unique_ptr<content::ResourceThrottle>>*
                             throttles) override;

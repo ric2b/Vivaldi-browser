@@ -46,7 +46,7 @@ AwPackageNamesAllowlistComponentInstallerPolicy::OnCustomInstall(
 }
 
 void RegisterWebViewAppsPackageNamesAllowlistComponent(
-    base::OnceCallback<bool(const update_client::CrxComponent&)>
+    base::OnceCallback<bool(const component_updater::ComponentRegistration&)>
         register_callback,
     base::OnceClosure registration_finished) {
   base::MakeRefCounted<component_updater::ComponentInstaller>(
@@ -57,7 +57,7 @@ void RegisterWebViewAppsPackageNamesAllowlistComponent(
 
 bool AwPackageNamesAllowlistComponentInstallerPolicy::
     SupportsGroupPolicyEnabledComponentUpdates() const {
-  return false;
+  return true;
 }
 
 bool AwPackageNamesAllowlistComponentInstallerPolicy::

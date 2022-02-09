@@ -12,6 +12,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "build/build_config.h"
@@ -28,6 +29,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gl/gl_surface_stub.h"
+
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 
 using ::testing::_;
 using ::testing::Expectation;
@@ -125,7 +130,7 @@ class TestOnGpu : public ::testing::Test {
   virtual void TearDownOnGpu() {}
   virtual void TestBodyOnGpu() {}
 
-  TestGpuServiceHolder* gpu_service_holder_;
+  raw_ptr<TestGpuServiceHolder> gpu_service_holder_;
   base::WaitableEvent wait_;
 };
 
@@ -307,12 +312,20 @@ class SkiaOutputDeviceBufferQueueTest : public TestOnGpu {
 
     auto present_callback = GetDidSwapBuffersCompleteCallback();
 
+    bool supports_non_backed_solid_color_buffers = false;
+#if defined(USE_OZONE)
+    supports_non_backed_solid_color_buffers =
+        ui::OzonePlatform::GetInstance()
+            ->GetPlatformRuntimeProperties()
+            .supports_non_backed_solid_color_buffers;
+#endif
     output_device_ = std::make_unique<SkiaOutputDeviceBufferQueue>(
         std::make_unique<OutputPresenterGL>(
             gl_surface_, dependency_.get(), shared_image_factory_.get(),
             shared_image_representation_factory_.get()),
         dependency_.get(), shared_image_representation_factory_.get(),
-        memory_tracker_.get(), present_callback, false);
+        memory_tracker_.get(), present_callback, false,
+        supports_non_backed_solid_color_buffers);
   }
 
   void TearDownOnGpu() override {

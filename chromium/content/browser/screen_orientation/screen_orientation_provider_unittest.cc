@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "content/public/browser/screen_orientation_delegate.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -37,7 +38,9 @@ class FakeScreenOrientationDelegate : public ScreenOrientationDelegate {
     return full_screen_required_;
   }
 
-  bool ScreenOrientationProviderSupported() override { return supported_; }
+  bool ScreenOrientationProviderSupported(WebContents* web_contents) override {
+    return supported_;
+  }
 
   void Lock(
       WebContents* web_contents,
@@ -82,7 +85,7 @@ class FakeWebContentsDelegate : public WebContentsDelegate {
   }
 
  private:
-  WebContents* fullscreened_contents_ = nullptr;
+  raw_ptr<WebContents> fullscreened_contents_ = nullptr;
 };
 
 void LockResultCallback(absl::optional<ScreenOrientationLockResult>* out_result,

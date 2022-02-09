@@ -52,9 +52,6 @@ public final class ChromePreferenceKeys {
      */
     public static final String ACCESSIBILITY_TAB_SWITCHER = "accessibility_tab_switcher";
 
-    public static final String ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT =
-            "Chrome.AccountPickerBottomSheet.ConsecutiveActiveDismissalCount";
-
     /** Whether the current adaptive toolbar customization is enabled. */
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED =
             "Chrome.AdaptiveToolbarCustomization.Enabled";
@@ -93,6 +90,10 @@ public final class ChromePreferenceKeys {
 
     /** Assistant voice search keys. */
     public static final String ASSISTANT_VOICE_SEARCH_ENABLED = "Chrome.Assistant.Enabled";
+
+    /** The last time the browser was started for the Attribution Provider. */
+    public static final String ATTRIBUTION_PROVIDER_LAST_BROWSER_START =
+            "Chrome.Attribution.LastBrowserStart";
 
     /** Whether Autofill Assistant is enabled */
     public static final String AUTOFILL_ASSISTANT_ENABLED = "autofill_assistant_switch";
@@ -283,13 +284,6 @@ public final class ChromePreferenceKeys {
             "Chrome.Contextmenu.OpenImageInEphemeralTabClicked";
     public static final String CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED =
             "Chrome.Contextmenu.OpenInEphemeralTabClicked";
-
-    /**
-     * Key used to save the context menu item order for the "Open in new tab" item and
-     * the "Open in new tab in group" item.
-     */
-    public static final String CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST =
-            "Chrome.ContextMenu.OpenNewTabInGroupFirst";
 
     public static final String CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED =
             "Chrome.ContextMenu.SearchWithGoogleLensClicked";
@@ -703,6 +697,13 @@ public final class ChromePreferenceKeys {
             "Chrome.OfflineIndicatorV2.HasPersistentOfflineContent";
 
     /**
+     * Save the timestamp of the last time that we record metrics on whether user enables the price
+     * tracking annotations.
+     */
+    public static final String PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP =
+            "Chrome.PriceTracking.AnnotationsEnabledMetricsTimestamp";
+
+    /**
      * Whether the PriceAlertsMessageCard is enabled.
      */
     public static final String PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD =
@@ -786,6 +787,9 @@ public final class ChromePreferenceKeys {
     public static final String OPEN_RECENT_TABS_COUNT = "Chrome.StartSurface.OpenRecentTabCount";
     public static final String SHOW_START_SEGMENTATION_RESULT =
             "Chrome.StartSurface.ShowSegmentationResult";
+
+    public static final String REGULAR_TAB_COUNT = "Chrome.StartSurface.RegularTabCount";
+    public static final String INCOGNITO_TAB_COUNT = "Chrome.StartSurface.IncognitoTabCount";
 
     /**
      * Contains a trial group that was used to determine whether the reached code profiler should be
@@ -977,6 +981,9 @@ public final class ChromePreferenceKeys {
     public static final String WEB_FEED_INTRO_LAST_SHOWN_TIME_MS =
             "Chrome.WebFeed.IntroLastShownTimeMs";
 
+    public static final String WEB_SIGNIN_ACCOUNT_PICKER_ACTIVE_DISMISSAL_COUNT =
+            "Chrome.AccountPickerBottomSheet.ConsecutiveActiveDismissalCount";
+
     /**
      * Key used to save the time in milliseconds since epoch that the WebFeed intro for the WebFeed
      * ID was last shown.
@@ -1032,11 +1039,11 @@ public final class ChromePreferenceKeys {
     static List<String> getKeysInUse() {
         // clang-format off
         return Arrays.asList(
-                ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT,
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS,
                 ASSISTANT_VOICE_CONSENT_OUTSIDE_TAPS,
                 ASSISTANT_VOICE_SEARCH_ENABLED,
+                ATTRIBUTION_PROVIDER_LAST_BROWSER_START,
                 AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
                 AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED,
                 AUTOFILL_ASSISTANT_PROACTIVE_HELP,
@@ -1056,7 +1063,6 @@ public final class ChromePreferenceKeys {
                 CONDITIONAL_TAB_STRIP_OPT_OUT,
                 CONTEXT_MENU_OPEN_IMAGE_IN_EPHEMERAL_TAB_CLICKED,
                 CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED,
-                CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST,
                 CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED,
                 CONTEXT_MENU_SHOP_IMAGE_WITH_GOOGLE_LENS_CLICKED,
                 CONTINUOUS_SEARCH_DISMISSAL_COUNT,
@@ -1076,9 +1082,10 @@ public final class ChromePreferenceKeys {
                 FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
                 HOMEPAGE_LOCATION_POLICY,
                 HOMEPAGE_USE_CHROME_NTP,
-            HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_URI,
+                HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_URI,
                 IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT,
                 IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN,
+                INCOGNITO_TAB_COUNT,
                 ISOLATED_SPLITS_DEX_COMPILE_VERSION,
                 LAST_SESSION_BROWSER_PID,
                 LAST_SESSION_APPLICATION_STATE,
@@ -1109,6 +1116,7 @@ public final class ChromePreferenceKeys {
                 OPEN_RECENT_TABS_COUNT,
                 OPTIMIZATION_GUIDE_PUSH_NOTIFICATION_CACHE.pattern(),
                 PERSISTENT_OFFLINE_CONTENT_AVAILABILITY_STATUS,
+                PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
                 PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD,
                 PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD_SHOW_COUNT,
                 PRICE_TRACKING_PRICE_WELCOME_MESSAGE_CARD,
@@ -1121,6 +1129,7 @@ public final class ChromePreferenceKeys {
                 QUERY_TILES_NUM_RECENT_MV_TILE_CLICKS,
                 QUERY_TILES_NUM_RECENT_QUERY_TILE_CLICKS,
                 QUERY_TILES_SHOW_ON_NTP,
+                REGULAR_TAB_COUNT,
                 SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP,
                 SETTINGS_SAFETY_CHECK_RUN_COUNTER,
                 SHARING_LAST_SHARED_COMPONENT_NAME,
@@ -1137,7 +1146,8 @@ public final class ChromePreferenceKeys {
                 TWA_DISCLOSURE_SEEN_PACKAGES,
                 VIDEO_TUTORIALS_SHARE_URL_SET,
                 WEB_FEED_INTRO_LAST_SHOWN_TIME_MS,
-                WEB_FEED_INTRO_WEB_FEED_ID_SHOWN_TIME_MS_PREFIX.pattern()
+                WEB_FEED_INTRO_WEB_FEED_ID_SHOWN_TIME_MS_PREFIX.pattern(),
+                WEB_SIGNIN_ACCOUNT_PICKER_ACTIVE_DISMISSAL_COUNT
         );
         // clang-format on
     }

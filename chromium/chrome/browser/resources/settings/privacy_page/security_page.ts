@@ -20,14 +20,19 @@ import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsRadioGroupElement} from '../controls/settings_radio_group.js';
+import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions, SafeBrowsingInteractions} from '../metrics_browser_proxy.js';
+
+// <if expr="chromeos or lacros">
 import {OpenWindowProxyImpl} from '../open_window_proxy.js';
+// </if>
+
 import {PrefsMixin, PrefsMixinInterface} from '../prefs/prefs_mixin.js';
 import {routes} from '../route.js';
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
 
-import {SettingsDisableSafebrowsingDialogElement} from './disable_safebrowsing_dialog.js';
+import {SettingsCollapseRadioButtonElement} from './collapse_radio_button.js';
 import {PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from './privacy_page_browser_proxy.js';
 
 /**
@@ -41,21 +46,16 @@ export enum SafeBrowsingSetting {
   DISABLED = 2,
 }
 
-// TODO(crbug.com/1234307): Remove when collapse_radio_button.js is migrated to
-// TypeScript.
-interface SettingsCollapseRadioButtonElement extends HTMLElement {
-  expanded: boolean;
-  updateCollapsed(): void;
-}
-
 type FocusConfig = Map<string, (string|(() => void))>;
 
 export interface SettingsSecurityPageElement {
   $: {
-    safeBrowsingRadioGroup: SettingsRadioGroupElement,
-    safeBrowsingEnhanced: SettingsCollapseRadioButtonElement,
-    safeBrowsingStandard: SettingsCollapseRadioButtonElement,
+    passwordsLeakToggle: SettingsToggleButtonElement,
     safeBrowsingDisabled: SettingsCollapseRadioButtonElement,
+    safeBrowsingEnhanced: SettingsCollapseRadioButtonElement,
+    safeBrowsingRadioGroup: SettingsRadioGroupElement,
+    safeBrowsingReportingToggle: SettingsToggleButtonElement,
+    safeBrowsingStandard: SettingsCollapseRadioButtonElement,
   };
 }
 
@@ -388,6 +388,12 @@ export class SettingsSecurityPageElement extends
     this.metricsBrowserProxy_.recordAction(
         confirmed ? 'SafeBrowsing.Settings.DisableSafeBrowsingDialogConfirmed' :
                     'SafeBrowsing.Settings.DisableSafeBrowsingDialogDenied');
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-security-page': SettingsSecurityPageElement;
   }
 }
 

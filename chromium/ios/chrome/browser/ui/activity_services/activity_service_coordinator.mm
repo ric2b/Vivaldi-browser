@@ -75,7 +75,8 @@
                                       bookmarksHandler:bookmarksHandler
                                    qrGenerationHandler:self.scopedHandler
                                            prefService:browserState->GetPrefs()
-                                         bookmarkModel:bookmarkModel];
+                                         bookmarkModel:bookmarkModel
+                                    baseViewController:self.baseViewController];
 
   SceneState* sceneState =
       SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
@@ -105,6 +106,7 @@
 }
 
 - (void)stop {
+  [self.viewController dismissViewControllerAnimated:YES completion:nil];
   self.viewController = nil;
 
   self.mediator = nil;
@@ -154,8 +156,10 @@
                                       activityType:activityType
                                          completed:completed];
 
-    // Signal the presentation provider that our scenario is over.
-    [strongSelf.presentationProvider activityServiceDidEndPresenting];
+    if (completed) {
+      // Signal the presentation provider that our scenario is over.
+      [strongSelf.presentationProvider activityServiceDidEndPresenting];
+    }
   }];
 
   [self.baseViewController presentViewController:self.viewController

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -43,7 +42,8 @@ class StackMarker {
   const int max_depth_;
   int* const depth_;
 
-  DISALLOW_COPY_AND_ASSIGN(StackMarker);
+  StackMarker(const StackMarker&) = delete;
+  StackMarker& operator=(const StackMarker&) = delete;
 };
 
 constexpr uint32_t kUnicodeReplacementPoint = 0xFFFD;

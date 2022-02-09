@@ -5,9 +5,8 @@
 #ifndef IOS_NET_COOKIES_COOKIE_STORE_IOS_CLIENT_H_
 #define IOS_NET_COOKIES_COOKIE_STORE_IOS_CLIENT_H_
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 
 namespace net {
 

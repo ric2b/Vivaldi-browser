@@ -83,7 +83,7 @@ void QuotaInternalsHandler::ReportPerOriginInfo(
 void QuotaInternalsHandler::ReportStatistics(const Statistics& stats) {
   base::DictionaryValue dict;
   for (auto itr(stats.begin()); itr != stats.end(); ++itr) {
-    dict.SetString(itr->first, itr->second);
+    dict.SetStringKey(itr->first, itr->second);
   }
 
   FireWebUIListener("StatisticsUpdated", dict);
@@ -110,8 +110,7 @@ void QuotaInternalsHandler::OnTriggerStoragePressure(
     const base::ListValue* args) {
   AllowJavascript();
   CHECK_EQ(1U, args->GetList().size());
-  std::string origin_string;
-  CHECK(args->GetString(0, &origin_string));
+  const std::string& origin_string = args->GetList()[0].GetString();
   GURL url(origin_string);
 
   if (!proxy_.get())

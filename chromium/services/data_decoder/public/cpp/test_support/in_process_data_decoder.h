@@ -5,10 +5,9 @@
 #ifndef SERVICES_DATA_DECODER_PUBLIC_CPP_TEST_SUPPORT_IN_PROCESS_DATA_DECODER_H_
 #define SERVICES_DATA_DECODER_PUBLIC_CPP_TEST_SUPPORT_IN_PROCESS_DATA_DECODER_H_
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/data_decoder/data_decoder_service.h"
 #include "services/data_decoder/public/cpp/service_provider.h"

@@ -96,7 +96,7 @@ H264Encoder::H264Encoder(
     : Encoder(on_encoded_video_cb, bits_per_second, std::move(task_runner)),
       codec_profile_(codec_profile) {
   DCHECK(encoding_thread_);
-  DCHECK_EQ(codec_profile_.codec_id, VideoTrackRecorder::CodecId::H264);
+  DCHECK_EQ(codec_profile_.codec_id, VideoTrackRecorder::CodecId::kH264);
 }
 
 H264Encoder::~H264Encoder() {
@@ -214,7 +214,7 @@ bool H264Encoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size) {
     init_params.iRCMode = RC_OFF_MODE;
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(OS_CHROMEOS)
   init_params.iMultipleThreadIdc = 0;
 #else
   // Threading model: Set to 1 due to https://crbug.com/583348.

@@ -3,7 +3,6 @@
 #ifndef EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_MAC_H_
 #define EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_MAC_H_
 
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 

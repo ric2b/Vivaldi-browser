@@ -4,6 +4,7 @@
 
 #include <mfapi.h>
 
+#include <VersionHelpers.h>
 #include <mferror.h>
 #include <mftransform.h>
 #include <wmcodecdsp.h>
@@ -105,24 +106,13 @@ static ffwmf_DllGetClassObject_ptr ffwmf_get_class_object = NULL;
 
 HMODULE ffwmf_aac_dll = NULL;
 
+// Permanently load WMF library.
 static HMODULE ffwmf_load_audio_library(int internal) {
-  // Permanently load WMF library. The name of the library changed with
-  // Windows-8.
-  //
-  // TODO(igor@vivaldi.com): Link the library directly once support for
-  // Windows 7 is dropped.
   if (!ffwmf_aac_dll) {
-    DWORD windows_version = GetVersion();
-    DWORD major = (DWORD)(LOBYTE(LOWORD(windows_version)));
-    DWORD minor = (DWORD)(LOBYTE(LOWORD(windows_version)));
-    const wchar_t* dll_name;
-    if (major > 6 || minor >= 2) {
-      // Windows 8 and later
-      dll_name = L"msauddecmft.dll";
-    } else {
-      // Windows 7
-      dll_name = L"msmpeg2adec.dll";
-    }
+    // The name of the library changed with Windows-8.
+    const wchar_t* dll_name =
+        IsWindows8OrGreater() ? L"msauddecmft.dll" : L"msmpeg2adec.dll";
+
     // Query if the library was already loaded. This is useful in case the
     // application use a sandbox with a library preload when LoadLibrary() fails
     // but gettings its handle works.
@@ -172,6 +162,7 @@ static int ffwmf_create_transformer(AVCodecContext* avctx) {
   HMODULE library = ffwmf_load_audio_library(1);
   if (!library) {
     FFWMF_LOG_ERROR(avctx, "failed to load WMF audio DLL\n");
+    status = AVERROR_UNKNOWN;
     goto cleanup;
   }
 

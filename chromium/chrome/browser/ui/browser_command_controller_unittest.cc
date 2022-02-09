@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -300,7 +301,7 @@ class FullscreenTestBrowserWindow : public TestBrowserWindow,
  private:
   bool fullscreen_;
   bool toolbar_showing_;
-  BrowserCommandControllerFullscreenTest* test_browser_;
+  raw_ptr<BrowserCommandControllerFullscreenTest> test_browser_;
 };
 
 // Test that uses FullscreenTestBrowserWindow for its window.
@@ -520,6 +521,28 @@ TEST_F(BrowserCommandControllerTest, OnSigninAllowedPrefChange) {
   EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_SHOW_SIGNIN));
   profile()->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
   EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_SHOW_SIGNIN));
+}
+
+TEST_F(BrowserCommandControllerTest,
+       SavePageDisabledByDownloadRestrictionsPolicy) {
+  chrome::BrowserCommandController command_controller(browser());
+  const CommandUpdater* command_updater = &command_controller;
+
+  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
+  profile()->GetPrefs()->SetInteger(prefs::kDownloadRestrictions,
+                                    3 /*ALL_FILES*/);
+  EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
+}
+
+TEST_F(BrowserCommandControllerTest,
+       SavePageDisabledByAllowFileSelectionDialogsPolicy) {
+  chrome::BrowserCommandController command_controller(browser());
+  const CommandUpdater* command_updater = &command_controller;
+
+  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
+  g_browser_process->local_state()->SetBoolean(
+      prefs::kAllowFileSelectionDialogs, false);
+  EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
 }
 
 class IncognitoClearBrowsingDataCommandTest

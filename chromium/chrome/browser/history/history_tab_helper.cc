@@ -96,7 +96,8 @@ absl::optional<history::Opener> GetHistoryOpenerFromOpenerWebContents(
 }  // namespace
 
 HistoryTabHelper::HistoryTabHelper(WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
+    : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<HistoryTabHelper>(*web_contents) {}
 
 HistoryTabHelper::~HistoryTabHelper() = default;
 
@@ -135,9 +136,10 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
   // main frame URL.
   GURL referrer_url = navigation_handle->GetReferrer().url;
   if (navigation_handle->IsInMainFrame() && !referrer_url.is_empty() &&
-      referrer_url == referrer_url.GetOrigin() &&
-      referrer_url.GetOrigin() ==
-          navigation_handle->GetPreviousMainFrameURL().GetOrigin()) {
+      referrer_url == referrer_url.DeprecatedGetOriginAsURL() &&
+      referrer_url.DeprecatedGetOriginAsURL() ==
+          navigation_handle->GetPreviousMainFrameURL()
+              .DeprecatedGetOriginAsURL()) {
     referrer_url = navigation_handle->GetPreviousMainFrameURL();
   }
 
@@ -151,7 +153,11 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
       hidden, history::SOURCE_BROWSED, navigation_handle->DidReplaceEntry(),
       ShouldConsiderForNtpMostVisited(*web_contents(), navigation_handle),
       /*floc_allowed=*/false,
-      navigation_handle->IsSameDocument()
+      // Reloads do not result in calling TitleWasSet() (which normally sets
+      // the title), so a reload needs to set the title. This is important for
+      // a reload after clearing history.
+      navigation_handle->IsSameDocument() ||
+              navigation_handle->GetReloadType() != content::ReloadType::NONE
           ? absl::optional<std::u16string>(
                 navigation_handle->GetWebContents()->GetTitle())
           : absl::nullopt,
@@ -234,14 +240,14 @@ void HistoryTabHelper::DidFinishNavigation(
   if (navigation_handle->GetWebContents()->IsPortal())
     return;
 
-  // No-state prefetchers should not update history. The prefetchers will have
-  // their own WebContents with all observers (including |this|), and go through
-  // the normal flow of a navigation, including commit.
+  // No-state prefetch should not update history. The prefetch will have its own
+  // WebContents with all observers (including |this|), and go through the
+  // normal flow of a navigation, including commit.
   prerender::NoStatePrefetchManager* no_state_prefetch_manager =
       prerender::NoStatePrefetchManagerFactory::GetForBrowserContext(
           web_contents()->GetBrowserContext());
   if (no_state_prefetch_manager &&
-      no_state_prefetch_manager->IsWebContentsPrerendering(web_contents())) {
+      no_state_prefetch_manager->IsWebContentsPrefetching(web_contents())) {
     return;
   }
 
@@ -301,7 +307,7 @@ void HistoryTabHelper::DidActivatePortal(
 void HistoryTabHelper::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
-  if (render_frame_host->GetParent())
+  if (!render_frame_host->IsInPrimaryMainFrame())
     return;
 
   is_loading_ = false;

@@ -50,7 +50,7 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_util.h"
-#include "chromeos/network/onc/onc_utils.h"
+#include "chromeos/network/onc/network_onc_utils.h"
 #include "chromeos/network/tether_constants.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
@@ -195,7 +195,6 @@ class SystemTrayClientImpl::EnterpriseAccountObserver
 
 SystemTrayClientImpl::SystemTrayClientImpl()
     : system_tray_(ash::SystemTray::Get()),
-      update_notification_style_(ash::NotificationStyle::kDefault),
       enterprise_account_observer_(
           std::make_unique<EnterpriseAccountObserver>(this)) {
   // If this observes clock setting changes before ash comes up the IPCs will
@@ -229,6 +228,10 @@ SystemTrayClientImpl::~SystemTrayClientImpl() {
   DCHECK_EQ(this, g_system_tray_client_instance);
   g_system_tray_client_instance = nullptr;
 
+  // This can happen when mocking this class in tests.
+  if (!system_tray_)
+    return;
+
   system_tray_->SetClient(nullptr);
 
   policy::BrowserPolicyConnectorAsh* connector =
@@ -247,20 +250,14 @@ SystemTrayClientImpl* SystemTrayClientImpl::Get() {
   return g_system_tray_client_instance;
 }
 
-void SystemTrayClientImpl::SetUpdateNotificationState(
-    ash::NotificationStyle style,
-    const std::u16string& notification_title,
-    const std::u16string& notification_body) {
-  update_notification_style_ = style;
-  update_notification_title_ = notification_title;
-  update_notification_body_ = notification_body;
+void SystemTrayClientImpl::SetRelaunchNotificationState(
+    const ash::RelaunchNotificationState& relaunch_notification_state) {
+  relaunch_notification_state_ = relaunch_notification_state;
   HandleUpdateAvailable(ash::UpdateType::kSystem);
 }
 
 void SystemTrayClientImpl::ResetUpdateState() {
-  update_notification_style_ = ash::NotificationStyle::kDefault;
-  update_notification_title_.clear();
-  update_notification_body_.clear();
+  relaunch_notification_state_ = {};
   system_tray_->ResetUpdateState();
 }
 
@@ -325,13 +322,18 @@ void SystemTrayClientImpl::ShowDateSettings() {
 }
 
 void SystemTrayClientImpl::ShowSetTimeDialog() {
-  chromeos::SetTimeDialog::ShowDialog();
+  ash::SetTimeDialog::ShowDialog();
 }
 
 void SystemTrayClientImpl::ShowDisplaySettings() {
   base::RecordAction(base::UserMetricsAction("ShowDisplayOptions"));
   ShowSettingsSubPageForActiveUser(
       chromeos::settings::mojom::kDisplaySubpagePath);
+}
+
+void SystemTrayClientImpl::ShowStorageSettings() {
+  ShowSettingsSubPageForActiveUser(
+      chromeos::settings::mojom::kStorageSubpagePath);
 }
 
 void SystemTrayClientImpl::ShowPowerSettings() {
@@ -578,6 +580,12 @@ void SystemTrayClientImpl::SetLocaleAndExit(
   chrome::AttemptUserExit();
 }
 
+SystemTrayClientImpl::SystemTrayClientImpl(SystemTrayClientImpl* mock_instance)
+    : system_tray_(nullptr) {
+  DCHECK(!g_system_tray_client_instance);
+  g_system_tray_client_instance = mock_instance;
+}
+
 void SystemTrayClientImpl::HandleUpdateAvailable(ash::UpdateType update_type) {
   UpgradeDetector* detector = UpgradeDetector::GetInstance();
   if (detector->upgrade_notification_stage() ==
@@ -598,11 +606,8 @@ void SystemTrayClientImpl::HandleUpdateAvailable(ash::UpdateType update_type) {
                                detector->is_rollback(), update_type);
 
   // Only overwrite title and body for system updates.
-  if (update_type == ash::UpdateType::kSystem) {
-    system_tray_->SetUpdateNotificationState(update_notification_style_,
-                                             update_notification_title_,
-                                             update_notification_body_);
-  }
+  if (update_type == ash::UpdateType::kSystem)
+    system_tray_->SetRelaunchNotificationState(relaunch_notification_state_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -10,10 +10,12 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "extensions/browser/api/idle/idle_api_constants.h"
 #include "extensions/browser/api/idle/idle_manager.h"
 #include "extensions/browser/api/idle/idle_manager_factory.h"
+#include "extensions/browser/api/idle/test_idle_provider.h"
 #include "extensions/browser/api_unittest.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
@@ -40,61 +42,13 @@ class MockEventDelegate : public IdleManager::EventDelegate {
   void UnregisterObserver(EventRouter::Observer* observer) override {}
 };
 
-class TestIdleProvider : public IdleManager::IdleTimeProvider {
- public:
-  TestIdleProvider();
-  ~TestIdleProvider() override;
-  ui::IdleState CalculateIdleState(int idle_threshold) override;
-  int CalculateIdleTime() override;
-  bool CheckIdleStateIsLocked() override;
-
-  void set_idle_time(int idle_time);
-  void set_locked(bool locked);
-
- private:
-  int idle_time_;
-  bool locked_;
-};
-
-TestIdleProvider::TestIdleProvider() : idle_time_(0), locked_(false) {
-}
-
-TestIdleProvider::~TestIdleProvider() {
-}
-
-ui::IdleState TestIdleProvider::CalculateIdleState(int idle_threshold) {
-  if (locked_) {
-    return ui::IDLE_STATE_LOCKED;
-  } else if (idle_time_ >= idle_threshold) {
-    return ui::IDLE_STATE_IDLE;
-  } else {
-    return ui::IDLE_STATE_ACTIVE;
-  }
-}
-
-int TestIdleProvider::CalculateIdleTime() {
-  return idle_time_;
-}
-
-bool TestIdleProvider::CheckIdleStateIsLocked() {
-  return locked_;
-}
-
-void TestIdleProvider::set_idle_time(int idle_time) {
-  idle_time_ = idle_time;
-}
-
-void TestIdleProvider::set_locked(bool locked) {
-  locked_ = locked;
-}
-
 class ScopedListen {
  public:
   ScopedListen(IdleManager* idle_manager, const std::string& extension_id);
   ~ScopedListen();
 
  private:
-  IdleManager* idle_manager_;
+  raw_ptr<IdleManager> idle_manager_;
   const std::string extension_id_;
 };
 
@@ -124,9 +78,9 @@ class IdleTest : public ApiUnitTest {
   void SetUp() override;
 
  protected:
-  IdleManager* idle_manager_;
-  TestIdleProvider* idle_provider_;
-  testing::StrictMock<MockEventDelegate>* event_delegate_;
+  raw_ptr<IdleManager> idle_manager_;
+  raw_ptr<TestIdleProvider> idle_provider_;
+  raw_ptr<testing::StrictMock<MockEventDelegate>> event_delegate_;
 };
 
 void IdleTest::SetUp() {

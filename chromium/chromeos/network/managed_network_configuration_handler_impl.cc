@@ -16,13 +16,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/dbus/shill/shill_profile_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
 #include "chromeos/network/device_state.h"
+#include "chromeos/network/metrics/esim_policy_login_metrics_logger.h"
 #include "chromeos/network/network_configuration_handler.h"
 #include "chromeos/network/network_device_handler.h"
 #include "chromeos/network/network_event_log.h"
@@ -33,10 +34,10 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_ui_data.h"
 #include "chromeos/network/network_util.h"
+#include "chromeos/network/onc/network_onc_utils.h"
 #include "chromeos/network/onc/onc_merger.h"
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_translator.h"
-#include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/onc/onc_validator.h"
 #include "chromeos/network/policy_util.h"
 #include "chromeos/network/prohibited_technologies_handler.h"
@@ -684,7 +685,6 @@ void ManagedNetworkConfigurationHandlerImpl::OnPoliciesApplied(
     const NetworkProfile& profile) {
   const std::string& userhash = profile.userhash;
   VLOG(1) << "Policy application for user '" << userhash << "' finished.";
-
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
       FROM_HERE, policy_applicators_[userhash].release());
   policy_applicators_.erase(userhash);
@@ -702,7 +702,9 @@ void ManagedNetworkConfigurationHandlerImpl::OnPoliciesApplied(
       user_policy_applied_ = true;
 
     if (features::IsESimPolicyEnabled()) {
-      // Call UpdateBlockedCellularNetworks when either device policy applied or
+      ESimPolicyLoginMetricsLogger::RecordBlockNonManagedCellularBehavior(
+          AllowOnlyPolicyCellularNetworks());
+      // Call UpdateBlockCellularNetworks when either device policy applied or
       // user policy applied so that so that unmanaged cellular networks are
       // blocked correctly if the policy appears in either.
       network_state_handler_->UpdateBlockedCellularNetworks(

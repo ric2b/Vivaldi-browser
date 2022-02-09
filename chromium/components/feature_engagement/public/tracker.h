@@ -12,10 +12,9 @@
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/sequenced_task_runner.h"
 #include "base/supports_user_data.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -65,6 +64,9 @@ class Tracker : public KeyedService, public base::SupportsUserData {
   };
 
   // Represents the action taken by the user on the snooze UI.
+  // These enums are persisted as histogram entries, so this enum should be
+  // treated as append-only and kept in sync with InProductHelpSnoozeAction in
+  // enums.xml.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.feature_engagement
   enum class SnoozeAction : int {
     // User chose to snooze the IPH.

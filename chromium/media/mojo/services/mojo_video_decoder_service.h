@@ -8,7 +8,7 @@
 #include <map>
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
@@ -90,9 +90,6 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
       bool restart_for_transitions,
       ProvideOverlayInfoCB provide_overlay_info_cb);
 
-  void OnSupportedVideoDecoderConfigs(GetSupportedConfigsCallback callback,
-                                      SupportedVideoDecoderConfigs configs);
-
   // Whether this instance is active (Decode() was called at least once).
   bool is_active_instance_ = false;
 
@@ -100,10 +97,10 @@ class MEDIA_MOJO_EXPORT MojoVideoDecoderService final
   std::string codec_string_;
 
   // Decoder factory.
-  MojoMediaClient* mojo_media_client_;
+  raw_ptr<MojoMediaClient> mojo_media_client_;
 
   // A helper object required to get the CDM from a CDM ID.
-  MojoCdmServiceContext* const mojo_cdm_service_context_ = nullptr;
+  const raw_ptr<MojoCdmServiceContext> mojo_cdm_service_context_ = nullptr;
 
   // Channel for sending async messages to the client.
   mojo::AssociatedRemote<mojom::VideoDecoderClient> client_;

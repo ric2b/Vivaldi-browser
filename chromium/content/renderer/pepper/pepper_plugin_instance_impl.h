@@ -16,8 +16,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
@@ -138,6 +136,9 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // return the instance even if it is in the process of being deleted.
   // Currently only used in tests.
   static PepperPluginInstanceImpl* GetForTesting(PP_Instance instance_id);
+
+  PepperPluginInstanceImpl(const PepperPluginInstanceImpl&) = delete;
+  PepperPluginInstanceImpl& operator=(const PepperPluginInstanceImpl&) = delete;
 
   // Returns the associated RenderFrameImpl. Can be null (in tests) or if the
   // frame has been destroyed.
@@ -871,8 +872,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   base::WeakPtrFactory<PepperPluginInstanceImpl> view_change_weak_ptr_factory_{
       this};
   base::WeakPtrFactory<PepperPluginInstanceImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(PepperPluginInstanceImpl);
 };
 
 }  // namespace content

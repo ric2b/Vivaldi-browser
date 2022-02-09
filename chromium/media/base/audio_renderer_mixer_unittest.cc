@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/task_environment.h"
 #include "base/threading/platform_thread.h"
@@ -85,6 +86,9 @@ class AudioRendererMixerTest
     expected_callback_ = std::make_unique<FakeAudioRenderCallback>(
         step, output_parameters_.sample_rate());
   }
+
+  AudioRendererMixerTest(const AudioRendererMixerTest&) = delete;
+  AudioRendererMixerTest& operator=(const AudioRendererMixerTest&) = delete;
 
   AudioRendererMixer* GetMixer(const base::UnguessableToken& owner_token,
                                const AudioParameters& params,
@@ -349,7 +353,7 @@ class AudioRendererMixerTest
   base::test::TaskEnvironment task_env_;
   scoped_refptr<MockAudioRendererSink> sink_;
   std::unique_ptr<AudioRendererMixer> mixer_;
-  AudioRendererSink::RenderCallback* mixer_callback_;
+  raw_ptr<AudioRendererSink::RenderCallback> mixer_callback_;
   std::vector<AudioParameters> input_parameters_;
   AudioParameters output_parameters_;
   std::unique_ptr<AudioBus> audio_bus_;
@@ -359,9 +363,6 @@ class AudioRendererMixerTest
   std::unique_ptr<FakeAudioRenderCallback> expected_callback_;
   double epsilon_;
   bool half_fill_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AudioRendererMixerTest);
 };
 
 class AudioRendererMixerBehavioralTest : public AudioRendererMixerTest {};

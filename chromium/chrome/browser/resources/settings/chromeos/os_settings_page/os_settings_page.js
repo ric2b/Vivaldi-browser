@@ -18,7 +18,7 @@ import '../os_people_page/os_people_page.m.js';
 import '../os_privacy_page/os_privacy_page.js';
 import '../os_printing_page/os_printing_page.js';
 import '../os_search_page/os_search_page.js';
-import '../personalization_page/personalization_page.m.js';
+import '../personalization_page/personalization_page.js';
 import '../../settings_page/settings_section.js';
 import '../../settings_page_css.js';
 import '../bluetooth_page/bluetooth_page.js';
@@ -27,16 +27,18 @@ import '../internet_page/internet_page.js';
 import '../kerberos_page/kerberos_page.js';
 import '../multidevice_page/multidevice_page.m.js';
 import '../os_bluetooth_page/os_bluetooth_page.js';
+import '../os_icons.m.js';
 
 import {assert} from '//resources/js/assert.m.js';
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior} from '//resources/js/web_ui_listener_behavior.m.js';
 import {beforeNextRender, html, Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {AndroidAppsBrowserProxyImpl, AndroidAppsInfo} from '../os_apps_page/android_apps_browser_proxy.js';
 import {OSPageVisibility, osPageVisibility} from '../os_page_visibility.m.js';
 import {routes} from '../os_route.m.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 import {MainPageBehavior} from './main_page_behavior.js';
 
@@ -58,6 +60,8 @@ Polymer({
     },
 
     showAndroidApps: Boolean,
+
+    showArcvmManageUsb: Boolean,
 
     showCrostini: Boolean,
 
@@ -135,18 +139,6 @@ Polymer({
 
     /** @private {!Route|undefined} */
     currentRoute_: Object,
-
-    /**
-     * True if redesign of account management flows is enabled.
-     * @private
-     */
-    isAccountManagementFlowsV2Enabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('isAccountManagementFlowsV2Enabled');
-      },
-      readOnly: true,
-    },
 
     /** @private */
     isBluetoothRevampEnabled_: {

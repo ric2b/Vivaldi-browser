@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_EXTENDED_RTTI
 
@@ -71,8 +68,8 @@ void wxObjectWriter::ClearObjectContext()
     m_data->m_nextId = 0;
 }
 
-void wxObjectWriter::WriteObject(const wxObject *object, const wxClassInfo *classInfo, 
-                           wxObjectWriterCallback *writercallback, const wxString &name, 
+void wxObjectWriter::WriteObject(const wxObject *object, const wxClassInfo *classInfo,
+                           wxObjectWriterCallback *writercallback, const wxString &name,
                            const wxStringToAnyHashMap &metadata )
 {
     DoBeginWriteTopLevelEntry( name );
@@ -80,8 +77,8 @@ void wxObjectWriter::WriteObject(const wxObject *object, const wxClassInfo *clas
     DoEndWriteTopLevelEntry( name );
 }
 
-void wxObjectWriter::WriteObject(const wxObject *object, const wxClassInfo *classInfo, 
-                           wxObjectWriterCallback *writercallback, bool isEmbedded, 
+void wxObjectWriter::WriteObject(const wxObject *object, const wxClassInfo *classInfo,
+                           wxObjectWriterCallback *writercallback, bool isEmbedded,
                            const wxStringToAnyHashMap &metadata )
 {
     if ( !classInfo->BeforeWriteObject( object, this, writercallback, metadata) )
@@ -115,43 +112,39 @@ void wxObjectWriter::WriteObject(const wxObject *object, const wxClassInfo *clas
 }
 
 void wxObjectWriter::FindConnectEntry(const wxEvtHandler * evSource,
-                                const wxEventSourceTypeInfo* dti, 
-                                const wxObject* &sink, 
+                                const wxEventSourceTypeInfo* dti,
+                                const wxObject* &sink,
                                 const wxHandlerInfo *&handler)
 {
-    wxList *dynamicEvents = evSource->GetDynamicEventTable();
-
-    if ( dynamicEvents )
+    size_t cookie;
+    for ( wxDynamicEventTableEntry* entry = evSource->GetFirstDynamicEntry(cookie);
+          entry;
+          entry = evSource->GetNextDynamicEntry(cookie) )
     {
-        for ( wxList::const_iterator node = dynamicEvents->begin(); node != dynamicEvents->end(); ++node )
+        // find the match
+        if ( entry->m_fn &&
+            (dti->GetEventType() == entry->m_eventType) &&
+            (entry->m_id == -1 ) &&
+            (entry->m_fn->GetEvtHandler() != NULL ) )
         {
-            wxDynamicEventTableEntry *entry = (wxDynamicEventTableEntry*)(*node);
-
-            // find the match
-            if ( entry->m_fn &&
-                (dti->GetEventType() == entry->m_eventType) &&
-                (entry->m_id == -1 ) &&
-                (entry->m_fn->GetEvtHandler() != NULL ) )
+            sink = entry->m_fn->GetEvtHandler();
+            const wxClassInfo* sinkClassInfo = sink->GetClassInfo();
+            const wxHandlerInfo* sinkHandler = sinkClassInfo->GetFirstHandler();
+            while ( sinkHandler )
             {
-                sink = entry->m_fn->GetEvtHandler();
-                const wxClassInfo* sinkClassInfo = sink->GetClassInfo();
-                const wxHandlerInfo* sinkHandler = sinkClassInfo->GetFirstHandler();
-                while ( sinkHandler )
+                if ( sinkHandler->GetEventFunction() == entry->m_fn->GetEvtMethod() )
                 {
-                    if ( sinkHandler->GetEventFunction() == entry->m_fn->GetEvtMethod() )
-                    {
-                        handler = sinkHandler;
-                        break;
-                    }
-                    sinkHandler = sinkHandler->GetNext();
+                    handler = sinkHandler;
+                    break;
                 }
-                break;
+                sinkHandler = sinkHandler->GetNext();
             }
+            break;
         }
     }
 }
-void wxObjectWriter::WriteAllProperties( const wxObject * obj, const wxClassInfo* ci, 
-                                   wxObjectWriterCallback *writercallback, 
+void wxObjectWriter::WriteAllProperties( const wxObject * obj, const wxClassInfo* ci,
+                                   wxObjectWriterCallback *writercallback,
                                    wxObjectWriterInternalPropertiesData * data )
 {
     wxPropertyInfoMap map;
@@ -199,13 +192,13 @@ public:
     wxObjectPropertyWriter(const wxClassTypeInfo* cti,
         wxObjectWriterCallback *writercallback,
         wxObjectWriter* writer,
-        wxStringToAnyHashMap &props) : 
+        wxStringToAnyHashMap &props) :
     m_cti(cti),m_persister(writercallback),m_writer(writer),m_props(props)
     {}
 
     virtual void operator()(const wxObject *vobj)
     {
-        m_writer->WriteObject( vobj, (vobj ? vobj->GetClassInfo() : m_cti->GetClassInfo() ), 
+        m_writer->WriteObject( vobj, (vobj ? vobj->GetClassInfo() : m_cti->GetClassInfo() ),
             m_persister, m_cti->GetKind()== wxT_OBJECT, m_props );
     }
 private:
@@ -215,8 +208,8 @@ private:
     wxStringToAnyHashMap& m_props;
 };
 
-void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* ci, 
-                                 const wxPropertyInfo* pi, wxObjectWriterCallback *writercallback, 
+void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* ci,
+                                 const wxPropertyInfo* pi, wxObjectWriterCallback *writercallback,
                                  wxObjectWriterInternalPropertiesData *WXUNUSED(data) )
 {
     if ( pi->GetFlags() & wxPROP_DONT_STREAM )
@@ -231,7 +224,7 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
     {
         wxAnyList data;
         pi->GetAccessor()->GetPropertyCollection(obj, data);
-        const wxTypeInfo * elementType = 
+        const wxTypeInfo * elementType =
             wx_dynamic_cast( const wxCollectionTypeInfo*, pi->GetTypeInfo() )->GetElementType();
         if ( !data.empty() )
         {
@@ -242,7 +235,7 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
                 const wxAny* valptr = *iter;
                 if ( writercallback->BeforeWriteProperty( this, obj, pi, *valptr ) )
                 {
-                    const wxClassTypeInfo* cti = 
+                    const wxClassTypeInfo* cti =
                         wx_dynamic_cast( const wxClassTypeInfo*, elementType );
                     if ( cti )
                     {
@@ -264,7 +257,7 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
     }
     else
     {
-        const wxEventSourceTypeInfo* dti = 
+        const wxEventSourceTypeInfo* dti =
             wx_dynamic_cast( const wxEventSourceTypeInfo* , pi->GetTypeInfo() );
         if ( dti )
         {
@@ -282,7 +275,7 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
                         DoBeginWriteProperty( pi );
                         if ( IsObjectKnown( sink ) )
                         {
-                            DoWriteDelegate( obj, ci, pi, sink, GetObjectID( sink ), 
+                            DoWriteDelegate( obj, ci, pi, sink, GetObjectID( sink ),
                                              sink->GetClassInfo(), handler );
                             DoEndWriteProperty( pi );
                         }
@@ -311,11 +304,11 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
 
             if ( pi->GetFlags() & wxPROP_ENUM_STORE_LONG )
             {
-                const wxEnumTypeInfo *eti = 
+                const wxEnumTypeInfo *eti =
                     wx_dynamic_cast(const wxEnumTypeInfo*,  pi->GetTypeInfo() );
                 if ( eti )
                 {
-                    eti->ConvertFromLong( wxANY_AS(value, long ), value );
+                    eti->ConvertFromLong( value.As<long >(), value );
                 }
                 else
                 {
@@ -324,7 +317,7 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
             }
 
             // avoid streaming out default values
-            if ( pi->GetTypeInfo()->HasStringConverters() && 
+            if ( pi->GetTypeInfo()->HasStringConverters() &&
                  !pi->GetDefaultValue().IsNull() ) // TODO Verify
             {
                 if ( wxAnyGetAsString(value) == wxAnyGetAsString(pi->GetDefaultValue()) )
@@ -332,7 +325,7 @@ void wxObjectWriter::WriteOneProperty( const wxObject *obj, const wxClassInfo* c
             }
 
             // avoid streaming out null objects
-            const wxClassTypeInfo* cti = 
+            const wxClassTypeInfo* cti =
                 wx_dynamic_cast( const wxClassTypeInfo* , pi->GetTypeInfo() );
 
             if ( cti && cti->GetKind() == wxT_OBJECT_PTR && wxAnyGetAsObjectPtr(value) == NULL )
@@ -587,7 +580,7 @@ void wxObjectRuntimeReaderCallback::SetPropertyAsObject(int objectID,
     wxObject *o, *valo;
     o = m_data->GetObject(objectID);
     valo = m_data->GetObject(valueObjectId);
-    const wxClassInfo* valClassInfo = 
+    const wxClassInfo* valClassInfo =
         (wx_dynamic_cast(const wxClassTypeInfo*,propertyInfo->GetTypeInfo()))->GetClassInfo();
 
     // if this is a dynamic object and we are asked for another class
@@ -609,14 +602,14 @@ void wxObjectRuntimeReaderCallback::SetConnect(int eventSourceObjectID,
                                       const wxHandlerInfo* handlerInfo,
                                       int eventSinkObjectID )
 {
-    wxEvtHandler *ehsource = 
+    wxEvtHandler *ehsource =
         wx_dynamic_cast( wxEvtHandler* , m_data->GetObject( eventSourceObjectID ) );
-    wxEvtHandler *ehsink = 
+    wxEvtHandler *ehsink =
         wx_dynamic_cast( wxEvtHandler *,m_data->GetObject(eventSinkObjectID) );
 
     if ( ehsource && ehsink )
     {
-        const wxEventSourceTypeInfo *delegateTypeInfo = 
+        const wxEventSourceTypeInfo *delegateTypeInfo =
             wx_dynamic_cast(const wxEventSourceTypeInfo*,delegateInfo->GetTypeInfo());
         if( delegateTypeInfo && delegateTypeInfo->GetLastEventType() == -1 )
         {
@@ -626,7 +619,7 @@ void wxObjectRuntimeReaderCallback::SetConnect(int eventSourceObjectID,
         }
         else
         {
-            for ( wxEventType iter = delegateTypeInfo->GetEventType(); 
+            for ( wxEventType iter = delegateTypeInfo->GetEventType();
                   iter <= delegateTypeInfo->GetLastEventType(); ++iter )
             {
                 ehsource->Connect( -1, iter,
@@ -660,9 +653,9 @@ void wxObjectRuntimeReaderCallback::AddToPropertyCollectionAsObject(int objectID
     wxObject *o, *valo;
     o = m_data->GetObject(objectID);
     valo = m_data->GetObject(valueObjectId);
-    const wxCollectionTypeInfo * collectionTypeInfo = 
+    const wxCollectionTypeInfo * collectionTypeInfo =
         wx_dynamic_cast( const wxCollectionTypeInfo *, propertyInfo->GetTypeInfo() );
-    const wxClassInfo* valClassInfo = 
+    const wxClassInfo* valClassInfo =
         (wx_dynamic_cast(const wxClassTypeInfo*,collectionTypeInfo->GetElementType()))->GetClassInfo();
 
     // if this is a dynamic object and we are asked for another class

@@ -2,16 +2,12 @@
 // Name:        tests/misc/safearrayconverttest.cpp
 // Purpose:     Test conversions between wxVariant and OLE VARIANT using SAFEARRAYs
 // Author:      PB
-// RCS-ID:      $Id: typeinfotest.cpp 67656 2011-04-30 10:57:04Z DS $
 // Copyright:   (c) the wxWidgets team
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifdef __WINDOWS__
 
@@ -50,7 +46,7 @@ private:
     void VariantListReturnSafeArray();
     void StringsReturnSafeArray();
 
-    DECLARE_NO_COPY_CLASS(SafeArrayConvertTestCase )
+    wxDECLARE_NO_COPY_CLASS(SafeArrayConvertTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -127,7 +123,7 @@ void SafeArrayConvertTestCase::VariantListReturnSafeArray()
     wxVariantDataSafeArray*
         vsa = wxStaticCastVariantData(variantCopy.GetData(),
                                       wxVariantDataSafeArray);
-    long bound;
+    long bound wxDUMMY_INITIALIZE(0);
 
     CPPUNIT_ASSERT( vsa );
     CPPUNIT_ASSERT( safeArray.Attach(vsa->GetValue()) );
@@ -178,7 +174,7 @@ void SafeArrayConvertTestCase::StringsReturnSafeArray()
     wxVariantDataSafeArray*
         vsa = wxStaticCastVariantData(variant.GetData(),
                                       wxVariantDataSafeArray);
-    long bound;
+    long bound wxDUMMY_INITIALIZE(0);
 
     CPPUNIT_ASSERT( vsa );
     CPPUNIT_ASSERT( safeArray.Attach(vsa->GetValue()) );

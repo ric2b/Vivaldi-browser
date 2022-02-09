@@ -15,6 +15,7 @@ android_library("java") {
 
   deps = [
     ":java_resources",
+    ":logging_java",
     "$google_play_services_package:google_play_services_base_java",
     "$google_play_services_package:google_play_services_fido_java",
     "$google_play_services_package:google_play_services_tasks_java",
@@ -32,6 +33,10 @@ android_library("java") {
   resources_package = "org.chromium.chrome.browser.webauth.authenticator"
 }
 
+android_library("logging_java") {
+  sources = [ "java/src/org/chromium/chrome/browser/webauth/authenticator/CableEventLogger.java" ]
+}
+
 generate_jni("jni_headers") {
   sources = [
     "java/src/org/chromium/chrome/browser/webauth/authenticator/BLEAdvert.java",
@@ -44,7 +49,9 @@ generate_jni("jni_headers") {
 android_resources("java_resources") {
   sources = [
     "java/res/drawable-night/ble.xml",
+    "java/res/drawable-night/cable_qr_code.xml",
     "java/res/drawable/ble.xml",
+    "java/res/drawable/cable_qr_code.xml",
     "java/res/drawable/usb_conn_disconnect.xml",
     "java/res/layout-sw600dp/cablev2_ble_enable.xml",
     "java/res/layout/cablev2_ble_enable.xml",

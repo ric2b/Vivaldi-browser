@@ -154,9 +154,7 @@ class BundleData {
     return bundle_deps_filter_;
   }
 
-  SubstitutionList& xcasset_compiler_flags() {
-    return xcasset_compiler_flags_;
-  }
+  SubstitutionList& xcasset_compiler_flags() { return xcasset_compiler_flags_; }
   const SubstitutionList& xcasset_compiler_flags() const {
     return xcasset_compiler_flags_;
   }
@@ -208,7 +206,8 @@ class BundleData {
   SubstitutionList code_signing_args_;
   SubstitutionList xcasset_compiler_flags_;
 
-  DISALLOW_COPY_AND_ASSIGN(BundleData);
+  BundleData(const BundleData&) = delete;
+  BundleData& operator=(const BundleData&) = delete;
 };
 
 #endif  // TOOLS_GN_BUNDLE_DATA_H_

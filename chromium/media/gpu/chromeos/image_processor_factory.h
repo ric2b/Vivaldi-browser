@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/chromeos/image_processor.h"
 #include "media/gpu/media_gpu_export.h"
@@ -70,7 +69,7 @@ class MEDIA_GPU_EXPORT ImageProcessorFactory {
   // the factory can instantiate a suitable ImageProcessor. Returns nullptr if
   // an ImageProcessor can't be created.
   static std::unique_ptr<ImageProcessor> CreateWithInputCandidates(
-      const std::vector<std::pair<Fourcc, gfx::Size>>& input_candidates,
+      const std::vector<ImageProcessor::PixelLayoutCandidate>& input_candidates,
       const gfx::Rect& input_visible_rect,
       const gfx::Size& output_size,
       size_t num_buffers,
@@ -78,7 +77,9 @@ class MEDIA_GPU_EXPORT ImageProcessorFactory {
       PickFormatCB out_format_picker,
       ImageProcessor::ErrorCB error_cb);
 
-  DISALLOW_IMPLICIT_CONSTRUCTORS(ImageProcessorFactory);
+  ImageProcessorFactory() = delete;
+  ImageProcessorFactory(const ImageProcessorFactory&) = delete;
+  ImageProcessorFactory& operator=(const ImageProcessorFactory&) = delete;
 };
 
 }  // namespace media

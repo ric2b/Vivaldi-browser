@@ -13,6 +13,8 @@
 #include "components/theme/vivaldi_theme_download.h"
 #include "extensions/schema/theme_private.h"
 
+class Profile;
+
 namespace extensions {
 
 class ThemePrivateAPI : public BrowserContextKeyedAPI {

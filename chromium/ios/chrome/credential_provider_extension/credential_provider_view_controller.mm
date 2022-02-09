@@ -24,6 +24,7 @@
 #import "ios/chrome/credential_provider_extension/password_util.h"
 #import "ios/chrome/credential_provider_extension/reauthentication_handler.h"
 #import "ios/chrome/credential_provider_extension/ui/consent_coordinator.h"
+#import "ios/chrome/credential_provider_extension/ui/consent_legacy_coordinator.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_coordinator.h"
 #import "ios/chrome/credential_provider_extension/ui/feature_flags.h"
 #import "ios/chrome/credential_provider_extension/ui/stale_credentials_view_controller.h"
@@ -31,6 +32,14 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+UIColor* BackgroundColor() {
+  return IsPasswordCreationEnabled()
+             ? [UIColor colorNamed:kGroupedPrimaryBackgroundColor]
+             : [UIColor colorNamed:kBackgroundColor];
+}
+}
 
 @interface CredentialProviderViewController () <ConfirmationAlertActionHandler,
                                                 SuccessfulReauthTimeAccessor>
@@ -41,8 +50,14 @@
 // List coordinator that shows the list of passwords when started.
 @property(nonatomic, strong) CredentialListCoordinator* listCoordinator;
 
+// Legacy consent coordinator that shows a view requesting device auth in order
+// to enable the extension. Will be used when
+// IsCredentialProviderExtensionPromoEnabled() == NO.
+@property(nonatomic, strong) ConsentLegacyCoordinator* consentLegacyCoordinator;
+
 // Consent coordinator that shows a view requesting device auth in order to
-// enable the extension.
+// enable the extension. Will be used when
+// IsCredentialProviderExtensionPromoEnabled() == YES.
 @property(nonatomic, strong) ConsentCoordinator* consentCoordinator;
 
 // Date kept for ReauthenticationModule.
@@ -61,15 +76,51 @@
 // Loading indicator used for user validation, which APIs can take a long time.
 @property(nonatomic, strong) UIActivityIndicatorView* activityIndicatorView;
 
+// Identfiers cached in |-prepareCredentialListForServiceIdentifiers:| to show
+// the next time this view appears.
+@property(nonatomic, strong)
+    NSArray<ASCredentialServiceIdentifier*>* serviceIdentifiers;
+
 @end
 
 @implementation CredentialProviderViewController
 
 + (void)initialize {
   if (self == [CredentialProviderViewController self]) {
-    if (crash_helper::common::CanCrashpadStart()) {
+    if (crash_helper::common::CanUseCrashpad()) {
       crash_helper::common::StartCrashpad();
     }
+  }
+}
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.view.backgroundColor = BackgroundColor();
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+  [super viewWillAppear:animated];
+  // If identifiers were stored in
+  // |-prepareCredentialListForServiceIdentifiers:|, handle that now.
+  if (self.serviceIdentifiers) {
+    NSArray<ASCredentialServiceIdentifier*>* serviceIdentifiers =
+        self.serviceIdentifiers;
+    self.serviceIdentifiers = nil;
+    __weak __typeof__(self) weakSelf = self;
+    [self validateUserWithCompletion:^(BOOL userIsValid) {
+      if (!userIsValid) {
+        [weakSelf showStaleCredentials];
+        return;
+      }
+      [weakSelf reauthenticateIfNeededWithCompletionHandler:^(
+                    ReauthenticationResult result) {
+        if (result != ReauthenticationResult::kFailure) {
+          [weakSelf showCredentialListForServiceIdentifiers:serviceIdentifiers];
+        } else {
+          [weakSelf exitWithErrorCode:ASExtensionErrorCodeFailed];
+        }
+      }];
+    }];
   }
 }
 
@@ -77,21 +128,11 @@
 
 - (void)prepareCredentialListForServiceIdentifiers:
     (NSArray<ASCredentialServiceIdentifier*>*)serviceIdentifiers {
-  __weak __typeof__(self) weakSelf = self;
-  [self validateUserWithCompletion:^(BOOL userIsValid) {
-    if (!userIsValid) {
-      [weakSelf showStaleCredentials];
-      return;
-    }
-    [weakSelf reauthenticateIfNeededWithCompletionHandler:^(
-                  ReauthenticationResult result) {
-      if (result != ReauthenticationResult::kFailure) {
-        [weakSelf showCredentialListForServiceIdentifiers:serviceIdentifiers];
-      } else {
-        [weakSelf exitWithErrorCode:ASExtensionErrorCodeFailed];
-      }
-    }];
-  }];
+  // Sometimes, this method is called while the authentication framework thinks
+  // the app is not foregrounded, so authentication fails. Instead of directly
+  // authenticating and showing the credentials, store the list of
+  // identifiers and authenticate once the extension is visible.
+  self.serviceIdentifiers = serviceIdentifiers;
 }
 
 - (void)provideCredentialWithoutUserInteractionForIdentity:
@@ -135,12 +176,19 @@
   NSUserDefaults* user_defaults = [NSUserDefaults standardUserDefaults];
   [user_defaults
       removeObjectForKey:kUserDefaultsCredentialProviderConsentVerified];
-  self.consentCoordinator = [[ConsentCoordinator alloc]
-         initWithBaseViewController:self
-                            context:self.extensionContext
-            reauthenticationHandler:self.reauthenticationHandler
-      isInitialConfigurationRequest:YES];
-  [self.consentCoordinator start];
+  if (IsCredentialProviderExtensionPromoEnabled()) {
+    self.consentCoordinator = [[ConsentCoordinator alloc]
+        initWithBaseViewController:self
+                           context:self.extensionContext];
+    [self.consentCoordinator start];
+  } else {
+    self.consentLegacyCoordinator = [[ConsentLegacyCoordinator alloc]
+           initWithBaseViewController:self
+                              context:self.extensionContext
+              reauthenticationHandler:self.reauthenticationHandler
+        isInitialConfigurationRequest:YES];
+    [self.consentLegacyCoordinator start];
+  }
 }
 
 #pragma mark - Properties

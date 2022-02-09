@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "gn/item.h"
 
 // Represents a named pool in the dependency graph.
@@ -35,7 +34,8 @@ class Pool : public Item {
 
   int64_t depth_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(Pool);
+  Pool(const Pool&) = delete;
+  Pool& operator=(const Pool&) = delete;
 };
 
 #endif  // TOOLS_GN_POOL_H_

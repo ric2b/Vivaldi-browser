@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread.h"
@@ -96,6 +95,10 @@ class MIDI_EXPORT MidiManagerAlsa final : public MidiManager {
              const std::string& manufacturer,
              const std::string& version,
              Type type);
+
+    MidiPort(const MidiPort&) = delete;
+    MidiPort& operator=(const MidiPort&) = delete;
+
     ~MidiPort();
 
     // Gets a Value representation of this object, suitable for serialization.
@@ -177,8 +180,6 @@ class MIDI_EXPORT MidiManagerAlsa final : public MidiManager {
 
     // Port is present in the ALSA system.
     bool connected_ = true;
-
-    DISALLOW_COPY_AND_ASSIGN(MidiPort);
   };
 
   class MidiPortStateBase {

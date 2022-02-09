@@ -4,92 +4,27 @@
 
 #include "chrome/browser/ash/crosapi/browser_util.h"
 
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-#include <utility>
-
 #include "ash/constants/ash_features.h"
-#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
-#include "base/cxx17_backports.h"
-#include "base/feature_list.h"
-#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
-#include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
+#include "base/values.h"
 #include "base/version.h"
-#include "chrome/browser/ash/crosapi/browser_version_service_ash.h"
-#include "chrome/browser/ash/crosapi/field_trial_service_ash.h"
-#include "chrome/browser/ash/crosapi/idle_service_ash.h"
-#include "chrome/browser/ash/crosapi/native_theme_service_ash.h"
-#include "chrome/browser/ash/crosapi/resource_manager_ash.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/ash/settings/cros_settings.h"
-#include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/policy/profile_policy_connector.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/pref_names.h"
-#include "chromeos/components/cdm_factory_daemon/mojom/browser_cdm_factory.mojom.h"
-#include "chromeos/components/sensors/mojom/cros_sensor_service.mojom.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
-#include "chromeos/crosapi/mojom/app_service.mojom.h"
-#include "chromeos/crosapi/mojom/app_window_tracker.mojom.h"
-#include "chromeos/crosapi/mojom/automation.mojom.h"
-#include "chromeos/crosapi/mojom/browser_app_instance_registry.mojom.h"
-#include "chromeos/crosapi/mojom/cert_database.mojom.h"
-#include "chromeos/crosapi/mojom/clipboard.mojom.h"
-#include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
-#include "chromeos/crosapi/mojom/content_protection.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/crosapi/mojom/device_attributes.mojom.h"
-#include "chromeos/crosapi/mojom/download_controller.mojom.h"
-#include "chromeos/crosapi/mojom/drive_integration_service.mojom.h"
-#include "chromeos/crosapi/mojom/feedback.mojom.h"
-#include "chromeos/crosapi/mojom/file_manager.mojom.h"
-#include "chromeos/crosapi/mojom/geolocation.mojom.h"
-#include "chromeos/crosapi/mojom/holding_space_service.mojom.h"
-#include "chromeos/crosapi/mojom/identity_manager.mojom.h"
-#include "chromeos/crosapi/mojom/image_writer.mojom.h"
-#include "chromeos/crosapi/mojom/keystore_service.mojom.h"
-#include "chromeos/crosapi/mojom/kiosk_session_service.mojom.h"
-#include "chromeos/crosapi/mojom/local_printer.mojom.h"
-#include "chromeos/crosapi/mojom/message_center.mojom.h"
-#include "chromeos/crosapi/mojom/metrics_reporting.mojom.h"
-#include "chromeos/crosapi/mojom/network_settings_service.mojom.h"
-#include "chromeos/crosapi/mojom/networking_attributes.mojom.h"
-#include "chromeos/crosapi/mojom/power.mojom.h"
-#include "chromeos/crosapi/mojom/prefs.mojom.h"
-#include "chromeos/crosapi/mojom/remoting.mojom.h"
-#include "chromeos/crosapi/mojom/screen_manager.mojom.h"
-#include "chromeos/crosapi/mojom/structured_metrics_service.mojom.h"
-#include "chromeos/crosapi/mojom/system_display.mojom.h"
-#include "chromeos/crosapi/mojom/task_manager.mojom.h"
-#include "chromeos/crosapi/mojom/test_controller.mojom.h"
-#include "chromeos/crosapi/mojom/url_handler.mojom.h"
-#include "chromeos/crosapi/mojom/video_capture.mojom.h"
-#include "chromeos/crosapi/mojom/web_page_info.mojom.h"
-#include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
-#include "components/account_manager_core/account.h"
-#include "components/account_manager_core/account_manager_util.h"
 #include "components/exo/shell_surface_util.h"
-#include "components/metrics/metrics_pref_names.h"
-#include "components/metrics/metrics_service.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -97,21 +32,10 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "components/user_manager/user_type.h"
 #include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "media/capture/mojom/video_capture.mojom.h"
-#include "media/media_buildflags.h"
-#include "media/mojo/mojom/stable/stable_video_decoder.mojom.h"
-#include "mojo/public/cpp/platform/platform_channel.h"
-#include "mojo/public/cpp/system/invitation.h"
-#include "services/device/public/mojom/hid.mojom.h"
-#include "services/media_session/public/mojom/audio_focus.mojom.h"
-#include "services/media_session/public/mojom/media_controller.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
-using MojoOptionalBool = crosapi::mojom::DeviceSettings::OptionalBool;
 using user_manager::User;
 using version_info::Channel;
 
@@ -120,6 +44,8 @@ namespace browser_util {
 namespace {
 
 bool g_lacros_enabled_for_test = false;
+
+bool g_profile_migration_completed_for_test = false;
 
 absl::optional<bool> g_lacros_primary_browser_for_test;
 
@@ -148,9 +74,9 @@ bool IsUserTypeAllowed(const User* user) {
   switch (user->GetType()) {
     case user_manager::USER_TYPE_REGULAR:
     case user_manager::USER_TYPE_WEB_KIOSK_APP:
+    case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
       return true;
     case user_manager::USER_TYPE_GUEST:
-    case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
     case user_manager::USER_TYPE_KIOSK_APP:
     case user_manager::USER_TYPE_CHILD:
     case user_manager::USER_TYPE_ARC_KIOSK_APP:
@@ -188,8 +114,8 @@ LacrosLaunchSwitch GetLaunchSwitch() {
 }
 
 // Gets called from IsLacrosAllowedToBeEnabled with primary user or from
-// IsLacrosEnabledWithUser with the user that the IsLacrosEnabledWithUser was
-// passed.
+// IsLacrosEnabledForMigration with the user that the
+// IsLacrosEnabledForMigration was passed.
 bool IsLacrosAllowedToBeEnabledWithUser(const User* user, Channel channel) {
   if (g_lacros_enabled_for_test)
     return true;
@@ -220,192 +146,6 @@ bool IsLacrosAllowedToBeEnabledWithUser(const User* user, Channel channel) {
     case Channel::STABLE:
       return base::FeatureList::IsEnabled(kLacrosAllowOnStableChannel);
   }
-}
-
-// Returns the vector containing policy data of the device account. In case of
-// an error, returns nullopt.
-absl::optional<std::vector<uint8_t>> GetDeviceAccountPolicy(
-    EnvironmentProvider* environment_provider) {
-  if (!user_manager::UserManager::IsInitialized()) {
-    LOG(ERROR) << "User not initialized.";
-    return absl::nullopt;
-  }
-  const auto* primary_user = user_manager::UserManager::Get()->GetPrimaryUser();
-  if (!primary_user) {
-    LOG(ERROR) << "No primary user.";
-    return absl::nullopt;
-  }
-  std::string policy_data = environment_provider->GetDeviceAccountPolicy();
-  return std::vector<uint8_t>(policy_data.begin(), policy_data.end());
-}
-
-// Returns the device specific data needed for Lacros.
-mojom::DevicePropertiesPtr GetDeviceProperties() {
-  mojom::DevicePropertiesPtr result = mojom::DeviceProperties::New();
-  result->device_dm_token = "";
-
-  if (ash::DeviceSettingsService::IsInitialized()) {
-    const enterprise_management::PolicyData* policy_data =
-        ash::DeviceSettingsService::Get()->policy_data();
-
-    if (policy_data && policy_data->has_request_token())
-      result->device_dm_token = policy_data->request_token();
-
-    if (policy_data && !policy_data->device_affiliation_ids().empty()) {
-      const auto& ids = policy_data->device_affiliation_ids();
-      result->device_affiliation_ids = {ids.begin(), ids.end()};
-    }
-  }
-
-  return result;
-}
-
-// Returns the device policy data needed for Lacros.
-mojom::DeviceSettingsPtr GetDeviceSettings() {
-  mojom::DeviceSettingsPtr result = mojom::DeviceSettings::New();
-
-  result->attestation_for_content_protection_enabled = MojoOptionalBool::kUnset;
-  if (ash::CrosSettings::IsInitialized()) {
-    // It's expected that the CrosSettings values are trusted. The only
-    // theoretical exception is when device ownership is taken on consumer
-    // device. Then there's no settings to be passed to Lacros anyway.
-    auto trusted_result =
-        ash::CrosSettings::Get()->PrepareTrustedValues(base::DoNothing());
-    if (trusted_result == ash::CrosSettingsProvider::TRUSTED) {
-      const auto* cros_settings = ash::CrosSettings::Get();
-      bool attestation_enabled = false;
-      if (cros_settings->GetBoolean(
-              ash::kAttestationForContentProtectionEnabled,
-              &attestation_enabled)) {
-        result->attestation_for_content_protection_enabled =
-            attestation_enabled ? MojoOptionalBool::kTrue
-                                : MojoOptionalBool::kFalse;
-      }
-
-      const base::ListValue* usb_detachable_allow_list;
-      if (cros_settings->GetList(ash::kUsbDetachableAllowlist,
-                                 &usb_detachable_allow_list)) {
-        mojom::UsbDetachableAllowlistPtr allow_list =
-            mojom::UsbDetachableAllowlist::New();
-        for (const auto& entry : usb_detachable_allow_list->GetList()) {
-          mojom::UsbDeviceIdPtr usb_device_id = mojom::UsbDeviceId::New();
-          absl::optional<int> vid =
-              entry.FindIntKey(ash::kUsbDetachableAllowlistKeyVid);
-          if (vid) {
-            usb_device_id->has_vendor_id = true;
-            usb_device_id->vendor_id = vid.value();
-          }
-          absl::optional<int> pid =
-              entry.FindIntKey(ash::kUsbDetachableAllowlistKeyPid);
-          if (pid) {
-            usb_device_id->has_product_id = true;
-            usb_device_id->product_id = pid.value();
-          }
-          allow_list->usb_device_ids.push_back(std::move(usb_device_id));
-        }
-        result->usb_detachable_allow_list = std::move(allow_list);
-      }
-    } else {
-      LOG(WARNING) << "Unexpected crossettings trusted values status: "
-                   << trusted_result;
-    }
-  }
-
-  result->device_system_wide_tracing_enabled = MojoOptionalBool::kUnset;
-  auto* local_state = g_browser_process->local_state();
-  if (local_state) {
-    auto* pref = local_state->FindPreference(
-        ash::prefs::kDeviceSystemWideTracingEnabled);
-    if (pref && pref->IsManaged()) {
-      result->device_system_wide_tracing_enabled =
-          pref->GetValue()->GetBool() ? MojoOptionalBool::kTrue
-                                      : MojoOptionalBool::kFalse;
-    }
-  }
-
-  return result;
-}
-
-struct InterfaceVersionEntry {
-  base::Token uuid;
-  uint32_t version;
-};
-
-template <typename T>
-constexpr InterfaceVersionEntry MakeInterfaceVersionEntry() {
-  return {T::Uuid_, T::Version_};
-}
-
-constexpr InterfaceVersionEntry kInterfaceVersionEntries[] = {
-    MakeInterfaceVersionEntry<chromeos::cdm::mojom::BrowserCdmFactory>(),
-    MakeInterfaceVersionEntry<chromeos::sensors::mojom::SensorHalClient>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Automation>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::AccountManager>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::AppPublisher>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::AppServiceProxy>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::AppWindowTracker>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::BrowserAppInstanceRegistry>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::BrowserServiceHost>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::BrowserVersionService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::CertDatabase>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Clipboard>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::ClipboardHistory>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::ContentProtection>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Crosapi>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::DeviceAttributes>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::DownloadController>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::DriveIntegrationService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Feedback>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::FieldTrialService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::FileManager>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::GeolocationService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::HoldingSpaceService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::IdentityManager>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::IdleService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::ImageWriter>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::KeystoreService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::KioskSessionService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::LocalPrinter>(),
-    MakeInterfaceVersionEntry<
-        chromeos::machine_learning::mojom::MachineLearningService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::MessageCenter>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::MetricsReporting>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::NativeThemeService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::NetworkingAttributes>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::NetworkSettingsService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Power>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Prefs>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::Remoting>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::ResourceManager>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::ScreenManager>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::StructuredMetricsService>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::SnapshotCapturer>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::SystemDisplay>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::TaskManager>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::TestController>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::UrlHandler>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::VideoCaptureDeviceFactory>(),
-    MakeInterfaceVersionEntry<crosapi::mojom::WebPageInfoFactory>(),
-    MakeInterfaceVersionEntry<device::mojom::HidConnection>(),
-    MakeInterfaceVersionEntry<device::mojom::HidManager>(),
-    MakeInterfaceVersionEntry<
-        media::stable::mojom::StableVideoDecoderFactory>(),
-    MakeInterfaceVersionEntry<media_session::mojom::MediaControllerManager>(),
-    MakeInterfaceVersionEntry<media_session::mojom::AudioFocusManager>(),
-    MakeInterfaceVersionEntry<media_session::mojom::AudioFocusManagerDebug>(),
-};
-
-constexpr bool HasDuplicatedUuid() {
-  // We assume the number of entries are small enough so that simple
-  // O(N^2) check works.
-  const size_t size = base::size(kInterfaceVersionEntries);
-  for (size_t i = 0; i < size; ++i) {
-    for (size_t j = i + 1; j < size; ++j) {
-      if (kInterfaceVersionEntries[i].uuid == kInterfaceVersionEntries[j].uuid)
-        return true;
-    }
-  }
-  return false;
 }
 
 // Called from `IsDataWipeRequired()` or `IsDataWipeRequiredForTesting()`.
@@ -439,25 +179,36 @@ bool IsDataWipeRequiredInternal(base::Version data_version,
   return true;
 }
 
-Channel GetChannelFromString(const std::string channel_str) {
-  if (channel_str == browser_util::kLacrosStabilityChannelCanary)
-    return Channel::CANARY;
-  if (channel_str == browser_util::kLacrosStabilityChannelDev)
-    return Channel::DEV;
-  if (channel_str == browser_util::kLacrosStabilityChannelBeta)
-    return Channel::BETA;
-  if (channel_str == browser_util::kLacrosStabilityChannelStable)
-    return Channel::STABLE;
+// Returns the string value for the kLacrosStabilitySwitch if present.
+absl::optional<std::string> GetLacrosStabilitySwitchValue() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return cmdline->HasSwitch(browser_util::kLacrosStabilitySwitch)
+             ? absl::optional<std::string>(cmdline->GetSwitchValueASCII(
+                   browser_util::kLacrosStabilitySwitch))
+             : absl::nullopt;
+}
 
-  NOTREACHED();
-  return Channel::UNKNOWN;
+// Resolves the Lacros stateful channel in the following order:
+//   1. From the kLacrosStabilitySwitch command line flag if present.
+//   2. From the current ash channel.
+Channel GetStatefulLacrosChannel() {
+  static const auto kStabilitySwitchToChannelMap =
+      base::MakeFixedFlatMap<base::StringPiece, Channel>({
+          {browser_util::kLacrosStabilityChannelCanary, Channel::CANARY},
+          {browser_util::kLacrosStabilityChannelDev, Channel::DEV},
+          {browser_util::kLacrosStabilityChannelBeta, Channel::BETA},
+          {browser_util::kLacrosStabilityChannelStable, Channel::STABLE},
+      });
+  auto stability_switch_value = GetLacrosStabilitySwitchValue();
+  return stability_switch_value && base::Contains(kStabilitySwitchToChannelMap,
+                                                  *stability_switch_value)
+             ? kStabilitySwitchToChannelMap.at(*stability_switch_value)
+             : chrome::GetChannel();
 }
 
 static_assert(
-    crosapi::mojom::Crosapi::Version_ == 52,
+    crosapi::mojom::Crosapi::Version_ == 60,
     "if you add a new crosapi, please add it to kInterfaceVersionEntries");
-static_assert(!HasDuplicatedUuid(),
-              "Each Crosapi Mojom interface should have unique UUID.");
 
 }  // namespace
 
@@ -472,14 +223,6 @@ const ComponentInfo kLacrosDogfoodBetaInfo = {
 const ComponentInfo kLacrosDogfoodStableInfo = {
     "lacros-dogfood-stable", "ehpjbaiafkpkmhjocnenjbbhmecnfcjb"};
 
-const auto lacros_stability_channel_to_component_info =
-    base::MakeFixedFlatMap<std::string, const ComponentInfo*>({
-        {kLacrosStabilityChannelCanary, &kLacrosDogfoodCanaryInfo},
-        {kLacrosStabilityChannelDev, &kLacrosDogfoodDevInfo},
-        {kLacrosStabilityChannelBeta, &kLacrosDogfoodBetaInfo},
-        {kLacrosStabilityChannelStable, &kLacrosDogfoodStableInfo},
-    });
-
 // When this feature is enabled, Lacros will be available on stable channel.
 const base::Feature kLacrosAllowOnStableChannel{
     "LacrosAllowOnStableChannel", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -492,6 +235,15 @@ const base::Feature kLacrosDisableChromeApps{"LacrosDisableChromeApps",
 // Googlers.
 const base::Feature kLacrosGooglePolicyRollout{
     "LacrosGooglePolicyRollout", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable this to turn on profile migration for non-googlers. Currently the
+// feature is only limited to googlers only.
+const base::Feature kLacrosProfileMigrationForAnyUser{
+    "LacrosProfileMigrationForAnyUser", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Emergency switch to turn off profile migration via Finch.
+const base::Feature kLacrosProfileMigrationForceOff{
+    "LacrosProfileMigrationForceOff", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const Channel kLacrosDefaultChannel = Channel::DEV;
 
@@ -509,6 +261,8 @@ const char kLaunchOnLoginPref[] = "lacros.launch_on_login";
 const char kClearUserDataDir1Pref[] = "lacros.clear_user_data_dir_1";
 const char kDataVerPref[] = "lacros.data_version";
 const char kRequiredDataVersion[] = "92.0.0.0";
+const char kProfileMigrationCompletedForUserPref[] =
+    "lacros.profile_migration_completed_for_user";
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kLaunchOnLoginPref, /*default_value=*/false);
@@ -518,6 +272,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kDataVerPref);
+  registry->RegisterDictionaryPref(kProfileMigrationCompletedForUserPref,
+                                   base::DictionaryValue());
 }
 
 base::FilePath GetUserDataDir() {
@@ -568,6 +324,21 @@ bool IsLacrosEnabled(Channel channel) {
   if (!IsLacrosAllowedToBeEnabled(channel))
     return false;
 
+  // If profile migration is enabled for the user, then make profile migration a
+  // requirement to enable lacros.
+  if (IsProfileMigrationEnabled(
+          user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId())) {
+    PrefService* local_state = g_browser_process->local_state();
+    // Note that local_state can be nullptr in tests.
+    if (local_state && !IsProfileMigrationCompletedForUser(
+                           local_state, user_manager::UserManager::Get()
+                                            ->GetPrimaryUser()
+                                            ->username_hash())) {
+      // If migration has not been completed, do not enable lacros.
+      return false;
+    }
+  }
+
   switch (GetLaunchSwitch()) {
     case LacrosLaunchSwitch::kUserChoice:
       break;
@@ -583,7 +354,26 @@ bool IsLacrosEnabled(Channel channel) {
   return base::FeatureList::IsEnabled(chromeos::features::kLacrosSupport);
 }
 
-bool IsLacrosEnabledWithUser(const User* user) {
+bool IsProfileMigrationEnabled(const AccountId& account_id) {
+  // Emergency switch to turn off profile migration. Turn this on via Finch in
+  // case profile migration needs to be turned off after launch.
+  if (base::FeatureList::IsEnabled(kLacrosProfileMigrationForceOff)) {
+    LOG(WARNING)
+        << "Profile migration is turned off by kLacrosProfileMigrationForceOff";
+    return false;
+  }
+
+  //  Currently we turn on profile migration only for Googlers.
+  //  `kLacrosProfileMigrationForAnyUser` can be enabled to allow testing with
+  //  non-googler accounts.
+  if (gaia::IsGoogleInternalAccountEmail(account_id.GetUserEmail()) ||
+      base::FeatureList::IsEnabled(kLacrosProfileMigrationForAnyUser))
+    return true;
+
+  return false;
+}
+
+bool IsLacrosEnabledForMigration(const User* user) {
   if (g_lacros_enabled_for_test)
     return true;
 
@@ -714,6 +504,12 @@ bool IsLacrosChromeAppsEnabled() {
   return true;
 }
 
+bool IsLacrosEnabledInWebKioskSession() {
+  return user_manager::UserManager::Get()->IsLoggedInAsWebKioskApp() &&
+         base::FeatureList::IsEnabled(features::kWebKioskEnableLacros) &&
+         IsLacrosEnabled();
+}
+
 bool IsLacrosWindow(const aura::Window* window) {
   const std::string* app_id = exo::GetShellApplicationId(window);
   if (!app_id)
@@ -754,170 +550,6 @@ bool DoesMetadataSupportNewAccountManager(base::Value* metadata) {
   // TODO(https://crbug.com/1197220): Come up with more appropriate major/minor
   // version numbers.
   return major_version >= 1000 && minor_version >= 0;
-}
-
-base::flat_map<base::Token, uint32_t> GetInterfaceVersions() {
-  base::flat_map<base::Token, uint32_t> versions;
-  for (const auto& entry : kInterfaceVersionEntries)
-    versions.emplace(entry.uuid, entry.version);
-  return versions;
-}
-
-mojom::BrowserInitParamsPtr GetBrowserInitParams(
-    EnvironmentProvider* environment_provider,
-    InitialBrowserAction initial_browser_action) {
-  auto params = mojom::BrowserInitParams::New();
-  params->crosapi_version = crosapi::mojom::Crosapi::Version_;
-  params->deprecated_ash_metrics_enabled_has_value = true;
-  PrefService* local_state = g_browser_process->local_state();
-  params->ash_metrics_enabled =
-      local_state->GetBoolean(metrics::prefs::kMetricsReportingEnabled);
-  params->ash_metrics_managed =
-      local_state->IsManagedPreference(metrics::prefs::kMetricsReportingEnabled)
-          ? mojom::MetricsReportingManaged::kManaged
-          : mojom::MetricsReportingManaged::kNotManaged;
-
-  params->session_type = environment_provider->GetSessionType();
-  params->device_mode = environment_provider->GetDeviceMode();
-  params->interface_versions = GetInterfaceVersions();
-  params->default_paths = environment_provider->GetDefaultPaths();
-  params->use_new_account_manager =
-      environment_provider->GetUseNewAccountManager();
-
-  params->device_account_gaia_id =
-      environment_provider->GetDeviceAccountGaiaId();
-  const absl::optional<account_manager::Account> maybe_device_account =
-      environment_provider->GetDeviceAccount();
-  if (maybe_device_account) {
-    params->device_account =
-        account_manager::ToMojoAccount(maybe_device_account.value());
-  }
-
-  // TODO(crbug.com/1093194): This should be updated to a new value when
-  // the long term fix is made in ash-chrome, atomically.
-  params->exo_ime_support =
-      crosapi::mojom::ExoImeSupport::kConsumedByImeWorkaround;
-  params->cros_user_id_hash = chromeos::ProfileHelper::GetUserIdHashFromProfile(
-      ProfileManager::GetPrimaryUserProfile());
-  params->device_account_policy = GetDeviceAccountPolicy(environment_provider);
-  params->idle_info = IdleServiceAsh::ReadIdleInfoFromSystem();
-  params->native_theme_info = NativeThemeServiceAsh::GetNativeThemeInfo();
-
-  params->is_incognito_deprecated =
-      initial_browser_action.action ==
-      crosapi::mojom::InitialBrowserAction::kOpenIncognitoWindow;
-  params->restore_last_session_deprecated =
-      initial_browser_action.action ==
-      crosapi::mojom::InitialBrowserAction::kRestoreLastSession;
-  params->initial_browser_action = initial_browser_action.action;
-  if (initial_browser_action.action ==
-      crosapi::mojom::InitialBrowserAction::kOpenWindowWithUrls) {
-    params->startup_urls = std::move(initial_browser_action.urls);
-  }
-
-  params->web_apps_enabled =
-      base::FeatureList::IsEnabled(features::kWebAppsCrosapi);
-  params->standalone_browser_is_primary = IsLacrosPrimaryBrowser();
-  params->device_properties = GetDeviceProperties();
-  params->device_settings = GetDeviceSettings();
-  // |metrics_service| could be nullptr in tests.
-  if (auto* metrics_service = g_browser_process->metrics_service()) {
-    // Send metrics service client id to Lacros if it's present.
-    std::string client_id = metrics_service->GetClientId();
-    if (!client_id.empty())
-      params->metrics_service_client_id = client_id;
-  }
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ash::switches::kOndeviceHandwritingSwitch)) {
-    const auto handwriting_switch =
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            ash::switches::kOndeviceHandwritingSwitch);
-
-    // TODO(https://crbug.com/1168978): Query mlservice instead of using
-    // hard-coded values.
-    if (handwriting_switch == "use_rootfs") {
-      params->ondevice_handwriting_support =
-          crosapi::mojom::OndeviceHandwritingSupport::kUseRootfs;
-    } else if (handwriting_switch == "use_dlc") {
-      params->ondevice_handwriting_support =
-          crosapi::mojom::OndeviceHandwritingSupport::kUseDlc;
-    } else {
-      params->ondevice_handwriting_support =
-          crosapi::mojom::OndeviceHandwritingSupport::kUnsupported;
-    }
-  }
-
-  // Add any BUILDFLAGs we use to pass our per-platform/ build configuration to
-  // lacros for runtime handling instead.
-  std::vector<crosapi::mojom::BuildFlag> build_flags;
-#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
-  build_flags.emplace_back(
-      crosapi::mojom::BuildFlag::kEnablePlatformEncryptedHevc);
-#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-  build_flags.emplace_back(crosapi::mojom::BuildFlag::kEnablePlatformHevc);
-#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
-#if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
-  build_flags.emplace_back(
-      crosapi::mojom::BuildFlag::kUseChromeosProtectedMedia);
-#endif  // BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
-#if BUILDFLAG(USE_CHROMEOS_PROTECTED_AV1)
-  build_flags.emplace_back(crosapi::mojom::BuildFlag::kUseChromeosProtectedAv1);
-#endif  // BUILDFLAG(USE_CHROMEOS_PROTECTED_AV1)
-  params->build_flags = std::move(build_flags);
-
-  params->standalone_browser_is_only_browser = !IsAshWebBrowserEnabled();
-  params->publish_chrome_apps = browser_util::IsLacrosChromeAppsEnabled();
-  return params;
-}
-
-InitialBrowserAction::InitialBrowserAction(
-    crosapi::mojom::InitialBrowserAction action)
-    : action(action) {
-  // kOpnWindowWIthUrls should take the argument, so the ctor below should be
-  // used.
-  DCHECK_NE(action, crosapi::mojom::InitialBrowserAction::kOpenWindowWithUrls);
-}
-
-InitialBrowserAction::InitialBrowserAction(
-    crosapi::mojom::InitialBrowserAction action,
-    std::vector<GURL> urls)
-    : action(action), urls(std::move(urls)) {
-  // Currently, only kOpenWindowWithUrls can take the URLs as its argument.
-  DCHECK_EQ(action, crosapi::mojom::InitialBrowserAction::kOpenWindowWithUrls);
-}
-
-InitialBrowserAction::InitialBrowserAction(InitialBrowserAction&&) = default;
-InitialBrowserAction& InitialBrowserAction::operator=(InitialBrowserAction&&) =
-    default;
-
-InitialBrowserAction::~InitialBrowserAction() = default;
-
-base::ScopedFD CreateStartupData(EnvironmentProvider* environment_provider,
-                                 InitialBrowserAction initial_browser_action) {
-  auto data = GetBrowserInitParams(environment_provider,
-                                   std::move(initial_browser_action));
-  std::vector<uint8_t> serialized =
-      crosapi::mojom::BrowserInitParams::Serialize(&data);
-
-  base::ScopedFD fd(memfd_create("startup_data", 0));
-  if (!fd.is_valid()) {
-    PLOG(ERROR) << "Failed to create a memory backed file";
-    return base::ScopedFD();
-  }
-
-  if (!base::WriteFileDescriptor(fd.get(), serialized)) {
-    LOG(ERROR) << "Failed to dump the serialized startup data";
-    return base::ScopedFD();
-  }
-
-  if (lseek(fd.get(), 0, SEEK_SET) < 0) {
-    PLOG(ERROR) << "Failed to reset the FD position";
-    return base::ScopedFD();
-  }
-
-  return fd;
 }
 
 base::Version GetDataVer(PrefService* local_state,
@@ -996,20 +628,6 @@ base::Version GetRootfsLacrosVersionMayBlock(
   return base::Version{version->GetString()};
 }
 
-bool IsSigninProfileOrBelongsToAffiliatedUser(Profile* profile) {
-  if (chromeos::ProfileHelper::IsSigninProfile(profile))
-    return true;
-
-  if (profile->IsOffTheRecord())
-    return false;
-
-  const user_manager::User* user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  if (!user)
-    return false;
-  return user->IsAffiliated();
-}
-
 void CacheLacrosLaunchSwitch(const policy::PolicyMap& map) {
   if (g_lacros_launch_switch_cache.has_value()) {
     // Some browser tests might call this multiple times.
@@ -1049,26 +667,17 @@ void CacheLacrosLaunchSwitch(const policy::PolicyMap& map) {
   g_lacros_launch_switch_cache = result;
 }
 
-Channel GetStatefulLacrosChannel() {
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(browser_util::kLacrosStabilitySwitch)) {
-    std::string value =
-        cmdline->GetSwitchValueASCII(browser_util::kLacrosStabilitySwitch);
-    return GetChannelFromString(value);
-  }
-
-  return Channel::UNKNOWN;
-}
-
 ComponentInfo GetLacrosComponentInfo() {
-  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(browser_util::kLacrosStabilitySwitch)) {
-    std::string value =
-        cmdline->GetSwitchValueASCII(browser_util::kLacrosStabilitySwitch);
-    return *lacros_stability_channel_to_component_info.at(value);
-  }
-  // Use once a week / Dev style updates by default.
-  return kLacrosDogfoodDevInfo;
+  // We default to the Dev component for UNKNOWN channels.
+  static const auto kChannelToComponentInfoMap =
+      base::MakeFixedFlatMap<Channel, const ComponentInfo*>({
+          {Channel::UNKNOWN, &kLacrosDogfoodDevInfo},
+          {Channel::CANARY, &kLacrosDogfoodCanaryInfo},
+          {Channel::DEV, &kLacrosDogfoodDevInfo},
+          {Channel::BETA, &kLacrosDogfoodBetaInfo},
+          {Channel::STABLE, &kLacrosDogfoodStableInfo},
+      });
+  return *kChannelToComponentInfoMap.at(GetStatefulLacrosChannel());
 }
 
 Channel GetLacrosSelectionUpdateChannel(LacrosSelection selection) {
@@ -1090,6 +699,54 @@ LacrosLaunchSwitch GetLaunchSwitchForTesting() {
 
 void ClearLacrosLaunchSwitchCacheForTest() {
   g_lacros_launch_switch_cache.reset();
+}
+
+bool IsProfileMigrationCompletedForUser(PrefService* local_state,
+                                        const std::string& user_id_hash) {
+  // Allows tests to avoid marking profile migration as completed by getting
+  // user_id_hash of the logged in user and updating
+  // g_browser_process->local_state() etc.
+  if (g_profile_migration_completed_for_test)
+    return true;
+
+  if (base::FeatureList::IsEnabled(
+          ash::features::kForceProfileMigrationCompletion)) {
+    return true;
+  }
+
+  const auto* pref =
+      local_state->FindPreference(kProfileMigrationCompletedForUserPref);
+  // Return if the pref is not registered. This can happen in browsertests. In
+  // such a case, assume that migration was completed.
+  if (!pref)
+    return true;
+
+  const base::Value* value = pref->GetValue();
+  DCHECK(value->is_dict());
+  absl::optional<bool> is_completed = value->FindBoolKey(user_id_hash);
+
+  // If migration was skipped or failed, disable lacros.
+  return is_completed.value_or(false);
+}
+
+void SetProfileMigrationCompletedForUser(PrefService* local_state,
+                                         const std::string& user_id_hash) {
+  DictionaryPrefUpdate update(local_state,
+                              kProfileMigrationCompletedForUserPref);
+  base::DictionaryValue* dict = update.Get();
+  dict->SetBoolKey(user_id_hash, true);
+}
+
+void ClearProfileMigrationCompletedForUser(PrefService* local_state,
+                                           const std::string& user_id_hash) {
+  DictionaryPrefUpdate update(local_state,
+                              kProfileMigrationCompletedForUserPref);
+  base::DictionaryValue* dict = update.Get();
+  dict->RemoveKey(user_id_hash);
+}
+
+void SetProfileMigrationCompletedForTest(bool is_completed) {
+  g_profile_migration_completed_for_test = is_completed;
 }
 
 }  // namespace browser_util

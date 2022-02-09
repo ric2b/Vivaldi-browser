@@ -8,13 +8,13 @@
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/deferred_sequenced_task_runner.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/process/memory.h"
 #include "base/run_loop.h"
+#include "base/task/deferred_sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
@@ -139,7 +139,7 @@ class TestNetworkQualityObserver
  private:
   net::EffectiveConnectionType run_loop_wait_effective_connection_type_;
   std::unique_ptr<base::RunLoop> run_loop_;
-  network::NetworkQualityTracker* tracker_;
+  raw_ptr<network::NetworkQualityTracker> tracker_;
   net::EffectiveConnectionType effective_connection_type_;
 };
 

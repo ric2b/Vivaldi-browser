@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
@@ -60,14 +60,9 @@ struct AX_EXPORT AXLegacyHypertext {
 
 class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
  public:
-  AXPlatformNodeBase();
-
+  ~AXPlatformNodeBase() override;
   AXPlatformNodeBase(const AXPlatformNodeBase&) = delete;
   AXPlatformNodeBase& operator=(const AXPlatformNodeBase&) = delete;
-
-  ~AXPlatformNodeBase() override;
-
-  virtual void Init(AXPlatformNodeDelegate* delegate);
 
   // These are simple wrappers to our delegate.
   const AXNodeData& GetData() const;
@@ -325,7 +320,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // Only text displayed on screen is included. Text from ARIA and HTML
   // attributes that is either not displayed on screen, or outside this node,
   // e.g. aria-label and HTML title, is not returned.
-  std::u16string GetInnerText() const;
+  std::u16string GetTextContentUTF16() const;
 
   // Returns the value of a control such as a text field, a slider, a <select>
   // element, a date picker or an ARIA combo box. In order to minimize
@@ -405,7 +400,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   //
   // Delegate.  This is a weak reference which owns |this|.
   //
-  AXPlatformNodeDelegate* delegate_ = nullptr;
+  raw_ptr<AXPlatformNodeDelegate> delegate_ = nullptr;
 
   // Uses the delegate to calculate this node's PosInSet.
   absl::optional<int> GetPosInSet() const;
@@ -419,6 +414,11 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   bool IsPlatformDocument() const;
 
  protected:
+  AXPlatformNodeBase();
+
+  // AXPlatformNode overrides.
+  void Init(AXPlatformNodeDelegate* delegate) override;
+
   bool IsStructuredAnnotation() const;
   bool IsSelectionItemSupported() const;
 
@@ -552,8 +552,6 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
       size_t* old_len,
       size_t* new_len);
 
-  std::string GetInvalidValue() const;
-
   // Based on the characteristics of this object, such as its role and the
   // presence of a multiselectable attribute, returns the maximum number of
   // selectable children that this object could potentially contain.
@@ -572,6 +570,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   // Is there an aria-describedby that points to a role="tooltip".
   bool IsDescribedByTooltip() const;
+
+  friend AXPlatformNode* AXPlatformNode::Create(
+      AXPlatformNodeDelegate* delegate);
 };
 
 }  // namespace ui

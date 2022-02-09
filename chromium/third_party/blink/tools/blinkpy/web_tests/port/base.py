@@ -135,6 +135,9 @@ class Port(object):
 
     CONTENT_SHELL_NAME = 'content_shell'
 
+    # Update the first line in third_party/blink/web_tests/TestExpectations and
+    # the documentation in docs/testing/web_test_expectations.md when this list
+    # changes.
     ALL_SYSTEMS = (
         ('mac10.12', 'x86'),
         ('mac10.13', 'x86'),
@@ -356,6 +359,8 @@ class Port(object):
                 '--run-web-tests',
                 '--ignore-certificate-errors-spki-list=' + WPT_FINGERPRINT +
                 ',' + SXG_FINGERPRINT + ',' + SXG_WPT_FINGERPRINT,
+                # Required for WebTransport tests.
+                '--origin-to-force-quic-on=web-platform.test:11000',
                 '--user-data-dir'
             ]
             if self.get_option('nocheck_sys_deps', False):
@@ -1295,11 +1300,16 @@ class Port(object):
 
         This exists because Windows has inconsistent behavior between the bots
         and local developer machines, such that determining which python3 name
-        to use is non-trivial. See https://crbug.com/155616.
+        to use is non-trivial. See https://crbug.com/1155616.
 
         Once blinkpy runs under python3, this can be removed in favour of
         callers using sys.executable.
         """
+        if six.PY3:
+            # Prefer sys.executable when the current script runs under python3.
+            # The current script might be running with vpython3 and in that case
+            # using the same executable will share the same virtualenv.
+            return sys.executable
         return 'python3'
 
     def get_option(self, name, default_value=None):
@@ -1775,7 +1785,8 @@ class Port(object):
                 self._used_expectation_files.append(flag_specific)
             for path in self.get_option('additional_expectations', []):
                 expanded_path = self._filesystem.expanduser(path)
-                self._used_expectation_files.append(expanded_path)
+                abs_path = self._filesystem.abspath(expanded_path)
+                self._used_expectation_files.append(abs_path)
         return self._used_expectation_files
 
     def extra_expectations_files(self):

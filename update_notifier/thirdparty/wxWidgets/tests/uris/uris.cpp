@@ -12,9 +12,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
@@ -81,7 +78,7 @@ private:
 #endif
 #endif
 
-    DECLARE_NO_COPY_CLASS(URITestCase)
+    wxDECLARE_NO_COPY_CLASS(URITestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -96,7 +93,7 @@ URITestCase::URITestCase()
 
 // apply the given accessor to the URI, check that the result is as expected
 #define URI_ASSERT_PART_EQUAL(uri, expected, accessor) \
-    CPPUNIT_ASSERT_EQUAL(expected, wxURI(uri).accessor)
+    CHECK(wxURI(uri).accessor == expected)
 
 #define URI_ASSERT_HOSTTYPE_EQUAL(uri, expected) \
     URI_ASSERT_PART_EQUAL((uri), (expected), GetHostType())
@@ -189,6 +186,13 @@ void URITestCase::Paths()
 
     URI_ASSERT_PART_EQUAL("path/john/../../../joe",
                           "../joe", BuildURI());
+
+    // According to RFC 3986, when the authority is present, the path must
+    // begin with a slash (or be empty) and when there is no authority, the
+    // path cannot begin with two slashes, so check for this.
+    URI_ASSERT_PATH_EQUAL("http://good.com:8042BADPATH", "");
+    URI_ASSERT_PATH_EQUAL("http://good.com:8042/GOODPATH", "/GOODPATH");
+    URI_ASSERT_PATH_EQUAL("//BADPATH", "");
 }
 
 void URITestCase::UserAndPass()
@@ -338,6 +342,15 @@ void URITestCase::Unescaping()
                             "\xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE"
                           ),
                           unescaped );
+
+    escaped = L"file://\u043C\u043E\u0439%5C%d1%84%d0%b0%d0%b9%d0%bb";
+    unescaped = wxURI::Unescape(escaped);
+
+    CPPUNIT_ASSERT_EQUAL
+    (
+        L"file://\u043C\u043E\u0439\\\u0444\u0430\u0439\u043B",
+        unescaped
+    );
 #endif // wxUSE_UNICODE
 }
 

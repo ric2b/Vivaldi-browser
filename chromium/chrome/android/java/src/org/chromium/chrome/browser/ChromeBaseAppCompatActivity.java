@@ -20,12 +20,12 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.base.SplitChromeApplication;
-import org.chromium.chrome.browser.base.SplitCompatAppComponentFactory;
 import org.chromium.chrome.browser.base.SplitCompatUtils;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -38,6 +38,8 @@ import org.chromium.chrome.browser.ui.theme.ColorDelegateImpl;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 
+import java.util.LinkedHashSet;
+
 /**
  * A subclass of {@link AppCompatActivity} that maintains states and objects applied to all
  * activities in {@link ChromeApplication} (e.g. night mode).
@@ -47,7 +49,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     private final ObservableSupplierImpl<ModalDialogManager> mModalDialogManagerSupplier =
             new ObservableSupplierImpl<>();
     private NightModeStateProvider mNightModeStateProvider;
-    private @StyleRes int mThemeResId;
+    private LinkedHashSet<Integer> mThemeResIds = new LinkedHashSet<>();
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -56,15 +58,18 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         // Make sure the "chrome" split is loaded before checking if ClassLoaders are equal.
         SplitChromeApplication.finishPreload(CHROME_SPLIT_NAME);
         ClassLoader chromeModuleClassLoader = ChromeBaseAppCompatActivity.class.getClassLoader();
-        if (!chromeModuleClassLoader.equals(
-                    ContextUtils.getApplicationContext().getClassLoader())) {
+        Context appContext = ContextUtils.getApplicationContext();
+        if (!chromeModuleClassLoader.equals(appContext.getClassLoader())) {
             // This should only happen on Android O. See crbug.com/1146745 for more info.
-            throw new IllegalStateException("ClassLoader mismatch detected.");
+            throw new IllegalStateException("ClassLoader mismatch detected.\nA: "
+                    + chromeModuleClassLoader + "\nB: " + appContext.getClassLoader()
+                    + "\nC: " + chromeModuleClassLoader.getParent()
+                    + "\nD: " + appContext.getClassLoader().getParent() + "\nE: " + appContext);
         }
         // If ClassLoader was corrected by SplitCompatAppComponentFactory, also need to correct
         // the reference in the associated Context.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            SplitCompatAppComponentFactory.checkContextClassLoader(newBase, this);
+            BundleUtils.checkContextClassLoader(newBase, this);
         }
 
         mNightModeStateProvider = createNightModeStateProvider();
@@ -81,7 +86,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
-        getSupportFragmentManager().setFragmentFactory(SplitCompatUtils.createFragmentFactory());
+        SplitCompatUtils.restoreLoadedSplits(savedInstanceState);
         mModalDialogManagerSupplier.set(createModalDialogManager());
 
         initializeNightModeStateProvider();
@@ -106,16 +111,31 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     }
 
     @Override
+    public ClassLoader getClassLoader() {
+        // Replace the default ClassLoader with a custom SplitAware one so that
+        // LayoutInflaters that use this ClassLoader can find view classes that
+        // live inside splits. Very useful when FragmentManger tries to inflate
+        // the UI automatically on restore.
+        return SplitCompatUtils.getSplitCompatClassLoader();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        SplitCompatUtils.saveLoadedSplits(outState);
+    }
+
+    @Override
     public void setTheme(@StyleRes int resid) {
         super.setTheme(resid);
-        mThemeResId = resid;
+        mThemeResIds.add(resid);
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         NightModeUtils.updateConfigurationForNightMode(
-                this, mNightModeStateProvider.isInNightMode(), newConfig, mThemeResId);
+                this, mNightModeStateProvider.isInNightMode(), newConfig, mThemeResIds);
         // newConfig will have the default system locale so reapply the app locale override if
         // needed: https://crbug.com/1248944
         GlobalAppLocaleController.getInstance().maybeOverrideContextConfig(this);

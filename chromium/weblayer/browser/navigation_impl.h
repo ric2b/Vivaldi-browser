@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "weblayer/public/navigation.h"
 
@@ -52,6 +53,10 @@ class NavigationImpl : public Navigation {
     safe_to_disable_network_error_auto_reload_ = value;
   }
 
+  void set_safe_to_disable_intent_processing(bool value) {
+    safe_to_disable_intent_processing_ = value;
+  }
+
   void set_safe_to_get_page() { safe_to_get_page_ = true; }
 
   void set_was_stopped() { was_stopped_ = true; }
@@ -61,6 +66,8 @@ class NavigationImpl : public Navigation {
   bool disable_network_error_auto_reload() {
     return disable_network_error_auto_reload_;
   }
+
+  bool disable_intent_processing() { return disable_intent_processing_; }
 
   void set_finished() { finished_ = true; }
 
@@ -89,6 +96,7 @@ class NavigationImpl : public Navigation {
     return IsServedFromBackForwardCache();
   }
   jboolean DisableNetworkErrorAutoReload(JNIEnv* env);
+  jboolean DisableIntentProcessing(JNIEnv* env);
   jboolean AreIntentLaunchesAllowedInBackground(JNIEnv* env);
   jboolean IsFormSubmission(JNIEnv* env) { return IsFormSubmission(); }
   base::android::ScopedJavaLocalRef<jstring> GetReferrer(JNIEnv* env);
@@ -131,7 +139,7 @@ class NavigationImpl : public Navigation {
   int GetNavigationEntryOffset() override;
 
  private:
-  content::NavigationHandle* navigation_handle_;
+  raw_ptr<content::NavigationHandle> navigation_handle_;
 
   // The NavigationEntry's unique ID for this navigation, or -1 if there isn't
   // one.
@@ -156,10 +164,15 @@ class NavigationImpl : public Navigation {
   // Whether DisableNetworkErrorAutoReload is allowed at this time.
   bool safe_to_disable_network_error_auto_reload_ = false;
 
+  // Whether DisableIntentProcessing is allowed at this time.
+  bool safe_to_disable_intent_processing_ = false;
+
   // Whether GetPage is allowed at this time.
   bool safe_to_get_page_ = false;
 
   bool disable_network_error_auto_reload_ = false;
+
+  bool disable_intent_processing_ = false;
 
   // Whether this navigation has finished.
   bool finished_ = false;

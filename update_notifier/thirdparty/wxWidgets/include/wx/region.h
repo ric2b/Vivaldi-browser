@@ -181,8 +181,7 @@ protected:
 // implement individual wxRegion operations, factor out the common code for the
 // ports with Combine() in this class
 #if defined(__WXMSW__) || \
-    ( defined(__WXMAC__) && wxOSX_USE_COCOA_OR_CARBON ) || \
-    defined(__WXPM__)
+    ( defined(__WXMAC__) && wxOSX_USE_COCOA_OR_CARBON )
 
 #define wxHAS_REGION_COMBINE
 
@@ -202,11 +201,11 @@ protected:
     virtual bool DoCombine(const wxRegion& region, wxRegionOp op) = 0;
 
     // implement some wxRegionBase pure virtuals in terms of Combine()
-    virtual bool DoUnionWithRect(const wxRect& rect);
-    virtual bool DoUnionWithRegion(const wxRegion& region);
-    virtual bool DoIntersect(const wxRegion& region);
-    virtual bool DoSubtract(const wxRegion& region);
-    virtual bool DoXor(const wxRegion& region);
+    virtual bool DoUnionWithRect(const wxRect& rect) wxOVERRIDE;
+    virtual bool DoUnionWithRegion(const wxRegion& region) wxOVERRIDE;
+    virtual bool DoIntersect(const wxRegion& region) wxOVERRIDE;
+    virtual bool DoSubtract(const wxRegion& region) wxOVERRIDE;
+    virtual bool DoXor(const wxRegion& region) wxOVERRIDE;
 };
 
 #endif // ports with wxRegion::Combine()
@@ -223,10 +222,8 @@ protected:
     #include "wx/dfb/region.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/region.h"
-#elif defined(__WXCOCOA__)
-    #include "wx/cocoa/region.h"
-#elif defined(__WXPM__)
-    #include "wx/os2/region.h"
+#elif defined(__WXQT__)
+    #include "wx/qt/region.h"
 #endif
 
 // ----------------------------------------------------------------------------

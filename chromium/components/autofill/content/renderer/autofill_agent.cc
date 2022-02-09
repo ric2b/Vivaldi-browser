@@ -17,11 +17,11 @@
 #include "base/i18n/case_conversion.h"
 #include "base/location.h"
 #include "base/metrics/field_trial.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -116,7 +116,7 @@ ExtractMask GetExtractDatalistMask() {
 // need to set up the mojo connection as before (i.e., we can't defer binding
 // the interface). Instead, we enqueue our messages here as post-activation
 // tasks. See post-prerendering activation steps here:
-// https://jeremyroman.github.io/alternate-loading-modes/#prerendering-bcs-subsection
+// https://wicg.github.io/nav-speculation/prerendering.html#prerendering-bcs-subsection
 class AutofillAgent::DeferringAutofillDriver : public mojom::AutofillDriver {
  public:
   explicit DeferringAutofillDriver(AutofillAgent* agent) : agent_(agent) {}
@@ -125,8 +125,10 @@ class AutofillAgent::DeferringAutofillDriver : public mojom::AutofillDriver {
  private:
   template <typename F, typename... Args>
   void SendMsg(F fn, Args&&... args) {
-    DCHECK(agent_->autofill_driver_);
-    (agent_->autofill_driver_.get()->*fn)(std::forward<Args>(args)...);
+    DCHECK(!agent_->IsPrerendering());
+    mojom::AutofillDriver& autofill_driver = agent_->GetAutofillDriver();
+    DCHECK_NE(&autofill_driver, this);
+    (autofill_driver.*fn)(std::forward<Args>(args)...);
   }
   template <typename F, typename... Args>
   void DeferMsg(F fn, Args... args) {
@@ -550,10 +552,14 @@ void AutofillAgent::FillOrPreviewForm(int32_t id,
       ReplaceElementIfNowInvalid(form);
 
     query_node_autofill_state_ = element_.GetAutofillState();
-    form_util::FillOrPreviewForm(form, element_, action);
+    bool filled_some_fields =
+        !form_util::FillOrPreviewForm(form, element_, action).empty();
 
-    if (!element_.Form().IsNull())
+    if (!element_.Form().IsNull()) {
       UpdateLastInteractedForm(element_.Form());
+    } else {
+      formless_elements_were_autofilled_ |= filled_some_fields;
+    }
 
     // TODO(crbug.com/1198811): Inform the BrowserAutofillManager about the
     // fields that were actually filled. It's possible that the form has changed
@@ -821,21 +827,15 @@ void AutofillAgent::SetFocusRequiresScroll(bool require) {
   focus_requires_scroll_ = require;
 }
 
-void AutofillAgent::GetElementFormAndFieldDataAtIndex(
-    const std::string& selector,
-    int index,
-    GetElementFormAndFieldDataAtIndexCallback callback) {
+void AutofillAgent::GetElementFormAndFieldDataForDevToolsNodeId(
+    const int backend_node_id,
+    GetElementFormAndFieldDataForDevToolsNodeIdCallback callback) {
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (!frame)
     return;
 
-  blink::WebElement target_element;
-  blink::WebVector<blink::WebElement> elements =
-      render_frame()->GetWebFrame()->GetDocument().QuerySelectorAll(
-          blink::WebString::FromUTF8(selector));
-  if (index >= 0 && static_cast<size_t>(index) < elements.size()) {
-    target_element = elements[index];
-  }
+  blink::WebElement target_element =
+      frame->GetDocument().GetElementByDevToolsNodeId(backend_node_id);
 
   FormData form;
   FormFieldData field;
@@ -963,7 +963,7 @@ void AutofillAgent::ProcessForms() {
       form_cache_.ExtractNewForms(field_data_manager_.get());
 
   // Always communicate to browser process for topmost frame.
-  if (!cache.updated_forms.empty() ||
+  if (!cache.updated_forms.empty() || !cache.removed_forms.empty() ||
       !render_frame()->GetWebFrame()->Parent()) {
     GetAutofillDriver().FormsSeen(cache.updated_forms,
                                   std::move(cache.removed_forms).extract());
@@ -1275,10 +1275,13 @@ absl::optional<FormData> AutofillAgent::GetSubmittedForm() const {
     } else if (provisionally_saved_form_.has_value()) {
       return absl::make_optional(provisionally_saved_form_.value());
     }
-  } else if (formless_elements_user_edited_.size() != 0 &&
-             !form_util::IsSomeControlElementVisible(
-                 render_frame()->GetWebFrame(),
-                 formless_elements_user_edited_)) {
+  } else if ((base::FeatureList::IsEnabled(
+                  features::kAutofillRecordMetricsOfUnownedForms) &&
+              formless_elements_were_autofilled_) ||
+             (formless_elements_user_edited_.size() != 0 &&
+              !form_util::IsSomeControlElementVisible(
+                  render_frame()->GetWebFrame(),
+                  formless_elements_user_edited_))) {
     // we check if all the elements the user has interacted with are gone,
     // to decide if submission has occurred, and use the
     // provisionally_saved_form_ saved in OnProvisionallySaveForm() if fail to
@@ -1301,6 +1304,7 @@ void AutofillAgent::ResetLastInteractedElements() {
   last_interacted_form_.Reset();
   last_clicked_form_control_element_for_testing_ = {};
   formless_elements_user_edited_.clear();
+  formless_elements_were_autofilled_ = false;
   provisionally_saved_form_.reset();
 }
 
@@ -1443,17 +1447,18 @@ void AutofillAgent::ReplaceElementIfNowInvalid(const FormData& original_form) {
 }
 
 mojom::AutofillDriver& AutofillAgent::GetAutofillDriver() {
-  if (!autofill_driver_) {
-    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(
-        &autofill_driver_);
-  }
-
   if (IsPrerendering()) {
     if (!deferring_autofill_driver_) {
       deferring_autofill_driver_ =
           std::make_unique<DeferringAutofillDriver>(this);
     }
     return *deferring_autofill_driver_;
+  }
+
+  // Lazily bind this interface.
+  if (!autofill_driver_) {
+    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(
+        &autofill_driver_);
   }
 
   return *autofill_driver_;

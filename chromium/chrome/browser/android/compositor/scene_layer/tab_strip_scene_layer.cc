@@ -15,7 +15,7 @@
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
-#include "ui/android/color_helpers.h"
+#include "ui/android/color_utils_android.h"
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;

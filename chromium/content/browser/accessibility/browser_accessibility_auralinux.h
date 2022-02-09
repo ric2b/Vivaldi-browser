@@ -5,26 +5,24 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_AURALINUX_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_AURALINUX_H_
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/common/content_export.h"
+#include "ui/accessibility/ax_node.h"
 
 namespace ui {
+
 class AXPlatformNodeAuraLinux;
-}
+
+}  // namespace ui
 
 namespace content {
 
 class BrowserAccessibilityAuraLinux : public BrowserAccessibility {
  public:
-  BrowserAccessibilityAuraLinux();
-
+  ~BrowserAccessibilityAuraLinux() override;
   BrowserAccessibilityAuraLinux(const BrowserAccessibilityAuraLinux&) = delete;
   BrowserAccessibilityAuraLinux& operator=(
       const BrowserAccessibilityAuraLinux&) = delete;
-
-  ~BrowserAccessibilityAuraLinux() override;
 
   CONTENT_EXPORT ui::AXPlatformNodeAuraLinux* GetNode() const;
 
@@ -41,10 +39,14 @@ class BrowserAccessibilityAuraLinux : public BrowserAccessibility {
 
   ui::TextAttributeList ComputeTextAttributes() const override;
 
- private:
-  // Give BrowserAccessibility::Create access to our constructor.
-  friend class BrowserAccessibility;
+ protected:
+  BrowserAccessibilityAuraLinux(BrowserAccessibilityManager* manager,
+                                ui::AXNode* node);
 
+  friend class BrowserAccessibility;  // Needs access to our constructor.
+
+ private:
+  // TODO(nektar): Rename to platform_node_ to avoid confusion with ui::AXNode.
   ui::AXPlatformNodeAuraLinux* node_;
 };
 

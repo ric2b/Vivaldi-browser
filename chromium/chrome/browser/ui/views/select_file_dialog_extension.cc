@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -18,8 +19,8 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -44,9 +45,11 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/extensions/extension_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/extension_system.h"
+#include "ui/aura/window.h"
 #include "ui/base/base_window.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/shell_dialogs/select_file_policy.h"
@@ -203,6 +206,20 @@ class SystemFilesAppDialogDelegate : public chromeos::SystemWebDialogDelegate {
 
   void SetModal(bool modal) {
     set_modal_type(modal ? ui::MODAL_TYPE_WINDOW : ui::MODAL_TYPE_NONE);
+  }
+
+  FrameKind GetWebDialogFrameKind() const override {
+    // The default is kDialog, however it doesn't allow to customize the title
+    // color and to make the dialog movable and re-sizable.
+    return FrameKind::kNonClient;
+  }
+
+  void AdjustWidgetInitParams(views::Widget::InitParams* params) override {
+    params->shadow_type = views::Widget::InitParams::ShadowType::kDefault;
+    params->init_properties_container.SetProperty(
+        chromeos::kFrameActiveColorKey, kFilePickerActiveTitleColor);
+    params->init_properties_container.SetProperty(
+        chromeos::kFrameInactiveColorKey, kFilePickerInactiveTitleColor);
   }
 
   void GetMinimumDialogSize(gfx::Size* size) const override {
@@ -441,8 +458,21 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
   // The web contents to associate the dialog with.
   content::WebContents* web_contents = nullptr;
 
+  // The folder selection dialog created for capture mode should never be
+  // parented to a browser window (if one exists). https://crbug.com/1258842.
+  const bool is_for_capture_mode =
+      owner.window &&
+      owner.window->GetId() ==
+          ash::kShellWindowId_CaptureModeFolderSelectionDialogOwner;
+
+  const bool skip_finding_browser = is_for_capture_mode ||
+                                    owner.android_task_id.has_value() ||
+                                    owner.lacros_window_id.has_value();
+
+  can_resize_ = !ash::TabletMode::IsInTabletMode() && !is_for_capture_mode;
+
   // Obtain BaseWindow and WebContents if the owner window is browser.
-  if (!owner.android_task_id.has_value() && !owner.lacros_window_id.has_value())
+  if (!skip_finding_browser)
     FindRuntimeContext(owner.window, &base_window, &web_contents);
 
   if (web_contents)
@@ -473,10 +503,6 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
                      : file_manager::util::GetSelectFileDialogTitle(type);
   gfx::NativeWindow parent_window =
       base_window ? base_window->GetNativeWindow() : owner.window;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  can_resize_ = !ash::TabletMode::IsInTabletMode();
-#endif
 
   if (ash::features::IsFileManagerSwaEnabled()) {
     // SystemFilesAppDialogDelegate is a self-deleting class that calls the

@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -36,6 +37,7 @@
 #include "components/policy/test_support/local_policy_test_server.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -240,11 +242,12 @@ class ComponentCloudPolicyTest : public extensions::ExtensionBrowserTest {
   LocalPolicyTestServer test_server_;
   scoped_refptr<const extensions::Extension> extension_;
   std::unique_ptr<ExtensionTestMessageListener> event_listener_;
-  CloudPolicyClient* client_ = nullptr;
+  raw_ptr<CloudPolicyClient> client_ = nullptr;
 };
 
 // crbug.com/1230268 not working on Lacros.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// TODO(crbug.com/1254962): flaky on Mac builders
+#if BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_MAC)
 #define MAYBE_FetchExtensionPolicy DISABLED_FetchExtensionPolicy
 #else
 #define MAYBE_FetchExtensionPolicy FetchExtensionPolicy
@@ -367,6 +370,11 @@ IN_PROC_BROWSER_TEST_F(ComponentCloudPolicyTest, SignOutAndBackIn) {
   ExtensionTestMessageListener signout_policy_listener("{}", false);
   event_listener.Reply("get-policy-Name");
   EXPECT_TRUE(signout_policy_listener.WaitUntilSatisfied());
+
+  // Spin all threads, including the background thread that performs cache
+  // operations, in order to guarantee that the cache file gets deleted before
+  // the test asserts it. There's no easy way to wait for this event otherwise.
+  content::RunAllTasksUntilIdle();
 
   // Verify that the cache is gone.
   EXPECT_FALSE(base::PathExists(cache_path));

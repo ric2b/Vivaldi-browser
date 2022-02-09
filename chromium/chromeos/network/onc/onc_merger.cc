@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chromeos/network/onc/onc_signature.h"
@@ -155,6 +154,9 @@ class MergeSettingsAndPolicies : public MergeListOfDictionaries {
 
   MergeSettingsAndPolicies() = default;
 
+  MergeSettingsAndPolicies(const MergeSettingsAndPolicies&) = delete;
+  MergeSettingsAndPolicies& operator=(const MergeSettingsAndPolicies&) = delete;
+
   // Merge the provided dictionaries. For each path in any of the dictionaries,
   // MergeValues is called. Its results are collected in a new dictionary which
   // is then returned. The resulting dictionary never contains empty
@@ -236,8 +238,6 @@ class MergeSettingsAndPolicies : public MergeListOfDictionaries {
   };
 
   bool hasUserPolicy_, hasDevicePolicy_;
-
-  DISALLOW_COPY_AND_ASSIGN(MergeSettingsAndPolicies);
 };
 
 // Call MergeDictionaries to merge policies and settings to the effective
@@ -246,6 +246,9 @@ class MergeSettingsAndPolicies : public MergeListOfDictionaries {
 class MergeToEffective : public MergeSettingsAndPolicies {
  public:
   MergeToEffective() = default;
+
+  MergeToEffective(const MergeToEffective&) = delete;
+  MergeToEffective& operator=(const MergeToEffective&) = delete;
 
  protected:
   // Merges |values| to the effective value (Mandatory policy overwrites user
@@ -291,9 +294,6 @@ class MergeToEffective : public MergeSettingsAndPolicies {
     std::string which;
     return MergeValues(key, values, &which);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MergeToEffective);
 };
 
 namespace {
@@ -322,6 +322,9 @@ bool AllPresentValuesEqual(const MergeSettingsAndPolicies::ValueParams& values,
 class MergeToAugmented : public MergeToEffective {
  public:
   MergeToAugmented() = default;
+
+  MergeToAugmented(const MergeToAugmented&) = delete;
+  MergeToAugmented& operator=(const MergeToAugmented&) = delete;
 
   base::Value MergeDictionaries(const OncValueSignature& signature,
                                 const base::Value* user_policy,
@@ -463,7 +466,6 @@ class MergeToAugmented : public MergeToEffective {
 
  private:
   const OncValueSignature* signature_;
-  DISALLOW_COPY_AND_ASSIGN(MergeToAugmented);
 };
 
 }  // namespace

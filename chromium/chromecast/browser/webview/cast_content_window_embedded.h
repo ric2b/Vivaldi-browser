@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/webview/cast_window_embedder.h"
 #include "chromecast/ui/back_gesture_router.h"
@@ -43,11 +42,9 @@ class CastContentWindowEmbedded
   // listens on incoming window events. Must outlive |this|.
   // |force_720p_resolution|: Whether 720p resolution is enabled/forced for
   // this window's hosted web page (i.e. a CastWebView).
-  explicit CastContentWindowEmbedded(
-      base::WeakPtr<CastContentWindow::Delegate> delegate,
-      mojom::CastWebViewParamsPtr params,
-      CastWindowEmbedder* cast_window_embedder,
-      bool force_720p_resolution);
+  CastContentWindowEmbedded(mojom::CastWebViewParamsPtr params,
+                            CastWindowEmbedder* cast_window_embedder,
+                            bool force_720p_resolution);
   ~CastContentWindowEmbedded() override;
   CastContentWindowEmbedded(const CastContentWindowEmbedded&) = delete;
   CastContentWindowEmbedded& operator=(const CastContentWindowEmbedded&) =

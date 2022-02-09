@@ -28,6 +28,7 @@
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
+#include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -70,6 +71,7 @@
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/browser/ui/sharing_hub/screenshot/screenshot_captured_bubble_controller.h"
 #include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller.h"
+#include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
@@ -83,6 +85,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -147,7 +150,6 @@
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
-#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "extensions/browser/extension_registry.h"
@@ -489,7 +491,7 @@ void NewEmptyWindow(Profile* profile, bool should_trigger_session_restore) {
         SessionServiceFactory::GetForProfileForSessionRestore(
             profile->GetOriginalProfile());
     if (!session_service ||
-        !session_service->RestoreIfNecessary(std::vector<GURL>(),
+        !session_service->RestoreIfNecessary(StartupTabs(),
                                              /* restore_apps */ false)) {
       OpenEmptyWindow(profile->GetOriginalProfile());
     }
@@ -683,7 +685,7 @@ void Stop(Browser* browser) {
 
 void NewWindow(Browser* browser) {
   Profile* const profile = browser->profile();
-#if BUILDFLAG(ENABLE_EXTENSIONS) && defined(OS_MAC)
+#if defined(OS_MAC)
   // Web apps should open a window to their launch page.
   if (browser->app_controller()) {
     const web_app::AppId app_id = browser->app_controller()->app_id();
@@ -698,26 +700,28 @@ void NewWindow(Browser* browser) {
     }
     apps::AppLaunchParams params = apps::AppLaunchParams(
         app_id, launch_container, WindowOpenDisposition::NEW_WINDOW,
-        apps::mojom::AppLaunchSource::kSourceKeyboard);
+        apps::mojom::LaunchSource::kFromKeyboard);
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
         ->LaunchAppWithParams(std::move(params));
     return;
   }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Hosted apps should open a window to their launch page.
   const extensions::Extension* extension = GetExtensionForBrowser(browser);
   if (extension && extension->is_hosted_app()) {
     DCHECK(!extension->from_bookmark());
     const auto app_launch_params = CreateAppLaunchParamsUserContainer(
         profile, extension, WindowOpenDisposition::NEW_WINDOW,
-        extensions::AppLaunchSource::kSourceKeyboard);
+        apps::mojom::LaunchSource::kFromKeyboard);
     OpenApplicationWindow(
         profile, app_launch_params,
         extensions::AppLaunchInfo::GetLaunchWebURL(extension));
     return;
   }
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // defined(OS_MAC)
   NewEmptyWindow(profile->GetOriginalProfile());
 }
 
@@ -1370,6 +1374,12 @@ bool CanSavePage(const Browser* browser) {
           prefs::kAllowFileSelectionDialogs)) {
     return false;
   }
+  if (static_cast<DownloadPrefs::DownloadRestriction>(
+          browser->profile()->GetPrefs()->GetInteger(
+              prefs::kDownloadRestrictions)) ==
+      DownloadPrefs::DownloadRestriction::ALL_FILES) {
+    return false;
+  }
   return !browser->is_type_devtools() &&
          !(GetContentRestrictions(browser) & CONTENT_RESTRICTION_SAVE);
 }
@@ -1528,11 +1538,6 @@ void FocusInactivePopupForAccessibility(Browser* browser) {
   browser->window()->FocusInactivePopupForAccessibility();
 }
 
-void FocusHelpBubble(Browser* browser) {
-  base::RecordAction(UserMetricsAction("FocusHelpBubble"));
-  browser->window()->FocusHelpBubble();
-}
-
 void FocusNextPane(Browser* browser) {
   base::RecordAction(UserMetricsAction("FocusNextPane"));
   browser->window()->RotatePaneFocus(true);
@@ -1686,7 +1691,8 @@ void SetAndroidOsForTabletSite(content::WebContents* current_tab) {
     blink::UserAgentOverride ua_override;
     ua_override.ua_string_override = content::BuildUserAgentFromOSAndProduct(
         kOsOverrideForTabletSite, product);
-    ua_override.ua_metadata_override = embedder_support::GetUserAgentMetadata();
+    ua_override.ua_metadata_override = embedder_support::GetUserAgentMetadata(
+        g_browser_process->local_state());
     ua_override.ua_metadata_override->mobile = true;
     ua_override.ua_metadata_override->platform =
         kChPlatformOverrideForTabletSite;

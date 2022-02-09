@@ -10,9 +10,10 @@
 #include <utility>
 #include <vector>
 
+#include "ash/app_list/app_list_event_targeter.h"
 #include "ash/app_list/app_list_metrics.h"
+#include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/app_list_util.h"
-#include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/views/app_list_a11y_announcer.h"
 #include "ash/app_list/views/app_list_folder_view.h"
 #include "ash/app_list/views/app_list_main_view.h"
@@ -20,7 +21,6 @@
 #include "ash/app_list/views/contents_view.h"
 #include "ash/app_list/views/paged_apps_grid_view.h"
 #include "ash/app_list/views/search_box_view.h"
-#include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/app_list/app_list_color_provider.h"
@@ -31,9 +31,9 @@
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/wm/work_area_insets.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
@@ -42,10 +42,8 @@
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/ui_base_switches.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -61,7 +59,6 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/interpolated_transform.h"
-#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -93,13 +90,8 @@ constexpr int kAppListBezelMargin = 50;
 constexpr int kAppInfoDialogWidth = 512;
 constexpr int kAppInfoDialogHeight = 384;
 
-// The duration of app list animations when |short_animations_for_testing| are
-// enabled.
+// The duration of app list animations when they should run immediately.
 constexpr int kAppListAnimationDurationImmediateMs = 0;
-
-// Set animation durations to 0 for testing.
-// TODO(oshima): Use ui::ScopedAnimationDurationScaleMode instead.
-bool short_animations_for_testing;
 
 // Histogram for the app list dragging in clamshell mode.
 constexpr char kAppListDragInClamshellHistogram[] =
@@ -189,8 +181,6 @@ SkColor GetBackgroundShieldColor(const std::vector<SkColor>& colors,
                      sk_opacity_value);
 }
 
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kExcludeWindowFromEventHandling, false)
-
 // Gets radius for app list background corners when the app list has the
 // provided height. The rounded corner should match the current app list height
 // (so the rounded corners bottom edge matches the shelf top), until it reaches
@@ -203,45 +193,6 @@ double GetBackgroundRadiusForAppListHeight(double height,
   return std::min(static_cast<double>(shelf_background_corner_radius),
                   std::max(height, 0.));
 }
-
-// This targeter prevents routing events to sub-windows, such as
-// RenderHostWindow in order to handle events in context of app list.
-class AppListEventTargeter : public aura::WindowTargeter {
- public:
-  explicit AppListEventTargeter(AppListViewDelegate* delegate)
-      : delegate_(delegate) {}
-
-  AppListEventTargeter(const AppListEventTargeter&) = delete;
-  AppListEventTargeter& operator=(const AppListEventTargeter&) = delete;
-
-  ~AppListEventTargeter() override = default;
-
-  // aura::WindowTargeter:
-  bool SubtreeShouldBeExploredForEvent(aura::Window* window,
-                                       const ui::LocatedEvent& event) override {
-    if (delegate_ && !delegate_->CanProcessEventsOnApplistViews())
-      return false;
-
-    if (window->GetProperty(kExcludeWindowFromEventHandling)) {
-      // Allow routing to sub-windows for ET_MOUSE_MOVED event which is used by
-      // accessibility to enter the mode of exploration of WebView contents.
-      if (event.type() != ui::ET_MOUSE_MOVED)
-        return false;
-    }
-
-    if (window->GetProperty(ash::assistant::ui::kOnlyAllowMouseClickEvents)) {
-      if (event.type() != ui::ET_MOUSE_PRESSED &&
-          event.type() != ui::ET_MOUSE_RELEASED) {
-        return false;
-      }
-    }
-
-    return aura::WindowTargeter::SubtreeShouldBeExploredForEvent(window, event);
-  }
-
- private:
-  AppListViewDelegate* delegate_;  // Weak. Owned by AppListService.
-};
 
 float ComputeSubpixelOffset(const display::Display& display, float value) {
   float pixel_position = std::round(display.device_scale_factor() * value);
@@ -635,8 +586,6 @@ PagedAppsGridView* AppListView::TestApi::GetRootAppsGridView() {
 
 AppListView::AppListView(AppListViewDelegate* delegate)
     : delegate_(delegate),
-      model_(delegate->GetModel()),
-      search_model_(delegate->GetSearchModel()),
       is_background_blur_enabled_(features::IsBackgroundBlurEnabled()),
       state_transition_notifier_(
           std::make_unique<StateTransitionNotifier>(this)),
@@ -660,12 +609,6 @@ AppListView::~AppListView() {
 }
 
 // static
-void AppListView::ExcludeWindowFromEventHandling(aura::Window* window) {
-  DCHECK(window);
-  window->SetProperty(kExcludeWindowFromEventHandling, true);
-}
-
-// static
 float AppListView::GetTransitionProgressForState(AppListViewState state) {
   switch (state) {
     case AppListViewState::kClosed:
@@ -679,16 +622,6 @@ float AppListView::GetTransitionProgressForState(AppListViewState state) {
   }
   NOTREACHED();
   return 0.0f;
-}
-
-// static
-void AppListView::SetShortAnimationForTesting(bool enabled) {
-  short_animations_for_testing = enabled;
-}
-
-// static
-bool AppListView::ShortAnimationsForTesting() {
-  return short_animations_for_testing;
 }
 
 // static
@@ -726,6 +659,8 @@ void AppListView::InitContents() {
   SearchBoxViewBase::InitParams params;
   params.show_close_button_when_active = true;
   params.create_background = true;
+  params.animate_changing_search_icon =
+      features::IsProductivityLauncherAnimationEnabled();
   search_box_view_->Init(params);
 
   // Assign |app_list_main_view_| here since it is accessed during Init().
@@ -1044,7 +979,8 @@ void AppListView::HandleClickOrTap(ui::LocatedEvent* event) {
   }
 
   if (!search_box_view_->is_search_box_active() &&
-      model_->state() != AppListState::kStateEmbeddedAssistant) {
+      delegate_->GetCurrentAppListPage() !=
+          AppListState::kStateEmbeddedAssistant) {
     if (!delegate_->IsInTabletMode())
       Dismiss();
     return;
@@ -1468,8 +1404,9 @@ void AppListView::OnMouseEvent(ui::MouseEvent* event) {
       break;
     case ui::ET_MOUSEWHEEL:
       if (HandleScroll(event->location(), event->AsMouseWheelEvent()->offset(),
-                       ui::ET_MOUSEWHEEL))
+                       ui::ET_MOUSEWHEEL)) {
         event->SetHandled();
+      }
       break;
     default:
       break;
@@ -1529,12 +1466,6 @@ void AppListView::OnGestureEvent(ui::GestureEvent* event) {
       event->SetHandled();
       break;
     }
-    case ui::ET_MOUSEWHEEL: {
-      if (HandleScroll(event->location(), event->AsMouseWheelEvent()->offset(),
-                       ui::ET_MOUSEWHEEL))
-        event->SetHandled();
-      break;
-    }
     default:
       break;
   }
@@ -1546,7 +1477,6 @@ void AppListView::OnKeyEvent(ui::KeyEvent* event) {
 
 void AppListView::OnTabletModeChanged(bool started) {
   search_box_view_->OnTabletModeChanged(started);
-  search_model_->SetTabletMode(started);
   app_list_main_view_->contents_view()->OnTabletModeChanged(started);
 
   if (is_in_drag_) {
@@ -1626,22 +1556,23 @@ bool AppListView::HandleScroll(const gfx::Point& location,
   if ((offset.y() == 0 && offset.x() == 0) || ShouldIgnoreScrollEvents())
     return false;
 
-  AppsGridView* apps_grid_view = GetAppsContainerView()->IsInFolderView()
-                                     ? GetFolderAppsGridView()
-                                     : GetRootAppsGridView();
+  // Don't forward scroll information if a folder is open. The folder view will
+  // handle scroll events itself.
+  if (GetAppsContainerView()->IsInFolderView())
+    return false;
+
+  PagedAppsGridView* apps_grid_view = GetRootAppsGridView();
 
   gfx::Point root_apps_grid_location(location);
-  views::View::ConvertPointToTarget(this, GetRootAppsGridView(),
+  views::View::ConvertPointToTarget(this, apps_grid_view,
                                     &root_apps_grid_location);
 
   // For the purposes of whether or not to dismiss the AppList, we treat any
   // scroll to the left or the right of the apps grid as though it was in the
   // apps grid, as long as it is within the vertical bounds of the apps grid.
   bool is_in_vertical_bounds =
-      root_apps_grid_location.y() >
-          GetRootAppsGridView()->GetLocalBounds().y() &&
-      root_apps_grid_location.y() <
-          GetRootAppsGridView()->GetLocalBounds().bottom();
+      root_apps_grid_location.y() > apps_grid_view->GetLocalBounds().y() &&
+      root_apps_grid_location.y() < apps_grid_view->GetLocalBounds().bottom();
 
   // First see if we need to collapse the app list from this scroll when in a
   // side shelf alignment. We do this first because if this happens anywhere on
@@ -1664,22 +1595,12 @@ bool AppListView::HandleScroll(const gfx::Point& location,
     return true;
   }
 
-  // Now if we haven't dismissed or expanded we pass the event on to
-  // `apps_grid_view`.
-  if (app_list_state_ == AppListViewState::kFullscreenAllApps) {
-    gfx::Point apps_grid_location(location);
-    views::View::ConvertPointToTarget(this, apps_grid_view,
-                                      &apps_grid_location);
-    bool is_in_active_apps_grid =
-        apps_grid_view->GetLocalBounds().Contains(apps_grid_location);
-    // If we are not in a folder, the event just need to be within the vertical
-    // bounds of the apps grid. If we are in a folder, it must be inside that
-    // folder's view.
-    if ((!GetAppsContainerView()->IsInFolderView() && is_in_vertical_bounds) ||
-        is_in_active_apps_grid) {
-      apps_grid_view->HandleScrollFromAppListView(offset, type);
-      return true;
-    }
+  // In fullscreen, forward events to `apps_grid_view`. For example, this allows
+  // scroll events to the right of the page switcher (not inside the apps grid)
+  // to switch pages.
+  if (app_list_state_ == AppListViewState::kFullscreenAllApps &&
+      is_in_vertical_bounds) {
+    apps_grid_view->HandleScrollFromParentView(offset, type);
   }
   return true;
 }
@@ -1728,7 +1649,6 @@ void AppListView::SetState(AppListViewState new_state) {
   StartAnimationForState(new_state_override);
   MaybeIncreasePrivacyInfoRowShownCounts(new_state_override);
   RecordStateTransitionForUma(new_state_override);
-  model_->SetStateFullscreen(new_state_override);
   app_list_state_ = new_state_override;
   if (delegate_)
     delegate_->OnViewStateChanged(new_state_override);
@@ -1762,7 +1682,7 @@ void AppListView::UpdateWindowTitle() {
   if (!GetWidget())
     return;
   gfx::NativeView window = GetWidget()->GetNativeView();
-  AppListState contents_view_state = app_list_main_view_->model()->state();
+  AppListState contents_view_state = delegate_->GetCurrentAppListPage();
   if (window) {
     if (contents_view_state == AppListState::kStateSearchResults ||
         contents_view_state == AppListState::kStateEmbeddedAssistant) {
@@ -1789,9 +1709,8 @@ void AppListView::UpdateWindowTitle() {
 
 base::TimeDelta AppListView::GetStateTransitionAnimationDuration(
     AppListViewState target_state) {
-  if (ShortAnimationsForTesting() || is_side_shelf_ ||
-      (target_state == AppListViewState::kClosed &&
-       delegate_->ShouldDismissImmediately())) {
+  if (is_side_shelf_ || (target_state == AppListViewState::kClosed &&
+                         delegate_->ShouldDismissImmediately())) {
     return base::Milliseconds(kAppListAnimationDurationImmediateMs);
   }
 
@@ -2250,16 +2169,6 @@ void AppListView::OnBoundsAnimationCompleted(AppListViewState target_state) {
                                                  was_animation_interrupted);
 }
 
-gfx::Rect AppListView::GetItemScreenBoundsInFirstGridPage(
-    const std::string& id) const {
-  const AppsGridView* apps_grid_view = app_list_main_view_->contents_view()
-                                           ->apps_container_view()
-                                           ->apps_grid_view();
-  gfx::Rect item_bounds = apps_grid_view->GetExpectedItemBoundsInFirstPage(id);
-  ConvertRectToScreen(apps_grid_view, &item_bounds);
-  return item_bounds;
-}
-
 void AppListView::SetShelfHasRoundedCorners(bool shelf_has_rounded_corners) {
   if (shelf_has_rounded_corners_ == shelf_has_rounded_corners)
     return;
@@ -2415,8 +2324,8 @@ void AppListView::RecordFolderMetrics() {
   int number_of_apps_in_folders = 0;
   int number_of_folders = 0;
   int non_system_folders = 0;
-  AppListItemList* item_list =
-      app_list_main_view_->model()->top_level_item_list();
+  AppListModel* const model = AppListModelProvider::Get()->model();
+  AppListItemList* const item_list = model->top_level_item_list();
   for (size_t i = 0; i < item_list->item_count(); ++i) {
     AppListItem* item = item_list->item_at(i);
     if (item->GetItemType() != AppListFolderItem::kItemType)

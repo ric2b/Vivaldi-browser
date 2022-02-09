@@ -6,13 +6,13 @@
   'use strict';
   TestRunner.addResult(
       `Verify that for a fileSystem UISourceCode with persistence binding TabbedEditorContainer opens filesystem UISourceCode.\n`);
-  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadLegacyModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.loadTestModule('bindings_test_runner');
   await TestRunner.addScriptTag('resources/foo.js');
   await TestRunner.showPanel('sources');
 
   var testMapping = BindingsTestRunner.initializeTestMapping();
-  var fs = new BindingsTestRunner.TestFileSystem('file:///var/www');
+  var fs = new BindingsTestRunner.TestFileSystem('/var/www');
   var fsEntry = BindingsTestRunner.addFooJSFile(fs);
   fs.reportCreated(function() {});
   testMapping.addBinding('foo.js');

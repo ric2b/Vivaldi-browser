@@ -5,7 +5,6 @@
 #ifndef CONTENT_RENDERER_WORKER_SHARED_WORKER_FACTORY_IMPL_H_
 #define CONTENT_RENDERER_WORKER_SHARED_WORKER_FACTORY_IMPL_H_
 
-#include "base/macros.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -23,6 +22,9 @@ class SharedWorkerFactoryImpl : public blink::mojom::SharedWorkerFactory {
  public:
   static void Create(
       mojo::PendingReceiver<blink::mojom::SharedWorkerFactory> receiver);
+
+  SharedWorkerFactoryImpl(const SharedWorkerFactoryImpl&) = delete;
+  SharedWorkerFactoryImpl& operator=(const SharedWorkerFactoryImpl&) = delete;
 
  private:
   SharedWorkerFactoryImpl();
@@ -53,8 +55,6 @@ class SharedWorkerFactoryImpl : public blink::mojom::SharedWorkerFactory {
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker,
       ukm::SourceId ukm_source_id) override;
-
-  DISALLOW_COPY_AND_ASSIGN(SharedWorkerFactoryImpl);
 };
 
 }  // namespace content

@@ -145,7 +145,7 @@ void AppLoadService::OnExtensionUnloaded(
           FROM_HERE, {content::BrowserThread::UI},
           base::BindRepeating(&AppLoadService::RestartApplication,
                               base::Unretained(this), extension->id()),
-          base::TimeDelta::FromSeconds(kRestartAppDelaySec));
+          base::Seconds(kRestartAppDelaySec));
 
       return;
     }

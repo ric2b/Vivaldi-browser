@@ -7,8 +7,15 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "base/location.h"
+#include "base/memory/raw_ptr.h"
+#include "base/run_loop.h"
 #include "base/strings/string_piece.h"
+#include "base/test/bind.h"
+#include "base/test/values_test_util.h"
+#include "base/time/time.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
@@ -40,6 +47,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/latency/latency_info.h"
 
 namespace chrome_pdf {
@@ -152,7 +160,14 @@ class FakeContainerWrapper : public PdfViewWebPlugin::ContainerWrapper {
 
   MOCK_METHOD(void, ReportFindInPageSelection, (int, int), (override));
 
+  MOCK_METHOD(void,
+              ReportFindInPageTickmarks,
+              (const std::vector<gfx::Rect>&),
+              (override));
+
   float DeviceScaleFactor() override { return device_scale_; }
+
+  MOCK_METHOD(gfx::PointF, GetScrollPosition, (), (override));
 
   MOCK_METHOD(void,
               SetReferrerForRequest,
@@ -214,7 +229,7 @@ class FakeContainerWrapper : public PdfViewWebPlugin::ContainerWrapper {
   // Represents the frame widget's text input type.
   blink::WebTextInputType widget_text_input_type_;
 
-  PdfViewWebPlugin* web_plugin_;
+  raw_ptr<PdfViewWebPlugin> web_plugin_;
 };
 
 class FakePdfViewWebPluginClient : public PdfViewWebPlugin::Client {
@@ -265,7 +280,7 @@ class PdfViewWebPluginWithoutInitializeTest : public testing::Test {
 
   void TearDown() override { plugin_.reset(); }
 
-  FakePdfViewWebPluginClient* client_ptr_;
+  raw_ptr<FakePdfViewWebPluginClient> client_ptr_;
   std::unique_ptr<PdfViewWebPlugin, PluginDeleter> plugin_;
 };
 
@@ -291,10 +306,42 @@ class PdfViewWebPluginTest : public PdfViewWebPluginWithoutInitializeTest {
 
   // Allow derived test classes to create their own custom TestPDFiumEngine.
   virtual std::unique_ptr<TestPDFiumEngine> CreateEngine() {
-    return std::make_unique<TestPDFiumEngine>(plugin_.get());
+    return std::make_unique<NiceMock<TestPDFiumEngine>>(plugin_.get());
+  }
+
+  void SetDocumentDimensions(const gfx::Size& dimensions) {
+    EXPECT_CALL(*engine_ptr_, ApplyDocumentLayout)
+        .WillRepeatedly(Return(dimensions));
+    plugin_->OnMessage(base::test::ParseJson(R"({
+      "type": "viewport",
+      "userInitiated": false,
+      "zoom": 1,
+      "layoutOptions": {
+        "direction": 2,
+        "defaultPageOrientation": 0,
+        "twoUpViewEnabled": false,
+      },
+      "xOffset": 0,
+      "yOffset": 0,
+      "pinchPhase": 0,
+    })"));
   }
 
   void UpdatePluginGeometry(float device_scale, const gfx::Rect& window_rect) {
+    UpdatePluginGeometryWithoutWaiting(device_scale, window_rect);
+
+    // Waits for main thread callback scheduled by `PaintManager`.
+    base::RunLoop run_loop;
+    plugin_->ScheduleTaskOnMainThread(
+        FROM_HERE, base::BindLambdaForTesting([&run_loop](int32_t /*result*/) {
+          run_loop.Quit();
+        }),
+        /*result=*/0, base::TimeDelta());
+    run_loop.Run();
+  }
+
+  void UpdatePluginGeometryWithoutWaiting(float device_scale,
+                                          const gfx::Rect& window_rect) {
     // The plugin container's device scale must be set before calling
     // UpdateGeometry().
     ASSERT_TRUE(wrapper_ptr_);
@@ -307,7 +354,7 @@ class PdfViewWebPluginTest : public PdfViewWebPluginWithoutInitializeTest {
                                         const gfx::Rect& window_rect,
                                         float expected_device_scale,
                                         const gfx::Rect& expected_plugin_rect) {
-    UpdatePluginGeometry(device_scale, window_rect);
+    UpdatePluginGeometryWithoutWaiting(device_scale, window_rect);
     EXPECT_EQ(expected_device_scale, plugin_->GetDeviceScaleForTesting())
         << "Device scale comparison failure at device scale of "
         << device_scale;
@@ -320,7 +367,7 @@ class PdfViewWebPluginTest : public PdfViewWebPluginWithoutInitializeTest {
                                const gfx::Rect& window_rect,
                                const gfx::Rect& paint_rect,
                                const gfx::Rect& expected_clipped_rect) {
-    UpdatePluginGeometry(device_scale, window_rect);
+    UpdatePluginGeometryWithoutWaiting(device_scale, window_rect);
     canvas_.DrawColor(kDefaultColor);
 
     plugin_->Paint(canvas_.sk_canvas(), paint_rect);
@@ -365,8 +412,8 @@ class PdfViewWebPluginTest : public PdfViewWebPluginWithoutInitializeTest {
         << window_rect.ToString();
   }
 
-  TestPDFiumEngine* engine_ptr_;
-  FakeContainerWrapper* wrapper_ptr_;
+  raw_ptr<TestPDFiumEngine> engine_ptr_;
+  raw_ptr<FakeContainerWrapper> wrapper_ptr_;
 
   // Provides the cc::PaintCanvas for painting.
   gfx::Canvas canvas_{kCanvasSize, /*image_scale=*/1.0f, /*is_opaque=*/true};
@@ -375,7 +422,7 @@ class PdfViewWebPluginTest : public PdfViewWebPluginWithoutInitializeTest {
 TEST_F(PdfViewWebPluginWithoutInitializeTest, Initialize) {
   auto wrapper =
       std::make_unique<NiceMock<FakeContainerWrapper>>(plugin_.get());
-  auto engine = std::make_unique<TestPDFiumEngine>(plugin_.get());
+  auto engine = std::make_unique<NiceMock<TestPDFiumEngine>>(plugin_.get());
   EXPECT_CALL(*wrapper,
               RequestTouchEventType(
                   blink::WebPluginContainer::kTouchEventRequestTypeRaw));
@@ -435,6 +482,30 @@ TEST_F(PdfViewWebPluginTest,
                                      params.expected_device_scale,
                                      params.expected_plugin_rect);
   }
+}
+
+TEST_F(PdfViewWebPluginTest, UpdateGeometryScrollsUseZoomForDSFEnabled) {
+  EXPECT_CALL(*client_ptr_, IsUseZoomForDSFEnabled)
+      .WillRepeatedly(Return(true));
+  SetDocumentDimensions({100, 200});
+
+  EXPECT_CALL(*wrapper_ptr_, GetScrollPosition)
+      .WillRepeatedly(Return(gfx::PointF(4.0f, 6.0f)));
+  EXPECT_CALL(*engine_ptr_, ScrolledToXPosition(4));
+  EXPECT_CALL(*engine_ptr_, ScrolledToYPosition(6));
+  UpdatePluginGeometryWithoutWaiting(2.0f, gfx::Rect(3, 4, 5, 6));
+}
+
+TEST_F(PdfViewWebPluginTest, UpdateGeometryScrollsUseZoomForDSFDisabled) {
+  EXPECT_CALL(*client_ptr_, IsUseZoomForDSFEnabled)
+      .WillRepeatedly(Return(false));
+  SetDocumentDimensions({100, 200});
+
+  EXPECT_CALL(*wrapper_ptr_, GetScrollPosition)
+      .WillRepeatedly(Return(gfx::PointF(2.0f, 3.0f)));
+  EXPECT_CALL(*engine_ptr_, ScrolledToXPosition(4));
+  EXPECT_CALL(*engine_ptr_, ScrolledToYPosition(6));
+  UpdatePluginGeometryWithoutWaiting(2.0f, gfx::Rect(3, 4, 5, 6));
 }
 
 class PdfViewWebPluginTestUseZoomForDSF
@@ -504,6 +575,70 @@ TEST_P(PdfViewWebPluginTestUseZoomForDSF,
   }
 }
 
+TEST_P(PdfViewWebPluginTestUseZoomForDSF, UpdateLayerTransformWithIdentity) {
+  plugin_->UpdateLayerTransform(1.0f, gfx::Vector2dF());
+  TestPaintSnapshots(/*device_scale=*/4.0f,
+                     /*window_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*paint_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*expected_clipped_rect=*/gfx::Rect(10, 10, 20, 20));
+}
+
+TEST_P(PdfViewWebPluginTestUseZoomForDSF, UpdateLayerTransformWithScale) {
+  plugin_->UpdateLayerTransform(0.5f, gfx::Vector2dF());
+  TestPaintSnapshots(/*device_scale=*/4.0f,
+                     /*window_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*paint_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*expected_clipped_rect=*/gfx::Rect(10, 10, 10, 10));
+}
+
+TEST_F(PdfViewWebPluginTest,
+       UpdateLayerTransformWithTranslateUseZoomForDSFDisabled) {
+  EXPECT_CALL(*client_ptr_, IsUseZoomForDSFEnabled)
+      .WillRepeatedly(Return(false));
+
+  plugin_->UpdateLayerTransform(1.0f, gfx::Vector2dF(-5, 5));
+  TestPaintSnapshots(/*device_scale=*/4.0f,
+                     /*window_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*paint_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*expected_clipped_rect=*/gfx::Rect(10, 15, 15, 15));
+}
+
+TEST_F(PdfViewWebPluginTest,
+       UpdateLayerTransformWithTranslateUseZoomForDSFEnabled) {
+  EXPECT_CALL(*client_ptr_, IsUseZoomForDSFEnabled)
+      .WillRepeatedly(Return(true));
+
+  plugin_->UpdateLayerTransform(1.0f, gfx::Vector2dF(-1.25, 1.25));
+  TestPaintSnapshots(/*device_scale=*/4.0f,
+                     /*window_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*paint_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*expected_clipped_rect=*/gfx::Rect(10, 15, 15, 15));
+}
+
+TEST_F(PdfViewWebPluginTest,
+       UpdateLayerTransformWithScaleAndTranslateUseZoomForDSFDisabled) {
+  EXPECT_CALL(*client_ptr_, IsUseZoomForDSFEnabled)
+      .WillRepeatedly(Return(false));
+
+  plugin_->UpdateLayerTransform(0.5f, gfx::Vector2dF(-5, 5));
+  TestPaintSnapshots(/*device_scale=*/4.0f,
+                     /*window_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*paint_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*expected_clipped_rect=*/gfx::Rect(10, 15, 5, 10));
+}
+
+TEST_F(PdfViewWebPluginTest,
+       UpdateLayerTransformWithScaleAndTranslateUseZoomForDSFEnabled) {
+  EXPECT_CALL(*client_ptr_, IsUseZoomForDSFEnabled)
+      .WillRepeatedly(Return(true));
+
+  plugin_->UpdateLayerTransform(0.5f, gfx::Vector2dF(-1.25, 1.25));
+  TestPaintSnapshots(/*device_scale=*/4.0f,
+                     /*window_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*paint_rect=*/gfx::Rect(10, 10, 20, 20),
+                     /*expected_clipped_rect=*/gfx::Rect(10, 15, 5, 10));
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          PdfViewWebPluginTestUseZoomForDSF,
                          testing::Bool());
@@ -537,7 +672,8 @@ class PdfViewWebPluginMouseEventsTest : public PdfViewWebPluginTest {
   };
 
   std::unique_ptr<TestPDFiumEngine> CreateEngine() override {
-    return std::make_unique<TestPDFiumEngineForMouseEvents>(plugin_.get());
+    return std::make_unique<NiceMock<TestPDFiumEngineForMouseEvents>>(
+        plugin_.get());
   }
 
   TestPDFiumEngineForMouseEvents* engine() {
@@ -598,7 +734,7 @@ class PdfViewWebPluginImeTest : public PdfViewWebPluginTest {
   };
 
   std::unique_ptr<TestPDFiumEngine> CreateEngine() override {
-    return std::make_unique<TestPDFiumEngineForIme>(plugin_.get());
+    return std::make_unique<NiceMock<TestPDFiumEngineForIme>>(plugin_.get());
   }
 
   TestPDFiumEngineForIme* engine() {
@@ -718,15 +854,31 @@ TEST_F(PdfViewWebPluginTest, FormTextFieldFocusChangeUpdatesTextInputType) {
     EXPECT_CALL(*wrapper_ptr_, UpdateTextInputState);
     EXPECT_CALL(checkpoint, Call);
     EXPECT_CALL(*wrapper_ptr_, UpdateTextInputState);
+    EXPECT_CALL(checkpoint, Call);
+    EXPECT_CALL(*wrapper_ptr_, UpdateTextInputState);
+    EXPECT_CALL(checkpoint, Call);
+    EXPECT_CALL(*wrapper_ptr_, UpdateTextInputState);
   }
 
-  plugin_->FormTextFieldFocusChange(true);
+  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kText);
   EXPECT_EQ(blink::WebTextInputType::kWebTextInputTypeText,
             wrapper_ptr_->widget_text_input_type());
 
   checkpoint.Call();
 
-  plugin_->FormTextFieldFocusChange(false);
+  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kNoFocus);
+  EXPECT_EQ(blink::WebTextInputType::kWebTextInputTypeNone,
+            wrapper_ptr_->widget_text_input_type());
+
+  checkpoint.Call();
+
+  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kText);
+  EXPECT_EQ(blink::WebTextInputType::kWebTextInputTypeText,
+            wrapper_ptr_->widget_text_input_type());
+
+  checkpoint.Call();
+
+  plugin_->FormFieldFocusChange(PDFEngine::FocusFieldType::kNonText);
   EXPECT_EQ(blink::WebTextInputType::kWebTextInputTypeNone,
             wrapper_ptr_->widget_text_input_type());
 }
@@ -815,6 +967,17 @@ TEST_F(PdfViewWebPluginTest, CaretChangeUseZoomForDSFDisabled) {
       /*device_scale=*/2.0f, /*window_rect=*/gfx::Rect(12, 24, 36, 48));
   plugin_->CaretChanged(gfx::Rect(10, 20, 30, 40));
   EXPECT_EQ(gfx::Rect(23, 10, 15, 20), plugin_->GetPluginCaretBounds());
+}
+
+TEST_F(PdfViewWebPluginTest, NotifyNumberOfFindResultsChanged) {
+  plugin_->StartFind("x", /*case_sensitive=*/false, /*identifier=*/123);
+
+  const std::vector<gfx::Rect> tickmarks = {gfx::Rect(1, 2), gfx::Rect(3, 4)};
+  plugin_->UpdateTickMarks(tickmarks);
+
+  EXPECT_CALL(*wrapper_ptr_, ReportFindInPageTickmarks(tickmarks));
+  EXPECT_CALL(*wrapper_ptr_, ReportFindInPageMatchCount(123, 5, true));
+  plugin_->NotifyNumberOfFindResultsChanged(/*total=*/5, /*final_result=*/true);
 }
 
 }  // namespace chrome_pdf

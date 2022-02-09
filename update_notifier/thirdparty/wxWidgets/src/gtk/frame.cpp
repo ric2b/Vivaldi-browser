@@ -17,16 +17,7 @@
     #include "wx/statusbr.h"
 #endif // WX_PRECOMP
 
-#include <gtk/gtk.h>
-#include "wx/gtk/private/gtk2-compat.h"
-
-#if wxUSE_LIBHILDON
-    #include <hildon-widgets/hildon-window.h>
-#endif // wxUSE_LIBHILDON
-
-#if wxUSE_LIBHILDON2
-    #include <hildon/hildon.h>
-#endif // wxUSE_LIBHILDON2
+#include "wx/gtk/private/wrapgtk.h"
 
 // ----------------------------------------------------------------------------
 // event tables
@@ -56,13 +47,6 @@ bool wxFrame::Create( wxWindow *parent,
     return wxFrameBase::Create(parent, id, title, pos, sizeOrig, style, name);
 }
 
-wxFrame::~wxFrame()
-{
-    SendDestroyEvent();
-
-    DeleteAllBars();
-}
-
 // ----------------------------------------------------------------------------
 // overridden wxWindow methods
 // ----------------------------------------------------------------------------
@@ -84,9 +68,7 @@ void wxFrame::DoGetClientSize( int *width, int *height ) const
         {
             int h;
             gtk_widget_get_preferred_height(m_frameMenuBar->m_widget, NULL, &h);
-#if !wxUSE_LIBHILDON && !wxUSE_LIBHILDON2
             *height -= h;
-#endif
         }
 #endif // wxUSE_MENUS_NATIVE
 
@@ -128,77 +110,10 @@ void wxFrame::DoGetClientSize( int *width, int *height ) const
         *height = 0;
 }
 
-#if wxUSE_MENUS && wxUSE_ACCEL
-// Helper for wxCreateAcceleratorTableForMenuBar
-static void wxAddAccelerators(wxList& accelEntries, wxMenu* menu)
-{
-    size_t i;
-    for (i = 0; i < menu->GetMenuItems().GetCount(); i++)
-    {
-        wxMenuItem* item = (wxMenuItem*) menu->GetMenuItems().Item(i)->GetData();
-        if (item->GetSubMenu())
-        {
-            wxAddAccelerators(accelEntries, item->GetSubMenu());
-        }
-        else if (!item->GetItemLabel().IsEmpty())
-        {
-            wxAcceleratorEntry* entry = wxAcceleratorEntry::Create(item->GetItemLabel());
-            if (entry)
-            {
-                entry->Set(entry->GetFlags(), entry->GetKeyCode(), item->GetId());
-                accelEntries.Append((wxObject*) entry);
-            }
-        }
-    }
-}
-
-// Create an accelerator table consisting of all the accelerators
-// from the menubar in the given menus
-static wxAcceleratorTable wxCreateAcceleratorTableForMenuBar(wxMenuBar* menuBar)
-{
-    wxList accelEntries;
-
-    size_t i;
-    for (i = 0; i < menuBar->GetMenuCount(); i++)
-    {
-        wxAddAccelerators(accelEntries, menuBar->GetMenu(i));
-    }
-
-    size_t n = accelEntries.GetCount();
-
-    if (n == 0)
-        return wxAcceleratorTable();
-
-    wxAcceleratorEntry* entries = new wxAcceleratorEntry[n];
-
-    for (i = 0; i < accelEntries.GetCount(); i++)
-    {
-        wxAcceleratorEntry* entry = (wxAcceleratorEntry*) accelEntries.Item(i)->GetData();
-        entries[i] = (*entry);
-        delete entry;
-
-    }
-
-    wxAcceleratorTable table(n, entries);
-    delete[] entries;
-
-    return table;
-}
-#endif // wxUSE_MENUS && wxUSE_ACCEL
-
 bool wxFrame::ShowFullScreen(bool show, long style)
 {
     if (!wxFrameBase::ShowFullScreen(show, style))
         return false;
-
-#if wxUSE_MENUS && wxUSE_ACCEL
-    if (show && GetMenuBar())
-    {
-        wxAcceleratorTable table(wxCreateAcceleratorTableForMenuBar(GetMenuBar()));
-        if (table.IsOk())
-            SetAcceleratorTable(table);
-    }
-#endif // wxUSE_MENUS && wxUSE_ACCEL
 
     wxWindow* const bar[] = {
 #if wxUSE_MENUS
@@ -276,15 +191,7 @@ void wxFrame::DetachMenuBar()
     wxASSERT_MSG( (m_wxwindow != NULL), wxT("invalid frame") );
 
     if ( m_frameMenuBar )
-    {
-#if wxUSE_LIBHILDON || wxUSE_LIBHILDON2
-        hildon_window_set_menu(HILDON_WINDOW(m_widget), NULL);
-#else // !wxUSE_LIBHILDON && !wxUSE_LIBHILDON2
-        g_object_ref( m_frameMenuBar->m_widget );
-
         gtk_container_remove( GTK_CONTAINER(m_mainWidget), m_frameMenuBar->m_widget );
-#endif // wxUSE_LIBHILDON || wxUSE_LIBHILDON2 /!wxUSE_LIBHILDON && !wxUSE_LIBHILDON2
-    }
 
     wxFrameBase::DetachMenuBar();
 
@@ -299,11 +206,6 @@ void wxFrame::AttachMenuBar( wxMenuBar *menuBar )
 
     if (m_frameMenuBar)
     {
-#if wxUSE_LIBHILDON || wxUSE_LIBHILDON2
-        hildon_window_set_menu(HILDON_WINDOW(m_widget),
-                               GTK_MENU(m_frameMenuBar->m_widget));
-#else // !wxUSE_LIBHILDON && !wxUSE_LIBHILDON2
-
         // menubar goes into top of vbox (m_mainWidget)
         gtk_box_pack_start(
             GTK_BOX(m_mainWidget), menuBar->m_widget, false, false, 0);
@@ -313,7 +215,6 @@ void wxFrame::AttachMenuBar( wxMenuBar *menuBar )
         gtk_widget_set_size_request(menuBar->m_widget, -1, -1);
 
         gtk_widget_show( m_frameMenuBar->m_widget );
-#endif // wxUSE_LIBHILDON || wxUSE_LIBHILDON2/!wxUSE_LIBHILDON && !wxUSE_LIBHILDON2
     }
     // make sure next size_allocate causes a wxSizeEvent
     m_useCachedClientSize = false;

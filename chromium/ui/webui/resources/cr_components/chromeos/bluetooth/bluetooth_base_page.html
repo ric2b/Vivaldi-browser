@@ -1,7 +1,17 @@
 <style include="iron-positioning">
   :host ::slotted([slot='page-body']) {
     color: var(--cr-primary-text-color);
-    height: 276px;
+    height: 292px;
+  }
+
+  paper-progress {
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    --paper-progress-active-color: var(--cros-icon-color-prominent);
+    --paper-progress-container-color: rgba(var(--cros-icon-color-prominent-rgb),
+                                           var(--cros-second-tone-opacity));
   }
 
   #buttonBar {
@@ -13,13 +23,14 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    margin: 8px;
+    margin: 0 8px 8px 8px;
   }
 
   #title {
     color: var(--cr-primary-text-color);
     font-weight: normal;
     line-height: 24px;
+    margin: 24px 0 8px 0;
   }
 
   .cancel-button {
@@ -32,6 +43,10 @@
   }
 </style>
 <div id="container">
+  <template is="dom-if" if="[[showScanProgress]]" restamp>
+    <paper-progress indeterminate>
+    </paper-progress>
+  </template>
   <h3 id="title">[[i18n('bluetoothPairNewDevice')]]</h3>
   <slot name="page-body" id="pageBody"></slot>
   <div id="buttonBar">

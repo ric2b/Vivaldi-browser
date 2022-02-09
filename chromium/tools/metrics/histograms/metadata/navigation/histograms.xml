@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -243,7 +244,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome"
-    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2022-02-06">
+    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2022-04-17">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -257,7 +258,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome.BlocklistedFeature"
-    enum="WebSchedulerTrackedFeature" expires_after="2022-04-03">
+    enum="WebSchedulerTrackedFeature" expires_after="2022-06-05">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -319,7 +320,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="BackForwardCache.HistoryNavigationOutcome.DisabledForRenderFrameHostReason2"
     enum="BackForwardCacheDisabledForRenderFrameHostReason2"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>carlscab@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -351,6 +352,26 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     for each reason. Compare this with
     BackForwardCache.HistoryNavigationOutcome, which contains the total number
     of navigations which where not cached
+
+    This is recorded for all websites regardless whether back-forward cache is
+    enabled or not.
+  </summary>
+</histogram>
+
+<histogram
+    name="BackForwardCache.HistoryNavigationOutcome.NotRestoredDueToAccessibility.AXEventType"
+    enum="AXEventType" expires_after="2022-10-31">
+  <owner>yuzus@chromium.org</owner>
+  <owner>bfcache-dev@chromium.org</owner>
+  <summary>
+    For history navigations, records the AX event type that caused
+    RenderFrameHost::IsInactiveAndDisallowActivation calls. The value refers to
+    AX enum in ui/accessibility/ax_enums.mojom.
+
+    The metric is recorded when a history navigation commits and emits the
+    breakdown of a specific bucket in HistoryNavigationOutcome.NotRestoredReason
+    (AXEvent). Compare this with BackForwardCache.HistoryNavigationOutcome,
+    which contains the total number of navigations which were not cached.
 
     This is recorded for all websites regardless whether back-forward cache is
     enabled or not.
@@ -652,7 +673,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.CodeCacheTime.{CodeCacheType}" units="ms"
-    expires_after="2021-12-29">
+    expires_after="2022-06-15">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -827,7 +848,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.IsLockedProcess" enum="NavigationIsLockedProcess"
-    expires_after="2021-12-21">
+    expires_after="2022-12-09">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -838,7 +859,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.IsLockedProcess.HTTPOrHTTPS"
-    enum="NavigationIsLockedProcess" expires_after="2021-12-21">
+    enum="NavigationIsLockedProcess" expires_after="2022-12-09">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -849,7 +870,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.IsSameBrowsingInstance"
-    enum="NavigationIsSameBrowsingInstance" expires_after="2021-12-12">
+    enum="NavigationIsSameBrowsingInstance" expires_after="2022-04-24">
   <owner>arthursonzogni@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
   <owner>nasko@chromium.org</owner>
@@ -924,6 +945,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Navigation.MainFrame.ThirdPartyCookieBlockingEnabled"
+    enum="ThirdPartyCookieBlockState" expires_after="2022-01-23">
+  <owner>dullweber@chromium.org</owner>
+  <owner>feuunk@chromium.org</owner>
+  <summary>
+    Records whether third party cookie blocking was enabled for a site. Recorded
+    for each main-frame navigation when that navigation commits. Only counts
+    HTTP or HTTPS URLs and ignores downloads.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.MainFrameFormSubmission.SiteEngagementLevel"
     enum="SiteEngagementLevel" expires_after="2021-04-04">
   <owner>meacer@chromium.org</owner>
@@ -969,9 +1001,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.MainFrameScheme2" enum="NavigationScheme"
-    expires_after="2022-02-06">
-  <owner>elawrence@chromium.org</owner>
+    expires_after="2022-11-01">
   <owner>estark@chromium.org</owner>
+  <owner>elawrence@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
   <summary>
     The scheme of the URL for each main-frame navigation. This is only recorded
     for finished navigations and not attempts. Warning: this histogram was
@@ -980,9 +1013,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.MainFrameSchemeDifferentPage2"
-    enum="NavigationScheme" expires_after="2022-04-10">
-  <owner>elawrence@chromium.org</owner>
+    enum="NavigationScheme" expires_after="2022-11-01">
   <owner>estark@chromium.org</owner>
+  <owner>elawrence@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
   <summary>
     The scheme of the URL for each main-frame navigation that replaces a
     document object. This is not reported for reference fragment navigations,
@@ -992,9 +1026,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.MainFrameSchemeDifferentPageOTR2"
-    enum="NavigationScheme" expires_after="2022-04-24">
-  <owner>elawrence@chromium.org</owner>
+    enum="NavigationScheme" expires_after="2022-11-01">
   <owner>estark@chromium.org</owner>
+  <owner>elawrence@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
   <summary>
     The scheme of the URL for each main-frame navigation that replaces a
     document object while in incognito. This is not reported for reference
@@ -1004,17 +1039,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.MainFrameSchemeOTR2" enum="NavigationScheme"
-    expires_after="2021-06-01">
+    expires_after="2022-11-01">
   <owner>elawrence@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
     The scheme of the URL for each main-frame navigation while in incognito.
-    This is only recorded for finished navigations and not attempts.
+    This is only recorded for finished navigations and not attempts. Warning:
+    this histogram was expired from 2021-06-01 through M97; data may be missing.
   </summary>
 </histogram>
 
 <histogram name="Navigation.NavigationURLLoaderImplIOPostTime"
     units="microseconds" expires_after="M79">
+  <obsolete>
+    Removed May 2020.
+  </obsolete>
   <owner>jam@chromium.org</owner>
   <owner>kinuko@chromium.org</owner>
   <summary>
@@ -1133,6 +1172,43 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Navigation.RendererCommitDelay.{FrameType}" units="ms"
+    expires_after="2022-11-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the delay between when the navigation commit was sent by the
+    browser to when it is received by the renderer. Recorded for every
+    cross-document non-page activation navigation commit.
+  </summary>
+  <token key="FrameType" variants="FrameTypes"/>
+</histogram>
+
+<histogram name="Navigation.RendererCommitProcessWaitTime.{FrameType}"
+    units="ms" expires_after="2022-11-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures how long the navigation commit was waiting for the renderer process
+    to start before it was able to receive the commit. Recorded for every
+    cross-document non-page activation navigation commit which waits on a
+    process start.
+  </summary>
+  <token key="FrameType" variants="FrameTypes"/>
+</histogram>
+
+<histogram name="Navigation.RendererCommitQueueTime.{FrameType}" units="ms"
+    expires_after="2022-11-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures queue time for the navigation commit mojo task on the renderer
+    side. Recorded for every cross-document non-page activation navigation
+    commit.
+  </summary>
+  <token key="FrameType" variants="FrameTypes"/>
+</histogram>
+
 <histogram name="Navigation.RendererDidNavigateTime.{FrameType}" units="ms"
     expires_after="2022-09-07">
   <owner>cduvall@chromium.org</owner>
@@ -1157,7 +1233,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.RequiresDedicatedProcess"
-    enum="NavigationRequiresDedicatedProcess" expires_after="2022-04-03">
+    enum="NavigationRequiresDedicatedProcess" expires_after="2022-06-05">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -1181,11 +1257,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Navigation.SecureSchemeHasSSLStatus" enum="BooleanPresent"
     expires_after="M85">
+  <obsolete>
+    Removed November 2021.
+  </obsolete>
   <owner>jam@chromium.org</owner>
+  <owner>trusty-transport@chromium.org</owner>
   <summary>
     True counts the events when a https URL commits with a SSL certificate.
     False is when the certificate is missing. This should be at 100%, anything
     less is probably a bug.
+
+    This histogram is recorded when the primary main frame's renderer navigated
+    to https scheme page without error.
   </summary>
 </histogram>
 
@@ -1224,10 +1307,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <token key="Event" variants="NavigationThrottleEvents"/>
 </histogram>
 
-<histogram name="Navigation.TimeToActivatePrerender" units="ms"
-    expires_after="2022-01-01">
+<histogram name="Navigation.TimeToActivatePrerender{TriggerType}" units="ms"
+    expires_after="2022-01-31">
   <owner>sreejakshetty@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
+  <owner>asamidoi@chromium.org</owner>
   <summary>
     The time needed to commit a navigation using prerender activation. This is
     the time from the beginning of NavigationStart to the end of
@@ -1235,6 +1319,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
     This metric is logged everytime prerender activation navigation commits.
   </summary>
+  <token key="TriggerType">
+    <variant name="">
+      <obsolete>
+        Base histogram. Use suffixes of this histogram instead. Non-suffix name
+        was removed in Nov 2021.
+      </obsolete>
+    </variant>
+    <variant name=".Embedder_DirectURLInput"/>
+    <variant name=".SpeculationRule"/>
+  </token>
 </histogram>
 
 <histogram name="Navigation.TimeToReadyToCommit2" units="ms"
@@ -1264,6 +1358,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="Navigation.URLLoaderNetworkService.OnCompleteCertificateChainsSize"
     units="KB" expires_after="M78">
+  <obsolete>
+    Expired in M78, code removed in M98
+  </obsolete>
   <owner>estark@chromium.org</owner>
   <summary>
     When the navigation URL loader receives an OnComplete message from the
@@ -1276,6 +1373,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Navigation.URLLoaderNetworkService.OnCompleteHasSSLInfo"
     enum="BooleanPresent" expires_after="M77">
+  <obsolete>
+    Expired in M77, code removed in M98
+  </obsolete>
   <owner>estark@chromium.org</owner>
   <summary>
     Whether the network service's OnComplete message to the navigation URL
@@ -1309,6 +1409,27 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     to trigger traces to be uploaded to analyze what happened in these
     navigations.
   </summary>
+</histogram>
+
+<histogram name="Navigation.{Stage}.{FrameType}" units="ms"
+    expires_after="2022-05-06">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the amount of time the {Stage} stage takes in early navigation.
+    Logged for any navigation that reaches the stage.
+  </summary>
+  <token key="Stage">
+    <variant name="BeginNavigationImpl"
+        summary="NavigationRequest::BeginNavigationImpl"/>
+    <variant name="DidStartLoading" summary="FrameTreeNode::DidStartLoading"/>
+    <variant name="LoaderCreateToRequestStart"
+        summary="NavigationURLLoaderImpl creation to network request start"/>
+    <variant name="WillStartRequestToLoaderStart"
+        summary="NavigationRequest::WillStartRequest to
+                 NavigationURLLoader::Start"/>
+  </token>
+  <token key="FrameType" variants="FrameTypes"/>
 </histogram>
 
 <histogram base="true" name="NavigationPredictor.ActionTaken"
@@ -1477,8 +1598,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="NavigationSuggestion.UpdateEngagedSitesDeferTime" units="ms"
+    expires_after="2022-05-03">
+  <owner>meacer@chromium.org</owner>
+  <owner>cduvall@chromium.org</owner>
+  <owner>security-enamel@chromium.org</owner>
+  <summary>
+    Records the time duration the navigation was deferred while waiting for
+    engaged sites data. Recorded whenever a navigation is deferred waiting for
+    engaged sites.
+  </summary>
+</histogram>
+
 <histogram name="Prerender.Experimental.PrerenderCancelledInterface"
-    enum="PrerenderCancelledInterface" expires_after="2022-01-27">
+    enum="PrerenderCancelledInterface" expires_after="2022-06-05">
   <owner>nhiroki@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>lingqi@chromium.org</owner>
@@ -1486,6 +1619,32 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Mojo interfaces that cause the cancellation of prerendering. Recorded by
     MojoBinderPolicyApplier in the browser process once it receives the binding
     request of a kCancel Mojo interface.
+  </summary>
+</histogram>
+
+<histogram name="Prerender.Experimental.PrerenderCancelledUnknownInterface"
+    enum="PrerenderCancelledUnknownInterface" expires_after="2022-06-05">
+  <owner>nhiroki@chromium.org</owner>
+  <owner>toyoshim@chromium.org</owner>
+  <owner>lingqi@chromium.org</owner>
+  <summary>
+    This histogram tracks the interfaces that
+    Prerender.Experimental.PrerenderCancelledInterface fails to track. It is
+    needed because:
+
+    * Embedders can set their own policies, so Prerender2 cannot map all of them
+    to enums.
+
+    * Channel-associated interfaces' policies are set to kCancel implicitly.
+    It's hard to track all of them, especially the newly added
+    channel-associated interfaces.
+
+    This sparse histogram allows Prerender2 to record all of these interfaces
+    separately.
+
+    It is recored by MojoBinderPolicyApplier in the browser process once it
+    receives the binding request of a kCancel Mojo interface and cannot find an
+    accurate enum type for this interface.
   </summary>
 </histogram>
 
@@ -1524,7 +1683,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Prerender.Experimental.PrerenderHostFinalStatus"
-    enum="PrerenderHostFinalStatus" expires_after="2022-01-27">
+    enum="PrerenderHostFinalStatus" expires_after="2022-06-05">
   <owner>nhiroki@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>lingqi@chromium.org</owner>
@@ -1535,7 +1694,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Prerender.FinalStatus" enum="PrerenderFinalStatus"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>ryansturm@chromium.org</owner>
   <owner>tbansal@chromium.org</owner>
   <summary>
@@ -1623,7 +1782,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Prerender.PrerenderLoadComplete" units="BooleanSuccess"
-    expires_after="2022-03-30">
+    expires_after="2022-06-05">
   <owner>gambard@chromium.org</owner>
   <owner>justincohen@chromium.org</owner>
   <summary>
@@ -1660,7 +1819,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Prerender.PrerenderTimeSaved" units="ms"
-    expires_after="2022-03-30">
+    expires_after="2022-06-05">
   <owner>gambard@chromium.org</owner>
   <owner>justincohen@chromium.org</owner>
   <summary>

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "chrome/browser/safe_browsing/incident_reporting/delayed_analysis_callback.h"
@@ -107,10 +108,9 @@ class ServicesDelegate {
   virtual DownloadProtectionService* GetDownloadService() = 0;
 #endif
 
-  // Takes a SharedURLLoaderFactory with the Safe Browsing NetworkContext and
-  // one from the BrowserProcess.
+  // Takes a SharedURLLoaderFactory from the BrowserProcess, for use in the
+  // database manager.
   virtual void StartOnIOThread(
-      scoped_refptr<network::SharedURLLoaderFactory> sb_url_loader_factory,
       scoped_refptr<network::SharedURLLoaderFactory> browser_url_loader_factory,
       const V4ProtocolConfig& v4_config) = 0;
   virtual void StopOnIOThread(bool shutdown) = 0;
@@ -118,12 +118,14 @@ class ServicesDelegate {
   virtual void CreateTelemetryService(Profile* profile) {}
   virtual void RemoveTelemetryService(Profile* profile) {}
 
+  virtual void OnProfileWillBeDestroyed(Profile* profile) {}
+
  protected:
   // Unowned pointer
-  SafeBrowsingService* const safe_browsing_service_;
+  const raw_ptr<SafeBrowsingService> safe_browsing_service_;
 
   // Unowned pointer
-  ServicesCreator* const services_creator_;
+  const raw_ptr<ServicesCreator> services_creator_;
 };
 
 }  // namespace safe_browsing

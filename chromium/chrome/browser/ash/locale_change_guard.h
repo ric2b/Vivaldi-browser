@@ -11,7 +11,6 @@
 #include <string>
 
 #include "ash/public/cpp/locale_update_controller.h"
-#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "base/memory/weak_ptr.h"
@@ -25,7 +24,7 @@
 
 class Profile;
 
-namespace chromeos {
+namespace ash {
 
 // Performs check whether locale has been changed automatically recently
 // (based on synchronized user preference).  If so: shows notification that
@@ -61,7 +60,7 @@ class LocaleChangeGuard : public content::NotificationObserver,
 
   void Check();
 
-  void OnResult(ash::LocaleNotificationResult result);
+  void OnResult(LocaleNotificationResult result);
   void AcceptLocaleChange();
   void RevertLocaleChange();
 
@@ -89,7 +88,7 @@ class LocaleChangeGuard : public content::NotificationObserver,
   static size_t GetSkipShowNotificationLanguagesSizeForTesting();
 
   // Set if the system locale has changed on the user login. If this is true,
-  // the LocaleChangeGuard will notify ash::LocaleUpdateController that the
+  // the `LocaleChangeGuard` will notify `LocaleUpdateController` that the
   // locale has changed, even if the user does not have to be shown locale
   // change notification, or if the user preferred locale has not changed.
   // Set by ProfileImple using set_locale_changed_during_login().
@@ -106,6 +105,6 @@ class LocaleChangeGuard : public content::NotificationObserver,
       session_observation_{this};
 };
 
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_LOCALE_CHANGE_GUARD_H_

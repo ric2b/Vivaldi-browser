@@ -15,7 +15,6 @@ import '../prefs/prefs.js';
 import '../settings_shared_css.js';
 // <if expr="not chromeos">
 import '//resources/cr_elements/cr_toast/cr_toast.js';
-
 // </if>
 
 import {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
@@ -25,23 +24,20 @@ import {html, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bun
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {LifetimeBrowserProxyImpl} from '../lifetime_browser_proxy.js';
+import {PrivacyPageVisibility} from '../page_visibility.js';
+import {SettingsSignoutDialogElement} from '../people_page/signout_dialog.js';
 import {StatusAction, SyncStatus} from '../people_page/sync_browser_proxy.js';
 import {PrefsMixin} from '../prefs/prefs_mixin.js';
 
 import {MetricsReporting, PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from './privacy_page_browser_proxy.js';
 
 
-// TODO(crbug.com/1234307): Remove when signout_dialog.js is migrated to
-// TypeScript.
-interface SettingsSignoutDialogElement extends HTMLElement {
-  wasConfirmed(): boolean;
-}
-
 export interface SettingsPersonalizationOptionsElement {
   $: {
     toast: CrToastElement,
     signinAllowedToggle: SettingsToggleButtonElement,
     metricsReportingControl: SettingsToggleButtonElement,
+    spellCheckControl: SettingsToggleButtonElement,
   };
 }
 
@@ -97,7 +93,7 @@ export class SettingsPersonalizationOptionsElement extends
         computed: 'computeSyncFirstSetupInProgress_(syncStatus)',
       },
 
-      // <if expr="not chromeos">
+      // <if expr="not chromeos and not lacros">
       signinAvailable_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('signinAvailable'),
@@ -107,6 +103,7 @@ export class SettingsPersonalizationOptionsElement extends
     };
   }
 
+  pageVisibility: PrivacyPageVisibility;
   syncStatus: SyncStatus;
 
   // <if expr="_google_chrome and not chromeos">
@@ -117,7 +114,7 @@ export class SettingsPersonalizationOptionsElement extends
   private showSignoutDialog_: boolean;
   private syncFirstSetupInProgress_: boolean;
 
-  // <if expr="not chromeos">
+  // <if expr="not chromeos and not lacros">
   private signinAvailable_: boolean;
   // </if>
 
@@ -139,6 +136,7 @@ export class SettingsPersonalizationOptionsElement extends
     // </if>
   }
 
+  // <if expr="chromeos">
   /**
    * @return the autocomplete search suggestions CrToggleElement.
    */
@@ -162,6 +160,7 @@ export class SettingsPersonalizationOptionsElement extends
     return this.shadowRoot!.querySelector<SettingsToggleButtonElement>(
         '#driveSuggestControl');
   }
+  // </if>
 
   // <if expr="_google_chrome and not chromeos">
   private onMetricsReportingChange_() {
@@ -194,6 +193,46 @@ export class SettingsPersonalizationOptionsElement extends
   }
   // </if>
 
+  private showSearchSuggestToggle_(): boolean {
+    // <if expr="chromeos">
+    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
+        loadTimeData.getBoolean('isOSSettings')) {
+      // Should be hidden in OS settings.
+      return false;
+    }
+    // </if>
+    if (this.pageVisibility === undefined) {
+      // pageVisibility isn't defined in non-Guest profiles (crbug.com/1288911).
+      return true;
+    }
+    return this.pageVisibility.searchPrediction;
+  }
+
+  // <if expr="chromeos">
+  private showMetricsReportingAsLink_(): boolean {
+    // If SyncSettingsCategorization is enabled, browser settings should show
+    // a link to the OS settings.
+    return loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
+        !loadTimeData.getBoolean('isOSSettings');
+  }
+
+  private onMetricsReportingLinkClick_() {
+    const chromeOSSyncSettingsPath =
+        loadTimeData.getString('chromeOSSyncSettingsPath');
+    window.location.href = `chrome://os-settings/${chromeOSSyncSettingsPath}`;
+  }
+  // </if>
+
+  private showUrlCollectionToggle_(): boolean {
+    // <if expr="chromeos">
+    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled')) {
+      // Should be hidden in OS settings.
+      return !loadTimeData.getBoolean('isOSSettings');
+    }
+    // </if>
+    return true;
+  }
+
   // <if expr="_google_chrome">
   private onUseSpellingServiceToggle_(event: Event) {
     // If turning on using the spelling service, automatically turn on
@@ -212,6 +251,13 @@ export class SettingsPersonalizationOptionsElement extends
   }
 
   private shouldShowDriveSuggest_(): boolean {
+    // <if expr="chromeos">
+    if (loadTimeData.getBoolean('syncSettingsCategorizationEnabled') &&
+        loadTimeData.getBoolean('isOSSettings')) {
+      // Should be hidden in OS settings.
+      return false;
+    }
+    // </if>
     return loadTimeData.getBoolean('driveSuggestAvailable') &&
         !!this.syncStatus && !!this.syncStatus.signedIn &&
         this.syncStatus.statusAction !== StatusAction.REAUTHENTICATE;
@@ -242,6 +288,12 @@ export class SettingsPersonalizationOptionsElement extends
   private onRestartTap_(e: Event) {
     e.stopPropagation();
     LifetimeBrowserProxyImpl.getInstance().restart();
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'settings-personalization-options': SettingsPersonalizationOptionsElement;
   }
 }
 

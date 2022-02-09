@@ -124,7 +124,7 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
     window_title_->SetSubpixelRenderingEnabled(false);
     window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     window_title_->SetID(VIEW_ID_WINDOW_TITLE);
-    AddChildView(window_title_);
+    AddChildView(window_title_.get());
   }
 
   caption_button_container_ =
@@ -779,9 +779,10 @@ void GlassBrowserFrameView::LayoutWindowControlsOverlay() {
 
 void GlassBrowserFrameView::LayoutClientView() {
   client_view_bounds_ = GetLocalBounds();
-  int top_inset = browser_view()->IsWindowControlsOverlayEnabled()
-                      ? WindowTopY()
-                      : GetTopInset(false);
+  int top_inset = GetTopInset(false);
+  if (browser_view()->IsWindowControlsOverlayEnabled()) {
+    top_inset = frame()->IsFullscreen() ? 0 : WindowTopY();
+  }
   client_view_bounds_.Inset(0, top_inset, 0, 0);
 }
 

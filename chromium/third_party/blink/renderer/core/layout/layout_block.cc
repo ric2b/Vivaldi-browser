@@ -48,7 +48,6 @@
 #include "third_party/blink/renderer/core/layout/box_layout_extra_input.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
-#include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/layout_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_grid.h"
@@ -65,6 +64,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/ng/svg/layout_ng_svg_text.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
@@ -119,6 +119,16 @@ static TrackedDescendantsMap& GetPercentHeightDescendantsMap() {
   return *map;
 }
 
+// This map keeps track of SVG <text> descendants.
+// LayoutNGSVGText needs to do re-layout on transform changes of any ancestor
+// because LayoutNGSVGText's layout result depends on scaling factors computed
+// with ancestor transforms.
+TrackedDescendantsMap& GetSvgTextDescendantsMap() {
+  DEFINE_STATIC_LOCAL(Persistent<TrackedDescendantsMap>, map,
+                      (MakeGarbageCollected<TrackedDescendantsMap>()));
+  return *map;
+}
+
 LayoutBlock::LayoutBlock(ContainerNode* node)
     : LayoutBox(node),
       has_margin_before_quirk_(false),
@@ -130,6 +140,7 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
       descendants_with_floats_marked_for_layout_(false),
       has_positioned_objects_(false),
       has_percent_height_descendants_(false),
+      has_svg_text_descendants_(false),
       pagination_state_changed_(false),
       is_legacy_initiated_out_of_flow_layout_(false) {
   if (node)
@@ -163,6 +174,10 @@ void LayoutBlock::RemoveFromGlobalMaps() {
       DCHECK_EQ(descendant->PercentHeightContainer(), this);
       descendant->SetPercentHeightContainer(nullptr);
     }
+  }
+  if (has_svg_text_descendants_) {
+    GetSvgTextDescendantsMap().erase(this);
+    has_svg_text_descendants_ = false;
   }
 }
 
@@ -260,6 +275,14 @@ void LayoutBlock::StyleDidChange(StyleDifference diff,
       old_style && diff.NeedsFullLayout() && NeedsLayout() &&
       BorderOrPaddingLogicalDimensionChanged(*old_style, new_style,
                                              kLogicalHeight);
+
+  if (diff.TransformChanged() && has_svg_text_descendants_) {
+    for (LayoutBox* box : *GetSvgTextDescendantsMap().at(this)) {
+      box->SetNeedsLayout(layout_invalidation_reason::kStyleChange,
+                          kMarkContainerChain);
+      To<LayoutNGSVGText>(box)->SetNeedsTextMetricsUpdate();
+    }
+  }
 }
 
 void LayoutBlock::UpdateFromStyle() {
@@ -423,8 +446,6 @@ void LayoutBlock::UpdateAfterLayout() {
 void LayoutBlock::UpdateLayout() {
   NOT_DESTROYED();
   DCHECK(!GetScrollableArea() || GetScrollableArea()->GetScrollAnchor());
-
-  LayoutAnalyzer::Scope analyzer(*this);
 
   bool needs_scroll_anchoring =
       IsScrollContainer() &&
@@ -597,8 +618,10 @@ void LayoutBlock::AddVisualOverflowFromBlockChildren() {
     // the outline which may enclose continuations.
     auto* child_block_flow = DynamicTo<LayoutBlockFlow>(child);
     if (child_block_flow &&
-        child_block_flow->ContainsInlineWithOutlineAndContinuation())
+        child_block_flow->ContainsInlineWithOutlineAndContinuation() &&
+        !child_block_flow->ChildPrePaintBlockedByDisplayLock()) {
       child_block_flow->AddVisualOverflowFromInlineChildren();
+    }
     AddVisualOverflowFromChild(*child);
   }
 }
@@ -618,8 +641,10 @@ void LayoutBlock::AddLayoutOverflowFromBlockChildren() {
     // the outline which may enclose continuations.
     auto* child_block_flow = DynamicTo<LayoutBlockFlow>(child);
     if (child_block_flow &&
-        child_block_flow->ContainsInlineWithOutlineAndContinuation())
+        child_block_flow->ContainsInlineWithOutlineAndContinuation() &&
+        !child_block_flow->ChildPrePaintBlockedByDisplayLock()) {
       child_block_flow->AddLayoutOverflowFromInlineChildren();
+    }
 
     AddLayoutOverflowFromChild(*child);
   }
@@ -680,7 +705,7 @@ void LayoutBlock::UpdateBlockChildDirtyBitsBeforeLayout(bool relayout_children,
        ChangeInAvailableLogicalHeightAffectsChild(this, child)) ||
       (child.IsListMarker() && IsListItem() &&
        To<LayoutBlockFlow>(this)->ContainsFloats())) {
-    if (child.IsLayoutNGMixin())
+    if (child.IsLayoutNGObject())
       child.SetSelfNeedsLayoutForAvailableSpace(true);
     else
       child.SetChildNeedsLayout(kMarkOnlyThis);
@@ -780,11 +805,7 @@ bool LayoutBlock::SimplifiedLayout() {
   }
 
   UpdateAfterLayout();
-
   ClearNeedsLayout();
-
-  if (LayoutAnalyzer* analyzer = GetFrameView()->GetLayoutAnalyzer())
-    analyzer->Increment(LayoutAnalyzer::kLayoutObjectsThatNeedSimplifiedLayout);
 
   return true;
 }
@@ -976,7 +997,7 @@ void LayoutBlock::LayoutPositionedObject(LayoutBox* positioned_object,
   LayoutObject* parent = positioned_object->Parent();
   bool layout_changed = false;
   if ((parent->IsLayoutNGFlexibleBox() &&
-       !positioned_object->IsLayoutNGMixin() &&
+       !positioned_object->IsLayoutNGObject() &&
        LayoutFlexibleBox::SetStaticPositionForChildInFlexNGContainer(
            *positioned_object, To<LayoutBlock>(parent))) ||
       (parent->IsFlexibleBox() &&
@@ -1113,6 +1134,18 @@ void LayoutBlock::ImageChanged(WrappedImagePtr image,
   }
 }
 
+static void ProcessPositionedObjectRemoval(
+    ContainingBlockState containing_block_state,
+    LayoutObject* positioned_object) {
+  if (containing_block_state == kNewContainingBlock)
+    positioned_object->SetChildNeedsLayout(kMarkOnlyThis);
+
+  // It is parent blocks job to add positioned child to positioned objects
+  // list of its containing block.
+  // Parent layout needs to be invalidated to ensure this happens.
+  positioned_object->MarkParentForOutOfFlowPositionedChange();
+}
+
 void LayoutBlock::RemovePositionedObjects(
     LayoutObject* o,
     ContainingBlockState containing_block_state) {
@@ -1125,28 +1158,7 @@ void LayoutBlock::RemovePositionedObjects(
   for (LayoutBox* positioned_object : *positioned_descendants) {
     if (!o ||
         (positioned_object->IsDescendantOf(o) && o != positioned_object)) {
-      if (containing_block_state == kNewContainingBlock) {
-        positioned_object->SetChildNeedsLayout(kMarkOnlyThis);
-
-        // The positioned object changing containing block may change paint
-        // invalidation container.
-        // Invalidate it (including non-compositing descendants) on its original
-        // paint invalidation container.
-        if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-          // This valid because we need to invalidate based on the current
-          // status.
-          DisableCompositingQueryAsserts compositing_disabler;
-          if (!positioned_object->IsPaintInvalidationContainer())
-            ObjectPaintInvalidator(*positioned_object)
-                .InvalidatePaintIncludingNonCompositingDescendants();
-        }
-      }
-
-      // It is parent blocks job to add positioned child to positioned objects
-      // list of its containing block.
-      // Parent layout needs to be invalidated to ensure this happens.
-      positioned_object->MarkParentForOutOfFlowPositionedChange();
-
+      ProcessPositionedObjectRemoval(containing_block_state, positioned_object);
       dead_objects.push_back(positioned_object);
     }
   }
@@ -1224,6 +1236,33 @@ void LayoutBlock::RemovePercentHeightDescendant(LayoutBox* descendant) {
   }
 }
 
+void LayoutBlock::AddSvgTextDescendant(LayoutBox& svg_text) {
+  NOT_DESTROYED();
+  DCHECK(IsA<LayoutNGSVGText>(svg_text));
+  auto result = GetSvgTextDescendantsMap().insert(this, nullptr);
+  if (result.is_new_entry) {
+    result.stored_value->value =
+        MakeGarbageCollected<TrackedLayoutBoxLinkedHashSet>();
+  }
+  result.stored_value->value->insert(&svg_text);
+  has_svg_text_descendants_ = true;
+}
+
+void LayoutBlock::RemoveSvgTextDescendant(LayoutBox& svg_text) {
+  NOT_DESTROYED();
+  DCHECK(IsA<LayoutNGSVGText>(svg_text));
+  TrackedDescendantsMap& map = GetSvgTextDescendantsMap();
+  auto it = map.find(this);
+  if (it == map.end())
+    return;
+  TrackedLayoutBoxLinkedHashSet* descendants = &*it->value;
+  descendants->erase(&svg_text);
+  if (descendants->IsEmpty()) {
+    map.erase(this);
+    has_svg_text_descendants_ = false;
+  }
+}
+
 TrackedLayoutBoxLinkedHashSet* LayoutBlock::PercentHeightDescendantsInternal()
     const {
   NOT_DESTROYED();
@@ -1269,7 +1308,7 @@ bool LayoutBlock::IsPointInOverflowControl(
     return false;
 
   return Layer()->GetScrollableArea()->HitTestOverflowControls(
-      result, RoundedIntPoint(hit_test_location - accumulated_offset));
+      result, ToRoundedPoint(hit_test_location - accumulated_offset));
 }
 
 bool LayoutBlock::HitTestOverflowControl(
@@ -1577,9 +1616,9 @@ MinMaxSizes LayoutBlock::ComputeIntrinsicLogicalWidths() const {
   if (UNLIKELY(IsListBox(this) && StyleRef().LogicalWidth().IsPercentOrCalc()))
     child_sizes.min_size = LayoutUnit();
 
-  if (IsTableCell()) {
+  if (IsTableCellLegacy()) {
     Length table_cell_width =
-        ToInterface<LayoutNGTableCellInterface>(this)->StyleOrColLogicalWidth();
+        To<LayoutTableCell>(this)->StyleOrColLogicalWidth();
     if (table_cell_width.IsFixed() && table_cell_width.Value() > 0) {
       child_sizes.max_size = std::max(
           child_sizes.min_size, AdjustContentBoxLogicalWidthForBoxSizing(
@@ -1636,7 +1675,7 @@ MinMaxSizes LayoutBlock::PreferredLogicalWidths() const {
     sizes.max_size = LayoutUnit(sizes.max_size.Ceil());
   }
 
-  if (IsLayoutNGMixin() && IsTable()) {
+  if (IsLayoutNGObject() && IsTable()) {
     sizes.Encompass(IntrinsicLogicalWidths().min_size);
   }
 

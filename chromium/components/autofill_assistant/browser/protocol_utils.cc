@@ -4,9 +4,9 @@
 
 #include "components/autofill_assistant/browser/protocol_utils.h"
 
-#include <map>
 #include <utility>
 
+#include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "components/autofill_assistant/browser/actions/action_delegate_util.h"
@@ -22,7 +22,6 @@
 #include "components/autofill_assistant/browser/actions/expect_navigation_action.h"
 #include "components/autofill_assistant/browser/actions/generate_password_for_form_field_action.h"
 #include "components/autofill_assistant/browser/actions/get_element_status_action.h"
-#include "components/autofill_assistant/browser/actions/highlight_element_action.h"
 #include "components/autofill_assistant/browser/actions/navigate_action.h"
 #include "components/autofill_assistant/browser/actions/perform_on_single_element_action.h"
 #include "components/autofill_assistant/browser/actions/popup_message_action.h"
@@ -33,6 +32,7 @@
 #include "components/autofill_assistant/browser/actions/save_generated_password_action.h"
 #include "components/autofill_assistant/browser/actions/save_submitted_password_action.h"
 #include "components/autofill_assistant/browser/actions/select_option_action.h"
+#include "components/autofill_assistant/browser/actions/send_keystroke_events_action.h"
 #include "components/autofill_assistant/browser/actions/set_attribute_action.h"
 #include "components/autofill_assistant/browser/actions/set_persistent_ui_action.h"
 #include "components/autofill_assistant/browser/actions/set_touchable_area_action.h"
@@ -96,16 +96,6 @@ void ProtocolUtils::AddScript(const SupportedScriptProto& script_proto,
     script->handle.interrupt = true;
   } else {
     script->handle.autostart = presentation.autostart();
-  }
-  if (script->handle.autostart) {
-    // Autostartable scripts without chip text must be skipped,
-    // but these chips must never be shown.
-    if (presentation.chip().text().empty()) {
-      return;
-    }
-  } else {
-    script->handle.initial_prompt = presentation.initial_prompt();
-    script->handle.chip = Chip(presentation.chip());
   }
   script->handle.direct_action = DirectAction(presentation.direct_action());
   script->handle.start_message = presentation.start_message();
@@ -196,8 +186,6 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
       return std::make_unique<PromptAction>(delegate, action);
     case ActionProto::ActionInfoCase::kStop:
       return std::make_unique<StopAction>(delegate, action);
-    case ActionProto::ActionInfoCase::kHighlightElement:
-      return std::make_unique<HighlightElementAction>(delegate, action);
     case ActionProto::ActionInfoCase::kUploadDom:
       return std::make_unique<UploadDomAction>(delegate, action);
     case ActionProto::ActionInfoCase::kShowDetails:
@@ -296,14 +284,7 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
           base::BindOnce(&WebController::JsClickElement,
                          delegate->GetWebController()->GetWeakPtr()));
     case ActionProto::ActionInfoCase::kSendKeystrokeEvents:
-      return PerformOnSingleElementAction::WithClientId(
-          delegate, action, action.send_keystroke_events().client_id(),
-          base::BindOnce(
-              &action_delegate_util::PerformWithTextValue, delegate,
-              action.send_keystroke_events().value(),
-              base::BindOnce(&WebController::SendTextInput,
-                             delegate->GetWebController()->GetWeakPtr(),
-                             action.send_keystroke_events().delay_in_ms())));
+      return std::make_unique<SendKeystrokeEventsAction>(delegate, action);
     case ActionProto::ActionInfoCase::kSendChangeEvent:
       return PerformOnSingleElementAction::WithClientId(
           delegate, action, action.send_change_event().client_id(),
@@ -536,11 +517,12 @@ bool ProtocolUtils::ParseTriggerScripts(
   }
 
   if (!response_proto.script_parameters().empty()) {
-    std::map<std::string, std::string> parameters;
+    std::vector<std::pair<std::string, std::string>> parameters;
     for (const auto& param : response_proto.script_parameters()) {
-      parameters.emplace(param.name(), param.value());
+      parameters.emplace_back(param.name(), param.value());
     }
-    *script_parameters = std::make_unique<ScriptParameters>(parameters);
+    *script_parameters = std::make_unique<ScriptParameters>(
+        base::flat_map<std::string, std::string>(std::move(parameters)));
   }
   return true;
 }

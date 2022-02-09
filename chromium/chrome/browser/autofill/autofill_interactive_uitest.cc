@@ -328,6 +328,9 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     cert_verifier_.SetUpCommandLine(command_line);
     // Needed to allow input before commit on various builders.
     command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
+    // TODO(crbug.com/1258185): Migrate to a better mechanism for testing around
+    // language detection.
+    command_line->AppendSwitch(switches::kOverrideLanguageDetection);
   }
 
   void SetUpInProcessBrowserTestFixture() override {
@@ -2017,11 +2020,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillAfterTranslate) {
 
   static const char kForm[] =
       "<form action=\"https://www.example.com/\" method=\"POST\">"
-      "<label for=\"fn\">なまえ</label>"
+      "<label for=\"fn\">Nom</label>"
       " <input type=\"text\" id=\"fn\""
       "        onfocus=\"domAutomationController.send(true)\""
       "><br>"
-      "<label for=\"ln\">みょうじ</label>"
+      "<label for=\"ln\">Nom de famille</label>"
       " <input type=\"text\" id=\"ln\"><br>"
       "<label for=\"a1\">Address line 1:</label>"
       " <input type=\"text\" id=\"a1\"><br>"
@@ -2046,16 +2049,24 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillAfterTranslate) {
       "<label for=\"ph\">Phone number:</label>"
       " <input type=\"text\" id=\"ph\"><br>"
       "</form>"
-      // Add additional Japanese characters to ensure the translate bar
+      // Add additional French characters to ensure the translate bar
       // will appear.
-      "我々は重要な、興味深いものになるが、時折状況が発生するため苦労や痛みは"
-      "彼にいくつかの素晴らしいを調達することができます。それから、いくつかの"
-      "利";
+      //
+      // TODO(crbug.com/1258185): The current translate testing overrides the
+      // result to be Adopted Language: 'fr' (the language the Chrome's
+      // translate feature believes the page language to be in). The behavior
+      // required here is to only force a translation which should not rely on
+      // language detection. The override simply just seeds the translate code
+      // so that a translate event occurs in a more testable way.
+      "Nous serons importants et intéressants, mais les épreuves et les peines"
+      "peuvent lui en procurer de grandes en raison de situations "
+      "occasionnelles."
+      "Puis quelques avantages";
 
   NavigateToContentAndWaitForLanguageDetection(kForm);
-  ASSERT_EQ("ja", GetLanguageState().current_language());
+  ASSERT_EQ("fr", GetLanguageState().current_language());
   ASSERT_NO_FATAL_FAILURE(Translate(true));
-  ASSERT_EQ("ja", GetLanguageState().source_language());
+  ASSERT_EQ("fr", GetLanguageState().source_language());
   ASSERT_EQ("en", GetLanguageState().current_language());
   TryBasicFormFill();
 }
@@ -2923,27 +2934,23 @@ class AutofillDynamicFormInteractiveTest
   base::test::ScopedFeatureList scoped_feature_;
 };
 
-// The boolean parameters indicate whether features::kAutofillAcrossIframes and
-// features::kAutofillRefillWithRendererIds, respectively, are enabled.
+// The boolean parameter indicates whether features::kAutofillAcrossIframes is
+// enabled.
 class AutofillDynamicFormReplacementInteractiveTest
     : public AutofillInteractiveTestBase,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+      public testing::WithParamInterface<bool> {
  public:
   AutofillDynamicFormReplacementInteractiveTest()
-      : autofill_across_iframes_(std::get<0>(GetParam())),
-        refill_with_renderer_ids_(std::get<1>(GetParam())) {
+      : autofill_across_iframes_(GetParam()) {
     std::vector<base::Feature> enabled;
     std::vector<base::Feature> disabled;
     (autofill_across_iframes_ ? enabled : disabled)
         .push_back(features::kAutofillAcrossIframes);
-    (refill_with_renderer_ids_ ? enabled : disabled)
-        .push_back(features::kAutofillRefillWithRendererIds);
     scoped_feature_.InitWithFeatures(enabled, disabled);
   }
 
  protected:
   const bool autofill_across_iframes_;
-  const bool refill_with_renderer_ids_;
   base::test::ScopedFeatureList scoped_feature_;
 };
 
@@ -2956,12 +2963,6 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormReplacementInteractiveTest,
       embedded_test_server()->GetURL("a.com", "/autofill/dynamic_form.html");
   ASSERT_NO_FATAL_FAILURE(
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url)));
-
-  // TODO(crbug/896689): Cleanup feature, also in JS code.
-  if (refill_with_renderer_ids_) {
-    ASSERT_TRUE(content::ExecuteScript(
-        GetWebContents(), "window.kAutofillRefillWithRendererIds = true;"));
-  }
 
   TriggerFormFill("firstname");
 
@@ -2992,12 +2993,6 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormReplacementInteractiveTest,
                                             "/autofill/two_dynamic_forms.html");
   ASSERT_NO_FATAL_FAILURE(
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url)));
-
-  // TODO(crbug/896689): Cleanup feature, also in JS code.
-  if (refill_with_renderer_ids_) {
-    ASSERT_TRUE(content::ExecuteScript(
-        GetWebContents(), "window.kAutofillRefillWithRendererIds = true;"));
-  }
 
   TriggerFormFill("firstname_form1");
 
@@ -3043,12 +3038,6 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormReplacementInteractiveTest,
       "a.com", "/autofill/double_dynamic_form.html");
   ASSERT_NO_FATAL_FAILURE(
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url)));
-
-  // TODO(crbug/896689): Cleanup feature, also in JS code.
-  if (refill_with_renderer_ids_) {
-    ASSERT_TRUE(content::ExecuteScript(
-        GetWebContents(), "window.kAutofillRefillWithRendererIds = true;"));
-  }
 
   TriggerFormFill("firstname");
 
@@ -3105,12 +3094,6 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormReplacementInteractiveTest,
       "a.com", "/autofill/dynamic_form_new_field_types.html");
   ASSERT_NO_FATAL_FAILURE(
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url)));
-
-  // TODO(crbug/896689): Cleanup feature, also in JS code.
-  if (refill_with_renderer_ids_) {
-    ASSERT_TRUE(content::ExecuteScript(
-        GetWebContents(), "window.kAutofillRefillWithRendererIds = true;"));
-  }
 
   TriggerFormFill("firstname");
 
@@ -3383,12 +3366,6 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormReplacementInteractiveTest,
   ASSERT_NO_FATAL_FAILURE(
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url)));
 
-  // TODO(crbug/896689): Cleanup feature, also in JS code.
-  if (refill_with_renderer_ids_) {
-    ASSERT_TRUE(content::ExecuteScript(
-        GetWebContents(), "window.kAutofillRefillWithRendererIds = true;"));
-  }
-
   // Trigger the initial fill.
   FocusFieldByName("cc-name");
   SendKeyToPageAndWait(ui::DomKey::FromCharacter('M'), ui::DomCode::US_M,
@@ -3479,12 +3456,6 @@ IN_PROC_BROWSER_TEST_P(AutofillDynamicFormReplacementInteractiveTest,
       "a.com", "/autofill/dynamic_form_no_name.html");
   ASSERT_NO_FATAL_FAILURE(
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url)));
-
-  // TODO(crbug/896689): Cleanup feature, also in JS code.
-  if (refill_with_renderer_ids_) {
-    ASSERT_TRUE(content::ExecuteScript(
-        GetWebContents(), "window.kAutofillRefillWithRendererIds = true;"));
-  }
 
   TriggerFormFill("firstname");
 
@@ -3655,6 +3626,6 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          AutofillDynamicFormReplacementInteractiveTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+                         testing::Bool());
 
 }  // namespace autofill

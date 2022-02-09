@@ -32,7 +32,7 @@ file
 .sp
 .BI "int TIFFSetDirectory(TIFF *" tif ", tdir_t " dirnum ")"
 .br
-.BI "int TIFFSetSubDirectory(TIFF *" tif ", uint32 " diroff ")"
+.BI "int TIFFSetSubDirectory(TIFF *" tif ", uint64 " diroff ")"
 .SH DESCRIPTION
 .I TIFFSetDirectory
 changes the current directory and reads its contents with
@@ -75,4 +75,4 @@ next directory in a file.
 .IR libtiff (3TIFF)
 .PP
 Libtiff library home page:
-.BR http://www.remotesensing.org/libtiff/
+.BR http://www.simplesystems.org/libtiff/

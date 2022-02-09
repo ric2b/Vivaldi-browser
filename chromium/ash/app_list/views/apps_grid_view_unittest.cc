@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -25,6 +26,7 @@
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/apps_container_view.h"
+#include "ash/app_list/views/apps_grid_context_menu.h"
 #include "ash/app_list/views/apps_grid_view_folder_delegate.h"
 #include "ash/app_list/views/apps_grid_view_test_api.h"
 #include "ash/app_list/views/contents_view.h"
@@ -47,10 +49,10 @@
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -58,8 +60,12 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/event_utils.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 
 namespace ash {
@@ -213,6 +219,29 @@ class TestSuggestedSearchResult : public TestSearchResult {
   ~TestSuggestedSearchResult() override = default;
 };
 
+// Counts when the observed view's bounds change.
+class BoundsChangeCounter : public views::ViewObserver {
+ public:
+  explicit BoundsChangeCounter(views::View* observed_view)
+      : observed_view_(observed_view) {
+    observed_view->AddObserver(this);
+  }
+  BoundsChangeCounter(const BoundsChangeCounter&) = delete;
+  BoundsChangeCounter& operator=(const BoundsChangeCounter&) = delete;
+  ~BoundsChangeCounter() override { observed_view_->RemoveObserver(this); }
+
+  //  views::ViewObserver:
+  void OnViewBoundsChanged(views::View* observed_view) override {
+    ++bounds_change_count_;
+  }
+
+  int bounds_change_count() const { return bounds_change_count_; }
+
+ private:
+  views::View* const observed_view_;
+  int bounds_change_count_ = 0;
+};
+
 }  // namespace
 
 // Subclasses should set `is_rtl_`, `create_as_tablet_mode_`, etc. in their
@@ -226,29 +255,38 @@ class AppsGridViewTest : public AshTestBase {
 
   // testing::Test overrides:
   void SetUp() override {
-    AppListView::SetShortAnimationForTesting(true);
     if (is_rtl_)
       base::i18n::SetICUDefaultLocale("he");
-    feature_list_.InitWithFeatureState(features::kProductivityLauncher,
-                                       is_productivity_launcher_enabled_);
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features;
+    if (is_productivity_launcher_enabled_) {
+      enabled_features.push_back(features::kProductivityLauncher);
+    } else {
+      disabled_features.push_back(features::kProductivityLauncher);
+    }
+    if (is_app_sort_enabled_) {
+      enabled_features.push_back(features::kLauncherAppSort);
+    } else {
+      disabled_features.push_back(features::kLauncherAppSort);
+    }
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
     AshTestBase::SetUp();
 
     // Make the display big enough to hold the app list.
     UpdateDisplay("1024x768");
 
-    // Replace the model before the app list views are created, because some
-    // views cache pointers to the model.
-    auto model = std::make_unique<test::AppListTestModel>();
-    model_ = model.get();
-    Shell::Get()->app_list_controller()->SetAppListModelForTest(
-        std::move(model));
-
     // Populate some suggested apps.
-    search_model_ = Shell::Get()->app_list_controller()->GetSearchModel();
+    search_model_ = std::make_unique<SearchModel>();
     for (size_t i = 0; i < kNumOfSuggestedApps; ++i) {
       search_model_->results()->Add(
           std::make_unique<TestSuggestedSearchResult>());
     }
+
+    // Replace the model before the app list views are created, because some
+    // views cache pointers to the model.
+    model_ = std::make_unique<test::AppListTestModel>();
+    Shell::Get()->app_list_controller()->SetActiveModel(
+        /*profile_id=*/1, model_.get(), search_model_.get());
 
     // Show the app list.
     auto* helper = GetAppListTestHelper();
@@ -300,7 +338,6 @@ class AppsGridViewTest : public AshTestBase {
     PresentationTimeRecorder::SetReportPresentationTimeImmediatelyForTest(
         false);
     AshTestBase::TearDown();
-    AppListView::SetShortAnimationForTesting(false);
   }
 
  protected:
@@ -418,6 +455,36 @@ class AppsGridViewTest : public AshTestBase {
                                    ui::GestureEventDetails(ui::ET_GESTURE_TAP));
     apps_grid_view_->OnGestureEvent(&gesture_event);
     return gesture_event;
+  }
+
+  // Simulates a tap on the point `location` if the test is in tablet mode.
+  // Simulates a left click on the point otherwise.
+  void SimulateLeftClickOrTapAt(const gfx::Point& location) {
+    auto* event_generator = GetEventGenerator();
+    if (create_as_tablet_mode_) {
+      event_generator->GestureTapAt(location);
+      return;
+    }
+
+    event_generator->MoveMouseTo(location);
+    event_generator->ClickLeftButton();
+  }
+
+  // Simulates a long press on the point `location` if the test is in tablet
+  // mode. Simulates a right click on the point otherwise. This function can be
+  // used to open the context menu.
+  void SimulateRightClickOrLongPressAt(const gfx::Point& location) {
+    auto* event_generator = GetEventGenerator();
+    if (create_as_tablet_mode_) {
+      ui::GestureEvent gesture_event(
+          location.x(), location.y(), 0, base::TimeTicks(),
+          ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
+      event_generator->Dispatch(&gesture_event);
+      return;
+    }
+
+    event_generator->MoveMouseTo(location);
+    event_generator->ClickRightButton();
   }
 
   // Sends left mouse button press and release events to `view`. The events will
@@ -544,7 +611,7 @@ class AppsGridViewTest : public AshTestBase {
     const gfx::Rect apps_grid_bounds = paged_apps_grid_view_->GetLocalBounds();
     gfx::Point point_in_page_flip_buffer =
         gfx::Point(apps_grid_bounds.width() / 2,
-                   next_page ? apps_grid_bounds.bottom() + 1 : 0);
+                   next_page ? apps_grid_bounds.bottom() - 1 : 0);
 
     // Build the drag event which will be triggered after page flip.
     gfx::Point root_to(to);
@@ -589,14 +656,16 @@ class AppsGridViewTest : public AshTestBase {
       nullptr;                                    // Owned by |apps_grid_view_|.
   ExpandArrowView* expand_arrow_view_ = nullptr;  // Owned by |apps_grid_view_|.
 
-  AppListTestModel* model_ = nullptr;
-  SearchModel* search_model_ = nullptr;
+  std::unique_ptr<AppListTestModel> model_;
+  std::unique_ptr<SearchModel> search_model_;
   std::unique_ptr<AppsGridViewTestApi> test_api_;
 
   // True if the test screen is configured to work with RTL locale.
   bool is_rtl_ = false;
   // True if feature ProductivityLauncher should be enabled.
   bool is_productivity_launcher_enabled_ = false;
+  // True if feature LauncherAppSort should be enabled.
+  bool is_app_sort_enabled_ = false;
   // True if we set the test on tablet mode.
   bool create_as_tablet_mode_ = false;
 
@@ -619,7 +688,7 @@ class AppsGridViewNonBubbleTest : public AppsGridViewTest {
   AppsGridViewNonBubbleTest() { is_productivity_launcher_enabled_ = false; }
 };
 
-// Test suite for clamshell mode, parameterized by feature AppListBubble.
+// Test suite for clamshell mode, parameterized by feature ProductivityLauncher.
 class AppsGridViewClamshellTest : public AppsGridViewTest,
                                   public testing::WithParamInterface<bool> {
  public:
@@ -628,6 +697,21 @@ class AppsGridViewClamshellTest : public AppsGridViewTest,
   }
 };
 INSTANTIATE_TEST_SUITE_P(All, AppsGridViewClamshellTest, testing::Bool());
+
+// Tests suite to test both tablet and clamshell mode behavior, additionally
+// parameterized by feature ProductivityLauncher.
+class AppsGridViewClamshellAndTabletTest
+    : public AppsGridViewTest,
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
+ public:
+  AppsGridViewClamshellAndTabletTest() {
+    create_as_tablet_mode_ = std::get<0>(GetParam());
+    is_productivity_launcher_enabled_ = std::get<1>(GetParam());
+  }
+};
+INSTANTIATE_TEST_SUITE_P(All,
+                         AppsGridViewClamshellAndTabletTest,
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 // Tests suite parameterized by RTL locale.
 class AppsGridViewRTLTest : public AppsGridViewTest,
@@ -638,7 +722,7 @@ class AppsGridViewRTLTest : public AppsGridViewTest,
 INSTANTIATE_TEST_SUITE_P(All, AppsGridViewRTLTest, testing::Bool());
 
 // Tests suite for app list items drag and drop tests. These tests are
-// parameterized by RTL locale and feature AppListBubble.
+// parameterized by RTL locale and feature ProductivityLauncher.
 class AppsGridViewDragTest
     : public AppsGridViewTest,
       public testing::WithParamInterface<std::tuple<bool, bool>> {
@@ -714,6 +798,42 @@ INSTANTIATE_TEST_SUITE_P(All,
                          AppsGridViewTabletTest,
                          testing::Combine(testing::Bool(), testing::Bool()));
 
+// Test suite that tests apps sort works on all apps grid, parameterized by
+// RTL locale and clamshell/tablet mode.
+class AppsGridViewAppSortTest
+    : public AppsGridViewTest,
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
+ public:
+  AppsGridViewAppSortTest() {
+    is_rtl_ = std::get<0>(GetParam());
+    is_productivity_launcher_enabled_ = true;
+    is_app_sort_enabled_ = true;
+    create_as_tablet_mode_ = std::get<1>(GetParam());
+  }
+};
+INSTANTIATE_TEST_SUITE_P(All,
+                         AppsGridViewAppSortTest,
+                         testing::Combine(testing::Bool(), testing::Bool()));
+
+// This does not test the font name or weight because ash_unittests returns
+// different font lists than chrome (e.g. "DejaVu Sans" instead of "Roboto").
+TEST_P(AppsGridViewClamshellTest, AppListItemViewFont) {
+  model_->PopulateApps(1);
+  AppListItemView* item_view = GetItemViewInTopLevelGrid(0);
+  EXPECT_EQ(12, item_view->title()->font_list().GetFontSize());
+}
+
+// This does not test the font name or weight because ash_unittests returns
+// different font lists than chrome (e.g. "DejaVu Sans" instead of "Roboto").
+TEST_P(AppsGridViewTabletTest, AppListItemViewFont) {
+  model_->PopulateApps(1);
+  AppListItemView* item_view = GetItemViewInTopLevelGrid(0);
+  if (is_productivity_launcher_enabled_)
+    EXPECT_EQ(13, item_view->title()->font_list().GetFontSize());
+  else
+    EXPECT_EQ(12, item_view->title()->font_list().GetFontSize());
+}
+
 TEST_P(AppsGridViewClamshellTest, RemoveSelectedLastApp) {
   const int kTotalItems = 2;
   const int kLastItemIndex = kTotalItems - 1;
@@ -738,6 +858,7 @@ TEST_P(AppsGridViewClamshellTest, RemoveSelectedLastApp) {
 TEST_F(AppsGridViewNonBubbleTest, UMATestForLaunchingApps) {
   base::HistogramTester histogram_tester;
   model_->PopulateApps(5);
+  UpdateLayout();
 
   // Select the first app in grid and launch it.
   SimulateLeftClickOnView(GetItemViewInTopLevelGrid(0));
@@ -811,6 +932,7 @@ TEST_F(AppsGridViewTest, MoveItemAcrossRowDoesNotCauseAnimation) {
 // Productivity launcher does not use suggestion chips.
 TEST_F(AppsGridViewNonBubbleTest, ControlArrowOnSuggestedChip) {
   model_->PopulateApps(5);
+  UpdateLayout();
   suggestions_container_->children().front()->RequestFocus();
 
   SimulateKeyPress(ui::VKEY_UP, ui::EF_CONTROL_DOWN);
@@ -819,28 +941,10 @@ TEST_F(AppsGridViewNonBubbleTest, ControlArrowOnSuggestedChip) {
             apps_grid_view_->GetFocusManager()->GetFocusedView());
 }
 
-TEST_P(AppsGridViewClamshellTest, ItemLabelShortNameOverride) {
-  // If the app's full name and short name differ, the title label's tooltip
-  // should always be the full name of the app.
-  std::string expected_text("xyz");
-  std::string expected_tooltip("tooltip");
-  AppListItem* item = model_->CreateAndAddItem("Item with short name");
-  model_->SetItemNameAndShortName(item, expected_tooltip, expected_text);
-
-  AppListItemView* item_view = GetItemViewInTopLevelGrid(0);
-  ASSERT_TRUE(item_view);
-  const views::Label* title_label = item_view->title();
-  EXPECT_EQ(base::ASCIIToUTF16(expected_tooltip),
-            item_view->GetTooltipText(title_label->bounds().CenterPoint()));
-  EXPECT_EQ(base::ASCIIToUTF16(expected_text), title_label->GetText());
-}
-
-TEST_P(AppsGridViewClamshellTest, ItemLabelNoShortName) {
-  // If the app's full name and short name are the same, use the default tooltip
-  // behavior of the label (only show a tooltip if the title is truncated).
+TEST_P(AppsGridViewClamshellTest, ItemTooltip) {
   std::string title("a");
   AppListItem* item = model_->CreateAndAddItem(title);
-  model_->SetItemNameAndShortName(item, title, "");
+  model_->SetItemName(item, title);
 
   AppListItemView* item_view = GetItemViewInTopLevelGrid(0);
   ASSERT_TRUE(item_view);
@@ -854,6 +958,7 @@ TEST_P(AppsGridViewRTLTest, ScrollSequenceHandledByAppListView) {
   base::HistogramTester histogram_tester;
 
   model_->PopulateApps(GetTilesPerPage(0) + 1);
+  UpdateLayout();
   EXPECT_EQ(2, GetPaginationModel()->total_pages());
 
   gfx::Point apps_grid_view_origin =
@@ -905,6 +1010,7 @@ TEST_P(AppsGridViewRTLTest, MouseScrollSequenceHandledByAppListView) {
   base::HistogramTester histogram_tester;
 
   model_->PopulateApps(GetTilesPerPage(0) + 1);
+  UpdateLayout();
   EXPECT_EQ(2, GetPaginationModel()->total_pages());
 
   const gfx::Point apps_grid_view_origin =
@@ -974,6 +1080,7 @@ TEST_P(AppsGridViewRTLTest,
   base::HistogramTester histogram_tester;
 
   model_->PopulateApps(GetTilesPerPage(0) + 1);
+  UpdateLayout();
   EXPECT_EQ(2, GetPaginationModel()->total_pages());
 
   gfx::Point apps_grid_view_origin =
@@ -1020,6 +1127,7 @@ TEST_P(AppsGridViewRTLTest,
 // AppList closing.
 TEST_F(AppsGridViewTest, TapsBetweenAppsWontCloseAppList) {
   model_->PopulateApps(2);
+  UpdateLayout();
   gfx::Point between_apps = GetItemRectOnCurrentPageAt(0, 0).right_center();
   gfx::Point empty_space = GetItemRectOnCurrentPageAt(0, 2).CenterPoint();
 
@@ -1216,6 +1324,7 @@ TEST_P(AppsGridViewRTLTest, ScrollDownShouldNotExitFolder) {
 // TODO(jamescook): Investigate why this is broken with AppListBubble.
 TEST_F(AppsGridViewTest, AppIconSelectedWhenMenuIsShown) {
   model_->PopulateApps(1);
+  UpdateLayout();
   ASSERT_EQ(1u, model_->top_level_item_list()->item_count());
   AppListItemView* app = GetItemViewInTopLevelGrid(0);
   EXPECT_FALSE(apps_grid_view_->IsSelectedView(app));
@@ -1239,6 +1348,7 @@ TEST_P(AppsGridViewRTLTest, MenuAtRightPosition) {
   const size_t kItemsInPage = GetTilesPerPage(0);
   const size_t kPages = 2;
   model_->PopulateApps(kItemsInPage * kPages);
+  UpdateLayout();
 
   auto* root = apps_grid_view_->GetWidget()->GetNativeWindow()->GetRootWindow();
   gfx::Rect root_bounds = root->GetBoundsInScreen();
@@ -1283,10 +1393,64 @@ TEST_P(AppsGridViewRTLTest, MenuAtRightPosition) {
 TEST_P(AppsGridViewClamshellTest, ItemViewsDontHaveLayer) {
   size_t kTotalItems = 3;
   model_->PopulateApps(kTotalItems);
+  UpdateLayout();
 
   // Normally individual item-view does not have a layer.
   for (size_t i = 0; i < model_->top_level_item_list()->item_count(); ++i)
     EXPECT_FALSE(GetItemViewInTopLevelGrid(i)->layer());
+}
+
+TEST_P(AppsGridViewDragTest, DismissWhileDraggingDoesNotCrash) {
+  model_->PopulateApps(2);
+  UpdateLayout();
+  AppListItemView* const item_view = GetItemViewInTopLevelGrid(1);
+
+  // Non-zero animation durations are necessary to make sure we don't miss
+  // crashes involving animation delegates. Specifically, `bounds_animator_` had
+  // a use after free problem in the past.
+  ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  GetEventGenerator()->MoveMouseTo(
+      item_view->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->PressLeftButton();
+  item_view->FireMouseDragTimerForTest();
+  GetEventGenerator()->MoveMouseBy(20, 20);
+
+  ASSERT_TRUE(apps_grid_view_->drag_item());
+  ASSERT_TRUE(apps_grid_view_->IsDragging());
+  ASSERT_EQ(item_view->item(), apps_grid_view_->drag_item());
+
+  GetAppListTestHelper()->Dismiss();
+  // No crash
+}
+
+TEST_P(AppsGridViewDragTest, DismissWhileDraggingInFolderDoesNotCrash) {
+  model_->CreateAndPopulateFolderWithApps(2);
+  test_api_->Update();
+  test_api_->PressItemAt(0);
+
+  AppListItemView* const item_view =
+      GetItemViewInAppsGridAt(1, folder_apps_grid_view());
+
+  // Non-zero animation durations are necessary to make sure we don't miss
+  // crashes involving animation delegates. Specifically, `bounds_animator_` had
+  // a use after free problem in the past.
+  ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  GetEventGenerator()->MoveMouseTo(
+      item_view->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->PressLeftButton();
+  item_view->FireMouseDragTimerForTest();
+  GetEventGenerator()->MoveMouseBy(20, 20);
+
+  ASSERT_TRUE(folder_apps_grid_view()->drag_item());
+  ASSERT_TRUE(folder_apps_grid_view()->IsDragging());
+  ASSERT_EQ(item_view->item(), folder_apps_grid_view()->drag_item());
+
+  GetAppListTestHelper()->Dismiss();
+  // No crash
 }
 
 TEST_P(AppsGridViewDragTest, ItemViewsHaveLayerDuringDrag) {
@@ -1328,6 +1492,7 @@ TEST_P(AppsGridViewDragTest, ItemViewsDontHaveLayerAfterDrag) {
 TEST_P(AppsGridViewDragTest, MouseDragItemIntoFolder) {
   size_t kTotalItems = 3;
   model_->PopulateApps(kTotalItems);
+  UpdateLayout();
   InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 1,
                                      apps_grid_view_);
 
@@ -1357,6 +1522,7 @@ TEST_P(AppsGridViewDragTest, MouseDragItemIntoFolder) {
 TEST_P(AppsGridViewDragTest, MouseDragSecondItemIntoFolder) {
   AppListFolderItem* folder_item = model_->CreateAndPopulateFolderWithApps(2);
   model_->PopulateApps(1);
+  UpdateLayout();
   InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 1,
                                      apps_grid_view_);
 
@@ -1583,6 +1749,7 @@ TEST_P(AppsGridViewDragTest, MouseDragMaxItemsInFolder) {
   ASSERT_FALSE(folder_item->IsFolderFull());
   // Create and add another item.
   model_->PopulateAppWithId(kTotalItems);
+  UpdateLayout();
   InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 1,
                                      apps_grid_view_);
 
@@ -2304,6 +2471,7 @@ TEST_F(AppsGridViewTest, ControlArrowDownOrRightRemovesPage) {
 TEST_F(AppsGridViewTest, ControlShiftArrowFoldersItemBasic) {
   base::HistogramTester histogram_tester;
   model_->PopulateApps(GetTilesPerPage(0));
+  UpdateLayout();
   // Select the first item in the grid, folder it with the item to the right.
   AppListItemView* first_item = GetItemViewInTopLevelGrid(0);
   const std::string first_item_id = first_item->item()->id();
@@ -2369,6 +2537,7 @@ TEST_F(AppsGridViewTest, ControlShiftArrowFoldersItemBasic) {
 // Tests that foldering an item that is on a different page fails.
 TEST_F(AppsGridViewTest, ControlShiftArrowFailsToFolderAcrossPages) {
   model_->PopulateApps(2 * GetTilesPerPage(0));
+  UpdateLayout();
 
   // For every item on the last row of the first page, test that foldering to
   // the next page fails.
@@ -2427,6 +2596,7 @@ TEST_F(AppsGridViewTest, ControlShiftArrowFailsToFolderAcrossPages) {
 TEST_F(AppsGridViewTest, ControlShiftArrowFolderLastItemOnPage) {
   const int kNumberOfApps = 4;
   model_->PopulateApps(kNumberOfApps);
+  UpdateLayout();
   // Select the second to last item in the grid, folder it with the item to the
   // right.
   AppListItemView* moving_item = GetItemViewInTopLevelGrid(kNumberOfApps - 2);
@@ -2455,13 +2625,15 @@ TEST_P(AppsGridViewTabletTest, TouchDragFlipToNextPage) {
   // Create 3 full pages of apps.
   model_->PopulateApps(GetTilesPerPage(0) + GetTilesPerPage(1) +
                        GetTilesPerPage(2));
+  UpdateLayout();
+
   const gfx::Rect apps_grid_bounds = paged_apps_grid_view_->GetLocalBounds();
   // Drag an item to the bottom to start flipping pages.
   page_flip_waiter_->Reset();
   InitiateDragForItemAtCurrentPageAt(AppsGridView::TOUCH, 0, 0,
                                      paged_apps_grid_view_);
   gfx::Point apps_grid_bottom_center =
-      gfx::Point(apps_grid_bounds.width() / 2, apps_grid_bounds.bottom() + 1);
+      gfx::Point(apps_grid_bounds.width() / 2, apps_grid_bounds.bottom() - 1);
   UpdateDrag(AppsGridView::TOUCH, apps_grid_bottom_center,
              paged_apps_grid_view_, 5 /*steps*/);
   while (HasPendingPageFlip(paged_apps_grid_view_)) {
@@ -2659,6 +2831,76 @@ TEST_P(AppsGridViewDragTest, FocusOfDraggedViewAfterDrag) {
   } else {
     EXPECT_FALSE(search_box_view_->search_box()->HasFocus());
     EXPECT_TRUE(item_view->HasFocus());
+  }
+}
+
+// Verify the dragged item's focus after the item is dragged from a folder with
+// a single items.
+TEST_P(AppsGridViewDragTest, FocusOfReparentedDragViewWithFolderDeleted) {
+  // Creates a folder item with two items.
+  model_->CreateAndPopulateFolderWithApps(2);
+  model_->PopulateApps(1);
+  test_api_->Update();
+
+  // Leave the dragged item as a single folder child.
+  model_->DeleteItem("Item 1");
+  // One folder and one app. Therefore the top level view count is 2.
+  EXPECT_EQ(2, apps_grid_view_->view_model()->view_size());
+
+  // Open the folder.
+  test_api_->PressItemAt(0);
+
+  // Drag the first folder child out of the folder.
+  InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 0,
+                                     folder_apps_grid_view());
+  gfx::Point point_outside_folder =
+      app_list_folder_view()->GetLocalBounds().bottom_center() +
+      gfx::Vector2d(10, 10);
+  UpdateDrag(AppsGridView::MOUSE, point_outside_folder, folder_apps_grid_view(),
+             /*steps=*/10);
+
+  // Fire the reparent timer that should be started when an item is dragged out
+  // of folder bounds.
+  ASSERT_TRUE(folder_apps_grid_view()->FireFolderItemReparentTimerForTest());
+
+  // Drop the item in (0,2) spot is the root apps grid. The spot is expected to
+  // be empty.
+  gfx::Point drop_point = GetItemRectOnCurrentPageAt(0, 2).CenterPoint();
+  views::View::ConvertPointToTarget(apps_grid_view_, folder_apps_grid_view(),
+                                    &drop_point);
+  UpdateDrag(AppsGridView::MOUSE, drop_point, folder_apps_grid_view(),
+             /*steps=*/5);
+  BoundsChangeCounter counter(GetItemViewInTopLevelGrid(1));
+  EndDrag(folder_apps_grid_view(), /*cancel=*/false);
+
+  // The folder should be deleted. The first item should be Item 2, the second
+  // item should be Item 0.
+  EXPECT_EQ(2, apps_grid_view_->view_model()->view_size());
+  EXPECT_EQ("Item 2", GetItemViewInTopLevelGrid(0)->item()->id());
+  EXPECT_EQ("Item 0", GetItemViewInTopLevelGrid(1)->item()->id());
+
+  AppListItemView* const dragged_view = GetItemViewInTopLevelGrid(1);
+  if (features::IsProductivityLauncherEnabled()) {
+    // Verify that Item 2's bounds do not change after calling `EndDrag()`.
+    EXPECT_EQ(0, counter.bounds_change_count());
+
+    // ProductivityLauncher keeps focus on the search box after drags.
+    EXPECT_TRUE(search_box_view_->search_box()->HasFocus());
+    EXPECT_FALSE(dragged_view->HasFocus());
+  } else {
+    // Verify that Item 2's bounds change once after calling `EndDrag()` due to
+    // ending the cardified state.
+    EXPECT_EQ(1, counter.bounds_change_count());
+
+    // The dragged item is focused but is not selected.
+    EXPECT_TRUE(dragged_view->HasFocus());
+    EXPECT_FALSE(apps_grid_view_->has_selected_view());
+
+    // Press the arrow key. The dragged item is selected now.
+    PressAndReleaseKey(ui::VKEY_RIGHT);
+    EXPECT_TRUE(dragged_view->HasFocus());
+    EXPECT_TRUE(apps_grid_view_->has_selected_view());
+    EXPECT_EQ(dragged_view, apps_grid_view_->selected_view());
   }
 }
 
@@ -3252,6 +3494,189 @@ TEST_F(AppsGridViewTest, NoPageBreakItemWithFullGrid) {
   EXPECT_EQ(model_content, model_->GetModelContent());
 }
 
+TEST_P(AppsGridViewClamshellAndTabletTest, RootGridUpdatesOnModelChange) {
+  model_->PopulateApps(2);
+  UpdateLayout();
+
+  const views::ViewModelT<AppListItemView>* view_model =
+      apps_grid_view_->view_model();
+  EXPECT_EQ(2, view_model->view_size());
+  TestAppListItemViewIndice();
+
+  // Update the model, and verify the apps grid gets updated.
+  auto model_override = std::make_unique<test::AppListTestModel>();
+  model_override->PopulateApps(3);
+  model_override->CreateAndPopulateFolderWithApps(5);
+  model_override->PopulateApps(3);
+
+  auto search_model_override = std::make_unique<SearchModel>();
+
+  Shell::Get()->app_list_controller()->SetActiveModel(
+      /*profile_id=*/1, model_override.get(), search_model_override.get());
+  UpdateLayout();
+
+  // Verify that the view model size matches the new model.
+  EXPECT_EQ(7, view_model->view_size());
+  TestAppListItemViewIndice();
+
+  // Verify that clicking an item activates it.
+  SimulateLeftClickOnView(view_model->view_at(0));
+  EXPECT_EQ("Item 0", GetTestAppListClient()->activate_item_last_id());
+
+  // Clicking on the folder item transitions to folder view.
+  SimulateLeftClickOnView(view_model->view_at(3));
+  EXPECT_TRUE(GetAppListTestHelper()->IsInFolderView());
+
+  ASSERT_EQ(5, folder_apps_grid_view()->view_model()->view_size());
+
+  // Click on an item within the folder.
+  SimulateLeftClickOnView(folder_apps_grid_view()->view_model()->view_at(1));
+  EXPECT_EQ("Item 4", GetTestAppListClient()->activate_item_last_id());
+
+  // Switch model to original one, and verify the folder view gets closed.
+  Shell::Get()->app_list_controller()->SetActiveModel(
+      /*profile_id=*/1, model_.get(), search_model_.get());
+  UpdateLayout();
+  EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
+  EXPECT_EQ(2, view_model->view_size());
+  TestAppListItemViewIndice();
+
+  SimulateLeftClickOnView(view_model->view_at(1));
+  EXPECT_EQ("Item 1", GetTestAppListClient()->activate_item_last_id());
+
+  Shell::Get()->app_list_controller()->ClearActiveModel();
+  EXPECT_EQ(0, view_model->view_size());
+}
+
+TEST_P(AppsGridViewClamshellAndTabletTest,
+       TouchScrollFromFolderNameDoesNotAffectRootGrid) {
+  // Add enough items to the root grid so the launcher becomes paged.
+  model_->PopulateApps(1);
+  model_->CreateAndPopulateFolderWithApps(5);
+  // `GetTilesPerPage()` may return a large number for bubble launcher - ensure
+  // the number of test apps is not excessive.
+  model_->PopulateApps(std::min(30, GetTilesPerPage(0)));
+  UpdateLayout();
+
+  // Open the folder view.
+  SimulateLeftClickOnView(apps_grid_view_->view_model()->view_at(1));
+  ASSERT_TRUE(GetAppListTestHelper()->IsInFolderView());
+
+  AppsGridView* const root_grid_view = apps_grid_view_;
+  const gfx::Point original_root_grid_origin =
+      apps_grid_view_->GetBoundsInScreen().origin();
+  const gfx::Point original_first_item_origin =
+      apps_grid_view_->view_model()->view_at(0)->GetBoundsInScreen().origin();
+  ui::test::ScrollStepCallback verify_grid_bounds = base::BindLambdaForTesting(
+      [&](ui::EventType event_type, const gfx::Vector2dF& offset) {
+        EXPECT_EQ(original_root_grid_origin,
+                  root_grid_view->GetBoundsInScreen().origin());
+        EXPECT_EQ(original_first_item_origin, root_grid_view->view_model()
+                                                  ->view_at(0)
+                                                  ->GetBoundsInScreen()
+                                                  .origin());
+      });
+
+  // Simulate upward gesture scroll from folder header view, and verify it
+  // doesn't affect the root apps grid view location.
+  gfx::Point scroll_start = app_list_folder_view_->folder_header_view()
+                                ->GetBoundsInScreen()
+                                .CenterPoint();
+  GetEventGenerator()->GestureScrollSequenceWithCallback(
+      scroll_start, scroll_start - gfx::Vector2d(0, 100),
+      /*duration=*/base::Milliseconds(50),
+      /*steps=*/5, verify_grid_bounds);
+
+  ASSERT_EQ(original_root_grid_origin,
+            apps_grid_view_->GetBoundsInScreen().origin());
+  ASSERT_EQ(
+      original_first_item_origin,
+      apps_grid_view_->view_model()->view_at(0)->GetBoundsInScreen().origin());
+  ASSERT_TRUE(GetAppListTestHelper()->IsInFolderView());
+
+  // Simulate downward gesture scroll from folder header view, and verify it
+  // doesn't affect the root apps grid view location.
+  scroll_start = app_list_folder_view_->folder_header_view()
+                     ->GetBoundsInScreen()
+                     .CenterPoint();
+  GetEventGenerator()->GestureScrollSequenceWithCallback(
+      scroll_start, scroll_start + gfx::Vector2d(0, 100),
+      /*duration=*/base::Milliseconds(50),
+      /*steps=*/5, verify_grid_bounds);
+
+  EXPECT_EQ(original_root_grid_origin,
+            apps_grid_view_->GetBoundsInScreen().origin());
+  EXPECT_EQ(
+      original_first_item_origin,
+      apps_grid_view_->view_model()->view_at(0)->GetBoundsInScreen().origin());
+}
+
+TEST_P(AppsGridViewClamshellAndTabletTest,
+       TouchScrollFromFolderGridDoesNotAffectRootGrid) {
+  // Add enough items to the root grid so the launcher becomes paged.
+  model_->PopulateApps(1);
+  model_->CreateAndPopulateFolderWithApps(5);
+  // `GetTilesPerPage()` may return a large number for bubble launcher - ensure
+  // the number of test apps is not excessive.
+  model_->PopulateApps(std::min(30, GetTilesPerPage(0)));
+  UpdateLayout();
+
+  // Open the folder view.
+  SimulateLeftClickOnView(apps_grid_view_->view_model()->view_at(1));
+  ASSERT_TRUE(GetAppListTestHelper()->IsInFolderView());
+
+  AppsGridView* const root_grid_view = apps_grid_view_;
+  const gfx::Point original_root_grid_origin =
+      apps_grid_view_->GetBoundsInScreen().origin();
+  const gfx::Point original_first_item_origin =
+      apps_grid_view_->view_model()->view_at(0)->GetBoundsInScreen().origin();
+  ui::test::ScrollStepCallback verify_grid_bounds = base::BindLambdaForTesting(
+      [&](ui::EventType event, const gfx::Vector2dF& offset) {
+        EXPECT_EQ(original_root_grid_origin,
+                  root_grid_view->GetBoundsInScreen().origin());
+        EXPECT_EQ(original_first_item_origin, root_grid_view->view_model()
+                                                  ->view_at(0)
+                                                  ->GetBoundsInScreen()
+                                                  .origin());
+      });
+
+  // Simulate downward gesture scroll from folder grid (outside any folder app
+  // list item view), and verify it doesn't affect the root apps grid view
+  // location.
+  gfx::Point scroll_start = GetItemViewInAppsGridAt(0, folder_apps_grid_view())
+                                ->GetBoundsInScreen()
+                                .right_center() +
+                            gfx::Vector2d(1, 0);
+  GetEventGenerator()->GestureScrollSequenceWithCallback(
+      scroll_start, scroll_start - gfx::Vector2d(0, 100),
+      /*duration=*/base::Milliseconds(50),
+      /*steps=*/5, verify_grid_bounds);
+
+  ASSERT_EQ(original_root_grid_origin,
+            apps_grid_view_->GetBoundsInScreen().origin());
+  ASSERT_EQ(
+      original_first_item_origin,
+      apps_grid_view_->view_model()->view_at(0)->GetBoundsInScreen().origin());
+  ASSERT_TRUE(GetAppListTestHelper()->IsInFolderView());
+
+  // Simulate downward gesture scroll from folder header view, and verify it
+  // doesn't affect the root apps grid view location.
+  scroll_start = GetItemViewInAppsGridAt(0, folder_apps_grid_view())
+                     ->GetBoundsInScreen()
+                     .right_center() +
+                 gfx::Vector2d(1, 0);
+  GetEventGenerator()->GestureScrollSequenceWithCallback(
+      scroll_start, scroll_start + gfx::Vector2d(0, 100),
+      /*duration=*/base::Milliseconds(50),
+      /*steps=*/5, verify_grid_bounds);
+
+  EXPECT_EQ(original_root_grid_origin,
+            apps_grid_view_->GetBoundsInScreen().origin());
+  EXPECT_EQ(
+      original_first_item_origin,
+      apps_grid_view_->view_model()->view_at(0)->GetBoundsInScreen().origin());
+}
+
 // This is a NonBubble test because page breaks are ignored with the
 // ProductivityLauncher feature.
 TEST_P(AppsGridViewDragNonBubbleTest, PageBreakItemAddedAfterDrag) {
@@ -3714,6 +4139,173 @@ TEST_P(AppsGridViewCardifiedStateTest,
   EXPECT_FALSE(paged_apps_grid_view_->cardified_state_for_testing());
   test_api_->WaitForItemMoveAnimationDone();
   test_api_->LayoutToIdealBounds();
+}
+
+TEST_P(AppsGridViewAppSortTest, ContextMenuInTopLevelAppListSortAllApps) {
+  // In this test, the sort algorithm is not tested. Instead, the context menu
+  // that contains the options to sort is verified to be shown in apps grid
+  // view. The menu option selecting is also simulated to ensure the sorting is
+  // called. The actual sort algorithm is tested in
+  // chrome/browser/ui/app_list/app_list_sort_browsertest.cc.
+  model_->PopulateApps(1);
+
+  AppsGridContextMenu* context_menu = apps_grid_view_->context_menu_for_test();
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+  EXPECT_EQ(AppListSortOrder::kCustom, model_->requested_sort_order());
+
+  // Get a point in `apps_grid_view_` that doesn't have an item on it.
+  const gfx::Point empty_space =
+      apps_grid_view_->GetBoundsInScreen().CenterPoint();
+
+  // Open the menu to test the alphabetical sort option.
+  SimulateRightClickOrLongPressAt(empty_space);
+  EXPECT_TRUE(context_menu->IsMenuShowing());
+
+  // Cache the current context menu view.
+  views::MenuItemView* reorder_option =
+      context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(1);
+  ASSERT_TRUE(reorder_option->title() == u"Name");
+
+  // Open the Reorder by Name submenu.
+  const gfx::Point reorder_option_point =
+      reorder_option->GetBoundsInScreen().CenterPoint();
+  SimulateLeftClickOrTapAt(reorder_option_point);
+  ASSERT_TRUE(reorder_option->SubmenuIsShowing());
+
+  // Sort the apps by their name in alphabetical order.
+  const gfx::Point alphabetical_option = reorder_option->GetSubmenu()
+                                             ->GetMenuItemAt(0)
+                                             ->GetBoundsInScreen()
+                                             .CenterPoint();
+  SimulateLeftClickOrTapAt(alphabetical_option);
+  EXPECT_EQ(AppListSortOrder::kNameAlphabetical,
+            model_->requested_sort_order());
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+
+  // Open the menu again to test the reverse alphabetical sort option.
+  SimulateRightClickOrLongPressAt(empty_space);
+  EXPECT_TRUE(context_menu->IsMenuShowing());
+
+  // Cache the current context menu view.
+  reorder_option =
+      context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(1);
+  ASSERT_TRUE(reorder_option->title() == u"Name");
+
+  // Open the Reorder by Name submenu.
+  SimulateLeftClickOrTapAt(reorder_option_point);
+  ASSERT_TRUE(reorder_option->SubmenuIsShowing());
+
+  // Sort the apps by their name in reverse alphabetical order.
+  const gfx::Point reverse_option = reorder_option->GetSubmenu()
+                                        ->GetMenuItemAt(1)
+                                        ->GetBoundsInScreen()
+                                        .CenterPoint();
+  SimulateLeftClickOrTapAt(reverse_option);
+  EXPECT_EQ(AppListSortOrder::kNameReverseAlphabetical,
+            model_->requested_sort_order());
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+
+  // Open the menu again to test the color sort option.
+  SimulateRightClickOrLongPressAt(empty_space);
+  EXPECT_TRUE(context_menu->IsMenuShowing());
+
+  reorder_option =
+      context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(2);
+  ASSERT_TRUE(reorder_option->title() == u"Color");
+
+  const gfx::Point color_option =
+      reorder_option->GetBoundsInScreen().CenterPoint();
+
+  SimulateLeftClickOrTapAt(color_option);
+  EXPECT_EQ(AppListSortOrder::kColor, model_->requested_sort_order());
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+}
+
+TEST_P(AppsGridViewAppSortTest, ContextMenuOnFolderItemSortAllApps) {
+  // In this test, the sort algorithm is not tested. Instead, the context menu
+  // that contains the options to sort is verified to be shown on folder app
+  // list item view. The menu option selecting is also simulated to ensure the
+  // sorting is called. The actual sort algorithm is tested in
+  // chrome/browser/ui/app_list/app_list_sort_browsertest.cc.
+
+  // Create a folder item and update the layout.
+  model_->CreateAndPopulateFolderWithApps(2);
+  UpdateLayout();
+  EXPECT_EQ(AppListSortOrder::kCustom, model_->requested_sort_order());
+
+  // Get a point on the folder item.
+  AppListItemView* folder_item = apps_grid_view_->view_model()->view_at(0);
+  ASSERT_TRUE(folder_item->is_folder());
+  gfx::Point folder_item_point = folder_item->GetBoundsInScreen().CenterPoint();
+
+  AppsGridContextMenu* context_menu = folder_item->context_menu_for_folder();
+  ASSERT_TRUE(context_menu);
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+
+  // Open the menu to test the alphabetical sort option.
+  SimulateRightClickOrLongPressAt(folder_item_point);
+  EXPECT_TRUE(context_menu->IsMenuShowing());
+
+  // Cache the current context menu view.
+  views::MenuItemView* reorder_option =
+      context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(1);
+  ASSERT_TRUE(reorder_option->title() == u"Name");
+
+  // Open the Reorder by Name submenu.
+  gfx::Point reorder_option_point =
+      reorder_option->GetBoundsInScreen().CenterPoint();
+  SimulateLeftClickOrTapAt(reorder_option_point);
+  ASSERT_TRUE(reorder_option->SubmenuIsShowing());
+
+  // Sort the apps by their name in alphabetical order.
+  const gfx::Point alphabetical_option = reorder_option->GetSubmenu()
+                                             ->GetMenuItemAt(0)
+                                             ->GetBoundsInScreen()
+                                             .CenterPoint();
+  SimulateLeftClickOrTapAt(alphabetical_option);
+  EXPECT_EQ(AppListSortOrder::kNameAlphabetical,
+            model_->requested_sort_order());
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+
+  // Open the menu again to test the reverse alphabetical sort option.
+  folder_item_point = folder_item->GetBoundsInScreen().CenterPoint();
+  SimulateRightClickOrLongPressAt(folder_item_point);
+  EXPECT_TRUE(context_menu->IsMenuShowing());
+
+  // Cache the current context menu view.
+  reorder_option =
+      context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(1);
+  ASSERT_TRUE(reorder_option->title() == u"Name");
+
+  // Open the Reorder by Name submenu.
+  reorder_option_point = reorder_option->GetBoundsInScreen().CenterPoint();
+  SimulateLeftClickOrTapAt(reorder_option_point);
+  ASSERT_TRUE(reorder_option->SubmenuIsShowing());
+
+  // Sort the apps by their name in reverse alphabetical order.
+  const gfx::Point reverse_option = reorder_option->GetSubmenu()
+                                        ->GetMenuItemAt(1)
+                                        ->GetBoundsInScreen()
+                                        .CenterPoint();
+  SimulateLeftClickOrTapAt(reverse_option);
+  EXPECT_EQ(AppListSortOrder::kNameReverseAlphabetical,
+            model_->requested_sort_order());
+  EXPECT_FALSE(context_menu->IsMenuShowing());
+
+  // Open the menu again to test the color sort option.
+  SimulateRightClickOrLongPressAt(folder_item_point);
+  EXPECT_TRUE(context_menu->IsMenuShowing());
+
+  reorder_option =
+      context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(2);
+  ASSERT_TRUE(reorder_option->title() == u"Color");
+
+  const gfx::Point color_option =
+      reorder_option->GetBoundsInScreen().CenterPoint();
+
+  SimulateLeftClickOrTapAt(color_option);
+  EXPECT_EQ(AppListSortOrder::kColor, model_->requested_sort_order());
+  EXPECT_FALSE(context_menu->IsMenuShowing());
 }
 
 }  // namespace test

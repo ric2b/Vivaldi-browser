@@ -12,8 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
-
 // Vector of XML attribute key-value pairs.
 class XmlAttributes
     : public std::vector<std::pair<std::string_view, std::string_view>> {
@@ -87,7 +85,8 @@ class XmlElementWriter {
   // Flag indicating if XML element should be written in one document line.
   bool one_line_;
 
-  DISALLOW_COPY_AND_ASSIGN(XmlElementWriter);
+  XmlElementWriter(const XmlElementWriter&) = delete;
+  XmlElementWriter& operator=(const XmlElementWriter&) = delete;
 };
 
 template <class Writer>

@@ -12,9 +12,10 @@
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/hash/hash.h"
+#include "base/memory/raw_ptr.h"
 #include "base/pickle.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -92,7 +93,7 @@ class MockSimpleIndexFile : public SimpleIndexFile,
 
  private:
   base::OnceClosure load_callback_;
-  SimpleIndexLoadResult* load_result_ = nullptr;
+  raw_ptr<SimpleIndexLoadResult> load_result_ = nullptr;
   int load_index_entries_calls_ = 0;
   int disk_writes_ = 0;
   SimpleIndex::EntrySet disk_write_entry_set_;

@@ -14,6 +14,7 @@
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_concepts.h"
 #include "components/omnibox/browser/buildflags.h"
+#include "components/strings/grit/components_strings.h"
 #include "url/gurl.h"
 
 // Conceptually, a Pedal is a fixed action that can be taken by the user
@@ -203,7 +204,10 @@ class OmniboxPedal : public OmniboxAction {
   void AddSynonymGroup(SynonymGroup&& group);
 
   // Specify synonym groups to load from localization strings.
-  virtual std::vector<SynonymGroupSpec> SpecifySynonymGroups() const;
+  // `locale_is_english` provides a hint about which locale is being loaded,
+  // used by batch3 pedals to pilot simplified whole-phrase translations.
+  virtual std::vector<SynonymGroupSpec> SpecifySynonymGroups(
+      bool locale_is_english) const;
 
   OmniboxPedalId id() const { return id_; }
 
@@ -245,6 +249,23 @@ class OmniboxPedal : public OmniboxAction {
   SynonymGroup verbatim_synonym_group_;
 
   std::vector<SynonymGroup> synonym_groups_;
+};
+
+// This is a simple pedal suitable only for use by tests.
+class TestOmniboxPedalClearBrowsingData : public OmniboxPedal {
+ public:
+  explicit TestOmniboxPedalClearBrowsingData()
+      : OmniboxPedal(
+            OmniboxPedalId::CLEAR_BROWSING_DATA,
+            LabelStrings(
+                IDS_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA_HINT,
+                IDS_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA_SUGGESTION_CONTENTS,
+                IDS_ACC_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA_SUFFIX,
+                IDS_ACC_OMNIBOX_PEDAL_CLEAR_BROWSING_DATA),
+            GURL("chrome://settings/clearBrowserData")) {}
+
+ protected:
+  ~TestOmniboxPedalClearBrowsingData() override = default;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_ACTIONS_OMNIBOX_PEDAL_H_

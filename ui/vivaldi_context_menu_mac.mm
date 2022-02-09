@@ -57,9 +57,11 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    bool force_views) {
+    bool force_views,
+    VivaldiRenderViewContextMenu* context_menu
+    ) {
   if (force_views) {
-    return new VivaldiContextMenuViews(web_contents, menu_model, rect);
+    return new VivaldiContextMenuViews(web_contents, menu_model, rect, context_menu);
   } else {
     return new VivaldiContextMenuMac(web_contents, menu_model, rect);
   }

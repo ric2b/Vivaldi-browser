@@ -49,7 +49,7 @@ namespace fileManagerPrivate {
 // Type of the mounted volume.
 enum VolumeType { drive, downloads, removable, archive, provided, mtp,
                   media_view, crostini, android_files, documents_provider,
-                  testing, smb };
+                  testing, smb, system_internal };
 
 // Device type. Available if this is removable volume.
 enum DeviceType { usb, sd, optical, mobile, unknown };
@@ -284,6 +284,7 @@ enum EntryPropertyName {
   canRename,
   canAddChildren,
   canShare,
+  canPin,
   isMachineRoot,
   isExternalMedia,
   isArbitrarySyncFolder
@@ -479,6 +480,9 @@ dictionary EntryProperties {
   // True if the entry can be shared by the user.
   boolean? canShare;
 
+  // True if the entry can be pinned by the user.
+  boolean? canPin;
+
   // True if the entry is a machine root for backup and sync.
   boolean? isMachineRoot;
 
@@ -593,6 +597,9 @@ dictionary VolumeMetadata {
   // The path on the remote host where this volume is mounted, for crostini this
   // is the user's homedir (/home/<username>).
   DOMString? remoteMountPath;
+
+  // Flag that specifies whether the volume is hidden from the user.
+  boolean hidden;
 };
 
 // Payload data for mount event.
@@ -722,12 +729,14 @@ dictionary Preferences {
   DOMString timezone;
   boolean arcEnabled;
   boolean arcRemovableMediaAccessEnabled;
+  DOMString[] folderShortcuts;
 };
 
 dictionary PreferencesChange {
   boolean? cellularDisabled;
   boolean? arcEnabled;
   boolean? arcRemovableMediaAccessEnabled;
+  DOMString[]? folderShortcuts;
 };
 
 dictionary SearchParams {
@@ -929,6 +938,44 @@ dictionary IOTaskParams {
   [instanceof=DirectoryEntry] object? destinationFolder;
 };
 
+// IO Task Progress status, see file_manager::io_task::ProgressStatus.
+dictionary ProgressStatus {
+
+  // Type of the task sending the progress.
+  IOTaskType type;
+
+  // Current state of the task sending the progress.
+  IOTaskState state;
+
+  // Name of the first source entry.
+  DOMString sourceName;
+
+  // Number of remaining entries to be processed.
+  long numRemainingItems;
+
+  // Total number of entries to be processed.
+  long itemCount;
+
+  // Name of the destination folder for operations that transfer files to a
+  // directory (e.g. copy or move).
+  DOMString destinationName;
+
+  // ProgressStatus over all |sources|.
+  long bytesTransferred;
+
+  // Total size of all |sources|.
+  long totalBytes;
+
+  // The task id for this progress status.
+  long taskId;
+
+  // The estimate time to finish the operation.
+  double remainingSeconds;
+
+  // The name of the last error that happened.
+  DOMString errorName;
+};
+
 // Callback that does not take arguments.
 callback SimpleCallback = void();
 
@@ -970,6 +1017,10 @@ callback AddMountCallback = void(DOMString sourcePath);
 // |volumeMetadataList| The list of VolumeMetadata representing mounted volumes.
 callback GetVolumeMetadataListCallback =
     void(VolumeMetadata[] volumeMetadataList);
+
+// |disallowedEntries| A list of files not allowed to be transfered.
+callback GetDisallowedTransfersCallback =
+    void([instanceOf=Entry] object[] disallowedEntries);
 
 // |copyId| ID of the copy task. Can be used to identify the progress, and to
 // cancel the task.
@@ -1231,6 +1282,16 @@ interface Functions {
   // Get the list of mounted volumes.
   // |callback|
   static void getVolumeMetadataList(GetVolumeMetadataListCallback callback);
+
+  // Returns the list of files not allowed to be transfered.
+  // |entires| List of the source entries to be transfered.
+  // |destinationEntry| Entry for the destination (parent) directory.
+  // |callback| Result callback.
+  [nocompile]
+  static void GetDisallowedTransfers(
+      [instanceOf=Entry] object[] entires,
+      [instanceOf=DirectoryEntry] object destinationEntry,
+      GetDisallowedTransfersCallback callback);
 
   // Starts to copy an entry. If the source is a directory, the copy is done
   // recursively.
@@ -1557,6 +1618,10 @@ interface Functions {
       IOTaskType type,
       [instanceof=Entry] object[] entries,
       IOTaskParams params);
+
+  // Cancels an I/O task by id. Task ids are communicated to the Files App in
+  // each I/O task's progress status.
+  static void cancelIOTask(long taskId);
 };
 
 // Events supported by fileManagerPrivate API. These events are broadcasted.
@@ -1588,5 +1653,7 @@ interface Events {
   static void onCrostiniChanged(CrostiniEvent event);
 
   static void onTabletModeChanged(boolean enabled);
+
+  static void onIOTaskProgressStatus(ProgressStatus status);
 };
 };

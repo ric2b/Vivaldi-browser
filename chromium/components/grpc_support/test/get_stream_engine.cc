@@ -8,12 +8,11 @@
 #include "components/grpc_support/test/get_stream_engine.h"
 
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "components/grpc_support/include/bidirectional_stream_c.h"
 #include "net/base/host_port_pair.h"

@@ -15,9 +15,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_DYNAMIC_LOADER
 
@@ -51,24 +48,24 @@ public:
     wxPluginLibraryModule() { }
 
     // TODO: create ms_classes on demand, why always preallocate it?
-    virtual bool OnInit()
+    virtual bool OnInit() wxOVERRIDE
     {
         wxPluginLibrary::ms_classes = new wxDLImports;
         wxPluginManager::CreateManifest();
         return true;
     }
 
-    virtual void OnExit()
+    virtual void OnExit() wxOVERRIDE
     {
         wxDELETE(wxPluginLibrary::ms_classes);
         wxPluginManager::ClearManifest();
     }
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxPluginLibraryModule )
+    wxDECLARE_DYNAMIC_CLASS(wxPluginLibraryModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxPluginLibraryModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxPluginLibraryModule, wxModule);
 
 
 wxPluginLibrary::wxPluginLibrary(const wxString &libname, int flags)

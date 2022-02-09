@@ -34,12 +34,6 @@ CC_BASE_EXPORT extern const base::Feature kScrollUnification;
 CC_BASE_EXPORT extern const base::Feature
     kSchedulerSmoothnessForAnimatedScrolls;
 
-// When enabled, cc's layers support region-based wheel event hit-testing rather
-// than only supporting flagging all layers, or no layers, as having blocking
-// wheel event listeners.
-// https://docs.google.com/document/d/1ar4WhVnLA-fmw6atgP-23iq-ys_NfFoGb3LA5AgaylA/edit?usp=sharing
-CC_BASE_EXPORT extern const base::Feature kWheelEventRegions;
-
 // When enabled, cc will show blink's Web-Vital metrics inside its heads up
 // display.
 CC_BASE_EXPORT extern const base::Feature kHudDisplayForPerformanceMetrics;
@@ -52,6 +46,16 @@ CC_BASE_EXPORT extern const base::Feature kJankInjectionAblationFeature;
 // checkerboard.
 CC_BASE_EXPORT extern const base::Feature
     kPreferNewContentForCheckerboardedScrolls;
+
+// When enabled, CompositorTimingHistory will directly record the timing history
+// that is used to calculate main thread timing estimates, and use the
+// percentile of sum of different stages instead of the sum of percentiles.
+CC_BASE_EXPORT extern const base::Feature
+    kDurationEstimatesInCompositorTimingHistory;
+
+// When enabled, DroppedFrameCounter will use an adjusted sliding window
+// interval specified by field trial params.
+CC_BASE_EXPORT extern const base::Feature kSlidingWindowForDroppedFrameCounter;
 
 }  // namespace features
 

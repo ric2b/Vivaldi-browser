@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "content/public/browser/navigation_handle.h"
@@ -21,21 +20,6 @@
 #include "url/gurl.h"
 
 namespace ukm {
-
-namespace {
-
-// -1 indicates no max number of same document sources per full source.
-int kUnlimitedSameDocumentSourcesPerFullSource = -1;
-
-// Returns the maximum number of same document sources that are allowed to be
-// recorded for a full source.
-int GetMaxSameDocumentSourcesPerFullSource() {
-  return base::GetFieldTrialParamByFeatureAsInt(
-      kUkmFeature, "MaxSameDocumentSourcesPerFullSource",
-      kUnlimitedSameDocumentSourcesPerFullSource);
-}
-
-}  // namespace
 
 namespace internal {
 
@@ -122,6 +106,8 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(SourceUrlRecorderWebContentsObserver);
 SourceUrlRecorderWebContentsObserver::SourceUrlRecorderWebContentsObserver(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<SourceUrlRecorderWebContentsObserver>(
+          *web_contents),
       last_committed_full_navigation_source_id_(ukm::kInvalidSourceId),
       last_committed_full_navigation_or_same_document_source_id_(
           ukm::kInvalidSourceId),
@@ -203,15 +189,7 @@ void SourceUrlRecorderWebContentsObserver::HandleSameDocumentNavigation(
         GetLastCommittedFullNavigationOrSameDocumentSourceId());
   }
 
-  const int max_same_document_sources_per_full_source =
-      GetMaxSameDocumentSourcesPerFullSource();
-
-  if (max_same_document_sources_per_full_source ==
-          kUnlimitedSameDocumentSourcesPerFullSource ||
-      num_same_document_sources_for_full_navigation_source_ <
-          max_same_document_sources_per_full_source) {
-    MaybeRecordUrl(navigation_handle, GURL::EmptyGURL());
-  }
+  MaybeRecordUrl(navigation_handle, GURL::EmptyGURL());
 
   last_committed_full_navigation_or_same_document_source_id_ =
       ukm::ConvertToSourceId(navigation_handle->GetNavigationId(),

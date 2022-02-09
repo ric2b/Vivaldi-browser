@@ -19,10 +19,10 @@
     #include "wx/msw/wrapwin.h"
 #endif
 
-#if wxCHECK_GCC_VERSION(3, 3)
+#ifdef __GNUC__
     #define HAVE_COMPILER_THREAD
     #define wxTHREAD_SPECIFIC __thread
-#elif wxCHECK_VISUALC_VERSION(7)
+#elif defined(__VISUALC__)
     #define HAVE_COMPILER_THREAD
     #define wxTHREAD_SPECIFIC __declspec(thread)
 #endif
@@ -92,7 +92,7 @@ public:
 private:
     pthread_key_t m_key;
 
-    DECLARE_NO_COPY_CLASS(PthreadKey)
+    wxDECLARE_NO_COPY_CLASS(PthreadKey);
 };
 
 BENCHMARK_FUNC(PosixTLS)
@@ -132,7 +132,7 @@ public:
 private:
     DWORD m_slot;
 
-    DECLARE_NO_COPY_CLASS(TlsSlot)
+    wxDECLARE_NO_COPY_CLASS(TlsSlot);
 };
 
 BENCHMARK_FUNC(Win32TLS)

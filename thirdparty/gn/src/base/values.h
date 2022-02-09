@@ -33,7 +33,6 @@
 
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
-#include "base/macros.h"
 #include "base/value_iterators.h"
 
 namespace base {
@@ -198,11 +197,11 @@ class Value {
   // This overload is necessary to avoid ambiguity for const char* arguments.
   Value* SetKey(const char* key, Value value);
 
-  // This attempts to remove the value associated with |key|. In case of failure,
-  // e.g. the key does not exist, |false| is returned and the underlying
-  // dictionary is not changed. In case of success, |key| is deleted from the
-  // dictionary and the method returns |true|.
-  // Note: This fatally asserts if type() is not Type::DICTIONARY.
+  // This attempts to remove the value associated with |key|. In case of
+  // failure, e.g. the key does not exist, |false| is returned and the
+  // underlying dictionary is not changed. In case of success, |key| is deleted
+  // from the dictionary and the method returns |true|. Note: This fatally
+  // asserts if type() is not Type::DICTIONARY.
   //
   // Example:
   //   bool success = RemoveKey("foo");
@@ -365,7 +364,8 @@ class Value {
   void InternalMoveConstructFrom(Value&& that);
   void InternalCleanup();
 
-  DISALLOW_COPY_AND_ASSIGN(Value);
+  Value(const Value&) = delete;
+  Value& operator=(const Value&) = delete;
 };
 
 // DictionaryValue provides a key-value dictionary with (optional) "path"

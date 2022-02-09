@@ -128,11 +128,7 @@ void ConfigureHttp2Params(const base::CommandLine& command_line,
   if (command_line.HasSwitch(switches::kHttp2GreaseSettings) ||
       GetVariationParam(http2_trial_params, "http2_grease_settings") ==
           "true") {
-    spdy::SpdySettingsId id = 0x0a0a + 0x1000 * base::RandGenerator(0xf + 1) +
-                              0x0010 * base::RandGenerator(0xf + 1);
-    uint32_t value = base::RandGenerator(
-        static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1);
-    params->http2_settings.insert(std::make_pair(id, value));
+    params->enable_http2_settings_grease = true;
   }
 
   // Optionally define a frame of reserved type to "grease" frame types, see
@@ -510,7 +506,7 @@ bool AreQuicParamsValid(const base::CommandLine& command_line,
     // Failed to parse epoch as int.
     return false;
   }
-  if (epoch < 20210915) {
+  if (epoch < 20211025) {
     // All channels currently have an epoch of at least this value. This
     // can be confirmed by checking the internal QUIC field trial config file.
     return false;

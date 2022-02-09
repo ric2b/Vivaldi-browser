@@ -58,7 +58,7 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
     CHECK(target_->action_values().outputs().list().size() == 1U);
     contents = Value(target_->action_values().outputs().list()[0].origin(),
                      Value::LIST);
-    std::set<const Target*> targets_walked;
+    TargetSet targets_walked;
     if (!target_->GetMetadata(target_->data_keys(), target_->walk_keys(),
                               target_->rebase(), /*deps_only = */ true,
                               &contents.list_value(), &targets_walked, &err)) {

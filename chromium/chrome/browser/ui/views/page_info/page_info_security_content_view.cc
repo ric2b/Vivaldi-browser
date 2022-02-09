@@ -25,7 +25,7 @@ PageInfoSecurityContentView::PageInfoSecurityContentView(
           .left()));
 
   if (is_standalone_page)
-    presenter_->InitializeUiState(this);
+    presenter_->InitializeUiState(this, base::DoNothing());
 }
 
 PageInfoSecurityContentView::~PageInfoSecurityContentView() = default;
@@ -108,7 +108,7 @@ void PageInfoSecurityContentView::SetIdentityInfo(
     // container, but its unlikely that the user will notice, since other
     // things are changing too.
     if (certificate_button_) {
-      RemoveChildViewT(certificate_button_);
+      RemoveChildViewT(certificate_button_.get());
     }
     certificate_button_ = AddChildView(
         std::make_unique<PageInfoHoverButton>(

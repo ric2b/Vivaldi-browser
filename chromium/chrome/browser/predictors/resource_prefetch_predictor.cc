@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -311,7 +310,8 @@ void ResourcePrefetchPredictor::RecordPageRequestSummary(
   LearnRedirect(summary->initial_url.host(), summary->main_frame_url,
                 host_redirect_data_.get());
   LearnOrigins(summary->main_frame_url.host(),
-               summary->main_frame_url.GetOrigin(), summary->origins);
+               summary->main_frame_url.DeprecatedGetOriginAsURL(),
+               summary->origins);
 
   if (observer_)
     observer_->OnNavigationLearned(*summary);

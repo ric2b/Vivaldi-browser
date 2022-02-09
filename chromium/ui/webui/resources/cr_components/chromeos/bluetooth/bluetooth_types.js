@@ -38,3 +38,18 @@ export const PairingAuthType = {
   CONFIRM_PASSKEY: 6,
   AUTHORIZE_PAIRING: 7,
 };
+
+/** @enum {number} */
+export const DeviceItemState = {
+  DEFAULT: 1,
+  PAIRING: 2,
+  FAILED: 3,
+};
+
+/** @enum {number} */
+export const BatteryType = {
+  DEFAULT: 1,
+  LEFT_BUD: 2,
+  CASE: 3,
+  RIGHT_BUD: 4,
+};

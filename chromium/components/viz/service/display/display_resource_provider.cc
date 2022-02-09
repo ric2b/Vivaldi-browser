@@ -119,7 +119,9 @@ bool DisplayResourceProvider::IsBackedBySurfaceTexture(ResourceId id) {
   ChildResource* resource = GetResource(id);
   return resource->transferable.is_backed_by_surface_texture;
 }
+#endif
 
+#if defined(OS_ANDROID) || defined(OS_WIN)
 bool DisplayResourceProvider::DoesResourceWantPromotionHint(ResourceId id) {
   ChildResource* resource = TryGetResource(id);
   // TODO(ericrk): We should never fail TryGetResource, but we appear to
@@ -167,6 +169,12 @@ ResourceFormat DisplayResourceProvider::GetResourceFormat(ResourceId id) {
 const gfx::ColorSpace& DisplayResourceProvider::GetColorSpace(ResourceId id) {
   ChildResource* resource = GetResource(id);
   return resource->transferable.color_space;
+}
+
+const absl::optional<gfx::HDRMetadata>& DisplayResourceProvider::GetHDRMetadata(
+    ResourceId id) {
+  ChildResource* resource = GetResource(id);
+  return resource->transferable.hdr_metadata;
 }
 
 int DisplayResourceProvider::CreateChild(ReturnCallback return_callback,

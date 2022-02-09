@@ -83,6 +83,7 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.share.qrcode.QrCodeDialog;
+import org.chromium.chrome.browser.share.scroll_capture.ScrollCaptureManager;
 import org.chromium.chrome.browser.tab.AccessibilityVisibilityHandler;
 import org.chromium.chrome.browser.tab.AutofillSessionLifetimeController;
 import org.chromium.chrome.browser.tab.Tab;
@@ -173,7 +174,7 @@ public class RootUiCoordinator
     private OverlayPanelManager.OverlayPanelManagerObserver mOverlayPanelManagerObserver;
 
     private OneshotSupplier<LayoutStateProvider> mLayoutStateProviderOneShotSupplier;
-    private LayoutStateProvider mLayoutStateProvider;
+    protected LayoutStateProvider mLayoutStateProvider;
     private LayoutStateProvider.LayoutStateObserver mLayoutStateObserver;
 
     /** A means of providing the theme color to different features. */
@@ -226,6 +227,7 @@ public class RootUiCoordinator
     @Nullable
     private VoiceRecognitionHandler.Observer mMicStateObserver;
     private MediaCaptureOverlayController mCaptureController;
+    private @Nullable ScrollCaptureManager mScrollCaptureManager;
     protected final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final ObservableSupplier<LayoutManagerImpl> mLayoutManagerSupplier;
     protected final ObservableSupplier<ModalDialogManager> mModalDialogManagerSupplier;
@@ -233,13 +235,14 @@ public class RootUiCoordinator
     private final BooleanSupplier mSupportsAppMenuSupplier;
     protected final BooleanSupplier mSupportsFindInPageSupplier;
     protected final Supplier<TabCreatorManager> mTabCreatorManagerSupplier;
-    private final FullscreenManager mFullscreenManager;
+    protected final FullscreenManager mFullscreenManager;
     protected final Supplier<CompositorViewHolder> mCompositorViewHolderSupplier;
     protected final StatusBarColorController mStatusBarColorController;
     protected final OneshotSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
     protected final Supplier<SnackbarManager> mSnackbarManagerSupplier;
     protected final @ActivityType int mActivityType;
     protected final Supplier<Boolean> mIsInOverviewModeSupplier;
+    protected final Supplier<Boolean> mShouldShowOverviewPageOnStartSupplier;
     private final Supplier<Boolean> mIsWarmOnResumeSupplier;
     private final AppMenuDelegate mAppMenuDelegate;
     private final StatusBarColorProvider mStatusBarColorProvider;
@@ -282,6 +285,8 @@ public class RootUiCoordinator
      * @param snackbarManagerSupplier Supplies the {@link SnackbarManager}.
      * @param activityType The {@link ActivityType} for the activity.
      * @param isInOverviewModeSupplier Supplies whether the app is in overview mode.
+     * @param shouldShowOverviewPageOnStartSupplier Supplies whether the overview page should be
+     *         shown on start.
      * @param isWarmOnResumeSupplier Supplies whether the app was warm on resume.
      * @param appMenuDelegate The app menu delegate.
      * @param statusBarColorProvider Provides the status bar color.
@@ -318,6 +323,7 @@ public class RootUiCoordinator
             @NonNull OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             @NonNull Supplier<SnackbarManager> snackbarManagerSupplier,
             @ActivityType int activityType, @NonNull Supplier<Boolean> isInOverviewModeSupplier,
+            @NonNull Supplier<Boolean> shouldShowOverviewPageOnStartSupplier,
             @NonNull Supplier<Boolean> isWarmOnResumeSupplier,
             @NonNull AppMenuDelegate appMenuDelegate,
             @NonNull StatusBarColorProvider statusBarColorProvider,
@@ -345,6 +351,7 @@ public class RootUiCoordinator
         mSnackbarManagerSupplier = snackbarManagerSupplier;
         mActivityType = activityType;
         mIsInOverviewModeSupplier = isInOverviewModeSupplier;
+        mShouldShowOverviewPageOnStartSupplier = shouldShowOverviewPageOnStartSupplier;
         mIsWarmOnResumeSupplier = isWarmOnResumeSupplier;
         mAppMenuDelegate = appMenuDelegate;
         mStatusBarColorProvider = statusBarColorProvider;
@@ -529,6 +536,11 @@ public class RootUiCoordinator
             mMerchantTrustSignalsCoordinatorSupplier.set(null);
         }
 
+        if (mScrollCaptureManager != null) {
+            mScrollCaptureManager.destroy();
+            mScrollCaptureManager = null;
+        }
+
         mActivity = null;
     }
 
@@ -649,6 +661,7 @@ public class RootUiCoordinator
                 () -> mMessageDispatcher, mModalDialogManagerSupplier.get(), mActivityTabProvider);
 
         initMerchantTrustSignals();
+        initScrollCapture();
     }
 
     private void initMerchantTrustSignals() {
@@ -661,6 +674,15 @@ public class RootUiCoordinator
                             mProfileSupplier, new MerchantTrustMetrics(), mIntentRequestTracker);
             mMerchantTrustSignalsCoordinatorSupplier.set(merchantTrustSignalsCoordinator);
         }
+    }
+
+    private void initScrollCapture() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+                || !ChromeFeatureList.isEnabled(ChromeFeatureList.SCROLL_CAPTURE)) {
+            return;
+        }
+
+        mScrollCaptureManager = new ScrollCaptureManager(mActivityTabProvider);
     }
 
     /**
@@ -738,11 +760,14 @@ public class RootUiCoordinator
         } else if (id == R.id.share_menu_id || id == R.id.direct_share_menu_id) {
             onShareMenuItemSelected(id == R.id.direct_share_menu_id,
                     mTabModelSelectorSupplier.get().isIncognitoSelected());
+            return true;
         } else if (id == R.id.paint_preview_show_id) {
             DemoPaintPreview.showForTab(mActivityTabProvider.get());
+            return true;
         } else if (id == R.id.get_image_descriptions_id) {
             ImageDescriptionsController.getInstance().onImageDescriptionsMenuItemSelected(mActivity,
                     mModalDialogManagerSupplier.get(), mActivityTabProvider.get().getWebContents());
+            return true;
         }
 
         return false;
@@ -897,6 +922,10 @@ public class RootUiCoordinator
                     AdaptiveToolbarButtonVariant.VOICE, voiceToolbarButtonController);
             mButtonDataProviders =
                     Arrays.asList(mIdentityDiscController, adaptiveToolbarButtonController);
+
+            // mShouldShowOverviewPageOnStartSupplier.get() should already be ready because
+            // ChromeTabbedActivity#mInactivityTracker and getTabModelSelector() have been set up by
+            // performPostInflationStartup before this method.
             mToolbarManager = new ToolbarManager(mActivity, mBrowserControlsManager,
                     mFullscreenManager, toolbarContainer, mCompositorViewHolderSupplier.get(),
                     urlFocusChangedCallback, mTopUiThemeColorProvider,
@@ -908,9 +937,9 @@ public class RootUiCoordinator
                     shouldShowMenuUpdateBadge(), mTabModelSelectorSupplier, mStartSurfaceSupplier,
                     mOmniboxFocusStateSupplier, mIntentMetadataOneshotSupplier,
                     mPromoShownOneshotSupplier, mWindowAndroid, mIsInOverviewModeSupplier,
-                    mModalDialogManagerSupplier, mStatusBarColorController, mAppMenuDelegate,
-                    mActivityLifecycleDispatcher, mStartSurfaceParentTabSupplier,
-                    mBottomSheetController, mIsWarmOnResumeSupplier,
+                    mShouldShowOverviewPageOnStartSupplier.get(), mModalDialogManagerSupplier,
+                    mStatusBarColorController, mAppMenuDelegate, mActivityLifecycleDispatcher,
+                    mStartSurfaceParentTabSupplier, mBottomSheetController, mIsWarmOnResumeSupplier,
                     mTabContentManagerSupplier.get(), mTabCreatorManagerSupplier.get(),
                     mOverviewModeBehaviorSupplier, mSnackbarManagerSupplier.get(), mJankTracker,
                     getMerchantTrustSignalsCoordinatorSupplier(), mTabReparentingControllerSupplier,
@@ -949,7 +978,7 @@ public class RootUiCoordinator
                         R.color.omnibox_focused_fading_background_color));
     }
 
-    private void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
+    protected void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
         assert layoutStateProvider != null;
         assert mLayoutStateProvider == null : "The LayoutStateProvider should set at most once.";
 
@@ -1203,5 +1232,12 @@ public class RootUiCoordinator
     @VisibleForTesting
     public ScrimCoordinator getScrimCoordinatorForTesting() {
         return mScrimCoordinator;
+    }
+
+    @VisibleForTesting
+    public void destroyActivityForTesting() {
+        // Actually destroying or finishing the activity hinders the shutdown process after
+        // a test is done. Just null it out to give an effect of |onDestroy| being invoked.
+        mActivity = null;
     }
 }

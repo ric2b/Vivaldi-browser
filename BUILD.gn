@@ -72,12 +72,14 @@ group("All") {
     deps += [
       "//vivaldi/tools/vivaldi_proxy",
       "//chrome/installer/mini_installer",
+      "//components/zucchini:zucchini",
       "//courgette:courgette",
       "//vivaldi/update_notifier",
     ]
     if (vivaldi_build_tests) {
       deps += [
         "//courgette:courgette_unittests",
+        "//components/zucchini:zucchini_unittests",
         "//sandbox/win:sbox_integration_tests",
         "//sandbox/win:sbox_unittests",
         "//sandbox/win:sbox_validation_tests",

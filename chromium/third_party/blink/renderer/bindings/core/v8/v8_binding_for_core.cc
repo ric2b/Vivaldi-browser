@@ -55,7 +55,9 @@
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/typed_arrays/flexible_array_buffer_view.h"
+#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
+#include "third_party/blink/renderer/core/workers/worklet_global_scope.h"
 #include "third_party/blink/renderer/core/xml/xpath_ns_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding_macros.h"
@@ -552,7 +554,7 @@ static bool HasUnmatchedSurrogates(const String& string) {
 
 // Replace unmatched surrogates with REPLACEMENT CHARACTER U+FFFD.
 String ReplaceUnmatchedSurrogates(String string) {
-  // This roughly implements http://heycam.github.io/webidl/#dfn-obtain-unicode
+  // This roughly implements https://webidl.spec.whatwg.org/#dfn-obtain-unicode
   // but since Blink strings are 16-bits internally, the output is simply
   // re-encoded to UTF-16.
 

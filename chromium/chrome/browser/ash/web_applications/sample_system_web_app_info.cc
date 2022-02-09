@@ -31,19 +31,22 @@ std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForSampleSystemWebApp() {
   info->background_color = 0xFFFFFFFF;
   // Bright green in dark mode to be able to see it flicker.
   // This should match up with the dark theme background color to prevent
-  // flickering.
+  // flickering. But for the sample app, we use different, garish colors
+  // to make sure we can see it working.
   info->dark_mode_theme_color = 0xFF11ff00;
+  info->dark_mode_background_color = 0xFFff8888;
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
   info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
 
   {
-    WebApplicationShortcutsMenuItemInfo shortcut;
-    shortcut.name = u"Untrusted Sandbox Demo";
-    shortcut.url = GURL("chrome://sample-system-web-app/sandbox.html");
+    WebAppShortcutsMenuItemInfo shortcut;
+    shortcut.name = u"Inter Frame Communication Demo";
+    shortcut.url =
+        GURL("chrome://sample-system-web-app/inter_frame_communication.html");
     info->shortcuts_menu_item_infos.push_back(std::move(shortcut));
   }
   {
-    WebApplicationShortcutsMenuItemInfo shortcut;
+    WebAppShortcutsMenuItemInfo shortcut;
     shortcut.name = u"Component Playground";
     shortcut.url =
         GURL("chrome://sample-system-web-app/component_playground.html");
@@ -78,7 +81,7 @@ bool SampleSystemAppDelegate::ShouldShowNewWindowMenuOption() const {
   return true;
 }
 
-bool SampleSystemAppDelegate::ShouldBeSingleWindow() const {
+bool SampleSystemAppDelegate::ShouldReuseExistingWindow() const {
   return false;
 }
 

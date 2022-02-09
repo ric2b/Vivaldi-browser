@@ -61,7 +61,7 @@ ScrollbarThemeOverlayMobile::ScrollbarThemeOverlayMobile(
 
 void ScrollbarThemeOverlayMobile::PaintThumb(GraphicsContext& context,
                                              const Scrollbar& scrollbar,
-                                             const IntRect& rect) {
+                                             const gfx::Rect& rect) {
   if (!scrollbar.Enabled())
     return;
 

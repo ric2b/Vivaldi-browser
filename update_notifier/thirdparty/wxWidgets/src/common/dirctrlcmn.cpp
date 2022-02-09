@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_DIRDLG || wxUSE_FILEDLG
 
@@ -62,7 +59,7 @@ wxBEGIN_FLAGS( wxGenericDirCtrlStyle )
     wxFLAGS_MEMBER(wxDIRCTRL_SHOW_FILTERS)
 wxEND_FLAGS( wxGenericDirCtrlStyle )
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxGenericDirCtrl, wxControl, "wx/dirctrl.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxGenericDirCtrl, wxControl, "wx/dirctrl.h");
 
 wxBEGIN_PROPERTIES_TABLE(wxGenericDirCtrl)
     wxHIDE_PROPERTY( Children )

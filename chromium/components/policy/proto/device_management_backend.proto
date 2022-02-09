@@ -8,6 +8,8 @@ option optimize_for = LITE_RUNTIME;
 
 package enterprise_management;
 
+option go_package="chromium/policy/enterprise_management_proto";
+
 import "private_membership_rlwe.proto";
 
 // Everything below this comment will be synchronized between client and server
@@ -369,12 +371,12 @@ message DeviceServiceApiAccessResponse {
 
 // Device Identifier for non-Chrome OS platform.
 message BrowserDeviceIdentifier {
+  reserved 3;
+
   // Name of the computer.
   optional string computer_name = 1;
   // Device serial number (definition depending on the platform).
   optional string serial_number = 2;
-  // Android-specific identifiers.
-  optional AndroidIdentifier android_identifier = 3;
 }
 
 message PolicyFetchRequest {
@@ -918,6 +920,11 @@ message NetworkInterface {
 
   // The mobile directory number associated with the device's sim card.
   optional string mdn = 7;
+
+  // List of EID (EUICC Identifier) of all cellular EUICCs
+  // (Embedded Universal Integrated Circuit Cards) on the device.
+  // 32 decimal digits encoded as ASCII string. e.g.
+  repeated string eids = 8;
 }
 
 // Information about configured/visible networks - this is separate from
@@ -1409,6 +1416,37 @@ message BootInfo {
   optional bool secure_boot = 2 [deprecated = true];
 }
 
+// Hardware component bus device classes.
+// Maps to BusDeviceClass from cros_healthd.
+enum BusDeviceClass {
+  DEVICE_CLASS_UNSPECIFIED = 0;
+  DISPLAY_CONTROLLER = 1;
+  ETHERNET_CONTROLLER = 2;
+  WIRELESS_CONTROLLER = 3;
+  BLUETOOTH_ADAPTER = 4;
+  THUNDERBOLT_CONTROLLER = 5;
+}
+
+// Hardware component busses.
+// Maps to BusInfo types from cros_healthd.
+enum BusType {
+  BUS_TYPE_UNSPECIFIED = 0;
+  PCI_BUS = 1;
+  USB_BUS = 2;
+  THUNDERBOLT_BUS = 3;
+}
+
+// Information about a device's network hardware.
+message NetworkAdapterInfo {
+  optional BusDeviceClass device_class = 1;
+  optional BusType bus_type = 2;
+  optional int32 vendor_id = 3;
+  optional string vendor_name = 4;
+  optional int32 device_id = 5;
+  optional string device_name = 6;
+  repeated string driver = 7;
+}
+
 // Report device level status.
 message DeviceStatusReportRequest {
   reserved 4, 7, 13, 20;
@@ -1543,6 +1581,9 @@ message DeviceStatusReportRequest {
 
   // Information about how the os was booted.
   optional BootInfo boot_info = 44;
+
+  // Information about the device's network hardware.
+  repeated NetworkAdapterInfo network_adapter_info = 45;
 }
 
 message OsUpdateStatus {
@@ -2019,13 +2060,6 @@ enum PartialReportType {
   EXTENSION_REQUEST = 1;
 }
 
-// Android-specific IDs to be reported in addition to the Client ID. Explicit
-// approval from Chrome Privacy is required for new IDs.
-message AndroidIdentifier {
-  // Gservices Android ID, only uploaded for Android version S and older.
-  optional string gservices_android_id = 1;
-}
-
 // Report the status of a Chrome installation on non-Chrome OS platform.
 message ChromeDesktopReportRequest {
   // The name of the machine within its local network. The string is a JSON
@@ -2084,6 +2118,16 @@ message ChromeOsUserReportRequest {
   // information. When list is empty or unset, the report should contains all
   // information.
   repeated PartialReportType partial_report_types = 3;
+}
+
+// Report user level status on all platforms. It includes the information of the
+// profile that user has signed in plus some basic browser and OS information.
+message ChromeProfileReportRequest {
+  // Browser related info
+  optional BrowserReport browser_report = 1;
+
+  // Basic OS information
+  optional OSReport os_report = 2;
 }
 
 // A validation issue from validating a policy value that was contained in
@@ -2303,13 +2347,18 @@ message DeviceStatusReportResponse {
 
 // Response from DMServer to a Chrome desktop report request. The report
 // upload errors will be set in the containing DeviceManagementResponse or
-// eventually at the HTTP level as mentioned in a TODO.
+// eventually at the HTTP level.
 message ChromeDesktopReportResponse {}
 
 // Response from DMServer to a ChromeOS user report request. The report
 // upload errors will be set in the containing DeviceManagementResponse or
-// eventually at the HTTP level as mentioned in a TODO.
+// eventually at the HTTP level.
 message ChromeOsUserReportResponse {}
+
+// Response from DMServer to a profile report request. The report
+// upload errors will be set in the containing DeviceManagementResponse or
+// eventually at the HTTP level.
+message ChromeProfileReportResponse {}
 
 // Response from DMServer to update user devices' status.
 // It is possible that status report fails but policy request succeed.  In such
@@ -2669,6 +2718,9 @@ message RemoteCommand {
     // Reset the cellular EUICC (Embedded Universal Integrated Circuit Card) on
     // the device.
     DEVICE_RESET_EUICC = 13;
+
+    // Rotates the attestation credentials associated with a browser device.
+    BROWSER_ROTATE_ATTESTATION_CREDENTIAL = 14;
 
     // Please update metrics after adding a new item - see the comment above.
   }
@@ -3552,6 +3604,15 @@ message UploadEuiccInfoRequest {
 
   // List of policy provisioned eSIM profiles on the device.
   repeated ESimProfileInfo esim_profiles = 2;
+
+  // A boolean flag which indicates that the list of eSim profiles was cleared.
+  // We use this differentiate between intentionally empty profile list(after
+  // cleanup) or not yet provisioned one.
+  // On the server, we would ignore requests where |esim_profiles| is empty
+  // if |clear_profile_list| is not set to |true| to not accidentally clear the
+  // values previously stored for this device(which can happen in a case of
+  // device being in after-powerwash state, for example).
+  optional bool clear_profile_list = 3;
 }
 
 // Response from server to device for EUICC status update.
@@ -3932,6 +3993,12 @@ message BrowserPublicKeyUploadRequest {
     CHROME_BROWSER_OS_KEY = 2;
   }
 
+  enum KeyType {
+    KEY_TYPE_UNSPECIFIED = 0;
+    RSA_KEY = 1;
+    EC_KEY = 2;
+  }
+
   // Public key in EC_NID_X9_62_PRIME256V1_PUBLIC_DER format.
   optional bytes public_key = 1;
   // Signature of the new public key signed using the existing key, empty for
@@ -3939,6 +4006,8 @@ message BrowserPublicKeyUploadRequest {
   optional bytes signature = 2;
   // Trust Level of the key.
   optional KeyTrustLevel key_trust_level = 3;
+  // Type of the key.
+  optional KeyType key_type = 4;
 }
 
 // Response from server to device for cert upload request.
@@ -4314,6 +4383,7 @@ message DeviceManagementResponse {
   optional BrowserPublicKeyUploadResponse browser_public_key_upload_response =
       36;
 
+  // Response to EUICC info upload request.
   optional UploadEuiccInfoResponse upload_euicc_info_response = 37;
 
   // Next id: 38.

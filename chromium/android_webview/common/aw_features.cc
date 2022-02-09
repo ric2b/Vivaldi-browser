@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "android_webview/common/aw_features.h"
+#include "base/feature_list.h"
 
 namespace android_webview {
 namespace features {
@@ -18,9 +19,24 @@ const base::Feature kWebViewBrotliSupport{"WebViewBrotliSupport",
 const base::Feature kWebViewConnectionlessSafeBrowsing{
     "WebViewConnectionlessSafeBrowsing", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enable WebView to set prefers-color-theme according to the app's theme unless
+// app specifies FORCE_DARK_OFF or DARK_STRATEGY_USER_AGENT_DARKENING_ONLY.
+const base::Feature kWebViewDarkModeMatchTheme{
+    "WebViewDarkModeMatchTheme", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable WebView to automatically darken the page in FORCE_DARK_AUTO mode if
+// the app's theme is dark.
+const base::Feature kWebViewForceDarkModeMatchTheme{
+    "WebViewForceDarkModeMatchTheme", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable display cutout support for Android P and above.
 const base::Feature kWebViewDisplayCutout{"WebViewDisplayCutout",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Fake empty component to measure component updater performance impact on
+// WebView clients.
+const base::Feature kWebViewEmptyComponent{"WebViewEmptyComponentLoaderPolicy",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, passive mixed content (Audio/Video/Image subresources loaded
 // over HTTP on HTTPS sites) will be autoupgraded to HTTPS, and the load will be
@@ -39,6 +55,14 @@ const base::Feature kWebViewExtraHeadersSameOriginOnly{
 // Enable the new Java/JS Bridge code path with mojo implementation.
 const base::Feature kWebViewJavaJsBridgeMojo{"WebViewJavaJsBridgeMojo",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, connections using legacy TLS 1.0/1.1 versions are allowed.
+const base::Feature kWebViewLegacyTlsSupport{"WebViewLegacyTlsSupport",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables logging whether it was a first party page when logging PageTimeSpent.
+const base::Feature kWebViewLogFirstPartyPageTimeSpent{
+    "WebViewLogFirstPartyPageTimeSpent", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Measure the number of pixels occupied by one or more WebViews as a
 // proportion of the total screen size. Depending on the number of

@@ -19,7 +19,6 @@
 #include "base/clang_profiling_buildflags.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
@@ -37,6 +36,7 @@
 #include "content/common/renderer_host.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/discardable_memory_utils.h"
+#include "content/services/shared_storage_worklet/public/mojom/shared_storage_worklet_service.mojom.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/media_buildflags.h"
@@ -78,10 +78,6 @@ class Thread;
 
 namespace cc {
 class TaskGraphRunner;
-}
-
-namespace gfx {
-class RenderingPipeline;
 }
 
 namespace gpu {
@@ -212,8 +208,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   blink::scheduler::WebThreadScheduler* GetWebMainThreadScheduler();
   cc::TaskGraphRunner* GetTaskGraphRunner();
-  gfx::RenderingPipeline* GetMainThreadPipeline();
-  gfx::RenderingPipeline* GetCompositorThreadPipeline();
   bool IsLcdTextEnabled();
   bool IsElasticOverscrollEnabled();
   bool IsScrollAnimatorEnabled();
@@ -288,6 +282,8 @@ class CONTENT_EXPORT RenderThreadImpl
   // Get the GPU channel. Returns NULL if the channel is not established or
   // has been lost.
   gpu::GpuChannelHost* GetGpuChannel();
+
+  base::PlatformThreadId GetIOPlatformThreadId() const;
 
   // Returns a SingleThreadTaskRunner instance corresponding to the message loop
   // of the thread on which media operations should be run. Must be called
@@ -408,6 +404,17 @@ class CONTENT_EXPORT RenderThreadImpl
     video_frame_compositor_task_runner_ = task_runner;
   }
 
+  void CreateSharedStorageWorkletService(
+      mojo::PendingReceiver<
+          shared_storage_worklet::mojom::SharedStorageWorkletService> receiver);
+
+  // The time the run loop started for this thread.
+  base::TimeTicks run_loop_start_time() const { return run_loop_start_time_; }
+
+  void set_run_loop_start_time(base::TimeTicks run_loop_start_time) {
+    run_loop_start_time_ = run_loop_start_time;
+  }
+
   // FEATURE_FORCE_ACCESS_TO_GPU
   scoped_refptr<gpu::GpuChannelHost> EstablishForcedGpuChannelSync();
 
@@ -472,6 +479,8 @@ class CONTENT_EXPORT RenderThreadImpl
 #endif
   void SetIsCrossOriginIsolated(bool value) override;
   void SetIsDirectSocketEnabled(bool value) override;
+  void EnableBlinkRuntimeFeatures(
+      const std::vector<std::string>& features) override;
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
@@ -543,9 +552,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // Thread for running multimedia operations (e.g., video decoding).
   std::unique_ptr<base::Thread> media_thread_;
-
-  std::unique_ptr<gfx::RenderingPipeline> main_thread_pipeline_;
-  std::unique_ptr<gfx::RenderingPipeline> compositor_thread_pipeline_;
 
   // Will point to appropriate task runner after initialization,
   // regardless of whether |compositor_thread_| is overriden.
@@ -627,6 +633,9 @@ class CONTENT_EXPORT RenderThreadImpl
   // Delegate is expected to live as long as requests may be sent.
   blink::WebResourceRequestSenderDelegate* resource_request_sender_delegate_ =
       nullptr;
+
+  // Tracks the time the run loop started for this thread.
+  base::TimeTicks run_loop_start_time_;
 
   base::WeakPtrFactory<RenderThreadImpl> weak_factory_{this};
 };

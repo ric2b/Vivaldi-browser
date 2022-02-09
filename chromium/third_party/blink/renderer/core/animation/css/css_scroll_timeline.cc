@@ -102,15 +102,15 @@ ScrollTimeline::ScrollDirection ComputeScrollDirection(const CSSValue* value) {
 
   switch (value_id) {
     case CSSValueID::kInline:
-      return ScrollTimeline::Inline;
+      return ScrollTimeline::kInline;
     case CSSValueID::kHorizontal:
-      return ScrollTimeline::Horizontal;
+      return ScrollTimeline::kHorizontal;
     case CSSValueID::kVertical:
-      return ScrollTimeline::Vertical;
+      return ScrollTimeline::kVertical;
     case CSSValueID::kAuto:
     case CSSValueID::kBlock:
     default:
-      return ScrollTimeline::Block;
+      return ScrollTimeline::kBlock;
   }
 }
 
@@ -223,7 +223,7 @@ const AtomicString& CSSScrollTimeline::Name() const {
 }
 
 bool CSSScrollTimeline::Matches(const Options& options) const {
-  return (scrollSource() == options.source_) &&
+  return (source() == options.source_) &&
          (GetOrientation() == options.direction_) &&
          (ScrollOffsetsEqual(options.offsets_)) && (rule_ == options.rule_);
 }

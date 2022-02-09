@@ -13,6 +13,7 @@
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -178,6 +179,24 @@ void VivaldiBrowserObserver::OnTabStripModelChanged(
     const TabStripSelectionChange& selection) {
   if (!selection.active_tab_changed() || !selection.new_contents)
     return;
+
+  // Synthesize webcontents OnWebContentsLostFocus/OnWebContentsFocused
+  if (selection.active_tab_changed()) {
+    autofill::ChromeAutofillClient* old_fill_client =
+        selection.old_contents
+            ? autofill::ChromeAutofillClient::FromWebContents(
+                  selection.old_contents)
+            : nullptr;
+    autofill::ChromeAutofillClient* new_fill_client =
+        autofill::ChromeAutofillClient::FromWebContents(selection.new_contents);
+
+    if (old_fill_client) {
+      old_fill_client->OnWebContentsLostFocus(
+          selection.old_contents->GetMainFrame()->GetRenderWidgetHost());
+    }
+    new_fill_client->OnWebContentsFocused(
+        selection.new_contents->GetMainFrame()->GetRenderWidgetHost());
+  }
 
   TabsPrivateAPI::FromBrowserContext(
       selection.new_contents->GetBrowserContext())

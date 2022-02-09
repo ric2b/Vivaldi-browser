@@ -89,8 +89,11 @@ const char kSopranoHeaderValue[] = "soprano";
 
 // We cancel the delta and switch to the full download if delta extraction and
 // setup reconstruction runs over this time limit.
-constexpr base::TimeDelta kDeltaExtractionLimit =
-    base::TimeDelta::FromMinutes(3);
+constexpr base::TimeDelta kDeltaExtractionLimit = base::Minutes(3);
+
+// Max limit to unpack the full installer. The value is arbitrary to have a
+// sanity limit.
+constexpr base::TimeDelta kUnpackTimeLimit = base::Hours(24);
 
 // Get a temporary directory with a stable, installation-specific name to hold
 // the directory with an unpredictable name. The stable name allows to remove
@@ -439,8 +442,7 @@ void RunHelperProcess(const base::CommandLine& cmdline,
   int exit_code = 0;
   for (;;) {
     // Wait for 2 seconds so we can check if the user canceled the download.
-    bool done = process.WaitForExitWithTimeout(base::TimeDelta::FromSeconds(2),
-                                               &exit_code);
+    bool done = process.WaitForExitWithTimeout(base::Seconds(2), &exit_code);
     if (done)
       break;
     delegate.SendReport(report, error);
@@ -500,7 +502,7 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
                         Error& error) {
   if (error)
     return;
-  report.kind = DownloadReport::kDeltaExtraction;
+  report.kind = DownloadReport::kUnpacking;
   delegate.SendReport(report, error);
   if (error)
     return;
@@ -670,6 +672,38 @@ std::unique_ptr<InstallerLaunchData> DownloadFullInstaller(
   VerifyEmbeddedSignature(full_update_path, report, delegate, error);
   if (error)
     return nullptr;
+
+  // For now require --vivaldi-unpack switch with the update notifier to enable
+  // separated unpacking stage until we release the installer with the support
+  // for --vivaldi-unpack option.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          vivaldi::constants::kVivaldiUnpack)) {
+    // Extract setup.exe and the main archive from the installer.
+    report.kind = DownloadReport::kUnpacking;
+    delegate.SendReport(report, error);
+
+    base::CommandLine unpack_cmdline(full_update_path);
+    unpack_cmdline.AppendSwitch(vivaldi::constants::kVivaldiUnpack);
+    base::LaunchOptions launch_options;
+    launch_options.current_directory = tmpdir;
+    launch_options.start_hidden = true;
+
+    RunHelperProcess(unpack_cmdline, launch_options,
+                     base::Time::Now() + kUnpackTimeLimit, report, delegate,
+                     error);
+    if (error)
+      return nullptr;
+
+    base::FilePath setup_exe = tmpdir.Append(kSetupExe);
+    if (!base::PathExists(setup_exe)) {
+      error.set(Error::kFormat, "The installer failed to unpack the main exe");
+      return nullptr;
+    }
+
+    // We no longer need the installer file.
+    base::DeleteFile(full_update_path);
+    full_update_path = std::move(setup_exe);
+  }
 
   base::CommandLine cmdline(full_update_path);
   AddInstallArguments(cmdline);

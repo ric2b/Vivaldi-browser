@@ -12,6 +12,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
@@ -83,13 +84,15 @@ bool ContextMenuController::Show() {
   // Mac needs the views version for certain origins as we can not position the
   // menu properly on mac/cocoa.
   bool force_views = params_->properties.origin != Origin::ORIGIN_POINTER;
+
   menu_.reset(CreateVivaldiContextMenu(window_web_contents_, nullptr, rect_,
-                                       force_views));
+                                       force_views, rv_context_menu_));
 
   if (rv_context_menu_) {
     // Give access to the toolkit delegate. Needed for containers that populate
     // content on demand (when folder opens).
-    rv_context_menu_->SetToolkitDelegate(menu_->GetToolkitDelegate());
+    std::unique_ptr<ToolkitDelegateViews> delegate(new ToolkitDelegateViews);
+    rv_context_menu_->set_toolkit_delegate(std::move(delegate));
     menu_->SetParentView(rv_context_menu_->parent_view());
   }
 
@@ -474,7 +477,7 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
       // OnClosed call to the delegate starts, but the crash log is hard to make
       // sense of.
       timer_.reset(new base::OneShotTimer());
-      timer_->Start(FROM_HERE, base::TimeDelta::FromMilliseconds(1),
+      timer_->Start(FROM_HERE, base::Milliseconds(1),
                     base::BindOnce(&ContextMenuController::Delete,
                                    base::Unretained(this)));
     } else {

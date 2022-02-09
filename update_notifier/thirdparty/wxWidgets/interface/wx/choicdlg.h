@@ -17,8 +17,6 @@
 
 /**
     Default style of the choice dialog.
-
-    @remarks wxRESIZE_BORDER is not used under WinCE.
 */
 #define wxCHOICEDLG_STYLE (wxDEFAULT_DIALOG_STYLE | wxOK | wxCANCEL | wxCENTRE | wxRESIZE_BORDER)
 
@@ -35,7 +33,7 @@
     @style{wxCANCEL}
         Show a Cancel button.
     @style{wxCENTRE}
-        Centre the message. Not Windows.
+        Centre the message.
     @endStyleTable
 
     @library{wxbase}
@@ -66,7 +64,7 @@ public:
             default value is equivalent to wxDEFAULT_DIALOG_STYLE |
             wxRESIZE_BORDER | wxOK | wxCANCEL | wxCENTRE.
         @param pos
-            Dialog position. Not Windows.
+            Dialog position.
 
         @remarks Use ShowModal() to show the dialog.
 
@@ -96,7 +94,7 @@ public:
             default value is equivalent to wxDEFAULT_DIALOG_STYLE |
             wxRESIZE_BORDER | wxOK | wxCANCEL | wxCENTRE.
         @param pos
-            Dialog position. Not Windows.
+            Dialog position.
 
         @remarks Use ShowModal() to show the dialog.
 
@@ -143,7 +141,7 @@ public:
     @style{wxCANCEL}
         Show a Cancel button.
     @style{wxCENTRE}
-        Centre the message. Not Windows.
+        Centre the message.
     @endStyleTable
 
     @library{wxbase}
@@ -178,7 +176,7 @@ public:
             default value is equivalent to wxDEFAULT_DIALOG_STYLE |
             wxRESIZE_BORDER | wxOK | wxCANCEL | wxCENTRE.
         @param pos
-            Dialog position. Not Windows.
+            Dialog position.
 
         @remarks Use ShowModal() to show the dialog.
 
@@ -213,7 +211,7 @@ public:
             default value is equivalent to wxDEFAULT_DIALOG_STYLE |
             wxRESIZE_BORDER | wxOK | wxCANCEL | wxCENTRE.
         @param pos
-            Dialog position. Not Windows.
+            Dialog position.
 
         @remarks Use ShowModal() to show the dialog.
 

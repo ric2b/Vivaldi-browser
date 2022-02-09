@@ -10,7 +10,6 @@
 
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/kill.h"
 #include "chromeos/dbus/power/power_manager_client.h"
@@ -104,10 +103,5 @@ class RendererFreezer : public PowerManagerClient::RenderProcessManagerDelegate,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-using ::ash::RendererFreezer;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_POWER_RENDERER_FREEZER_H_

@@ -38,6 +38,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     // Vivaldi
     private boolean mShouldHideOverlay;
     private boolean mIsStackStrip;
+    private float mMainYOffset;
 
     public TabStripSceneLayer(Context context) {
         mDpToPx = context.getResources().getDisplayMetrics().density;
@@ -76,9 +77,10 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             StripLayoutTab[] stripLayoutTabsToRender, float yOffset, int selectedTabId) {
         if (mNativePtr == 0) return;
 
-        // Note(david@vivaldi.com): If we have a stack the offset is twice as big.
+        // Note(david@vivaldi.com): If we have a stack the offset is twice as big. We also always
+        // consider the |mMainYOffset| for calculating the tab strip visibility.
         float stackOffset = VivaldiUtils.isTabStackVisible() ? 2 * mDpToPx : 1;
-        boolean visible = yOffset > -(layoutHelper.getHeight() * stackOffset); // Vivaldi
+        boolean visible = mMainYOffset > -(layoutHelper.getHeight() * stackOffset); // Vivaldi
         visible = visible && VivaldiUtils.isTabStripOn() && !mShouldHideOverlay;
 
         // Note(david@vivaldi.com): We only show the stacking strip when we are in a tab stack.
@@ -195,6 +197,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     public void setIsStackStrip(boolean isStackStrip) {
         mIsStackStrip = isStackStrip;
         TabStripSceneLayerJni.get().setIsStackStrip(mNativePtr, this, mIsStackStrip);
+    }
+
+    /** Vivaldi **/
+    public void setMainYOffset(float yOffset) {
+        mMainYOffset = yOffset;
     }
 
     @NativeMethods

@@ -45,7 +45,6 @@ import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
-import org.chromium.components.query_tiles.QueryTile;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -179,9 +178,9 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
     /**
      * Initialize the Mediator with default set of suggestion processors.
      */
-    void initDefaultProcessors(Callback<List<QueryTile>> queryTileSuggestionCallback) {
+    void initDefaultProcessors() {
         mDropdownViewInfoListBuilder.initDefaultProcessors(
-                mContext, this, mDelegate, mUrlBarEditingTextProvider, queryTileSuggestionCallback);
+                mContext, this, mDelegate, mUrlBarEditingTextProvider);
     }
 
     /**
@@ -396,35 +395,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         return mAutocompleteResult.getNativeObjectRef();
     }
 
-    private static boolean isQueryEditingEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.QUERY_TILES_ENABLE_QUERY_EDITING);
-    }
-
-    /** Called when a query tile is selected by the user. */
-    void onQueryTileSelected(QueryTile queryTile) {
-        // For last level tile, start a search query, unless we want to let user have a chance to
-        // edit the query.
-        if (queryTile.children.isEmpty() && !isQueryEditingEnabled()) {
-            launchSearchUrlForQueryTileSuggestion(queryTile);
-            return;
-        }
-
-        // If the tile has sub-tiles, start a new request to the backend to get the new set
-        // of tiles. Also set the tile text in omnibox.
-        stopAutocomplete(false);
-        String refineText = TextUtils.concat(queryTile.queryText, " ").toString();
-        mDelegate.setOmniboxEditingText(refineText);
-
-        mNewOmniboxEditSessionTimestamp = SystemClock.elapsedRealtime();
-        mEditSessionState = EditSessionState.ACTIVATED_BY_QUERY_TILE;
-
-        mAutocomplete.start(mDataProvider.getCurrentUrl(),
-                mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox()),
-                mUrlBarEditingTextProvider.getTextWithoutAutocomplete(),
-                mUrlBarEditingTextProvider.getSelectionStart(),
-                !mUrlBarEditingTextProvider.shouldAutocomplete(), queryTile.id, true);
-    }
-
     /**
      * Triggered when the user selects one of the omnibox suggestions to navigate to.
      * @param suggestion The AutocompleteMatch which was selected.
@@ -477,7 +447,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
     @Override
     public void onSwitchToTab(AutocompleteMatch suggestion, int position) {
-        Tab tab = mAutocomplete.findMatchingTabWithUrl(suggestion.getUrl());
+        Tab tab = mAutocomplete.getMatchingTabForSuggestion(position);
         if (tab == null || !mTabWindowManagerSupplier.hasValue()) {
             onSuggestionClicked(suggestion, position, suggestion.getUrl());
             return;
@@ -492,7 +462,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             assert tabModel != null;
 
             int tabIndex = TabModelUtils.getTabIndexById(tabModel, tab.getId());
-            tabModel.setIndex(tabIndex, TabSelectionType.FROM_OMNIBOX);
+            tabModel.setIndex(tabIndex, TabSelectionType.FROM_OMNIBOX, false);
         } else {
             mBringTabToFrontCallback.onResult(tab);
         }
@@ -687,12 +657,10 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
                 int pageClassification =
                         mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox());
                 String currentUrl = mDataProvider.getCurrentUrl();
-                boolean isQueryStartedFromTiles = mDelegate.didFocusUrlFromQueryTiles()
-                        || mEditSessionState == EditSessionState.ACTIVATED_BY_QUERY_TILE;
 
                 postAutocompleteRequest(() -> {
                     mAutocomplete.start(currentUrl, pageClassification, textWithoutAutocomplete,
-                            cursorPosition, preventAutocomplete, null, isQueryStartedFromTiles);
+                            cursorPosition, preventAutocomplete);
                 }, OMNIBOX_SUGGESTION_START_DELAY_MS);
             }
         }
@@ -916,7 +884,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         stopAutocomplete(false);
         if (mDataProvider.hasTab()) {
             mAutocomplete.start(mDataProvider.getCurrentUrl(),
-                    mDataProvider.getPageClassification(false), query, -1, false, null, false);
+                    mDataProvider.getPageClassification(false), query, -1, false);
         }
     }
 
@@ -990,37 +958,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         return mNewOmniboxEditSessionTimestamp > 0
                 ? (SystemClock.elapsedRealtime() - mNewOmniboxEditSessionTimestamp)
                 : -1;
-    }
-
-    /**
-     * Launches the search URL for the query tile suggestion.
-     * @param queryTile The query tile user selected.
-     */
-    @SuppressWarnings("VisibleForTests")
-    private void launchSearchUrlForQueryTileSuggestion(QueryTile queryTile) {
-        SuggestionsMetrics.recordFocusToOpenTime(System.currentTimeMillis() - mUrlFocusTime);
-        int position = -1;
-        int suggestionCount = getSuggestionCount();
-        AutocompleteMatch suggestion = null;
-        // Find the suggestion position and hashCode.
-        for (int i = 0; i < suggestionCount; ++i) {
-            suggestion = getSuggestionAt(i);
-            if (suggestion.getType() == OmniboxSuggestionType.TILE_SUGGESTION) {
-                position = i;
-                break;
-            }
-        }
-        if (suggestion == null) return;
-        GURL updatedUrl = mAutocomplete.updateMatchDestinationUrlWithQueryFormulationTime(position,
-                getElapsedTimeSinceInputChange(), queryTile.queryText, queryTile.searchParams);
-
-        // Abort if the Autocomplete has just become invalid/profile was destroyed.
-        if (updatedUrl == null) return;
-
-        // RecordMetrics has to be called before loadUrl, or otherwise the native AutocompleteResult
-        // object will be reset and the suggestion will fail validation.
-        recordMetrics(position, WindowOpenDisposition.CURRENT_TAB, suggestion);
-        mDelegate.loadUrl(updatedUrl.getSpec(), PageTransition.LINK, mLastActionUpTimestamp);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)

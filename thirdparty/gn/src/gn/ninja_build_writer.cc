@@ -156,7 +156,7 @@ Err GetDuplicateOutputError(const std::vector<const Target*>& all_targets,
   DCHECK(matches.size() >= 2);
   std::string matches_string;
   for (const Target* target : matches)
-    matches_string += "  " + target->label().GetUserVisibleName(false) + "\n";
+    matches_string += "  " + target->label().GetUserVisibleName(true) + "\n";
 
   Err result(matches[0]->defined_from(), "Duplicate output file.",
              "Two or more targets generate the same output:\n  " +

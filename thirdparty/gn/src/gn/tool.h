@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/label.h"
 #include "gn/label_ptr.h"
 #include "gn/scope.h"
@@ -84,9 +83,7 @@ class Tool {
   }
 
   // Launcher for the command (e.g. goma)
-  const std::string& command_launcher() const {
-    return command_launcher_;
-  }
+  const std::string& command_launcher() const { return command_launcher_; }
   void set_command_launcher(std::string l) {
     DCHECK(!complete_);
     command_launcher_ = std::move(l);
@@ -298,7 +295,8 @@ class Tool {
 
   SubstitutionBits substitution_bits_;
 
-  DISALLOW_COPY_AND_ASSIGN(Tool);
+  Tool(const Tool&) = delete;
+  Tool& operator=(const Tool&) = delete;
 };
 
 #endif  // TOOLS_GN_TOOL_H_

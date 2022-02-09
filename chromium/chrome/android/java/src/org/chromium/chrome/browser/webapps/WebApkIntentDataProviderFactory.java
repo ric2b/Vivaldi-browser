@@ -23,6 +23,7 @@ import android.text.TextUtils;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 import androidx.browser.trusted.sharing.ShareData;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -47,6 +48,7 @@ import org.chromium.components.webapk.lib.common.WebApkMetaDataKeys;
 import org.chromium.components.webapps.ShortcutSource;
 import org.chromium.components.webapps.WebApkDistributor;
 import org.chromium.device.mojom.ScreenOrientationLockType;
+import org.chromium.ui.util.ColorUtils;
 import org.chromium.webapk.lib.common.WebApkCommonUtils;
 import org.chromium.webapk.lib.common.WebApkMetaDataUtils;
 import org.chromium.webapk.lib.common.splash.SplashLayout;
@@ -262,11 +264,10 @@ public class WebApkIntentDataProviderFactory {
                 IntentUtils.safeGetString(bundle, WebApkMetaDataKeys.DISPLAY_MODE));
         int orientation = orientationFromString(
                 IntentUtils.safeGetString(bundle, WebApkMetaDataKeys.ORIENTATION));
-        long themeColor = WebApkMetaDataUtils.getLongFromMetaData(bundle,
-                WebApkMetaDataKeys.THEME_COLOR, WebappConstants.MANIFEST_COLOR_INVALID_OR_MISSING);
-        long backgroundColor =
-                WebApkMetaDataUtils.getLongFromMetaData(bundle, WebApkMetaDataKeys.BACKGROUND_COLOR,
-                        WebappConstants.MANIFEST_COLOR_INVALID_OR_MISSING);
+        long themeColor = WebApkMetaDataUtils.getLongFromMetaData(
+                bundle, WebApkMetaDataKeys.THEME_COLOR, ColorUtils.INVALID_COLOR);
+        long backgroundColor = WebApkMetaDataUtils.getLongFromMetaData(
+                bundle, WebApkMetaDataKeys.BACKGROUND_COLOR, ColorUtils.INVALID_COLOR);
 
         // Fetch the default background color from the WebAPK's resources. Fetching the default
         // background color from the WebAPK is important for consistency when:
@@ -473,7 +474,8 @@ public class WebApkIntentDataProviderFactory {
      * WebAPK's AndroidManifest.xml as following:
      * "URL1 hash1 URL2 hash2 URL3 hash3..."
      */
-    private static Map<String, String> getIconUrlAndIconMurmur2HashMap(Bundle metaData) {
+    @VisibleForTesting
+    static Map<String, String> getIconUrlAndIconMurmur2HashMap(Bundle metaData) {
         Map<String, String> iconUrlAndIconMurmur2HashMap = new HashMap<String, String>();
         String iconUrlsAndIconMurmur2Hashes =
                 metaData.getString(WebApkMetaDataKeys.ICON_URLS_AND_ICON_MURMUR2_HASHES);
@@ -481,15 +483,15 @@ public class WebApkIntentDataProviderFactory {
 
         // Parse the metadata tag which contains "URL1 hash1 URL2 hash2 URL3 hash3..." pairs and
         // create a hash map.
-        // TODO(hanxi): crbug.com/666349. Add a test to verify that the icon URLs in WebAPKs'
-        // AndroidManifest.xml don't contain space.
-        String[] urlsAndHashes = iconUrlsAndIconMurmur2Hashes.split("[ ]+");
+        String[] urlsAndHashes = iconUrlsAndIconMurmur2Hashes.split(" ");
         if (urlsAndHashes.length % 2 != 0) {
             Log.e(TAG, "The icon URLs and icon murmur2 hashes don't come in pairs.");
             return iconUrlAndIconMurmur2HashMap;
         }
         for (int i = 0; i < urlsAndHashes.length; i += 2) {
-            iconUrlAndIconMurmur2HashMap.put(urlsAndHashes[i], urlsAndHashes[i + 1]);
+            if (!TextUtils.isEmpty(urlsAndHashes[i])) {
+                iconUrlAndIconMurmur2HashMap.put(urlsAndHashes[i], urlsAndHashes[i + 1]);
+            }
         }
         return iconUrlAndIconMurmur2HashMap;
     }

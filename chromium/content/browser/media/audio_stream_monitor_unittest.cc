@@ -10,7 +10,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "build/chromeos_buildflags.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -53,6 +53,9 @@ class AudioStreamMonitorTest : public RenderViewHostTestHarness {
     // Start |clock_| at non-zero.
     clock_.Advance(base::Seconds(1000000));
   }
+
+  AudioStreamMonitorTest(const AudioStreamMonitorTest&) = delete;
+  AudioStreamMonitorTest& operator=(const AudioStreamMonitorTest&) = delete;
 
   void SetUp() override {
     RenderViewHostTestHarness::SetUp();
@@ -158,7 +161,7 @@ class AudioStreamMonitorTest : public RenderViewHostTestHarness {
   WebContents* web_contents() { return monitor_->web_contents_; }
 
  protected:
-  AudioStreamMonitor* monitor_;
+  raw_ptr<AudioStreamMonitor> monitor_;
 
  private:
   void ExpectWasRecentlyAudible() const {
@@ -176,8 +179,6 @@ class AudioStreamMonitorTest : public RenderViewHostTestHarness {
 
   MockWebContentsDelegate mock_web_contents_delegate_;
   base::SimpleTestTickClock clock_;
-
-  DISALLOW_COPY_AND_ASSIGN(AudioStreamMonitorTest);
 };
 
 TEST_F(AudioStreamMonitorTest, MonitorsWhenProvidedAStream) {

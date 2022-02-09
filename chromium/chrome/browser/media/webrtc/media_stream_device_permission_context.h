@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_MEDIA_WEBRTC_MEDIA_STREAM_DEVICE_PERMISSION_CONTEXT_H_
 #define CHROME_BROWSER_MEDIA_WEBRTC_MEDIA_STREAM_DEVICE_PERMISSION_CONTEXT_H_
 
-#include "base/macros.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/permission_context_base.h"
 
@@ -32,8 +31,9 @@ class MediaStreamDevicePermissionContext
       bool user_gesture,
       permissions::BrowserPermissionCallback callback) override;
 
-  // TODO(xhwang): GURL.GetOrigin() shouldn't be used as the origin. Need to
-  // refactor to use url::Origin. crbug.com/527149 is filed for this.
+  // TODO(xhwang): GURL.DeprecatedGetOriginAsURL() shouldn't be used as the
+  // origin. Need to refactor to use url::Origin. crbug.com/527149 is filed for
+  // this.
   ContentSetting GetPermissionStatusInternal(
       content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,

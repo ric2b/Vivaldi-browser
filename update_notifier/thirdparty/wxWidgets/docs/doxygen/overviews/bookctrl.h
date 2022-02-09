@@ -34,17 +34,19 @@ circumstances than the other variants.
 @section overview_bookctrl_bestbookctrl Best Book
 
 ::wxBookCtrl is mapped to the class best suited for a given platform. Currently
-it provides wxChoicebook for smartphones equipped with WinCE, and wxNotebook
-for all other platforms. The mapping consists of:
+it is the same as wxNotebook if it is compiled in (i.e. @c wxUSE_NOTEBOOK was
+not explicitly set to 0), otherwise it is the same as wxChoicebook.
+
+The mapping consists of:
 
 @beginTable
 @row2col{ ::wxBookCtrl, wxChoicebook or wxNotebook }
-@row2col{ @c wxEVT_COMMAND_BOOKCTRL_PAGE_CHANGED,
-          @c wxEVT_COMMAND_CHOICEBOOK_PAGE_CHANGED or
-          @c wxEVT_COMMAND_NOTEBOOK_PAGE_CHANGED }
-@row2col{ @c wxEVT_COMMAND_BOOKCTRL_PAGE_CHANGING,
-          @c wxEVT_COMMAND_CHOICEBOOK_PAGE_CHANGING or
-          @c wxEVT_COMMAND_NOTEBOOK_PAGE_CHANGING }
+@row2col{ @c wxEVT_BOOKCTRL_PAGE_CHANGED,
+          @c wxEVT_CHOICEBOOK_PAGE_CHANGED or
+          @c wxEVT_NOTEBOOK_PAGE_CHANGED }
+@row2col{ @c wxEVT_BOOKCTRL_PAGE_CHANGING,
+          @c wxEVT_CHOICEBOOK_PAGE_CHANGING or
+          @c wxEVT_NOTEBOOK_PAGE_CHANGING }
 @row2col{ @c EVT_BOOKCTRL_PAGE_CHANGED(id\, fn),
           @c EVT_CHOICEBOOK_PAGE_CHANGED(id, fn) or
           @c EVT_NOTEBOOK_PAGE_CHANGED(id, fn) }

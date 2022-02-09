@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -626,11 +625,8 @@ TEST_F(MenuManagerTest, ExecuteCommand) {
   base::DictionaryValue* info;
   ASSERT_TRUE(list->GetDictionary(0, &info));
 
-  int tmp_id = 0;
-  ASSERT_TRUE(info->GetInteger("menuItemId", &tmp_id));
-  ASSERT_EQ(id.uid, tmp_id);
-  ASSERT_TRUE(info->GetInteger("parentMenuItemId", &tmp_id));
-  ASSERT_EQ(parent_id.uid, tmp_id);
+  ASSERT_EQ(id.uid, info->FindIntKey("menuItemId"));
+  ASSERT_EQ(parent_id.uid, info->FindIntKey("parentMenuItemId"));
 
   std::string tmp;
   ASSERT_TRUE(info->GetString("mediaType", &tmp));
@@ -644,9 +640,9 @@ TEST_F(MenuManagerTest, ExecuteCommand) {
   ASSERT_TRUE(info->GetString("selectionText", &tmp16));
   ASSERT_EQ(params.selection_text, tmp16);
 
-  bool bool_tmp = true;
-  ASSERT_TRUE(info->GetBoolean("editable", &bool_tmp));
-  ASSERT_EQ(params.is_editable, bool_tmp);
+  absl::optional<bool> editable = info->FindBoolKey("editable");
+  ASSERT_TRUE(editable.has_value());
+  ASSERT_EQ(params.is_editable, editable.value());
 
   delete list;
 }

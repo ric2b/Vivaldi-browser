@@ -36,7 +36,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <memory>
 
-#include "base/macros.h"
 #include "base/message_loop/timer_slack.h"
 #include "build/build_config.h"
 
@@ -413,6 +412,10 @@ class MessagePumpCrApplication : public MessagePumpNSApplication {
 
 class BASE_EXPORT MessagePumpMac {
  public:
+  MessagePumpMac() = delete;
+  MessagePumpMac(const MessagePumpMac&) = delete;
+  MessagePumpMac& operator=(const MessagePumpMac&) = delete;
+
   // If not on the main thread, returns a new instance of
   // MessagePumpNSRunLoop.
   //
@@ -435,9 +438,6 @@ class BASE_EXPORT MessagePumpMac {
   // Requires NSApp to implement CrAppProtocol.
   static bool IsHandlingSendEvent();
 #endif  // !defined(OS_IOS)
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(MessagePumpMac);
 };
 
 // Tasks posted to the message loop are posted under this mode, as well

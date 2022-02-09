@@ -55,10 +55,8 @@ heart-beat:10000,10000
 
 )";
 
-constexpr base::TimeDelta kHeartBeatDelay =
-    base::TimeDelta::FromMilliseconds(10000);
-constexpr base::TimeDelta kHeartBeatGrace =
-    base::TimeDelta::FromMilliseconds(5000);
+constexpr base::TimeDelta kHeartBeatDelay = base::Milliseconds(10000);
+constexpr base::TimeDelta kHeartBeatGrace = base::Milliseconds(5000);
 
 constexpr char kSubscribeFrame[] = R"(SUBSCRIBE
 id:0
@@ -407,8 +405,8 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
         return false;
       if (server_heart_beats_delay_out != 0) {
         base::TimeDelta heart_beats_delay_out =
-            std::max(kHeartBeatDelay, base::TimeDelta::FromMilliseconds(
-                                          server_heart_beats_delay_out)) -
+            std::max(kHeartBeatDelay,
+                     base::Milliseconds(server_heart_beats_delay_out)) -
             kHeartBeatGrace;
         heart_beats_out_timer_.Start(
             FROM_HERE, heart_beats_delay_out,
@@ -422,8 +420,8 @@ bool InvalidationServiceStompWebsocket::HandleFrame() {
         return false;
       if (server_heart_beats_delay_in != 0) {
         base::TimeDelta heart_beats_delay_in =
-            std::max(kHeartBeatDelay, base::TimeDelta::FromMilliseconds(
-                                          server_heart_beats_delay_in)) +
+            std::max(kHeartBeatDelay,
+                     base::Milliseconds(server_heart_beats_delay_in)) +
             kHeartBeatGrace;
         heart_beats_in_timer_.Start(
             FROM_HERE, heart_beats_delay_in,

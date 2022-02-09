@@ -8,6 +8,7 @@
 
 #include "base/auto_reset.h"
 #include "base/containers/contains.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -100,7 +101,7 @@ class NavigationControllerImpl::NavigationThrottleImpl
   }
 
  private:
-  NavigationControllerImpl* controller_;
+  raw_ptr<NavigationControllerImpl> controller_;
   bool should_cancel_ = false;
 };
 
@@ -361,24 +362,52 @@ void NavigationControllerImpl::Stop() {
 }
 
 int NavigationControllerImpl::GetNavigationListSize() {
+  content::NavigationEntry* current_entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+  if (current_entry && current_entry->IsInitialEntry()) {
+    // If we're currently on the initial NavigationEntry, no navigation has
+    // committed, so the initial NavigationEntry should not be part of the
+    // "Navigation List", and we should return 0 as the navigation list size.
+    // This also preserves the old behavior where we used to not have the
+    // initial NavigationEntry.
+    return 0;
+  }
+
   return web_contents()->GetController().GetEntryCount();
 }
 
 int NavigationControllerImpl::GetNavigationListCurrentIndex() {
+  content::NavigationEntry* current_entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+  if (current_entry && current_entry->IsInitialEntry()) {
+    // If we're currently on the initial NavigationEntry, no navigation has
+    // committed, so the initial NavigationEntry should not be part of the
+    // "Navigation List", and we should return -1 as the current index. This
+    // also preserves the old behavior where we used to not have the initial
+    // NavigationEntry.
+    return -1;
+  }
+
   return web_contents()->GetController().GetCurrentEntryIndex();
 }
 
 GURL NavigationControllerImpl::GetNavigationEntryDisplayURL(int index) {
   auto* entry = web_contents()->GetController().GetEntryAtIndex(index);
-  if (!entry)
-    return GURL();
+  // This function should never be called when GetNavigationListSize() is 0
+  // because `index` should be between 0 and GetNavigationListSize() - 1, which
+  // also means `entry` must not be the initial NavigationEntry.
+  DCHECK_NE(0, GetNavigationListSize());
+  DCHECK(!entry->IsInitialEntry());
   return entry->GetVirtualURL();
 }
 
 std::string NavigationControllerImpl::GetNavigationEntryTitle(int index) {
   auto* entry = web_contents()->GetController().GetEntryAtIndex(index);
-  if (!entry)
-    return std::string();
+  // This function should never be called when GetNavigationListSize() is 0
+  // because `index` should be between 0 and GetNavigationListSize() - 1, which
+  // also means `entry` must not be the initial NavigationEntry.
+  DCHECK_NE(0, GetNavigationListSize());
+  DCHECK(!entry->IsInitialEntry());
   return base::UTF16ToUTF8(entry->GetTitle());
 }
 
@@ -405,6 +434,7 @@ void NavigationControllerImpl::DidStartNavigation(
                                               navigation);
   navigation->set_safe_to_set_request_headers(true);
   navigation->set_safe_to_disable_network_error_auto_reload(true);
+  navigation->set_safe_to_disable_intent_processing(true);
 
 #if defined(OS_ANDROID)
   // Desktop mode and per-navigation UA use the same mechanism and so don't
@@ -447,6 +477,7 @@ void NavigationControllerImpl::DidStartNavigation(
   navigation->set_safe_to_set_user_agent(false);
   navigation->set_safe_to_set_request_headers(false);
   navigation->set_safe_to_disable_network_error_auto_reload(false);
+  navigation->set_safe_to_disable_intent_processing(false);
 }
 
 void NavigationControllerImpl::DidRedirectNavigation(
@@ -506,6 +537,18 @@ void NavigationControllerImpl::DidFinishNavigation(
     auto* rfh = navigation_handle->GetRenderFrameHost();
     PageImpl::GetOrCreateForPage(rfh->GetPage());
     navigation->set_safe_to_get_page();
+
+#if defined(OS_ANDROID)
+    // Ensure that the Java-side Page object for this navigation is
+    // populated from and linked to the native Page object. Without this
+    // call, the Java-side navigation object won't be created and linked to
+    // the native object until/unless the client calls Navigation#getPage(),
+    // which is problematic when implementation-side callers need to bridge
+    // the C++ Page object into Java (e.g., to fire
+    // NavigationCallback#onPageLanguageDetermined()).
+    Java_NavigationControllerImpl_getOrCreatePageForNavigation(
+        AttachCurrentThread(), java_controller_, navigation->java_navigation());
+#endif
   }
 
   // In some corner cases (e.g., a tab closing with an ongoing navigation)
@@ -613,12 +656,12 @@ void NavigationControllerImpl::NotifyLoadStateChanged() {
     TRACE_EVENT0("weblayer", "Java_NavigationControllerImpl_loadStateChanged");
     Java_NavigationControllerImpl_loadStateChanged(
         AttachCurrentThread(), java_controller_, web_contents()->IsLoading(),
-        web_contents()->IsLoadingToDifferentDocument());
+        web_contents()->ShouldShowLoadingUI());
   }
 #endif
   for (auto& observer : observers_) {
     observer.LoadStateChanged(web_contents()->IsLoading(),
-                              web_contents()->IsLoadingToDifferentDocument());
+                              web_contents()->ShouldShowLoadingUI());
   }
 }
 

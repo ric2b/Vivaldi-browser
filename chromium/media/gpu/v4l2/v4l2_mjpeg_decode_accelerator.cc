@@ -171,6 +171,9 @@ class JobRecordBitstreamBuffer : public V4L2MjpegDecodeAccelerator::JobRecord {
         offset_(bitstream_buffer.offset()),
         out_frame_(video_frame) {}
 
+  JobRecordBitstreamBuffer(const JobRecordBitstreamBuffer&) = delete;
+  JobRecordBitstreamBuffer& operator=(const JobRecordBitstreamBuffer&) = delete;
+
   int32_t task_id() const override { return task_id_; }
   size_t size() const override { return shm_.size(); }
   off_t offset() const override { return offset_; }
@@ -184,8 +187,6 @@ class JobRecordBitstreamBuffer : public V4L2MjpegDecodeAccelerator::JobRecord {
   UnalignedSharedMemory shm_;
   off_t offset_;
   scoped_refptr<VideoFrame> out_frame_;
-
-  DISALLOW_COPY_AND_ASSIGN(JobRecordBitstreamBuffer);
 };
 
 // Job record when the client uses DMA buffer as input in Decode().
@@ -1124,7 +1125,8 @@ static bool AddHuffmanTable(const void* input_ptr,
   DCHECK(output_ptr);
   DCHECK_LE((input_size + sizeof(kDefaultDhtSeg)), output_size);
 
-  base::BigEndianReader reader(static_cast<const char*>(input_ptr), input_size);
+  base::BigEndianReader reader(static_cast<const uint8_t*>(input_ptr),
+                               input_size);
   bool has_marker_dht = false;
   bool has_marker_sos = false;
   uint8_t marker1, marker2;
@@ -1140,7 +1142,7 @@ static bool AddHuffmanTable(const void* input_ptr,
   size_t current_offset = 2;
 
   while (!has_marker_sos && !has_marker_dht) {
-    const char* start_addr = reader.ptr();
+    const uint8_t* start_addr = reader.ptr();
     READ_U8_OR_RETURN_FALSE(reader, &marker1);
     if (marker1 != JPEG_MARKER_PREFIX) {
       DVLOGF(1) << "marker1 != 0xFF";

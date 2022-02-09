@@ -8,7 +8,7 @@
 #include <memory>
 #include <set>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "build/build_config.h"
@@ -24,8 +24,8 @@ class EventObserver;
 class GestureRecognizer;
 class PlatformEventSource;
 
-#if defined(OS_WIN) || defined(USE_X11)
-class CursorFactory;
+#if defined(OS_WIN)
+class WinCursorFactory;
 #endif
 }  // namespace ui
 
@@ -184,14 +184,14 @@ class AURA_EXPORT Env : public ui::EventTarget,
 
   std::unique_ptr<ui::GestureRecognizer> gesture_recognizer_;
 
-#if defined(OS_WIN) || defined(USE_X11)
-  std::unique_ptr<ui::CursorFactory> cursor_factory_;
+#if defined(OS_WIN)
+  std::unique_ptr<ui::WinCursorFactory> cursor_factory_;
 #endif
 
   std::unique_ptr<InputStateLookup> input_state_lookup_;
   std::unique_ptr<ui::PlatformEventSource> event_source_;
 
-  ui::ContextFactory* context_factory_ = nullptr;
+  raw_ptr<ui::ContextFactory> context_factory_ = nullptr;
 
   static bool initial_throttle_input_on_resize_;
   bool throttle_input_on_resize_ = initial_throttle_input_on_resize_;

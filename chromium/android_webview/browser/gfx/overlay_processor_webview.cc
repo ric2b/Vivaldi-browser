@@ -8,9 +8,10 @@
 #include "android_webview/browser/gfx/viz_compositor_thread_runner_webview.h"
 #include "base/android/android_hardware_buffer_compat.h"
 #include "base/android/scoped_hardware_buffer_fence_sync.h"
-#include "base/bind_post_task.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/bind_post_task.h"
 #include "base/threading/thread_checker.h"
 #include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
 #include "components/viz/service/display/resolved_frame_data.h"
@@ -579,7 +580,7 @@ class OverlayProcessorWebView::Manager
   base::Lock lock_;
 
   // These can be accessed on any thread, but only initialized in ctor.
-  gpu::SharedImageManager* const shared_image_manager_;
+  const raw_ptr<gpu::SharedImageManager> shared_image_manager_;
   std::unique_ptr<gpu::MemoryTypeTracker> memory_tracker_;
 
   // GPU Main Thread task runner.

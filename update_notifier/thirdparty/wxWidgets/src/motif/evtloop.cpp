@@ -130,18 +130,13 @@ void wxGUIEventLoop::ScheduleExit(int rc)
     ::wxBreakDispatch();
 }
 
-bool wxGUIEventLoop::YieldFor(long eventsToProcess)
+void wxGUIEventLoop::DoYieldFor(long eventsToProcess)
 {
-    m_isInsideYield = true;
-    m_eventsToProcessInsideYield = eventsToProcess;
-
     while (wxTheApp && wxTheApp->Pending())
         // TODO: implement event filtering using the eventsToProcess mask
         wxTheApp->Dispatch();
 
-    m_isInsideYield = false;
-
-    return true;
+    wxEventLoopBase::DoYieldFor(eventsToProcess);
 }
 
 // ----------------------------------------------------------------------------
@@ -410,10 +405,10 @@ public:
         close( idleFds[1] );
     }
 private:
-    DECLARE_DYNAMIC_CLASS(wxIdlePipeModule)
+    wxDECLARE_DYNAMIC_CLASS(wxIdlePipeModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxIdlePipeModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxIdlePipeModule, wxModule);
 
 static void wxInputCallback( XtPointer, int* fd, XtInputId* )
 {

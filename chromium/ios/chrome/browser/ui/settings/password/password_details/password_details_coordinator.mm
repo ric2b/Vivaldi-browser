@@ -98,7 +98,8 @@
 
 - (void)start {
   self.viewController = [[PasswordDetailsTableViewController alloc]
-      initWithCredentialType:_credentialType];
+      initWithCredentialType:_credentialType
+            syncingUserEmail:nil];
 
   self.mediator = [[PasswordDetailsMediator alloc] initWithPassword:_password
                                                passwordCheckManager:_manager];
@@ -216,6 +217,10 @@
                  style:UIAlertActionStyleCancel];
 
   [self.actionSheetCoordinator start];
+}
+
+- (void)showPasswordDetailsInEditModeWithoutAuthentication {
+  [self.viewController showEditViewWithoutAuthentication];
 }
 
 #pragma mark - Private

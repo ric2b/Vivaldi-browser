@@ -11,10 +11,10 @@
 #include <memory>
 
 #include "base/containers/span.h"
-#include "base/macros.h"
 #include "base/test/task_environment.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
+#include "gin/public/isolate_holder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "v8/include/v8-array-buffer.h"
 #include "v8/include/v8-container.h"
@@ -71,8 +71,10 @@ ScopedAvoidIdentityHashForTesting::~ScopedAvoidIdentityHashForTesting() {
 class V8ValueConverterImplTest : public testing::Test {
  public:
   V8ValueConverterImplTest()
-      : isolate_(v8::Isolate::GetCurrent()) {
-  }
+      : isolate_holder_(task_environment_.GetMainThreadTaskRunner(),
+                        gin::IsolateHolder::IsolateType::kTest),
+        isolate_scope_(isolate_holder_.isolate()),
+        isolate_(isolate_holder_.isolate()) {}
 
  protected:
   void SetUp() override {
@@ -109,12 +111,12 @@ class V8ValueConverterImplTest : public testing::Test {
   }
 
   std::string GetString(base::ListValue* value, uint32_t index) {
-    std::string temp;
-    if (!value->GetString(static_cast<size_t>(index), &temp)) {
+    base::Value::ConstListView value_list = value->GetList();
+    if (index >= value_list.size() || !value_list[index].is_string()) {
       ADD_FAILURE();
       return std::string();
     }
-    return temp;
+    return value_list[index].GetString();
   }
 
   std::string GetString(v8::Local<v8::Array> value, uint32_t index) {
@@ -259,8 +261,9 @@ class V8ValueConverterImplTest : public testing::Test {
   }
 
   base::test::TaskEnvironment task_environment_;
-
-  v8::Isolate* isolate_;
+  gin::IsolateHolder isolate_holder_;
+  v8::Isolate::Scope isolate_scope_;
+  v8::Isolate* isolate_ = nullptr;
 
   // Context for the JavaScript in the test.
   v8::Persistent<v8::Context> context_;

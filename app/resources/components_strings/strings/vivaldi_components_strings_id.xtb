@@ -7,7 +7,7 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> mendadak menutup sambungan.</translation>
 <translation id="1161325031994447685">Menyambungkan ulang ke Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Cetak...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Coba hapus reremah anda<ph name="END_LINK" /></translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Coba hapus kuki Anda<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Tentang Versi</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> tidak mengirimkan data apapun.</translation>
 <translation id="1559528461873125649">Tidak ada berkas atau direktori tersebut</translation>
@@ -94,7 +94,7 @@
 <translation id="4305666528087210886">Berkas Anda tidak dapat diakses</translation>
 <translation id="4312866146174492540">Blokir (standar)</translation>
 <translation id="4356973930735388585">Penyerang di situs ini mungkin berusaha memasang program berbahaya di komputer Anda yang dapat mencuri atau menghapus informasi Anda (misalnya, foto, sandi, pesan, dan kartu kredit).</translation>
-<translation id="4408413947728134509">Reremah <ph name="NUM_COOKIES" /></translation>
+<translation id="4408413947728134509">Kuki <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> tidak menerima sertifikat masuk anda, atau sertifikat masuk mungkin tidak tersedia.</translation>
 <translation id="4506599922270137252">Menghubungi admin sistem</translation>
 <translation id="4522570452068850558">Semua Detail</translation>
@@ -114,7 +114,7 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 dipakai)} other {(# dipakai)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Memeriksa alamat proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
-<translation id="5287240709317226393">Tampilkan reremah</translation>
+<translation id="5287240709317226393">Tampilkan kuki</translation>
 <translation id="5355557959165512791">Anda tidak dapat membuka <ph name="SITE" /> sekarang karena sertifikatnya telah dicabut. Kesalahan jaringan dan serangan biasanya bersifat sementara, sehingga halaman ini mungkin akan berfungsi nanti.</translation>
 <translation id="5386426401304769735">Rantai sertifikat untuk situs ini berisi sertifikat yang ditandatangani dengan SHA-1.</translation>
 <translation id="5452270690849572955">Halaman <ph name="HOST_NAME" /> ini tidak dapat ditemukan</translation>
@@ -149,7 +149,7 @@
 <translation id="6328786501058569169">Situs ini bersifat menipu</translation>
 <translation id="6358450015545214790">Apa maksudnya?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> menolak untuk tersambung.</translation>
-<translation id="6447842834002726250">Reremah</translation>
+<translation id="6447842834002726250">Kuki</translation>
 <translation id="6451458296329894277">Konfirmasi Pengiriman Ulang Formulir</translation>
 <translation id="6569060085658103619">Anda melihat halaman ekstensi</translation>
 <translation id="6657585470893396449">Sandi</translation>

@@ -15,9 +15,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/event.h"
@@ -99,7 +96,7 @@ wxFLAGS_MEMBER(wxTE_CHARWRAP)
 wxFLAGS_MEMBER(wxTE_WORDWRAP)
 wxEND_FLAGS( wxTextCtrlStyle )
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxTextCtrl, wxControl, "wx/textctrl.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxTextCtrl, wxControl, "wx/textctrl.h");
 
 wxBEGIN_PROPERTIES_TABLE(wxTextCtrl)
 wxEVENT_PROPERTY( TextUpdated, wxEVT_TEXT, wxCommandEvent )
@@ -122,14 +119,14 @@ wxCONSTRUCTOR_6( wxTextCtrl, wxWindow*, Parent, wxWindowID, Id, \
                 long, WindowStyle)
 
 
-IMPLEMENT_DYNAMIC_CLASS(wxTextUrlEvent, wxCommandEvent)
+wxIMPLEMENT_DYNAMIC_CLASS(wxTextUrlEvent, wxCommandEvent);
 
 wxDEFINE_EVENT( wxEVT_TEXT, wxCommandEvent );
 wxDEFINE_EVENT( wxEVT_TEXT_ENTER, wxCommandEvent );
 wxDEFINE_EVENT( wxEVT_TEXT_URL, wxTextUrlEvent );
 wxDEFINE_EVENT( wxEVT_TEXT_MAXLEN, wxCommandEvent );
 
-IMPLEMENT_ABSTRACT_CLASS(wxTextCtrlBase, wxControl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxTextCtrlBase, wxControl);
 
 // ============================================================================
 // wxTextAttr implementation
@@ -162,7 +159,7 @@ void wxTextAttr::Init()
     m_fontSize = 12;
     m_fontStyle = wxFONTSTYLE_NORMAL;
     m_fontWeight = wxFONTWEIGHT_NORMAL;
-    m_fontUnderlined = false;
+    m_fontUnderlineType = wxTEXT_ATTR_UNDERLINE_NONE;
     m_fontStrikethrough = false;
     m_fontEncoding = wxFONTENCODING_DEFAULT;
     m_fontFamily = wxFONTFAMILY_DEFAULT;
@@ -175,6 +172,7 @@ void wxTextAttr::Init()
     m_textEffectFlags = wxTEXT_ATTR_EFFECT_NONE;
     m_outlineLevel = 0;
     m_bulletNumber = 0;
+    m_colUnderline = wxNullColour;
 }
 
 // Copy
@@ -192,7 +190,8 @@ void wxTextAttr::Copy(const wxTextAttr& attr)
     m_fontSize = attr.m_fontSize;
     m_fontStyle = attr.m_fontStyle;
     m_fontWeight = attr.m_fontWeight;
-    m_fontUnderlined = attr.m_fontUnderlined;
+    m_fontUnderlineType = attr.m_fontUnderlineType;
+    m_colUnderline = attr.m_colUnderline;
     m_fontStrikethrough = attr.m_fontStrikethrough;
     m_fontFaceName = attr.m_fontFaceName;
     m_fontEncoding = attr.m_fontEncoding;
@@ -257,7 +256,7 @@ bool wxTextAttr::operator== (const wxTextAttr& attr) const
             (!HasFontSize() || (GetFontSize() == attr.GetFontSize())) &&
             (!HasFontItalic() || (GetFontStyle() == attr.GetFontStyle())) &&
             (!HasFontWeight() || (GetFontWeight() == attr.GetFontWeight())) &&
-            (!HasFontUnderlined() || (GetFontUnderlined() == attr.GetFontUnderlined())) &&
+            (!HasFontUnderlined() || ((GetUnderlineType() == attr.GetUnderlineType()) && (GetUnderlineColour() == attr.GetUnderlineColour()) )) &&
             (!HasFontStrikethrough() || (GetFontStrikethrough() == attr.GetFontStrikethrough())) &&
             (!HasFontFaceName() || (GetFontFaceName() == attr.GetFontFaceName())) &&
             (!HasFontEncoding() || (GetFontEncoding() == attr.GetFontEncoding())) &&
@@ -327,7 +326,8 @@ bool wxTextAttr::EqPartial(const wxTextAttr& attr, bool weakTest) const
     if (HasFontItalic() && attr.HasFontItalic() && GetFontStyle() != attr.GetFontStyle())
         return false;
 
-    if (HasFontUnderlined() && attr.HasFontUnderlined() && GetFontUnderlined() != attr.GetFontUnderlined())
+    if (HasFontUnderlined() && attr.HasFontUnderlined() &&
+        ( (GetUnderlineType() != attr.GetUnderlineType()) || (GetUnderlineColour() != attr.GetUnderlineColour()) ))
         return false;
 
     if (HasFontStrikethrough() && attr.HasFontStrikethrough() && GetFontStrikethrough() != attr.GetFontStrikethrough())
@@ -390,6 +390,12 @@ bool wxTextAttr::EqPartial(const wxTextAttr& attr, bool weakTest) const
         return false;
 
     if ((HasPageBreak() != attr.HasPageBreak()))
+         return false;
+
+    if ((GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE) != (attr.GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE))
+         return false;
+
+    if ((GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER) != (attr.GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER))
          return false;
 
     if (HasTextEffects() && attr.HasTextEffects())
@@ -496,7 +502,7 @@ bool wxTextAttr::GetFontAttributes(const wxFont& font, int flags)
         m_fontWeight = font.GetWeight();
 
     if (flags & wxTEXT_ATTR_FONT_UNDERLINE)
-        m_fontUnderlined = font.GetUnderlined();
+        m_fontUnderlineType = font.GetUnderlined() ? wxTEXT_ATTR_UNDERLINE_SOLID : wxTEXT_ATTR_UNDERLINE_NONE;
 
     if (flags & wxTEXT_ATTR_FONT_STRIKETHROUGH)
         m_fontStrikethrough = font.GetStrikethrough();
@@ -565,8 +571,10 @@ bool wxTextAttr::Apply(const wxTextAttr& style, const wxTextAttr* compareWith)
 
     if (style.HasFontUnderlined())
     {
-        if (!(compareWith && compareWith->HasFontUnderlined() && compareWith->GetFontUnderlined() == style.GetFontUnderlined()))
-            destStyle.SetFontUnderlined(style.GetFontUnderlined());
+        if (!(compareWith && compareWith->HasFontUnderlined() &&
+                             compareWith->GetUnderlineType() == style.GetUnderlineType() &&
+                             compareWith->GetUnderlineColour() == style.GetUnderlineColour()))
+            destStyle.SetFontUnderlined(style.GetUnderlineType(), style.GetUnderlineColour());
     }
 
     if (style.HasFontStrikethrough())
@@ -705,6 +713,18 @@ bool wxTextAttr::Apply(const wxTextAttr& style, const wxTextAttr* compareWith)
             destStyle.SetPageBreak();
     }
 
+    if (style.GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE)
+    {
+        if (!(compareWith && (compareWith->GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE)))
+            destStyle.SetFlags(destStyle.GetFlags()|wxTEXT_ATTR_AVOID_PAGE_BREAK_BEFORE);
+    }
+
+    if (style.GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER)
+    {
+        if (!(compareWith && (compareWith->GetFlags() & wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER)))
+            destStyle.SetFlags(destStyle.GetFlags()|wxTEXT_ATTR_AVOID_PAGE_BREAK_AFTER);
+    }
+
     if (style.HasTextEffects())
     {
         if (!(compareWith && compareWith->HasTextEffects() && compareWith->GetTextEffects() == style.GetTextEffects()))
@@ -773,6 +793,8 @@ wxTextAttr wxTextAttr::Combine(const wxTextAttr& attr,
     }
 
     wxTextAttr newAttr(colFg, colBg, font);
+    if (attr.HasFontUnderlined())
+        newAttr.SetFontUnderlined(attr.GetUnderlineType(), attr.GetUnderlineColour());
 
     if (attr.HasAlignment())
         newAttr.SetAlignment(attr.GetAlignment());
@@ -1160,14 +1182,6 @@ bool wxTextCtrlBase::EmulateKeyPress(const wxKeyEvent& event)
 // Other miscellaneous stuff
 // ----------------------------------------------------------------------------
 
-bool wxTextCtrlBase::SetHint(const wxString& hint)
-{
-    wxCHECK_MSG( IsSingleLine(), false,
-                 wxS("Hints can only be set for single line text controls") );
-
-    return wxTextEntry::SetHint(hint);
-}
-
 // do the window-specific processing after processing the update event
 void wxTextCtrlBase::DoUpdateWindowUI(wxUpdateUIEvent& event)
 {
@@ -1182,6 +1196,21 @@ void wxTextCtrlBase::DoUpdateWindowUI(wxUpdateUIEvent& event)
         if ( event.GetText() != GetValue() )
             SetValue(event.GetText());
     }
+}
+
+bool wxTextCtrlBase::OnDynamicBind(wxDynamicEventTableEntry& entry)
+{
+    if ( entry.m_eventType == wxEVT_TEXT_ENTER )
+    {
+        wxCHECK_MSG
+        (
+            HasFlag(wxTE_PROCESS_ENTER),
+            false,
+            wxS("Must have wxTE_PROCESS_ENTER for wxEVT_TEXT_ENTER to work")
+        );
+    }
+
+    return wxControl::OnDynamicBind(entry);
 }
 
 // ----------------------------------------------------------------------------

@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/ranking/launch_data.h"
@@ -54,11 +53,10 @@ class SearchControllerImplNew : public SearchController {
   SearchControllerImplNew& operator=(const SearchControllerImplNew&) = delete;
 
   // SearchController:
-  void InitializeRankers() override;
   void Start(const std::u16string& query) override;
   void OpenResult(ChromeSearchResult* result, int event_flags) override;
   void InvokeResultAction(ChromeSearchResult* result,
-                          int action_index) override;
+                          ash::SearchResultActionType action) override;
   size_t AddGroup(size_t max_results) override;
   void AddProvider(size_t group_id,
                    std::unique_ptr<SearchProvider> provider) override;
@@ -100,6 +98,9 @@ class SearchControllerImplNew : public SearchController {
 
   // Storage for all search results for the current query.
   ResultsMap results_;
+
+  // Storage for category scores for the current query.
+  CategoriesList categories_;
 
   std::unique_ptr<SearchMetricsObserver> metrics_observer_;
   using Providers = std::vector<std::unique_ptr<SearchProvider>>;

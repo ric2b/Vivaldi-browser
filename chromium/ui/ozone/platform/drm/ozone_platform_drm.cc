@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/threading/platform_thread.h"
@@ -23,12 +22,12 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/cursor/cursor_factory.h"
-#include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/events/ozone/device/device_manager.h"
 #include "ui/events/ozone/evdev/event_factory_evdev.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/gfx/linux/client_native_pixmap_dmabuf.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/ozone/common/bitmap_cursor_factory.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
@@ -126,7 +125,7 @@ class OzonePlatformDrm : public OzonePlatform {
       binders->Add<ozone::mojom::DrmDevice>(
           base::BindRepeating(
               &OzonePlatformDrm::CreateDrmDeviceReceiverOnDrmThread,
-              weak_factory_on_drm_.GetWeakPtr()),
+              base::Unretained(this)),
           drm_thread_proxy_->GetDrmThreadTaskRunner());
     }
   }
@@ -226,7 +225,7 @@ class OzonePlatformDrm : public OzonePlatform {
     display_manager_ = std::make_unique<DrmDisplayHostManager>(
         adapter, device_manager_.get(), &host_properties_,
         event_factory_ozone_->input_controller());
-    cursor_factory_ = std::make_unique<BitmapCursorFactoryOzone>();
+    cursor_factory_ = std::make_unique<BitmapCursorFactory>();
 
     host_drm_device_->SetDisplayManager(display_manager_.get());
   }
@@ -276,7 +275,7 @@ class OzonePlatformDrm : public OzonePlatform {
   }
 
   const PlatformRuntimeProperties& GetPlatformRuntimeProperties() override {
-    DCHECK(has_initialized_ui());
+    DCHECK(has_initialized_ui() || has_initialized_gpu());
     return host_properties_;
   }
 
@@ -303,9 +302,12 @@ class OzonePlatformDrm : public OzonePlatform {
       done_event.Wait();
       DrainReceiverRequests();
     } else {
+      // OzonePlatformDrm owns |drm_thread_proxy_| which owns the DRM thread
+      // this callback is invoked on, using base::Unretained pointer here is
+      // safe.
       auto safe_receiver_request_drainer = CreateSafeOnceCallback(
           base::BindOnce(&OzonePlatformDrm::DrainReceiverRequests,
-                         weak_factory_on_drm_.GetWeakPtr()));
+                         base::Unretained(this)));
       drm_thread_proxy_->StartDrmThread(
           std::move(safe_receiver_request_drainer));
     }
@@ -346,7 +348,6 @@ class OzonePlatformDrm : public OzonePlatform {
   PlatformRuntimeProperties host_properties_;
 
   base::WeakPtrFactory<OzonePlatformDrm> weak_factory_{this};
-  base::WeakPtrFactory<OzonePlatformDrm> weak_factory_on_drm_{this};
   OzonePlatformDrm(const OzonePlatformDrm&) = delete;
   OzonePlatformDrm& operator=(const OzonePlatformDrm&) = delete;
 };

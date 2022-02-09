@@ -38,6 +38,7 @@
     #include "wx/thread.h"
 #endif
 
+#include "wx/clipbrd.h"
 #include "wx/x11/private.h"
 
 #include <string.h>
@@ -58,6 +59,11 @@ static wxSize g_initialSize = wxDefaultSize;
 // generates itself.
 static wxWindow *g_nextFocus = NULL;
 static wxWindow *g_prevFocus = NULL;
+
+//------------------------------------------------------------------------
+// X11 clipboard event handling
+//------------------------------------------------------------------------
+extern "C" void wxClipboardHandleSelectionRequest(XEvent event);
 
 //------------------------------------------------------------------------
 //   X11 error handling
@@ -82,7 +88,7 @@ static int wxXErrorHandler(Display *dpy, XErrorEvent *xevent)
 
 long wxApp::sm_lastMessageTime = 0;
 
-IMPLEMENT_DYNAMIC_CLASS(wxApp, wxEvtHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxApp, wxEvtHandler);
 
 bool wxApp::Initialize(int& argC, wxChar **argV)
 {
@@ -178,8 +184,11 @@ bool wxApp::Initialize(int& argC, wxChar **argV)
         return false;
 
 #if wxUSE_UNICODE
-    // Glib's type system required by Pango
+    // Glib's type system required by Pango (deprecated since glib 2.36 but
+    // used to be required, so still call it, it's harmless).
+    wxGCC_WARNING_SUPPRESS(deprecated-declarations)
     g_type_init();
+    wxGCC_WARNING_RESTORE()
 #endif
 
 #if wxUSE_INTL
@@ -384,12 +393,30 @@ bool wxApp::ProcessXEvent(WXEvent* _event)
             if (win->HandleWindowEvent( keyEvent ))
                 return true;
 
-            keyEvent.SetEventType(wxEVT_CHAR);
             // Do the translation again, retaining the ASCII
             // code.
-            if (wxTranslateKeyEvent(keyEvent, win, window, event, true) &&
-                win->HandleWindowEvent( keyEvent ))
-                return true;
+            if ( wxTranslateKeyEvent(keyEvent, win, window, event, true) )
+            {
+                switch ( keyEvent.m_keyCode )
+                {
+                    // for modifiers, don't send wxEVT_CHAR event.
+                    // the definition of Modifiers, plese see the doc of
+                    // wxKeyModifier. we only take care of wxMOD_ALT, wxMOD_CONTROL
+                    // wxMOD_SHIFT under X11 platform. Other modifiers is handled
+                    // by window manager.
+                    case WXK_CONTROL:
+                    case WXK_SHIFT:
+                    case WXK_ALT:
+                        break;
+                    default:
+                    {
+                        // process wxEVT_CHAR here
+                        keyEvent.SetEventType(wxEVT_CHAR);
+                        if ( win->HandleWindowEvent( keyEvent ) )
+                            return true;
+                    }
+                }
+            }
 
             if ( (keyEvent.m_keyCode == WXK_TAB) &&
                  win->GetParent() && (win->GetParent()->HasFlag( wxTAB_TRAVERSAL)) )
@@ -413,6 +440,23 @@ bool wxApp::ProcessXEvent(WXEvent* _event)
 
             wxKeyEvent keyEvent(wxEVT_KEY_UP);
             wxTranslateKeyEvent(keyEvent, win, window, event);
+
+            // if recieve the modifiers key up. set the corresponding
+            // keyboardState to false.
+            switch ( keyEvent.m_keyCode )
+            {
+                case WXK_CONTROL:
+                    keyEvent.SetControlDown(false);
+                    break;
+                case WXK_SHIFT:
+                    keyEvent.SetShiftDown(false);
+                    break;
+                case WXK_ALT:
+                    keyEvent.SetAltDown(false);
+                    break;
+                default:
+                    break;
+            }
 
             return win->HandleWindowEvent( keyEvent );
         }
@@ -464,6 +508,14 @@ bool wxApp::ProcessXEvent(WXEvent* _event)
                 }
             }
             return false;
+        }
+        case SelectionRequest:
+        {
+            // A request to paste has occurred.
+            wxClipboardHandleSelectionRequest(*event);
+            // The event handle doesn't care the clipboard
+            // how to response requestor, so just return true.
+            return true;
         }
 #if 0
         case DestroyNotify:
@@ -669,7 +721,15 @@ PangoContext* wxApp::GetPangoContext()
         Display *dpy = wxGlobalDisplay();
         int xscreen = DefaultScreen(dpy);
 
+        // Calling pango_xft_get_context() is exactly the same as doing
+        // pango_font_map_create_context(pango_xft_get_font_map(dpy, xscreen))
+        // so continue to use it even if it's deprecated to not bother with
+        // checking for Pango 1.2 in configure and just disable the warning.
+        wxGCC_WARNING_SUPPRESS(deprecated-declarations)
+
         s_pangoContext = pango_xft_get_context(dpy, xscreen);
+
+        wxGCC_WARNING_RESTORE(deprecated-declarations)
 
         if (!PANGO_IS_CONTEXT(s_pangoContext))
         {
@@ -680,6 +740,12 @@ PangoContext* wxApp::GetPangoContext()
     return s_pangoContext;
 }
 
+PangoContext* wxGetPangoContext()
+{
+    PangoContext* context = wxTheApp->GetPangoContext();
+    g_object_ref(context);
+    return context;
+}
 #endif // wxUSE_UNICODE
 
 WXColormap wxApp::GetMainColormap(WXDisplay* display)

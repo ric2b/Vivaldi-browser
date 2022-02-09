@@ -6,7 +6,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/sequence_token.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequence_local_storage_map.h"
 #include "base/threading/sequenced_task_runner_handle.h"

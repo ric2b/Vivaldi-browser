@@ -27,7 +27,7 @@ class wxArtProviderModule;
 typedef wxString wxArtClient;
 typedef wxString wxArtID;
 
-#define wxART_MAKE_CLIENT_ID_FROM_STR(id)  ((id) + "_C")
+#define wxART_MAKE_CLIENT_ID_FROM_STR(id)  ((id) + wxASCII_STR("_C"))
 #define wxART_MAKE_CLIENT_ID(id)           (#id "_C")
 #define wxART_MAKE_ART_ID_FROM_STR(id)     (id)
 #define wxART_MAKE_ART_ID(id)              (#id)
@@ -111,6 +111,9 @@ typedef wxString wxArtID;
 #define wxART_FIND                 wxART_MAKE_ART_ID(wxART_FIND)
 #define wxART_FIND_AND_REPLACE     wxART_MAKE_ART_ID(wxART_FIND_AND_REPLACE)
 
+#define wxART_FULL_SCREEN          wxART_MAKE_ART_ID(wxART_FULL_SCREEN)
+
+#define wxART_EDIT                 wxART_MAKE_ART_ID(wxART_EDIT)
 
 // ----------------------------------------------------------------------------
 // wxArtProvider class
@@ -151,13 +154,13 @@ public:
     // Query the providers for bitmap with given ID and return it. Return
     // wxNullBitmap if no provider provides it.
     static wxBitmap GetBitmap(const wxArtID& id,
-                              const wxArtClient& client = wxART_OTHER,
+                              const wxArtClient& client = wxASCII_STR(wxART_OTHER),
                               const wxSize& size = wxDefaultSize);
 
     // Query the providers for icon with given ID and return it. Return
     // wxNullIcon if no provider provides it.
     static wxIcon GetIcon(const wxArtID& id,
-                          const wxArtClient& client = wxART_OTHER,
+                          const wxArtClient& client = wxASCII_STR(wxART_OTHER),
                           const wxSize& size = wxDefaultSize);
 
     // Helper used by GetMessageBoxIcon(): return the art id corresponding to
@@ -170,13 +173,13 @@ public:
     // can be set)
     static wxIcon GetMessageBoxIcon(int flags)
     {
-        return GetIcon(GetMessageBoxIconId(flags), wxART_MESSAGE_BOX);
+        return GetIcon(GetMessageBoxIconId(flags), wxASCII_STR(wxART_MESSAGE_BOX));
     }
 
     // Query the providers for iconbundle with given ID and return it. Return
     // wxNullIconBundle if no provider provides it.
     static wxIconBundle GetIconBundle(const wxArtID& id,
-                                      const wxArtClient& client = wxART_OTHER);
+                                      const wxArtClient& client = wxASCII_STR(wxART_OTHER));
 
     // Gets native size for given 'client' or wxDefaultSize if it doesn't
     // have native equivalent
@@ -186,17 +189,8 @@ public:
     // the topmost provider if platform_dependent = false
     static wxSize GetSizeHint(const wxArtClient& client, bool platform_dependent = false);
 
-#if WXWIN_COMPATIBILITY_2_6
-    // use the corresponding methods without redundant "Provider" suffix
-    static wxDEPRECATED( void PushProvider(wxArtProvider *provider) );
-    static wxDEPRECATED( void InsertProvider(wxArtProvider *provider) );
-    static wxDEPRECATED( bool PopProvider() );
-
-    // use Delete() if this is what you really need, or just delete the
-    // provider pointer, do not use Remove() as it does not delete the pointer
-    // unlike RemoveProvider() which does
-    static wxDEPRECATED( bool RemoveProvider(wxArtProvider *provider) );
-#endif // WXWIN_COMPATIBILITY_2_6
+    // Rescale bitmap (used internally if requested size is other than the available).
+    static void RescaleBitmap(wxBitmap& bmp, const wxSize& sizeNeeded);
 
 protected:
     friend class wxArtProviderModule;
@@ -246,7 +240,7 @@ private:
     // art resources cache (so that CreateXXX is not called that often):
     static wxArtProviderCache *sm_cache;
 
-    DECLARE_ABSTRACT_CLASS(wxArtProvider)
+    wxDECLARE_ABSTRACT_CLASS(wxArtProvider);
 };
 
 

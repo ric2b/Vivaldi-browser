@@ -7,6 +7,11 @@
 #include <memory>
 #include <vector>
 
+#include "ash/components/arc/session/arc_bridge_service.h"
+#include "ash/components/arc/session/arc_service_manager.h"
+#include "ash/components/arc/test/arc_util_test_support.h"
+#include "ash/components/arc/test/connection_holder_util.h"
+#include "ash/components/arc/test/fake_app_instance.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -29,11 +34,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/arc/arc_service_manager.h"
-#include "components/arc/session/arc_bridge_service.h"
-#include "components/arc/test/arc_util_test_support.h"
-#include "components/arc/test/connection_holder_util.h"
-#include "components/arc/test/fake_app_instance.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #include "components/services/app_service/public/cpp/icon_loader.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
@@ -41,6 +41,7 @@
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -64,6 +65,12 @@ struct TypeConverter<arc::mojom::ArcPackageInfoPtr,
 }  // namespace mojo
 
 namespace {
+
+using content::RenderFrameHost;
+using content::test::PrerenderHostObserver;
+using content::test::PrerenderHostRegistryObserver;
+using content::test::PrerenderTestHelper;
+
 const char kTestAppActivity[] = "abcdefg";
 
 class FakeIconLoader : public apps::IconLoader {
@@ -73,25 +80,37 @@ class FakeIconLoader : public apps::IconLoader {
   FakeIconLoader& operator=(const FakeIconLoader&) = delete;
   ~FakeIconLoader() override = default;
 
-  apps::mojom::IconKeyPtr GetIconKey(const std::string& app_id) override {
-    return apps::mojom::IconKey::New(0, 0, 0);
-  }
-
   std::unique_ptr<apps::IconLoader::Releaser> LoadIconFromIconKey(
-      apps::mojom::AppType app_type,
+      apps::AppType app_type,
       const std::string& app_id,
-      apps::mojom::IconKeyPtr icon_key,
-      apps::mojom::IconType icon_type,
+      const apps::IconKey& icon_key,
+      apps::IconType icon_type,
       int32_t size_hint_in_dip,
       bool allow_placeholder_icon,
-      apps::mojom::Publisher::LoadIconCallback callback) override {
-    auto iv = apps::mojom::IconValue::New();
+      apps::LoadIconCallback callback) override {
+    auto iv = std::make_unique<apps::IconValue>();
     iv->icon_type = icon_type;
     iv->uncompressed = gfx::ImageSkia(gfx::ImageSkiaRep(gfx::Size(1, 1), 1.0f));
     iv->is_placeholder_icon = false;
 
     std::move(callback).Run(std::move(iv));
     return nullptr;
+  }
+
+  std::unique_ptr<apps::IconLoader::Releaser> LoadIconFromIconKey(
+      apps::mojom::AppType app_type,
+      const std::string& app_id,
+      apps::mojom::IconKeyPtr mojom_icon_key,
+      apps::mojom::IconType icon_type,
+      int32_t size_hint_in_dip,
+      bool allow_placeholder_icon,
+      apps::mojom::Publisher::LoadIconCallback callback) override {
+    auto icon_key = apps::ConvertMojomIconKeyToIconKey(mojom_icon_key);
+    return LoadIconFromIconKey(
+        apps::ConvertMojomAppTypToAppType(app_type), app_id, *icon_key,
+        apps::ConvertMojomIconTypeToIconType(icon_type), size_hint_in_dip,
+        allow_placeholder_icon,
+        apps::IconValueToMojomIconValueCallback(std::move(callback)));
   }
 };
 }  // namespace
@@ -188,6 +207,8 @@ class IntentPickerBubbleViewBrowserTestChromeOS : public InProcessBrowserTest {
     return intent_picker_bubble()->remember_selection_checkbox_;
   }
 
+  // TODO(crbug.com/1265991): There should be an explicit signal we can wait on
+  // rather than assuming the AppService will be started after RunUntilIdle.
   void WaitForAppService() { base::RunLoop().RunUntilIdle(); }
 
   ArcAppListPrefs* app_prefs() { return ArcAppListPrefs::Get(profile()); }
@@ -259,15 +280,14 @@ class IntentPickerBubbleViewBrowserTestChromeOS : public InProcessBrowserTest {
     EXPECT_EQ(test_url.spec(), launched_arc_apps()[0].intent->data);
   }
 
-  void VerifyPWALaunched(const std::string& app_id) {
+  bool VerifyPWALaunched(const std::string& app_id) {
     WaitForAppService();
     Browser* app_browser = BrowserList::GetInstance()->GetLastActive();
-    EXPECT_TRUE(
-        web_app::AppBrowserController::IsForWebApp(app_browser, app_id));
+    return web_app::AppBrowserController::IsForWebApp(app_browser, app_id);
   }
 
  private:
-  apps::AppServiceProxyChromeOs* app_service_proxy_ = nullptr;
+  apps::AppServiceProxy* app_service_proxy_ = nullptr;
   std::unique_ptr<arc::FakeIntentHelperInstance> intent_helper_instance_;
   std::unique_ptr<arc::FakeAppInstance> app_instance_;
   FakeIconLoader icon_loader_;
@@ -386,7 +406,7 @@ IN_PROC_BROWSER_TEST_F(IntentPickerBubbleViewBrowserTestChromeOS,
 
   // Launch the app.
   intent_picker_bubble()->AcceptDialog();
-  VerifyPWALaunched(app_id);
+  EXPECT_TRUE(VerifyPWALaunched(app_id));
 }
 
 // Test that intent picker bubble will not pop up for non-link navigation.
@@ -746,7 +766,7 @@ IN_PROC_BROWSER_TEST_F(IntentPickerBubbleViewBrowserTestChromeOS,
 
   // Launch the app.
   intent_picker_bubble()->AcceptDialog();
-  VerifyPWALaunched(app_id_pwa);
+  EXPECT_TRUE(VerifyPWALaunched(app_id_pwa));
 }
 
 // Test that bubble pops out when there is both PWA and ARC candidates, and
@@ -1010,7 +1030,7 @@ IN_PROC_BROWSER_TEST_F(IntentPickerBrowserTestPWAPersistence, RememberOpenPWA) {
   remember_selection_checkbox()->SetChecked(true);
   ASSERT_TRUE(intent_picker_bubble());
   intent_picker_bubble()->AcceptDialog();
-  VerifyPWALaunched(app_id);
+  EXPECT_TRUE(VerifyPWALaunched(app_id));
   Browser* app_browser = BrowserList::GetInstance()->GetLastActive();
   chrome::CloseWindow(app_browser);
   ui_test_utils::WaitForBrowserToClose(app_browser);
@@ -1024,5 +1044,85 @@ IN_PROC_BROWSER_TEST_F(IntentPickerBrowserTestPWAPersistence, RememberOpenPWA) {
                             ui::PageTransition::PAGE_TRANSITION_LINK);
   ui_test_utils::NavigateToURL(&params_new);
 
-  VerifyPWALaunched(app_id);
+  EXPECT_TRUE(VerifyPWALaunched(app_id));
+}
+
+class IntentPickerBrowserTestPrerendering
+    : public IntentPickerBrowserTestPWAPersistence {
+ public:
+  IntentPickerBrowserTestPrerendering()
+      : prerender_helper_(base::BindRepeating(
+            &IntentPickerBrowserTestPrerendering::web_contents,
+            base::Unretained(this))) {}
+  ~IntentPickerBrowserTestPrerendering() override = default;
+
+ protected:
+  content::WebContents* web_contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+  PrerenderTestHelper prerender_helper_;
+};
+
+// Simulates prerendering an app URL that the user has opted into always
+// launching an app window for. In this case, the prerender should be canceled
+// and the app shouldn't be opened.
+IN_PROC_BROWSER_TEST_F(IntentPickerBrowserTestPrerendering,
+                       AppLaunchURLCancelsPrerendering) {
+  // Prerendering is currently limited to same-origin pages so we need to start
+  // it from an arbitrary page on the same origin, rather than about:blank.
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
+  const GURL kAppUrl = embedded_test_server()->GetURL("/app");
+  const std::string kAppName = "test_name";
+  const auto kAppId = InstallWebApp(kAppName, kAppUrl);
+
+  chrome::NewTab(browser());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialUrl));
+
+  // Setup: navigate to the app URL and persist the "Open App" setting. Then
+  // close the app.
+  {
+    // Navigate from a link.
+    NavigateParams params(browser(), kAppUrl,
+                          ui::PageTransition::PAGE_TRANSITION_LINK);
+
+    views::NamedWidgetShownWaiter waiter(
+        views::test::AnyWidgetTestPasskey{},
+        IntentPickerBubbleView::kViewClassName);
+    // Navigates and waits for loading to finish.
+    ui_test_utils::NavigateToURL(&params);
+
+    waiter.WaitIfNeededAndGet();
+    EXPECT_TRUE(GetIntentPickerIcon()->GetVisible());
+
+    // Check "Remember my choice" and choose "Open App".
+    ASSERT_TRUE(remember_selection_checkbox());
+    ASSERT_TRUE(remember_selection_checkbox()->GetEnabled());
+    remember_selection_checkbox()->SetChecked(true);
+    ASSERT_TRUE(intent_picker_bubble());
+    intent_picker_bubble()->AcceptDialog();
+    ASSERT_TRUE(VerifyPWALaunched(kAppId));
+    Browser* app_browser = BrowserList::GetInstance()->GetLastActive();
+    chrome::CloseWindow(app_browser);
+    ui_test_utils::WaitForBrowserToClose(app_browser);
+    ASSERT_FALSE(VerifyPWALaunched(kAppId));
+  }
+
+  chrome::NewTab(browser());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialUrl));
+
+  // Trigger a prerender of the app URL.
+  PrerenderHostObserver host_observer(*web_contents(), kAppUrl);
+  prerender_helper_.AddPrerenderAsync(kAppUrl);
+  host_observer.WaitForDestroyed();
+
+  // The app must not have been launched.
+  EXPECT_FALSE(VerifyPWALaunched(kAppId));
+
+  // However, a standard user navigation should launch the app as usual.
+  NavigateParams params_new(browser(), kAppUrl,
+                            ui::PageTransition::PAGE_TRANSITION_LINK);
+  ui_test_utils::NavigateToURL(&params_new);
+  EXPECT_TRUE(VerifyPWALaunched(kAppId));
 }

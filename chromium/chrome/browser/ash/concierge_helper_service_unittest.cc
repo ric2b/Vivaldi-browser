@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
@@ -16,7 +15,7 @@
 #include "dbus/object_proxy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chromeos {
+namespace ash {
 
 class TestConciergeClient : public FakeConciergeClient {
  public:
@@ -186,4 +185,4 @@ TEST_F(ConciergeHelperServiceTest, TestWaitForServiceAvailable) {
             fake_concierge_client()->requests()[1].cpu_restriction_state());
 }
 
-}  // namespace chromeos
+}  // namespace ash

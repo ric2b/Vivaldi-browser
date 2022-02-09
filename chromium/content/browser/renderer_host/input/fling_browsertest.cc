@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/ignore_result.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -113,8 +115,8 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
     EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
     FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                              ->GetFrameTree()
-                              ->root();
+                              ->GetPrimaryFrameTree()
+                              .root();
     ASSERT_EQ(1U, root->child_count());
 
     // Navigate oopif to URL.
@@ -249,7 +251,7 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
   void WaitForScroll() {
     RenderFrameSubmissionObserver observer(
         GetWidgetHost()->render_frame_metadata_provider());
-    gfx::Vector2dF default_scroll_offset;
+    gfx::PointF default_scroll_offset;
     // scrollTop > 0 is not enough since the first progressFling is called from
     // FlingController::ProcessGestureFlingStart. Wait for scrollTop to exceed
     // 100 pixels to make sure that ProgressFling has been called through
@@ -289,8 +291,8 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
 
   FrameTreeNode* GetRootNode() {
     return static_cast<WebContentsImpl*>(shell()->web_contents())
-        ->GetFrameTree()
-        ->root();
+        ->GetPrimaryFrameTree()
+        .root();
   }
 
   FrameTreeNode* GetChildNode() {
@@ -299,8 +301,8 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
   }
 
   std::unique_ptr<base::RunLoop> run_loop_;
-  RenderWidgetHostViewBase* child_view_ = nullptr;
-  RenderWidgetHostViewBase* root_view_ = nullptr;
+  raw_ptr<RenderWidgetHostViewBase> child_view_ = nullptr;
+  raw_ptr<RenderWidgetHostViewBase> root_view_ = nullptr;
 };
 
 // On Mac we don't have any touchscreen/touchpad fling events (GFS/GFC).
@@ -373,8 +375,8 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
   // Wait for 100ms. Then check that the second page has not scrolled.
   GiveItSomeTime(100);
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetFrameTree()
-                            ->root();
+                            ->GetPrimaryFrameTree()
+                            .root();
   EXPECT_EQ(
       0, EvalJs(root->current_frame_host(), "window.scrollY").ExtractDouble());
 }
@@ -529,8 +531,8 @@ IN_PROC_BROWSER_TEST_F(BrowserSideFlingBrowserTest,
                        NoFlingWhenViewIsDestroyed) {
   LoadURL(kBrowserFlingDataURL);
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetFrameTree()
-                            ->root();
+                            ->GetPrimaryFrameTree()
+                            .root();
 
   GetWidgetHost()->GetView()->Destroy();
   SimulateTouchscreenFling(GetWidgetHost());

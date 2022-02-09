@@ -26,6 +26,23 @@ public interface SubscriptionsManager {
         int INVALID_ARGUMENT = 4;
     }
 
+    /** An observer for notification about a product be tracked or untracked. */
+    interface SubscriptionObserver {
+        /**
+         * A notification that a user has subscribed to product updated.
+         *
+         * @param subscriptions The list of subscriptions being added.
+         */
+        void onSubscribe(List<CommerceSubscription> subscriptions);
+
+        /**
+         * A notification that a user has unsubscribed to product updated.
+         *
+         * @param subscriptions The list of subscriptions being removed.
+         */
+        void onUnsubscribe(List<CommerceSubscription> subscriptions);
+    }
+
     /**
      * Creates a new subscription on the server if needed.
      * @param subscription The {@link CommerceSubscription} to add.
@@ -55,4 +72,26 @@ public interface SubscriptionsManager {
      */
     void getSubscriptions(@CommerceSubscription.CommerceSubscriptionType String type,
             boolean forceFetch, Callback<List<CommerceSubscription>> callback);
+
+    /**
+     * Checks if the given subscription matches any subscriptions in local storage.
+     *
+     * @param subscription The subscription to check.
+     * @param callback The callback to receive the result.
+     */
+    void isSubscribed(CommerceSubscription subscription, Callback<Boolean> callback);
+
+    /**
+     * Add an observer of subscribe and unsubscribe events.
+     *
+     * @param observer The observer to add.
+     */
+    void addObserver(SubscriptionObserver observer);
+
+    /**
+     * Remove an observer of subscribe and unsubscribe events.
+     *
+     * @param observer The observer to remove.
+     */
+    void removeObserver(SubscriptionObserver observer);
 }

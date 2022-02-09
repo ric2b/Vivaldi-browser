@@ -539,6 +539,8 @@ void VivaldiNativeAppWindowViews::ViewHierarchyChanged(
   if (details.is_add && details.child == this) {
     content::WebContents* contents = window_->web_contents();
     web_view_ = new views::WebView(contents->GetBrowserContext());
+    // Events in the webview are handled in VivaldiEventHooks::HandleXXX.
+    web_view_->SetCanProcessEventsWithinSubtree(false);
     AddChildView(web_view_);
     web_view_->SetWebContents(contents);
   }

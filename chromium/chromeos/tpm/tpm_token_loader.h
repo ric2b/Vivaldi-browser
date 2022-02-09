@@ -11,7 +11,6 @@
 
 #include "base/callback_forward.h"
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -54,6 +53,9 @@ class COMPONENT_EXPORT(CHROMEOS_TPM) TPMTokenLoader
 
   // Gets the global instance. Initialize() must be called before this.
   static TPMTokenLoader* Get();
+
+  TPMTokenLoader(const TPMTokenLoader&) = delete;
+  TPMTokenLoader& operator=(const TPMTokenLoader&) = delete;
 
   // Returns true if the global instance has been initialized.
   static bool IsInitialized();
@@ -132,8 +134,6 @@ class COMPONENT_EXPORT(CHROMEOS_TPM) TPMTokenLoader
   scoped_refptr<base::SequencedTaskRunner> crypto_task_runner_;
 
   base::WeakPtrFactory<TPMTokenLoader> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(TPMTokenLoader);
 };
 
 }  // namespace chromeos

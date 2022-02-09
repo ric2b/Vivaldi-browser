@@ -9,7 +9,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/clamped_math.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "skia/ext/legacy_display_globals.h"
@@ -31,7 +31,7 @@
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/video_frame_image_util.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/worker_pool.h"
@@ -53,26 +53,9 @@ constexpr const char* kImageBitmapOptionResizeQualityPixelated = "pixelated";
 
 namespace {
 
-// The following two functions are helpers used in cropImage
-static inline IntRect NormalizeRect(const IntRect& rect) {
-  int x = rect.X();
-  int y = rect.Y();
-  int width = rect.Width();
-  int height = rect.Height();
-  if (width < 0) {
-    x = base::ClampAdd(x, width);
-    width = -width;
-  }
-  if (height < 0) {
-    y = base::ClampAdd(y, height);
-    height = -height;
-  }
-  return IntRect(x, y, width, height);
-}
-
 ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
-                                        absl::optional<IntRect> crop_rect,
-                                        IntSize source_size) {
+                                        absl::optional<gfx::Rect> crop_rect,
+                                        gfx::Size source_size) {
   ImageBitmap::ParsedOptions parsed_options;
   if (options->imageOrientation() == kImageOrientationFlipY) {
     parsed_options.flip_y = true;
@@ -98,16 +81,16 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
         << IDLEnumAsString(options->colorSpaceConversion());
   }
 
-  int source_width = source_size.Width();
-  int source_height = source_size.Height();
+  int source_width = source_size.width();
+  int source_height = source_size.height();
   if (!crop_rect) {
-    parsed_options.crop_rect = IntRect(0, 0, source_width, source_height);
+    parsed_options.crop_rect = gfx::Rect(0, 0, source_width, source_height);
   } else {
-    parsed_options.crop_rect = NormalizeRect(*crop_rect);
+    parsed_options.crop_rect = *crop_rect;
   }
   if (!options->hasResizeWidth() && !options->hasResizeHeight()) {
-    parsed_options.resize_width = parsed_options.crop_rect.Width();
-    parsed_options.resize_height = parsed_options.crop_rect.Height();
+    parsed_options.resize_width = parsed_options.crop_rect.width();
+    parsed_options.resize_height = parsed_options.crop_rect.height();
   } else if (options->hasResizeWidth() && options->hasResizeHeight()) {
     parsed_options.resize_width = options->resizeWidth();
     parsed_options.resize_height = options->resizeHeight();
@@ -115,17 +98,17 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
     parsed_options.resize_width = options->resizeWidth();
     parsed_options.resize_height = ceil(
         static_cast<float>(options->resizeWidth()) /
-        parsed_options.crop_rect.Width() * parsed_options.crop_rect.Height());
+        parsed_options.crop_rect.width() * parsed_options.crop_rect.height());
   } else {
     parsed_options.resize_height = options->resizeHeight();
     parsed_options.resize_width = ceil(
         static_cast<float>(options->resizeHeight()) /
-        parsed_options.crop_rect.Height() * parsed_options.crop_rect.Width());
+        parsed_options.crop_rect.height() * parsed_options.crop_rect.width());
   }
   if (static_cast<int>(parsed_options.resize_width) ==
-          parsed_options.crop_rect.Width() &&
+          parsed_options.crop_rect.width() &&
       static_cast<int>(parsed_options.resize_height) ==
-          parsed_options.crop_rect.Height()) {
+          parsed_options.crop_rect.height()) {
     parsed_options.should_scale_input = false;
     return parsed_options;
   }
@@ -147,8 +130,8 @@ ImageBitmap::ParsedOptions ParseOptions(const ImageBitmapOptions* options,
 // width * height * bytesPerPixel will never overflow unsigned.
 // This function assumes that the pixel format is N32.
 bool DstBufferSizeHasOverflow(const ImageBitmap::ParsedOptions& options) {
-  base::CheckedNumeric<unsigned> total_bytes = options.crop_rect.Width();
-  total_bytes *= options.crop_rect.Height();
+  base::CheckedNumeric<unsigned> total_bytes = options.crop_rect.width();
+  total_bytes *= options.crop_rect.height();
   total_bytes *= SkColorTypeBytesPerPixel(kN32_SkColorType);
   if (!total_bytes.IsValid())
     return true;
@@ -195,7 +178,7 @@ Vector<uint8_t> CopyImageData(const scoped_refptr<StaticBitmapImage>& input,
   // Orient the data, and re-read the pixels.
   if (apply_orientation && !input->HasDefaultOrientation()) {
     paint_image = Image::ResizeAndOrientImage(
-        paint_image, input->CurrentFrameOrientation(), FloatSize(1, 1), 1,
+        paint_image, input->CurrentFrameOrientation(), gfx::Vector2dF(1, 1), 1,
         kInterpolationNone);
     read_pixels_successful = paint_image.readPixels(info, dst_buffer.data(),
                                                     info.minRowBytes(), 0, 0);
@@ -217,21 +200,17 @@ std::unique_ptr<CanvasResourceProvider> CreateProvider(
     const SkImageInfo& info,
     const scoped_refptr<StaticBitmapImage>& source_image,
     bool fallback_to_software) {
-  IntSize size(info.width(), info.height());
-
   const cc::PaintFlags::FilterQuality filter_quality =
       cc::PaintFlags::FilterQuality::kLow;
-  const CanvasResourceParams resource_params(info);
-
   if (context_provider) {
     uint32_t usage_flags =
         context_provider->ContextProvider()
             ->SharedImageInterface()
             ->UsageForMailbox(source_image->GetMailboxHolder().mailbox);
     auto resource_provider = CanvasResourceProvider::CreateSharedImageProvider(
-        size, filter_quality, resource_params,
-        CanvasResourceProvider::ShouldInitialize::kNo, context_provider,
-        RasterMode::kGPU, source_image->IsOriginTopLeft(), usage_flags);
+        info, filter_quality, CanvasResourceProvider::ShouldInitialize::kNo,
+        context_provider, RasterMode::kGPU, source_image->IsOriginTopLeft(),
+        usage_flags);
     if (resource_provider)
       return resource_provider;
 
@@ -240,8 +219,7 @@ std::unique_ptr<CanvasResourceProvider> CreateProvider(
   }
 
   return CanvasResourceProvider::CreateBitmapProvider(
-      size, filter_quality, resource_params,
-      CanvasResourceProvider::ShouldInitialize::kNo);
+      info, filter_quality, CanvasResourceProvider::ShouldInitialize::kNo);
 }
 
 scoped_refptr<StaticBitmapImage> FlipImageVertically(
@@ -380,7 +358,7 @@ scoped_refptr<StaticBitmapImage> ApplyColorSpaceConversion(
 scoped_refptr<StaticBitmapImage> MakeBlankImage(
     const ImageBitmap::ParsedOptions& parsed_options) {
   SkImageInfo info = SkImageInfo::Make(
-      parsed_options.crop_rect.Width(), parsed_options.crop_rect.Height(),
+      parsed_options.crop_rect.width(), parsed_options.crop_rect.height(),
       kN32_SkColorType, kPremul_SkAlphaType, SkColorSpace::MakeSRGB());
   if (parsed_options.should_scale_input) {
     info =
@@ -427,9 +405,9 @@ static scoped_refptr<StaticBitmapImage> CropImageAndApplyColorSpaceConversion(
   DCHECK(image);
   DCHECK(!image->HasData());
 
-  IntRect img_rect(IntPoint(), IntSize(image->width(), image->height()));
-  const IntRect& src_rect{parsed_options.crop_rect};
-  const IntRect intersect_rect = Intersection(img_rect, src_rect);
+  gfx::Rect img_rect(image->width(), image->height());
+  const gfx::Rect& src_rect = parsed_options.crop_rect;
+  const gfx::Rect intersect_rect = IntersectRects(img_rect, src_rect);
 
   // If cropRect doesn't intersect the source image, return a transparent black
   // image.
@@ -439,8 +417,8 @@ static scoped_refptr<StaticBitmapImage> CropImageAndApplyColorSpaceConversion(
   scoped_refptr<StaticBitmapImage> result = image;
   if (src_rect != img_rect) {
     auto paint_image = result->PaintImageForCurrentFrame();
-    auto image_info = paint_image.GetSkImageInfo().makeWH(src_rect.Width(),
-                                                          src_rect.Height());
+    auto image_info = paint_image.GetSkImageInfo().makeWH(src_rect.width(),
+                                                          src_rect.height());
     auto resource_provider =
         CreateProvider(image->ContextProviderWrapper(), image_info, result,
                        true /* fallback_to_software*/);
@@ -450,19 +428,19 @@ static scoped_refptr<StaticBitmapImage> CropImageAndApplyColorSpaceConversion(
     cc::PaintFlags paint;
     paint.setBlendMode(SkBlendMode::kSrc);
     canvas->drawImageRect(paint_image,
-                          SkRect::MakeXYWH(src_rect.X(), src_rect.Y(),
-                                           src_rect.Width(), src_rect.Height()),
-                          SkRect::MakeWH(src_rect.Width(), src_rect.Height()),
+                          SkRect::MakeXYWH(src_rect.x(), src_rect.y(),
+                                           src_rect.width(), src_rect.height()),
+                          SkRect::MakeWH(src_rect.width(), src_rect.height()),
                           SkSamplingOptions(), &paint,
                           SkCanvas::kStrict_SrcRectConstraint);
     result = resource_provider->Snapshot(image->CurrentFrameOrientation());
   }
 
   // down-scaling has higher priority than other tasks, up-scaling has lower.
-  bool down_scaling =
-      parsed_options.should_scale_input &&
-      (parsed_options.resize_width * parsed_options.resize_height <
-       result->Size().Area());
+  bool down_scaling = parsed_options.should_scale_input &&
+                      (static_cast<uint64_t>(parsed_options.resize_width) *
+                           parsed_options.resize_height <
+                       result->Size().Area64());
   bool up_scaling = parsed_options.should_scale_input && !down_scaling;
 
   // resize if down-scaling
@@ -517,7 +495,7 @@ sk_sp<SkImage> ImageBitmap::GetSkImageFromDecoder(
 }
 
 ImageBitmap::ImageBitmap(ImageElementBase* image,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   scoped_refptr<Image> input = image->CachedImage()->GetImage();
   DCHECK(!input->IsTextureBacked());
@@ -586,7 +564,7 @@ ImageBitmap::ImageBitmap(ImageElementBase* image,
 }
 
 ImageBitmap::ImageBitmap(HTMLVideoElement* video,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   ParsedOptions parsed_options =
       ParseOptions(options, crop_rect, video->BitmapSourceSize());
@@ -612,11 +590,11 @@ ImageBitmap::ImageBitmap(HTMLVideoElement* video,
 }
 
 ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   SourceImageStatus status;
   scoped_refptr<Image> image_input =
-      canvas->GetSourceImageForCanvas(&status, FloatSize());
+      canvas->GetSourceImageForCanvas(&status, gfx::SizeF());
   if (status != kNormalSourceImageStatus)
     return;
   DCHECK(IsA<StaticBitmapImage>(image_input.get()));
@@ -624,7 +602,7 @@ ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
       static_cast<StaticBitmapImage*>(image_input.get());
 
   ParsedOptions parsed_options = ParseOptions(
-      options, crop_rect, IntSize(input->width(), input->height()));
+      options, crop_rect, gfx::Size(input->width(), input->height()));
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
 
@@ -638,11 +616,11 @@ ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
 }
 
 ImageBitmap::ImageBitmap(OffscreenCanvas* offscreen_canvas,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   SourceImageStatus status;
   scoped_refptr<Image> raw_input = offscreen_canvas->GetSourceImageForCanvas(
-      &status, FloatSize(offscreen_canvas->Size()));
+      &status, gfx::SizeF(offscreen_canvas->Size()));
   DCHECK(IsA<StaticBitmapImage>(raw_input.get()));
   scoped_refptr<StaticBitmapImage> input =
       static_cast<StaticBitmapImage*>(raw_input.get());
@@ -652,7 +630,7 @@ ImageBitmap::ImageBitmap(OffscreenCanvas* offscreen_canvas,
     return;
 
   ParsedOptions parsed_options = ParseOptions(
-      options, crop_rect, IntSize(input->width(), input->height()));
+      options, crop_rect, gfx::Size(input->width(), input->height()));
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
 
@@ -677,7 +655,7 @@ ImageBitmap::ImageBitmap(const SkPixmap& pixmap,
 }
 
 ImageBitmap::ImageBitmap(ImageData* data,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   ParsedOptions parsed_options =
       ParseOptions(options, crop_rect, data->BitmapSourceSize());
@@ -686,10 +664,10 @@ ImageBitmap::ImageBitmap(ImageData* data,
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
 
-  const IntRect& src_rect{parsed_options.crop_rect};
-  const IntRect data_src_rect = IntRect(IntPoint(), data->Size());
-  const IntRect intersect_rect =
-      crop_rect ? Intersection(src_rect, data_src_rect) : data_src_rect;
+  const gfx::Rect& src_rect = parsed_options.crop_rect;
+  const gfx::Rect data_src_rect(data->Size());
+  const gfx::Rect intersect_rect =
+      crop_rect ? IntersectRects(src_rect, data_src_rect) : data_src_rect;
 
   // If cropRect doesn't intersect the source image, return a transparent black
   // image.
@@ -700,7 +678,7 @@ ImageBitmap::ImageBitmap(ImageData* data,
 
   // Copy / color convert the pixels
   SkImageInfo info = SkImageInfo::Make(
-      src_rect.Width(), src_rect.Height(), kN32_SkColorType,
+      src_rect.width(), src_rect.height(), kN32_SkColorType,
       parsed_options.premultiply_alpha ? kPremul_SkAlphaType
                                        : kUnpremul_SkAlphaType,
       SkColorSpace::MakeSRGB());
@@ -711,8 +689,8 @@ ImageBitmap::ImageBitmap(ImageData* data,
   if (!image_pixels)
     return;
   if (!data->GetSkPixmap().readPixels(info, image_pixels->writable_data(),
-                                      info.minRowBytes(), src_rect.X(),
-                                      src_rect.Y())) {
+                                      info.minRowBytes(), src_rect.x(),
+                                      src_rect.y())) {
     return;
   }
 
@@ -722,10 +700,10 @@ ImageBitmap::ImageBitmap(ImageData* data,
     return;
 
   // down-scaling has higher priority than other tasks, up-scaling has lower.
-  bool down_scaling =
-      parsed_options.should_scale_input &&
-      (parsed_options.resize_width * parsed_options.resize_height <
-       image_->Size().Area());
+  bool down_scaling = parsed_options.should_scale_input &&
+                      (static_cast<uint64_t>(parsed_options.resize_width) *
+                           parsed_options.resize_height <
+                       image_->Size().Area64());
   bool up_scaling = parsed_options.should_scale_input && !down_scaling;
 
   // resize if down-scaling
@@ -758,7 +736,7 @@ ImageBitmap::ImageBitmap(ImageData* data,
 }
 
 ImageBitmap::ImageBitmap(ImageBitmap* bitmap,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   scoped_refptr<StaticBitmapImage> input = bitmap->BitmapImage();
   if (!input)
@@ -781,7 +759,7 @@ ImageBitmap::ImageBitmap(ImageBitmap* bitmap,
 }
 
 ImageBitmap::ImageBitmap(scoped_refptr<StaticBitmapImage> image,
-                         absl::optional<IntRect> crop_rect,
+                         absl::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
   bool origin_clean = image->OriginClean();
   ParsedOptions parsed_options =
@@ -878,13 +856,13 @@ void ImageBitmap::ResolvePromiseOnOriginalThread(
 
 void ImageBitmap::RasterizeImageOnBackgroundThread(
     sk_sp<PaintRecord> paint_record,
-    const IntRect& dst_rect,
+    const gfx::Rect& dst_rect,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     WTF::CrossThreadOnceFunction<void(sk_sp<SkImage>,
                                       const ImageOrientationEnum)> callback) {
   DCHECK(!IsMainThread());
   SkImageInfo info =
-      SkImageInfo::MakeN32Premul(dst_rect.Width(), dst_rect.Height());
+      SkImageInfo::MakeN32Premul(dst_rect.width(), dst_rect.height());
   SkSurfaceProps props = skia::LegacyDisplayGlobals::GetSkSurfaceProps();
   sk_sp<SkSurface> surface = SkSurface::MakeRaster(info, &props);
   sk_sp<SkImage> skia_image;
@@ -899,7 +877,7 @@ void ImageBitmap::RasterizeImageOnBackgroundThread(
 }
 
 ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
-                                       absl::optional<IntRect> crop_rect,
+                                       absl::optional<gfx::Rect> crop_rect,
                                        ScriptState* script_state,
                                        const ImageBitmapOptions* options) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -916,7 +894,7 @@ ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
 
   scoped_refptr<Image> input = image->CachedImage()->GetImage();
   DCHECK(input->IsSVGImage());
-  IntRect input_rect(IntPoint(), input->Size());
+  gfx::Rect input_rect(input->Size());
 
   // In the case when |crop_rect| doesn't intersect the source image, we return
   // a transparent black image, respecting the color_params but ignoring
@@ -935,19 +913,20 @@ ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
     return promise;
   }
 
-  IntRect draw_src_rect(parsed_options.crop_rect);
-  IntRect draw_dst_rect(0, 0, parsed_options.resize_width,
-                        parsed_options.resize_height);
+  gfx::Rect draw_src_rect = parsed_options.crop_rect;
+  gfx::Rect draw_dst_rect(0, 0, parsed_options.resize_width,
+                          parsed_options.resize_height);
   PaintRecorder recorder;
-  cc::PaintCanvas* canvas = recorder.beginRecording(draw_src_rect);
+  cc::PaintCanvas* canvas =
+      recorder.beginRecording(gfx::RectToSkRect(draw_src_rect));
   if (parsed_options.flip_y) {
-    canvas->translate(0, draw_dst_rect.Height());
+    canvas->translate(0, draw_dst_rect.height());
     canvas->scale(1, -1);
   }
   SVGImageForContainer::Create(To<SVGImage>(input.get()),
-                               FloatSize(input_rect.Size()), 1, NullURL())
-      ->Draw(canvas, cc::PaintFlags(), FloatRect(draw_dst_rect),
-             FloatRect(draw_src_rect), ImageDrawOptions());
+                               gfx::SizeF(input_rect.size()), 1, NullURL())
+      ->Draw(canvas, cc::PaintFlags(), gfx::RectF(draw_dst_rect),
+             gfx::RectF(draw_src_rect), ImageDrawOptions());
   sk_sp<PaintRecord> paint_record = recorder.finishRecordingAsPicture();
 
   std::unique_ptr<ParsedOptions> passed_parsed_options =
@@ -989,35 +968,36 @@ Vector<uint8_t> ImageBitmap::CopyBitmapData(const SkImageInfo& info,
 unsigned ImageBitmap::width() const {
   if (!image_)
     return 0;
-  IntSize size = image_->PreferredDisplaySize();
-  DCHECK_GT(size.Width(), 0);
-  return size.Width();
+  gfx::Size size = image_->PreferredDisplaySize();
+  DCHECK_GT(size.width(), 0);
+  return size.width();
 }
 
 unsigned ImageBitmap::height() const {
   if (!image_)
     return 0;
-  IntSize size = image_->PreferredDisplaySize();
-  DCHECK_GT(size.Height(), 0);
-  return size.Height();
+  gfx::Size size = image_->PreferredDisplaySize();
+  DCHECK_GT(size.height(), 0);
+  return size.height();
 }
 
 bool ImageBitmap::IsAccelerated() const {
   return image_ && image_->IsTextureBacked();
 }
 
-IntSize ImageBitmap::Size() const {
+gfx::Size ImageBitmap::Size() const {
   if (!image_)
-    return IntSize();
+    return gfx::Size();
   DCHECK_GT(image_->width(), 0);
   DCHECK_GT(image_->height(), 0);
   return image_->PreferredDisplaySize();
 }
 
-ScriptPromise ImageBitmap::CreateImageBitmap(ScriptState* script_state,
-                                             absl::optional<IntRect> crop_rect,
-                                             const ImageBitmapOptions* options,
-                                             ExceptionState& exception_state) {
+ScriptPromise ImageBitmap::CreateImageBitmap(
+    ScriptState* script_state,
+    absl::optional<gfx::Rect> crop_rect,
+    const ImageBitmapOptions* options,
+    ExceptionState& exception_state) {
   return ImageBitmapSource::FulfillImageBitmap(
       script_state, MakeGarbageCollected<ImageBitmap>(this, crop_rect, options),
       exception_state);
@@ -1025,7 +1005,7 @@ ScriptPromise ImageBitmap::CreateImageBitmap(ScriptState* script_state,
 
 scoped_refptr<Image> ImageBitmap::GetSourceImageForCanvas(
     SourceImageStatus* status,
-    const FloatSize&,
+    const gfx::SizeF&,
     const AlphaDisposition alpha_disposition) {
   *status = kNormalSourceImageStatus;
   if (!image_)
@@ -1038,10 +1018,10 @@ scoped_refptr<Image> ImageBitmap::GetSourceImageForCanvas(
   return GetImageWithAlphaDisposition(std::move(image), alpha_disposition);
 }
 
-FloatSize ImageBitmap::ElementSize(
-    const FloatSize&,
+gfx::SizeF ImageBitmap::ElementSize(
+    const gfx::SizeF&,
     const RespectImageOrientationEnum respect_orientation) const {
-  return FloatSize(image_->Size(respect_orientation));
+  return gfx::SizeF(image_->Size(respect_orientation));
 }
 
 }  // namespace blink

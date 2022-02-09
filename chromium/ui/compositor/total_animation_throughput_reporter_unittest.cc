@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/time/time.h"
@@ -123,7 +124,7 @@ TEST_F(TotalAnimationThroughputReporterTest, DISABLED_MultipleAnimations) {
   // runs slwer.
 #if !defined(SANITIZER_ENABLED)
   auto sixty_four_ms_from_start = DeltaFromNowToTarget(start, 64);
-  ASSERT_TRUE(sixty_four_ms_from_start > base::TimeDelta());
+  ASSERT_TRUE(sixty_four_ms_from_start.is_positive());
   Advance(sixty_four_ms_from_start);
   EXPECT_FALSE(checker.reported());
 #endif
@@ -202,7 +203,7 @@ TEST_F(TotalAnimationThroughputReporterTest,
 #if !defined(SANITIZER_ENABLED)
   // The animation time is extended by 32ms.
   auto sixty_four_ms_from_start = DeltaFromNowToTarget(start, 64);
-  ASSERT_TRUE(sixty_four_ms_from_start > base::TimeDelta());
+  ASSERT_TRUE(sixty_four_ms_from_start.is_positive());
   Advance(sixty_four_ms_from_start);
   EXPECT_FALSE(checker.reported());
 #endif
@@ -313,7 +314,7 @@ class ObserverChecker : public ui::CompositorObserver {
   }
 
  private:
-  ui::CompositorObserver* const reporter_observer_;
+  const raw_ptr<ui::CompositorObserver> reporter_observer_;
 };
 
 }  // namespace
@@ -362,7 +363,7 @@ TEST_F(TotalAnimationThroughputReporterTest, OnceReporterShouldDelete) {
     ~DeleteTestReporter() override { *deleted_ = true; }
 
    private:
-    bool* deleted_;
+    raw_ptr<bool> deleted_;
   };
 
   Layer layer;

@@ -27,11 +27,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -604,9 +604,10 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
     user_policy_provider_->Init(schema_registry_service_->registry());
     policy_provider = user_policy_provider_.get();
     user_cloud_policy_manager = nullptr;
-  } else
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  } else {
+#else
   {
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
     user_cloud_policy_manager_ = CreateUserCloudPolicyManager(
         GetPath(), GetPolicySchemaRegistryService()->registry(),
         force_immediate_policy_load, io_task_runner_);
@@ -883,13 +884,17 @@ ProfileImpl::~ProfileImpl() {
 
   // Destroy all OTR profiles and their profile services first.
   std::vector<Profile*> raw_otr_profiles;
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   bool primary_otr_available = false;
+#endif
 
   // Get a list of existing OTR profiles since |off_the_record_profile_| might
   // be modified after the call to |DestroyProfileNow|.
   for (auto& otr_profile : otr_profiles_) {
     raw_otr_profiles.push_back(otr_profile.second.get());
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     primary_otr_available |= (otr_profile.first == OTRProfileID::PrimaryID());
+#endif
   }
 
   for (Profile* otr_profile : raw_otr_profiles)
@@ -1038,10 +1043,6 @@ const Profile* ProfileImpl::GetOriginalProfile() const {
   return this;
 }
 
-bool ProfileImpl::IsSupervised() const {
-  return !GetPrefs()->GetString(prefs::kSupervisedUserId).empty();
-}
-
 bool ProfileImpl::IsChild() const {
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   return GetPrefs()->GetString(prefs::kSupervisedUserId) ==
@@ -1156,16 +1157,14 @@ bool ProfileImpl::WasCreatedByVersionOrLater(const std::string& version) {
 
 bool ProfileImpl::ShouldRestoreOldSessionCookies() {
 #if defined(OS_ANDROID)
-  SessionStartupPref::Type startup_pref_type =
-      SessionStartupPref::GetDefaultStartupType();
-  return startup_pref_type == SessionStartupPref::LAST;
+  SessionStartupPref startup_pref(SessionStartupPref::GetDefaultStartupType());
+  return startup_pref.ShouldRestoreLastSession();
 #else
-  SessionStartupPref::Type startup_pref_type =
+  SessionStartupPref startup_pref =
       StartupBrowserCreator::GetSessionStartupPref(
-          *base::CommandLine::ForCurrentProcess(), this)
-          .type;
+          *base::CommandLine::ForCurrentProcess(), this);
   return ExitTypeService::GetLastSessionExitType(this) == ExitType::kCrashed ||
-         startup_pref_type == SessionStartupPref::LAST;
+         startup_pref.ShouldRestoreLastSession();
 #endif
 }
 
@@ -1407,10 +1406,8 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
       if (!pref_locale.empty()) {
         DCHECK(LocaleNotChanged(pref_locale, new_locale));
 
-        if (!locale_change_guard_) {
-          locale_change_guard_ =
-              std::make_unique<chromeos::LocaleChangeGuard>(this);
-        }
+        if (!locale_change_guard_)
+          locale_change_guard_ = std::make_unique<ash::LocaleChangeGuard>(this);
         locale_change_guard_->set_locale_changed_during_login(true);
 
         std::string accepted_locale =
@@ -1471,12 +1468,12 @@ void ProfileImpl::ChangeAppLocale(const std::string& new_locale,
 
 void ProfileImpl::OnLogin() {
   if (!locale_change_guard_)
-    locale_change_guard_ = std::make_unique<chromeos::LocaleChangeGuard>(this);
+    locale_change_guard_ = std::make_unique<ash::LocaleChangeGuard>(this);
   locale_change_guard_->OnLogin();
 }
 
 void ProfileImpl::InitChromeOSPreferences() {
-  chromeos_preferences_ = std::make_unique<chromeos::Preferences>();
+  chromeos_preferences_ = std::make_unique<ash::Preferences>();
   chromeos_preferences_->Init(
       this, chromeos::ProfileHelper::Get()->GetUserByProfile(this));
 }

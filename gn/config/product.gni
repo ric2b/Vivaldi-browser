@@ -1,7 +1,6 @@
 declare_args() {
   build_branch = "master"
   force_sopranos_build = false
-  is_oem_automotive_build = is_vivaldi_polestar
   is_final_build = false
 }
 
@@ -24,7 +23,13 @@ official_product_kind_string =
                 "trim string",
                 [_vivaldi_product_kind_file])
 
-android_vivaldi_manifest_package = "com.vivaldi.browser.sopranos"
+if (is_vivaldi_polestar) {
+  # Vivaldi/Polestar
+  android_vivaldi_manifest_package = "com.polestar.vivaldi.dev.android"
+} else {
+  android_vivaldi_manifest_package = "com.vivaldi.browser.sopranos"
+}
+
 if (release_kind == "final") {
   is_final_build = true
   extra_grit_defines = [
@@ -32,7 +37,7 @@ if (release_kind == "final") {
     "vivaldi_release_final",
   ]
   VIVALDI_RELEASE_KIND = "vivaldi_final"
-  if (is_oem_automotive_build) {
+  if (is_vivaldi_polestar) {
     # Vivaldi/Polestar
     android_vivaldi_manifest_package = "com.polestar.vivaldi.production.android"
   } else {
@@ -44,11 +49,19 @@ if (release_kind == "final") {
     "vivaldi_release_snapshot",
   ]
   VIVALDI_RELEASE_KIND = "vivaldi_snapshot"
-  android_vivaldi_manifest_package = "com.vivaldi.browser.snapshot"
+  if (is_vivaldi_polestar) {
+    # Vivaldi/Polestar
+    android_vivaldi_manifest_package = "com.polestar.vivaldi.beta.android"
+  } else {
+    android_vivaldi_manifest_package = "com.vivaldi.browser.snapshot"
+  }
 } else {
   extra_grit_defines = [
     "-D",
     "vivaldi_release_sopranos",
   ]
   VIVALDI_RELEASE_KIND = "vivaldi_sopranos"
+}
+if (is_vivaldi_automotive && !is_vivaldi_polestar) {
+  android_vivaldi_manifest_package += ".automotive"
 }

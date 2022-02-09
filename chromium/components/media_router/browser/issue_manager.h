@@ -12,11 +12,11 @@
 
 #include "base/cancelable_callback.h"
 #include "base/containers/small_map.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/media_router/browser/issues_observer.h"
 #include "components/media_router/common/issue.h"
 
@@ -100,7 +100,7 @@ class IssueManager {
   base::ObserverList<IssuesObserver>::Unchecked issues_observers_;
 
   // Pointer to the top Issue in |issues_|, or |nullptr| if there are no issues.
-  const Issue* top_issue_;
+  raw_ptr<const Issue> top_issue_;
 
   // The SingleThreadTaskRunner that this IssueManager runs on, and is used
   // for posting issue auto-dismissal tasks.

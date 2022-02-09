@@ -10,8 +10,6 @@
 
 namespace web_app {
 
-namespace {
-
 // A hard coded list of features available for externally installed apps to
 // gate their installation on via their config file settings. See
 // |kFeatureName| in preinstalled_web_app_utils.h.
@@ -23,12 +21,14 @@ constexpr const base::Feature* kPreinstalledAppInstallFeatures[] = {
 
 bool g_always_enabled_for_testing = false;
 
-#if defined(OS_CHROMEOS)
+namespace {
+
+// Checks if the feature being passed matches any of the migration features
+// above.
 bool IsMigrationFeature(const base::Feature& feature) {
   return &feature == &kMigrateDefaultChromeAppToWebAppsGSuite ||
          &feature == &kMigrateDefaultChromeAppToWebAppsNonGSuite;
 }
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 
@@ -57,7 +57,7 @@ const base::Feature kMigrateDefaultChromeAppToWebAppsNonGSuite{
 // Enables installing the PWA version of the chrome os calculator instead of the
 // deprecated chrome app.
 const base::Feature kDefaultCalculatorWebApp{"DefaultCalculatorWebApp",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Whether to allow the MigrateDefaultChromeAppToWebAppsGSuite and
@@ -96,6 +96,17 @@ bool IsPreinstalledAppInstallFeatureEnabled(base::StringPiece feature_name,
       return base::FeatureList::IsEnabled(*feature);
   }
 
+  return false;
+}
+
+bool IsAnyChromeAppToWebAppMigrationEnabled(const Profile& profile) {
+  for (const base::Feature* feature : kPreinstalledAppInstallFeatures) {
+    if (IsMigrationFeature(*feature)) {
+      if (IsPreinstalledAppInstallFeatureEnabled(feature->name, profile)) {
+        return true;
+      }
+    }
+  }
   return false;
 }
 

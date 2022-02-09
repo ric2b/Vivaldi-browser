@@ -5,24 +5,27 @@ if (is_android) {
 }
 
 static_library("menus") {
-  sources = [
-    "context_menu_service_factory.cc",
-    "context_menu_service_factory.h",
-    "main_menu_service_factory.cc",
-    "main_menu_service_factory.h",
-    "menu_codec.cc",
-    "menu_codec.h",
-    "menu_model.cc",
-    "menu_model.h",
-    "menu_node.cc",
-    "menu_node.h",
-    "menu_storage.cc",
-    "menu_storage.h",
-    "menu_upgrade.cc",
-    "menu_upgrade.h",
-    "menu_model_loaded_observer.cc",
-    "menu_model_loaded_observer.h",
-  ]
+  sources = []
+  if (!is_android) {
+    sources += [
+      "context_menu_service_factory.cc",
+      "context_menu_service_factory.h",
+      "main_menu_service_factory.cc",
+      "main_menu_service_factory.h",
+      "menu_codec.cc",
+      "menu_codec.h",
+      "menu_model.cc",
+      "menu_model.h",
+      "menu_node.cc",
+      "menu_node.h",
+      "menu_storage.cc",
+      "menu_storage.h",
+      "menu_upgrade.cc",
+      "menu_upgrade.h",
+      "menu_model_loaded_observer.cc",
+      "menu_model_loaded_observer.h",
+    ]
+  }
   deps = [
     "//base:base",
     "//base:i18n",

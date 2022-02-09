@@ -9,7 +9,6 @@
 
 #include <string_view>
 
-#include "base/macros.h"
 #include "gn/location.h"
 
 class InputFile;
@@ -55,7 +54,8 @@ class CIncludeIterator {
   // beginning of the file) with some exceptions.
   int lines_since_last_include_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(CIncludeIterator);
+  CIncludeIterator(const CIncludeIterator&) = delete;
+  CIncludeIterator& operator=(const CIncludeIterator&) = delete;
 };
 
 #endif  // TOOLS_GN_C_INCLUDE_ITERATOR_H_

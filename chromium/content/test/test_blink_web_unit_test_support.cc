@@ -11,12 +11,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/message_loop/message_pump.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/path_service.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/null_task_runner.h"
 #include "base/threading/platform_thread.h"
@@ -63,6 +62,9 @@ class DummyTaskRunner : public base::SingleThreadTaskRunner {
  public:
   DummyTaskRunner() : thread_id_(base::PlatformThread::CurrentId()) {}
 
+  DummyTaskRunner(const DummyTaskRunner&) = delete;
+  DummyTaskRunner& operator=(const DummyTaskRunner&) = delete;
+
   bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
@@ -85,17 +87,15 @@ class DummyTaskRunner : public base::SingleThreadTaskRunner {
   ~DummyTaskRunner() override {}
 
   base::PlatformThreadId thread_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(DummyTaskRunner);
 };
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 #if defined(USE_V8_CONTEXT_SNAPSHOT)
-constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-    gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+constexpr gin::V8SnapshotFileType kSnapshotType =
+    gin::V8SnapshotFileType::kWithAdditionalContext;
 #else
-constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-    gin::V8Initializer::V8SnapshotFileType::kDefault;
+constexpr gin::V8SnapshotFileType kSnapshotType =
+    gin::V8SnapshotFileType::kDefault;
 #endif
 #endif
 
@@ -115,6 +115,9 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport(
   gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
 #endif
 
+  // Test shell always exposes the GC.
+  std::string v8_flags("--expose-gc");
+
   blink::Platform::InitializeBlink();
   scoped_refptr<base::SingleThreadTaskRunner> dummy_task_runner;
   std::unique_ptr<base::ThreadTaskRunnerHandle> dummy_task_runner_handle;
@@ -131,6 +134,8 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport(
     dummy_task_runner = base::MakeRefCounted<base::NullTaskRunner>();
     dummy_task_runner_handle =
         std::make_unique<base::ThreadTaskRunnerHandle>(dummy_task_runner);
+    // Force V8 to run single threaded.
+    v8_flags += " --single-threaded";
   } else {
     DCHECK_EQ(scheduler_type, SchedulerType::kRealScheduler);
     main_thread_scheduler_ =
@@ -142,6 +147,9 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport(
 
   // Initialize mojo firstly to enable Blink initialization to use it.
   InitializeMojo();
+
+  // Set V8 flags.
+  v8::V8::SetFlagsFromString(v8_flags.c_str(), v8_flags.size());
 
   mojo::BinderMap binders;
   blink::Initialize(this, &binders, main_thread_scheduler_.get());
@@ -158,10 +166,6 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport(
 
   // Initialize libraries for media.
   media::InitializeMediaLibrary();
-
-  // Test shell always exposes the GC.
-  std::string flags("--expose-gc");
-  v8::V8::SetFlagsFromString(flags.c_str(), flags.size());
 }
 
 TestBlinkWebUnitTestSupport::~TestBlinkWebUnitTestSupport() {

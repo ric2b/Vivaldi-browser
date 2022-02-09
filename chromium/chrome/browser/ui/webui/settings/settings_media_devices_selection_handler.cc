@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -70,11 +69,11 @@ void MediaDevicesSelectionHandler::OnUpdateVideoDevices(
 void MediaDevicesSelectionHandler::GetDefaultCaptureDevices(
     const base::ListValue* args) {
   DCHECK_EQ(1U, args->GetList().size());
-  std::string type;
-  if (!args->GetString(0, &type)) {
+  if (!args->GetList()[0].is_string()) {
     NOTREACHED();
     return;
   }
+  const std::string& type = args->GetList()[0].GetString();
   DCHECK(!type.empty());
 
   if (type == kAudio)
@@ -86,11 +85,12 @@ void MediaDevicesSelectionHandler::GetDefaultCaptureDevices(
 void MediaDevicesSelectionHandler::SetDefaultCaptureDevice(
     const base::ListValue* args) {
   DCHECK_EQ(2U, args->GetList().size());
-  std::string type, device;
-  if (!(args->GetString(0, &type) && args->GetString(1, &device))) {
+  if (!args->GetList()[0].is_string() || !args->GetList()[1].is_string()) {
     NOTREACHED();
     return;
   }
+  const std::string& type = args->GetList()[0].GetString();
+  const std::string& device = args->GetList()[1].GetString();
 
   DCHECK(!type.empty());
   DCHECK(!device.empty());

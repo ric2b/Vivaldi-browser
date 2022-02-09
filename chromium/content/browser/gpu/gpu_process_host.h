@@ -14,7 +14,6 @@
 
 #include "base/atomicops.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -68,6 +67,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   CONTENT_EXPORT static GpuProcessHost* Get(
       GpuProcessKind kind = GPU_PROCESS_KIND_SANDBOXED,
       bool force_create = true);
+
+  GpuProcessHost(const GpuProcessHost&) = delete;
+  GpuProcessHost& operator=(const GpuProcessHost&) = delete;
 
   // Returns whether there is an active GPU process or not.
   static void GetHasGpuProcess(base::OnceCallback<void(bool)> callback);
@@ -266,8 +268,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<GpuProcessHost> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(GpuProcessHost);
 };
 
 }  // namespace content

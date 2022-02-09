@@ -16,13 +16,13 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/tick_clock.h"
@@ -130,6 +130,8 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       const base::TickClock* tick_clock);
 
+  base::WeakPtr<Core> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
+
  private:
   // webrtc::DesktopCapturer::Callback interface.
   // A side-effect of this method is to schedule the next frame.
@@ -182,7 +184,7 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
   // be returned to the caller directly then this is NULL.
   std::unique_ptr<webrtc::DesktopFrame> output_frame_;
 
-  const base::TickClock* tick_clock_ = nullptr;
+  raw_ptr<const base::TickClock> tick_clock_ = nullptr;
 
   // Timer used to capture the frame.
   std::unique_ptr<base::OneShotTimer> capture_timer_;
@@ -589,9 +591,8 @@ void DesktopCaptureDevice::AllocateAndStart(
     const media::VideoCaptureParams& params,
     std::unique_ptr<Client> client) {
   thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&Core::AllocateAndStart, base::Unretained(core_.get()),
-                     params, std::move(client)));
+      FROM_HERE, base::BindOnce(&Core::AllocateAndStart, core_->GetWeakPtr(),
+                                params, std::move(client)));
 }
 
 void DesktopCaptureDevice::StopAndDeAllocate() {
@@ -611,7 +612,7 @@ void DesktopCaptureDevice::SetNotificationWindowId(
     return;
   thread_.task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&Core::SetNotificationWindowId,
-                                base::Unretained(core_.get()), window_id));
+                                core_->GetWeakPtr(), window_id));
 }
 
 DesktopCaptureDevice::DesktopCaptureDevice(

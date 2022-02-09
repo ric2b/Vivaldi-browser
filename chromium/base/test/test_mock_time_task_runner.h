@@ -14,11 +14,11 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/test_pending_task.h"
 #include "base/threading/thread_checker_impl.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -245,7 +245,7 @@ class TestMockTimeTaskRunner : public SingleThreadTaskRunner,
     Time Now() const override;
 
    private:
-    TestMockTimeTaskRunner* task_runner_;
+    raw_ptr<TestMockTimeTaskRunner> task_runner_;
   };
 
   struct TestOrderedPendingTask;

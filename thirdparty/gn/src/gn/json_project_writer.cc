@@ -43,11 +43,9 @@
 
 namespace {
 
-void AddTargetDependencies(const Target* target,
-                           std::set<const Target*>* deps) {
+void AddTargetDependencies(const Target* target, TargetSet* deps) {
   for (const auto& pair : target->GetDeps(Target::DEPS_LINKED)) {
-    if (deps->find(pair.ptr) == deps->end()) {
-      deps->insert(pair.ptr);
+    if (deps->add(pair.ptr)) {
       AddTargetDependencies(pair.ptr, deps);
     }
   }
@@ -71,7 +69,7 @@ bool FilterTargets(const BuildSettings* build_settings,
     }
     commands::FilterTargetsByPatterns(all_targets, filters, targets);
 
-    std::set<const Target*> target_set(targets->begin(), targets->end());
+    TargetSet target_set(targets->begin(), targets->end());
     for (const auto* target : *targets)
       AddTargetDependencies(target, &target_set);
 

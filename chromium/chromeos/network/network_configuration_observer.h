@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/component_export.h"
-#include "base/macros.h"
 
 namespace base {
 class Value;
@@ -19,6 +18,9 @@ namespace chromeos {
 // Observer class for network configuration events (remove only).
 class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConfigurationObserver {
  public:
+  NetworkConfigurationObserver& operator=(const NetworkConfigurationObserver&) =
+      delete;
+
   // Called after a new network configuration is created successfully.
   virtual void OnConfigurationCreated(const std::string& service_path,
                                       const std::string& guid);
@@ -45,9 +47,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConfigurationObserver {
 
  protected:
   virtual ~NetworkConfigurationObserver();
-
- private:
-  DISALLOW_ASSIGN(NetworkConfigurationObserver);
 };
 
 }  // namespace chromeos

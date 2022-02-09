@@ -47,7 +47,8 @@ class ShareServiceUnitTest : public ChromeRenderViewHostTestHarness {
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    share_service_ = std::make_unique<ShareServiceImpl>(*main_rfh());
+    ShareServiceImpl::Create(
+        main_rfh(), share_service_remote_.BindNewPipeAndPassReceiver());
 
 #if defined(OS_CHROMEOS)
     webshare::SharesheetClient::SetSharesheetCallbackForTesting(
@@ -58,19 +59,12 @@ class ShareServiceUnitTest : public ChromeRenderViewHostTestHarness {
         base::BindRepeating(&ShareServiceUnitTest::AcceptShareRequest));
 #endif
 #if defined(OS_WIN)
-    if (!IsSupportedEnvironment())
-      return;
+    if (!webshare::ScopedShareOperationFakeComponents::IsSupportedEnvironment())
+      GTEST_SKIP();
 
     ASSERT_NO_FATAL_FAILURE(scoped_fake_components_.SetUp());
 #endif
   }
-
-#if defined(OS_WIN)
-  bool IsSupportedEnvironment() {
-    return webshare::ScopedShareOperationFakeComponents::
-        IsSupportedEnvironment();
-  }
-#endif
 
   ShareError ShareGeneratedFileData(const std::string& extension,
                                     const std::string& content_type,
@@ -89,7 +83,7 @@ class ShareServiceUnitTest : public ChromeRenderViewHostTestHarness {
 
     ShareError result;
     base::RunLoop run_loop;
-    share_service_->Share(
+    share_service_remote_->Share(
         kTitle, kText, kUrl, std::move(files),
         base::BindLambdaForTesting([&result, &run_loop](ShareError error) {
           result = error;
@@ -167,15 +161,10 @@ class ShareServiceUnitTest : public ChromeRenderViewHostTestHarness {
   webshare::ScopedShareOperationFakeComponents scoped_fake_components_;
 #endif
   base::test::ScopedFeatureList feature_list_;
-  std::unique_ptr<ShareServiceImpl> share_service_;
+  mojo::Remote<blink::mojom::ShareService> share_service_remote_;
 };
 
 TEST_F(ShareServiceUnitTest, FileCount) {
-#if defined(OS_WIN)
-  if (!IsSupportedEnvironment())
-    return;
-#endif
-
   EXPECT_EQ(ShareError::OK, ShareGeneratedFileData(".txt", "text/plain", 1234,
                                                    kMaxSharedFileCount));
   EXPECT_EQ(ShareError::PERMISSION_DENIED,
@@ -216,11 +205,6 @@ TEST_F(ShareServiceUnitTest, DangerousMimeType) {
 }
 
 TEST_F(ShareServiceUnitTest, Multimedia) {
-#if defined(OS_WIN)
-  if (!IsSupportedEnvironment())
-    return;
-#endif
-
   EXPECT_EQ(ShareError::OK, ShareGeneratedFileData(".bmp", "image/bmp"));
   EXPECT_EQ(ShareError::OK, ShareGeneratedFileData(".xbm", "image/x-xbitmap"));
   EXPECT_EQ(ShareError::OK, ShareGeneratedFileData(".flac", "audio/flac"));
@@ -228,11 +212,6 @@ TEST_F(ShareServiceUnitTest, Multimedia) {
 }
 
 TEST_F(ShareServiceUnitTest, PortableDocumentFormat) {
-#if defined(OS_WIN)
-  if (!IsSupportedEnvironment())
-    return;
-#endif
-
   EXPECT_EQ(ShareError::OK, ShareGeneratedFileData(".pdf", "application/pdf"));
 }
 

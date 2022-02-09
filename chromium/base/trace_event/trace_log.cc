@@ -18,6 +18,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/no_destructor.h"
 #include "base/process/process.h"
@@ -159,7 +160,7 @@ class AutoThreadLocalBoolean {
   ~AutoThreadLocalBoolean() { thread_local_boolean_->Set(false); }
 
  private:
-  ThreadLocalBoolean* thread_local_boolean_;
+  raw_ptr<ThreadLocalBoolean> thread_local_boolean_;
 };
 
 // Use this function instead of TraceEventHandle constructor to keep the
@@ -528,7 +529,7 @@ class TraceLog::ThreadLocalEventBuffer
 
   // Since TraceLog is a leaky singleton, trace_log_ will always be valid
   // as long as the thread exists.
-  TraceLog* trace_log_;
+  raw_ptr<TraceLog> trace_log_;
   std::unique_ptr<TraceBufferChunk> chunk_;
   size_t chunk_index_ = 0;
   int generation_;
@@ -1172,7 +1173,20 @@ void TraceLog::SetDisabledWhileLocked(uint8_t modes_to_disable) {
   metadata_events_.clear();
 
   perfetto::TrackEvent::Flush();
-  tracing_session_->StopBlocking();
+  // If the current thread has an active task runner, allow nested tasks to run
+  // while stopping the session. This is needed by some tests, e.g., to allow
+  // data sources to properly flush themselves.
+  if (ThreadTaskRunnerHandle::IsSet()) {
+    RunLoop stop_loop(RunLoop::Type::kNestableTasksAllowed);
+    auto quit_closure = stop_loop.QuitClosure();
+    tracing_session_->SetOnStopCallback(
+        [&quit_closure] { quit_closure.Run(); });
+    tracing_session_->Stop();
+    AutoUnlock unlock(lock_);
+    stop_loop.Run();
+  } else {
+    tracing_session_->StopBlocking();
+  }
 #else   // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
   if (!(enabled_modes_ & modes_to_disable))
     return;
@@ -1268,6 +1282,25 @@ bool TraceLog::HasAsyncEnabledStateObserver(
     AsyncEnabledStateObserver* listener) const {
   AutoLock lock(observers_lock_);
   return Contains(async_observers_, listener);
+}
+
+void TraceLog::AddIncrementalStateObserver(IncrementalStateObserver* listener) {
+  AutoLock lock(observers_lock_);
+  incremental_state_observers_.push_back(listener);
+}
+
+void TraceLog::RemoveIncrementalStateObserver(
+    IncrementalStateObserver* listener) {
+  AutoLock lock(observers_lock_);
+  incremental_state_observers_.erase(
+      ranges::remove(incremental_state_observers_, listener),
+      incremental_state_observers_.end());
+}
+
+void TraceLog::OnIncrementalStateCleared() {
+  AutoLock lock(observers_lock_);
+  for (IncrementalStateObserver* observer : incremental_state_observers_)
+    observer->OnIncrementalStateCleared();
 }
 
 TraceLogStatus TraceLog::GetStatus() const {
@@ -2217,10 +2250,12 @@ void TraceLog::set_process_name(const std::string& process_name) {
     process_name_ = process_name;
   }
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-  auto track = perfetto::ProcessTrack::Current();
-  auto desc = track.Serialize();
-  desc.mutable_process()->set_process_name(process_name);
-  perfetto::TrackEvent::SetTrackDescriptor(track, std::move(desc));
+  if (perfetto::Tracing::IsInitialized()) {
+    auto track = perfetto::ProcessTrack::Current();
+    auto desc = track.Serialize();
+    desc.mutable_process()->set_process_name(process_name);
+    perfetto::TrackEvent::SetTrackDescriptor(track, std::move(desc));
+  }
 #endif
 }
 

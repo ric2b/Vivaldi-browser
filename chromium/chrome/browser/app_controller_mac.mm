@@ -19,7 +19,6 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_objc_class_swizzler.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
 #include "base/scoped_multi_source_observation.h"
@@ -86,6 +85,8 @@
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
+#include "chrome/browser/ui/startup/startup_tab.h"
+#include "chrome/browser/ui/startup/startup_types.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_shortcut_mac.h"
@@ -320,7 +321,6 @@ void FocusWindowSetOnCurrentSpace(const std::set<gfx::NativeWindow>& windows) {
   // TODO(davidben): To limit those cases, consider preferentially
   // deminiaturizing a window on the current space.
   NSWindow* frontmost_window = nil;
-  NSWindow* frontmost_window_all_spaces = nil;
   NSWindow* frontmost_miniaturized_window = nil;
   bool all_miniaturized = true;
   for (NSWindow* win in [[NSApp orderedWindows] reverseObjectEnumerator]) {
@@ -330,7 +330,6 @@ void FocusWindowSetOnCurrentSpace(const std::set<gfx::NativeWindow>& windows) {
       frontmost_miniaturized_window = win;
     } else if ([win isVisible]) {
       all_miniaturized = false;
-      frontmost_window_all_spaces = win;
       if ([win isOnActiveSpace]) {
         // Raise the old |frontmost_window| (if any). The topmost |win| will be
         // raised with makeKeyAndOrderFront: below.
@@ -1017,7 +1016,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     _localPrefRegistrar.Add(
         prefs::kAllowFileSelectionDialogs,
         base::BindRepeating(
-            &chrome::BrowserCommandController::UpdateOpenFileState,
+            [](CommandUpdater* commandUpdater) {
+              bool enabled = g_browser_process->local_state()->GetBoolean(
+                  prefs::kAllowFileSelectionDialogs);
+              commandUpdater->UpdateCommandEnabled(IDC_OPEN_FILE, enabled);
+            },
             _menuState.get()));
   }
 
@@ -1730,7 +1733,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
       SessionService* sessionService =
           SessionServiceFactory::GetForProfileForSessionRestore(lastProfile);
       if (sessionService &&
-          sessionService->RestoreIfNecessary(std::vector<GURL>(),
+          sessionService->RestoreIfNecessary(StartupTabs(),
                                              /* restore_apps */ false))
         return NO;
     }
@@ -2442,16 +2445,17 @@ void OpenUrlsInBrowserWithProfile(const std::vector<GURL>& urls,
     startupIndex = browser->tab_strip_model()->active_index();
     startupContent = browser->tab_strip_model()->GetActiveWebContents();
   } else if (!browser) {
-    if (!browser && vivaldi::IsVivaldiRunning()) {
+    if (vivaldi::IsVivaldiRunning()) {
       // We get here before the app is run, so we dont have any browser.
       base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
       chrome::startup::IsFirstRun first_run = first_run::IsChromeFirstRun() ?
-      chrome::startup::IS_FIRST_RUN : chrome::startup::IS_NOT_FIRST_RUN;
+          chrome::startup::IsFirstRun::kYes : chrome::startup::IsFirstRun::kNo;
       StartupBrowserCreatorImpl launch(base::FilePath(),
                                       dummy,
                                       first_run);
 
-      launch.Launch(profile, first_run, std::make_unique<LaunchModeRecorder>());
+      launch.Launch(profile, chrome::startup::IsProcessStartup::kNo,
+                    std::make_unique<LaunchModeRecorder>());
       return;
     }
 
@@ -2466,10 +2470,11 @@ void OpenUrlsInBrowserWithProfile(const std::vector<GURL>& urls,
   // best to bottleneck the openings through that for uniform handling.
   base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
   chrome::startup::IsFirstRun first_run =
-      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                    : chrome::startup::IS_NOT_FIRST_RUN;
+      first_run::IsChromeFirstRun() ? chrome::startup::IsFirstRun::kYes
+                                    : chrome::startup::IsFirstRun::kNo;
   StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
-  launch.OpenURLsInBrowser(browser, false, urls);
+  launch.OpenURLsInBrowser(browser, chrome::startup::IsProcessStartup::kNo,
+                           urls);
 
   // This NTP check should be replaced once https://crbug.com/624410 is fixed.
   if (startupIndex != TabStripModel::kNoTab &&

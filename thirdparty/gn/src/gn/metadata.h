@@ -84,7 +84,8 @@ class Metadata {
                                           const Value& value,
                                           Err* err) const;
 
-  DISALLOW_COPY_AND_ASSIGN(Metadata);
+  Metadata(const Metadata&) = delete;
+  Metadata& operator=(const Metadata&) = delete;
 };
 
 #endif  // TOOLS_GN_METADATA_H_

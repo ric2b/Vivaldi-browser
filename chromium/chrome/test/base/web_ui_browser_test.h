@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/webui/web_ui_test_handler.h"
 #include "chrome/test/base/devtools_listener.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -125,12 +126,6 @@ class BaseWebUIBrowserTest : public JavaScriptBrowserTest {
   // handler mocking.
   virtual void BrowsePreload(const GURL& browse_to);
 
-  // Called by javascript-generated test bodies to browse to a page and preload
-  // the javascript for the given |preload_test_fixture| and
-  // |preload_test_name|. chrome.send will be overridden to allow javascript
-  // handler mocking.
-  void BrowsePrintPreload(const GURL& browse_to);
-
  protected:
   // URL to dummy WebUI page for testing framework.
   static const std::string kDummyURL;
@@ -213,7 +208,7 @@ class BaseWebUIBrowserTest : public JavaScriptBrowserTest {
 
   // When this is non-NULL, this is The WebUI instance used for testing.
   // Otherwise the selected tab's web_ui is used.
-  content::WebUI* override_selected_web_ui_ = nullptr;
+  raw_ptr<content::WebUI> override_selected_web_ui_ = nullptr;
 
   std::unique_ptr<TestChromeWebUIControllerFactory> test_factory_;
   std::unique_ptr<content::ScopedWebUIControllerFactoryRegistration>
@@ -231,7 +226,7 @@ class WebUIBrowserTest : public BaseWebUIBrowserTest {
 
  private:
   // Owned by |test_handler_| in BaseWebUIBrowserTest.
-  WebUITestMessageHandler* const test_message_handler_;
+  const raw_ptr<WebUITestMessageHandler> test_message_handler_;
 };
 
 #endif  // CHROME_TEST_BASE_WEB_UI_BROWSER_TEST_H_

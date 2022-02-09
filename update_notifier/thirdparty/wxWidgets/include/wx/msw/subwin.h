@@ -4,7 +4,7 @@
 // Author:      Vadim Zeitlin
 // Modified by:
 // Created:     2004-12-11
-// Copyright:   (c) 2004 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2004 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -113,16 +113,25 @@ public:
     // set font for all windows
     void SetFont(const wxFont& font)
     {
-        HFONT hfont = GetHfontOf(font);
-        wxCHECK_RET( hfont, wxT("invalid font") );
-
         for ( size_t n = 0; n < m_count; n++ )
         {
             if ( m_hwnds[n] )
             {
-                ::SendMessage(m_hwnds[n], WM_SETFONT, (WPARAM)hfont, 0);
+                wxSetWindowFont(m_hwnds[n], font);
 
                 // otherwise the window might not be redrawn correctly
+                ::InvalidateRect(m_hwnds[n], NULL, FALSE /* don't erase bg */);
+            }
+        }
+    }
+
+    // add all windows to update region to force redraw
+    void Refresh()
+    {
+        for ( size_t n = 0; n < m_count; n++ )
+        {
+            if ( m_hwnds[n] )
+            {
                 ::InvalidateRect(m_hwnds[n], NULL, FALSE /* don't erase bg */);
             }
         }
@@ -212,7 +221,29 @@ private:
             subwins->SetFont(font);                                           \
                                                                               \
         return true;                                                          \
-    }
+    }                                                                         \
+                                                                              \
+    bool cname::SetForegroundColour(const wxColour& colour)                   \
+    {                                                                         \
+        if ( !base::SetForegroundColour(colour) )                             \
+            return false;                                                     \
+                                                                              \
+        if ( subwins )                                                        \
+            subwins->Refresh();                                               \
+                                                                              \
+        return true;                                                          \
+    }                                                                         \
+                                                                              \
+    bool cname::SetBackgroundColour(const wxColour& colour)                   \
+    {                                                                         \
+        if ( !base::SetBackgroundColour(colour) )                             \
+            return false;                                                     \
+                                                                              \
+        if ( subwins )                                                        \
+            subwins->Refresh();                                               \
+                                                                              \
+        return true;                                                          \
+    }                                                                         \
 
 
 #endif // _WX_MSW_SUBWIN_H_

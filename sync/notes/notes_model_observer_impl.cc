@@ -86,8 +86,7 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   // the tombstone was not committed yet. In that case the existing entity
   // should be updated.
   const SyncedNoteTracker::Entity* entity =
-      note_tracker_->GetEntityForClientTagHash(
-          SyncedNoteTracker::GetClientTagHashFromGUID(node->guid()));
+      note_tracker_->GetEntityForGUID(node->guid());
   const base::Time creation_time = base::Time::Now();
   if (entity) {
     // If there is a tracked entity with the same client tag hash (effectively

@@ -13,6 +13,7 @@
 
 #include "base/command_line.h"
 #include "base/json/values_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -122,9 +123,9 @@ class AppPrefs {
 
  private:
   const GURL& origin_;
-  HostContentSettingsMap* settings_ = nullptr;
+  raw_ptr<HostContentSettingsMap> settings_ = nullptr;
   std::unique_ptr<base::DictionaryValue> origin_dict_;
-  base::Value* dict_ = nullptr;
+  raw_ptr<base::Value> dict_ = nullptr;
 };
 
 // Queries variations for the number of days which dismissing and ignoring the
@@ -403,7 +404,7 @@ bool AppBannerSettingsHelper::WasLaunchedRecently(
     base::Time now) {
   HostContentSettingsMap* settings =
       permissions::PermissionsClient::Get()->GetSettingsMap(browser_context);
-  std::unique_ptr<base::DictionaryValue> origin_dict =
+  std::unique_ptr<base::Value> origin_dict =
       GetOriginAppBannerData(settings, origin_url);
 
   if (!origin_dict)
@@ -414,13 +415,11 @@ bool AppBannerSettingsHelper::WasLaunchedRecently(
   // homescreen recently, return true.
   base::TimeDelta recent_last_launch_in_days =
       base::Days(kRecentLastLaunchInDays);
-  for (base::DictionaryValue::Iterator it(*origin_dict); !it.IsAtEnd();
-       it.Advance()) {
-    if (it.value().is_dict()) {
-      const base::DictionaryValue* value;
-      it.value().GetAsDictionary(&value);
+  for (auto path_dicts : origin_dict->DictItems()) {
+    if (path_dicts.second.is_dict()) {
+      base::Value* value = &path_dicts.second;
 
-      if (it.key() == kInstantAppsKey)
+      if (path_dicts.first == kInstantAppsKey)
         continue;
 
       absl::optional<double> internal_time = value->FindDoubleKey(

@@ -3,7 +3,7 @@
 #include "components/theme/vivaldi_theme_download.h"
 
 #include "base/files/file_util.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "content/public/browser/browser_context.h"

@@ -8,6 +8,8 @@
 
 #include <algorithm>
 
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -46,6 +48,7 @@ AXNode::AXNode(AXNode::OwnerTree* tree,
 AXNode::~AXNode() = default;
 
 AXNodeData&& AXNode::TakeData() {
+  has_data_been_taken_ = true;
   return std::move(data_);
 }
 
@@ -162,7 +165,25 @@ AXNode* AXNode::GetParentCrossingTreeBoundary() const {
 }
 
 AXNode* AXNode::GetUnignoredParent() const {
-  DCHECK(!tree_->GetTreeUpdateInProgressState());
+  // TODO(crbug.com/1237353): The following bailout is to test a hypothesis that
+  // this function is sometimes called while a tree update is in progress or
+  // when data_ isn't valid, which may be the cause of the crash detailed in
+  // crbug.com/1237353. Once this hypothesis has been verified, replace the
+  // bailout with a fix, which ideally should not call this function under
+  // the circumstances hypothesized. Also, add back in the following line:
+  // DCHECK(!tree_->GetTreeUpdateInProgressState());
+  if (tree_->GetTreeUpdateInProgressState() || is_data_still_uninitialized_ ||
+      has_data_been_taken_) {
+    static auto* const crash_key = base::debug::AllocateCrashKeyString(
+        "ax_node_err", base::debug::CrashKeySize::Size64);
+    std::ostringstream error;
+    error << "dataUninitialized=" << is_data_still_uninitialized_
+          << " dataTaken=" << has_data_been_taken_
+          << " treeUpdating=" << tree_->GetTreeUpdateInProgressState();
+    base::debug::SetCrashKeyString(crash_key, error.str());
+    base::debug::DumpWithoutCrashing();
+    return nullptr;
+  }
   AXNode* unignored_parent = GetParent();
   while (unignored_parent && unignored_parent->IsIgnored())
     unignored_parent = unignored_parent->GetParent();
@@ -641,6 +662,8 @@ bool AXNode::IsLineBreak() const {
 
 void AXNode::SetData(const AXNodeData& src) {
   data_ = src;
+  is_data_still_uninitialized_ = false;
+  has_data_been_taken_ = false;
 }
 
 void AXNode::SetLocation(AXNodeID offset_container_id,
@@ -692,48 +715,6 @@ bool AXNode::IsDescendantOfCrossingTreeBoundary(const AXNode* ancestor) const {
   if (const AXNode* parent = GetParentCrossingTreeBoundary())
     return parent->IsDescendantOfCrossingTreeBoundary(ancestor);
   return false;
-}
-
-std::vector<int> AXNode::GetOrComputeLineStartOffsets() {
-  DCHECK(!tree_->GetTreeUpdateInProgressState());
-  std::vector<int> line_offsets;
-  if (GetIntListAttribute(ax::mojom::IntListAttribute::kLineStarts,
-                          &line_offsets)) {
-    return line_offsets;
-  }
-
-  int start_offset = 0;
-  ComputeLineStartOffsets(&line_offsets, &start_offset);
-  data_.AddIntListAttribute(ax::mojom::IntListAttribute::kLineStarts,
-                            line_offsets);
-  return line_offsets;
-}
-
-void AXNode::ComputeLineStartOffsets(std::vector<int>* line_offsets,
-                                     int* start_offset) const {
-  DCHECK(!tree_->GetTreeUpdateInProgressState());
-  DCHECK(line_offsets);
-  DCHECK(start_offset);
-  for (auto iter = AllChildrenCrossingTreeBoundaryBegin();
-       iter != AllChildrenCrossingTreeBoundaryEnd(); ++iter) {
-    if (iter->GetChildCountCrossingTreeBoundary()) {
-      iter->ComputeLineStartOffsets(line_offsets, start_offset);
-      continue;
-    }
-
-    // Don't report if the first piece of text starts a new line or not.
-    if (*start_offset &&
-        !iter->HasIntAttribute(ax::mojom::IntAttribute::kPreviousOnLineId)) {
-      // If there are multiple objects with an empty accessible label at the
-      // start of a line, only include a single line start offset.
-      if (line_offsets->empty() || line_offsets->back() != *start_offset)
-        line_offsets->push_back(*start_offset);
-    }
-
-    std::u16string text =
-        iter->GetString16Attribute(ax::mojom::StringAttribute::kName);
-    *start_offset += static_cast<int>(text.length());
-  }
 }
 
 SkColor AXNode::ComputeColor() const {
@@ -791,20 +772,47 @@ bool AXNode::GetString16Attribute(ax::mojom::StringAttribute attribute,
   return false;
 }
 
+bool AXNode::HasInheritedStringAttribute(
+    ax::mojom::StringAttribute attribute) const {
+  for (const AXNode* current_node = this; current_node;
+       current_node = current_node->GetParent()) {
+    if (current_node->HasStringAttribute(attribute))
+      return true;
+  }
+  return false;
+}
+
 const std::string& AXNode::GetInheritedStringAttribute(
     ax::mojom::StringAttribute attribute) const {
-  const AXNode* current_node = this;
-  do {
+  for (const AXNode* current_node = this; current_node;
+       current_node = current_node->GetParent()) {
     if (current_node->HasStringAttribute(attribute))
       return current_node->GetStringAttribute(attribute);
-    current_node = current_node->GetParent();
-  } while (current_node);
+  }
   return base::EmptyString();
 }
 
 std::u16string AXNode::GetInheritedString16Attribute(
     ax::mojom::StringAttribute attribute) const {
   return base::UTF8ToUTF16(GetInheritedStringAttribute(attribute));
+}
+
+bool AXNode::HasIntListAttribute(ax::mojom::IntListAttribute attribute) const {
+  return GetComputedNodeData().HasOrCanComputeAttribute(attribute);
+}
+
+const std::vector<int32_t>& AXNode::GetIntListAttribute(
+    ax::mojom::IntListAttribute attribute) const {
+  return GetComputedNodeData().GetOrComputeAttribute(attribute);
+}
+
+bool AXNode::GetIntListAttribute(ax::mojom::IntListAttribute attribute,
+                                 std::vector<int32_t>* value) const {
+  if (GetComputedNodeData().HasOrCanComputeAttribute(attribute)) {
+    *value = GetComputedNodeData().GetOrComputeAttribute(attribute);
+    return true;
+  }
+  return false;
 }
 
 AXLanguageInfo* AXNode::GetLanguageInfo() const {
@@ -856,16 +864,16 @@ const std::u16string& AXNode::GetHypertext() const {
   hypertext_ = AXHypertext();
 
   // Hypertext is not exposed for descendants of leaf nodes. For such nodes,
-  // their inner text is equivalent to their hypertext. Otherwise, we would
+  // their text content is equivalent to their hypertext. Otherwise, we would
   // never be able to compute equivalent ancestor positions in atomic text
   // fields given an AXPosition on an inline text box descendant, because there
   // is often an ignored generic container between the text descendants and the
   // text field node.
   //
   // For example, look at the following accessibility tree and the text
-  // positions indicated using "<>" symbols in the inner text of every node, and
-  // then imagine what would happen if the generic container was represented by
-  // an "embedded object replacement character" in the text of its text field
+  // positions indicated using "<>" symbols in the text content of every node,
+  // and then imagine what would happen if the generic container was represented
+  // by an "embedded object replacement character" in the text of its text field
   // parent.
   // ++kTextField "Hell<o>" IsLeaf=true
   // ++++kGenericContainer "Hell<o>" ignored IsChildOfLeaf=true
@@ -873,10 +881,10 @@ const std::u16string& AXNode::GetHypertext() const {
   // ++++++++kInlineTextBox "Hell<o>" IsChildOfLeaf=true
 
   if (IsLeaf() || IsChildOfLeaf()) {
-    hypertext_.hypertext = base::UTF8ToUTF16(GetInnerText());
+    hypertext_.hypertext = GetTextContentUTF16();
   } else {
     // Construct the hypertext for this node, which contains the concatenation
-    // of the inner text of this node's textual children, and an "object
+    // of the text content of this node's textual children, and an "object
     // replacement character" for all the other children.
     //
     // Note that the word "hypertext" comes from the IAccessible2 Standard and
@@ -890,7 +898,7 @@ const std::u16string& AXNode::GetHypertext() const {
       // hypertext with the embedded object character. We copy all of their text
       // instead.
       if (iter->IsText()) {
-        hypertext_.hypertext += iter->GetInnerTextUTF16();
+        hypertext_.hypertext += iter->GetTextContentUTF16();
       } else {
         int character_offset = static_cast<int>(hypertext_.hypertext.size());
         auto inserted =
@@ -930,24 +938,24 @@ const AXHypertext& AXNode::GetOldHypertext() const {
   return old_hypertext_;
 }
 
-const std::string& AXNode::GetInnerText() const {
+const std::string& AXNode::GetTextContentUTF8() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
-  return GetComputedNodeData().GetOrComputeInnerTextUTF8();
+  return GetComputedNodeData().GetOrComputeTextContentUTF8();
 }
 
-const std::u16string& AXNode::GetInnerTextUTF16() const {
+const std::u16string& AXNode::GetTextContentUTF16() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
-  return GetComputedNodeData().GetOrComputeInnerTextUTF16();
+  return GetComputedNodeData().GetOrComputeTextContentUTF16();
 }
 
-int AXNode::GetInnerTextLength() const {
+int AXNode::GetTextContentLengthUTF8() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
-  return GetComputedNodeData().GetOrComputeInnerTextLengthUTF8();
+  return GetComputedNodeData().GetOrComputeTextContentLengthUTF8();
 }
 
-int AXNode::GetInnerTextLengthUTF16() const {
+int AXNode::GetTextContentLengthUTF16() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
-  return GetComputedNodeData().GetOrComputeInnerTextLengthUTF16();
+  return GetComputedNodeData().GetOrComputeTextContentLengthUTF16();
 }
 
 std::string AXNode::GetLanguage() const {
@@ -969,14 +977,21 @@ std::string AXNode::GetLanguage() const {
 
 std::string AXNode::GetValueForControl() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
-  if (data().IsTextField())
-    return GetValueForTextField();
+  if (data().IsTextField()) {
+    // Returns the value of a text field. If necessary, computes the value from
+    // the field's internal representation in the accessibility tree, in order
+    // to minimize cross-process communication between the renderer and the
+    // browser processes.
+    return GetStringAttribute(ax::mojom::StringAttribute::kValue);
+  }
+
   if (data().IsRangeValueSupported())
     return GetTextForRangeValue();
   if (GetRole() == ax::mojom::Role::kColorWell)
     return GetValueForColorWell();
   if (!IsControl(GetRole()))
     return std::string();
+
   return GetStringAttribute(ax::mojom::StringAttribute::kValue);
 }
 
@@ -1556,19 +1571,11 @@ std::string AXNode::GetValueForColorWell() const {
                             green * 100 / 255, blue * 100 / 255);
 }
 
-std::string AXNode::GetValueForTextField() const {
-  DCHECK(data().IsTextField());
-  std::string value = GetStringAttribute(ax::mojom::StringAttribute::kValue);
-  // Some screen readers like Jaws and VoiceOver require a value to be set in
-  // text fields with rich content, even though the same information is
-  // available on the children.
-  if (value.empty() && data().IsNonAtomicTextField())
-    return GetInnerText();
-  return value;
-}
-
 bool AXNode::IsIgnored() const {
-  return data().IsIgnored();
+  // If the focus has moved, then it could make a previously ignored node
+  // unignored or vice versa. We never ignore focused nodes otherwise users of
+  // assistive software might be unable to interact with the webpage.
+  return AXTree::ComputeNodeIsIgnored(&tree_->data(), data());
 }
 
 bool AXNode::IsIgnoredForTextNavigation() const {
@@ -1588,14 +1595,7 @@ bool AXNode::IsIgnoredForTextNavigation() const {
 }
 
 bool AXNode::IsInvisibleOrIgnored() const {
-  if (!data().IsInvisibleOrIgnored())
-    return false;
-
-  return !IsFocusedWithinThisTree();
-}
-
-bool AXNode::IsFocusedWithinThisTree() const {
-  return id() == tree_->data().focus_id;
+  return id() != tree_->data().focus_id && (IsIgnored() || data_.IsInvisible());
 }
 
 bool AXNode::IsChildOfLeaf() const {
@@ -1611,10 +1611,10 @@ bool AXNode::IsEmptyLeaf() const {
   if (!IsLeaf())
     return false;
   if (GetUnignoredChildCountCrossingTreeBoundary())
-    return !GetInnerTextLength();
+    return !GetTextContentLengthUTF8();
   // Text exposed by ignored leaf (text) nodes is not exposed to the platforms'
   // accessibility layer, hence such leaf nodes are in effect empty.
-  return IsIgnored() || !GetInnerTextLength();
+  return IsIgnored() || !GetTextContentLengthUTF8();
 }
 
 bool AXNode::IsLeaf() const {
@@ -1688,7 +1688,9 @@ bool AXNode::IsLeaf() const {
       return true;
     case ax::mojom::Role::kCheckBox:
     case ax::mojom::Role::kListBoxOption:
-    case ax::mojom::Role::kMath:  // role="math" is flat, unlike <math>.
+    // role="math" is flat. But always return false for kMathMLMath since the
+    // children of a <math> tag should be exposed to make MathML accessible.
+    case ax::mojom::Role::kMath:
     case ax::mojom::Role::kMenuListOption:
     case ax::mojom::Role::kMenuItem:
     case ax::mojom::Role::kMenuItemCheckBox:

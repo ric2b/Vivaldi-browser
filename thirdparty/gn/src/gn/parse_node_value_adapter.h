@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_PARSE_NODE_VALUE_ADAPTER_H_
 #define TOOLS_GN_PARSE_NODE_VALUE_ADAPTER_H_
 
-#include "base/macros.h"
 #include "gn/value.h"
 
 class ParseNode;
@@ -49,7 +48,8 @@ class ParseNodeValueAdapter {
   const Value* ref_;
   Value temporary_;
 
-  DISALLOW_COPY_AND_ASSIGN(ParseNodeValueAdapter);
+  ParseNodeValueAdapter(const ParseNodeValueAdapter&) = delete;
+  ParseNodeValueAdapter& operator=(const ParseNodeValueAdapter&) = delete;
 };
 
 #endif  // TOOLS_GN_PARSE_NODE_VALUE_ADAPTER_H_

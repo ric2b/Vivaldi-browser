@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -49,13 +50,9 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
 
   // ContentBrowserClient overrides.
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
-      const content::MainFunctionParams& parameters) override;
+      content::MainFunctionParams parameters) override;
   std::string GetApplicationLocale() override;
   std::string GetAcceptLangs(content::BrowserContext* context) override;
-  bool AllowAppCache(const GURL& manifest_url,
-                     const net::SiteForCookies& site_for_cookies,
-                     const absl::optional<url::Origin>& top_frame_origin,
-                     content::BrowserContext* context) override;
   content::AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
       const net::SiteForCookies& site_for_cookies,
@@ -210,7 +207,7 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,
       const content::GlobalRequestID& request_id,
-      bool is_main_frame,
+      bool is_request_for_primary_main_frame,
       const GURL& url,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
@@ -229,6 +226,8 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   bool HasErrorPage(int http_status_code) override;
   bool IsClipboardPasteAllowed(
       content::RenderFrameHost* render_frame_host) override;
+  bool ShouldPreconnectNavigation(
+      content::BrowserContext* browser_context) override;
 
   void CreateFeatureListAndFieldTrials();
 
@@ -241,7 +240,7 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   std::unique_ptr<permissions::BluetoothDelegateImpl> bluetooth_delegate_;
 #endif
 
-  MainParams* params_;
+  raw_ptr<MainParams> params_;
 
   // Local-state is created early on, before BrowserProcess. Ownership moves to
   // BrowserMainParts, then BrowserProcess. BrowserProcess ultimately owns

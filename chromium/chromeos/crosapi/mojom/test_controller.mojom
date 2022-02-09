@@ -5,6 +5,7 @@
 module crosapi.mojom;
 
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "chromeos/crosapi/mojom/app_service_types.mojom";
 
 [Stable, Extensible]
 enum TouchEventType {
@@ -27,11 +28,22 @@ enum OptionalBoolean {
   kTrue,
 };
 
+// Implemented in lacros-chrome.
+// Lets the Ash browser tests that require Lacros to send commands to this
+// lacros-chrome instance.
+[Stable, Uuid="20e7f031-f4e1-4ad9-bd91-ad59eb8b1504"]
+interface StandaloneBrowserTestController {
+  // Installs a test web app in lacros-chrome given a start URL and mode (open
+  // in a tab or window) and returns the ID of the installed app (see
+  // |web_app::GenerateAppId|).
+  InstallWebApp@0(string start_url, WindowMode mode) => (string app_id);
+};
+
 // This interface is implemented by Ash-Chrome.
 // This interface provides tests a mechanism to mutate or query ash.
 // In the future, this interface may merge with an automation or a11y interface.
-// Next version: 7
-// Next method id: 13
+// Next version: 10
+// Next method id: 17
 [Stable, Uuid="1f93f9d7-e466-466c-a675-c21b48cf30d3"]
 interface TestController {
   // Clicks the middle of the window. Assumes that the window exists and is
@@ -67,6 +79,11 @@ interface TestController {
   [MinVersion=2]
   ExitTabletMode@5() => ();
 
+  // Gets the context menu for a shelf item. This assumes the item is already in
+  // the shelf.
+  [MinVersion=7]
+  GetContextMenuForShelfItem@13(string item_id) => (array<string> items);
+
   // Returns the value of the ash::kMinimizeOnBackKey property for the given
   // window.
   // This allows the client (eg lacros) to verify assumptions eg whether
@@ -75,7 +92,7 @@ interface TestController {
   // Note: For simplicity, the return callback is called with `true` in case
   // the property is not set, of the window is not found.
   [MinVersion=4]
-  GetMinimizeOnBackKeyWindowProperty@10(string windiow_id)
+  GetMinimizeOnBackKeyWindowProperty@10(string window_id)
       => (OptionalBoolean value);
 
   // Returns the position of a window's top-left corner in global "screen"
@@ -109,4 +126,18 @@ interface TestController {
   SendTouchEvent@7(string window_id, TouchEventType type, uint8 pointer_id,
                    gfx.mojom.PointF location_in_window) => ();
 
+  // Get the number of open Ash browser windows.
+  [MinVersion=8]
+  GetOpenAshBrowserWindows@14() => (uint32 number);
+
+  // Close all browser windows.
+  // Note: Usually there should be no Ash window open unless the test opened
+  // one.
+  [MinVersion=8]
+  CloseAllBrowserWindows@15() => (bool success);
+
+  // Register a lacros-chrome test controller with ash-chrome to let ash-chrome
+  // send commands to lacros-chrome.
+  [MinVersion=9] RegisterStandaloneBrowserTestController@16(
+      pending_remote<StandaloneBrowserTestController> controller);
 };

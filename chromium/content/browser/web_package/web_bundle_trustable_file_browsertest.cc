@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include "base/files/file_util.h"
+#include "base/memory/raw_ptr.h"
 #include "content/browser/web_package/web_bundle_browsertest_base.h"
+#include "content/browser/web_package/web_bundle_utils.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 
@@ -42,7 +44,7 @@ class InvalidTrustableWebBundleFileUrlBrowserTest : public ContentBrowserTest {
   }
 
  private:
-  ContentBrowserClient* original_client_ = nullptr;
+  raw_ptr<ContentBrowserClient> original_client_ = nullptr;
   web_bundle_browsertest_utils::TestBrowserClient browser_client_;
 };
 
@@ -89,14 +91,14 @@ class WebBundleTrustableFileBrowserTest
                                 contents.size()) > 0);
   }
 
-  void WriteCommonWebBundleFile() {
+  void WriteCommonWebBundleFile(std::string version_suffix = "_b2") {
     std::string contents;
     {
       base::ScopedAllowBlockingForTesting allow_blocking;
-      ASSERT_TRUE(
-          base::ReadFileToString(web_bundle_browsertest_utils::GetTestDataPath(
-                                     "web_bundle_browsertest.wbn"),
-                                 &contents));
+      ASSERT_TRUE(base::ReadFileToString(
+          web_bundle_browsertest_utils::GetTestDataPath(
+              "web_bundle_browsertest" + version_suffix + ".wbn"),
+          &contents));
     }
     WriteWebBundleFile(contents);
   }
@@ -141,7 +143,14 @@ class WebBundleTrustableFileBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_P(WebBundleTrustableFileBrowserTest,
-                       TrustableWebBundleFile) {
+                       TrustableWebBundleFileB1) {
+  WriteCommonWebBundleFile("_b1");
+  NavigateToBundleAndWaitForReady(
+      test_data_url(), GURL(web_bundle_browsertest_utils::kTestPageUrl));
+}
+
+IN_PROC_BROWSER_TEST_P(WebBundleTrustableFileBrowserTest,
+                       TrustableWebBundleFileB2) {
   WriteCommonWebBundleFile();
   NavigateToBundleAndWaitForReady(
       test_data_url(), GURL(web_bundle_browsertest_utils::kTestPageUrl));
@@ -278,6 +287,30 @@ IN_PROC_BROWSER_TEST_P(WebBundleTrustableFileBrowserTest, WindowOpen) {
       shell()->web_contents(), primary_url_origin, third_party_origin,
       &web_bundle_browsertest_utils::WindowOpenAndWaitForMessage,
       true /* support_third_party_wbn_page */);
+}
+
+// TODO(https://crbug.com/1225178): flaky
+#if defined(OS_LINUX)
+#define MAYBE_NoPrimaryURLFound DISABLED_NoPrimaryURLFound
+#else
+#define MAYBE_NoPrimaryURLFound NoPrimaryURLFound
+#endif
+IN_PROC_BROWSER_TEST_P(WebBundleTrustableFileBrowserTest,
+                       MAYBE_NoPrimaryURLFound) {
+  std::string contents;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::ReadFileToString(
+        web_bundle_browsertest_utils::GetTestDataPath("same_origin_b2.wbn"),
+        &contents));
+  }
+  WriteWebBundleFile(contents);
+
+  std::string console_message = web_bundle_browsertest_utils::
+      ExpectNavigationFailureAndReturnConsoleMessage(shell()->web_contents(),
+                                                     test_data_url());
+
+  EXPECT_EQ(web_bundle_utils::kNoPrimaryUrlErrorMessage, console_message);
 }
 
 INSTANTIATE_TEST_SUITE_P(WebBundleTrustableFileBrowserTest,

@@ -7,7 +7,13 @@
 
 #include <string>
 
+#include "third_party/cast_core/public/src/proto/common/application_config.pb.h"
 #include "third_party/cast_core/public/src/proto/runtime/runtime_service.grpc.pb.h"
+#include "url/gurl.h"
+
+namespace url_rewrite {
+class UrlRequestRewriteRulesManager;
+}
 
 namespace chromecast {
 
@@ -21,19 +27,30 @@ class RuntimeApplication {
   virtual ~RuntimeApplication() = 0;
 
   // NOTE: These fields are the empty string until after Load().
-  const std::string& app_id() const { return app_id_; }
+  const cast::common::ApplicationConfig& app_config() const {
+    return app_config_;
+  }
+
+  // NOTE: These fields are the empty string until after Load().
   const std::string& cast_session_id() const { return cast_session_id_; }
-  const std::string& display_name() const { return display_name_; }
 
   // NOTE: This is the empty string until after Launch().
   const std::string& cast_media_service_grpc_endpoint() const {
     return cast_media_service_grpc_endpoint_;
   }
 
-  // Called before Launch() to perform any pre-launch loading that is necessary.
-  // This should return true if the load was successful and it's valid to call
-  // Launch, false otherwise.  If Load fails, |this| should be destroyed since
-  // it's not necessarily valid to retry Load with a new |request|.
+  // NOTE: This is the empty string until after Launch().
+  const GURL& app_url() const { return app_url_; }
+
+  // NOTE: These fields are the empty string until after Load().
+  virtual url_rewrite::UrlRequestRewriteRulesManager*
+  GetUrlRewriteRulesManager() = 0;
+
+  // Called before Launch() to perform any pre-launch loading that is
+  // necessary. This should return true if the load was successful and it's
+  // valid to call Launch, false otherwise.  If Load fails, |this| should be
+  // destroyed since it's not necessarily valid to retry Load with a new
+  // |request|.
   virtual bool Load(const cast::runtime::LoadApplicationRequest& request) = 0;
 
   // Called to launch the application.  The application will indicate that it is
@@ -43,14 +60,12 @@ class RuntimeApplication {
       const cast::runtime::LaunchApplicationRequest& request) = 0;
 
  protected:
-  void set_app_id(std::string app_id) { app_id_ = std::move(app_id); }
+  void set_application_config(cast::common::ApplicationConfig app_config) {
+    app_config_ = std::move(app_config);
+  }
 
   void set_cast_session_id(std::string cast_session_id) {
     cast_session_id_ = std::move(cast_session_id);
-  }
-
-  void set_display_name(std::string display_name) {
-    app_id_ = std::move(display_name);
   }
 
   void set_cast_media_service_grpc_endpoint(
@@ -59,11 +74,13 @@ class RuntimeApplication {
         std::move(cast_media_service_grpc_endpoint);
   }
 
+  void set_app_url(GURL app_url) { app_url_ = std::move(app_url); }
+
  private:
-  std::string app_id_;
+  cast::common::ApplicationConfig app_config_;
   std::string cast_session_id_;
-  std::string display_name_;
   std::string cast_media_service_grpc_endpoint_;
+  GURL app_url_;
 };
 
 std::ostream& operator<<(std::ostream& os, const RuntimeApplication& app);

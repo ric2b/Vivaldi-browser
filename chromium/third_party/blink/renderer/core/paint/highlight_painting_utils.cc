@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/highlight_painting_utils.h"
 
-#include "components/shared_highlighting/core/common/text_fragments_constants.h"
+#include "components/shared_highlighting/core/common/fragment_directives_constants.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_request.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -26,11 +26,6 @@
 namespace blink {
 
 namespace {
-
-bool NodeIsSelectable(const ComputedStyle& style, Node* node) {
-  return !node->IsInert() && !(style.UserSelect() == EUserSelect::kNone &&
-                               style.UserModify() == EUserModify::kReadOnly);
-}
 
 bool NodeIsReplaced(Node* node) {
   return node && node->GetLayoutObject() &&
@@ -202,9 +197,7 @@ scoped_refptr<const ComputedStyle> HighlightPseudoStyle(
     case kPseudoIdGrammarError:
       return style.HighlightData()->GrammarError();
     case kPseudoIdHighlight:
-      // TODO(crbug.com/1024156): implement ::highlight() case
-      return HighlightPseudoStyleWithOriginatingInheritance(node, pseudo,
-                                                            pseudo_argument);
+      return style.HighlightData()->CustomHighlight(pseudo_argument);
     default:
       NOTREACHED();
       return nullptr;
@@ -234,7 +227,7 @@ Color HighlightColor(const Document& document,
   if (pseudo == kPseudoIdSelection) {
     // If the element is unselectable, or we are only painting the selection,
     // don't override the foreground color with the selection foreground color.
-    if ((node && !NodeIsSelectable(style, node)) ||
+    if ((node && !style.IsSelectable()) ||
         (global_paint_flags & kGlobalPaintSelectionDragImageOnly)) {
       return style.VisitedDependentColor(color_property);
     }
@@ -247,7 +240,7 @@ Color HighlightColor(const Document& document,
   if (pseudo_style && (!RuntimeEnabledFeatures::HighlightInheritanceEnabled() ||
                        !UseUaHighlightColors(pseudo, *pseudo_style))) {
     if (!document.InForcedColorsMode() ||
-        pseudo_style->ForcedColorAdjust() == EForcedColorAdjust::kNone) {
+        pseudo_style->ForcedColorAdjust() != EForcedColorAdjust::kAuto) {
       return pseudo_style->VisitedDependentColor(color_property);
     }
     color_scheme = pseudo_style->UsedColorScheme();
@@ -267,7 +260,7 @@ Color HighlightPaintingUtils::HighlightBackgroundColor(
     PseudoId pseudo,
     const AtomicString& pseudo_argument) {
   if (pseudo == kPseudoIdSelection) {
-    if (node && !NodeIsSelectable(style, node))
+    if (node && !style.IsSelectable())
       return Color::kTransparent;
   }
 
@@ -278,7 +271,7 @@ Color HighlightPaintingUtils::HighlightBackgroundColor(
   if (pseudo_style && (!RuntimeEnabledFeatures::HighlightInheritanceEnabled() ||
                        !UseUaHighlightColors(pseudo, *pseudo_style))) {
     if (!document.InForcedColorsMode() ||
-        pseudo_style->ForcedColorAdjust() == EForcedColorAdjust::kNone) {
+        pseudo_style->ForcedColorAdjust() != EForcedColorAdjust::kAuto) {
       Color highlight_color =
           pseudo_style->VisitedDependentColor(GetCSSPropertyBackgroundColor());
       if (pseudo == kPseudoIdSelection && NodeIsReplaced(node)) {
@@ -376,8 +369,14 @@ TextPaintStyle HighlightPaintingUtils::HighlightPaintingStyle(
                           : pseudo_style->VisitedDependentColor(
                                 GetCSSPropertyWebkitTextStrokeColor());
     highlight_style.stroke_width = pseudo_style->TextStrokeWidth();
-    highlight_style.shadow =
-        uses_text_as_clip ? nullptr : pseudo_style->TextShadow();
+    // TODO(crbug.com/1164461) For now, don't paint text shadows for ::highlight
+    // because some details of how this will be standardized aren't yet
+    // settled. Once the final standardization and implementation of highlight
+    // text-shadow behavior is complete, remove the following check.
+    if (pseudo != kPseudoIdHighlight) {
+      highlight_style.shadow =
+          uses_text_as_clip ? nullptr : pseudo_style->TextShadow();
+    }
     highlight_style.selection_text_decoration =
         HighlightTextDecoration(style, *pseudo_style);
   }

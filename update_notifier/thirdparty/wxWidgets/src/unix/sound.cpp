@@ -11,9 +11,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#if defined(__BORLANDC__)
-    #pragma hdrstop
-#endif
 
 #if wxUSE_SOUND
 
@@ -78,15 +75,15 @@ wxSoundData::~wxSoundData()
 class wxSoundBackendNull : public wxSoundBackend
 {
 public:
-    wxString GetName() const { return _("No sound"); }
-    int GetPriority() const { return 0; }
-    bool IsAvailable() const { return true; }
-    bool HasNativeAsyncPlayback() const { return true; }
+    wxString GetName() const wxOVERRIDE { return _("No sound"); }
+    int GetPriority() const wxOVERRIDE { return 0; }
+    bool IsAvailable() const wxOVERRIDE { return true; }
+    bool HasNativeAsyncPlayback() const wxOVERRIDE { return true; }
     bool Play(wxSoundData *WXUNUSED(data), unsigned WXUNUSED(flags),
-              volatile wxSoundPlaybackStatus *WXUNUSED(status))
+              volatile wxSoundPlaybackStatus *WXUNUSED(status)) wxOVERRIDE
         { return true; }
-    void Stop() {}
-    bool IsPlaying() const { return false; }
+    void Stop() wxOVERRIDE {}
+    bool IsPlaying() const wxOVERRIDE { return false; }
 };
 
 
@@ -103,14 +100,14 @@ public:
 class wxSoundBackendOSS : public wxSoundBackend
 {
 public:
-    wxString GetName() const { return wxT("Open Sound System"); }
-    int GetPriority() const { return 10; }
-    bool IsAvailable() const;
-    bool HasNativeAsyncPlayback() const { return false; }
+    wxString GetName() const wxOVERRIDE { return wxT("Open Sound System"); }
+    int GetPriority() const wxOVERRIDE { return 10; }
+    bool IsAvailable() const wxOVERRIDE;
+    bool HasNativeAsyncPlayback() const wxOVERRIDE { return false; }
     bool Play(wxSoundData *data, unsigned flags,
-              volatile wxSoundPlaybackStatus *status);
-    void Stop() {}
-    bool IsPlaying() const { return false; }
+              volatile wxSoundPlaybackStatus *status) wxOVERRIDE;
+    void Stop() wxOVERRIDE {}
+    bool IsPlaying() const wxOVERRIDE { return false; }
 
 private:
     int OpenDSP(const wxSoundData *data);
@@ -224,7 +221,6 @@ bool wxSoundBackendOSS::InitDSP(int dev, const wxSoundData *data)
     if (tmp != stereo)
     {
         wxLogTrace(wxT("sound"), wxT("Unable to set DSP to %s."), stereo?  wxT("stereo"):wxT("mono"));
-        m_needConversion = true;
     }
 
     tmp = data->m_samplingRate;
@@ -278,7 +274,7 @@ public:
     wxSoundAsyncPlaybackThread(wxSoundSyncOnlyAdaptor *adaptor,
                               wxSoundData *data, unsigned flags)
         : wxThread(), m_adapt(adaptor), m_data(data), m_flags(flags) {}
-    virtual ExitCode Entry();
+    virtual ExitCode Entry() wxOVERRIDE;
 
 protected:
     wxSoundSyncOnlyAdaptor *m_adapt;
@@ -294,37 +290,36 @@ class wxSoundSyncOnlyAdaptor : public wxSoundBackend
 {
 public:
     wxSoundSyncOnlyAdaptor(wxSoundBackend *backend)
-        : m_backend(backend), m_playing(false) {}
+        : m_backend(backend) {}
     virtual ~wxSoundSyncOnlyAdaptor()
     {
         delete m_backend;
     }
-    wxString GetName() const
+    wxString GetName() const wxOVERRIDE
     {
         return m_backend->GetName();
     }
-    int GetPriority() const
+    int GetPriority() const wxOVERRIDE
     {
         return m_backend->GetPriority();
     }
-    bool IsAvailable() const
+    bool IsAvailable() const wxOVERRIDE
     {
         return m_backend->IsAvailable();
     }
-    bool HasNativeAsyncPlayback() const
+    bool HasNativeAsyncPlayback() const wxOVERRIDE
     {
         return true;
     }
     bool Play(wxSoundData *data, unsigned flags,
-              volatile wxSoundPlaybackStatus *status);
-    void Stop();
-    bool IsPlaying() const;
+              volatile wxSoundPlaybackStatus *status) wxOVERRIDE;
+    void Stop() wxOVERRIDE;
+    bool IsPlaying() const wxOVERRIDE;
 
 private:
     friend class wxSoundAsyncPlaybackThread;
 
     wxSoundBackend *m_backend;
-    bool m_playing;
 #if wxUSE_THREADS
     // player thread holds this mutex and releases it after it finishes
     // playing, so that the main thread knows when it can play sound
@@ -337,12 +332,14 @@ private:
 #if wxUSE_THREADS
 wxThread::ExitCode wxSoundAsyncPlaybackThread::Entry()
 {
+    wxMutexLocker locker(m_adapt->m_mutexRightToPlay);
+
     m_adapt->m_backend->Play(m_data, m_flags & ~wxSOUND_ASYNC,
                              &m_adapt->m_status);
 
     m_data->DecRef();
-    m_adapt->m_playing = false;
-    m_adapt->m_mutexRightToPlay.Unlock();
+    m_adapt->m_status.m_playing = false;
+
     wxLogTrace(wxT("sound"), wxT("terminated async playback thread"));
     return 0;
 }
@@ -355,7 +352,7 @@ bool wxSoundSyncOnlyAdaptor::Play(wxSoundData *data, unsigned flags,
     if (flags & wxSOUND_ASYNC)
     {
 #if wxUSE_THREADS
-        m_mutexRightToPlay.Lock();
+        wxMutexLocker locker(m_mutexRightToPlay);
         m_status.m_playing = true;
         m_status.m_stopRequested = false;
         data->IncRef();
@@ -372,13 +369,9 @@ bool wxSoundSyncOnlyAdaptor::Play(wxSoundData *data, unsigned flags,
     else
     {
 #if wxUSE_THREADS
-        m_mutexRightToPlay.Lock();
+        wxMutexLocker locker(m_mutexRightToPlay);
 #endif
-        bool rv = m_backend->Play(data, flags, status);
-#if wxUSE_THREADS
-        m_mutexRightToPlay.Unlock();
-#endif
-        return rv;
+        return m_backend->Play(data, flags, status);
     }
 }
 
@@ -387,15 +380,11 @@ void wxSoundSyncOnlyAdaptor::Stop()
     wxLogTrace(wxT("sound"), wxT("asking audio to stop"));
 
 #if wxUSE_THREADS
+    wxMutexLocker lock(m_mutexRightToPlay);
+
     // tell the player thread (if running) to stop playback ASAP:
     m_status.m_stopRequested = true;
 
-    // acquire the mutex to be sure no sound is being played, then
-    // release it because we don't need it for anything (the effect of this
-    // is that calling thread will wait until playback thread reacts to
-    // our request to interrupt playback):
-    m_mutexRightToPlay.Lock();
-    m_mutexRightToPlay.Unlock();
     wxLogTrace(wxT("sound"), wxT("audio was stopped"));
 #endif
 }
@@ -659,35 +648,64 @@ bool wxSound::LoadWAV(const void* data_, size_t length, bool copyData)
     waveformat.uiBlockAlign = wxUINT16_SWAP_ON_BE(waveformat.uiBlockAlign);
     waveformat.uiBitsPerSample = wxUINT16_SWAP_ON_BE(waveformat.uiBitsPerSample);
 
-    // get the sound data size
-    wxUint32 ul;
-    memcpy(&ul, &data[FMT_INDEX + waveformat.uiSize + 12], 4);
-    ul = wxUINT32_SWAP_ON_BE(ul);
-
-    if ( length < ul + FMT_INDEX + waveformat.uiSize + 16 )
-        return false;
-
     if (memcmp(data, "RIFF", 4) != 0)
         return false;
     if (memcmp(&data[WAVE_INDEX], "WAVE", 4) != 0)
         return false;
     if (memcmp(&data[FMT_INDEX], "fmt ", 4) != 0)
         return false;
+
+    // Check that the format chunk size is correct: it must be 16 for PCM,
+    // which is the only format we handle.
+    if (waveformat.uiSize != 16)
+        return false;
+
     if (memcmp(&data[FMT_INDEX + waveformat.uiSize + 8], "data", 4) != 0)
         return false;
 
     if (waveformat.uiFormatTag != WAVE_FORMAT_PCM)
         return false;
 
-    if (waveformat.ulSamplesPerSec !=
-        waveformat.ulAvgBytesPerSec / waveformat.uiBlockAlign)
+    if (waveformat.ulAvgBytesPerSec !=
+        waveformat.ulSamplesPerSec * waveformat.uiBlockAlign)
+        return false;
+
+    // We divide by the sample size below to obtain the number of samples, so
+    // it definitely can't be 0. Also take care to avoid integer overflow when
+    // computing it.
+    unsigned tmp = waveformat.uiChannels;
+    if (tmp >= 0x10000)
+        return false;
+
+    tmp *= waveformat.uiBitsPerSample;
+
+    wxUint32 const sampleSize = tmp / 8;
+    if (!sampleSize)
+        return false;
+
+    // get file size from header
+    wxUint32 chunkSize;
+    memcpy(&chunkSize, &data[4], 4);
+    chunkSize = wxUINT32_SWAP_ON_BE(chunkSize);
+
+    // ensure file length is at least length in header
+    if (chunkSize > length - 8)
+        return false;
+
+    // get the sound data size
+    wxUint32 ul;
+    memcpy(&ul, &data[FMT_INDEX + waveformat.uiSize + 12], 4);
+    ul = wxUINT32_SWAP_ON_BE(ul);
+
+    // ensure we actually have at least that much data in the input
+    if (ul > length - FMT_INDEX - waveformat.uiSize - 16)
         return false;
 
     m_data = new wxSoundData;
     m_data->m_channels = waveformat.uiChannels;
     m_data->m_samplingRate = waveformat.ulSamplesPerSec;
     m_data->m_bitsPerSample = waveformat.uiBitsPerSample;
-    m_data->m_samples = ul / (m_data->m_channels * m_data->m_bitsPerSample / 8);
+    m_data->m_samples = ul / sampleSize;
     m_data->m_dataBytes = ul;
 
     if (copyData)
@@ -696,7 +714,7 @@ bool wxSound::LoadWAV(const void* data_, size_t length, bool copyData)
         memcpy(m_data->m_dataWithHeader, data, length);
     }
     else
-        m_data->m_dataWithHeader = (wxUint8*)data;
+        m_data->m_dataWithHeader = const_cast<wxUint8*>(data);
 
     m_data->m_data =
         (&m_data->m_dataWithHeader[FMT_INDEX + waveformat.uiSize + 8]);
@@ -712,11 +730,11 @@ bool wxSound::LoadWAV(const void* data_, size_t length, bool copyData)
 class wxSoundCleanupModule: public wxModule
 {
 public:
-    bool OnInit() { return true; }
-    void OnExit() { wxSound::UnloadBackend(); }
-    DECLARE_DYNAMIC_CLASS(wxSoundCleanupModule)
+    bool OnInit() wxOVERRIDE { return true; }
+    void OnExit() wxOVERRIDE { wxSound::UnloadBackend(); }
+    wxDECLARE_DYNAMIC_CLASS(wxSoundCleanupModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxSoundCleanupModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSoundCleanupModule, wxModule);
 
 #endif

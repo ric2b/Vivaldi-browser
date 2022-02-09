@@ -11,7 +11,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -28,7 +27,6 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
-#include "components/autofill/core/browser/data_driven_test.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/pattern_provider/pattern_configuration_parser.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -40,6 +38,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "testing/data_driven_testing/data_driven_test.h"
 #include "url/gurl.h"
 
 #if defined(OS_MAC)
@@ -53,6 +52,7 @@ using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
 
+const base::FilePath::CharType kFeatureName[] = FILE_PATH_LITERAL("autofill");
 const base::FilePath::CharType kTestName[] = FILE_PATH_LITERAL("heuristics");
 
 // To disable a data driven test, please add the name of the test file
@@ -75,7 +75,7 @@ const base::FilePath& GetTestDataDir() {
 
 const base::FilePath GetInputDir() {
   static base::FilePath input_dir = GetTestDataDir()
-                                        .AppendASCII("autofill")
+                                        .Append(kFeatureName)
                                         .Append(kTestName)
                                         .AppendASCII("input");
   return input_dir;
@@ -145,8 +145,8 @@ std::string FormStructuresToString(
 // heuristically detected type for each field.
 class FormStructureBrowserTest
     : public InProcessBrowserTest,
-      public DataDrivenTest,
-      public ::testing::WithParamInterface<base::FilePath> {
+      public testing::DataDrivenTest,
+      public testing::WithParamInterface<base::FilePath> {
  public:
   FormStructureBrowserTest(const FormStructureBrowserTest&) = delete;
   FormStructureBrowserTest& operator=(const FormStructureBrowserTest&) = delete;
@@ -177,7 +177,7 @@ class FormStructureBrowserTest
 };
 
 FormStructureBrowserTest::FormStructureBrowserTest()
-    : DataDrivenTest(GetTestDataDir()) {
+    : ::testing::DataDrivenTest(GetTestDataDir(), kFeatureName, kTestName) {
   feature_list_.InitWithFeatures(
       // Enabled
       {// TODO(crbug.com/1187842): Remove once experiment is over.
@@ -186,8 +186,6 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        features::kAutofillEnableSupportForMoreStructureInNames,
        // TODO(crbug.com/1125978): Remove once launched.
        features::kAutofillEnableSupportForMoreStructureInAddresses,
-       // TODO(crbug.com/896689): Remove once launched.
-       features::kAutofillNameSectionsWithRendererIds,
        // TODO(crbug.com/1076175) Remove once launched.
        features::kAutofillUseNewSectioningMethod,
        // Remove once launched
@@ -198,13 +196,15 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        features::kAutofillParsingPatternsLanguageDetection,
        // TODO(crbug/1165780): Remove once shared labels are launched.
        features::kAutofillEnableSupportForParsingWithSharedLabels,
+       // TODO(crbug.com/1277480): Remove once launched.
+       features::kAutofillEnableNameSurenameParsing,
        // TODO(crbug/1190334): Remove once launched.
        features::kAutofillParseMerchantPromoCodeFields},
       // Disabled
       {});
 }
 
-FormStructureBrowserTest::~FormStructureBrowserTest() {}
+FormStructureBrowserTest::~FormStructureBrowserTest() = default;
 
 void FormStructureBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
@@ -267,8 +267,7 @@ IN_PROC_BROWSER_TEST_P(FormStructureBrowserTest, DataDrivenHeuristics) {
   LOG(INFO) << GetParam().MaybeAsASCII();
   bool is_expected_to_pass =
       !base::Contains(GetFailingTestNames(), GetParam().BaseName().value());
-  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(kTestName),
-                       is_expected_to_pass);
+  RunOneDataDrivenTest(GetParam(), GetOutputDirectory(), is_expected_to_pass);
 }
 
 INSTANTIATE_TEST_SUITE_P(AllForms,

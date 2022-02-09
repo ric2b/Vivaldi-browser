@@ -1078,6 +1078,7 @@
 
     // grid-template-{columns|rows}
     "minmax",
+    "subgrid",
 
     // text-indent
     "each-line",
@@ -1195,6 +1196,7 @@
     // initial
     // inherit
     "revert",
+    "revert-layer",
     "unset",
 
     // background-image, etc.
@@ -1329,6 +1331,10 @@
     "block-size",
     "inline-size",
 
+    // @container
+    "name",
+    "type",
+
     // grid auto-repeat
     "auto-fill",
     "auto-fit",
@@ -1389,6 +1395,11 @@
     // (forced-colors:) media feature
     // none
     "active",
+
+    // forced-color-adjust
+    // auto
+    // none
+    "preserve-parent-color",
 
     // (navigation-controls) media feature
     // none

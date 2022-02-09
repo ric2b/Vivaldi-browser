@@ -4,6 +4,7 @@
 
 #include "media/base/android/media_service_throttler.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
@@ -30,6 +31,10 @@ class MediaServiceThrottlerTest : public testing::Test {
     base_delay_ = throttler_->GetBaseThrottlingRateForTesting();
   }
 
+  MediaServiceThrottlerTest(const MediaServiceThrottlerTest&) = delete;
+  MediaServiceThrottlerTest& operator=(const MediaServiceThrottlerTest&) =
+      delete;
+
   void SimulateCrashes(int number_of_crashes) {
     for (int i = 0; i < number_of_crashes; ++i)
       throttler_->OnMediaServerCrash(false);
@@ -53,7 +58,7 @@ class MediaServiceThrottlerTest : public testing::Test {
 
   base::TimeTicks TestNow() { return clock_.NowTicks(); }
 
-  MediaServiceThrottler* throttler_;
+  raw_ptr<MediaServiceThrottler> throttler_;
   base::SimpleTestTickClock clock_;
 
   base::TimeDelta base_delay_;
@@ -62,9 +67,6 @@ class MediaServiceThrottlerTest : public testing::Test {
 
   // Necessary, or else base::ThreadTaskRunnerHandle::Get() fails.
   base::test::SingleThreadTaskEnvironment task_environment_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MediaServiceThrottlerTest);
 };
 
 // Canary test case.

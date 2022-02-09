@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/commerce/coupons/coupon_service.h"
+#include "chrome/browser/cart/cart_features.h"
 #include "chrome/browser/commerce/commerce_feature_list.h"
 #include "chrome/browser/commerce/coupons/coupon_db_content.pb.h"
 
@@ -34,6 +35,18 @@ void ConstructCouponProto(
   }
 }
 
+bool CompareCouponList(
+    const std::vector<std::unique_ptr<autofill::AutofillOfferData>>&
+        coupon_list_a,
+    const std::vector<std::unique_ptr<autofill::AutofillOfferData>>&
+        coupon_list_b) {
+  return std::equal(coupon_list_a.begin(), coupon_list_a.end(),
+                    coupon_list_b.begin(),
+                    [](const auto& coupon_a, const auto& coupon_b) {
+                      return *coupon_a == *coupon_b;
+                    });
+}
+
 }  // namespace
 
 CouponService::CouponService(std::unique_ptr<CouponDB> coupon_db)
@@ -45,13 +58,29 @@ CouponService::~CouponService() = default;
 void CouponService::UpdateFreeListingCoupons(const CouponsMap& coupon_map) {
   if (!features_enabled_)
     return;
-  DeleteAllFreeListingCoupons();
+  // Identify origins whose coupon has changed in the new data.
+  std::vector<GURL> invalid_coupon_origins;
+  for (const auto& entry : coupon_map_) {
+    const GURL& origin = entry.first;
+    if (!coupon_map.contains(origin) ||
+        !CompareCouponList(coupon_map.at(origin), coupon_map_.at(origin))) {
+      invalid_coupon_origins.emplace_back(origin);
+    }
+  }
+  for (const GURL& origin : invalid_coupon_origins) {
+    NotifyObserversOfInvalidatedCoupon(origin);
+    coupon_map_.erase(origin);
+  }
+  coupon_db_->DeleteAllCoupons();
   CouponDisplayTimeMap new_time_map;
   for (const auto& entry : coupon_map) {
-    const GURL& origin(entry.first.GetOrigin());
+    const GURL& origin(entry.first.DeprecatedGetOriginAsURL());
     for (const auto& coupon : entry.second) {
-      auto new_coupon = std::make_unique<autofill::AutofillOfferData>(*coupon);
-      coupon_map_[origin].emplace_back(std::move(new_coupon));
+      if (!coupon_map_.contains(origin)) {
+        auto new_coupon =
+            std::make_unique<autofill::AutofillOfferData>(*coupon);
+        coupon_map_[origin].emplace_back(std::move(new_coupon));
+      }
       new_time_map[{origin, coupon->offer_id}] =
           coupon_time_map_[{origin, coupon->offer_id}];
     }
@@ -65,12 +94,16 @@ void CouponService::UpdateFreeListingCoupons(const CouponsMap& coupon_map) {
 void CouponService::DeleteFreeListingCouponsForUrl(const GURL& url) {
   if (!url.is_valid())
     return;
-  const GURL& origin(url.GetOrigin());
+  const GURL& origin(url.DeprecatedGetOriginAsURL());
+  NotifyObserversOfInvalidatedCoupon(origin);
   coupon_map_.erase(origin);
   coupon_db_->DeleteCoupon(origin);
 }
 
 void CouponService::DeleteAllFreeListingCoupons() {
+  for (const auto& entry : coupon_map_) {
+    NotifyObserversOfInvalidatedCoupon(entry.first);
+  }
   coupon_map_.clear();
   coupon_db_->DeleteAllCoupons();
 }
@@ -105,7 +138,8 @@ void CouponService::RecordCouponDisplayTimestamp(
 }
 
 void CouponService::MaybeFeatureStatusChanged(bool enabled) {
-  enabled &= commerce::IsCouponWithCodeEnabled();
+  enabled &= (commerce::IsCouponWithCodeEnabled() ||
+              cart_features::IsFakeDataEnabled());
   if (enabled == features_enabled_)
     return;
   features_enabled_ = enabled;
@@ -117,7 +151,7 @@ CouponService::Coupons CouponService::GetFreeListingCouponsForUrl(
     const GURL& url) {
   if (!url.is_valid())
     return {};
-  const GURL& origin(url.GetOrigin());
+  const GURL& origin(url.DeprecatedGetOriginAsURL());
   if (coupon_map_.find(origin) == coupon_map_.end()) {
     return {};
   }
@@ -131,14 +165,18 @@ CouponService::Coupons CouponService::GetFreeListingCouponsForUrl(
 bool CouponService::IsUrlEligible(const GURL& url) {
   if (!url.is_valid())
     return false;
-  return coupon_map_.find(url.GetOrigin()) != coupon_map_.end();
+  return coupon_map_.find(url.DeprecatedGetOriginAsURL()) != coupon_map_.end();
+}
+
+void CouponService::AddObserver(CouponServiceObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void CouponService::RemoveObserver(CouponServiceObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 CouponService::CouponService() = default;
-
-CouponDB* CouponService::GetDB() {
-  return coupon_db_.get();
-}
 
 void CouponService::InitializeCouponsMap() {
   coupon_db_->LoadAllCoupons(base::BindOnce(
@@ -182,5 +220,17 @@ void CouponService::OnUpdateCouponTimestamp(
     coupon_proto->set_last_display_time(last_display_timestamp.ToJavaTime());
     coupon_db_->AddCoupon(GURL(proto_pairs[0].first), proto);
     return;
+  }
+}
+
+CouponDB* CouponService::GetDB() {
+  return coupon_db_.get();
+}
+
+void CouponService::NotifyObserversOfInvalidatedCoupon(const GURL& url) {
+  for (const auto& offer : coupon_map_[url]) {
+    for (CouponServiceObserver& observer : observers_) {
+      observer.OnCouponInvalidated(*offer);
+    }
   }
 }

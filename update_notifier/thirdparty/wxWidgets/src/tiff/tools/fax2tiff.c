@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1990-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -69,13 +68,24 @@ uint16	badfaxrun;
 uint32	badfaxlines;
 
 int	copyFaxFile(TIFF* tifin, TIFF* tifout);
-static	void usage(void);
+static	void usage(int code);
+
+/*
+  Struct to carry client data.  Note that it does not appear that the client
+  data is actually used in this program.
+*/
+typedef union _FAX_Client_Data
+{
+	thandle_t fh; /* Operating system file handle */
+	int fd;      /* Integer file descriptor */
+} FAX_Client_Data;
 
 int
 main(int argc, char* argv[])
 {
 	FILE *in;
 	TIFF *out = NULL;
+	FAX_Client_Data client_data;
 	TIFFErrorHandler whandler = NULL;
 	int compression_in = COMPRESSION_CCITTFAX3;
 	int compression_out = COMPRESSION_CCITTFAX3;
@@ -94,11 +104,13 @@ main(int argc, char* argv[])
 	int c;
 	int pn, npages;
 	float resY = 196.0;
+
+#if !HAVE_DECL_OPTARG
 	extern int optind;
 	extern char* optarg;
+#endif
 
-
-	while ((c = getopt(argc, argv, "R:X:o:1234ABLMPUW5678abcflmprsuvwz?")) != -1)
+	while ((c = getopt(argc, argv, "R:X:o:r:1234ABLMPUW5678abcflmprsuvwzh")) != -1)
 		switch (c) {
 			/* input-related options */
 		case '3':		/* input is g3-encoded */
@@ -204,13 +216,15 @@ main(int argc, char* argv[])
 		case 'v':		/* -v for info */
 			verbose++;
 			break;
+		case 'h':
+			usage(EXIT_SUCCESS);
 		case '?':
-			usage();
+			usage(EXIT_FAILURE);
 			/*NOTREACHED*/
 		}
 	npages = argc - optind;
 	if (npages < 1)
-		usage();
+		usage(EXIT_FAILURE);
 
 	rowbuf = _TIFFmalloc(TIFFhowmany8(xsize));
 	refbuf = _TIFFmalloc(TIFFhowmany8(xsize));
@@ -264,10 +278,11 @@ main(int argc, char* argv[])
 			continue;
 		}
 #if defined(_WIN32) && defined(USE_WIN32_FILEIO)
-                TIFFSetClientdata(faxTIFF, (thandle_t)_get_osfhandle(fileno(in)));
+		client_data.fh = (thandle_t)_get_osfhandle(fileno(in));
 #else
-                TIFFSetClientdata(faxTIFF, (thandle_t)fileno(in));
+		client_data.fd = fileno(in);
 #endif
+		TIFFSetClientdata(faxTIFF, client_data.fh);
 		TIFFSetFileName(faxTIFF, (const char*)argv[optind]);
 		TIFFSetField(out, TIFFTAG_IMAGEWIDTH, xsize);
 		TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 1);
@@ -351,6 +366,10 @@ copyFaxFile(TIFF* tifin, TIFF* tifout)
 	int ok;
 
 	tifin->tif_rawdatasize = (tmsize_t)TIFFGetFileSize(tifin);
+	if (tifin->tif_rawdatasize == 0) {
+		TIFFError(tifin->tif_name, "Empty input file");
+		return (0);
+	}
 	tifin->tif_rawdata = _TIFFmalloc(tifin->tif_rawdatasize);
 	if (tifin->tif_rawdata == NULL) {
 		TIFFError(tifin->tif_name, "Not enough memory");
@@ -409,7 +428,7 @@ copyFaxFile(TIFF* tifin, TIFF* tifout)
 	return (row);
 }
 
-char* stuff[] = {
+const char* stuff[] = {
 "usage: fax2tiff [options] input.raw...",
 "where options are:",
 " -3		input data is G3-encoded		[default]",
@@ -446,16 +465,15 @@ NULL
 };
 
 static void
-usage(void)
+usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+	fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
-	exit(EXIT_FAILURE);
+		fprintf(out, "%s\n", stuff[i]);
+	exit(code);
 }
 
 /* vim: set ts=8 sts=8 sw=8 noet: */

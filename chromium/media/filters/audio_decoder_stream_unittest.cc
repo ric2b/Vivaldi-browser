@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
@@ -72,6 +73,9 @@ class AudioDecoderStreamTest : public testing::Test {
     run_loop.Run();
   }
 
+  AudioDecoderStreamTest(const AudioDecoderStreamTest&) = delete;
+  AudioDecoderStreamTest& operator=(const AudioDecoderStreamTest&) = delete;
+
   MockDemuxerStream* demuxer_stream() { return &demuxer_stream_; }
   MockAudioDecoder* decoder() { return decoder_; }
 
@@ -123,11 +127,9 @@ class AudioDecoderStreamTest : public testing::Test {
   testing::NiceMock<MockDemuxerStream> demuxer_stream_{DemuxerStream::AUDIO};
   AudioDecoderStream audio_decoder_stream_;
 
-  MockAudioDecoder* decoder_ = nullptr;
+  raw_ptr<MockAudioDecoder> decoder_ = nullptr;
   AudioDecoder::OutputCB decoder_output_cb_;
   base::TimeDelta last_timestamp_;
-
-  DISALLOW_COPY_AND_ASSIGN(AudioDecoderStreamTest);
 };
 
 TEST_F(AudioDecoderStreamTest, FlushOnConfigChange) {

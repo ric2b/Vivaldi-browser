@@ -7,7 +7,6 @@
 #include <iterator>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 
 namespace base {
 

@@ -56,7 +56,7 @@ class PaintControllerPaintTestBase : public RenderingTest {
       CullRectUpdater(*GetLayoutView().Layer()).Update();
   }
 
-  void PaintContents(const IntRect& interest_rect) {
+  void PaintContents(const gfx::Rect& interest_rect) {
     GetDocument().View()->PaintContentsForTest(CullRect(interest_rect));
   }
 
@@ -153,7 +153,7 @@ const DisplayItem::Type kClippedContentsBackgroundChunkType =
 // This version also checks the following additional parameters:
 //   wtf_size_t display_item_count,
 //   const HitTestData* hit_test_data,
-//   (optional) const IntRect& bounds
+//   (optional) const gfx::Rect& bounds
 #define VIEW_SCROLLING_BACKGROUND_CHUNK(display_item_count, ...)     \
   IsPaintChunk(0, display_item_count,                                \
                PaintChunk::Id(ViewScrollingBackgroundClient().Id(),  \

@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -41,7 +41,6 @@ class PLATFORM_EXPORT VideoDecodeStatsReporter {
       GetPipelineStatsCB get_pipeline_stats_cb,
       media::VideoCodecProfile codec_profile,
       const gfx::Size& natural_size,
-      std::string key_system,
       absl::optional<media::CdmConfig> cdm_config,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       const base::TickClock* tick_clock =

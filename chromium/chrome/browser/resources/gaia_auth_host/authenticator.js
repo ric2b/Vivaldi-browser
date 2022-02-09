@@ -166,7 +166,6 @@ cr.define('cr.login', function() {
                      // Default is |true|.
     'flow',          // One of 'default', 'enterprise', or
                      // 'cfm' or 'enterpriseLicense'.
-    'enterpriseDisplayDomain',     // Current domain name to be displayed.
     'enterpriseDomainManager',     // Manager of the current domain. Can be
                                    // either a domain name (foo.com) or an email
                                    // address (admin@foo.com).
@@ -738,9 +737,6 @@ cr.define('cr.login', function() {
       }
       if (data.clientId) {
         url = appendParam(url, 'client_id', data.clientId);
-      }
-      if (data.enterpriseDisplayDomain) {
-        url = appendParam(url, 'manageddomain', data.enterpriseDisplayDomain);
       }
       if (data.enterpriseDomainManager) {
         url = appendParam(url, 'devicemanager', data.enterpriseDomainManager);
@@ -1457,19 +1453,28 @@ cr.define('cr.login', function() {
    * The current auth flow of the hosted auth page.
    * @type {AuthFlow}
    */
-  cr.defineProperty(Authenticator, 'authFlow');
+  Authenticator.prototype.authFlow;
+  Object.defineProperty(
+      Authenticator.prototype, 'authFlow',
+      cr.getPropertyDescriptor('authFlow'));
 
   /**
    * The domain name of the current auth page.
    * @type {string}
    */
-  cr.defineProperty(Authenticator, 'authDomain');
+  Authenticator.prototype.authDomain;
+  Object.defineProperty(
+      Authenticator.prototype, 'authDomain',
+      cr.getPropertyDescriptor('authDomain'));
 
   /**
    * True if the page has requested media access.
    * @type {boolean}
    */
-  cr.defineProperty(Authenticator, 'videoEnabled');
+  Authenticator.prototype.videoEnabled;
+  Object.defineProperty(
+      Authenticator.prototype, 'videoEnabled',
+      cr.getPropertyDescriptor('videoEnabled'));
 
   Authenticator.AuthFlow = AuthFlow;
   Authenticator.AuthMode = AuthMode;

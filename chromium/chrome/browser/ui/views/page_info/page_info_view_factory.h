@@ -5,10 +5,17 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_VIEW_FACTORY_H_
 #define CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_VIEW_FACTORY_H_
 
+#include "base/memory/raw_ptr.h"
 #include "components/page_info/page_info.h"
 #include "components/page_info/page_info_ui.h"
 #include "ui/base/models/image_model.h"
 #include "ui/views/view.h"
+
+namespace page_info {
+namespace proto {
+class SiteInfo;
+}
+}  // namespace page_info
 
 class ChromePageInfoUiDelegate;
 class PageInfo;
@@ -100,10 +107,13 @@ class PageInfoViewFactory {
   // Returns the icon for 'About this site' button.
   static const ui::ImageModel GetAboutThisSiteIcon();
 
-  std::unique_ptr<views::View> CreateMainPageView() WARN_UNUSED_RESULT;
+  std::unique_ptr<views::View> CreateMainPageView(
+      base::OnceClosure initialized_callback) WARN_UNUSED_RESULT;
   std::unique_ptr<views::View> CreateSecurityPageView() WARN_UNUSED_RESULT;
   std::unique_ptr<views::View> CreatePermissionPageView(
       ContentSettingsType type) WARN_UNUSED_RESULT;
+  std::unique_ptr<views::View> CreateAboutThisSitePageView(
+      const page_info::proto::SiteInfo& info) WARN_UNUSED_RESULT;
 
  private:
   // Creates a subpage header with back button that opens the main page, a
@@ -117,9 +127,9 @@ class PageInfoViewFactory {
   std::unique_ptr<views::View> CreateSubpageHeader(std::u16string title)
       WARN_UNUSED_RESULT;
 
-  PageInfo* presenter_;
-  ChromePageInfoUiDelegate* ui_delegate_;
-  PageInfoNavigationHandler* navigation_handler_;
+  raw_ptr<PageInfo> presenter_;
+  raw_ptr<ChromePageInfoUiDelegate> ui_delegate_;
+  raw_ptr<PageInfoNavigationHandler> navigation_handler_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_VIEW_FACTORY_H_

@@ -22,7 +22,7 @@
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/json/json_values.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
@@ -263,37 +263,6 @@ TEST_F(LayoutObjectTest, UseCountContainWithoutContentVisibility) {
       WebFeature::kCSSContainStrictWithoutContentVisibility));
 }
 
-TEST_F(LayoutObjectTest, UseCountContainingBlockFixedPosUnderFlattened3D) {
-  ScopedTransformInteropForTest disabled(false);
-  SetBodyInnerHTML(R"HTML(
-    <div style='transform-style: preserve-3d; opacity: 0.9'>
-      <div id=target style='position:fixed'></div>
-    </div>
-  )HTML");
-
-  LayoutObject* target = GetLayoutObjectByElementId("target");
-  EXPECT_EQ(target->View(), target->Container());
-
-  EXPECT_TRUE(GetDocument().IsUseCounted(
-      WebFeature::kTransformStyleContainingBlockComputedUsedMismatch));
-}
-
-TEST_F(LayoutObjectTest,
-       UseCountContainingBlockFixedPosUnderFlattened3DTransformInterop) {
-  ScopedTransformInteropForTest enabled(true);
-  SetBodyInnerHTML(R"HTML(
-    <div style='transform-style: preserve-3d; opacity: 0.9'>
-      <div id=target style='position:fixed'></div>
-    </div>
-  )HTML");
-
-  LayoutObject* target = GetLayoutObjectByElementId("target");
-  EXPECT_EQ(target->View(), target->GetDocument().GetLayoutView());
-
-  EXPECT_TRUE(GetDocument().IsUseCounted(
-      WebFeature::kTransformStyleContainingBlockComputedUsedMismatch));
-}
-
 // Containing block test.
 TEST_F(LayoutObjectTest, ContainingBlockLayoutViewShouldBeNull) {
   EXPECT_EQ(nullptr, GetLayoutView().ContainingBlock());
@@ -352,9 +321,7 @@ TEST_F(
   EXPECT_EQ(PhysicalOffset(2, 10), offset);
 }
 
-TEST_F(LayoutObjectTest, ContainingBlockFixedPosUnderFlattened3DWithInterop) {
-  ScopedTransformInteropForTest enabled(true);
-
+TEST_F(LayoutObjectTest, ContainingBlockFixedPosUnderFlattened3D) {
   SetBodyInnerHTML(R"HTML(
     <div id=container style='transform-style: preserve-3d; opacity: 0.9'>
       <div id=target style='position:fixed'></div>
@@ -456,7 +423,7 @@ TEST_F(
 
 TEST_F(LayoutObjectTest, PaintingLayerOfOverflowClipLayerUnderColumnSpanAll) {
   SetBodyInnerHTML(R"HTML(
-    <div id='columns' style='columns: 3'>
+    <div id='columns' style='position: relative; columns: 3'>
       <div style='column-span: all'>
         <div id='overflow-clip-layer' style='height: 100px; overflow:
     hidden'></div>
@@ -1379,8 +1346,6 @@ TEST_F(LayoutObjectTest, ContainValueIsRelayoutBoundary) {
 }
 
 TEST_F(LayoutObjectTest, PerspectiveIsNotParent) {
-  ScopedTransformInteropForTest enabled(true);
-
   GetDocument().SetBaseURLOverride(KURL("http://test.com"));
   SetBodyInnerHTML(R"HTML(
     <style>body { margin:0; }</style>
@@ -1403,8 +1368,6 @@ TEST_F(LayoutObjectTest, PerspectiveIsNotParent) {
 }
 
 TEST_F(LayoutObjectTest, PerspectiveWithAnonymousTable) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>body { margin:0; }</style>
     <div id='ancestor' style='display: table; perspective: 100px; width: 100px; height: 100px;'>

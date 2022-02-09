@@ -65,8 +65,7 @@ extern "C" {
 static gint
 gtk_glwindow_map_callback( GtkWidget * WXUNUSED(widget), wxGLCanvas *win )
 {
-    wxPaintEvent event( win->GetId() );
-    event.SetEventObject( win );
+    wxPaintEvent event( win );
     win->HandleWindowEvent( event );
 
     win->GetUpdateRegion().Clear();
@@ -133,7 +132,22 @@ gtk_glcanvas_size_callback( GtkWidget *WXUNUSED(widget), GtkAllocation* alloc, w
 // wxGlCanvas
 //---------------------------------------------------------------------------
 
-IMPLEMENT_CLASS(wxGLCanvas, wxWindow)
+wxIMPLEMENT_CLASS(wxGLCanvas, wxWindow);
+
+wxGLCanvas::wxGLCanvas(wxWindow *parent,
+                       const wxGLAttributes& dispAttrs,
+                       wxWindowID id,
+                       const wxPoint& pos,
+                       const wxSize& size,
+                       long style,
+                       const wxString& name,
+                       const wxPalette& palette)
+#if WXWIN_COMPATIBILITY_2_8
+    : m_createImplicitContext(false)
+#endif
+{
+    Create(parent, dispAttrs, id, pos, size, style, name, palette);
+}
 
 wxGLCanvas::wxGLCanvas(wxWindow *parent,
                        wxWindowID id,
@@ -206,13 +220,32 @@ bool wxGLCanvas::Create(wxWindow *parent,
                         const int *attribList,
                         const wxPalette& palette)
 {
+    // Separate 'GLXFBConfig/XVisual' attributes.
+    // Also store context attributes for wxGLContext ctor
+    wxGLAttributes dispAttrs;
+    if ( ! ParseAttribList(attribList, dispAttrs, &m_GLCTXAttrs) )
+        return false;
+
+    return Create(parent, dispAttrs, id, pos, size, style, name, palette);
+}
+
+bool wxGLCanvas::Create(wxWindow *parent,
+                        const wxGLAttributes& dispAttrs,
+                        wxWindowID id,
+                        const wxPoint& pos,
+                        const wxSize& size,
+                        long style,
+                        const wxString& name,
+                        const wxPalette& palette)
+{
+
     m_noExpose = true;
     m_nativeSizeEvent = true;
 
-    if ( !InitVisual(attribList) )
+    if ( !InitVisual(dispAttrs) )
         return false;
 
-    GdkVisual *visual = gdkx_visual_get( GetXVisualInfo()->visualid );
+    GdkVisual *visual = gdkx_visual_get(static_cast<XVisualInfo*>(GetXVisualInfo())->visualid);
     GdkColormap *colormap = gdk_colormap_new( visual, TRUE );
 
     gtk_widget_push_colormap( colormap );
@@ -258,7 +291,7 @@ bool wxGLCanvas::Create(wxWindow *parent,
     return true;
 }
 
-Window wxGLCanvas::GetXWindow() const
+unsigned long wxGLCanvas::GetXWindow() const
 {
     GdkWindow *window = GTK_PIZZA(m_wxwindow)->bin_window;
     return window ? GDK_WINDOW_XWINDOW(window) : 0;
@@ -268,8 +301,7 @@ void wxGLCanvas::OnInternalIdle()
 {
     if (!m_updateRegion.IsEmpty())
     {
-        wxPaintEvent event( GetId() );
-        event.SetEventObject( this );
+        wxPaintEvent event( this );
         HandleWindowEvent( event );
 
         GetUpdateRegion().Clear();

@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/macros.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
@@ -124,6 +123,9 @@ class MEDIA_EXPORT StreamParserBuffer : public DecoderBuffer {
                                                     Type type,
                                                     TrackId track_id);
 
+  StreamParserBuffer(const StreamParserBuffer&) = delete;
+  StreamParserBuffer& operator=(const StreamParserBuffer&) = delete;
+
   // Decode timestamp. If not explicitly set, or set to kNoTimestamp, the
   // value will be taken from the normal timestamp.
   DecodeTimestamp GetDecodeTimestamp() const;
@@ -179,8 +181,6 @@ class MEDIA_EXPORT StreamParserBuffer : public DecoderBuffer {
   TrackId track_id_;
   scoped_refptr<StreamParserBuffer> preroll_buffer_;
   bool is_duration_estimated_;
-
-  DISALLOW_COPY_AND_ASSIGN(StreamParserBuffer);
 };
 
 }  // namespace media

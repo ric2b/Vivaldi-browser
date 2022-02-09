@@ -19,9 +19,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/evtloop.h"
 
@@ -184,45 +181,13 @@ void wxMacWakeUp()
 
 #endif
 
-bool wxCFEventLoop::YieldFor(long eventsToProcess)
+void wxCFEventLoop::DoYieldFor(long eventsToProcess)
 {
-#if wxUSE_THREADS
-    // Yielding from a non-gui thread needs to bail out, otherwise we end up
-    // possibly sending events in the thread too.
-    if ( !wxThread::IsMain() )
-    {
-        return true;
-    }
-#endif // wxUSE_THREADS
-
-    m_isInsideYield = true;
-    m_eventsToProcessInsideYield = eventsToProcess;
-
-#if wxUSE_LOG
-    // disable log flushing from here because a call to wxYield() shouldn't
-    // normally result in message boxes popping up &c
-    wxLog::Suspend();
-#endif // wxUSE_LOG
-
     // process all pending events:
     while ( DoProcessEvents() == 1 )
         ;
 
-    // it's necessary to call ProcessIdle() to update the frames sizes which
-    // might have been changed (it also will update other things set from
-    // OnUpdateUI() which is a nice (and desired) side effect)
-    while ( ProcessIdle() ) {}
-
-    // if there are pending events, we must process them.
-    if (wxTheApp)
-        wxTheApp->ProcessPendingEvents();
-
-#if wxUSE_LOG
-    wxLog::Resume();
-#endif // wxUSE_LOG
-    m_isInsideYield = false;
-
-    return true;
+    wxEventLoopBase::DoYieldFor(eventsToProcess);
 }
 
 // implement/override base class pure virtual
@@ -243,7 +208,7 @@ int wxCFEventLoop::DoProcessEvents()
     }
     else
 #endif
-        return DispatchTimeout( m_isInsideYield ? 0 : 1000 );
+        return DispatchTimeout( IsYielding() ? 0 : 1000 );
 }
 
 bool wxCFEventLoop::Dispatch()
@@ -284,10 +249,8 @@ int wxCFEventLoop::DoDispatchTimeout(unsigned long timeout)
             break;
         case kCFRunLoopRunStopped:
             return 0;
-            break;
         case kCFRunLoopRunTimedOut:
             return -1;
-            break;
         case kCFRunLoopRunHandledSource:
         default:
             break;
@@ -299,6 +262,8 @@ void wxCFEventLoop::OSXDoRun()
 {
     for ( ;; )
     {
+        OnNextIteration();
+
         // generate and process idle events for as long as we don't
         // have anything else to do
         DoProcessEvents();
@@ -312,6 +277,27 @@ void wxCFEventLoop::OSXDoRun()
                 ;
 
             break;
+        }
+
+        // Process the remaining queued messages, both at the level of the
+        // underlying toolkit level (Pending/Dispatch()) and wx level
+        // (Has/ProcessPendingEvents()).
+        //
+        // We do run the risk of never exiting this loop if pending event
+        // handlers endlessly generate new events but they shouldn't do
+        // this in a well-behaved program and we shouldn't just discard the
+        // events we already have, they might be important.
+        for ( ;; )
+        {
+            bool hasMoreEvents = false;
+            if ( wxTheApp && wxTheApp->HasPendingEvents() )
+            {
+                wxTheApp->ProcessPendingEvents();
+                hasMoreEvents = true;
+            }
+
+            if ( !hasMoreEvents )
+                break;
         }
     }
 }

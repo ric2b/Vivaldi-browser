@@ -38,9 +38,9 @@ namespace {
 
 constexpr base::TimeDelta kStandaloneCheckPeriod =
 #ifdef OFFICIAL_BUILD
-    base::TimeDelta::FromDays(1)
+    base::Days(1)
 #else
-    base::TimeDelta::FromHours(1)
+    base::Hours(1)
 #endif
     ;
 

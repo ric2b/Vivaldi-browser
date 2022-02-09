@@ -5,9 +5,11 @@
 #include "chrome/browser/ui/views/location_bar/permission_chip.h"
 
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_style.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/permissions/features.h"
@@ -34,23 +36,17 @@ class BubbleButtonController : public views::ButtonController {
       : views::ButtonController(button, std::move(delegate)),
         bubble_owner_(bubble_owner) {}
 
-  bool OnMousePressed(const ui::MouseEvent& event) override {
-    suppress_button_release_ = bubble_owner_->IsBubbleShowing();
-    return views::ButtonController::OnMousePressed(event);
-  }
+  // TODO(crbug.com/1270699): Add keyboard support.
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    if (bubble_owner_->IsBubbleShowing() || bubble_owner_->IsAnimating()) {
+      return;
+    }
 
-  bool IsTriggerableEvent(const ui::Event& event) override {
-    // TODO(olesiamarukhno): There is the same logic in IconLabelBubbleView,
-    // this class should be reused in the future to avoid duplication.
-    if (event.IsMouseEvent())
-      return !bubble_owner_->IsBubbleShowing() && !suppress_button_release_;
-
-    return views::ButtonController::IsTriggerableEvent(event);
+    bubble_owner_->RestartTimersOnMouseHover();
   }
 
  private:
-  bool suppress_button_release_ = false;
-  BubbleOwnerDelegate* bubble_owner_ = nullptr;
+  raw_ptr<BubbleOwnerDelegate> bubble_owner_ = nullptr;
 };
 
 PermissionChip::PermissionChip(
@@ -65,7 +61,8 @@ PermissionChip::PermissionChip(
   chip_button_ = AddChildView(std::make_unique<OmniboxChipButton>(
       base::BindRepeating(&PermissionChip::ChipButtonPressed,
                           base::Unretained(this)),
-      initializer.icon, initializer.message, initializer.is_prominent));
+      initializer.icon_on, initializer.icon_off, initializer.message,
+      initializer.is_prominent));
   chip_button_->SetTheme(initializer.theme);
   chip_button_->SetButtonController(std::make_unique<BubbleButtonController>(
       chip_button_, this,
@@ -84,16 +81,16 @@ PermissionChip::~PermissionChip() {
     bubble_widget->Close();
   }
   CHECK(!IsInObserverList());
-  collapse_timer_.AbandonAndStop();
-  dismiss_timer_.AbandonAndStop();
+  ResetTimers();
 }
 
 void PermissionChip::OpenBubble() {
   // The prompt bubble is either not opened yet or already closed on
   // deactivation.
-  DCHECK(!GetPromptBubbleWidget());
+  DCHECK(!IsBubbleShowing());
 
   prompt_bubble_tracker_.SetView(CreateBubble());
+  delegate_->SetBubbleShown();
 }
 
 void PermissionChip::Hide() {
@@ -108,29 +105,41 @@ void PermissionChip::Reshow() {
 }
 
 void PermissionChip::Collapse(bool allow_restart) {
-  if (allow_restart && (IsMouseHovered() || IsBubbleShowing())) {
+  if (allow_restart && IsMouseHovered()) {
     StartCollapseTimer();
   } else {
     chip_button_->AnimateCollapse();
     StartDismissTimer();
+    ShowBlockedIcon();
   }
 }
 
-void PermissionChip::ShowBlockedBadge() {
-  chip_button_->SetShowBlockedBadge(true);
-}
-
-void PermissionChip::OnMouseEntered(const ui::MouseEvent& event) {
-  if (!chip_button_->is_animating())
-    RestartTimersOnInteraction();
+void PermissionChip::ShowBlockedIcon() {
+  chip_button_->SetShowBlockedIcon(true);
 }
 
 void PermissionChip::AddedToWidget() {
   views::AccessiblePaneView::AddedToWidget();
 
   if (!should_start_open_) {
+#if defined(OS_MAC)
+    GetViewAccessibility().OverrideName(l10n_util::GetStringUTF16(
+        IDS_PERMISSIONS_REQUESTED_SCREENREADER_ANNOUNCEMENT));
+    NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+#else
     GetViewAccessibility().AnnounceText(l10n_util::GetStringUTF16(
         IDS_PERMISSIONS_REQUESTED_SCREENREADER_ANNOUNCEMENT));
+#endif
+  }
+}
+
+void PermissionChip::VisibilityChanged(views::View* /*starting_from*/,
+                                       bool is_visible) {
+  auto* prompt_bubble = GetPromptBubbleWidget();
+  if (!is_visible && prompt_bubble) {
+    // In case if the prompt bubble isn't closed on focus loss, manually close
+    // it when chip is hidden.
+    prompt_bubble->Close();
   }
 }
 
@@ -139,10 +148,23 @@ void PermissionChip::OnWidgetDestroying(views::Widget* widget) {
   // If permission request is still active after the prompt was closed,
   // collapse the chip.
   Collapse(/*allow_restart=*/false);
+  ShowBlockedIcon();
 }
 
 bool PermissionChip::IsBubbleShowing() const {
   return prompt_bubble_tracker_.view() != nullptr;
+}
+
+bool PermissionChip::IsAnimating() const {
+  return chip_button_->is_animating();
+}
+
+void PermissionChip::RestartTimersOnMouseHover() {
+  if (is_fully_collapsed()) {
+    StartDismissTimer();
+  } else {
+    StartCollapseTimer();
+  }
 }
 
 views::Widget* PermissionChip::GetPromptBubbleWidgetForTesting() {
@@ -153,6 +175,15 @@ views::Widget* PermissionChip::GetPromptBubbleWidget() {
   return prompt_bubble_tracker_.view()
              ? prompt_bubble_tracker_.view()->GetWidget()
              : nullptr;
+}
+
+void PermissionChip::OnPromptBubbleDismissed() {
+  should_dismiss_ = true;
+  delegate_->SetDismissOnTabClose();
+  // If the permission prompt bubble is closed, we count it as "Dismissed",
+  // hence it should record the time when the bubble is closed and not when the
+  // permission request is finalized.
+  delegate_->SetDecisionTime();
 }
 
 void PermissionChip::Show(bool always_open_bubble) {
@@ -168,21 +199,25 @@ void PermissionChip::Show(bool always_open_bubble) {
 }
 
 void PermissionChip::ExpandAnimationEnded() {
-  StartCollapseTimer();
-  if (should_start_open_ && !IsBubbleShowing())
+  if (IsBubbleShowing())
+    return;
+
+  if (should_start_open_) {
     OpenBubble();
+  } else {
+    StartCollapseTimer();
+  }
 }
 
 void PermissionChip::ChipButtonPressed() {
-  OpenBubble();
-  RestartTimersOnInteraction();
-}
-
-void PermissionChip::RestartTimersOnInteraction() {
-  if (is_fully_collapsed()) {
-    StartDismissTimer();
+  if (IsBubbleShowing()) {
+    // A mouse click on chip while a permission prompt is open should dismiss
+    // the prompt and collapse the chip
+    prompt_bubble_tracker_.view()->GetWidget()->CloseWithReason(
+        views::Widget::ClosedReason::kCloseButtonClicked);
   } else {
-    StartCollapseTimer();
+    ResetTimers();
+    OpenBubble();
   }
 }
 
@@ -200,23 +235,27 @@ void PermissionChip::StartDismissTimer() {
             permissions::features::kPermissionChipAutoDismiss)) {
       auto delay = base::Milliseconds(
           permissions::features::kPermissionChipAutoDismissDelay.Get());
-      dismiss_timer_.Start(FROM_HERE, delay, this, &PermissionChip::Dismiss);
+      dismiss_timer_.Start(FROM_HERE, delay, this, &PermissionChip::Finalize);
     }
   } else {
     // Abusive origins do not support expand animation, hence the dismiss timer
     // should be longer.
     dismiss_timer_.Start(FROM_HERE, base::Seconds(18), this,
-                         &PermissionChip::Dismiss);
+                         &PermissionChip::Finalize);
   }
 }
 
-void PermissionChip::Dismiss() {
+void PermissionChip::Finalize() {
   GetViewAccessibility().AnnounceText(l10n_util::GetStringUTF16(
       IDS_PERMISSIONS_EXPIRED_SCREENREADER_ANNOUNCEMENT));
 
-  // `delegate_->Closing()` will destroy `this`. It's not safe to run any code
-  // afterwards.
-  delegate_->Closing();
+  // `delegate_->Dismiss()` and `delegate_->Ignore()` will destroy `this`. It's
+  // not safe to run any code afterwards.
+  if (should_dismiss_) {
+    delegate_->Dismiss();
+  } else {
+    delegate_->Ignore();
+  }
 }
 
 BEGIN_METADATA(PermissionChip, views::View)

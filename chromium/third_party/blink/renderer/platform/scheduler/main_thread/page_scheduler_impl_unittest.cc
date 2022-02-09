@@ -12,9 +12,9 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/sequence_manager/test/fake_task.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -422,7 +422,7 @@ void RunVirtualTimeRecorderTask(const base::TickClock* clock,
                                 Vector<base::TimeTicks>* out_real_times,
                                 Vector<base::TimeTicks>* out_virtual_times) {
   out_real_times->push_back(clock->NowTicks());
-  out_virtual_times->push_back(scheduler->GetVirtualTimeDomain()->Now());
+  out_virtual_times->push_back(scheduler->NowTicks());
 }
 
 base::OnceClosure MakeVirtualTimeRecorderTask(
@@ -443,9 +443,8 @@ TEST_F(PageSchedulerImplTest, VirtualTime_TimerFastForwarding) {
 
   page_scheduler_->EnableVirtualTime();
 
-  base::TimeTicks initial_real_time = scheduler_->tick_clock()->NowTicks();
-  base::TimeTicks initial_virtual_time =
-      scheduler_->GetVirtualTimeDomain()->Now();
+  base::TimeTicks initial_real_time = scheduler_->NowTicks();
+  base::TimeTicks initial_virtual_time = scheduler_->NowTicks();
 
   ThrottleableTaskRunner()->PostDelayedTask(
       FROM_HERE,
@@ -484,9 +483,8 @@ TEST_F(PageSchedulerImplTest, VirtualTime_LoadingTaskFastForwarding) {
 
   page_scheduler_->EnableVirtualTime();
 
-  base::TimeTicks initial_real_time = scheduler_->tick_clock()->NowTicks();
-  base::TimeTicks initial_virtual_time =
-      scheduler_->GetVirtualTimeDomain()->Now();
+  base::TimeTicks initial_real_time = scheduler_->NowTicks();
+  base::TimeTicks initial_virtual_time = scheduler_->NowTicks();
 
   LoadingTaskRunner()->PostDelayedTask(
       FROM_HERE,
@@ -524,7 +522,7 @@ TEST_F(PageSchedulerImplTest,
   page_scheduler_->EnableVirtualTime();
   page_scheduler_->SetPageVisible(false);
   scheduler_->GetSchedulerHelperForTesting()->SetWorkBatchSizeForTesting(1);
-  base::TimeTicks initial_real_time = scheduler_->tick_clock()->NowTicks();
+  base::TimeTicks initial_real_time = scheduler_->NowTicks();
 
   int run_count = 0;
   ThrottleableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostDelayedTask(
@@ -541,7 +539,34 @@ TEST_F(PageSchedulerImplTest,
 
   // The global tick clock has not moved, yet we ran a large number of "delayed"
   // tasks despite calling setPageVisible(false).
-  EXPECT_EQ(initial_real_time, scheduler_->tick_clock()->NowTicks());
+  EXPECT_EQ(initial_real_time, test_task_runner_->NowTicks());
+}
+
+// Check that enabling virtual time while the page is backgrounded prevents a
+// page from being frozen if it wasn't already.
+TEST_F(PageSchedulerImplTest, PageBackgrounded_EnableVirtualTime) {
+  page_scheduler_->SetPageVisible(false);
+  EXPECT_FALSE(page_scheduler_->IsFrozen());
+
+  page_scheduler_->EnableVirtualTime();
+  test_task_runner_->FastForwardUntilNoTasksRemain();
+
+  // Page should not be frozen after a delay since virtual time
+  // was enabled.
+  EXPECT_FALSE(page_scheduler_->IsFrozen());
+}
+
+// Check that enabling virtual time while a backgrounded page is frozen
+// unfreezes it.
+TEST_F(PageSchedulerImplTest, PageFrozen_EnableVirtualTime) {
+  page_scheduler_->SetPageVisible(false);
+  test_task_runner_->FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(page_scheduler_->IsFrozen());
+
+  page_scheduler_->EnableVirtualTime();
+
+  // Page should not be frozen since virtual time was enabled.
+  EXPECT_FALSE(page_scheduler_->IsFrozen());
 }
 
 namespace {
@@ -778,14 +803,14 @@ namespace {
 
 void RecordVirtualTime(MainThreadSchedulerImpl* scheduler,
                        base::TimeTicks* out) {
-  *out = scheduler->GetVirtualTimeDomain()->Now();
+  *out = scheduler->NowTicks();
 }
 
 void PauseAndUnpauseVirtualTime(MainThreadSchedulerImpl* scheduler,
                                 FrameSchedulerImpl* frame_scheduler,
                                 base::TimeTicks* paused,
                                 base::TimeTicks* unpaused) {
-  *paused = scheduler->GetVirtualTimeDomain()->Now();
+  *paused = scheduler->NowTicks();
 
   {
     WebScopedVirtualTimePauser virtual_time_pauser =
@@ -795,7 +820,7 @@ void PauseAndUnpauseVirtualTime(MainThreadSchedulerImpl* scheduler,
     virtual_time_pauser.PauseVirtualTime();
   }
 
-  *unpaused = scheduler->GetVirtualTimeDomain()->Now();
+  *unpaused = scheduler->NowTicks();
 }
 
 }  // namespace
@@ -810,8 +835,7 @@ TEST_F(PageSchedulerImplTest,
   page_scheduler_->SetVirtualTimePolicy(
       VirtualTimePolicy::kDeterministicLoading);
 
-  base::TimeTicks initial_virtual_time =
-      scheduler_->GetVirtualTimeDomain()->Now();
+  base::TimeTicks initial_virtual_time = scheduler_->NowTicks();
 
   base::TimeTicks time_paused;
   base::TimeTicks time_unpaused;
@@ -882,7 +906,7 @@ TEST_F(PageSchedulerImplTest, NestedMessageLoop_DETERMINISTIC_LOADING) {
   FakeTask fake_task;
   fake_task.set_enqueue_order(
       base::sequence_manager::EnqueueOrder::FromIntForTesting(42));
-  const base::TimeTicks start = scheduler_->real_time_domain()->Now();
+  const base::TimeTicks start = scheduler_->NowTicks();
   scheduler_->OnTaskStarted(nullptr, fake_task,
                             FakeTaskTiming(start, base::TimeTicks()));
   scheduler_->OnBeginNestedRunLoop();
@@ -890,7 +914,7 @@ TEST_F(PageSchedulerImplTest, NestedMessageLoop_DETERMINISTIC_LOADING) {
 
   scheduler_->OnExitNestedRunLoop();
   EXPECT_TRUE(scheduler_->VirtualTimeAllowedToAdvance());
-  FakeTaskTiming task_timing(start, scheduler_->real_time_domain()->Now());
+  FakeTaskTiming task_timing(start, scheduler_->NowTicks());
   scheduler_->OnTaskCompleted(nullptr, fake_task, &task_timing, nullptr);
 }
 
@@ -923,9 +947,8 @@ TEST_F(PageSchedulerImplTest, VirtualTimeBudgetExhaustedCallback) {
 
   page_scheduler_->EnableVirtualTime();
 
-  base::TimeTicks initial_real_time = scheduler_->tick_clock()->NowTicks();
-  base::TimeTicks initial_virtual_time =
-      scheduler_->GetVirtualTimeDomain()->Now();
+  base::TimeTicks initial_real_time = scheduler_->NowTicks();
+  base::TimeTicks initial_virtual_time = scheduler_->NowTicks();
 
   ThrottleableTaskRunner()->PostDelayedTask(
       FROM_HERE,
@@ -1032,7 +1055,7 @@ TEST_F(PageSchedulerImplTest,
   FakeTask fake_task;
   fake_task.set_enqueue_order(
       base::sequence_manager::EnqueueOrder::FromIntForTesting(42));
-  const base::TimeTicks start = scheduler_->real_time_domain()->Now();
+  const base::TimeTicks start = scheduler_->NowTicks();
   scheduler_->OnTaskStarted(nullptr, fake_task,
                             FakeTaskTiming(start, base::TimeTicks()));
   scheduler_->OnBeginNestedRunLoop();

@@ -53,7 +53,7 @@ class MockImageDecoderClient {
   // MockImageDecoder::decodedSize() to return the same thing as
   // MockImageDecoder::size(). See the precise implementation of
   // MockImageDecoder::decodedSize() below.
-  virtual IntSize DecodedSize() const { return IntSize(); }
+  virtual gfx::Size DecodedSize() const { return gfx::Size(); }
 
   void ForceFirstFrameToBeEmpty() { first_frame_forced_to_be_empty_ = true; }
 
@@ -77,7 +77,7 @@ class MockImageDecoder : public ImageDecoder {
 
   ~MockImageDecoder() override { client_->DecoderBeingDestroyed(); }
 
-  IntSize DecodedSize() const override {
+  gfx::Size DecodedSize() const override {
     return client_->DecodedSize().IsEmpty() ? Size() : client_->DecodedSize();
   }
 
@@ -130,7 +130,7 @@ class MockImageDecoder : public ImageDecoder {
 
   void InitializeNewFrame(wtf_size_t index) override {
     if (frame_buffer_cache_[index].AllocatePixelData(
-            Size().Width(), Size().Height(), ColorSpaceForSkImages()))
+            Size().width(), Size().height(), ColorSpaceForSkImages()))
       frame_buffer_cache_[index].ZeroFillPixelData();
     frame_buffer_cache_[index].SetHasAlpha(false);
   }
@@ -144,29 +144,29 @@ class MockImageDecoderFactory : public ImageDecoderFactory {
       MockImageDecoderClient* client,
       const SkISize& decoded_size) {
     return base::WrapUnique(new MockImageDecoderFactory(
-        client, IntSize(decoded_size.width(), decoded_size.height())));
+        client, gfx::Size(decoded_size.width(), decoded_size.height())));
   }
 
   static std::unique_ptr<MockImageDecoderFactory> Create(
       MockImageDecoderClient* client,
-      const IntSize& decoded_size) {
+      const gfx::Size& decoded_size) {
     return base::WrapUnique(new MockImageDecoderFactory(client, decoded_size));
   }
 
   std::unique_ptr<ImageDecoder> Create() override {
     auto decoder = std::make_unique<MockImageDecoder>(client_);
-    decoder->SetSize(static_cast<unsigned>(decoded_size_.Width()),
-                     static_cast<unsigned>(decoded_size_.Height()));
+    decoder->SetSize(static_cast<unsigned>(decoded_size_.width()),
+                     static_cast<unsigned>(decoded_size_.height()));
     return std::move(decoder);
   }
 
  private:
   MockImageDecoderFactory(MockImageDecoderClient* client,
-                          const IntSize& decoded_size)
+                          const gfx::Size& decoded_size)
       : client_(client), decoded_size_(decoded_size) {}
 
   MockImageDecoderClient* client_;
-  IntSize decoded_size_;
+  gfx::Size decoded_size_;
 };
 
 }  // namespace blink

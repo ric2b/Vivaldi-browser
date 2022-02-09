@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 #include "content/browser/media/capture/aura_window_video_capture_device.h"
+#include "base/memory/raw_ptr.h"
 
 #include <utility>
 
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -26,10 +26,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_occlusion_tracker.h"
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "content/browser/media/capture/slow_window_capturer_chromeos.h"
-#include "content/public/common/content_features.h"
-#endif
+#include "ui/aura/window_tree_host.h"
 
 namespace content {
 
@@ -85,21 +82,20 @@ class AuraWindowVideoCaptureDevice::WindowTracker final
     DCHECK(!target_window_);
 
     target_window_ = DesktopMediaID::GetNativeWindowById(source_id);
-    FrameSinkVideoCaptureDevice::VideoCaptureTarget target;
-    if (target_window_) {
-      target.frame_sink_id = target_window_->GetRootWindow()->GetFrameSinkId();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-      if (base::FeatureList::IsEnabled(features::kAuraWindowSubtreeCapture)) {
-        if (!target_window_->IsRootWindow()) {
-          capture_request_ = target_window_->MakeWindowCapturable();
-          target.subtree_capture_id = capture_request_.GetCaptureId();
-        }
+    if (target_window_ &&
+        target_window_->GetRootWindow()->GetFrameSinkId().is_valid()) {
+      target_ = viz::VideoCaptureTarget(
+          target_window_->GetRootWindow()->GetFrameSinkId());
+      if (!target_window_->IsRootWindow()) {
+        capture_request_ = target_window_->MakeWindowCapturable();
+        target_->sub_target = capture_request_.GetCaptureId();
       }
-#endif
+    } else {
+      target_ = absl::nullopt;
     }
 
-    if (target.frame_sink_id.is_valid()) {
-      target_ = target;
+    if (target_) {
+      video_capture_lock_ = target_window_->GetHost()->CreateVideoCaptureLock();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       force_visible_.emplace(target_window_);
 #endif
@@ -107,7 +103,7 @@ class AuraWindowVideoCaptureDevice::WindowTracker final
       device_task_runner_->PostTask(
           FROM_HERE,
           base::BindOnce(&FrameSinkVideoCaptureDevice::OnTargetChanged, device_,
-                         std::move(target)));
+                         target_));
       // Note: The MouseCursorOverlayController runs on the UI thread. It's also
       // important that SetTargetView() be called in the current stack while
       // |target_window_| is known to be a valid pointer.
@@ -126,6 +122,7 @@ class AuraWindowVideoCaptureDevice::WindowTracker final
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK_EQ(window, target_window_);
 
+    video_capture_lock_.reset();
     target_window_->RemoveObserver(this);
     target_window_ = nullptr;
 
@@ -145,22 +142,18 @@ class AuraWindowVideoCaptureDevice::WindowTracker final
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK_EQ(window, target_window_);
 
-    // The legacy capture path doesn't need to track frame sink ID changes.
-    if (!base::FeatureList::IsEnabled(features::kAuraWindowSubtreeCapture)) {
-      return;
-    }
-
     viz::FrameSinkId new_frame_sink_id =
         target_window_->GetRootWindow()->GetFrameSinkId();
 
     // Since the window is not destroyed, only re-parented, we can keep the
     // same subtree ID and only update the FrameSinkId of the target.
-    if (new_frame_sink_id != target_.frame_sink_id) {
-      target_.frame_sink_id = new_frame_sink_id;
+    DCHECK(target_);
+    if (new_frame_sink_id != target_->frame_sink_id) {
+      target_->frame_sink_id = new_frame_sink_id;
       device_task_runner_->PostTask(
           FROM_HERE,
           base::BindOnce(&FrameSinkVideoCaptureDevice::OnTargetChanged, device_,
-                         target_));
+                         target_.value()));
     }
   }
 #endif
@@ -173,18 +166,20 @@ class AuraWindowVideoCaptureDevice::WindowTracker final
   // Owned by FrameSinkVideoCaptureDevice. This will be valid for the life of
   // WindowTracker because the WindowTracker deleter task will be posted to the
   // UI thread before the MouseCursorOverlayController deleter task.
-  MouseCursorOverlayController* const cursor_controller_;
+  const raw_ptr<MouseCursorOverlayController> cursor_controller_;
 
   const DesktopMediaID::Type target_type_;
 
-  aura::Window* target_window_ = nullptr;
+  raw_ptr<aura::Window> target_window_ = nullptr;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   absl::optional<aura::WindowOcclusionTracker::ScopedForceVisible>
       force_visible_;
 #endif
 
   aura::ScopedWindowCaptureRequest capture_request_;
-  FrameSinkVideoCaptureDevice::VideoCaptureTarget target_;
+  absl::optional<viz::VideoCaptureTarget> target_;
+
+  std::unique_ptr<aura::WindowTreeHost::VideoCaptureLock> video_capture_lock_;
 };
 
 AuraWindowVideoCaptureDevice::AuraWindowVideoCaptureDevice(
@@ -193,40 +188,5 @@ AuraWindowVideoCaptureDevice::AuraWindowVideoCaptureDevice(
 }
 
 AuraWindowVideoCaptureDevice::~AuraWindowVideoCaptureDevice() = default;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-void AuraWindowVideoCaptureDevice::CreateCapturer(
-    mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer> receiver) {
-  GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::WeakPtr<WindowTracker> tracker_ptr,
-             mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer>
-                 receiver) {
-            WindowTracker* const tracker = tracker_ptr.get();
-            if (!tracker) {
-              // WindowTracker was destroyed in the meantime, due to early
-              // shutdown.
-              return;
-            }
-
-            if (tracker->target_type() == DesktopMediaID::TYPE_WINDOW &&
-                !base::FeatureList::IsEnabled(
-                    features::kAuraWindowSubtreeCapture)) {
-              VLOG(1) << "AuraWindowVideoCaptureDevice is using the legacy "
-                         "slow capturer.";
-              mojo::MakeSelfOwnedReceiver(
-                  std::make_unique<SlowWindowCapturerChromeOS>(
-                      tracker->target_window()),
-                  std::move(receiver));
-            } else {
-              VLOG(1) << "AuraWindowVideoCaptureDevice is using the frame "
-                         "sink capturer. :)";
-              CreateCapturerViaGlobalManager(std::move(receiver));
-            }
-          },
-          tracker_->AsWeakPtr(), std::move(receiver)));
-}
-#endif
 
 }  // namespace content

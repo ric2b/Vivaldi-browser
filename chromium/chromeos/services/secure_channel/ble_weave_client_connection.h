@@ -14,7 +14,6 @@
 #include "base/callback.h"
 #include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -102,6 +101,11 @@ class BluetoothLowEnergyWeaveClientConnection
       const device::BluetoothUUID remote_service_uuid,
       const std::string& device_address,
       bool should_set_low_connection_latency);
+
+  BluetoothLowEnergyWeaveClientConnection(
+      const BluetoothLowEnergyWeaveClientConnection&) = delete;
+  BluetoothLowEnergyWeaveClientConnection& operator=(
+      const BluetoothLowEnergyWeaveClientConnection&) = delete;
 
   ~BluetoothLowEnergyWeaveClientConnection() override;
 
@@ -274,11 +278,11 @@ class BluetoothLowEnergyWeaveClientConnection
   FRIEND_TEST_ALL_PREFIXES(
       SecureChannelBluetoothLowEnergyWeaveClientConnectionTest,
       Timeout_SendingMessage);
-  enum WriteRequestType {
-    REGULAR,
-    MESSAGE_COMPLETE,
-    CONNECTION_REQUEST,
-    CONNECTION_CLOSE
+  enum class WriteRequestType {
+    kRegular,
+    kMessageComplete,
+    kConnectionRequest,
+    kConnectionClose
   };
 
   // GATT_CONNECTION_RESULT_UNKNOWN indicates that the Bluetooth platform
@@ -446,8 +450,6 @@ class BluetoothLowEnergyWeaveClientConnection
 
   base::WeakPtrFactory<BluetoothLowEnergyWeaveClientConnection>
       weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BluetoothLowEnergyWeaveClientConnection);
 };
 
 }  // namespace weave

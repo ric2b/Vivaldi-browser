@@ -12,7 +12,8 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/check.h"
-#include "base/single_thread_task_runner.h"
+#include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -133,7 +134,7 @@ class CodecAllocatorTest : public testing::Test {
 
   // Allocators that we own. They are not unique_ptrs because the destructor is
   // private and they need to be destructed on the right thread.
-  CodecAllocator* allocator_ = nullptr;
+  raw_ptr<CodecAllocator> allocator_ = nullptr;
 
   std::unique_ptr<MockMediaCodecBridge> last_created_codec_;
 };
@@ -393,13 +394,7 @@ TEST_F(CodecAllocatorTest, LowResolutionGetsSoftware) {
                      base::Unretained(this), run_loop.QuitClosure()),
       std::move(config));
 
-  bool lollipop = base::android::BuildInfo::GetInstance()->sdk_int() <
-                  base::android::SDK_VERSION_MARSHMALLOW;
-  if (lollipop)
-    EXPECT_CALL(*this, OnCodecCreated(CodecType::kAny));
-  else
-    EXPECT_CALL(*this, OnCodecCreated(CodecType::kSoftware));
-
+  EXPECT_CALL(*this, OnCodecCreated(CodecType::kSoftware));
   run_loop.Run();
 }
 

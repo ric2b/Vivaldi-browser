@@ -126,11 +126,6 @@ class FileBrowserBackgroundImpl extends BackgroundBaseImpl {
     this.stringData = null;
 
     if (!window.isSWA) {
-      // Initialize listener for importer.handlePhotosAppMessage messages to
-      // the files app back-end. FIXME: Files SWA needs to support photos
-      // import workflow.
-      chrome.runtime.onMessageExternal.addListener(
-          this.onExternalMessageReceived_.bind(this));
       // FIXME: chrome.contextMenus not enabled for Files SWA yet. See service
       // onContextMenuClicked_ for adding "New Window" item to the OS shelf.
       chrome.contextMenus.onClicked.addListener(
@@ -373,7 +368,7 @@ class FileBrowserBackgroundImpl extends BackgroundBaseImpl {
    * @private
    * @override
    */
-  onLaunched_(launchData) {
+  async onLaunched_(launchData) {
     metrics.startInterval('Load.BackgroundLaunch');
     if (!launchData || !launchData.items || launchData.items.length == 0) {
       this.launch_(undefined);
@@ -411,18 +406,6 @@ class FileBrowserBackgroundImpl extends BackgroundBaseImpl {
         metrics.recordInterval('Load.BackgroundLaunch');
       });
     });
-  }
-
-  /**
-   * Handles a message received via chrome.runtime.sendMessageExternal.
-   *
-   * @param {*} message
-   * @param {MessageSender} sender
-   */
-  onExternalMessageReceived_(message, sender) {
-    if ('origin' in sender && sender.origin === GPLUS_PHOTOS_APP_ORIGIN) {
-      importer.handlePhotosAppMessage(message);
-    }
   }
 
   /**
@@ -583,10 +566,6 @@ const DIALOG_ID_PREFIX = 'dialog#';
  * @type {number}
  */
 let nextFileManagerDialogID = 0;
-
-/** @const {!string} */
-const GPLUS_PHOTOS_APP_ORIGIN =
-    'chrome-extension://efjnaogkjbogokcnohkmnjdojkikgobo';
 
 /**
  * Singleton instance of Background object.

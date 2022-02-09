@@ -72,6 +72,8 @@ CastAudioRenderer::CastAudioRenderer(
 
   interface_broker->GetInterface(application_media_info_manager_pending_remote_
                                      .InitWithNewPipeAndPassReceiver());
+  interface_broker->GetInterface(
+      audio_socket_broker_pending_remote_.InitWithNewPipeAndPassReceiver());
 }
 
 CastAudioRenderer::~CastAudioRenderer() {
@@ -140,13 +142,14 @@ void CastAudioRenderer::Flush(base::OnceClosure callback) {
 
 void CastAudioRenderer::FlushInternal() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(CurrentPlaybackStateEquals(PlaybackState::kStopped) ||
-         is_at_end_of_stream_);
   DCHECK(output_connection_);
 
   if (last_pushed_timestamp_.is_min()) {
     return;
   }
+
+  DCHECK(CurrentPlaybackStateEquals(PlaybackState::kStopped) ||
+         is_at_end_of_stream_);
 
   // At this point, there is no more pending demuxer read,
   // so all the previous tasks associated with the current timeline
@@ -258,7 +261,8 @@ void CastAudioRenderer::SetPlaybackRate(double playback_rate) {
     if (ticking_ && playback_rate_ == 0.0f && playback_rate > 0.0) {
       // It is necessary to set the playback state in the `Resume` case since
       // `playback_rate_` is changed immediately but the media time should not
-      // move forward until we received a timestamp update in UpdateMediaTime().
+      // move forward until we received a timestamp update in
+      // OnNextBuffer().
       SetPlaybackState(PlaybackState::kStarting);
     }
     playback_rate_ = playback_rate;
@@ -285,7 +289,8 @@ void CastAudioRenderer::SetBufferState(::media::BufferingState buffer_state) {
 
 void CastAudioRenderer::SetMediaTime(base::TimeDelta time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(CurrentPlaybackStateEquals(PlaybackState::kStopped));
+  DCHECK(CurrentPlaybackStateEquals(PlaybackState::kStopped) ||
+         CurrentPlaybackStateEquals(PlaybackState::kStarting));
 
   {
     base::AutoLock lock(timeline_lock_);
@@ -467,17 +472,18 @@ void CastAudioRenderer::OnNewBuffer(
   auto io_buffer = base::MakeRefCounted<net::IOBuffer>(io_buffer_size);
   if (buffer->end_of_stream()) {
     OnEndOfStream();
-  } else {
-    last_pushed_timestamp_ = buffer->timestamp() + buffer->duration();
-    memcpy(io_buffer->data() +
-               audio_output_service::OutputSocket::kAudioMessageHeaderSize,
-           buffer->data(), buffer->data_size());
+    return;
   }
+
+  last_pushed_timestamp_ = buffer->timestamp() + buffer->duration();
+  memcpy(io_buffer->data() +
+             audio_output_service::OutputSocket::kAudioMessageHeaderSize,
+         buffer->data(), buffer->data_size());
+
   output_connection_
       .AsyncCall(&audio_output_service::OutputStreamConnection::SendAudioBuffer)
       .WithArgs(std::move(io_buffer), filled_bytes,
-                buffer->end_of_stream() ? INT64_MIN
-                                        : buffer->timestamp().InMicroseconds());
+                buffer->timestamp().InMicroseconds());
 }
 
 void CastAudioRenderer::OnBackendInitialized(
@@ -496,19 +502,23 @@ void CastAudioRenderer::OnBackendInitialized(
   std::move(init_cb_).Run(::media::PIPELINE_OK);
 }
 
-void CastAudioRenderer::UpdateMediaTime(
-    int64_t media_timestamp_microseconds,
-    int64_t reference_timestamp_microseconds) {
+void CastAudioRenderer::OnNextBuffer(int64_t media_timestamp_microseconds,
+                                     int64_t reference_timestamp_microseconds,
+                                     int64_t delay_microseconds,
+                                     int64_t delay_timestamp_microseconds) {
   base::AutoLock lock(timeline_lock_);
   if (GetPlaybackState() == PlaybackState::kStopped) {
     return;
   }
-  if (GetPlaybackState() == PlaybackState::kStarting) {
-    SetPlaybackState(PlaybackState::kPlaying);
+  if (reference_timestamp_microseconds >= 0l &&
+      media_timestamp_microseconds >= 0l) {
+    media_pos_ = base::Microseconds(media_timestamp_microseconds);
+    reference_time_ =
+        base::TimeTicks::FromInternalValue(reference_timestamp_microseconds);
+    if (GetPlaybackState() == PlaybackState::kStarting) {
+      SetPlaybackState(PlaybackState::kPlaying);
+    }
   }
-  reference_time_ =
-      base::TimeTicks::FromInternalValue(reference_timestamp_microseconds);
-  media_pos_ = base::Microseconds(media_timestamp_microseconds);
   RUN_ON_MAIN_THREAD(ScheduleFetchNextBuffer);
 }
 
@@ -558,7 +568,8 @@ void CastAudioRenderer::OnApplicationMediaInfoReceived(
 
   output_connection_ =
       base::SequenceBound<audio_output_service::OutputStreamConnection>(
-          AudioIoThread::Get()->task_runner(), this, std::move(backend_params));
+          AudioIoThread::Get()->task_runner(), this, std::move(backend_params),
+          std::move(audio_socket_broker_pending_remote_));
   output_connection_.AsyncCall(
       &audio_output_service::OutputStreamConnection::Connect);
 }

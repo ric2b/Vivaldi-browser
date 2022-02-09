@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
@@ -75,7 +76,14 @@ class BLINK_COMMON_EXPORT ThrottlingURLLoader
   // implementing similar logic to FollowRedirectForcingRestart(). If this is
   // called, a future request for the redirect should be guaranteed to be sent
   // with the same request_id.
-  void ResetForFollowRedirect();
+  // `removed_headers`, `modified_headers` and `modified_cors_exempt_headers`
+  // will be merged to corresponding members in the ThrottlingURLLoader, and
+  // then apply updates against `resource_request`.
+  void ResetForFollowRedirect(
+      network::ResourceRequest& resource_request,
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers);
 
   void FollowRedirect(
       const std::vector<std::string>& removed_headers,
@@ -172,7 +180,7 @@ class BLINK_COMMON_EXPORT ThrottlingURLLoader
   void UpdateDeferredRequestHeaders(
       const net::HttpRequestHeaders& modified_request_headers,
       const net::HttpRequestHeaders& modified_cors_exempt_request_headers);
-  void UpdateRequestHeaders();
+  void UpdateRequestHeaders(network::ResourceRequest& resource_request);
   void UpdateDeferredResponseHead(
       network::mojom::URLResponseHeadPtr new_response_head);
   void PauseReadingBodyFromNet(URLLoaderThrottle* throttle);
@@ -222,7 +230,7 @@ class BLINK_COMMON_EXPORT ThrottlingURLLoader
   // NOTE: This may point to a native implementation (instead of a Mojo proxy
   // object). And it is possible that the implementation of |forwarding_client_|
   // destroys this object synchronously when this object is calling into it.
-  network::mojom::URLLoaderClient* forwarding_client_;
+  raw_ptr<network::mojom::URLLoaderClient> forwarding_client_;
   mojo::Remote<network::mojom::URLLoader> url_loader_;
 
   mojo::Receiver<network::mojom::URLLoaderClient> client_receiver_{this};

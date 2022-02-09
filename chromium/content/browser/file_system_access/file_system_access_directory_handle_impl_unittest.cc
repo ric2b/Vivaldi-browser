@@ -10,7 +10,8 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
+#include "base/ignore_result.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -184,8 +185,8 @@ class TestFileSystemAccessDirectoryEntriesListener
   }
 
  private:
-  std::vector<blink::mojom::FileSystemAccessEntryPtr>* entries_;
-  blink::mojom::FileSystemAccessErrorPtr* final_result_;
+  raw_ptr<std::vector<blink::mojom::FileSystemAccessEntryPtr>> entries_;
+  raw_ptr<blink::mojom::FileSystemAccessErrorPtr> final_result_;
   base::OnceClosure done_;
 };
 }  // namespace
@@ -370,15 +371,16 @@ TEST_F(FileSystemAccessDirectoryHandleImplTest, RemoveEntry) {
     EXPECT_TRUE(write_lock.has_value());
 
     base::RunLoop loop;
-    handle->RemoveEntry(
-        base_name,
-        /*recurse=*/false,
-        base::BindLambdaForTesting([&](blink::mojom::FileSystemAccessErrorPtr
-                                           result) {
-          EXPECT_EQ(result->status,
-                    blink::mojom::FileSystemAccessStatus::kOperationAborted);
-          EXPECT_TRUE(base::PathExists(file));
-        }).Then(loop.QuitClosure()));
+    handle->RemoveEntry(base_name,
+                        /*recurse=*/false,
+                        base::BindLambdaForTesting(
+                            [&](blink::mojom::FileSystemAccessErrorPtr result) {
+                              EXPECT_EQ(result->status,
+                                        blink::mojom::FileSystemAccessStatus::
+                                            kNoModificationAllowedError);
+                              EXPECT_TRUE(base::PathExists(file));
+                            })
+                            .Then(loop.QuitClosure()));
     loop.Run();
   }
 

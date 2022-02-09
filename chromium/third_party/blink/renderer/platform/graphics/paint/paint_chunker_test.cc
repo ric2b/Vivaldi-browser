@@ -77,7 +77,7 @@ class TestDisplayItemRequiringSeparateChunk : public ForeignLayerDisplayItem {
       : ForeignLayerDisplayItem(client_id,
                                 DisplayItem::kForeignLayerPlugin,
                                 cc::Layer::Create(),
-                                IntPoint(),
+                                gfx::Point(),
                                 RasterEffectOutset::kNone,
                                 PaintInvalidationReason::kJustCreated) {}
 };
@@ -666,8 +666,6 @@ TEST_F(PaintChunkerTest, AddHitTestDataToCurrentChunk) {
 }
 
 TEST_F(PaintChunkerTest, AddHitTestDataToCurrentChunkWheelRegionsEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
   Vector<PaintChunk> chunks;
   PaintChunker chunker(chunks);
 
@@ -731,7 +729,6 @@ TEST_F(PaintChunkerTest, AddHitTestDataToCurrentChunkWheelRegionsEnabled) {
 }
 
 TEST_F(PaintChunkerTest, ChunkBoundsAndKnownToBeOpaqueAllOpaqueItems) {
-  ScopedCompositeAfterPaintForTest cap(true);
   Vector<PaintChunk> chunks;
   PaintChunker chunker(chunks);
   FakeDisplayItemClient& client1 =
@@ -781,7 +778,6 @@ TEST_F(PaintChunkerTest, ChunkBoundsAndKnownToBeOpaqueAllOpaqueItems) {
 }
 
 TEST_F(PaintChunkerTest, ChunkBoundsAndKnownToBeOpaqueWithHitTest) {
-  ScopedCompositeAfterPaintForTest cap(true);
   Vector<PaintChunk> chunks;
   PaintChunker chunker(chunks);
   FakeDisplayItemClient& client1 =
@@ -840,7 +836,6 @@ TEST_F(PaintChunkerTest, ChunkBoundsAndKnownToBeOpaqueWithHitTest) {
 }
 
 TEST_F(PaintChunkerTest, ChunkBoundsAndKnownToBeOpaqueMixedOpaquenessItems) {
-  ScopedCompositeAfterPaintForTest cap(true);
   Vector<PaintChunk> chunks;
   PaintChunker chunker(chunks);
   FakeDisplayItemClient& client1 =

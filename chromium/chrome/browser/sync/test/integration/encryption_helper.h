@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/status_change_checker.h"
@@ -26,7 +27,7 @@ class ServerNigoriChecker : public SingleClientStatusChangeChecker {
   bool IsExitConditionSatisfied(std::ostream* os) override;
 
  private:
-  fake_server::FakeServer* const fake_server_;
+  const raw_ptr<fake_server::FakeServer> fake_server_;
   const syncer::PassphraseType expected_passphrase_type_;
 };
 
@@ -41,7 +42,7 @@ class ServerNigoriKeyNameChecker : public SingleClientStatusChangeChecker {
   bool IsExitConditionSatisfied(std::ostream* os) override;
 
  private:
-  fake_server::FakeServer* const fake_server_;
+  const raw_ptr<fake_server::FakeServer> fake_server_;
   const std::string expected_key_name_;
 };
 
@@ -88,20 +89,8 @@ class TrustedVaultKeysChangedStateChecker
   void OnTrustedVaultRecoverabilityChanged() override;
 
  private:
-  syncer::SyncServiceImpl* const service_;
+  const raw_ptr<syncer::SyncServiceImpl> service_;
   bool keys_changed_;
-};
-
-// Helper for setting scrypt-related feature flags.
-// NOTE: DO NOT INSTANTIATE THIS CLASS IN THE TEST BODY FOR INTEGRATION TESTS!
-// That causes data races, see crbug.com/915219. Instead, instantiate it in the
-// test fixture class.
-class ScopedScryptFeatureToggler {
- public:
-  ScopedScryptFeatureToggler(bool force_disabled, bool use_for_new_passphrases);
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 #endif  // CHROME_BROWSER_SYNC_TEST_INTEGRATION_ENCRYPTION_HELPER_H_

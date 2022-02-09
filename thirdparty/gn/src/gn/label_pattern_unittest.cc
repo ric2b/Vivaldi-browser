@@ -6,7 +6,6 @@
 
 #include <iterator>
 
-#include "base/macros.h"
 #include "gn/err.h"
 #include "gn/label_pattern.h"
 #include "gn/value.h"

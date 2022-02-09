@@ -9,7 +9,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/document_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -47,6 +46,9 @@ class CONTENT_EXPORT AuthenticatorImpl
       RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<blink::mojom::Authenticator> receiver);
 
+  AuthenticatorImpl(const AuthenticatorImpl&) = delete;
+  AuthenticatorImpl& operator=(const AuthenticatorImpl&) = delete;
+
  private:
   friend class AuthenticatorImplTest;
   friend class AuthenticatorImplRequestDelegateTest;
@@ -76,8 +78,6 @@ class CONTENT_EXPORT AuthenticatorImpl
   mojo::Receiver<blink::mojom::Authenticator> receiver_{this};
 
   base::WeakPtrFactory<AuthenticatorImpl> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(AuthenticatorImpl);
 };
 
 }  // namespace content

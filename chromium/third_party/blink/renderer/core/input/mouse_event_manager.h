@@ -46,7 +46,7 @@ class CORE_EXPORT MouseEventManager final
       EventTarget*,
       const AtomicString&,
       const WebMouseEvent&,
-      const FloatPoint* last_position,
+      const gfx::PointF* last_position,
       EventTarget* related_target,
       bool check_for_listener = false,
       const PointerId& pointer_id = PointerEventFactory::kInvalidId,
@@ -122,8 +122,8 @@ class CORE_EXPORT MouseEventManager final
   // refactoring to be able to remove the dependency from EventHandler.
   Element* GetElementUnderMouse();
   bool IsMousePositionUnknown();
-  FloatPoint LastKnownMousePositionInViewport();
-  FloatPoint LastKnownMouseScreenPosition();
+  gfx::PointF LastKnownMousePositionInViewport();
+  gfx::PointF LastKnownMouseScreenPosition();
 
   bool MousePressed();
   void ReleaseMousePress();
@@ -186,7 +186,7 @@ class CORE_EXPORT MouseEventManager final
   // is different from the given element.
   bool SlideFocusOnShadowHostIfNecessary(const Element&);
 
-  bool DragThresholdExceeded(const IntPoint&) const;
+  bool DragThresholdExceeded(const gfx::Point&) const;
   bool HandleDrag(const MouseEventWithHitTestResults&, DragInitiator);
   bool TryStartDrag(const MouseEventWithHitTestResults&);
   void ClearDragDataTransfer();
@@ -212,8 +212,9 @@ class CORE_EXPORT MouseEventManager final
 
   // The last mouse movement position this frame has seen in viewport
   // coordinates.
-  FloatPoint last_known_mouse_position_;
-  FloatPoint last_known_mouse_screen_position_;
+  PhysicalOffset last_known_mouse_position_in_root_frame_;
+  gfx::PointF last_known_mouse_position_;
+  gfx::PointF last_known_mouse_screen_position_;
 
   unsigned is_mouse_position_unknown_ : 1;
   // Current button-press state for mouse/mouse-like-stylus.
@@ -236,11 +237,11 @@ class CORE_EXPORT MouseEventManager final
   // remains unchanged.
   Member<Element> mouse_down_element_;
 
-  IntPoint mouse_down_pos_;  // In our view's coords.
+  gfx::Point mouse_down_pos_;  // In our view's coords.
   base::TimeTicks mouse_down_timestamp_;
   WebMouseEvent mouse_down_;
 
-  PhysicalOffset drag_start_pos_;
+  PhysicalOffset drag_start_pos_in_root_frame_;
   // This indicates that whether we should update the hover at each begin
   // frame. This is set to be true after the compositor or main thread scroll
   // ends, and at each begin frame, we will dispatch a fake mouse move event to

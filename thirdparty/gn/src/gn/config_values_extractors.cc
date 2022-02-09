@@ -25,10 +25,11 @@ class EscapedStringWriter {
 }  // namespace
 
 void RecursiveTargetConfigStringsToStream(
+    RecursiveWriterConfig config,
     const Target* target,
     const std::vector<std::string>& (ConfigValues::*getter)() const,
     const EscapeOptions& escape_options,
     std::ostream& out) {
-  RecursiveTargetConfigToStream(target, getter,
+  RecursiveTargetConfigToStream(config, target, getter,
                                 EscapedStringWriter(escape_options), out);
 }

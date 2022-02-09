@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -1168,7 +1167,7 @@ void ChunkDemuxer::SetDuration(double duration) {
         base::Microseconds(duration * base::Time::kMicrosecondsPerSecond);
   }
 
-  DCHECK(duration_td > base::TimeDelta());
+  DCHECK(duration_td.is_positive());
 
   user_specified_duration_ = duration;
   duration_ = duration_td;

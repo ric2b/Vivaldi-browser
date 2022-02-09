@@ -22,6 +22,7 @@
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -101,6 +102,10 @@ class FormStructureTestImpl : public test::FormStructureTest {
 
   bool FormShouldRunHeuristics(const FormData& form) {
     return FormStructure(form).ShouldRunHeuristics();
+  }
+
+  bool FormShouldRunPromoCodeHeuristics(const FormData& form) {
+    return FormStructure(form).ShouldRunPromoCodeHeuristics();
   }
 
   bool FormShouldBeQueried(const FormData& form) {
@@ -1071,6 +1076,36 @@ TEST_F(FormStructureTestImpl,
     EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
     EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
     EXPECT_EQ(NAME_FIRST, form_structure.field(0)->Type().GetStorableType());
+    EXPECT_TRUE(form_structure.IsAutofillable());
+  }
+}
+
+// Tests that promo code heuristics are run for forms with fewer than 3 fields.
+TEST_F(FormStructureTestImpl, PromoCodeHeuristics_SmallForm) {
+  base::test::ScopedFeatureList scoped_feature;
+  scoped_feature.InitAndEnableFeature(
+      features::kAutofillParseMerchantPromoCodeFields);
+  FormData form;
+  form.url = GURL("http://www.foo.com/");
+
+  FormFieldData field;
+  field.form_control_type = "text";
+
+  field.label = u"Promo Code";
+  field.name = u"promocode";
+  field.unique_renderer_id = MakeFieldRendererId();
+  form.fields.push_back(field);
+
+  EXPECT_TRUE(FormShouldRunPromoCodeHeuristics(form));
+
+  // Default configuration.
+  {
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(nullptr, nullptr);
+    ASSERT_EQ(1U, form_structure.field_count());
+    ASSERT_EQ(1U, form_structure.autofill_count());
+    EXPECT_EQ(MERCHANT_PROMO_CODE, form_structure.field(0)->heuristic_type());
+    EXPECT_EQ(NO_SERVER_DATA, form_structure.field(0)->server_type());
     EXPECT_TRUE(form_structure.IsAutofillable());
   }
 }
@@ -6176,16 +6211,7 @@ TEST_F(FormStructureTestImpl, ParseQueryResponse_RationalizeMultiMonth_2) {
   EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(3)->Type().GetStorableType());
 }
 
-TEST_P(ParameterizedFormStructureTest,
-       RationalizePhoneNumber_RunsOncePerSection) {
-  bool section_with_renderer_ids = GetParam();
-  base::test::ScopedFeatureList scoped_features;
-  std::vector<base::Feature> enabled;
-  std::vector<base::Feature> disabled;
-  (section_with_renderer_ids ? &enabled : &disabled)
-      ->push_back(features::kAutofillNameSectionsWithRendererIds);
-  scoped_features.InitWithFeatures(enabled, disabled);
-
+TEST_F(FormStructureTestImpl, RationalizePhoneNumber_RunsOncePerSection) {
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -6231,15 +6257,9 @@ TEST_P(ParameterizedFormStructureTest,
                                        test::GetEncodedSignatures(forms),
                                        nullptr, nullptr);
 
-  if (section_with_renderer_ids) {
-    EXPECT_FALSE(form_structure.phone_rationalized_["fullName_0_11-default"]);
-    form_structure.RationalizePhoneNumbersInSection("fullName_0_11-default");
-    EXPECT_TRUE(form_structure.phone_rationalized_["fullName_0_11-default"]);
-  } else {
-    EXPECT_FALSE(form_structure.phone_rationalized_["fullName_1-default"]);
-    form_structure.RationalizePhoneNumbersInSection("fullName_1-default");
-    EXPECT_TRUE(form_structure.phone_rationalized_["fullName_1-default"]);
-  }
+  EXPECT_FALSE(form_structure.phone_rationalized_["fullName_0_11-default"]);
+  form_structure.RationalizePhoneNumbersInSection("fullName_0_11-default");
+  EXPECT_TRUE(form_structure.phone_rationalized_["fullName_0_11-default"]);
   ASSERT_EQ(1U, forms.size());
   ASSERT_EQ(4U, forms[0]->field_count());
   EXPECT_EQ(NAME_FULL, forms[0]->field(0)->server_type());
@@ -7521,7 +7541,7 @@ INSTANTIATE_TEST_SUITE_P(All, ParameterizedFormStructureTest, testing::Bool());
 // Tests that, when the flag is off, we will not set the predicted type to
 // unknown for fields that have no server data and autocomplete off, and when
 // the flag is ON, we will overwrite the predicted type.
-TEST_F(ParameterizedFormStructureTest,
+TEST_F(FormStructureTestImpl,
        NoServerData_AutocompleteOff_FlagDisabled_NoOverwrite) {
   FormData form;
   form.url = GURL("http://foo.com");
@@ -7589,7 +7609,7 @@ TEST_F(ParameterizedFormStructureTest,
 
 // Tests that we never overwrite the CVC heuristic-predicted type, even if there
 // is no server data (votes) for every CC fields.
-TEST_F(ParameterizedFormStructureTest, NoServerDataCCFields_CVC_NoOverwrite) {
+TEST_F(FormStructureTestImpl, NoServerDataCCFields_CVC_NoOverwrite) {
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -7656,7 +7676,7 @@ TEST_F(ParameterizedFormStructureTest, NoServerDataCCFields_CVC_NoOverwrite) {
 
 // Tests that we never overwrite the CVC heuristic-predicted type, even if there
 // is server data (votes) for every other CC fields.
-TEST_F(ParameterizedFormStructureTest, WithServerDataCCFields_CVC_NoOverwrite) {
+TEST_F(FormStructureTestImpl, WithServerDataCCFields_CVC_NoOverwrite) {
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -8047,16 +8067,7 @@ TEST_F(FormStructureTestImpl, CreateForPasswordManagerUpload) {
 
 // Tests if a new logical form is started with the second appearance of a field
 // of type |FieldTypeGroup::kName|.
-TEST_P(ParameterizedFormStructureTest, NoAutocompleteSectionNames) {
-  bool section_with_renderer_ids = GetParam();
-  base::test::ScopedFeatureList scoped_features;
-  std::vector<base::Feature> enabled;
-  std::vector<base::Feature> disabled;
-  enabled.push_back(features::kAutofillUseNewSectioningMethod);
-  (section_with_renderer_ids ? &enabled : &disabled)
-      ->push_back(features::kAutofillNameSectionsWithRendererIds);
-  scoped_features.InitWithFeatures(enabled, disabled);
-
+TEST_F(FormStructureTestImpl, NoAutocompleteSectionNames) {
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -8109,21 +8120,12 @@ TEST_P(ParameterizedFormStructureTest, NoAutocompleteSectionNames) {
   // Assert the correct number of fields.
   ASSERT_EQ(6U, form_structure.field_count());
 
-  if (section_with_renderer_ids) {
-    EXPECT_EQ("fullName_0_11-default", form_structure.field(0)->section);
-    EXPECT_EQ("fullName_0_11-default", form_structure.field(1)->section);
-    EXPECT_EQ("fullName_0_11-default", form_structure.field(2)->section);
-    EXPECT_EQ("fullName_0_14-default", form_structure.field(3)->section);
-    EXPECT_EQ("fullName_0_14-default", form_structure.field(4)->section);
-    EXPECT_EQ("fullName_0_14-default", form_structure.field(5)->section);
-  } else {
-    EXPECT_EQ("fullName_1-default", form_structure.field(0)->section);
-    EXPECT_EQ("fullName_1-default", form_structure.field(1)->section);
-    EXPECT_EQ("fullName_1-default", form_structure.field(2)->section);
-    EXPECT_EQ("fullName_2-default", form_structure.field(3)->section);
-    EXPECT_EQ("fullName_2-default", form_structure.field(4)->section);
-    EXPECT_EQ("fullName_2-default", form_structure.field(5)->section);
-  }
+  EXPECT_EQ("fullName_0_11-default", form_structure.field(0)->section);
+  EXPECT_EQ("fullName_0_11-default", form_structure.field(1)->section);
+  EXPECT_EQ("fullName_0_11-default", form_structure.field(2)->section);
+  EXPECT_EQ("fullName_0_14-default", form_structure.field(3)->section);
+  EXPECT_EQ("fullName_0_14-default", form_structure.field(4)->section);
+  EXPECT_EQ("fullName_0_14-default", form_structure.field(5)->section);
 }
 
 // Tests that the immediate recurrence of the |PHONE_HOME_NUMBER| type does not
@@ -8204,16 +8206,10 @@ TEST_F(FormStructureTestImpl, NoSplitByRecurringPhoneFieldType) {
 
 // Tests if a new logical form is started with the second appearance of a field
 // of type |ADDRESS_HOME_COUNTRY|.
-TEST_P(ParameterizedFormStructureTest, SplitByRecurringFieldType) {
-  bool section_with_renderer_ids = GetParam();
+TEST_F(FormStructureTestImpl, SplitByRecurringFieldType) {
   base::test::ScopedFeatureList scoped_features;
-  std::vector<base::Feature> enabled;
-  std::vector<base::Feature> disabled;
-  enabled.push_back(features::kAutofillUseNewSectioningMethod);
-  (section_with_renderer_ids ? &enabled : &disabled)
-      ->push_back(features::kAutofillNameSectionsWithRendererIds);
-  scoped_features.InitWithFeatures(enabled, disabled);
-
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillUseNewSectioningMethod);
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -8261,27 +8257,17 @@ TEST_P(ParameterizedFormStructureTest, SplitByRecurringFieldType) {
   EXPECT_EQ("blue-shipping-default", form_structure.field(0)->section);
   EXPECT_EQ("blue-shipping-default", form_structure.field(1)->section);
   EXPECT_EQ("blue-shipping-default", form_structure.field(2)->section);
-  if (section_with_renderer_ids) {
-    EXPECT_EQ("country_0_14-default", form_structure.field(3)->section);
-  } else {
-    EXPECT_EQ("country_2-default", form_structure.field(3)->section);
-  }
+  EXPECT_EQ("country_0_14-default", form_structure.field(3)->section);
 }
 
 // Tests if a new logical form is started with the second appearance of a field
 // of type |NAME_FULL| and another with the second appearance of a field of
 // type |ADDRESS_HOME_COUNTRY|.
-TEST_P(ParameterizedFormStructureTest,
+TEST_F(FormStructureTestImpl,
        SplitByNewAutocompleteSectionNameAndRecurringType) {
-  bool section_with_renderer_ids = GetParam();
   base::test::ScopedFeatureList scoped_features;
-  std::vector<base::Feature> enabled;
-  std::vector<base::Feature> disabled;
-  enabled.push_back(features::kAutofillUseNewSectioningMethod);
-  (section_with_renderer_ids ? &enabled : &disabled)
-      ->push_back(features::kAutofillNameSectionsWithRendererIds);
-  scoped_features.InitWithFeatures(enabled, disabled);
-
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillUseNewSectioningMethod);
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -8330,11 +8316,7 @@ TEST_P(ParameterizedFormStructureTest,
   EXPECT_EQ("blue-shipping-default", form_structure.field(0)->section);
   EXPECT_EQ("blue-billing-default", form_structure.field(1)->section);
   EXPECT_EQ("blue-billing-default", form_structure.field(2)->section);
-  if (section_with_renderer_ids) {
-    EXPECT_EQ("country_0_14-default", form_structure.field(3)->section);
-  } else {
-    EXPECT_EQ("country_2-default", form_structure.field(3)->section);
-  }
+  EXPECT_EQ("country_0_14-default", form_structure.field(3)->section);
 }
 
 // Tests if a new logical form is started with the second appearance of a field

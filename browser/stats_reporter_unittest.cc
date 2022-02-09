@@ -109,7 +109,7 @@ TEST(StatsReporterTest, FirstRunNormal) {
                       "installation_year=2020&installation_week=53&earliest_"
                       "installation_year=2020&earliest_installation_week=53&"
                       "pings_since_last_month=0");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromMinutes(10));
+  EXPECT_EQ(next_reporting_time_interval, base::Minutes(10));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
@@ -130,7 +130,7 @@ TEST(StatsReporterTest, FirstRunNormal) {
           "&action_name=FirstRun_10_min&url=http://localhost/FirstRun_10_min&"
           "installation_year=2020&installation_week=53&earliest_"
           "installation_year=2020&earliest_installation_week=53");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromMinutes(50));
+  EXPECT_EQ(next_reporting_time_interval, base::Minutes(50));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
@@ -151,8 +151,7 @@ TEST(StatsReporterTest, FirstRunNormal) {
           "&action_name=FirstRun_60_min&url=http://localhost/FirstRun_60_min&"
           "installation_year=2020&installation_week=53&earliest_"
           "installation_year=2020&earliest_installation_week=53");
-  EXPECT_EQ(next_reporting_time_interval,
-            base::TimeDelta::FromDays(1) - base::TimeDelta::FromMinutes(60));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1) - base::Minutes(60));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
@@ -170,7 +169,7 @@ TEST(StatsReporterTest, FirstRunNormal) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=53&earliest_"
                       "installation_year=2020&earliest_installation_week=53");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 }
@@ -190,22 +189,15 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
   DCHECK(StatsReporterImpl::IsValidUserId(uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(5);
+  local_state_reporting_data.installation_time = time - base::Days(5);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 2;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromHours(2);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time + base::TimeDelta::FromDays(23);
-  local_state_reporting_data.next_pings.trimestrial =
-      time + base::TimeDelta::FromDays(84);
-  local_state_reporting_data.next_pings.semestrial =
-      time + base::TimeDelta::FromDays(176);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(360);
+  local_state_reporting_data.next_pings.daily = time - base::Hours(2);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time + base::Days(23);
+  local_state_reporting_data.next_pings.trimestrial = time + base::Days(84);
+  local_state_reporting_data.next_pings.semestrial = time + base::Days(176);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
@@ -250,11 +242,11 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=8&earliest_"
                       "installation_year=2021&earliest_installation_week=8");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromHours(7);
+  time += base::Hours(7);
   EXPECT_FALSE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
       kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
@@ -284,26 +276,19 @@ TEST(StatsReporterTest, NewInstallation) {
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
-      "installation_time",
-      base::TimeToValue(time - base::TimeDelta::FromDays(5)));
+      "installation_time", base::TimeToValue(time - base::Days(5)));
   os_profile_reporting_data_json->SetKey(
-      "next_daily_ping",
-      base::TimeToValue(time + base::TimeDelta::FromHours(2)));
+      "next_daily_ping", base::TimeToValue(time + base::Hours(2)));
   os_profile_reporting_data_json->SetKey(
-      "next_weekly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(2)));
+      "next_weekly_ping", base::TimeToValue(time + base::Days(2)));
   os_profile_reporting_data_json->SetKey(
-      "next_monthly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(23)));
+      "next_monthly_ping", base::TimeToValue(time + base::Days(23)));
   os_profile_reporting_data_json->SetKey(
-      "next_trimestrial_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(84)));
+      "next_trimestrial_ping", base::TimeToValue(time + base::Days(84)));
   os_profile_reporting_data_json->SetKey(
-      "next_semestrial_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(176)));
+      "next_semestrial_ping", base::TimeToValue(time + base::Days(176)));
   os_profile_reporting_data_json->SetKey(
-      "next_yearly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(360)));
+      "next_yearly_ping", base::TimeToValue(time + base::Days(360)));
 
   std::string request_url;
   std::string body;
@@ -315,7 +300,7 @@ TEST(StatsReporterTest, NewInstallation) {
       os_profile_reporting_data_json, request_url, body,
       next_reporting_time_interval));
 
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromHours(2));
+  EXPECT_EQ(next_reporting_time_interval, base::Hours(2));
 
   time += next_reporting_time_interval;
 
@@ -332,7 +317,7 @@ TEST(StatsReporterTest, NewInstallation) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=9&earliest_"
                       "installation_year=2021&earliest_installation_week=8");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
@@ -351,7 +336,7 @@ TEST(StatsReporterTest, NewInstallation) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=9&earliest_"
                       "installation_year=2021&earliest_installation_week=8");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 }
@@ -373,48 +358,34 @@ TEST(StatsReporterTest, MovedStandalone) {
   DCHECK(StatsReporterImpl::IsValidUserId(other_uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(5);
+  local_state_reporting_data.installation_time = time - base::Days(5);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 2;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromHours(2);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time + base::TimeDelta::FromDays(23);
-  local_state_reporting_data.next_pings.trimestrial =
-      time + base::TimeDelta::FromDays(84);
-  local_state_reporting_data.next_pings.semestrial =
-      time + base::TimeDelta::FromDays(176);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(360);
+  local_state_reporting_data.next_pings.daily = time - base::Hours(2);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time + base::Days(23);
+  local_state_reporting_data.next_pings.trimestrial = time + base::Days(84);
+  local_state_reporting_data.next_pings.semestrial = time + base::Days(176);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", other_uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 6);
   os_profile_reporting_data_json->SetKey(
-      "installation_time",
-      base::TimeToValue(time - base::TimeDelta::FromDays(365)));
+      "installation_time", base::TimeToValue(time - base::Days(365)));
   os_profile_reporting_data_json->SetKey(
-      "next_daily_ping",
-      base::TimeToValue(time + base::TimeDelta::FromHours(7)));
+      "next_daily_ping", base::TimeToValue(time + base::Hours(7)));
   os_profile_reporting_data_json->SetKey(
-      "next_weekly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(5)));
+      "next_weekly_ping", base::TimeToValue(time + base::Days(5)));
   os_profile_reporting_data_json->SetKey(
-      "next_monthly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(30)));
+      "next_monthly_ping", base::TimeToValue(time + base::Days(30)));
   os_profile_reporting_data_json->SetKey(
-      "next_trimestrial_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(90)));
+      "next_trimestrial_ping", base::TimeToValue(time + base::Days(90)));
   os_profile_reporting_data_json->SetKey(
-      "next_semestrial_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(180)));
+      "next_semestrial_ping", base::TimeToValue(time + base::Days(180)));
   os_profile_reporting_data_json->SetKey(
-      "next_yearly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(360)));
+      "next_yearly_ping", base::TimeToValue(time + base::Days(360)));
 
   std::string request_url;
   std::string body;
@@ -433,7 +404,7 @@ TEST(StatsReporterTest, MovedStandalone) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=8&earliest_"
                       "installation_year=0&earliest_installation_week=0");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
 }
 
 TEST(StatsReporterTest, UseLegacyUserId) {
@@ -471,7 +442,7 @@ TEST(StatsReporterTest, UseLegacyUserId) {
                       "installation_year=2020&installation_week=53&earliest_"
                       "installation_year=2020&earliest_installation_week=53&"
                       "pings_since_last_month=0");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
@@ -489,7 +460,7 @@ TEST(StatsReporterTest, UseLegacyUserId) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=53&earliest_"
                       "installation_year=2020&earliest_installation_week=53");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 }
@@ -509,22 +480,15 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
   DCHECK(StatsReporterImpl::IsValidUserId(uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(5);
+  local_state_reporting_data.installation_time = time - base::Days(5);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 2;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromHours(2);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time + base::TimeDelta::FromDays(23);
-  local_state_reporting_data.next_pings.trimestrial =
-      time + base::TimeDelta::FromDays(84);
-  local_state_reporting_data.next_pings.semestrial =
-      time + base::TimeDelta::FromDays(176);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(360);
+  local_state_reporting_data.next_pings.daily = time - base::Hours(2);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time + base::Days(23);
+  local_state_reporting_data.next_pings.trimestrial = time + base::Days(84);
+  local_state_reporting_data.next_pings.semestrial = time + base::Days(176);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
@@ -569,7 +533,7 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=8&earliest_"
                       "installation_year=2021&earliest_installation_week=8");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 }
@@ -589,30 +553,22 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
   DCHECK(StatsReporterImpl::IsValidUserId(uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(5);
+  local_state_reporting_data.installation_time = time - base::Days(5);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 6;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromHours(2);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time + base::TimeDelta::FromDays(23);
-  local_state_reporting_data.next_pings.trimestrial =
-      time + base::TimeDelta::FromDays(84);
-  local_state_reporting_data.next_pings.semestrial =
-      time + base::TimeDelta::FromDays(176);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(360);
+  local_state_reporting_data.next_pings.daily = time - base::Hours(2);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time + base::Days(23);
+  local_state_reporting_data.next_pings.trimestrial = time + base::Days(84);
+  local_state_reporting_data.next_pings.semestrial = time + base::Days(176);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 7);
   os_profile_reporting_data_json->SetKey(
-      "installation_time",
-      base::TimeToValue(time - base::TimeDelta::FromDays(365)));
+      "installation_time", base::TimeToValue(time - base::Days(365)));
   os_profile_reporting_data_json->SetKey(
       "next_daily_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.daily));
@@ -649,7 +605,7 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=8&earliest_"
                       "installation_year=2020&earliest_installation_week=9");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
   EXPECT_EQ(local_state_reporting_data.pings_since_last_month, 8);
@@ -670,38 +626,29 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
   DCHECK(StatsReporterImpl::IsValidUserId(uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(5);
+  local_state_reporting_data.installation_time = time - base::Days(5);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 10;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromDays(1);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time - base::TimeDelta::FromDays(1);
-  local_state_reporting_data.next_pings.trimestrial =
-      time + base::TimeDelta::FromDays(84);
-  local_state_reporting_data.next_pings.semestrial =
-      time + base::TimeDelta::FromDays(176);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(360);
+  local_state_reporting_data.next_pings.daily = time - base::Days(1);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time - base::Days(1);
+  local_state_reporting_data.next_pings.trimestrial = time + base::Days(84);
+  local_state_reporting_data.next_pings.semestrial = time + base::Days(176);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 0);
   os_profile_reporting_data_json->SetKey(
-      "installation_time",
-      base::TimeToValue(time - base::TimeDelta::FromDays(365)));
+      "installation_time", base::TimeToValue(time - base::Days(365)));
   os_profile_reporting_data_json->SetKey("next_daily_ping",
                                          base::TimeToValue(time));
   os_profile_reporting_data_json->SetKey(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
   os_profile_reporting_data_json->SetKey(
-      "next_monthly_ping",
-      base::TimeToValue(time + base::TimeDelta::FromDays(30)));
+      "next_monthly_ping", base::TimeToValue(time + base::Days(30)));
   os_profile_reporting_data_json->SetKey(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
@@ -729,7 +676,7 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2021&installation_week=8&earliest_"
                       "installation_year=2020&earliest_installation_week=9");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
   EXPECT_EQ(local_state_reporting_data.pings_since_last_month, 1);
@@ -750,22 +697,15 @@ TEST(StatsReporterTest, LongRun) {
   DCHECK(StatsReporterImpl::IsValidUserId(uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(365);
+  local_state_reporting_data.installation_time = time - base::Days(365);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 20;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromMinutes(1);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time + base::TimeDelta::FromDays(5);
-  local_state_reporting_data.next_pings.trimestrial =
-      time + base::TimeDelta::FromDays(5);
-  local_state_reporting_data.next_pings.semestrial =
-      time + base::TimeDelta::FromDays(5);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(5);
+  local_state_reporting_data.next_pings.daily = time - base::Minutes(1);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time + base::Days(5);
+  local_state_reporting_data.next_pings.trimestrial = time + base::Days(5);
+  local_state_reporting_data.next_pings.semestrial = time + base::Days(5);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(5);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
@@ -810,11 +750,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(3);
+  time += base::Days(3);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -830,11 +770,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(2);
+  time += base::Days(2);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -852,11 +792,11 @@ TEST(StatsReporterTest, LongRun) {
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1&"
                       "pings_since_last_month=22");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(1) + base::TimeDelta::FromHours(23);
+  time += base::Days(1) + base::Hours(23);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -871,11 +811,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(4) - base::TimeDelta::FromHours(6);
+  time += base::Days(4) - base::Hours(6);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -891,11 +831,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(25);
+  time += base::Days(25);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -911,11 +851,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(1);
+  time += base::Days(1);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -931,11 +871,11 @@ TEST(StatsReporterTest, LongRun) {
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1&"
                       "pings_since_last_month=3");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(58);
+  time += base::Days(58);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -952,11 +892,11 @@ TEST(StatsReporterTest, LongRun) {
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1&"
                       "pings_since_last_month=0");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(1);
+  time += base::Days(1);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -971,11 +911,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(90);
+  time += base::Days(90);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -992,11 +932,11 @@ TEST(StatsReporterTest, LongRun) {
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1&"
                       "pings_since_last_month=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(1);
+  time += base::Days(1);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -1012,11 +952,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(91);
+  time += base::Days(91);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -1033,11 +973,11 @@ TEST(StatsReporterTest, LongRun) {
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1&"
                       "pings_since_last_month=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(1);
+  time += base::Days(1);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -1052,11 +992,11 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(91);
+  time += base::Days(91);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -1073,11 +1013,11 @@ TEST(StatsReporterTest, LongRun) {
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1&"
                       "pings_since_last_month=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 
-  time += base::TimeDelta::FromDays(1) + base::TimeDelta::FromHours(2);
+  time += base::Days(1) + base::Hours(2);
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
@@ -1093,7 +1033,7 @@ TEST(StatsReporterTest, LongRun) {
                       "&action_name=Ping&url=http://localhost/Ping&"
                       "installation_year=2020&installation_week=1&earliest_"
                       "installation_year=2020&earliest_installation_week=1");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
 }
@@ -1113,22 +1053,15 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
   DCHECK(StatsReporterImpl::IsValidUserId(uid));
 
   StatsReporterImpl::ReportingData local_state_reporting_data;
-  local_state_reporting_data.installation_time =
-      time - base::TimeDelta::FromDays(500);
+  local_state_reporting_data.installation_time = time - base::Days(500);
   local_state_reporting_data.user_id = uid;
   local_state_reporting_data.pings_since_last_month = 10;
-  local_state_reporting_data.next_pings.daily =
-      time - base::TimeDelta::FromHours(1);
-  local_state_reporting_data.next_pings.weekly =
-      time + base::TimeDelta::FromDays(2);
-  local_state_reporting_data.next_pings.monthly =
-      time - base::TimeDelta::FromHours(1);
-  local_state_reporting_data.next_pings.trimestrial =
-      time - base::TimeDelta::FromHours(1);
-  local_state_reporting_data.next_pings.semestrial =
-      time - base::TimeDelta::FromHours(1);
-  local_state_reporting_data.next_pings.yearly =
-      time + base::TimeDelta::FromDays(50);
+  local_state_reporting_data.next_pings.daily = time - base::Hours(1);
+  local_state_reporting_data.next_pings.weekly = time + base::Days(2);
+  local_state_reporting_data.next_pings.monthly = time - base::Hours(1);
+  local_state_reporting_data.next_pings.trimestrial = time - base::Hours(1);
+  local_state_reporting_data.next_pings.semestrial = time - base::Hours(1);
+  local_state_reporting_data.next_pings.yearly = time + base::Days(50);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
       base::Value::Type::DICTIONARY);
@@ -1175,7 +1108,7 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
                       "installation_year=2020&installation_week=3&earliest_"
                       "installation_year=2020&earliest_installation_week=3&"
                       "pings_since_last_month=10");
-  EXPECT_EQ(next_reporting_time_interval, base::TimeDelta::FromDays(1));
+  EXPECT_EQ(next_reporting_time_interval, base::Days(1));
   ExpectReportingDataMatch(local_state_reporting_data,
                            *os_profile_reporting_data_json);
   base::Time::Exploded exploded;

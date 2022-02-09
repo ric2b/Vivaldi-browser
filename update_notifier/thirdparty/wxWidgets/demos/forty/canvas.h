@@ -23,7 +23,7 @@ public:
     FortyCanvas(wxWindow* parent, const wxPoint& pos, const wxSize& size);
     virtual ~FortyCanvas();
 
-    virtual void OnDraw(wxDC& dc);
+    virtual void OnDraw(wxDC& dc) wxOVERRIDE;
     bool OnCloseCanvas();
     void OnMouseEvent(wxMouseEvent& event);
     void SetCursorStyle(int x, int y);
@@ -39,7 +39,7 @@ public:
     void LayoutGame();
     void ShowPlayerDialog();
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 
 private:
     wxFont* m_font;

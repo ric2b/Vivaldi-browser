@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "cc/layers/deadline_policy.h"
 #include "cc/layers/layer.h"
@@ -43,7 +44,7 @@ class CustomScreenInfoRenderWidgetHostViewAndroid
   void SetScreenInfo(display::ScreenInfo screen_info);
 
   // RenderWidgetHostViewAndroid:
-  display::ScreenInfos GetScreenInfos() override;
+  display::ScreenInfos GetScreenInfos() const override;
 
  private:
   CustomScreenInfoRenderWidgetHostViewAndroid(
@@ -66,7 +67,7 @@ void CustomScreenInfoRenderWidgetHostViewAndroid::SetScreenInfo(
 }
 
 display::ScreenInfos
-CustomScreenInfoRenderWidgetHostViewAndroid::GetScreenInfos() {
+CustomScreenInfoRenderWidgetHostViewAndroid::GetScreenInfos() const {
   return display::ScreenInfos(screen_info_);
 }
 
@@ -127,8 +128,8 @@ class RenderWidgetHostViewAndroidTest : public testing::Test {
   // TestRenderViewHost
   scoped_refptr<RenderViewHostImpl> render_view_host_;
   // Owned by `render_view_host_`.
-  MockRenderWidgetHost* host_;
-  RenderWidgetHostViewAndroid* render_widget_host_view_android_;
+  raw_ptr<MockRenderWidgetHost> host_;
+  raw_ptr<RenderWidgetHostViewAndroid> render_widget_host_view_android_;
 
   BrowserTaskEnvironment task_environment_;
 };

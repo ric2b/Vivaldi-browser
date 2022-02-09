@@ -10,13 +10,11 @@
 #include <map>
 
 #include "base/containers/flat_set.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/devtools_throttle_handle.h"
-#include "content/common/content_export.h"
 #include "content/public/browser/global_routing_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom-forward.h"
@@ -37,7 +35,7 @@ class ServiceWorkerDevToolsAgentHost;
 class ServiceWorkerContextWrapper;
 
 // Manages ServiceWorkerDevToolsAgentHost's. This class lives on UI thread.
-class CONTENT_EXPORT ServiceWorkerDevToolsManager {
+class ServiceWorkerDevToolsManager {
  public:
   class Observer {
    public:
@@ -51,6 +49,10 @@ class CONTENT_EXPORT ServiceWorkerDevToolsManager {
 
   // Returns the ServiceWorkerDevToolsManager singleton.
   static ServiceWorkerDevToolsManager* GetInstance();
+
+  ServiceWorkerDevToolsManager(const ServiceWorkerDevToolsManager&) = delete;
+  ServiceWorkerDevToolsManager& operator=(const ServiceWorkerDevToolsManager&) =
+      delete;
 
   ServiceWorkerDevToolsAgentHost* GetDevToolsAgentHostForWorker(
       int worker_process_id,
@@ -173,8 +175,6 @@ class CONTENT_EXPORT ServiceWorkerDevToolsManager {
   // Clients may retain agent host for the terminated shared worker,
   // and we reconnect them when shared worker is restarted.
   base::flat_set<ServiceWorkerDevToolsAgentHost*> stopped_hosts_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerDevToolsManager);
 };
 
 }  // namespace content

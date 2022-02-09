@@ -29,16 +29,7 @@ namespace {
 
 #if defined(OS_WIN) || defined(OS_MAC)
 const char kVivaldiAppCastUrl[] =
-#if defined(_DEBUG) && defined(_DEBUG_AUTOUPDATE)
-// This is for debugging/testing in debug builds
-#if defined(OS_MAC)
-    "http://mirror.viv.osl/~jarle/sparkle/mac_appcast.xml";
-#elif defined(_WIN64)
-    "http://mirror.viv.osl/~jarle/sparkle/appcast.x64.xml";
-#else
-    "http://mirror.viv.osl/~jarle/sparkle/appcast.xml";
-#endif
-#elif defined(OFFICIAL_BUILD) && \
+#if defined(OFFICIAL_BUILD) && \
     (UPDATE_SOURCE_WIN(VIVALDI_RELEASE) == UPDATE_PREVIEW_SOURCE_WINDOWS)
 // This is the public TP/Beta/Final release channel
 #if defined(OS_MAC)

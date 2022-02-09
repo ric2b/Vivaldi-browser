@@ -6,20 +6,17 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
-ResourceCacheKey::ResourceCacheKey(const IntSize& size,
-                                   const CanvasResourceParams& params,
+ResourceCacheKey::ResourceCacheKey(const SkImageInfo& info,
                                    bool is_origin_top_left)
-    : size(size), params(params), is_origin_top_left(is_origin_top_left) {}
+    : info(info), is_origin_top_left(is_origin_top_left) {}
 
 bool ResourceCacheKey::operator==(const ResourceCacheKey& other) const {
-  return (size == other.size &&
-          params.ColorSpace() == other.params.ColorSpace() &&
-          params.GetSkColorType() == other.params.GetSkColorType() &&
-          params.GetSkAlphaType() == other.params.GetSkAlphaType() &&
-          is_origin_top_left == other.is_origin_top_left);
+  return (info == other.info && is_origin_top_left == other.is_origin_top_left);
 }
 
 bool ResourceCacheKey::operator!=(const ResourceCacheKey& other) const {
@@ -45,13 +42,7 @@ RecyclableCanvasResource::~RecyclableCanvasResource() {
   // with unsupported parameters and if it's fine to lose the cache. Or, we can
   // save the cache key in |unused_providers_| and only compare the saved cache
   // key instead of the one in CanvasResourceProvider.
-  DCHECK(cache_key_.size == resource_provider_->Size());
-  DCHECK(cache_key_.params.ColorSpace() ==
-         resource_provider_->ColorParams().ColorSpace());
-  DCHECK(cache_key_.params.GetSkColorType() ==
-         resource_provider_->ColorParams().GetSkColorType());
-  DCHECK(cache_key_.params.GetSkAlphaType() ==
-         resource_provider_->ColorParams().GetSkAlphaType());
+  DCHECK(cache_key_.info == resource_provider_->GetSkImageInfo());
   DCHECK(cache_key_.is_origin_top_left ==
          resource_provider_->IsOriginTopLeft());
 
@@ -74,17 +65,16 @@ WebGPURecyclableResourceCache::WebGPURecyclableResourceCache(
 
 std::unique_ptr<RecyclableCanvasResource>
 WebGPURecyclableResourceCache::GetOrCreateCanvasResource(
-    const IntSize& size,
-    const CanvasResourceParams& params,
+    const SkImageInfo& info,
     bool is_origin_top_left) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  const ResourceCacheKey cache_key(size, params, is_origin_top_left);
+  const ResourceCacheKey cache_key(info, is_origin_top_left);
   std::unique_ptr<CanvasResourceProvider> provider =
       AcquireCachedProvider(cache_key);
   if (!provider) {
     provider = CanvasResourceProvider::CreateWebGPUImageProvider(
-        size, params, is_origin_top_left);
+        info, is_origin_top_left);
     if (!provider)
       return nullptr;
   }
@@ -95,9 +85,9 @@ WebGPURecyclableResourceCache::GetOrCreateCanvasResource(
 
 void WebGPURecyclableResourceCache::OnDestroyRecyclableResource(
     std::unique_ptr<CanvasResourceProvider> resource_provider) {
-  int resource_size = resource_provider->Size().Width() *
-                      resource_provider->Size().Height() *
-                      resource_provider->ColorParams().BytesPerPixel();
+  int resource_size = resource_provider->Size().width() *
+                      resource_provider->Size().height() *
+                      resource_provider->GetSkImageInfo().bytesPerPixel();
   if (context_provider_) {
     total_unused_resources_in_bytes_ += resource_size;
 
@@ -129,6 +119,19 @@ void WebGPURecyclableResourceCache::OnDestroyRecyclableResource(
   StartResourceCleanUpTimer();
 }
 
+WebGPURecyclableResourceCache::Resource::Resource(
+    std::unique_ptr<CanvasResourceProvider> resource_provider,
+    unsigned int timer_id,
+    int resource_size)
+    : resource_provider_(std::move(resource_provider)),
+      timer_id_(timer_id),
+      resource_size_(resource_size) {}
+
+WebGPURecyclableResourceCache::Resource::Resource(Resource&& that) noexcept =
+    default;
+
+WebGPURecyclableResourceCache::Resource::~Resource() = default;
+
 std::unique_ptr<CanvasResourceProvider>
 WebGPURecyclableResourceCache::AcquireCachedProvider(
     const ResourceCacheKey& cache_key) {
@@ -136,9 +139,9 @@ WebGPURecyclableResourceCache::AcquireCachedProvider(
   DequeResourceProvider::iterator it;
   for (it = unused_providers_.begin(); it != unused_providers_.end(); ++it) {
     CanvasResourceProvider* resource_provider = it->resource_provider_.get();
-    const auto it_cache_key = ResourceCacheKey(
-        resource_provider->Size(), resource_provider->ColorParams(),
-        resource_provider->IsOriginTopLeft());
+    const auto it_cache_key =
+        ResourceCacheKey(resource_provider->GetSkImageInfo(),
+                         resource_provider->IsOriginTopLeft());
 
     if (cache_key == it_cache_key) {
       break;

@@ -16,19 +16,19 @@
 
 namespace blink {
 
-void NGMathMLPainter::PaintBar(const PaintInfo& info, const IntRect& bar) {
+void NGMathMLPainter::PaintBar(const PaintInfo& info, const gfx::Rect& bar) {
   if (bar.IsEmpty())
     return;
 
   GraphicsContextStateSaver state_saver(info.context);
-  info.context.SetStrokeThickness(bar.Height());
+  info.context.SetStrokeThickness(bar.height());
   info.context.SetStrokeStyle(kSolidStroke);
   info.context.SetStrokeColor(
       box_fragment_.Style().VisitedDependentColor(GetCSSPropertyColor()));
-  IntPoint line_end_point = {bar.Width(), 0};
+  gfx::Point line_end_point = {bar.width(), 0};
   AutoDarkMode auto_dark_mode(PaintAutoDarkMode(
-      box_fragment_.Style(), DarkModeFilter::ElementRole::kText));
-  info.context.DrawLine(bar.Location(), bar.Location() + line_end_point,
+      box_fragment_.Style(), DarkModeFilter::ElementRole::kForeground));
+  info.context.DrawLine(bar.origin(), line_end_point + bar.OffsetFromOrigin(),
                         auto_dark_mode);
 }
 
@@ -44,9 +44,9 @@ void NGMathMLPainter::PaintStretchyOrLargeOperator(
   GraphicsContextStateSaver state_saver(info.context);
   info.context.SetFillColor(style.VisitedDependentColor(GetCSSPropertyColor()));
   AutoDarkMode auto_dark_mode(
-      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kText));
+      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground));
   info.context.DrawText(style.GetFont(), text_fragment_paint_info,
-                        FloatPoint(paint_offset), kInvalidDOMNodeId,
+                        gfx::PointF(paint_offset), kInvalidDOMNodeId,
                         auto_dark_mode);
 }
 
@@ -68,7 +68,7 @@ void NGMathMLPainter::PaintFractionBar(
             padding.HorizontalSum(),
         line_thickness};
     bar_rect.Move(paint_offset);
-    PaintBar(info, PixelSnappedIntRect(bar_rect));
+    PaintBar(info, ToPixelSnappedRect(bar_rect));
   }
 }
 
@@ -157,7 +157,7 @@ void NGMathMLPainter::PaintRadicalSymbol(
   PhysicalRect bar_rect = {bar_physical_offset.left, bar_physical_offset.top,
                            base_width, rule_thickness};
   bar_rect.Move(paint_offset);
-  PaintBar(info, PixelSnappedIntRect(bar_rect));
+  PaintBar(info, ToPixelSnappedRect(bar_rect));
 }
 
 void NGMathMLPainter::Paint(const PaintInfo& info,

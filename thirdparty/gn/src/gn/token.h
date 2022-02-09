@@ -70,8 +70,7 @@ class Token {
     return LocationRange(
         location_,
         Location(location_.file(), location_.line_number(),
-                 location_.column_number() + static_cast<int>(value_.size()),
-                 location_.byte() + static_cast<int>(value_.size())));
+                 location_.column_number() + static_cast<int>(value_.size())));
   }
 
   // Helper functions for comparing this token to something.

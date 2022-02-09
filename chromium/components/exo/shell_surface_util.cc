@@ -26,6 +26,8 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/window_properties.h"
+#include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/desks/desks_util.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/exo/client_controlled_shell_surface.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -153,10 +155,14 @@ ClientControlledShellSurface* GetShellClientControlledShellSurface(
 
 int GetWindowDeskStateChanged(const aura::Window* window) {
   constexpr int kToggleVisibleOnAllWorkspacesValue = -1;
-  return window->GetProperty(aura::client::kWindowWorkspaceKey) ==
-                 aura::client::kWindowWorkspaceVisibleOnAllWorkspaces
-             ? kToggleVisibleOnAllWorkspacesValue
-             : window->GetProperty(aura::client::kWindowWorkspaceKey);
+  if (ash::desks_util::IsWindowVisibleOnAllWorkspaces(window))
+    return kToggleVisibleOnAllWorkspacesValue;
+
+  int workspace = window->GetProperty(aura::client::kWindowWorkspaceKey);
+  // If workspace is unassigned, returns the active desk index.
+  if (workspace == aura::client::kWindowWorkspaceUnassignedWorkspace)
+    workspace = ash::DesksController::Get()->GetActiveDeskIndex();
+  return workspace;
 }
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -308,10 +314,6 @@ bool HasPermissionToActivate(aura::Window* window) {
 }
 
 bool ConsumedByIme(aura::Window* window, const ui::KeyEvent& event) {
-  // When IME is blocked, Exo can handle any key events.
-  if (WMHelper::GetInstance()->IsImeBlocked(window))
-    return false;
-
   // Check if IME consumed the event, to avoid it to be doubly processed.
   // First let us see whether IME is active and is in text input mode.
   views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(window);
@@ -345,7 +347,7 @@ bool ConsumedByIme(aura::Window* window, const ui::KeyEvent& event) {
   // Unfortunately, this is not necessary the case for our clients that may
   // treat keydown as a trigger of text inputs. We need suppression for keydown.
   //
-  // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
+  // Same condition as ash/components/arc/ime/arc_ime_service.cc#InsertChar.
   const char16_t ch = event.GetCharacter();
   const bool is_control_char =
       (0x00 <= ch && ch <= 0x1f) || (0x7f <= ch && ch <= 0x9f);
@@ -359,7 +361,7 @@ bool ConsumedByIme(aura::Window* window, const ui::KeyEvent& event) {
   constexpr int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
                                 ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN |
                                 ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN;
-  // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
+  // Same condition as ash/components/arc/ime/arc_ime_service.cc#InsertChar.
   if ((event.flags() & kModifierMask) == 0) {
     if (event.key_code() == ui::VKEY_RETURN ||
         event.key_code() == ui::VKEY_BACK) {

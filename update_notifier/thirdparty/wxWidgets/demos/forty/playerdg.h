@@ -16,14 +16,14 @@ class PlayerSelectionDialog : public wxDialog
 {
 public:
     PlayerSelectionDialog(wxWindow* parent, ScoreFile* file);
-    virtual ~PlayerSelectionDialog(){};
+    virtual ~PlayerSelectionDialog(){}
 
     const wxString& GetPlayersName();
     void ButtonCallback(wxCommandEvent& event);
     void SelectCallback(wxCommandEvent& event);
     void OnSize(wxSizeEvent& event);
 
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 
 protected:
     friend void SelectCallback(wxListBox&, wxCommandEvent&);

@@ -15,7 +15,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -30,6 +29,7 @@
 #include "components/metrics/test/test_enabled_state_provider.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/variations/pref_names.h"
+#include "components/version_info/channel.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -83,6 +83,7 @@ class MetricsStateManagerTest : public testing::Test {
         MetricsStateManager::Create(
             &prefs_, enabled_state_provider_.get(), std::wstring(),
             base::FilePath(), StartupVisibility::kUnknown,
+            version_info::Channel::UNKNOWN,
             base::BindRepeating(
                 &MetricsStateManagerTest::MockStoreClientInfoBackup,
                 base::Unretained(this)),

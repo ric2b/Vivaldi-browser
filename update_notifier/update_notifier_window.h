@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
 #include "base/win/message_window.h"
 #include "update_notifier/native_menu.h"
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"

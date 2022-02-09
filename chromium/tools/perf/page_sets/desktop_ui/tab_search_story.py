@@ -5,6 +5,8 @@
 import logging
 import py_utils
 
+from page_sets.desktop_ui.browser_element_identifiers import \
+    kTabSearchButtonElementId
 from page_sets.desktop_ui.custom_metric_utils import SetMetricNames
 from page_sets.desktop_ui.js_utils import MEASURE_JS_MEMORY
 from page_sets.desktop_ui.multitab_story import MultiTabStory
@@ -23,6 +25,7 @@ TAB_SEARCH_BENCHMARK_UMA = [
     'Tabs.TabSearch.WebUI.InitialTabsRenderTime',
     'Tabs.TabSearch.WebUI.LoadCompletedTime',
     'Tabs.TabSearch.WebUI.LoadDocumentTime',
+    'Tabs.TabSearch.WebUI.SearchAlgorithmDuration',
     'Tabs.TabSearch.WebUI.TabListDataReceived',
     'Tabs.TabSearch.WebUI.TabSwitchAction',
     'Tabs.TabSearch.WindowDisplayedDuration2',
@@ -52,7 +55,7 @@ class TabSearchStory(MultiTabStory):
                                     'tab_search:used_js_heap_size_end')
 
   def ToggleTabSearch(self, index=0):
-    ClickOn(self._devtools, 'TabSearchButton', index)
+    ClickOn(self._devtools, element_id=kTabSearchButtonElementId, index=index)
 
   def InteractWithPage(self, action_runner):
     self.ScrollTabs(action_runner)

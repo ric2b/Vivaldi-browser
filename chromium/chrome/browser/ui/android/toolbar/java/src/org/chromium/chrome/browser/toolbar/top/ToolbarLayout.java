@@ -886,4 +886,8 @@ public abstract class ToolbarLayout
         return !isTopToolbarOn() && SharedPreferencesManager.getInstance().readBoolean(
                 "show_start_page_icon", false);
     }
+
+    public void maybeUnfocusUrlbarPublic() {
+        maybeUnfocusUrlBar();
+    }
 }

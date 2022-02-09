@@ -12,18 +12,12 @@
 
 Location::Location() = default;
 
-Location::Location(const InputFile* file,
-                   int line_number,
-                   int column_number,
-                   int byte)
-    : file_(file),
-      line_number_(line_number),
-      column_number_(column_number),
-      byte_(byte) {}
+Location::Location(const InputFile* file, int line_number, int column_number)
+    : file_(file), line_number_(line_number), column_number_(column_number) {}
 
 bool Location::operator==(const Location& other) const {
-  return other.file_ == file_ && other.line_number_ == line_number_ &&
-         other.column_number_ == column_number_;
+  return (file_ == other.file_ && line_number_ == other.line_number_ &&
+          column_number_ == other.column_number_);
 }
 
 bool Location::operator!=(const Location& other) const {
@@ -33,6 +27,12 @@ bool Location::operator!=(const Location& other) const {
 bool Location::operator<(const Location& other) const {
   DCHECK(file_ == other.file_);
   return std::tie(line_number_, column_number_) <
+         std::tie(other.line_number_, other.column_number_);
+}
+
+bool Location::operator<=(const Location& other) const {
+  DCHECK(file_ == other.file_);
+  return std::tie(line_number_, column_number_) <=
          std::tie(other.line_number_, other.column_number_);
 }
 

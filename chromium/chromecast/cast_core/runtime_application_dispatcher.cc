@@ -7,10 +7,8 @@
 #include "base/notreached.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/cast_web_service.h"
-#include "chromecast/browser/cast_web_view_factory.h"
 #include "chromecast/cast_core/streaming_runtime_application.h"
 #include "chromecast/cast_core/web_runtime_application.h"
 #include "third_party/cast_core/public/src/proto/common/application_config.pb.h"
@@ -50,20 +48,13 @@ void RuntimeApplicationDispatcher::AsyncMetricsRecord::StepGRPC(
 }
 
 RuntimeApplicationDispatcher::RuntimeApplicationDispatcher(
-    content::BrowserContext* browser_context,
-    CastWindowManager* window_manager,
+    CastWebService* web_service,
     CastRuntimeMetricsRecorder::EventBuilderFactory* event_builder_factory,
     cast_streaming::NetworkContextGetter network_context_getter)
     : GrpcServer(base::SequencedTaskRunnerHandle::Get()),
-      web_view_factory_(std::make_unique<CastWebViewFactory>(browser_context)),
-      web_service_(std::make_unique<CastWebService>(browser_context,
-                                                    web_view_factory_.get(),
-                                                    window_manager)),
+      web_service_(web_service),
       network_context_getter_(std::move(network_context_getter)),
-      metrics_recorder_(event_builder_factory) {
-  shell::CastBrowserProcess::GetInstance()->SetWebViewFactory(
-      web_view_factory_.get());
-}
+      metrics_recorder_(event_builder_factory) {}
 
 RuntimeApplicationDispatcher::~RuntimeApplicationDispatcher() {
   Stop();
@@ -124,13 +115,12 @@ void RuntimeApplicationDispatcher::LoadApplication(
     GrpcMethod* callback) {
   const std::string& app_id = request.application_config().app_id();
 
-  if (openscreen::cast::IsCastStreamingAppId(app_id)) {
+  if (openscreen::cast::IsCastStreamingReceiverAppId(app_id)) {
     // Deliberately copy |network_context_getter_|.
     app_ = std::make_unique<StreamingRuntimeApplication>(
-        web_service_.get(), task_runner_, network_context_getter_);
+        web_service_, task_runner_, network_context_getter_);
   } else {
-    app_ = std::make_unique<WebRuntimeApplication>(web_service_.get(),
-                                                   task_runner_);
+    app_ = std::make_unique<WebRuntimeApplication>(web_service_, task_runner_);
   }
   if (!app_->Load(request)) {
     app_.reset();
@@ -162,7 +152,8 @@ void RuntimeApplicationDispatcher::LaunchApplication(
   if (!app_->Launch(request)) {
     std::stringstream err_stream;
     err_stream << "failed to launch RuntimeApplication (session id: "
-               << app_->cast_session_id() << ", app id: " << app_->app_id()
+               << app_->cast_session_id()
+               << ", app id: " << app_->app_config().app_id()
                << ", cast media service endpoint: "
                << (request.has_cast_media_service_info()
                        ? request.cast_media_service_info().grpc_endpoint()
@@ -179,7 +170,7 @@ void RuntimeApplicationDispatcher::StopApplication(
     const cast::runtime::StopApplicationRequest& request,
     cast::runtime::StopApplicationResponse* response,
     GrpcMethod* callback) {
-  response->set_app_id(app_->app_id());
+  response->set_app_id(app_->app_config().app_id());
   response->set_cast_session_id(app_->cast_session_id());
   app_.reset();
   callback->StepGRPC(grpc::Status::OK);
@@ -264,6 +255,14 @@ void RuntimeApplicationDispatcher::OnMetricsRecorderServiceStopped(
 const std::string&
 RuntimeApplicationDispatcher::GetCastMediaServiceGrpcEndpoint() const {
   return app_->cast_media_service_grpc_endpoint();
+}
+
+CastWebService* RuntimeApplicationDispatcher::GetCastWebService() const {
+  return web_service_;
+}
+
+RuntimeApplication* RuntimeApplicationDispatcher::GetRuntimeApplication() {
+  return app_.get();
 }
 
 }  // namespace chromecast

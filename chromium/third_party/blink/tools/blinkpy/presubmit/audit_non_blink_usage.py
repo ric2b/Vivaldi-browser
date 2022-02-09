@@ -20,6 +20,13 @@ import os
 import re
 import sys
 
+_DISALLOW_NON_BLINK_MOJOM = (
+    # network::mojom::Foo is allowed to use as non-blink mojom type.
+    '(|::)(?!network::)(\w+::)?mojom::(?!blink).+',
+    'Using non-blink mojom types, consider using "::mojom::blink::Foo" instead'
+    'of "::mojom::Foo" unless you have clear reasons not to do so.',
+    'Warning')
+
 _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/'],
@@ -40,6 +47,7 @@ _CONFIG = [
             'base::AutoReset',
             'base::Contains',
             'base::CreateSequencedTaskRunner',
+            'base::Days',
             'base::DefaultTickClock',
             'base::ElapsedTimer',
             'base::JobDelegate',
@@ -49,12 +57,18 @@ _CONFIG = [
             'base::FileErrorOr',
             'base::FilePath',
             'base::GetUniqueIdForProcess',
+            'base::GUID',
+            'base::HexStringToUInt64',
+            'base::Hours',
             "base::i18n::TextDirection",
             "base::i18n::ToChar16Ptr",
             "base::i18n::ToUCharPtr",
             'base::Location',
             'base::MakeRefCounted',
+            'base::Microseconds',
             'base::Milliseconds',
+            'base::Minutes',
+            'base::Nanoseconds',
             'base::OptionalFromPtr',
             'base::OptionalOrNullptr',
             'base::PlatformThread',
@@ -63,21 +77,25 @@ _CONFIG = [
             'base::RunLoop',
             'base::ReadOnlySharedMemoryMapping',
             'base::ReadOnlySharedMemoryRegion',
+            'base::RemoveChars',
             'base::RepeatingTimer',
+            'base::Seconds',
             'base::SequencedTaskRunner',
             'base::SingleThreadTaskRunner',
             'base::ScopedAllowBlocking',
             'base::ScopedFD',
             'base::ScopedClosureRunner',
+            'base::StringPiece',
             'base::SupportsWeakPtr',
             'base::SysInfo',
             'base::ThreadChecker',
+            'base::ThreadTicks',
             'base::TickClock',
             'base::Time',
             'base::TimeDelta',
             'base::TimeTicks',
-            'base::ThreadTicks',
             'base::trace_event::.*',
+            'base::Token',
             'base::UnguessableToken',
             'base::UnguessableTokenHash',
             'base::UnsafeSharedMemoryRegion',
@@ -90,6 +108,7 @@ _CONFIG = [
             'absl::make_optional',
             'base::make_span',
             'absl::nullopt',
+            'absl::nullopt_t',
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
             'base::size',
@@ -101,7 +120,7 @@ _CONFIG = [
             # //base/allocator/partition_allocator/partition_alloc_constants.h
             'base::kAlignment',
 
-            # //base/bind_post_task.h
+            # //base/task/bind_post_task.h
             'base::BindPostTask',
 
             # //base/bits.h
@@ -149,6 +168,7 @@ _CONFIG = [
             'base::UmaHistogram.+',
 
             # //base/metrics/histogram.h
+            'base::Histogram',
             'base::HistogramBase',
             'base::LinearHistogram',
 
@@ -273,6 +293,7 @@ _CONFIG = [
             'cc::PaintImage',
             'cc::PaintImageBuilder',
             'cc::PaintRecord',
+            'cc::RecordPaintCanvas',
             'cc::PaintShader',
             'cc::PaintWorkletInput',
             'cc::NodeId',
@@ -285,14 +306,11 @@ _CONFIG = [
             'gfx::Point',
             'gfx::PointF',
             'gfx::Point3F',
+            'gfx::QuadF',
             'gfx::Quaternion',
             'gfx::Rect',
             'gfx::RectF',
             'gfx::RRectF',
-            'gfx::ScaleToCeiledSize',
-            'gfx::ScaleToEnclosingRectSafe',
-            'gfx::ScaleToFlooredSize',
-            'gfx::ScaleVector2d',
             'gfx::Size',
             'gfx::SizeF',
             'gfx::Transform',
@@ -301,9 +319,55 @@ _CONFIG = [
 
             # Chromium geometry operations.
             'cc::MathUtil',
+            'gfx::BoundingRect',
             'gfx::ComputeApproximateMaxScale',
-            'gfx::ComputeTransform2dScaleComponents',
+            'gfx::Determinant',
+            'gfx::IntersectRects',
+            'gfx::MapRect',
+            'gfx::PointAtOffsetFromOrigin',
+            'gfx::PointFToSkPoint',
+            'gfx::PointToSkIPoint',
+            'gfx::MapRect',
+            'gfx::MaximumCoveredRect',
+            'gfx::RectFToSkRect',
+            'gfx::RectToSkIRect',
+            'gfx::RectToSkRect',
+            'gfx::ScalePoint',
+            'gfx::ScaleToCeiledSize',
+            'gfx::ScaleToEnclosingRect',
+            'gfx::ScaleToFlooredSize',
+            'gfx::ScaleToRoundedRect',
+            'gfx::ScaleToRoundedSize',
+            'gfx::ScaleSize',
+            'gfx::ScalePoint',
+            'gfx::ScaleToRoundedPoint',
+            'gfx::ScaleVector2d',
+            'gfx::SizeFToSkSize',
+            'gfx::SizeToSkISize',
+            'gfx::SkIPointToPoint',
+            'gfx::SkIRectToRect',
+            'gfx::SkISizeToSize',
+            'gfx::SkPointToPointF',
+            'gfx::SkRectToRectF',
+            'gfx::SkSizeToSizeF',
+            'gfx::SubtractRects',
+            'gfx::ToCeiledPoint',
+            'gfx::ToCeiledSize',
+            'gfx::ToCeiledVector2d',
+            'gfx::ToEnclosedRect',
+            'gfx::ToEnclosingRect',
             'gfx::ToFlooredPoint',
+            'gfx::ToFlooredSize',
+            'gfx::ToFlooredVector2d',
+            'gfx::ToRoundedPoint',
+            'gfx::ToRoundedRect',
+            'gfx::ToRoundedSize',
+            'gfx::ToRoundedVector2d',
+            'gfx::TransposePoint',
+            'gfx::TransposeRect',
+            'gfx::TransposeSize',
+            'gfx::TryComputeTransform2dScaleComponents',
+            'gfx::UnionRects',
 
             # Range type.
             'gfx::Range',
@@ -383,13 +447,12 @@ _CONFIG = [
             'cc::SnapSelectionStrategy',
             'cc::SnapStrictness',
             'cc::TargetSnapAreaElementIds',
-            'gfx::RectToSkRect',
-            'gfx::RectToSkIRect',
-            'gfx::ScrollOffset',
             'ui::ScrollGranularity',
 
             # Document transitions
             'cc::DocumentTransitionRequest',
+            'cc::SharedElementLayer',
+            'viz::SharedElementResourceId',
 
             # base/types/strong_alias.h
             'base::StrongAlias',
@@ -427,6 +490,7 @@ _CONFIG = [
             'layout_invalidation_reason::.+',
             'media_constraints_impl::.+',
             'media_element_parser_helpers::.+',
+            'mobile_metrics_test_helpers::.+',
             'file_system_access_error::.+',
             'network_utils::.+',
             'origin_trials::.+',
@@ -543,6 +607,7 @@ _CONFIG = [
             # serialization. Please keep alphabetized.
             'ui::CanHaveInlineTextBoxChildren',
             'ui::IsCellOrTableHeader',
+            'ui::IsClickable',
             'ui::IsComboBox',
             'ui::IsContainerWithSelectableChildren',
             'ui::IsDialog',
@@ -569,8 +634,11 @@ _CONFIG = [
             'base::(scoped_nsobject|ScopedCFTypeRef)',
 
             # absl::variant and getters:
-            'absl::variant',
+            'absl::get',
             'absl::get_if',
+            'absl::holds_alternative',
+            'absl::variant',
+            'absl::visit',
         ],
         'disallowed': [
             ('base::Bind(|Once|Repeating)',
@@ -580,10 +648,7 @@ _CONFIG = [
              'However, it is fine to use std containers at the boundary layer between Blink and Chromium. '
              'If you are in this case, you can use --bypass-hooks option to avoid the presubmit check when uploading your CL.'
              ),
-            # network::mojom::Foo is allowed to use as non-blink mojom type.
-            ('(|::)(?!network::)(\w+::)?mojom::(?!blink).+',
-             'Using non-blink mojom types, consider using "::mojom::blink::Foo" instead of "::mojom::Foo" unless you have clear reasons not to do so',
-             'Warning'),
+            _DISALLOW_NON_BLINK_MOJOM,
         ],
     },
     {
@@ -682,7 +747,6 @@ _CONFIG = [
             'cc::TranslateOp',
             'gfx::DisplayColorSpaces',
             'gfx::FontRenderParams',
-            'gfx::RenderingPipeline',
             'ui::ImeTextSpan',
             'viz::FrameSinkId',
             'viz::LocalSurfaceId',
@@ -808,7 +872,7 @@ _CONFIG = [
         ],
     },
     {
-        'paths': ['third_party/blink/renderer/core/page/scrolling'],
+        'paths': ['third_party/blink/renderer/core/fragment_directive'],
         'allowed': [
             'cc::ScrollbarLayerBase',
             'shared_highlighting::.+',
@@ -874,6 +938,9 @@ _CONFIG = [
             # [C]h[R]ome [D]ev[T]ools [P]rotocol implementation support library
             # (see third_party/inspector_protocol/crdtp).
             'crdtp::.+',
+            # DevTools manages certificates from the net stack.
+            'net::X509Certificate',
+            'net::x509_util::CryptoBufferAsSpan',
         ],
     },
     {
@@ -911,8 +978,12 @@ _CONFIG = [
             'third_party/blink/renderer/core/inspector/inspector_network_agent.cc'
         ],
         'allowed': [
-            'net::SourceStream',
             'base::flat_set',
+            'base::HexEncode',
+            'net::ct::.+',
+            'net::IPAddress',
+            'net::SourceStream',
+            'net::SSL.+',
         ],
     },
     {
@@ -975,7 +1046,7 @@ _CONFIG = [
         # The modules listed above need access to the following GL drawing and
         # display-related types.
         'allowed': [
-            'base::MRUCache',
+            'base::LRUCache',
             'gl::GpuPreference',
             'gpu::SHARED_IMAGE_USAGE_.+',
             'gpu::gles2::GLES2Interface',
@@ -1264,6 +1335,11 @@ _CONFIG = [
         # WTF::RefCounted should be used instead. base::RefCountedThreadSafe is
         # still needed for cross_thread_copier.h though.
         'allowed': ['base::RefCountedThreadSafe', '(?!base::RefCounted).+'],
+        'disallowed': [
+            # TODO(https://crbug.com/1267866): this warning is shown twice for
+            # renderer/platform/ violations.
+            _DISALLOW_NON_BLINK_MOJOM,
+        ]
     },
     {
         'paths': [
@@ -1347,6 +1423,16 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/core/scroll/mac_scrollbar_animator_impl.h',
+            'third_party/blink/renderer/core/scroll/mac_scrollbar_animator_impl.mm',
+        ],
+        'allowed': [
+            'ui::ScrollbarAnimationTimerMac',
+            'ui::OverlayScrollbarAnimatorMac',
+        ],
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/crypto/',
         ],
         'allowed': ['crypto::.+'],
@@ -1373,6 +1459,8 @@ _CONFIG = [
             'absl::.+',
             'base::AutoLock',
             'base::AutoUnlock',
+            # TODO(crbug.com/1266408): Temporarily added to enable splitting UMA stats based on tier.
+            'base::CPU',
             'base::LazyInstance',
             'base::Lock',
             # TODO(crbug.com/787254): Remove base::BindOnce, base::Unretained,
@@ -1398,6 +1486,8 @@ _CONFIG = [
             'media::.+',
             'net::NetworkTrafficAnnotationTag',
             'net::DefineNetworkTrafficAnnotation',
+            # TODO(crbug.com/1266408): Temporarily added to enable splitting UMA stats based on tier.
+            're2::RE2',
             'rtc::.+',
             'webrtc::.+',
             'quic::.+',
@@ -1516,10 +1606,28 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/modules/webdatabase/dom_window_web_database.cc',
+            'third_party/blink/renderer/controller/blink_initializer.cc',
         ],
         'allowed': [
             'base::CommandLine',
         ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/controller/blink_shutdown.cc',
+        ],
+        'allowed': [
+            'base::CommandLine',
+            'switches::kDumpRuntimeCallStats',
+        ]
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc'],
+        'allowed': [
+            'base::SingleSampleMetric',
+            'base::SingleSampleMetricsFactory',
+        ],
     },
 ]
 
@@ -1669,9 +1777,8 @@ def check(path, contents):
         idx = line.find('//')
         if idx >= 0:
             line = line[:idx]
-        match = _IDENTIFIER_WITH_NAMESPACE_RE.search(line)
-        if match:
-            identifier = match.group(0)
+        identifiers = _IDENTIFIER_WITH_NAMESPACE_RE.findall(line)
+        for identifier in identifiers:
             if not _check_entries_for_identifier(entries, identifier):
                 advice, warning = _find_advice_for_identifier(
                     entries, identifier)

@@ -60,8 +60,8 @@ public:
 #define M_REGIONDATA ((wxRegionRefData *)m_refData)
 #define M_REGIONDATA_OF(rgn) ((wxRegionRefData *)(rgn.m_refData))
 
-IMPLEMENT_DYNAMIC_CLASS(wxRegion, wxGDIObject)
-IMPLEMENT_DYNAMIC_CLASS(wxRegionIterator,wxObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxRegion, wxGDIObject);
+wxIMPLEMENT_DYNAMIC_CLASS(wxRegionIterator, wxObject);
 
 // ----------------------------------------------------------------------------
 // wxRegion construction
@@ -83,9 +83,8 @@ void wxRegion::InitRect(wxCoord x, wxCoord y, wxCoord w, wxCoord h)
     XUnionRectWithRegion( &rect, M_REGIONDATA->m_region, M_REGIONDATA->m_region );
 }
 
-wxRegion::wxRegion( size_t WXUNUSED(n), const wxPoint *WXUNUSED(points), wxPolygonFillMode WXUNUSED(fillStyle) )
+wxRegion::wxRegion( size_t n, const wxPoint *points, wxPolygonFillMode fillStyle )
 {
-#if 0
     XPoint *xpoints = new XPoint[n];
     for ( size_t i = 0 ; i < n ; i++ )
     {
@@ -95,18 +94,10 @@ wxRegion::wxRegion( size_t WXUNUSED(n), const wxPoint *WXUNUSED(points), wxPolyg
 
     m_refData = new wxRegionRefData();
 
-    Region* reg = gdk_region_polygon
-                     (
-                        gdkpoints,
-                        n,
-                        fillStyle == wxWINDING_RULE ? GDK_WINDING_RULE
-                                                    : GDK_EVEN_ODD_RULE
-                     );
-
-    M_REGIONDATA->m_region = reg;
-
-    delete [] xpoints;
-#endif
+    if ( fillStyle == wxODDEVEN_RULE )
+        M_REGIONDATA->m_region = XPolygonRegion(xpoints, n, EvenOddRule);
+    else if ( fillStyle == wxWINDING_RULE )
+        M_REGIONDATA->m_region = XPolygonRegion(xpoints, n, WindingRule);
 }
 
 wxRegion::~wxRegion()
@@ -289,8 +280,7 @@ bool wxRegion::DoGetBox( wxCoord &x, wxCoord &y, wxCoord &w, wxCoord &h ) const
 
 bool wxRegion::DoOffset( wxCoord x, wxCoord y )
 {
-    if (!m_refData)
-        return false;
+    wxCHECK_MSG( m_refData, false, wxS("invalid region") );
 
     AllocExclusive();
 

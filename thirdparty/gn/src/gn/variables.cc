@@ -12,10 +12,9 @@ namespace variables {
 // Built-in variables ----------------------------------------------------------
 
 const char kGnVersion[] = "gn_version";
-const char kGnVersion_HelpShort[] =
-    "gn_version: [number] The version of gn.";
+const char kGnVersion_HelpShort[] = "gn_version: [number] The version of gn.";
 const char kGnVersion_Help[] =
-  R"(gn_version: [number] The version of gn.
+    R"(gn_version: [number] The version of gn.
 
   Corresponds to the number printed by `gn --version`.
 
@@ -411,7 +410,7 @@ Example
   "     those configs appear in the list.\n"                                 \
   "  5. all_dependent_configs pulled from dependencies, in the order of\n"   \
   "     the \"deps\" list. This is done recursively. If a config appears\n"  \
-  "     more than once, only the first occurrence will be used.\n"            \
+  "     more than once, only the first occurrence will be used.\n"           \
   "  6. public_configs pulled from dependencies, in the order of the\n"      \
   "     \"deps\" list. If a dependency is public, they will be applied\n"    \
   "     recursively.\n"
@@ -507,6 +506,23 @@ Example
   group("a_b_shared_deps") {
     public_deps = [ ":c" ]
   }
+)";
+
+const char kGenDeps[] = "gen_deps";
+const char kGenDeps_HelpShort[] =
+    "gen_deps: [label list] "
+    "Declares targets that should generate when this one does.";
+const char kGenDeps_Help[] =
+    R"(gen_deps: Declares targets that should generate when this one does.
+
+  A list of target labels.
+
+  Not all GN targets that get evaluated are actually turned into ninja targets
+  (see "gn help execution"). If this target is generated, then any targets in
+  the "gen_deps" list will also be generated, regardless of the usual critera.
+
+  Since "gen_deps" are not build time dependencies, there can be cycles between
+  "deps" and "gen_deps" or within "gen_deps" itself.
 )";
 
 const char kArflags[] = "arflags";
@@ -2186,7 +2202,7 @@ const char kWriteOutputConversion_Help[] =
     R"(output_conversion: Data format for generated_file targets.
 
   Controls how the "contents" of a generated_file target is formatted.
-  See "gn help io_conversion".
+  See `gn help io_conversion`.
 )";
 
 const char kWriteRuntimeDeps[] = "write_runtime_deps";
@@ -2265,6 +2281,7 @@ const VariableInfoMap& GetTargetVariables() {
   if (info_map.empty()) {
     INSERT_VARIABLE(AllDependentConfigs)
     INSERT_VARIABLE(AllowCircularIncludesFrom)
+    INSERT_VARIABLE(GenDeps)
     INSERT_VARIABLE(Arflags)
     INSERT_VARIABLE(Args)
     INSERT_VARIABLE(Asmflags)

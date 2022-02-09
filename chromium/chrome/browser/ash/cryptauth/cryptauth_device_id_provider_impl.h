@@ -7,13 +7,12 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "base/no_destructor.h"
 #include "chromeos/services/device_sync/public/cpp/cryptauth_device_id_provider.h"
 
 class PrefRegistrySimple;
 
-namespace cryptauth {
+namespace ash {
 
 // Concrete CryptAuthDeviceIdProvider implementation which stores the device ID
 // in the browser process' local state PrefStore.
@@ -39,6 +38,6 @@ class CryptAuthDeviceIdProviderImpl
   CryptAuthDeviceIdProviderImpl();
 };
 
-}  // namespace cryptauth
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_CRYPTAUTH_CRYPTAUTH_DEVICE_ID_PROVIDER_IMPL_H_

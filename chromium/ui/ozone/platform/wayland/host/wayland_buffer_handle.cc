@@ -11,7 +11,7 @@ WaylandBufferHandle::WaylandBufferHandle(WaylandBufferBacking* backing)
 
 WaylandBufferHandle::~WaylandBufferHandle() {
   if (!released_callback_.is_null())
-    std::move(released_callback_).Run();
+    std::move(released_callback_).Run(wl_buffer());
 }
 
 void WaylandBufferHandle::OnWlBufferCreated(
@@ -24,16 +24,23 @@ void WaylandBufferHandle::OnWlBufferCreated(
   static struct wl_buffer_listener buffer_listener = {
       &WaylandBufferHandle::BufferRelease,
   };
-  wl_buffer_add_listener(wl_buffer_.get(), &buffer_listener, this);
+  if (!backing_->UseExplicitSyncRelease())
+    wl_buffer_add_listener(wl_buffer_.get(), &buffer_listener, this);
 
   if (!created_callback_.is_null())
     std::move(created_callback_).Run();
 }
 
-void WaylandBufferHandle::OnRelease(struct wl_buffer* wl_buff) {
+void WaylandBufferHandle::OnExplicitRelease() {
+  DCHECK(!released_callback_.is_null());
+  released_callback_.Reset();
+}
+
+void WaylandBufferHandle::OnWlBufferRelease(struct wl_buffer* wl_buff) {
   DCHECK_EQ(wl_buff, wl_buffer_.get());
+  DCHECK(!backing_->UseExplicitSyncRelease());
   if (!released_callback_.is_null())
-    std::move(released_callback_).Run();
+    std::move(released_callback_).Run(wl_buff);
 }
 
 base::WeakPtr<WaylandBufferHandle> WaylandBufferHandle::AsWeakPtr() {
@@ -45,7 +52,7 @@ void WaylandBufferHandle::BufferRelease(void* data,
                                         struct wl_buffer* wl_buffer) {
   WaylandBufferHandle* self = static_cast<WaylandBufferHandle*>(data);
   DCHECK(self);
-  self->OnRelease(wl_buffer);
+  self->OnWlBufferRelease(wl_buffer);
 }
 
 }  // namespace ui

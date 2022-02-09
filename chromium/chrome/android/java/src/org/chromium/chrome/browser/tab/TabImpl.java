@@ -75,7 +75,6 @@ import java.nio.ByteBuffer;
 import android.os.Build;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 import org.vivaldi.browser.autofill.AutofillProvider;
@@ -224,9 +223,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     private int mThemeColor;
     private boolean mUsedCriticalPersistedTabData;
 
-    /** Whether or not the user manually changed the user agent. */
-    private boolean mUserForcedUserAgent;
-
     //** Vivaldi */
     private SharedPreferencesManager.Observer mPreferenceObserver;
     boolean mOverrideUserAgent;
@@ -359,6 +355,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 observer.onActivityAttachmentChanged(this, window);
             }
         }
+
+        updateInteractableState();
     }
 
     /**
@@ -378,7 +376,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     public View getView() {
         if (mCustomView != null) return mCustomView;
 
-        if (mNativePage != null) return mNativePage.getView();
+        if (mNativePage != null && !mNativePage.isFrozen()) return mNativePage.getView();
 
         return mContentView;
     }
@@ -469,9 +467,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
     @Override
     public boolean isThemingAllowed() {
-        // Vivaldi
-        if (GlobalNightModeStateProviderHolder.getInstance().isInNightMode() || isIncognito())
-            return false;
         // Do not apply the theme color if there are any security issues on the page.
         int securityLevel = SecurityStateModel.getSecurityLevelForWebContents(getWebContents());
         boolean hasSecurityIssue = securityLevel == ConnectionSecurityLevel.DANGEROUS
@@ -514,17 +509,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             // TODO(tedchoc): When showing the android NTP, delay the call to
             // TabImplJni.get().loadUrl until the android view has entirely rendered.
             if (!mIsNativePageCommitPending) {
-                mIsNativePageCommitPending = maybeShowNativePage(params.getUrl(), false);
-                // Vivaldi has panels and does not load these urls as native pages.
-                if (ChromeApplicationImpl.isVivaldi()) {
-                    if (VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL.equals(params.getUrl())
-                            || VivaldiUrlConstants.VIVALDI_DOWNLOADS_URL.equals(params.getUrl())
-                            || VivaldiUrlConstants.VIVALDI_HISTORY_URL.equals(params.getUrl())
-                            || VivaldiUrlConstants.VIVALDI_NOTES_URL.equals(params.getUrl())
-                    || UrlConstants.BOOKMARKS_URL.equals(params.getUrl())
-                            || UrlConstants.DOWNLOADS_URL.equals(params.getUrl())
-                            || UrlConstants.HISTORY_URL.equals(params.getUrl()))
-                        return 0;
+                if  (!ChromeApplicationImpl.isVivaldi() || !isVivaldiPanelPage(params.getUrl())) {
+                    mIsNativePageCommitPending = maybeShowNativePage(params.getUrl(), false);
                 }
             }
 
@@ -539,7 +525,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 throw new RuntimeException("Tab.loadUrl called when no native side exists");
             }
 
-            // Request desktop sites for large screen tablets.
+            // Request desktop sites for large screen tablets if necessary.
             params.setOverrideUserAgent(calculateUserAgentOverrideOption());
 
             @TabLoadStatus
@@ -730,6 +716,10 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             // Updating the timestamp has to happen after the showInternal() call since subclasses
             // may use it for logging.
             CriticalPersistedTabData.from(this).setTimestampMillis(System.currentTimeMillis());
+
+            // Note(nagamani@vivaldi.com) We need to update here, otherwise a changed theme/accent
+            // from the settings won't be recognized.
+            mThemeColorHelper.onFaviconUpdated(this, null);
         } finally {
             TraceEvent.end("Tab.show");
         }
@@ -949,7 +939,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
             initWebContents(webContents);
 
-            if (!creatingWebContents && webContents.isLoadingToDifferentDocument()) {
+            if (!creatingWebContents && webContents.shouldShowLoadingUI()) {
                 didStartPageLoad(webContents.getVisibleUrl());
             }
 
@@ -1012,6 +1002,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         CriticalPersistedTabData.from(this).setLaunchTypeAtCreation(state.tabLaunchTypeAtCreation);
         CriticalPersistedTabData.from(this).setRootId(
                 state.rootId == Tab.INVALID_TAB_ID ? mId : state.rootId);
+        CriticalPersistedTabData.from(this).setUserAgent(state.userAgent);
     }
 
     /**
@@ -1532,7 +1523,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
      */
     private void updateInteractableState() {
         boolean currentState = !mIsHidden && !isFrozen()
-                && (mIsViewAttachedToWindow || VrModuleProvider.getDelegate().isInVr());
+                && (mIsViewAttachedToWindow || VrModuleProvider.getDelegate().isInVr())
+                && !isDetached(this);
 
         if (currentState == mInteractableState) return;
 
@@ -1698,20 +1690,40 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     }
 
     private @UserAgentOverrideOption int calculateUserAgentOverrideOption() {
-        boolean currentRequestDesktopSite = getWebContents() == null
+        WebContents webContents = getWebContents();
+        boolean currentRequestDesktopSite = webContents == null
                 ? false
-                : getWebContents().getNavigationController().getUseDesktopUserAgent();
+                : webContents.getNavigationController().getUseDesktopUserAgent();
 
+        @TabUserAgent
+        int tabUserAgent = CriticalPersistedTabData.from(this).getUserAgent();
+        // TabUserAgent.UNSET means this is a pre-existing tab from an earlier build. In this case
+        // we set the TabUserAgent bit based on last committed entry's user agent. If webContents is
+        // null, this method is triggered too early, and we cannot read the last committed entry's
+        // user agent yet. We will skip for now and let the following call set the TabUserAgent bit.
+        if (webContents != null && tabUserAgent == TabUserAgent.UNSET) {
+            if (currentRequestDesktopSite) {
+                tabUserAgent = TabUserAgent.DESKTOP;
+            } else {
+                tabUserAgent = TabUserAgent.DEFAULT;
+            }
+            CriticalPersistedTabData.from(this).setUserAgent(tabUserAgent);
+        }
         // We only calculate the user agent when users did not manually choose one.
-        // TODO(crbug.com/1251794): Desktop site setting in app menu does not persist after restart.
-        if (!mUserForcedUserAgent
+        if (tabUserAgent == TabUserAgent.DEFAULT
                 && ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_GLOBAL)) {
-            // We only do the following logic to choose the desktop/mobile user agent if
-            // 1. User never manually made a choice in app menu for requesting desktop site.
-            // 2. User enabled request desktop site in site settings.
+            // We only do the following logic to choose the desktop/mobile user agent if:
+            // 1. User never manually made a choice in the app menu for requesting desktop site.
+            // 2. User-enabled request desktop site in site settings.
             Profile profile =
                     IncognitoUtils.getProfileFromWindowAndroid(mWindowAndroid, isIncognito());
-            boolean shouldRequestDesktopSite = TabUtils.isDesktopSiteGlobalEnabled(profile);
+            boolean shouldRequestDesktopSite;
+            if (ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
+                shouldRequestDesktopSite = getWebContents() != null
+                        && TabUtils.isDesktopSiteEnabled(profile, getWebContents().getVisibleUrl());
+            } else {
+                shouldRequestDesktopSite = TabUtils.isDesktopSiteGlobalEnabled(profile);
+            }
 
             if (shouldRequestDesktopSite != currentRequestDesktopSite) {
                 // TODO(crbug.com/1243758): Confirm if a new histogram should be used.
@@ -1731,10 +1743,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
         // INHERIT means use the same that was used last time.
         return UserAgentOverrideOption.INHERIT;
-    }
-
-    void setUserForcedUserAgent() {
-        mUserForcedUserAgent = true;
     }
 
     private void switchUserAgentIfNeeded() {
@@ -1758,6 +1766,20 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                     prefAlwaysShowDesktop, !isNativePage());
             mOverrideUserAgent = false;
         }
+    }
+
+    private boolean isVivaldiPanelPage(String url) {
+     return (VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_DOWNLOADS_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_HISTORY_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_NOTES_URL.equals(url)
+             || VivaldiUrlConstants.VIVALDI_CHROME_BOOKMARKS_URL.equals(url)
+             || VivaldiUrlConstants.VIVALDI_CHROME_DOWNLOADS_URL.equals(url)
+             || VivaldiUrlConstants.VIVALDI_CHROME_HISTORY_URL.equals(url)
+             || VivaldiUrlConstants.VIVALDI_CHROME_NOTES_URL.equals(url)
+                || UrlConstants.BOOKMARKS_URL.equals(url)
+                || UrlConstants.DOWNLOADS_URL.equals(url)
+                || UrlConstants.HISTORY_URL.equals(url));
     }
 
     /**

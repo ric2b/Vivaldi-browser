@@ -47,7 +47,7 @@
 #include "third_party/blink/renderer/core/html/html_table_row_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 
@@ -871,31 +871,18 @@ void DeleteSelectionCommand::HandleGeneralDelete(EditingState* editing_state) {
   }
 }
 
-void DeleteSelectionCommand::FixupWhitespace() {
+void DeleteSelectionCommand::FixupWhitespace(const Position& position) {
+  auto* const text_node = DynamicTo<Text>(position.AnchorNode());
+  if (!text_node)
+    return;
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
-  if (leading_whitespace_.IsNotNull() &&
-      !IsRenderedCharacter(leading_whitespace_)) {
-    if (auto* text_node = DynamicTo<Text>(leading_whitespace_.AnchorNode())) {
-      DCHECK(!text_node->GetLayoutObject() ||
-             text_node->GetLayoutObject()->Style()->CollapseWhiteSpace())
-          << text_node;
-      ReplaceTextInNode(text_node,
-                        leading_whitespace_.ComputeOffsetInContainerNode(), 1,
-                        NonBreakingSpaceString());
-    }
-  }
-
-  if (trailing_whitespace_.IsNotNull() &&
-      !IsRenderedCharacter(trailing_whitespace_)) {
-    if (auto* text_node = DynamicTo<Text>(trailing_whitespace_.AnchorNode())) {
-      DCHECK(!text_node->GetLayoutObject() ||
-             text_node->GetLayoutObject()->Style()->CollapseWhiteSpace())
-          << text_node;
-      ReplaceTextInNode(text_node,
-                        trailing_whitespace_.ComputeOffsetInContainerNode(), 1,
-                        NonBreakingSpaceString());
-    }
-  }
+  if (IsRenderedCharacter(position))
+    return;
+  DCHECK(!text_node->GetLayoutObject() ||
+         text_node->GetLayoutObject()->Style()->CollapseWhiteSpace())
+      << text_node;
+  ReplaceTextInNode(text_node, position.ComputeOffsetInContainerNode(), 1,
+                    NonBreakingSpaceString());
 }
 
 // If a selection starts in one block and ends in another, we have to merge to
@@ -1000,9 +987,9 @@ void DeleteSelectionCommand::MergeParagraphs(EditingState* editing_state) {
   // the right.
   // FIXME: Consider RTL.
   if (!starts_at_empty_line_ && IsStartOfParagraph(merge_destination) &&
-      AbsoluteCaretBoundsOf(merge_origin.ToPositionWithAffinity()).X() >
+      AbsoluteCaretBoundsOf(merge_origin.ToPositionWithAffinity()).x() >
           AbsoluteCaretBoundsOf(merge_destination.ToPositionWithAffinity())
-              .X()) {
+              .x()) {
     if (IsA<HTMLBRElement>(
             *MostForwardCaretPosition(merge_destination.DeepEquivalent())
                  .AnchorNode())) {
@@ -1267,7 +1254,8 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
   if (editing_state->IsAborted())
     return;
 
-  FixupWhitespace();
+  FixupWhitespace(leading_whitespace_);
+  FixupWhitespace(trailing_whitespace_);
 
   MergeParagraphs(editing_state);
   if (editing_state->IsAborted())

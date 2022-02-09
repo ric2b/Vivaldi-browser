@@ -52,9 +52,9 @@ void CancelAppLaunch(Profile* profile, const web_app::AppId& app_id) {
 
 // Called after the user's preference has been persisted, and the OS
 // has been notified of the change.
-void OnPersistProtocolHandlersUserChoiceCompleted(apps::AppLaunchParams params,
-                                                  Profile* profile,
-                                                  bool allowed) {
+void OnPersistUserChoiceCompleted(apps::AppLaunchParams params,
+                                  Profile* profile,
+                                  bool allowed) {
   if (allowed) {
     LaunchAppWithParams(profile, std::move(params));
   } else {
@@ -64,21 +64,28 @@ void OnPersistProtocolHandlersUserChoiceCompleted(apps::AppLaunchParams params,
 
 // Called after the user has dismissed the WebAppProtocolHandlerIntentPicker
 // dialog.
-void OnProtocolHandlerDialogCompleted(apps::AppLaunchParams params,
-                                      Profile* profile,
-                                      bool allowed,
-                                      bool remember_user_choice) {
-  GURL protocol_url = params.protocol_handler_launch_url.value();
+void UserChoiceDialogCompleted(apps::AppLaunchParams params,
+                               Profile* profile,
+                               bool allowed,
+                               bool remember_user_choice) {
+  absl::optional<GURL> protocol_url = params.protocol_handler_launch_url;
+  std::vector<base::FilePath> launch_files = params.launch_files;
   web_app::AppId app_id = params.app_id;
-  auto launch_callback =
-      base::BindOnce(&OnPersistProtocolHandlersUserChoiceCompleted,
-                     std::move(params), profile, allowed);
+
+  auto persist_done = base::BindOnce(&OnPersistUserChoiceCompleted,
+                                     std::move(params), profile, allowed);
 
   if (remember_user_choice) {
-    PersistProtocolHandlersUserChoice(profile, app_id, protocol_url, allowed,
-                                      std::move(launch_callback));
+    if (protocol_url) {
+      PersistProtocolHandlersUserChoice(profile, app_id, *protocol_url, allowed,
+                                        std::move(persist_done));
+    } else {
+      DCHECK(!launch_files.empty());
+      PersistFileHandlersUserChoice(profile, app_id, allowed,
+                                    std::move(persist_done));
+    }
   } else {
-    std::move(launch_callback).Run();
+    std::move(persist_done).Run();
   }
 }
 
@@ -177,17 +184,19 @@ void WebAppShimManagerDelegate::LaunchApp(
           app_id);
   apps::mojom::LaunchContainer launch_container =
       web_app::ConvertDisplayModeToAppLaunchContainer(display_mode);
-  apps::mojom::AppLaunchSource launch_source =
-      apps::mojom::AppLaunchSource::kSourceCommandLine;
+  apps::mojom::LaunchSource launch_source =
+      apps::mojom::LaunchSource::kFromCommandLine;
   if (login_item_restore_state !=
       chrome::mojom::AppShimLoginItemRestoreState::kNone) {
-    launch_source = apps::mojom::AppLaunchSource::kSourceRunOnOsLogin;
+    launch_source = apps::mojom::LaunchSource::kFromOsLogin;
   }
 
   apps::AppLaunchParams params(app_id, launch_container,
                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                launch_source);
-  params.launch_files = files;
+  // Don't assign `files` to `params.launch_files` until we're sure this is a
+  // permitted file launch.
+  std::vector<base::FilePath> launch_files = files;
   params.override_url = override_url;
 
   for (const GURL& url : urls) {
@@ -202,7 +211,7 @@ void WebAppShimManagerDelegate::LaunchApp(
     if (url.SchemeIsFile()) {
       base::FilePath file_path;
       if (net::FileURLToFilePath(url, &file_path)) {
-        params.launch_files.push_back(file_path);
+        launch_files.push_back(file_path);
       } else {
         DLOG(ERROR) << "Failed to convert file scheme url to file path.";
       }
@@ -225,10 +234,11 @@ void WebAppShimManagerDelegate::LaunchApp(
     }
 
     params.protocol_handler_launch_url = url;
-    params.source = apps::mojom::AppLaunchSource::kSourceProtocolHandler;
+    params.launch_source = apps::mojom::LaunchSource::kFromProtocolHandler;
   }
 
   if (GetBrowserAppLauncherForTesting()) {
+    params.launch_files = launch_files;
     std::move(GetBrowserAppLauncherForTesting()).Run(params);
     return;
   }
@@ -247,15 +257,40 @@ void WebAppShimManagerDelegate::LaunchApp(
     }
 
     if (!registrar.IsAllowedLaunchProtocol(app_id, protocol_url.scheme())) {
-      auto launch_callback = base::BindOnce(&OnProtocolHandlerDialogCompleted,
-                                            std::move(params), profile);
-
-      // ShowWebAppProtocolHandlerIntentPicker keeps the `profile` alive through
-      // running of `launch_callback`.
       chrome::ShowWebAppProtocolHandlerIntentPicker(
-          std::move(protocol_url), profile, app_id, std::move(launch_callback));
+          std::move(protocol_url), profile, app_id,
+          base::BindOnce(&UserChoiceDialogCompleted, std::move(params),
+                         profile));
       return;
     }
+  }
+
+  if (!launch_files.empty()) {
+    WebAppProvider* const provider = WebAppProvider::GetForWebApps(profile);
+    absl::optional<GURL> file_handler_url =
+        provider->os_integration_manager().GetMatchingFileHandlerURL(
+            app_id, launch_files);
+    if (!file_handler_url) {
+      CancelAppLaunch(profile, app_id);
+      return;
+    }
+
+    params.launch_files = launch_files;
+
+    const WebApp* web_app = provider->registrar().GetAppById(app_id);
+    DCHECK(web_app);
+
+    if (web_app->file_handler_approval_state() ==
+        ApiApprovalState::kRequiresPrompt) {
+      chrome::ShowWebAppFileLaunchDialog(
+          launch_files, profile, app_id,
+          base::BindOnce(&UserChoiceDialogCompleted, std::move(params),
+                         profile));
+      return;
+    }
+
+    DCHECK_EQ(ApiApprovalState::kAllowed,
+              web_app->file_handler_approval_state());
   }
 
   LaunchAppWithParams(profile, std::move(params));

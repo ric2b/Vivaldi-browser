@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/label.h"
 #include "gn/label_ptr.h"
 #include "gn/rust_values.h"
@@ -38,6 +37,7 @@ class RustTool : public Tool {
   bool ValidateName(const char* name) const override;
   void SetComplete() override;
   bool ValidateSubstitution(const Substitution* sub_type) const override;
+  bool MayLink() const;
 
   RustTool* AsRust() override;
   const RustTool* AsRust() const override;
@@ -53,7 +53,8 @@ class RustTool : public Tool {
                               SubstitutionList* field,
                               Err* err);
 
-  DISALLOW_COPY_AND_ASSIGN(RustTool);
+  RustTool(const RustTool&) = delete;
+  RustTool& operator=(const RustTool&) = delete;
 };
 
 #endif  // TOOLS_GN_RUST_TOOL_H_

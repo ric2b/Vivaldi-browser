@@ -13,7 +13,6 @@
 
 #include "base/callback.h"
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
@@ -136,7 +135,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkConfigurationHandler
   void OnShuttingDown() override;
 
   // Construct and initialize an instance for testing.
-  static NetworkConfigurationHandler* InitializeForTest(
+  static std::unique_ptr<NetworkConfigurationHandler> InitializeForTest(
       NetworkStateHandler* network_state_handler,
       NetworkDeviceHandler* network_device_handler);
 

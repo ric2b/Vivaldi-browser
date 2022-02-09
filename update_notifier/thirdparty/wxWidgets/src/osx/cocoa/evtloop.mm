@@ -4,7 +4,7 @@
 // Author:      Vadim Zeitlin, Stefan Csomor
 // Modified by:
 // Created:     2006-01-12
-// Copyright:   (c) 2006 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2006 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -19,15 +19,13 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/evtloop.h"
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
     #include "wx/nonownedwnd.h"
+    #include "wx/dialog.h"
 #endif // WX_PRECOMP
 
 #include "wx/log.h"
@@ -71,7 +69,7 @@ static NSUInteger CalculateNSEventMaskFromEventCategory(wxEventCategory cat)
     if ( cat | wxEVT_CATEGORY_USER_INPUT )
     {
         mask |=
-            NSLeftMouseDownMask	|
+            NSLeftMouseDownMask |
             NSLeftMouseUpMask |
             NSRightMouseDownMask |
             NSRightMouseUpMask |
@@ -214,19 +212,22 @@ int wxGUIEventLoop::DoDispatchTimeout(unsigned long timeout)
         
         switch (response) 
         {
-            case NSRunContinuesResponse:
+            case NSModalResponseContinue:
             {
+                [[NSRunLoop currentRunLoop]
+                        runMode:NSDefaultRunLoopMode
+                        beforeDate:[NSDate dateWithTimeIntervalSinceNow: timeout/1000.0]];
                 if ( [[NSApplication sharedApplication]
                         nextEventMatchingMask: NSAnyEventMask
-                        untilDate: [NSDate dateWithTimeIntervalSinceNow: timeout/1000.0]
+                        untilDate: nil
                         inMode: NSDefaultRunLoopMode
                         dequeue: NO] != nil )
                     return 1;
                 
                 return -1;
             }
-            case NSRunStoppedResponse:
-            case NSRunAbortedResponse:
+            case NSModalResponseStop:
+            case NSModalResponseAbort:
                 return -1;
             default:
                 // nested native loops may return other codes here, just ignore them
@@ -445,52 +446,13 @@ void wxModalEventLoop::OSXDoRun()
 
 void wxModalEventLoop::OSXDoStop()
 {
-        [NSApp abortModal];
-    }
-
-// we need our own version of ProcessIdle here in order to
-// avoid deletion of pending objects, because ProcessIdle is running
-// to soon and ends up in destroying the object too early, ie before
-// a stack allocated instance is removed resulting in double deletes
-bool wxModalEventLoop::ProcessIdle()
-{
-    bool needMore = false;
-    if ( wxTheApp )
-    {
-        // synthesize an idle event and check if more of them are needed
-        wxIdleEvent event;
-        event.SetEventObject(wxTheApp);
-        wxTheApp->ProcessEvent(event);
-        
-#if wxUSE_LOG
-        // flush the logged messages if any (do this after processing the events
-        // which could have logged new messages)
-        wxLog::FlushActive();
-#endif
-        needMore = event.MoreRequested();
-        
-        wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetFirst();
-        while (node)
-        {
-            wxWindow* win = node->GetData();
-            
-            // Don't send idle events to the windows that are about to be destroyed
-            // anyhow, this is wasteful and unexpected.
-            if ( !wxPendingDelete.Member(win) && win->SendIdleEvents(event) )
-                needMore = true;
-            node = node->GetNext();
-        }
-        
-        wxUpdateUIEvent::ResetUpdateTime();
-
-    }
-    return needMore;
+    [NSApp abortModal];
 }
 
 void wxGUIEventLoop::BeginModalSession( wxWindow* modalWindow )
 {
     WXWindow nsnow = nil;
-    
+
     m_modalNestedLevel++;
     if ( m_modalNestedLevel > 1 )
     {
@@ -596,72 +558,15 @@ void wxGUIEventLoop::EndModalSession()
 // 
 //
 
-wxWindowDisabler::wxWindowDisabler(bool disable)
+void wxWindowDisabler::AfterDisable(wxWindow* winToSkip)
 {
-    m_modalEventLoop = NULL;
-    m_disabled = disable;
-    if ( disable )
-        DoDisable();
-}
-
-wxWindowDisabler::wxWindowDisabler(wxWindow *winToSkip)
-{
-    m_disabled = true;
-    DoDisable(winToSkip);
-}
-
-void wxWindowDisabler::DoDisable(wxWindow *winToSkip)
-{    
-    // remember the top level windows which were already disabled, so that we
-    // don't reenable them later
-    m_winDisabled = NULL;
-    
-    wxWindowList::compatibility_iterator node;
-    for ( node = wxTopLevelWindows.GetFirst(); node; node = node->GetNext() )
-    {
-        wxWindow *winTop = node->GetData();
-        if ( winTop == winToSkip )
-            continue;
-        
-        // we don't need to disable the hidden or already disabled windows
-        if ( winTop->IsEnabled() && winTop->IsShown() )
-        {
-            winTop->Disable();
-        }
-        else
-        {
-            if ( !m_winDisabled )
-            {
-                m_winDisabled = new wxWindowList;
-            }
-            
-            m_winDisabled->Append(winTop);
-        }
-    }
-    
     m_modalEventLoop = (wxEventLoop*)wxEventLoopBase::GetActive();
     if (m_modalEventLoop)
         m_modalEventLoop->BeginModalSession(winToSkip);
 }
 
-wxWindowDisabler::~wxWindowDisabler()
+void wxWindowDisabler::BeforeEnable()
 {
-    if ( !m_disabled )
-        return;
-    
     if (m_modalEventLoop)
         m_modalEventLoop->EndModalSession();
-    
-    wxWindowList::compatibility_iterator node;
-    for ( node = wxTopLevelWindows.GetFirst(); node; node = node->GetNext() )
-    {
-        wxWindow *winTop = node->GetData();
-        if ( !m_winDisabled || !m_winDisabled->Find(winTop) )
-        {
-            winTop->Enable();
-        }
-        //else: had been already disabled, don't reenable
-    }
-    
-    delete m_winDisabled;
 }

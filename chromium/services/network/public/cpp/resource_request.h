@@ -18,6 +18,7 @@
 #include "net/cookies/site_for_cookies.h"
 #include "net/filter/source_stream.h"
 #include "net/http/http_request_headers.h"
+#include "net/log/net_log_source.h"
 #include "net/url_request/referrer_policy.h"
 #include "services/network/public/cpp/optional_trust_token_params.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -101,16 +102,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
     int32_t render_process_id = -1;
   };
 
-  // Typemapped to network.mojom.NetLogParams, see comments there for
-  // details of each field.
-  struct COMPONENT_EXPORT(NETWORK_CPP_BASE) NetLogParams {
-    NetLogParams();
-    explicit NetLogParams(uint32_t id);
-    ~NetLogParams();
-
-    uint32_t source_id;
-  };
-
   ResourceRequest();
   ResourceRequest(const ResourceRequest& request);
   ~ResourceRequest();
@@ -134,6 +125,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   // once Chrome Platform Apps are gone.
   absl::optional<url::Origin> isolated_world_origin;
 
+  // The chain of URLs seen during navigation redirects.  This should only
+  // contain values if the mode is `RedirectMode::kNavigate`.
+  std::vector<GURL> navigation_redirect_chain;
+
   GURL referrer;
   net::ReferrerPolicy referrer_policy = net::ReferrerPolicy::NEVER_CLEAR;
   net::HttpRequestHeaders headers;
@@ -141,7 +136,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   int load_flags = 0;
   int resource_type = 0;
   net::RequestPriority priority = net::IDLE;
-  bool should_reset_appcache = false;
   bool is_external_request = false;
   mojom::CorsPreflightPolicy cors_preflight_policy =
       mojom::CorsPreflightPolicy::kConsiderPreflight;
@@ -153,6 +147,8 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   mojom::RedirectMode redirect_mode = mojom::RedirectMode::kFollow;
   std::string fetch_integrity;
   mojom::RequestDestination destination = mojom::RequestDestination::kEmpty;
+  mojom::RequestDestination original_destination =
+      mojom::RequestDestination::kEmpty;
   scoped_refptr<ResourceRequestBody> request_body;
   bool keepalive = false;
   bool has_user_gesture = false;
@@ -186,7 +182,8 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   // decoding any non-listed stream types.
   absl::optional<std::vector<net::SourceStream::SourceType>>
       devtools_accepted_stream_types;
-  absl::optional<NetLogParams> net_log_params;
+  absl::optional<net::NetLogSource> net_log_create_info;
+  absl::optional<net::NetLogSource> net_log_reference_info;
   mojom::IPAddressSpace target_ip_address_space =
       mojom::IPAddressSpace::kUnknown;
 };

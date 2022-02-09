@@ -10,7 +10,7 @@
 #include "base/json/json_reader.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
@@ -201,7 +201,7 @@ void AdverseAdFilterListService::OnBlocklistDownloadDone(
         FROM_HERE,
         base::BindOnce(&AdverseAdFilterListService::OnDoBlockListLifecycleCheck,
                        weak_ptr_factory_.GetWeakPtr()),
-        base::TimeDelta::FromHours(interval));
+        base::Hours(interval));
 
     LoadList(AdverseAdFilterListService::ListFailedCallback());
 
@@ -244,7 +244,7 @@ void AdverseAdFilterListService::OnDoBlockListLifecycleCheck() {
         FROM_HERE,
         base::BindOnce(&AdverseAdFilterListService::OnDoBlockListLifecycleCheck,
                        weak_ptr_factory_.GetWeakPtr()),
-        base::TimeDelta::FromHours(interval));
+        base::Hours(interval));
   }
 
   // Make sure we try to load an existing file on startup.

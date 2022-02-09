@@ -889,12 +889,12 @@ const char kGeneratedFile_Help[] =
   specifying the intended location of the output file.
 
   The `output_conversion` variable specified the format to write the
-  value. See `gn help output_conversion`.
+  value. See `gn help io_conversion`.
 
-  One of `contents` or `data_keys` must be specified; use of `data` will write
-  the contents of that value to file, while use of `data_keys` will trigger a
-  metadata collection walk based on the dependencies of the target and the
-  optional values of the `rebase` and `walk_keys` variables. See
+  One of `contents` or `data_keys` must be specified; use of `contents` will
+  write the contents of that value to file, while use of `data_keys` will
+  trigger a metadata collection walk based on the dependencies of the target and
+  the optional values of the `rebase` and `walk_keys` variables. See
   `gn help metadata`.
 
   Collected metadata, if specified, will be returned in postorder of

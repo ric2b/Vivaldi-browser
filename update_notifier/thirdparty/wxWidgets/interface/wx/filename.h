@@ -193,7 +193,7 @@ wxULongLong wxInvalidSize;
     invalid state and wxFileName::IsOk() returns false for it.
 
     File names can be case-sensitive or not, the function wxFileName::IsCaseSensitive()
-    allows to determine this. The rules for determining whether the file name is
+    allows determining this. The rules for determining whether the file name is
     absolute or relative also depend on the file name format and the only portable way
     to answer this question is to use wxFileName::IsAbsolute() or wxFileName::IsRelative()
     method.
@@ -266,8 +266,6 @@ wxULongLong wxInvalidSize;
     @li wxFileName::SetName()
     @li wxFileName::SetVolume()
 
-    You can initialize a wxFileName instance using one of the following functions:
-
 
     @section filename_operations File name operations
 
@@ -287,6 +285,24 @@ wxULongLong wxInvalidSize;
     @li wxFileName::Mkdir()
     @li wxFileName::Rmdir()
 
+    @section symlink_behavior Behavior with symlinks
+
+    wxFileName instances can store the path to symlinks on systems that support them.
+    When the path is for a symlink, the behavior of the following methods can be modified
+    to either operate on the symlink itself or on the file the link points to.
+
+    @li wxFileName::FileExists()
+    @li wxFileName::DirExists()
+    @li wxFileName::Exists()
+    @li wxFileName::SameAs()
+    @li wxFileName::GetTimes()
+
+    By default, those functions will operate on the target of the link, but they can be
+    made to operate on the link itself by calling wxFileName::DontFollowLink(). The current
+    link-following mode can be examined by calling wxFileName::ShouldFollowLink().
+
+    The wxFileName::ResolveLink() method can be used to get the absolute path for the target
+    of the symlink.
 
     @library{wxbase}
     @category{file}
@@ -517,7 +533,7 @@ public:
 
         By default, all operations in this class work on the target of a
         symbolic link (symlink) if the path of the file is actually a symlink.
-        Using this method allows to turn off this "symlink following" behaviour
+        Using this method allows turning off this "symlink following" behaviour
         and apply the operations to this path itself, even if it is a symlink.
 
         The following methods are currently affected by this option:
@@ -773,7 +789,8 @@ public:
     static wxULongLong GetSize(const wxString& filename);
 
     /**
-        Returns the directory used for temporary files.
+        Returns the directory used for temporary files, for current user. Same as
+        wxStandardPaths::GetTempDir().
     */
     static wxString GetTempDir();
 
@@ -813,8 +830,7 @@ public:
      /**
         This function builds a volume path string, for example "C:\\".
 
-        Implemented for the platforms which use drive letters, i.e. DOS, MSW
-        and OS/2 only.
+        Implemented for the platforms which use drive letters, i.e. MSW only.
 
         @since 2.9.0
 
@@ -980,33 +996,6 @@ public:
     bool IsRelative(wxPathFormat format = wxPATH_NATIVE) const;
 
     /**
-        On Mac OS, gets the common type and creator for the given extension.
-
-        @onlyfor{wxosx}
-    */
-    static bool MacFindDefaultTypeAndCreator(const wxString& ext,
-                                            wxUint32* type,
-                                            wxUint32* creator);
-
-    /**
-        On Mac OS, registers application defined extensions and their default type
-        and creator.
-
-        @onlyfor{wxosx}
-    */
-    static void MacRegisterDefaultTypeAndCreator(const wxString& ext,
-                                                wxUint32 type,
-                                                wxUint32 creator);
-
-    /**
-        On Mac OS, looks up the appropriate type and creator from the registration
-        and then sets it.
-
-        @onlyfor{wxosx}
-    */
-    bool MacSetDefaultTypeAndCreator();
-
-    /**
         Make the file name absolute.
         This is a shortcut for
         @code
@@ -1165,6 +1154,24 @@ public:
     */
     bool ReplaceHomeDir(wxPathFormat format = wxPATH_NATIVE);
 
+    /**
+        Find the absolute path of the file/directory that is pointed to by this
+        path.
+
+        If this path isn't a symlink, then this function will return the current
+        path. If the path does not exist on disk, An empty wxFileName instance
+        will be returned.
+
+        @note This is only supported on Unix-like platforms (e.g. wxGTK, wxOSX),
+              on other platforms (e.g. wxMSW) this function just returns the
+              current path.
+
+        @since 3.1.5
+
+        @return The absolute path that the current symlink path points to.
+    */
+    wxFileName ResolveLink();
+
 
     /**
         Deletes the specified directory from the file system.
@@ -1272,6 +1279,25 @@ public:
                 the file doesn't exist).
     */
     bool SetPermissions(int permissions);
+
+    /**
+        Converts URL into a well-formed filename.
+        The URL must use the @c file protocol.
+        If the URL does not use @c file protocol
+        wxFileName object may not be good or may not exist
+
+        @since 3.1.3
+    */
+    static wxFileName URLToFileName(const wxString& url);
+
+    /**
+        Converts wxFileName into an URL.
+
+        @see URLToFileName(), wxFileName
+
+        @since 3.1.3
+    */
+    static wxString FileNameToURL(const wxFileName& filename);
 
     /**
         Sets the file creation and last access/modification times (any of the pointers

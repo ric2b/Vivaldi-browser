@@ -48,20 +48,9 @@ be accessed using XRCCTRL().
 @section overview_xrcformat_root Resource Root Element
 
 The root element is always @c \<resource\>. It has one optional attribute, @c
-version. If set, it specifies version of the file. In absence of @c version
-attribute, the default is @c "0.0.0.0".
-
-The version consists of four integers separated by periods.  The first three
-components are major, minor and release number of the wxWidgets release when
-the change was introduced, the last one is revision number and is 0 for the
-first incompatible change in given wxWidgets release, 1 for the second and so
-on.  The version changes only if there was an incompatible change introduced;
-merely adding new kind of objects does not constitute incompatible change.
-
-At the time of writing, the latest version is @c "2.5.3.0".
-
-Note that even though @c version attribute is optional, it should always be
-specified to take advantage of the latest capabilities:
+version which, while optional, should always be set to the latest version. At
+the time of writing, it is @c "2.5.3.0", so all XRC documents should look like
+the following:
 
 @code
 <?xml version="1.0"?>
@@ -69,6 +58,13 @@ specified to take advantage of the latest capabilities:
     ...
 </resource>
 @endcode
+
+The version consists of four integers separated by periods.  The first three
+components are major, minor and release number of the wxWidgets release when
+the change was introduced, the last one is revision number and is 0 for the
+first incompatible change in given wxWidgets release, 1 for the second and so
+on.  The version changes only if there was an incompatible change introduced;
+merely adding new kind of objects does not constitute incompatible change.
 
 @c \<resource\> may have arbitrary number of
 @ref overview_xrcformat_objects "object elements" as its children; they are referred
@@ -119,7 +115,7 @@ These come in two varieties:
     ("\<label\>Cancel\</label\>"), but they may use nested subelements too (e.g.
     @ref overview_xrcformat_type_font "font property"). A property can only be
     listed once in an object's definition.
- -# Child objects. Window childs, sizers, sizer items or notebook pages
+ -# Child objects. Window children, sizers, sizer items or notebook pages
     are all examples of child objects. They are represented using nested
     @c \<object\> elements and are can be repeated more than once. The specifics
     of which object classes are allowed as children are class-specific and
@@ -246,8 +242,10 @@ Some examples:
 
 @subsection overview_xrcformat_type_size Size
 
-Sizes and positions have the form of string with two comma-separated integer
-components, with optional "d" suffix. Semi-formally:
+Sizes and positions can be expressed in either @ref wxWindow::FromDIP()
+"DPI-independent pixel values" or in @ref wxWindow::ConvertDialogToPixels()
+"dialog units". The former is the default, to use the latter "d" suffix can be
+added. Semi-formally the format is:
 
   size := x "," y ["d"]
 
@@ -255,8 +253,9 @@ where x and y are integers. Either of the components (or both) may be "-1" to
 signify default value. As a shortcut, empty string is equivalent to "-1,-1"
 (= wxDefaultSize or wxDefaultPosition).
 
-When the "d" suffix is used, integer values are interpreted as
-@ref wxWindow::ConvertDialogToPixels() "dialog units" in the parent window.
+Notice that the dialog unit suffix "d" applies to both @c x and @c y if it's
+specified and cannot be specified after the first component, but only at the
+end.
 
 Examples:
 @code
@@ -274,7 +273,19 @@ Same as @ref overview_xrcformat_type_size.
 
 Similarly to @ref overview_xrcformat_type_size "sizes", dimensions are expressed
 as integers with optional "d" suffix. When "d" suffix is used, the integer
-preceding it is interpreted as dialog units in the parent window.
+preceding it is interpreted as dialog units in the parent window, otherwise
+it's a DPI-independent pixel value.
+
+
+@subsection overview_xrcformat_type_pair_ints Pair of integers
+
+This is similar to @ref overview_xrcformat_type_size size, but for values that
+are not expressed in pixels and so doesn't allow "d" suffix nor does any
+DPI-dependent scaling, i.e. the format is just
+
+  size := x "," y
+
+and @c x and @c y are just integers which are not interpreted in any way.
 
 
 @subsection overview_xrcformat_type_text Text
@@ -341,6 +352,9 @@ wxFileSystem URL) of the bitmap to use. For example:
 The value is interpreted as path relative to the location of XRC file where the
 reference occurs.
 
+Bitmap file paths can include environment variables that are expanded if
+wxXRC_USE_ENVVARS was passed to the wxXmlResource constructor.
+
 Alternatively, it is possible to specify the bitmap using wxArtProvider IDs.
 In this case, the property element has no textual value (filename) and instead
 has the @c stock_id XML attribute that contains stock art ID as accepted by
@@ -378,6 +392,16 @@ Examples:
 @endcode
 
 
+@subsection overview_xrcformat_type_showeffect Show Effect
+
+One of the @ref wxShowEffect values.
+
+Example:
+@code
+<showeffect>wxSHOW_EFFECT_EXPAND</showeffect>
+@endcode
+
+
 @subsection overview_xrcformat_type_font Font
 
 XRC uses similar, but more flexible, abstract description of fonts to that
@@ -392,19 +416,28 @@ and can be one of the following "sub-properties":
 
 @beginTable
 @hdr3col{property, type, description}
-@row3col{size, unsigned integer,
+@row3col{size, float,
     Pixel size of the font (default: wxNORMAL_FONT's size or @c sysfont's
     size if the @c sysfont property is used or the current size of the font
-    of the enclosing control if the @c inherit property is used.}
+    of the enclosing control if the @c inherit property is used. Note that
+    versions of wxWidgets until 3.1.2 only supported integer values for the
+    font size.}
 @row3col{style, enum,
     One of "normal", "italic" or "slant" (default: normal).}
-@row3col{weight, enum,
-    One of "normal", "bold" or "light" (default: normal).}
+@row3col{weight, enum or integer,
+    One of "thin", "extralight", "light", "normal", "medium", "semibold",
+    "bold", "extrabold", "heavy", "extraheavy", corresponding to the similarly
+    named elements of ::wxFontWeight enum, or a numeric value between 1 and
+    1000 (default: normal). Note that versions of wxWidgets until 3.1.2 only
+    supported "light", "normal" and "bold" values for weight.}
 @row3col{family, enum,
     One of "default", "roman", "script", "decorative", "swiss", "modern" or "teletype"
     (default: default).}
 @row3col{underlined, @ref overview_xrcformat_type_bool,
     Whether the font should be underlined (default: 0).}
+@row3col{strikethrough, @ref overview_xrcformat_type_bool,
+    Whether the strikethrough font should be used (default: 0). This property
+    is only supported since wxWidgets 3.1.2.}
 @row3col{face, ,
     Comma-separated list of face names; the first one available is used
     (default: unspecified).}
@@ -541,6 +574,14 @@ control-specific properties are listed. If the control can have child objects,
 it is documented there too; unless said otherwise, XRC elements for these
 controls cannot have children.
 
+@subsubsection xrc_activityindicator wxActivityIndicator
+
+@beginTable
+@hdr3col{property, type, description}
+@row3col{running, @ref overview_xrcformat_type_bool,
+    If true, start the activity indicator after creating it (default: false).}
+@endTable
+
 @subsubsection xrc_wxanimationctrl wxAnimationCtrl
 
 @beginTable
@@ -549,6 +590,96 @@ controls cannot have children.
     Animation file to load into the control (default: none).}
 @row3col{inactive-bitmap, @ref overview_xrcformat_type_bitmap,
     Bitmap to use when not playing the animation (default: the default).}
+@endTable
+
+
+@subsubsection xrc_wxauimanager wxAuiManager
+
+Notice that wxAUI support in XRC is available in wxWidgets 3.1.1 and
+later only and you need to explicitly register its handler using
+@code
+    #include <wx/xrc/xh_aui.h>
+
+    AddHandler(new wxAuiXmlHandler);
+@endcode
+to use it.
+
+A wxAuiManager can have one or more child objects of the
+wxAuiPaneInfo class.
+wxAuiPaneInfo objects have the following properties:
+
+@beginTable
+@hdr3col{property, type, description}
+@row3col{caption, @ref overview_xrcformat_type_text,
+    Sets the caption of the pane.}
+@row3col{caption_visible, @ref overview_xrcformat_type_bool,
+    Indicates that a pane caption should be visible.}
+@row3col{close_button, @ref overview_xrcformat_type_bool,
+    Indicates that a close button should be drawn for the pane.}
+@row3col{maximize_button, @ref overview_xrcformat_type_bool,
+    Indicates that a maximize button should be drawn for the pane.}
+@row3col{minimize_button, @ref overview_xrcformat_type_bool,
+    Indicates that a minimize button should be drawn for the pane.}
+@row3col{pin_button, @ref overview_xrcformat_type_bool,
+    Indicates that a pin button should be drawn for the pane.}
+@row3col{gripper, @ref overview_xrcformat_type_bool,
+    Indicates that a gripper should be drawn for the pane.}
+@row3col{pane_border, @ref overview_xrcformat_type_bool,
+    Indicates that a border should be drawn for the pane.}
+@row3col{dock, ,
+    Indicates that a pane should be docked.}
+@row3col{float, ,
+    Indicates that a pane should be floated.}
+@row3col{top_dockable, @ref overview_xrcformat_type_bool,
+    Indicates whether a pane can be docked at the top of the frame.}
+@row3col{bottom_dockable, @ref overview_xrcformat_type_bool,
+    Indicates whether a pane can be docked at the bottom of the frame.}
+@row3col{left_dockable, @ref overview_xrcformat_type_bool,
+    Indicates whether a pane can be docked on the left of the frame.}
+@row3col{right_dockable, @ref overview_xrcformat_type_bool,
+    Indicates whether a pane can be docked on the right of the frame.}
+@row3col{dock_fixed, @ref overview_xrcformat_type_bool,
+    Causes the containing dock to have no resize sash.}
+@row3col{resizable, @ref overview_xrcformat_type_bool,
+    Allows a pane to be resized if the parameter is @true, and forces it
+    to be a fixed size if the parameter is @false.}
+@row3col{movable, @ref overview_xrcformat_type_bool,
+    Indicates whether a pane can be moved.}
+@row3col{floatable, @ref overview_xrcformat_type_bool,
+    Sets whether the user will be able to undock a pane and turn it
+    into a floating window.}
+@row3col{best_size, @ref overview_xrcformat_type_size,
+    Sets the ideal size for the pane.}
+@row3col{floating_size, @ref overview_xrcformat_type_size,
+    Sets the size of the floating pane.}
+@row3col{min_size, @ref overview_xrcformat_type_size,
+    Sets the minimum size of the pane.}
+@row3col{max_size, @ref overview_xrcformat_type_size,
+    Sets the maximum size of the pane.}
+@row3col{default_pane, ,
+    Specifies that the pane should adopt the default pane settings.}
+@row3col{toolbar_pane, ,
+    Specifies that the pane should adopt the default toolbar pane settings.}
+@row3col{layer, , Determines the layer of the docked pane.}
+@row3col{row, , Determines the row of the docked pane.}
+@row3col{center_pane, ,
+    Specifies that the pane should adopt the default center pane settings.}
+@row3col{centre_pane, ,
+    Same as center_pane.}
+@row3col{direction, ,
+    Determines the direction of the docked pane.}
+@row3col{top, ,
+    Sets the pane dock position to the top of the frame.}
+@row3col{bottom, ,
+    Sets the pane dock position to the bottom side of the frame.}
+@row3col{left, ,
+    Sets the pane dock position to the left side of the frame.}
+@row3col{right, ,
+    Sets the pane dock position to the right side of the frame.}
+@row3col{center, ,
+    Sets the pane dock position to the center of the frame.}
+@row3col{centre, ,
+    Same as center.}
 @endTable
 
 
@@ -584,15 +715,32 @@ Example:
 </object>
 @endcode
 
-Notice that wxAuiNotebook support in XRC is available in wxWidgets 2.9.5 and
-later only and you need to explicitly register its handler using
+@note See @ref xrc_wxauimanager about using wxAUI classes in XRC.
+
+@subsubsection xrc_wxauitoolbar wxAuiToolBar
+
+Building an XRC for wxAuiToolBar is quite similar to wxToolBar.
+The only significant differences are:
+@li the use of the class name wxAuiToolBar
+@li the styles supported are the ones described in the wxAuiToolBar class definition
+@li the 'space' pseudo-class has two optional, mutually exclusive,
+integer properties: 'proportion' and 'width'. If 'width' is specified, a space
+is added using wxAuiToolBar::AddSpacer(); if 'proportion', the value is used in
+wxAuiToolBar::AddStretchSpacer(). If neither are provided, the default is a
+stretch-spacer with a proportion of 1.
+@li there is an additional pseudo-class, 'label', that has a string property.
+See wxAuiToolBar::AddLabel().
+
+Refer to the section @ref xrc_wxtoolbar for more details.
+
+@note The XML Handler should be explicitly registered:
 @code
-    #include <wx/xrc/xh_auinotbk.h>
+    #include <wx/xrc/xh_auitoolb.h>
 
-    AddHandler(new wxAuiNotebookXmlHandler);
+    AddHandler(new wxAuiToolBarXmlHandler);
 @endcode
-to use it.
 
+@since 3.1.0
 
 @subsubsection xrc_wxbannerwindow wxBannerWindow
 
@@ -621,6 +769,11 @@ to use it.
 @hdr3col{property, type, description}
 @row3col{default, @ref overview_xrcformat_type_bool,
      Should this button be the default button in dialog (default: 0)?}
+@row3col{close, @ref overview_xrcformat_type_bool,
+     If set, this is a special "Close" button using system-defined appearance,
+     see wxBitmapButton::NewCloseButton(). If this property is set, @c bitmap
+     and @c style are ignored and shouldn't be used. Available since wxWidgets
+     3.1.5.}
 @row3col{bitmap, @ref overview_xrcformat_type_bitmap,
      Bitmap to show on the button (default: none).}
 @row3col{selected, @ref overview_xrcformat_type_bitmap,
@@ -809,6 +962,9 @@ The wxCommandLinkButton contains a main title-like @c label and an optional
 concatenated into a single string using a new line character between them
 (notice that the @c note part can have more new lines in it).
 
+Since wxWidgets 3.1.5 it also supports @c default and @c bitmap properties,
+just as @ref xrc_wxbutton wxButton.
+
 @beginTable
 @hdr3col{property, type, description}
 @row3col{label, @ref overview_xrcformat_type_text,
@@ -816,6 +972,10 @@ concatenated into a single string using a new line character between them
     will be made when the button is pressed (default: empty). }
 @row3col{note, @ref overview_xrcformat_type_text,
     Second line of text describing the action performed when the button is pressed (default: none).  }
+@row3col{bitmap, @ref overview_xrcformat_type_bitmap,
+    Bitmap to display in the button (optional).}
+@row3col{default, @ref overview_xrcformat_type_bool,
+    Should this button be the default button in dialog (default: 0)?}
 @endTable
 
 
@@ -883,6 +1043,25 @@ Example:
 @hdr3col{property, type, description}
 @row3col{value, @ref overview_xrcformat_type_string,
      Initial value in the control (default: empty).}
+@endTable
+
+
+@subsubsection xrc_wxdataviewctrl wxDataViewCtrl
+
+No additional properties.
+
+
+@subsubsection xrc_wxdataviewlistctrl wxDataViewListCtrl
+
+No additional properties.
+
+
+@subsubsection xrc_wxdataviewtreectrl wxDataViewTreeCtrl
+
+@beginTable
+@hdr3col{property, type, description}
+@row3col{imagelist, @ref overview_xrcformat_type_imagelist,
+     Image list to use for the images (default: none).}
 @endTable
 
 
@@ -1013,10 +1192,18 @@ objects. If sizer child is used, it sets
 @row3col{value, integer,
     Initial value of the control (default: 0).}
 @row3col{shadow, @ref overview_xrcformat_type_dimension,
-    Rendered shadow size (default: none; ignored by most platforms).}
+    Ignored, preserved only for compatibility.}
 @row3col{bezel, @ref overview_xrcformat_type_dimension,
-    Rendered bezel size (default: none; ignored by most platforms).}
+    Ignored, preserved only for compatibility.}
 @endTable
+
+@subsubsection xrc_wxgenericanimationctrl wxGenericAnimationCtrl
+
+This handler is identical to the one for @ref xrc_wxanimationctrl
+"wxAnimationCtrl", please see it for more information. The only difference is
+that, for the platforms with a native wxAnimationCtrl implementation, using
+this handler creates a generic control rather than a native one.
+
 
 @subsubsection xrc_wxgenericdirctrl wxGenericDirCtrl
 
@@ -1062,6 +1249,40 @@ page.
 @row3col{url, @ref overview_xrcformat_type_url,
      URL to open when the link is clicked (default: empty).}
 @endTable
+
+
+@subsubsection xrc_wxinfobar wxInfoBar
+
+@beginTable
+@hdr3col{property, type, description}
+@row3col{showeffect, @ref overview_xrcformat_type_showeffect,
+     The effect to use when showing the bar (optional).}
+@row3col{hideeffect, @ref overview_xrcformat_type_showeffect,
+     The effect to use when hiding the bar (optional).}
+@row3col{effectduration, integer,
+     The duration of the animation used when showing or hiding the bar
+     (optional).}
+@row3col{button, object,
+     Add a button to be shown in the info bar (see wxInfoBar::AddButton);
+     this property is of class "button" has name (can be one of standard
+     button ID) and has optional label property. If no buttons are added
+     to the info bar, the default "Close" button will be shown.}
+@endTable
+
+Example:
+@code
+<object class="wxInfoBar">
+    <effectduration>1000</effectduration>
+    <showeffect>wxSHOW_EFFECT_EXPAND</showeffect>
+    <hideeffect>wxSHOW_EFFECT_SLIDE_TO_RIGHT</hideeffect>
+    <object class="button" name="wxID_UNDO"/>
+    <object class="button" name="wxID_REDO">
+        <label>Redo Custom Label</label>
+    </object>
+</object>
+@endcode
+
+@since 3.1.3
 
 
 @subsubsection xrc_wxlistbox wxListBox
@@ -1223,7 +1444,7 @@ must be of wxMDIChildFrame type.
 wxMDIChildFrame supports the same properties that @ref xrc_wxfrane and
 @ref xrc_wxmdiparentframe do.
 
-wxMDIChildFrame can only be used as as immediate child of @ref
+wxMDIChildFrame can only be used as immediate child of @ref
 xrc_wxmdiparentframe.
 
 wxMDIChildFrame may have optional children: either exactly one
@@ -1462,13 +1683,18 @@ can also have some optional XML @em attributes (not properties!):
 @beginTable
 @hdr3col{attribute, type, description}
 @row3col{tooltip, @ref overview_xrcformat_type_string,
-     Tooltip to show over this ratio button (default: none).}
+     Tooltip to show over this radio button (default: none).}
 @row3col{helptext, @ref overview_xrcformat_type_string,
      Contextual help for this radio button (default: none).}
 @row3col{enabled, @ref overview_xrcformat_type_bool,
      Is the button enabled (default: 1)?}
 @row3col{hidden, @ref overview_xrcformat_type_bool,
      Is the button hidden initially (default: 0)?}
+@row3col{label, @ref overview_xrcformat_type_bool,
+     Should this item text be interpreted as a label, i.e. escaping underscores
+     in it as done for the label properties of other controls? This attribute
+     exists since wxWidgets 3.1.1 and was always treated as having the value of
+     0, which still remains its default, until then.}
 @endTable
 
 Example:
@@ -1485,7 +1711,7 @@ Example:
         <item tooltip="E=mc^2">Energy 98.3</item>
         <item helptext="Favourite chukcha's radio">CHUM FM</item>
         <item>92FM</item>
-        <item hidden="1">Very quit station</item>
+        <item hidden="1">Very quiet station</item>
     </content>
 </object>
 @endcode
@@ -1605,7 +1831,7 @@ objects have the following properties:
 @endTable
 
 A wxRibbonPage may have children of any type derived from wxRibbonControl.
-Most commontly, wxRibbonPanel is used. As a special case, the @c panel
+Most commonly, wxRibbonPanel is used. As a special case, the @c panel
 pseudo-class may be used instead of @c wxRibbonPanel when used as wxRibbonPage
 children.
 
@@ -1780,6 +2006,19 @@ wxWidgets 2.9.5, another one:
 @endTable
 
 
+@subsubsection xrc_wxspinctrldouble wxSpinCtrlDouble
+
+wxSpinCtrlDouble supports the same properties as @ref xrc_wxspinbutton but @c
+value, @c min and @a max are all of type float instead of int. There is one
+additional property:
+@beginTable
+@row3col{inc, float,
+    The amount by which the number is changed by a single arrow press.}
+@endTable
+
+This handler was added in wxWidgets 3.1.1.
+
+
 @subsubsection xrc_wxsplitterwindow wxSplitterWindow
 
 @beginTable
@@ -1806,6 +2045,9 @@ child and the second one for right/bottom child window.
 @hdr3col{property, type, description}
 @row3col{value, @ref overview_xrcformat_type_text,
     Initial value of the control (default: empty).}
+@row3col{hint, @ref overview_xrcformat_type_text,
+    Descriptive text shown in the empty control (default: "Search"). This
+    property is new since wxWidgets 3.1.1.}
 @endTable
 
 
@@ -1868,6 +2110,9 @@ No additional properties.
     Initial value of the control (default: empty).}
 @row3col{maxlength, integer,
     Maximum length of the text which can be entered by user (default: unlimited).}
+@row3col{forceupper, @ref overview_xrcformat_type_bool,
+    If true, use wxTextEntry::ForceUpper() to force the control contents to be
+    upper case.}
 @row3col{hint, @ref overview_xrcformat_type_text,
     Hint shown in empty control (new since wxWidgets 3.0.1).}
 @endTable
@@ -1886,6 +2131,10 @@ No additional properties.
      Label to display on the button (default: empty).}
 @row3col{checked, @ref overview_xrcformat_type_bool,
      Should the button be checked/pressed initially (default: 0)?}
+@row3col{bitmap, @ref overview_xrcformat_type_bitmap,
+    Bitmap to display in the button (optional). @since 3.1.1}
+@row3col{bitmapposition, @c wxLEFT|wxRIGHT|wxTOP|wxBOTTOM,
+    Position of the bitmap in the button, see wxButton::SetBitmapPosition() (default: wxLEFT). @since 3.1.1}
 @endTable
 
 @subsubsection xrc_wxtoolbar wxToolBar
@@ -2194,11 +2443,11 @@ properties:
     (default: 0).}
 @row3col{minsize, @ref overview_xrcformat_type_size,
     Minimal size of this item (default: no min size).}
-@row3col{ratio, @ref overview_xrcformat_type_size,
+@row3col{ratio, @ref overview_xrcformat_type_pair_ints,
     Item ratio, see wxSizer::SetRatio() (default: no ratio).}
-@row3col{cellpos, @ref overview_xrcformat_type_pos,
+@row3col{cellpos, @ref overview_xrcformat_type_pair_ints,
     (wxGridBagSizer only) Position, see wxGBSizerItem::SetPos() (required). }
-@row3col{cellspan, @ref overview_xrcformat_type_size,
+@row3col{cellspan, @ref overview_xrcformat_type_pair_ints,
     (wxGridBagSizer only) Span, see wxGBSizerItem::SetSpan() (required). }
 @endTable
 
@@ -2250,13 +2499,17 @@ Example of sizers XRC code:
 @endcode
 
 The sizer classes that can be used are listed below, together with their
-class-specific properties. All classes support the following properties:
+class-specific properties. All classes except wxStdDialogButtonSizer
+support the following properties:
 
 @beginTable
 @hdr3col{property, type, description}
 @row3col{minsize, @ref overview_xrcformat_type_size,
     Minimal size that this sizer will have, see wxSizer::SetMinSize()
     (default: no min size).}
+@row3col{hideitems, @ref overview_xrcformat_type_bool,
+    Whether the sizer will be created with all its items hidden
+    (default: 0).}
 @endTable
 
 @subsection overview_xrcformat_wxboxsizer wxBoxSizer
@@ -2275,6 +2528,9 @@ class-specific properties. All classes support the following properties:
     Sizer orientation, "wxHORIZONTAL" or "wxVERTICAL" (default: wxHORIZONTAL).}
 @row3col{label, @ref overview_xrcformat_type_text,
     Label to be used for the static box around the sizer (default: empty).}
+@row3col{windowlabel, any window,
+    Window to be used instead of the plain text label (default: none).
+    This property is only available since wxWidgets 3.1.1.}}
 @endTable
 
 @subsection overview_xrcformat_wxgridsizer wxGridSizer
@@ -2418,17 +2674,17 @@ should be processed on. It is filtered out and ignored on any other platforms.
 
 Possible elemental values are:
 @beginDefList
-@itemdef{ @c win, Windows }
-@itemdef{ @c mac, Mac OS X (or Mac Classic in wxWidgets version supporting it) }
-@itemdef{ @c unix, Any Unix platform @em except OS X }
-@itemdef{ @c os2, OS/2 }
+@itemdef{ @c msw, Windows, preferred platform name }
+@itemdef{ @c win, Windows, alternative synonym }
+@itemdef{ @c mac, macOS or iOS }
+@itemdef{ @c unix, Any Unix platform @em except macOS }
 @endDefList
 
 Examples:
 @code
-<label platform="win">Windows</label>
+<label platform="msw">Windows</label>
 <label platform="unix">Unix</label>
-<label platform="mac">Mac OS X</label>
+<label platform="mac">macOS</label>
 <help platform="mac|unix">Not a Windows machine</help>
 @endcode
 

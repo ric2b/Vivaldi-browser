@@ -18,6 +18,7 @@
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -121,7 +122,7 @@ class ScopedTransaction {
   ~ScopedTransaction() { db_->CommitTransaction(); }
 
  private:
-  LoginDatabase* db_;
+  raw_ptr<LoginDatabase> db_;
 };
 
 // Convenience enum for interacting with SQL queries that use all the columns.
@@ -1318,43 +1319,18 @@ bool LoginDatabase::GetLogins(
 
   // PSL matching only applies to HTML forms.
   if (should_PSL_matching_apply) {
-    const GURL signon_realm(form.signon_realm);
-    std::string registered_domain = GetRegistryControlledDomain(signon_realm);
-    DCHECK(!registered_domain.empty());
-    // We are extending the original SQL query with one that includes more
-    // possible matches based on public suffix domain matching. Using a regexp
-    // here is just an optimization to not have to parse all the stored entries
-    // in the |logins| table. The result (scheme, domain and port) is verified
-    // further down using GURL. See the functions SchemeMatches,
-    // RegistryControlledDomainMatches and PortMatches.
-    // We need to escape . in the domain. Since the domain has already been
-    // sanitized using GURL, we do not need to escape any other characters.
-    base::ReplaceChars(registered_domain, ".", "\\.", &registered_domain);
-    std::string scheme = signon_realm.scheme();
-    // We need to escape . in the scheme. Since the scheme has already been
-    // sanitized using GURL, we do not need to escape any other characters.
-    // The scheme soap.beep is an example with '.'.
-    base::ReplaceChars(scheme, ".", "\\.", &scheme);
-    const std::string port = signon_realm.port();
-    // For a signon realm such as http://foo.bar/, this regexp will match
-    // domains on the form http://foo.bar/, http://www.foo.bar/,
-    // http://www.mobile.foo.bar/. It will not match http://notfoo.bar/.
-    // The scheme and port has to be the same as the observed form.
-    std::string regexp = "^(" + scheme + ":\\/\\/)([\\w-]+\\.)*" +
-                         registered_domain + "(:" + port + ")?\\/$";
-    s.BindString(placeholder++, regexp);
+    s.BindString(placeholder++, GetRegexForPSLMatching(form.signon_realm));
 
     if (should_federated_apply) {
       // This regex matches any subdomain of |registered_domain|, in particular
       // it matches the empty subdomain. Hence exact domain matches are also
       // retrieved.
       s.BindString(placeholder++,
-                   "^federation://([\\w-]+\\.)*" + registered_domain + "/.+$");
+                   GetRegexForPSLFederatedMatching(form.signon_realm));
     }
   } else if (should_federated_apply) {
-    std::string expression =
-        base::StringPrintf("federation://%s/%%", form.url.host().c_str());
-    s.BindString(placeholder++, expression);
+    s.BindString(placeholder++,
+                 GetExpressionForFederatedMatching(form.url) + "%");
   }
 
   PrimaryKeyToFormMap key_to_form_map;
@@ -1477,10 +1453,7 @@ DatabaseCleanupResult LoginDatabase::DeleteUndecryptableLogins() {
 
   DCHECK(db_.is_open());
 
-  // Get all autofillable (not blocklisted) logins.
-  sql::Statement s(
-      db_.GetCachedStatement(SQL_FROM_HERE, blocklisted_statement_.c_str()));
-  s.BindInt(0, 0);  // blocklisted = false
+  sql::Statement s(db_.GetUniqueStatement("SELECT * FROM logins"));
 
   std::vector<PasswordForm> forms_to_be_deleted;
 
@@ -1760,8 +1733,6 @@ FormRetrievalResult LoginDatabase::StatementToForms(
     sql::Statement* statement,
     const PasswordFormDigest* matched_form,
     PrimaryKeyToFormMap* key_to_form_map) {
-  std::vector<PasswordForm> forms_to_be_deleted;
-
   key_to_form_map->clear();
   while (statement->Step()) {
     auto new_form = std::make_unique<PasswordForm>();
@@ -1771,8 +1742,9 @@ FormRetrievalResult LoginDatabase::StatementToForms(
     EncryptionResult result = InitPasswordFormFromStatement(
         *statement, /*decrypt_and_fill_password_value=*/true, &primary_key,
         new_form.get());
-    if (result == ENCRYPTION_RESULT_SERVICE_FAILURE)
+    if (result == ENCRYPTION_RESULT_SERVICE_FAILURE) {
       return FormRetrievalResult::kEncrytionServiceFailure;
+    }
     if (result == ENCRYPTION_RESULT_ITEM_FAILURE) {
       continue;
     }
@@ -1795,18 +1767,9 @@ FormRetrievalResult LoginDatabase::StatementToForms(
     key_to_form_map->emplace(primary_key, std::move(new_form));
   }
 
-#if defined(OS_MAC)
-  // Remove corrupted passwords.
-  size_t count_removed_logins = 0;
-  for (const auto& form : forms_to_be_deleted) {
-    if (RemoveLogin(form, nullptr)) {
-      count_removed_logins++;
-    }
-  }
-#endif
-
-  if (!statement->Succeeded())
+  if (!statement->Succeeded()) {
     return FormRetrievalResult::kDbError;
+  }
   return FormRetrievalResult::kSuccess;
 }
 

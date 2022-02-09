@@ -55,7 +55,7 @@ import org.chromium.chrome.browser.share.LensUtils;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.share.ShareHelper;
-import org.chromium.chrome.browser.share.link_to_text.LinkToTextCoordinator;
+import org.chromium.chrome.browser.share.link_to_text.LinkToTextHelper;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
@@ -469,8 +469,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                     linkGroup.add(createListItem(Item.SAVE_LINK_AS));
                 }
                 if (!mParams.isImage() && ChromeFeatureList.isEnabled(ChromeFeatureList.READ_LATER)
-                        && ReadingListUtils.isReadingListSupported(
-                                mParams.getLinkUrl().getValidSpecOrEmpty())) {
+                        && ReadingListUtils.isReadingListSupported(mParams.getLinkUrl())) {
                     linkGroup.add(createListItem(Item.READ_LATER, shouldTriggerReadLaterHelpUi()));
                 }
                 // Vivaldi
@@ -835,14 +834,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             shareHighlighting();
         } else if (itemId == R.id.contextmenu_remove_highlight) {
             recordContextMenuSelection(ContextMenuUma.Action.REMOVE_HIGHLIGHT);
-            mItemDelegate.removeHighlighting(
-                    ChromeFeatureList.isEnabled(ChromeFeatureList.SHARED_HIGHLIGHTING_AMP)
-                            ? mNativeDelegate.getRenderFrameHost()
-                            : null);
+            LinkToTextHelper.removeHighlightsAllFrames(mItemDelegate.getWebContents());
         } else if (itemId == R.id.contextmenu_learn_more) {
             recordContextMenuSelection(ContextMenuUma.Action.LEARN_MORE);
-            mItemDelegate.onOpenInNewTab(
-                    new GURL(LinkToTextCoordinator.SHARED_HIGHLIGHTING_SUPPORT_URL),
+            mItemDelegate.onOpenInNewTab(new GURL(LinkToTextHelper.SHARED_HIGHLIGHTING_SUPPORT_URL),
                     mParams.getReferrer());
         } else if (itemId == R.id.contextmenu_open_in_new_tab_background) { // Vivaldi
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IMAGE_IN_NEW_TAB);
@@ -881,10 +876,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 new ChromeShareExtras.Builder()
                         .setSaveLastUsed(true)
                         .setIsReshareHighlightedText(true)
-                        .setRenderFrameHost(ChromeFeatureList.isEnabled(
-                                                    ChromeFeatureList.SHARED_HIGHLIGHTING_AMP)
-                                        ? mNativeDelegate.getRenderFrameHost()
-                                        : null)
+                        .setRenderFrameHost(mNativeDelegate.getRenderFrameHost())
                         .setDetailedContentType(
                                 ChromeShareExtras.DetailedContentType.HIGHLIGHTED_TEXT)
                         .build(),

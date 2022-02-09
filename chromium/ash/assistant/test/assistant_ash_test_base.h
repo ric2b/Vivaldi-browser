@@ -12,7 +12,6 @@
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/assistant/test/mocked_assistant_interaction.h"
 #include "ash/test/ash_test_base.h"
-#include "base/macros.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
 
 namespace aura {
@@ -39,7 +38,7 @@ class AssistantTestApi;
 class SuggestionChipView;
 class TestAssistantService;
 class TestAssistantSetup;
-class TestAssistantWebViewFactory;
+class TestAshWebViewFactory;
 
 // Helper class to make testing the Assistant Ash UI easier.
 class AssistantAshTestBase : public AshTestBase {
@@ -219,7 +218,7 @@ class AssistantAshTestBase : public AshTestBase {
 
   std::unique_ptr<AssistantTestApi> test_api_;
   std::unique_ptr<TestAssistantSetup> test_setup_;
-  std::unique_ptr<TestAssistantWebViewFactory> test_web_view_factory_;
+  std::unique_ptr<TestAshWebViewFactory> test_web_view_factory_;
 
   std::vector<std::unique_ptr<aura::Window>> windows_;
   std::vector<std::unique_ptr<views::Widget>> widgets_;

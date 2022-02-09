@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
@@ -223,8 +222,7 @@ class CrashRestoreComplexTest : public CrashRestoreSimpleTest {
   }
 };
 
-// TODO(crbug.com/1249033): Disabled due to flakiness.
-IN_PROC_BROWSER_TEST_F(CrashRestoreComplexTest, DISABLED_RestoreSessionForThreeUsers) {
+IN_PROC_BROWSER_TEST_F(CrashRestoreComplexTest, RestoreSessionForThreeUsers) {
   {
     UserSessionRestoreObserver restore_observer;
     restore_observer.Wait();

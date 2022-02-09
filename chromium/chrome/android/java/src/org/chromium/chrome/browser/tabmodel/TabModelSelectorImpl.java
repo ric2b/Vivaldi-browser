@@ -23,6 +23,9 @@ import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
 
+// Vivaldi
+import org.vivaldi.browser.tabmodel.VivaldiTabModelOrderControllerImpl;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -76,7 +79,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         super(tabCreatorManager, tabModelFilterFactory, startIncognito);
         mWindowAndroidSupplier = windowAndroidSupplier;
         mIsUndoSupported = supportUndo;
-        mOrderController = new TabModelOrderControllerImpl(this);
+        mOrderController = new VivaldiTabModelOrderControllerImpl(this);
         mNextTabPolicySupplier = nextTabPolicySupplier;
         mAsyncTabParamsManager = asyncTabParamsManager;
         mActivityType = activityType;
@@ -195,7 +198,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         super.selectModel(incognito);
         TabModel newModel = getCurrentModel();
         if (oldModel != newModel) {
-            TabModelUtils.setIndex(newModel, newModel.index());
+            TabModelUtils.setIndex(newModel, newModel.index(), false);
 
             // Make the call to notifyDataSetChanged() after any delayed events
             // have had a chance to fire. Otherwise, this may result in some

@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "chromeos/services/cellular_setup/cellular_setup_base.h"
 #include "chromeos/services/cellular_setup/public/mojom/cellular_setup.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -53,6 +52,10 @@ class FakeCellularSetup : public CellularSetupBase {
   };
 
   FakeCellularSetup();
+
+  FakeCellularSetup(const FakeCellularSetup&) = delete;
+  FakeCellularSetup& operator=(const FakeCellularSetup&) = delete;
+
   ~FakeCellularSetup() override;
 
   std::vector<std::unique_ptr<StartActivationInvocation>>&
@@ -68,8 +71,6 @@ class FakeCellularSetup : public CellularSetupBase {
 
   std::vector<std::unique_ptr<StartActivationInvocation>>
       start_activation_invocations_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeCellularSetup);
 };
 
 }  // namespace cellular_setup

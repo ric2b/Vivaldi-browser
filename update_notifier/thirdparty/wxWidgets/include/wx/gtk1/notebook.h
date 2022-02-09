@@ -34,14 +34,14 @@ public:
              const wxPoint& pos = wxDefaultPosition,
              const wxSize& size = wxDefaultSize,
              long style = 0,
-             const wxString& name = wxNotebookNameStr);
+             const wxString& name = wxASCII_STR(wxNotebookNameStr));
       // Create() function
     bool Create(wxWindow *parent,
               wxWindowID id,
               const wxPoint& pos = wxDefaultPosition,
               const wxSize& size = wxDefaultSize,
               long style = 0,
-              const wxString& name = wxNotebookNameStr);
+              const wxString& name = wxASCII_STR(wxNotebookNameStr));
       // dtor
     virtual ~wxNotebook();
 
@@ -141,8 +141,8 @@ private:
     // the padding set by SetPadding()
     int m_padding;
 
-    DECLARE_DYNAMIC_CLASS(wxNotebook)
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_DYNAMIC_CLASS(wxNotebook);
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif

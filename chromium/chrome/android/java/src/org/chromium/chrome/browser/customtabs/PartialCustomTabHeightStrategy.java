@@ -26,6 +26,7 @@ import android.widget.ImageView;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Px;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.view.MotionEventCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -37,7 +38,6 @@ import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.ConfigurationChangedObserver;
-import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 
 import java.lang.annotation.Retention;
@@ -48,8 +48,7 @@ import java.lang.annotation.RetentionPolicy;
  * owned by the CustomTabActivity.
  */
 public class PartialCustomTabHeightStrategy extends CustomTabHeightStrategy
-        implements InflationObserver, ConfigurationChangedObserver,
-                   ValueAnimator.AnimatorUpdateListener,
+        implements ConfigurationChangedObserver, ValueAnimator.AnimatorUpdateListener,
                    MultiWindowModeStateDispatcher.MultiWindowModeObserver {
     /**
      * Minimal height the bottom sheet CCT should show is half of the display height.
@@ -94,14 +93,18 @@ public class PartialCustomTabHeightStrategy extends CustomTabHeightStrategy
     /**
      * Handling touch events for resizing the Window.
      */
-    private class PartialCustomTabHandleStrategy extends GestureDetector.SimpleOnGestureListener
+    @VisibleForTesting
+    /* package */ class PartialCustomTabHandleStrategy
+            extends GestureDetector.SimpleOnGestureListener
             implements CustomTabToolbar.HandleStrategy {
+        private static final int CLOSE_DISTANCE = 300;
         private GestureDetector mGestureDetector;
         private float mLastPosY;
         private float mLastDownPosY;
         private float mMostRecentYDistance;
         private float mInitialY;
         private boolean mSeenFirstMoveOrDown;
+        private Runnable mCloseHandler;
 
         public PartialCustomTabHandleStrategy(Context context) {
             mGestureDetector = new GestureDetector(context, this, ThreadUtils.getUiThreadHandler());
@@ -152,6 +155,10 @@ public class PartialCustomTabHeightStrategy extends CustomTabHeightStrategy
                         if (y - mLastPosY != 0) {
                             mMostRecentYDistance = y - mLastPosY;
                         }
+                        if (mStatus == HeightStatus.INITIAL_HEIGHT
+                                && y - mInitialY > CLOSE_DISTANCE) {
+                            mCloseHandler.run();
+                        }
                     }
                     mLastPosY = y;
                     return true;
@@ -168,6 +175,11 @@ public class PartialCustomTabHeightStrategy extends CustomTabHeightStrategy
                 default:
                     return true;
             }
+        }
+
+        @Override
+        public void setCloseClickHandler(Runnable handler) {
+            mCloseHandler = handler;
         }
 
         @Override
@@ -257,16 +269,9 @@ public class PartialCustomTabHeightStrategy extends CustomTabHeightStrategy
     }
 
     @Override
-    public void onPreInflationStartup() {
-        // Intentionally no-op, we registered this class during the pre-inflation startup stage, so
-        // this method won't be called.
-    }
+    public void onToolbarInitialized(View coordinatorView, CustomTabToolbar toolbar) {
+        roundCorners(coordinatorView, toolbar);
 
-    @Override
-    public void onPostInflationStartup() {
-        roundCorners();
-        // TODO(crbug.com/1241285): Avoid to use #findViewById(), better to pass in as dependency.
-        CustomTabToolbar toolbar = mActivity.findViewById(R.id.toolbar);
         toolbar.setHandleStrategy(new PartialCustomTabHandleStrategy(mActivity));
     }
 
@@ -292,20 +297,16 @@ public class PartialCustomTabHeightStrategy extends CustomTabHeightStrategy
         updateWindowHeight(value);
     }
 
-    private void roundCorners() {
+    private void roundCorners(View coordinator, CustomTabToolbar toolbar) {
         final float radius = mActivity.getResources().getDimensionPixelSize(
                 R.dimen.custom_tabs_top_corner_round_radius);
-        // TODO(crbug.com/1241285): Avoid to use #findViewById(), better to pass in as dependency.
-        View coordinator = mActivity.findViewById(R.id.coordinator);
 
         // Inflate the handle View.
         ViewStub handleViewStub = mActivity.findViewById(R.id.custom_tabs_handle_view_stub);
         handleViewStub.inflate();
         ImageView handleView = mActivity.findViewById(R.id.custom_tabs_handle_view);
 
-        // TODO(crbug.com/1241285): Avoid to use #findViewById(), better to pass in as dependency.
         // Pass the handle View to CustomTabToolbar for background color management.
-        CustomTabToolbar toolbar = mActivity.findViewById(R.id.toolbar);
         toolbar.setHandleView(handleView);
 
         // Make enough room for the handle View.

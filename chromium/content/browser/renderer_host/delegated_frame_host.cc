@@ -91,7 +91,7 @@ void DelegatedFrameHost::WasShown(
     compositor_->RequestPresentationTimeForNextFrame(
         tab_switch_time_recorder_.TabWasShown(
             true /* has_saved_frames */,
-            std::move(record_tab_switch_time_request), base::TimeTicks::Now()));
+            std::move(record_tab_switch_time_request)));
   }
 
   // Use the default deadline to synchronize web content with browser UI.
@@ -104,6 +104,23 @@ void DelegatedFrameHost::WasShown(
     stale_content_layer_->SetShowSolidColorContent();
     stale_content_layer_->SetVisible(false);
   }
+}
+
+void DelegatedFrameHost::RequestPresentationTimeForNextFrame(
+    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
+  DCHECK(visible_time_request);
+  if (!compositor_)
+    return;
+  // Tab was shown while widget was already painting, eg. due to being
+  // captured.
+  compositor_->RequestPresentationTimeForNextFrame(
+      tab_switch_time_recorder_.TabWasShown(true /* has_saved_frames */,
+                                            std::move(visible_time_request)));
+}
+
+void DelegatedFrameHost::CancelPresentationTimeRequest() {
+  // Tab was hidden while widget keeps painting, eg. due to being captured.
+  tab_switch_time_recorder_.TabWasHidden();
 }
 
 bool DelegatedFrameHost::HasSavedFrame() const {
@@ -403,7 +420,11 @@ void DelegatedFrameHost::DidCopyStaleContent(
   DCHECK_EQ(result->destination(),
             viz::CopyOutputResult::Destination::kNativeTextures);
 
+// TODO(crbug.com/1227661): Revert https://crrev.com/c/3222541 to re-enable this
+// DCHECK on CrOS.
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK_NE(frame_eviction_state_, FrameEvictionState::kNotStarted);
+#endif
   SetFrameEvictionStateAndNotifyObservers(FrameEvictionState::kNotStarted);
   ContinueDelegatedFrameEviction();
 

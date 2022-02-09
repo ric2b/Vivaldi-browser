@@ -11,10 +11,11 @@ feature engagement along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -42,8 +43,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <variant name="IPH_AutoDarkOptOut"
       summary="educating users about disabling auto dark feature globally"/>
   <variant name="IPH_AutoDarkUserEducationMessage"
-      summary="message educating users about adding disabling auto dark web
-               contents feature globally"/>
+      summary="message educating users about disabling auto dark web contents
+               feature globally"/>
+  <variant name="IPH_AutoDarkUserEducationMessageOptIn"
+      summary="message educating users about enabling auto dark web contents
+               feature globally"/>
   <variant name="IPH_BadgedReadingList" summary="badged reading list"/>
   <variant name="IPH_Bookmark" summary="bookmark"/>
   <variant name="IPH_BottomToolbarTip" summary="bottom toolbar"/>
@@ -124,6 +128,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <variant name="IPH_EphemeralTab"
       summary="new label on the context menu for Ephemeral Tab"/>
   <variant name="IPH_ExploreSitesTile" summary="Explore Sites feature"/>
+  <variant name="IPH_FeatureNotificationGuideDefaultBrowserNotificationShown"
+      summary="feature notification guide default browser notification"/>
+  <variant name="IPH_FeatureNotificationGuideIncognitoTabNotificationShown"
+      summary="feature notification guide incognito tab notification"/>
+  <variant
+      name="IPH_FeatureNotificationGuideNTPSuggestionCardNotificationShown"
+      summary="feature notification guide NTP suggestion card notification"/>
+  <variant name="IPH_FeatureNotificationGuideSignInNotificationShown"
+      summary="feature notification guide sign in notification"/>
+  <variant name="IPH_FeatureNotificationGuideVoiceSearchNotificationShown"
+      summary="feature notification guide voice search notification"/>
   <variant name="IPH_FeedCardMenu" summary="feed card menu on NTP"/>
   <variant name="IPH_FeedHeaderMenu" summary="feed header menu on NTP"/>
   <variant name="IPH_FeedSwipeRefresh" summary="swipe refreshing feeds on NTP"/>
@@ -251,7 +266,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InProductHelp.Db.Init.{IPHDatabase}" enum="BooleanSuccess"
-    expires_after="2021-12-26">
+    expires_after="2022-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <summary>
@@ -262,7 +277,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InProductHelp.Db.Load" enum="BooleanSuccess"
-    expires_after="2021-07-28">
+    expires_after="2022-07-28">
   <obsolete>
     Deleted on 2021-07-28. Use InProductHelp.Db.Load.AvailabilityStore or
     InProductHelp.Db.Load.EventStore instead.
@@ -276,7 +291,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InProductHelp.Db.Load.{IPHDatabase}" enum="BooleanSuccess"
-    expires_after="2021-12-26">
+    expires_after="2022-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <summary>
@@ -297,7 +312,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InProductHelp.Db.Update.{IPHDatabase}" enum="BooleanSuccess"
-    expires_after="2021-12-26">
+    expires_after="2022-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <summary>
@@ -307,7 +322,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InProductHelp.NotifyEventReadyState.{IPHFeature}"
-    enum="BooleanSuccess" expires_after="2021-12-26">
+    enum="BooleanSuccess" expires_after="2022-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <summary>
@@ -378,7 +393,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InProductHelp.ShouldTriggerHelpUI.{IPHFeature}"
-    enum="TriggerHelpUIResult" expires_after="2021-12-26">
+    enum="TriggerHelpUIResult" expires_after="2022-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>xingliu@chromium.org</owner>
   <summary>
@@ -390,12 +405,30 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <token key="IPHFeature" variants="IPHFeature"/>
 </histogram>
 
+<histogram name="InProductHelp.SnoozeAction" enum="InProductHelpSnoozeAction"
+    expires_after="2022-10-01">
+  <owner>haileywang@chromium.org</owner>
+  <owner>shaktisahu@chromium.org</owner>
+  <summary>
+    Records the action taken by the user on a snoozable in-product help bubble.
+  </summary>
+</histogram>
+
 <histogram name="InProductHelp.TextBubble.ShownTime" units="ms"
     expires_after="2022-10-01">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
     The time duration for which the in-product help bubble is shown.
+  </summary>
+</histogram>
+
+<histogram name="InProductHelp.TextBubble.ShowSnooze" enum="BooleanShown"
+    expires_after="2022-10-01">
+  <owner>haileywang@chromium.org</owner>
+  <owner>shaktisahu@chromium.org</owner>
+  <summary>
+    Records if the snooze button was shown on an in-product help bubble.
   </summary>
 </histogram>
 

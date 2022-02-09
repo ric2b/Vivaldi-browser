@@ -185,77 +185,6 @@ dnl C++ features test
 dnl ===========================================================================
 
 dnl ---------------------------------------------------------------------------
-dnl WX_CPP_NEW_HEADERS checks whether the compiler has "new" <iostream> header
-dnl or only the old <iostream.h> one - it may be generally assumed that if
-dnl <iostream> exists, the other "new" headers (without .h) exist too.
-dnl
-dnl call WX_CPP_NEW_HEADERS(action-if-true, action-if-false)
-dnl ---------------------------------------------------------------------------
-
-AC_DEFUN([WX_CPP_NEW_HEADERS],
-[
-    AC_LANG_SAVE
-    AC_LANG_CPLUSPLUS
-
-    AC_CHECK_HEADERS([iostream],,, [ ])
-
-    if test "$ac_cv_header_iostream" = "yes" ; then
-      ifelse([$1], , :, [$1])
-    else
-      ifelse([$2], , :, [$2])
-    fi
-
-    AC_LANG_RESTORE
-])
-
-dnl ---------------------------------------------------------------------------
-dnl WX_CPP_EXPLICIT checks whether the C++ compiler support the explicit
-dnl keyword and defines HAVE_EXPLICIT if this is the case
-dnl ---------------------------------------------------------------------------
-
-AC_DEFUN([WX_CPP_EXPLICIT],
-[
-  AC_CACHE_CHECK([if C++ compiler supports the explicit keyword],
-                 wx_cv_explicit,
-  [
-    AC_LANG_SAVE
-    AC_LANG_CPLUSPLUS
-
-    dnl do the test in 2 steps: first check that the compiler knows about the
-    dnl explicit keyword at all and then verify that it really honours it
-    AC_TRY_COMPILE(
-      [
-        class Foo { public: explicit Foo(int) {} };
-      ],
-      [
-        return 0;
-      ],
-      [
-        AC_TRY_COMPILE(
-            [
-                class Foo { public: explicit Foo(int) {} };
-                static void TakeFoo(const Foo& foo) { }
-            ],
-            [
-                TakeFoo(17);
-                return 0;
-            ],
-            wx_cv_explicit=no,
-            wx_cv_explicit=yes
-        )
-      ],
-      wx_cv_explicit=no
-    )
-
-    AC_LANG_RESTORE
-  ])
-
-  if test "$wx_cv_explicit" = "yes"; then
-    AC_DEFINE(HAVE_EXPLICIT)
-  fi
-])
-
-dnl ---------------------------------------------------------------------------
 dnl WX_CHECK_FUNCS(FUNCTIONS...,
 dnl                [ACTION-IF-FOUND],
 dnl                [ACTION-IF-NOT-FOUND],
@@ -367,12 +296,18 @@ dnl this macro checks for a three-valued command line --with argument:
 dnl   possible arguments are 'yes', 'no', 'sys', or 'builtin'
 dnl usage: WX_ARG_SYS_WITH(option, helpmessage, variable-name)
 dnl
-dnl the default value (used if the option is not specified at all) is the value
-dnl of wxUSE_ALL_FEATURES (which is "yes" by default but can be changed by
-dnl giving configure --disable-all-features option)
+dnl the default value (used if the option is not specified at all) is
+dnl determined in the following way:
+dnl  1. If default value for the given library (DEFAULT_wxUSE_LIBXXX) exists,
+dnl     it is used: this allows to disable some libraries by default.
+dnl  2. If wxUSE_ALL_FEATURES is turned off, the use of the library is turned
+dnl     off as well: this ensures that minimal builds are really minimal.
+dnl  3. If wxUSE_SYS_LIBS is turned off, then "builtin" is used: this allows
+dnl     to prevent system libraries from being used by using a single option.
+dnl  4. Otherwise the default value is "yes", meaning that either the system
+dnl     (preferred) or builtin version of the library will be used.
 AC_DEFUN([WX_ARG_SYS_WITH],
         [
-          AC_MSG_CHECKING([for --with-$1])
           AC_ARG_WITH($1, [$2],
                       [
                         if test "$withval" = yes; then
@@ -388,22 +323,20 @@ AC_DEFUN([WX_ARG_SYS_WITH],
                         fi
                       ],
                       [
-                        AS_TR_SH(wx_cv_use_$1)='$3=${'DEFAULT_$3":-$wxUSE_ALL_FEATURES}"
+                        if test "DEFAULT_$3" = no; then
+                            value=no
+                        elif test "$wxUSE_ALL_FEATURES" = no; then
+                            value=no
+                        elif test "$wxUSE_SYS_LIBS" = no; then
+                            value=builtin
+                        else
+                            value=yes
+                        fi
+
+                        AS_TR_SH(wx_cv_use_$1)="$3=$value"
                       ])
 
           eval "$AS_TR_SH(wx_cv_use_$1)"
-
-          if test "$$3" = yes; then
-            AC_MSG_RESULT(yes)
-          elif test "$$3" = no; then
-            AC_MSG_RESULT(no)
-          elif test "$$3" = sys; then
-            AC_MSG_RESULT([system version])
-          elif test "$$3" = builtin; then
-            AC_MSG_RESULT([builtin version])
-          else
-            AC_MSG_ERROR([Invalid value for --with-$1: should be yes, no, sys, or builtin])
-          fi
         ])
 
 dnl this macro simply checks for a command line argument
@@ -419,7 +352,6 @@ AC_DEFUN([WX_ARG_WITH],
                   defaultval=no
               fi
           fi
-          AC_MSG_CHECKING([for --${withstring:-with}-$1])
           AC_ARG_WITH($1, [$2],
                       [
                         if test "$withval" = yes; then
@@ -433,22 +365,20 @@ AC_DEFUN([WX_ARG_WITH],
                       ])
 
           eval "$AS_TR_SH(wx_cv_use_$1)"
-
-          if test x"$withstring" = xwithout; then
-            if test $$3 = yes; then
-              result=no
-            else
-              result=yes
-            fi
-          else
-            result=$$3
-          fi
-
-          AC_MSG_RESULT($result)
         ])
 
 dnl same as WX_ARG_WITH but makes it clear that the option is enabled by default
 AC_DEFUN([WX_ARG_WITHOUT], [WX_ARG_WITH($1, [$2], $3, without)])
+
+dnl variant of AC_ARG_WITH which doesn't accept --without-xxx varient
+AC_DEFUN([WX_ARG_ONLY_WITH], [
+        AC_ARG_WITH($1, [$2], [
+            if test "$withval" != yes; then
+                AC_MSG_ERROR([Option --with-$1 doesn't accept any arguments])
+            fi
+            $3
+        ])
+    ])
 
 dnl like WX_ARG_WITH but uses AC_ARG_ENABLE instead of AC_ARG_WITH
 dnl usage: WX_ARG_ENABLE(option, helpmessage, var, [enablestring], [default])
@@ -472,7 +402,6 @@ AC_DEFUN([WX_ARG_ENABLE],
               fi
           fi
 
-          AC_MSG_CHECKING([for --${enablestring:-enable}-$1])
           AC_ARG_ENABLE($1, [$2],
                         [
                           if test "$enableval" = yes; then
@@ -486,18 +415,6 @@ AC_DEFUN([WX_ARG_ENABLE],
                         ])
 
           eval "$AS_TR_SH(wx_cv_use_$1)"
-
-          if test x"$enablestring" = xdisable; then
-            if test $$3 = no; then
-              result=yes
-            else
-              result=no
-            fi
-          else
-            result=$$3
-          fi
-
-          AC_MSG_RESULT($result)
         ])
 
 dnl the same as WX_ARG_ENABLE but makes it more clear that the option is
@@ -523,7 +440,6 @@ dnl
 AC_DEFUN([WX_ARG_ENABLE_PARAM],
         [
           enablestring=$4
-          AC_MSG_CHECKING([for --${enablestring:-enable}-$1])
           AC_ARG_ENABLE($1, [$2],
                         [
                           wx_cv_use_$1="$3='$enableval'"
@@ -533,8 +449,6 @@ AC_DEFUN([WX_ARG_ENABLE_PARAM],
                         ])
 
           eval "$wx_cv_use_$1"
-
-          AC_MSG_RESULT([$$3])
         ])
 
 dnl ===========================================================================

@@ -10,8 +10,7 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 
@@ -33,6 +32,7 @@ class Device {
                const std::string& exec_name,
                const std::string& args,
                bool use_running_app,
+               bool keep_app_data_dir,
                int* port);
 
   Status TearDown();
@@ -51,7 +51,7 @@ class Device {
 
   const std::string serial_;
   std::string active_package_;
-  Adb* adb_;
+  raw_ptr<Adb> adb_;
   int devtools_port_ = 0;
   base::OnceCallback<void()> release_callback_;
 };
@@ -81,7 +81,7 @@ class DeviceManager {
 
   base::Lock devices_lock_;
   std::list<std::string> active_devices_;
-  Adb* adb_;
+  raw_ptr<Adb> adb_;
 };
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_DEVICE_MANAGER_H_

@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
@@ -190,7 +191,7 @@ class MockPrefHashStore : public PrefHashStore {
     bool StampSuperMac() override;
 
    private:
-    MockPrefHashStore* outer_;
+    raw_ptr<MockPrefHashStore> outer_;
   };
 
   // Records a call to this mock's CheckValue/CheckSplitValue methods.
@@ -368,6 +369,9 @@ class MockHashStoreContents : public HashStoreContents {
  public:
   MockHashStoreContents() {}
 
+  MockHashStoreContents(const MockHashStoreContents&) = delete;
+  MockHashStoreContents& operator=(const MockHashStoreContents&) = delete;
+
   // Returns the number of hashes stored.
   size_t stored_hashes_count() const { return dictionary_.DictSize(); }
 
@@ -426,9 +430,7 @@ class MockHashStoreContents : public HashStoreContents {
   // which can be executed during shutdown. To be able to capture the behavior
   // of the copy, we make it forward calls to the mock it was created from.
   // Once set, |origin_mock_| must outlive this instance.
-  MockHashStoreContents* origin_mock_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockHashStoreContents);
+  raw_ptr<MockHashStoreContents> origin_mock_;
 };
 
 std::string MockHashStoreContents::GetStoredMac(const std::string& path) const {
@@ -551,6 +553,9 @@ class PrefHashFilterTest : public testing::TestWithParam<EnforcementLevel>,
         validation_delegate_receiver_(&mock_validation_delegate_),
         reset_recorded_(false) {}
 
+  PrefHashFilterTest(const PrefHashFilterTest&) = delete;
+  PrefHashFilterTest& operator=(const PrefHashFilterTest&) = delete;
+
   void SetUp() override {
     Reset();
   }
@@ -620,9 +625,9 @@ class PrefHashFilterTest : public testing::TestWithParam<EnforcementLevel>,
         std::move(pref_store_contents_));
   }
 
-  MockPrefHashStore* mock_pref_hash_store_;
-  MockPrefHashStore* mock_external_validation_pref_hash_store_;
-  MockHashStoreContents* mock_external_validation_hash_store_contents_;
+  raw_ptr<MockPrefHashStore> mock_pref_hash_store_;
+  raw_ptr<MockPrefHashStore> mock_external_validation_pref_hash_store_;
+  raw_ptr<MockHashStoreContents> mock_external_validation_hash_store_contents_;
   std::unique_ptr<base::DictionaryValue> pref_store_contents_;
   scoped_refptr<MockValidationDelegateRecord> mock_validation_delegate_record_;
   std::unique_ptr<PrefHashFilter> pref_hash_filter_;
@@ -652,8 +657,6 @@ class PrefHashFilterTest : public testing::TestWithParam<EnforcementLevel>,
   mojo::ReceiverSet<prefs::mojom::ResetOnLoadObserver>
       reset_on_load_observer_receivers_;
   bool reset_recorded_;
-
-  DISALLOW_COPY_AND_ASSIGN(PrefHashFilterTest);
 };
 
 TEST_P(PrefHashFilterTest, EmptyAndUnchanged) {

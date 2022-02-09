@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "components/url_pattern_index/flat/url_pattern_index_generated.h"
 #include "components/url_pattern_index/url_pattern.h"
@@ -203,7 +202,7 @@ TEST_F(UrlRuleUtilTest, ElementType) {
   std::string expected =
       "example.com/"
       "$script,image,stylesheet,object,xmlhttprequest,object-subrequest,"
-      "subdocument,ping,media,font,websocket,webtransport";
+      "subdocument,ping,media,font,websocket,webtransport,webbundle";
 
   EXPECT_EQ(expected, FlatUrlRuleToFilterlistString(flat_rule));
 }

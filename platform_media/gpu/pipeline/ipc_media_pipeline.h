@@ -62,8 +62,13 @@ class IPCMediaPipeline : public platform_media::mojom::Pipeline {
   class Factory;
   friend Factory;
 
-  void Initialized(StartNewPipelineCallback callback,
-                   platform_media::mojom::PipelineInitResultPtr result);
+  // The method is static to call the callback even when `pipeline` is null.
+  // `callback` here belongs to the factory and stopping and deleting the
+  // pipeline instance and its connections during initialization does not close
+  // the the factory connection so the callback must still be called.
+  static void Initialized(base::WeakPtr<IPCMediaPipeline> pipeline,
+                          StartNewPipelineCallback callback,
+                          platform_media::mojom::PipelineInitResultPtr result);
 
   void DecodedDataReady(ReadDecodedDataCallback callback,
                         IPCDecodingBuffer buffer);

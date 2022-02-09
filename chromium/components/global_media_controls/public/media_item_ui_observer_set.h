@@ -7,6 +7,7 @@
 
 #include <map>
 #include "base/component_export.h"
+#include "base/memory/raw_ptr.h"
 #include "components/global_media_controls/public/media_item_ui.h"
 #include "components/global_media_controls/public/media_item_ui_observer.h"
 
@@ -32,11 +33,9 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIObserverSet
   void OnMediaItemUIClicked(const std::string& id) override;
   void OnMediaItemUIDismissed(const std::string& id) override;
   void OnMediaItemUIDestroyed(const std::string& id) override;
-  void OnAudioSinkChosen(const std::string& id,
-                         const std::string& sink_id) override;
 
  private:
-  MediaItemUIObserver* const owner_;
+  const raw_ptr<MediaItemUIObserver> owner_;
   std::map<std::string, MediaItemUI*> observed_item_uis_;
 };
 

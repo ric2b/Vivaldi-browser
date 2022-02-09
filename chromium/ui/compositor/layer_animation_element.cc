@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/keyframe_model.h"
@@ -643,7 +642,7 @@ bool LayerAnimationElement::Progress(base::TimeTicks now,
   }
 
   base::TimeDelta elapsed = now - effective_start_time_;
-  if ((duration_ > base::TimeDelta()) && (elapsed < duration_))
+  if ((duration_.is_positive()) && (elapsed < duration_))
     t = elapsed / duration_;
   base::WeakPtr<LayerAnimationElement> alive(weak_ptr_factory_.GetWeakPtr());
   need_draw = OnProgress(gfx::Tween::CalculateValue(tween_type_, t), delegate);

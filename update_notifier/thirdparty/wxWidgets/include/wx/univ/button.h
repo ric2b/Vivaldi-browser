@@ -11,14 +11,12 @@
 #ifndef _WX_UNIV_BUTTON_H_
 #define _WX_UNIV_BUTTON_H_
 
-class WXDLLIMPEXP_FWD_CORE wxInputHandler;
-
 #include "wx/bitmap.h"
 
 // ----------------------------------------------------------------------------
 // the actions supported by this control
 // ----------------------------------------------------------------------------
-
+//checkbox.cpp needed it, so not move it to anybutton.h
 #define wxACTION_BUTTON_TOGGLE  wxT("toggle")    // press/release the button
 #define wxACTION_BUTTON_PRESS   wxT("press")     // press the button
 #define wxACTION_BUTTON_RELEASE wxT("release")   // release the button
@@ -40,7 +38,7 @@ public:
              const wxSize& size = wxDefaultSize,
              long style = 0,
              const wxValidator& validator = wxDefaultValidator,
-             const wxString& name = wxButtonNameStr)
+             const wxString& name = wxASCII_STR(wxButtonNameStr))
     {
         Init();
 
@@ -54,7 +52,7 @@ public:
              const wxSize& size = wxDefaultSize,
              long style = 0,
              const wxValidator& validator = wxDefaultValidator,
-             const wxString& name = wxButtonNameStr)
+             const wxString& name = wxASCII_STR(wxButtonNameStr))
     {
         Init();
 
@@ -68,7 +66,7 @@ public:
                 const wxSize& size = wxDefaultSize,
                 long style = 0,
                 const wxValidator& validator = wxDefaultValidator,
-                const wxString& name = wxButtonNameStr)
+                const wxString& name = wxASCII_STR(wxButtonNameStr))
     {
         return Create(parent, id, wxNullBitmap, label,
                       pos, size, style, validator, name);
@@ -82,57 +80,32 @@ public:
                 const wxSize& size = wxDefaultSize,
                 long style = 0,
                 const wxValidator& validator = wxDefaultValidator,
-                const wxString& name = wxButtonNameStr);
+                const wxString& name = wxASCII_STR(wxButtonNameStr));
 
     virtual ~wxButton();
 
-    virtual wxWindow *SetDefault();
+    virtual wxWindow *SetDefault() wxOVERRIDE;
 
-    virtual bool IsPressed() const { return m_isPressed; }
-    virtual bool IsDefault() const { return m_isDefault; }
+    virtual bool IsPressed() const wxOVERRIDE { return m_isPressed; }
+    virtual bool IsDefault() const wxOVERRIDE { return m_isDefault; }
 
     // wxButton actions
-    virtual void Toggle();
-    virtual void Press();
-    virtual void Release();
-    virtual void Click();
+    virtual void Click() wxOVERRIDE;
 
-    virtual bool PerformAction(const wxControlAction& action,
-                               long numArg = -1,
-                               const wxString& strArg = wxEmptyString);
+    virtual bool CanBeHighlighted() const wxOVERRIDE { return true; }
 
-    virtual bool CanBeHighlighted() const { return true; }
-
-    static wxInputHandler *GetStdInputHandler(wxInputHandler *handlerDef);
-    virtual wxInputHandler *DoGetStdInputHandler(wxInputHandler *handlerDef)
-    {
-        return GetStdInputHandler(handlerDef);
-    }
 
 
 protected:
-    virtual wxSize DoGetBestClientSize() const;
-
-    virtual bool DoDrawBackground(wxDC& dc);
-    virtual void DoDraw(wxControlRenderer *renderer);
-
-    virtual void DoSetBitmap(const wxBitmap& bitmap, State which);
-    virtual void DoSetBitmapMargins(wxCoord x, wxCoord y);
+    virtual void DoSetBitmap(const wxBitmap& bitmap, State which) wxOVERRIDE;
+    virtual wxBitmap DoGetBitmap(State which) const wxOVERRIDE;
+    virtual void DoSetBitmapMargins(wxCoord x, wxCoord y) wxOVERRIDE;
 
     // common part of all ctors
     void Init();
 
-    // current state
-    bool m_isPressed,
-         m_isDefault;
-
-    // the (optional) image to show and the margins around it
-    wxBitmap m_bitmap;
-    wxCoord  m_marginBmpX,
-             m_marginBmpY;
-
 private:
-    DECLARE_DYNAMIC_CLASS(wxButton)
+    wxDECLARE_DYNAMIC_CLASS(wxButton);
 };
 
 #endif // _WX_UNIV_BUTTON_H_

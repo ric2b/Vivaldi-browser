@@ -12,20 +12,15 @@
 
 class GURL;
 
-namespace content {
-class RenderFrameHost;
-}
-
 namespace vivaldi {
 
 // Starts proxying WebTransport handshake if the extensions want to listen it
 // by overrinding `handshake_client`.
 void StartWebRequestProxyingWebTransport(
-    content::BrowserContext* browser_context,
-    int process_id,
-    int frame_id,
-    const url::Origin& frame_origin,
+    content::RenderProcessHost& render_process_host,
+    int frame_routing_id,
     const GURL& url,
+    const url::Origin& initiator_origin,
     mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
         handshake_client,
     int64_t request_id,

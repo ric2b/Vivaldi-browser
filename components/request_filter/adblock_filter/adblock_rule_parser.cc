@@ -692,9 +692,9 @@ bool RuleParser::MaybeParseMetadata(base::StringPiece comment) {
       return false;
 
     if (expire_data[1].compare("days") == 0) {
-      parse_result_->metadata.expires = base::TimeDelta::FromDays(count);
+      parse_result_->metadata.expires = base::Days(count);
     } else if (expire_data[1].compare("hours") == 0) {
-      parse_result_->metadata.expires = base::TimeDelta::FromHours(count);
+      parse_result_->metadata.expires = base::Hours(count);
     } else {
       return false;
     }

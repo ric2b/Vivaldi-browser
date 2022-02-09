@@ -29,9 +29,9 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
-#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -512,12 +512,12 @@ void CookieManager::GetCookieListAsyncHelper(const GURL& host,
 
   if (GetMojoCookieManager()) {
     GetMojoCookieManager()->GetCookieList(
-        host, options, net::CookiePartitionKeychain::Todo(),
+        host, options, net::CookiePartitionKeyCollection::Todo(),
         base::BindOnce(&CookieManager::GetCookieListCompleted,
                        base::Unretained(this), std::move(complete), result));
   } else {
     GetCookieStore()->GetCookieListWithOptionsAsync(
-        host, options, net::CookiePartitionKeychain::Todo(),
+        host, options, net::CookiePartitionKeyCollection::Todo(),
         base::BindOnce(&CookieManager::GetCookieListCompleted,
                        base::Unretained(this), std::move(complete), result));
   }

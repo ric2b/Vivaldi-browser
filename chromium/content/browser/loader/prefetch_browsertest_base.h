@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
@@ -78,6 +77,9 @@ class PrefetchBrowserTestBase : public ContentBrowserTest {
         base::RunLoop* waiter = nullptr);
     RequestCounter(const std::string& path, base::RunLoop* waiter);
 
+    RequestCounter(const RequestCounter&) = delete;
+    RequestCounter& operator=(const RequestCounter&) = delete;
+
     int GetRequestCount();
 
    private:
@@ -90,8 +92,6 @@ class PrefetchBrowserTestBase : public ContentBrowserTest {
     const std::string path_;
     int request_count_ GUARDED_BY(lock_) = 0;
     base::Lock lock_;
-
-    DISALLOW_COPY_AND_ASSIGN(RequestCounter);
   };
 
   void RegisterResponse(const std::string& url, ResponseEntry&& entry);

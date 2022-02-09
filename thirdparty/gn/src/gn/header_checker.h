@@ -15,7 +15,6 @@
 
 #include "base/atomic_ref_count.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "gn/c_include_iterator.h"
 #include "gn/err.h"
@@ -202,7 +201,8 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   // Signaled when |task_count_| becomes zero.
   std::condition_variable task_count_cv_;
 
-  DISALLOW_COPY_AND_ASSIGN(HeaderChecker);
+  HeaderChecker(const HeaderChecker&) = delete;
+  HeaderChecker& operator=(const HeaderChecker&) = delete;
 };
 
 #endif  // TOOLS_GN_HEADER_CHECKER_H_

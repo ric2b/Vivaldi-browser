@@ -6,13 +6,26 @@
 
 #include <memory>
 
+#include "base/base64.h"
+#include "base/json/json_reader.h"
+#include "base/run_loop.h"
+#include "base/test/bind.h"
+#include "base/test/task_environment.h"
+#include "base/values.h"
 #include "chrome/browser/enterprise/connectors/device_trust/attestation/common/attestation_utils.h"
 #include "chrome/browser/enterprise/connectors/device_trust/attestation/common/proto/device_trust_attestation_ca.pb.h"
-#include "chrome/browser/enterprise/connectors/device_trust/attestation/desktop/memory_signing_key_pair.h"
-#include "chrome/browser/enterprise/connectors/device_trust/attestation/desktop/signing_key_pair.h"
-#include "components/enterprise/common/proto/device_trust_report_event.pb.h"
+#include "chrome/browser/enterprise/connectors/device_trust/key_management/browser/device_trust_key_manager_impl.h"
+#include "chrome/browser/enterprise/connectors/device_trust/key_management/browser/mock_key_rotation_launcher.h"
+#include "chrome/browser/enterprise/connectors/device_trust/key_management/core/persistence/scoped_key_persistence_delegate_factory.h"
 #include "content/public/test/browser_task_environment.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using testing::_;
+using testing::Invoke;
+using testing::StrictMock;
+
+namespace enterprise_connectors {
 
 namespace {
 
@@ -31,9 +44,33 @@ constexpr char kJsonChallenge[] =
     "u3W4CMboCswxIxNYRCGrIIVPElE3Yb4QS65mKrg=\""
     "}";
 
-}  // namespace
+constexpr char kDeviceId[] = "device-id";
+constexpr char kObfuscatedCustomerId[] = "customer-id";
 
-namespace enterprise_connectors {
+absl::optional<SignedData> ParseDataFromResponse(const std::string& response) {
+  absl::optional<base::Value> data = base::JSONReader::Read(
+      response, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
+
+  // If json is malformed or it doesn't include the needed field return
+  // an empty string.
+  if (!data || !data.value().FindPath("challengeResponse"))
+    return absl::nullopt;
+
+  std::string serialized_signed_data;
+  if (!base::Base64Decode(
+          data.value().FindPath("challengeResponse")->GetString(),
+          &serialized_signed_data)) {
+    return absl::nullopt;
+  }
+
+  SignedData signed_data;
+  if (!signed_data.ParseFromString(serialized_signed_data)) {
+    return absl::nullopt;
+  }
+  return signed_data;
+}
+
+}  // namespace
 
 class DesktopAttestationServiceTest : public testing::Test {
  protected:
@@ -42,66 +79,49 @@ class DesktopAttestationServiceTest : public testing::Test {
   void SetUp() override {
     testing::Test::SetUp();
 
-    // Make sure a signing key exists for the tests. This won't actual require
-    // admin rights because of MemorySigningKeyPair.
-    auto key_pair = test::CreateInMemorySigningKeyPair(nullptr, nullptr);
-    ASSERT_TRUE(key_pair->RotateWithAdminRights("fake_dm_token"));
+    // Create the key manager and initialize it, which will make it use the
+    // scoped persistence factory's default TPM-backed mock. In other words,
+    // it will initialize itself with a valid key.
+    key_manager_ = std::make_unique<DeviceTrustKeyManagerImpl>(
+        std::make_unique<StrictMock<test::MockKeyRotationLauncher>>());
+    key_manager_->StartInitialization();
 
     attestation_service_ =
-        std::make_unique<DesktopAttestationService>(std::move(key_pair));
+        std::make_unique<DesktopAttestationService>(key_manager_.get());
   }
 
-  DesktopAttestationService* attestation_service() {
-    return attestation_service_.get();
+  std::unique_ptr<DeviceTrustSignals> CreateSignals() {
+    auto signals = std::make_unique<DeviceTrustSignals>();
+    signals->set_device_id(kDeviceId);
+    signals->set_obfuscated_customer_id(kObfuscatedCustomerId);
+    return signals;
   }
 
- private:
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<DesktopAttestationService> attestation_service_;
-  test::ScopedMemorySigningKeyPairPersistence persistence_scope_;
+  test::ScopedKeyPersistenceDelegateFactory persistence_delegate_factory_;
+  std::unique_ptr<DeviceTrustKeyManagerImpl> key_manager_;
 };
 
-TEST_F(DesktopAttestationServiceTest, BuildChallengeResponse) {
-  SignEnterpriseChallengeRequest request;
-  SignEnterpriseChallengeReply result;
-
+TEST_F(DesktopAttestationServiceTest, BuildChallengeResponse_Success) {
   // TODO(crbug.com/1208881): Add signals and validate they effectively get
   // added to the signed data.
-  auto signals = std::make_unique<DeviceTrustSignals>();
+  auto signals = CreateSignals();
 
-  // Get the challenge from the SignedData json and create request.
-  request.set_challenge(JsonChallengeToProtobufChallenge(kJsonChallenge));
-  // If challenge is equal to empty string, then
-  // `JsonChallengeToProtobufChallenge()` failed.
-  EXPECT_NE(request.challenge(), std::string());
+  base::RunLoop run_loop;
+  auto callback =
+      base::BindLambdaForTesting([&](const std::string& challenge_response) {
+        ASSERT_FALSE(challenge_response.empty());
+        auto signed_data = ParseDataFromResponse(challenge_response);
+        ASSERT_TRUE(signed_data);
+        EXPECT_FALSE(signed_data->data().empty());
+        EXPECT_FALSE(signed_data->signature().empty());
+        run_loop.Quit();
+      });
 
-  attestation_service()->SignEnterpriseChallenge(request, std::move(signals),
-                                                 &result);
-  // If challenge is equal to empty string, then
-  // `JsonChallengeToProtobufChallenge()` failed.
-  EXPECT_NE(result.challenge_response(), std::string());
-
-  SignedData signed_data;
-  EXPECT_TRUE(signed_data.ParseFromString(result.challenge_response()));
-
-  EXPECT_NE(signed_data.data(), std::string());
-  EXPECT_NE(signed_data.signature(), std::string());
-}
-
-// Tests that StampReport properly adds the credentials to the proto.
-TEST_F(DesktopAttestationServiceTest, StampReport) {
-  DeviceTrustReportEvent report;
-
-  attestation_service()->StampReport(report);
-
-  ASSERT_TRUE(report.has_attestation_credential());
-  ASSERT_TRUE(report.attestation_credential().has_credential());
-
-  const auto& credential = report.attestation_credential();
-  EXPECT_EQ(credential.credential(), attestation_service()->ExportPublicKey());
-  EXPECT_EQ(
-      credential.format(),
-      DeviceTrustReportEvent::Credential::EC_NID_X9_62_PRIME256V1_PUBLIC_DER);
+  attestation_service_->BuildChallengeResponseForVAChallenge(
+      kJsonChallenge, std::move(signals), std::move(callback));
+  run_loop.Run();
 }
 
 }  // namespace enterprise_connectors

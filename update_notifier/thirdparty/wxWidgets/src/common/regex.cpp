@@ -5,7 +5,7 @@
 // Modified by:
 // Created:     13.07.01
 // Copyright:   (c) 2000 Karsten Ballueder <ballueder@gmx.net>
-//                  2001 Vadim Zeitlin <vadim@wxwindows.org>
+//                  2001 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -20,9 +20,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_REGEX
 
@@ -35,11 +32,8 @@
     #include "wx/crt.h"
 #endif //WX_PRECOMP
 
-// FreeBSD, Watcom and DMars require this, CW doesn't have nor need it.
-// Others also don't seem to need it. If you have an error related to
-// (not) including <sys/types.h> please report details to
-// wx-dev@lists.wxwindows.org
-#if defined(__UNIX__) || defined(__WATCOMC__) || defined(__DIGITALMARS__)
+// At least FreeBSD requires this.
+#if defined(__UNIX__)
 #   include <sys/types.h>
 #endif
 
@@ -433,7 +427,7 @@ bool wxRegExImpl::Matches(const wxRegChar *str,
             // an error occurred
             wxLogError(_("Failed to find match for regular expression: %s"),
                        GetErrorMsg(rc, !str).c_str());
-            // fall through
+            wxFALLTHROUGH;
 
         case REG_NOMATCH:
             // no match
@@ -691,6 +685,31 @@ int wxRegEx::Replace(wxString *pattern,
     wxCHECK_MSG( IsValid(), wxNOT_FOUND, wxT("must successfully Compile() first") );
 
     return m_impl->Replace(pattern, replacement, maxMatches);
+}
+
+wxString wxRegEx::QuoteMeta(const wxString& str)
+{
+    static const wxString s_strMetaChars = wxS("\\^$.|?*+()[]{}");
+
+    wxString strEscaped;
+
+    // This is the maximal possible length of the resulting string, if every
+    // character were escaped.
+    strEscaped.reserve(str.length() * 2);
+
+    for ( wxString::const_iterator it = str.begin(); it != str.end(); ++it )
+    {
+        if ( s_strMetaChars.find(*it) != wxString::npos )
+        {
+            strEscaped += wxS('\\');
+        }
+
+        strEscaped += *it;
+    }
+
+    strEscaped.shrink_to_fit();
+
+    return strEscaped;
 }
 
 #endif // wxUSE_REGEX

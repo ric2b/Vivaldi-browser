@@ -28,6 +28,8 @@
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_import_rule.h"
 #include "third_party/blink/renderer/core/css/css_keyframes_rule.h"
+#include "third_party/blink/renderer/core/css/css_layer_block_rule.h"
+#include "third_party/blink/renderer/core/css/css_layer_statement_rule.h"
 #include "third_party/blink/renderer/core/css/css_media_rule.h"
 #include "third_party/blink/renderer/core/css/css_namespace_rule.h"
 #include "third_party/blink/renderer/core/css/css_page_rule.h"
@@ -35,6 +37,8 @@
 #include "third_party/blink/renderer/core/css/css_scroll_timeline_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_rule.h"
 #include "third_party/blink/renderer/core/css/css_supports_rule.h"
+#include "third_party/blink/renderer/core/css/parser/container_query_parser.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/style_rule_counter_style.h"
 #include "third_party/blink/renderer/core/css/style_rule_import.h"
 #include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
@@ -257,9 +261,13 @@ CSSRule* StyleRuleBase::CreateCSSOMWrapper(CSSStyleSheet* parent_sheet,
           To<StyleRuleKeyframes>(self), parent_sheet);
       break;
     case kLayerBlock:
+      rule = MakeGarbageCollected<CSSLayerBlockRule>(
+          To<StyleRuleLayerBlock>(self), parent_sheet);
+      break;
     case kLayerStatement:
-      // TODO(crbug.com/1095765): Implement.
-      return nullptr;
+      rule = MakeGarbageCollected<CSSLayerStatementRule>(
+          To<StyleRuleLayerStatement>(self), parent_sheet);
+      break;
     case kNamespace:
       rule = MakeGarbageCollected<CSSNamespaceRule>(
           To<StyleRuleNamespace>(self), parent_sheet);
@@ -477,6 +485,18 @@ void StyleRuleGroup::TraceAfterDispatch(blink::Visitor* visitor) const {
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
 
+// static
+String StyleRuleBase::LayerNameAsString(
+    const StyleRuleBase::LayerName& name_parts) {
+  StringBuilder result;
+  for (const auto& part : name_parts) {
+    if (result.length())
+      result.Append(".");
+    result.Append(part);
+  }
+  return result.ReleaseString();
+}
+
 StyleRuleLayerBlock::StyleRuleLayerBlock(
     LayerName&& name,
     HeapVector<Member<StyleRuleBase>>& adopt_rules)
@@ -491,6 +511,10 @@ void StyleRuleLayerBlock::TraceAfterDispatch(blink::Visitor* visitor) const {
   StyleRuleGroup::TraceAfterDispatch(visitor);
 }
 
+String StyleRuleLayerBlock::GetNameAsString() const {
+  return LayerNameAsString(name_);
+}
+
 StyleRuleLayerStatement::StyleRuleLayerStatement(Vector<LayerName>&& names)
     : StyleRuleBase(kLayerStatement), names_(std::move(names)) {}
 
@@ -502,6 +526,13 @@ StyleRuleLayerStatement::~StyleRuleLayerStatement() = default;
 void StyleRuleLayerStatement::TraceAfterDispatch(
     blink::Visitor* visitor) const {
   StyleRuleBase::TraceAfterDispatch(visitor);
+}
+
+Vector<String> StyleRuleLayerStatement::GetNamesAsStrings() const {
+  Vector<String> result;
+  for (const auto& name : names_)
+    result.push_back(LayerNameAsString(name));
+  return result;
 }
 
 StyleRuleCondition::StyleRuleCondition(
@@ -546,7 +577,7 @@ StyleRuleSupports::StyleRuleSupports(const StyleRuleSupports& supports_rule)
 StyleRuleContainer::StyleRuleContainer(
     ContainerQuery& container_query,
     HeapVector<Member<StyleRuleBase>>& adopt_rules)
-    : StyleRuleCondition(kContainer, adopt_rules),
+    : StyleRuleCondition(kContainer, container_query.ToString(), adopt_rules),
       container_query_(&container_query) {}
 
 StyleRuleContainer::StyleRuleContainer(const StyleRuleContainer& container_rule)
@@ -554,6 +585,19 @@ StyleRuleContainer::StyleRuleContainer(const StyleRuleContainer& container_rule)
   DCHECK(container_rule.container_query_);
   container_query_ =
       MakeGarbageCollected<ContainerQuery>(*container_rule.container_query_);
+}
+
+void StyleRuleContainer::SetConditionText(
+    const ExecutionContext* execution_context,
+    String value) {
+  auto* context = MakeGarbageCollected<CSSParserContext>(*execution_context);
+  ContainerQueryParser parser(*context);
+
+  if (auto exp_node = parser.ParseQuery(value)) {
+    condition_text_ = exp_node->Serialize();
+    container_query_ = MakeGarbageCollected<ContainerQuery>(
+        container_query_->Selector(), std::move(exp_node));
+  }
 }
 
 void StyleRuleContainer::TraceAfterDispatch(blink::Visitor* visitor) const {

@@ -11,6 +11,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 
 namespace {
 
@@ -26,10 +27,10 @@ void InitI18n() {
   ASSERT_TRUE(base::PathService::Get(ui::UI_TEST_PAK, &ui_test_pak_path));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(ui_test_pak_path);
 
-  base::FilePath dir_module_path;
-  ASSERT_TRUE(base::PathService::Get(base::DIR_MODULE, &dir_module_path));
+  base::FilePath dir_assets_path;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_ASSETS, &dir_assets_path));
   base::FilePath chromeos_test_strings_path =
-      dir_module_path.Append(FILE_PATH_LITERAL("chromeos_test_strings.pak"));
+      dir_assets_path.Append(FILE_PATH_LITERAL("chromeos_test_strings.pak"));
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       chromeos_test_strings_path, ui::kScaleFactorNone);
 }
@@ -43,6 +44,8 @@ AshWebUITestSuite::~AshWebUITestSuite() = default;
 
 void AshWebUITestSuite::Initialize() {
   base::TestSuite::Initialize();
+
+  gl::GLSurfaceTestSupport::InitializeOneOff();
 
   InitI18n();
 }

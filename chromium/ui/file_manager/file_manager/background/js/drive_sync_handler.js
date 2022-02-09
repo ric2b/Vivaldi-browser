@@ -163,8 +163,10 @@ export class DriveSyncHandlerImpl extends EventTarget {
         this.onFileTransfersStatusReceived_.bind(this, this.pinItem_));
     chrome.fileManagerPrivate.onDriveSyncError.addListener(
         this.onDriveSyncError_.bind(this));
-    chrome.fileManagerPrivate.onDriveConfirmDialog.addListener(
-        this.onDriveConfirmDialog_.bind(this));
+    if (!window.isSWA) {
+      chrome.fileManagerPrivate.onDriveConfirmDialog.addListener(
+          this.onDriveConfirmDialog_.bind(this));
+    }
     xfm.notifications.onButtonClicked.addListener(
         this.onNotificationButtonClicked_.bind(this));
     xfm.notifications.onClosed.addListener(
@@ -278,8 +280,6 @@ export class DriveSyncHandlerImpl extends EventTarget {
       const speedometer = this.speedometers_[item.id];
       speedometer.setTotalBytes(item.progressMax);
       speedometer.update(item.progressValue);
-      item.currentSpeed = speedometer.getCurrentSpeed();
-      item.averageSpeed = speedometer.getAverageSpeed();
       item.remainingTime = speedometer.getRemainingTime();
 
       this.progressRateLimiter_.run();

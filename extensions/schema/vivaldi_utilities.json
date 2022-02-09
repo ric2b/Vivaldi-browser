@@ -410,7 +410,7 @@
       {
         "id": "CookieMode",
         "type": "string",
-        "description": "CookieMode enumeration, corrensponds to CookieControlsMode in chromium/components/content_settings/core/browser/cookie_settings.h",
+        "description": "CookieMode enumeration, corresponds to CookieControlsMode in chromium/components/content_settings/core/browser/cookie_settings.h",
         "enum": [
           {
             "name": "off",
@@ -720,6 +720,46 @@
             "description": "The Chromium version as a string."
           }
         }
+      },
+      {
+        "id": "TranslateError",
+        "type": "string",
+        "enum": [
+          "no_error",
+          "network",
+          "unknown_language",
+          "unsupported_language",
+          "timeout",
+          "error"
+        ],
+        "description": "The error messages translate can return."
+      },
+      {
+        "id": "TranslateTextResponse",
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "TranslateError"
+          },
+          "detectedSourceLanguage": {
+            "type": "string",
+            "description": "Language code of the detected language code of the provided source text, if any."
+          },
+          "sourceText": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The original source strings."
+          },
+          "translatedText": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The translated text corresponding to the given sourceText."
+          }
+        }
       }
     ],
     "functions": [
@@ -1005,6 +1045,52 @@
               "description": "Data value."
             }
           ]
+        }
+      },
+      {
+        "name": "takeMutex",
+        "type": "function",
+        "description": "Uses the in-memory storage to synchronize access to a resource accross several vivaldi extension processes (until Vivaldi exits).",
+        "parameters": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "A name uniquely identifying the mutex."
+          },
+          {
+            "name": "wait",
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether to wait for the mutex to be available or to to throw an error if it isn't. Defaults to true."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "handle",
+              "type": "any",
+              "description": "An opaque handle which is required to release the Mutex."
+            }
+          ]
+        }
+      },
+      {
+        "name": "releaseMutex",
+        "type": "function",
+        "description": "Relinquish use of a mutex obtained in takeSharedMutex.",
+        "parameters": [
+          {
+            "name": "handle",
+            "type": "any",
+            "description": "The handle to the mutex, returned from takeSharedMutex."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": []
         }
       },
       {
@@ -1677,6 +1763,38 @@
         }
       },
       {
+        "name": "getYOAuthClientId",
+        "type": "function",
+        "description": "Returns Yahoo OAuth client id.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's Yahoo OAuth client id."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getYOAuthClientSecret",
+        "type": "function",
+        "description": "Returns Yahoo OAuth client secret.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's OAuth API client secret."
+            }
+          ]
+        }
+      },
+      {
         "name": "getCommandLineValue",
         "type": "function",
         "description": "Gets the command line value for the given named argument.",
@@ -1734,6 +1852,39 @@
             {
               "name": "plain",
               "type": "string"
+            }
+          ]
+        }
+      },
+      {
+        "name": "translateText",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "sourceLanguageCode",
+            "type": "string",
+            "description": "The language code of the source text, or empty if you want the server to try to detect the language."
+          },
+          {
+            "name": "destinationLanguageCode",
+            "type": "string",
+            "description": "The destination language code."
+          },
+          {
+            "name": "sourceText",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The strings to translate."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "TranslateTextResponse"
             }
           ]
         }

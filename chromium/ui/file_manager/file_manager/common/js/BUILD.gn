@@ -32,6 +32,7 @@ group("js_modules") {
     ":file_type",
     ":files_app_entry_types",
     ":filtered_volume_manager",
+    ":glitch",
     ":importer_common",
     ":lru_cache",
     ":mediasession_types",
@@ -59,6 +60,7 @@ js_type_check("closure_compile_jsmodules") {
     ":file_type",
     ":files_app_entry_types",
     ":filtered_volume_manager",
+    ":glitch",
     ":importer_common",
     ":lru_cache",
     ":metrics",
@@ -105,6 +107,7 @@ js_library("api") {
 
 js_library("app_util") {
   deps = [
+    ":storage_adapter",
     "//ui/file_manager/file_manager/externs:file_manager_private",
     "//ui/file_manager/file_manager/externs:volume_manager",
     "//ui/file_manager/file_manager/externs/background:background_base",
@@ -117,6 +120,11 @@ js_library("async_util") {
 }
 
 js_library("error_counter") {
+  deps = [ ":glitch" ]
+}
+
+js_library("glitch") {
+  deps = [ ":metrics" ]
 }
 
 js_library("dialog_type") {
@@ -271,6 +279,14 @@ js_library("power") {
 }
 
 js_library("storage_adapter") {
+  externs_list = [ "$externs_path/chrome_extensions.js" ]
+}
+
+js_unittest("storage_adapter_unittest.m") {
+  deps = [
+    ":storage_adapter",
+    "//chrome/test/data/webui:chai_assert",
+  ]
 }
 
 js_library("test_error_reporting") {
@@ -353,6 +369,7 @@ js_test_gen_html("js_test_gen_html_modules") {
     ":files_app_entry_types_unittest.m",
     ":importer_common_unittest.m",
     ":lru_cache_unittest.m",
+    ":storage_adapter_unittest.m",
     ":util_unittest.m",
     ":volume_manager_types_unittest.m",
   ]

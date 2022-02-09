@@ -29,12 +29,12 @@ public:
     virtual ~wxApp();
 
     // override base class (pure) virtuals
-    virtual bool Initialize(int& argc, wxChar **argv);
-    virtual void CleanUp();
+    virtual bool Initialize(int& argc, wxChar **argv) wxOVERRIDE;
+    virtual void CleanUp() wxOVERRIDE;
 
-    virtual void WakeUpIdle();
+    virtual void WakeUpIdle() wxOVERRIDE;
 
-    virtual void SetPrintMode(int mode) { m_printMode = mode; }
+    virtual void SetPrintMode(int mode) wxOVERRIDE { m_printMode = mode; }
     virtual int GetPrintMode() const { return m_printMode; }
 
     // implementation only
@@ -43,7 +43,7 @@ public:
     void OnQueryEndSession(wxCloseEvent& event);
 
 #if wxUSE_EXCEPTIONS
-    virtual bool OnExceptionInMainLoop();
+    virtual bool OnExceptionInMainLoop() wxOVERRIDE;
 #endif // wxUSE_EXCEPTIONS
 
     // MSW-specific from now on
@@ -52,6 +52,23 @@ public:
     // this suffix should be appended to all our Win32 class names to obtain a
     // variant registered without CS_[HV]REDRAW styles
     static const wxChar *GetNoRedrawClassSuffix() { return wxT("NR"); }
+
+    // Flags for GetRegisteredClassName()
+    enum
+    {
+        // Just a symbolic name indicating absence of any special flags.
+        RegClass_Default = 0,
+
+        // Return the name with the GetNoRedrawClassSuffix() appended to it.
+        RegClass_ReturnNR = 1,
+
+        // Don't register the class with CS_[HV]REDRAW styles. This is useful
+        // for internal windows for which we can guarantee that they will be
+        // never created with wxFULL_REPAINT_ON_RESIZE flag.
+        //
+        // Notice that this implies RegClass_ReturnNR.
+        RegClass_OnlyNR = 3
+    };
 
     // get the name of the registered Win32 class with the given (unique) base
     // name: this function constructs the unique class name using this name as
@@ -68,11 +85,27 @@ public:
     // or (default) -1 meaning that the class paints its background itself
     static const wxChar *GetRegisteredClassName(const wxChar *name,
                                                 int bgBrushCol = -1,
-                                                int extraStyles = 0);
+                                                int extraStyles = 0,
+                                                int flags = RegClass_Default);
 
     // return true if this name corresponds to one of the classes we registered
     // in the previous GetRegisteredClassName() calls
     static bool IsRegisteredClassName(const wxString& name);
+
+    // Return the layout direction to use for a window by default.
+    //
+    // If the parent is specified, use the same layout direction as it uses.
+    // Otherwise use the default global layout, either from wxTheApp, if it
+    // exists, or Windows itself.
+    //
+    // Notice that this normally should not be used for the child windows as
+    // they already inherit, just dialogs such as wxMessageDialog may want to
+    // use it.
+    static wxLayoutDirection MSWGetDefaultLayout(wxWindow* parent = NULL);
+
+    // Call ProcessPendingEvents() but only if we need to do it, i.e. there was
+    // a recent call to WakeUpIdle().
+    void MSWProcessPendingEventsIfNeeded();
 
 protected:
     int    m_printMode; // wxPRINT_WINDOWS, wxPRINT_POSTSCRIPT
@@ -83,7 +116,7 @@ public:
 
 #if wxUSE_RICHEDIT
     // initialize the richedit DLL of (at least) given version, return true if
-    // ok (Win95 has version 1, Win98/NT4 has 1 and 2, W2K has 3)
+    // ok
     static bool InitRichEdit(int version = 2);
 #endif // wxUSE_RICHEDIT
 
@@ -91,39 +124,15 @@ public:
     // wasn't found at all
     static int GetComCtl32Version();
 
-    // the same for shell32.dll: returns 400, 471, 500, 600, ... (4.70 not
-    // currently detected)
-    static int GetShell32Version();
-
     // the SW_XXX value to be used for the frames opened by the application
     // (currently seems unused which is a bug -- TODO)
     static int m_nCmdShow;
 
 protected:
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
     wxDECLARE_NO_COPY_CLASS(wxApp);
-    DECLARE_DYNAMIC_CLASS(wxApp)
+    wxDECLARE_DYNAMIC_CLASS(wxApp);
 };
-
-#ifdef __WXWINCE__
-
-// under CE provide a dummy implementation of GetComCtl32Version() returning
-// the value passing all ">= 470" tests (which are the only ones used in our
-// code currently) as commctrl.dll under CE 2.0 and later support comctl32.dll
-// functionality
-inline int wxApp::GetComCtl32Version()
-{
-    return 471;
-}
-
-// this is not currently used at all under CE so it's not really clear what do
-// we need to return from here
-inline int wxApp::GetShell32Version()
-{
-    return 0;
-}
-
-#endif // __WXWINCE__
 
 #endif // _WX_APP_H_
 

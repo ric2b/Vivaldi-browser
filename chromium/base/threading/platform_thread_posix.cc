@@ -17,8 +17,10 @@
 
 #include "base/allocator/buildflags.h"
 #include "base/debug/activity_tracker.h"
+#include "base/ignore_result.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/threading/platform_thread_internal_posix.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_id_name_manager.h"
@@ -56,7 +58,7 @@ struct ThreadParams {
   ThreadParams()
       : delegate(nullptr), joinable(false), priority(ThreadPriority::NORMAL) {}
 
-  PlatformThread::Delegate* delegate;
+  raw_ptr<PlatformThread::Delegate> delegate;
   bool joinable;
   ThreadPriority priority;
 };
@@ -311,17 +313,20 @@ void PlatformThread::Detach(PlatformThreadHandle thread_handle) {
 #if !defined(OS_APPLE) && !defined(OS_FUCHSIA)
 
 // static
-bool PlatformThread::CanIncreaseThreadPriority(ThreadPriority priority) {
+bool PlatformThread::CanChangeThreadPriority(ThreadPriority from,
+                                             ThreadPriority to) {
 #if defined(OS_NACL)
   return false;
 #else
-  auto platform_specific_ability =
-      internal::CanIncreaseCurrentThreadPriorityForPlatform(priority);
-  if (platform_specific_ability)
-    return platform_specific_ability.value();
+  if (from >= to) {
+    // Decreasing thread priority on POSIX is always allowed.
+    return true;
+  }
+  if (to == ThreadPriority::REALTIME_AUDIO) {
+    return internal::CanSetThreadPriorityToRealtimeAudio();
+  }
 
-  return internal::CanLowerNiceTo(
-      internal::ThreadPriorityToNiceValue(priority));
+  return internal::CanLowerNiceTo(internal::ThreadPriorityToNiceValue(to));
 #endif  // defined(OS_NACL)
 }
 

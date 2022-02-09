@@ -9,7 +9,6 @@
 #ifndef CALENDAR_EVENT_EXCEPTION_TYPE_H_
 #define CALENDAR_EVENT_EXCEPTION_TYPE_H_
 
-#include "base/macros.h"
 #include "base/time/time.h"
 
 namespace calendar {

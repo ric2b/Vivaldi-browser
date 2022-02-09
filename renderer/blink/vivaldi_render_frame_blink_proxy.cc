@@ -51,10 +51,9 @@ void VivaldiRenderFrameBlinkProxy::SendMediaElementAddedEvent(
 /* static */
 void VivaldiRenderFrameBlinkProxy::DidChangeLoadProgressExtended(
     blink::LocalFrame* local_frame,
-    double load_progress,
-    double loaded_bytes,
-    int loaded_elements,
-    int total_elements) {
+    int64_t loaded_bytes_delta,
+    int loaded_resource_delta,
+    int total_resource_delta) {
 #if !defined(OS_ANDROID)
   if (!g_proxy_singleton)
     return;
@@ -67,6 +66,6 @@ void VivaldiRenderFrameBlinkProxy::DidChangeLoadProgressExtended(
   if (!frame_host_service)
     return;
   frame_host_service->DidChangeLoadProgressExtended(
-      load_progress, loaded_bytes, loaded_elements, total_elements);
+      loaded_bytes_delta, loaded_resource_delta, total_resource_delta);
 #endif
 }

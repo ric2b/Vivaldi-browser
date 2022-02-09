@@ -54,10 +54,6 @@ const base::Feature kAllowDownloadResumptionWithoutStrongValidators{
 #endif
 };
 
-const base::Feature kUseParallelRequestsForUnknwonRangeSupport{
-    "UseParallelRequestForUnknownRangeSupport",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kUseParallelRequestsForHTTP2{
     "UseParallelRequestsForHTTP2", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -71,19 +67,16 @@ const base::Feature kDeleteOverwrittenDownloads{
     "DeleteOverwrittenDownloads", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAllowFileBufferSizeControl{
-  "AllowFileBufferSizeControl",
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
+    "AllowFileBufferSizeControl", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kAllowSavePackageScanning{
-    "AllowSavePackageScanning", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAllowSavePackageScanning{"AllowSavePackageScanning",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kIncognitoDownloadsWarning{
     "IncognitoDownloadsWarning", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDownloadRange{"DownloadRange",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 

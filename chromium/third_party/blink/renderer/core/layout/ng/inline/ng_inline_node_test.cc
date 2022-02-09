@@ -51,7 +51,6 @@ class NGInlineNodeForTest : public NGInlineNode {
     data->text_content = data->text_content + text;
     data->items.push_back(NGInlineItem(NGInlineItem::kText, start,
                                        start + text.length(), layout_object));
-    data->is_empty_inline_ = false;
   }
 
   void Append(UChar character) {
@@ -61,14 +60,12 @@ class NGInlineNodeForTest : public NGInlineNode {
     data->items.push_back(
         NGInlineItem(NGInlineItem::kBidiControl, end - 1, end, nullptr));
     data->is_bidi_enabled_ = true;
-    data->is_empty_inline_ = false;
   }
 
   void ClearText() {
     NGInlineNodeData* data = MutableData();
     data->text_content = String();
     data->items.clear();
-    data->is_empty_inline_ = true;
   }
 
   void SegmentText() {
@@ -1399,6 +1396,52 @@ TEST_F(NGInlineNodeTest, SegmentRanges) {
   EXPECT_EQ(ToEndOffsetList(segments->Ranges(8, 10, 1)), expect_8_10);
   Vector<unsigned> expect_9_12 = {12u};
   EXPECT_EQ(ToEndOffsetList(segments->Ranges(9, 12, 1)), expect_9_12);
+}
+
+// https://crbug.com/1275383
+TEST_F(NGInlineNodeTest, ReusingWithPreservedCase1) {
+  SetupHtml("container",
+            "<div id=container>"
+            "a"
+            "<br id='remove'>"
+            "<span style='white-space: pre-wrap'> ijkl </span>"
+            "</div>");
+  EXPECT_EQ(String(u"a\n \u200Bijkl "), GetText());
+  GetElementById("remove")->remove();
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(String(u"a ijkl "), GetText());
+}
+
+// https://crbug.com/1275383
+TEST_F(NGInlineNodeTest, ReusingWithPreservedCase2) {
+  SetupHtml("container",
+            "<div id=container style='white-space: pre-wrap'>"
+            "a "
+            "<br id='remove'>"
+            "<span> ijkl </span>"
+            "</div>");
+  EXPECT_EQ(String(u"a \n \u200Bijkl "), GetText());
+  GetElementById("remove")->remove();
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(String(u"a  ijkl "), GetText());
+}
+
+// https://crbug.com/1275383
+TEST_F(NGInlineNodeTest, ReusingWithPreservedCase3) {
+  SetupHtml("container",
+            "<div id=container style='white-space: pre-wrap'>"
+            " "
+            "<br id='remove'>"
+            "<span> ijkl </span>"
+            "</div>");
+  EXPECT_EQ(String(u" \u200B\n \u200Bijkl "), GetText());
+  GetElementById("remove")->remove();
+  UpdateAllLifecyclePhasesForTest();
+  // TODO(jfernandez): This should be "  \u200Bijkl ", but there is clearly a
+  // bug that causes the first control item to be preserved, while the second is
+  // ignored (due to the presence of the previous control break).
+  // https://crbug.com/1276358
+  EXPECT_EQ(String(u" \u200B ijkl "), GetText());
 }
 
 // https://crbug.com/1021677

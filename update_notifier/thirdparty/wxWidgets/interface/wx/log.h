@@ -54,7 +54,18 @@ public:
      */
     const char *func;
 
-    /// Time when the log message was generated.
+    /**
+        Time in milliseconds since Epoch when the log message was generated.
+
+        @since 3.1.5
+     */
+    wxLongLong_t timestampMS;
+
+    /**
+        Time when the log message was generated.
+
+        @deprecated Please use timestampMS instead.
+     */
     time_t timestamp;
 
     /**
@@ -134,7 +145,7 @@ public:
             associated with this log record.
 
         @return
-            The formated message.
+            The formatted message.
 
         @note
             Time stamping is disabled for Visual C++ users in debug builds by
@@ -149,7 +160,28 @@ public:
 
 protected:
     /**
+        This function formats the time stamp part of the log message including
+        milliseconds.
+
+        Override this function if you need to customize just the time stamp
+        formatting in the log messages.
+
+        @param msec
+            Time to format as the number of milliseconds since
+            1970-01-01T00:00:00.
+
+        @return
+            The formatted time string, may be empty.
+
+        @since 3.1.5
+    */
+    virtual wxString FormatTimeMS(wxLongLong_t msec) const;
+
+    /**
         This function formats the time stamp part of the log message.
+
+        @deprecated This function only exists for compatibility, please
+        override FormatTimeMS() in the new code.
 
         Override this function if you need to customize just the time stamp.
 
@@ -157,7 +189,7 @@ protected:
             Time to format.
 
         @return
-            The formated time string, may be empty.
+            The formatted time string, may be empty.
     */
     virtual wxString FormatTime(time_t time) const;
 };
@@ -506,6 +538,8 @@ public:
 
 
     /**
+        Show all pending output and clear the buffer.
+
         Some of wxLog implementations, most notably the standard wxLogGui class,
         buffer the messages (for example, to avoid showing the user a zillion of modal
         message boxes one after another -- which would be really annoying).
@@ -666,7 +700,7 @@ public:
         By default, the log messages are passed to the previously active log target.
         Calling this function with @false parameter disables this behaviour
         (presumably temporarily, as you shouldn't use wxLogChain at all otherwise) and
-        it can be reenabled by calling it again with @a passMessages set to @true.
+        it can be re-enabled by calling it again with @a passMessages set to @true.
     */
     void PassMessages(bool passMessages);
 
@@ -754,8 +788,24 @@ public:
     /**
         Constructs a log target which sends all the log messages to the given
         output stream. If it is @NULL, the messages are sent to @c cerr.
+        The messages will be written in the encoding specified by the
+        given @c wxMBConv.
+
+        The @a conv argument is only available in wxWidgets 3.1.1 and later.
+
+        @note
+            In practice, it is only advisable to specify @c wxConvUTF8 as
+            the @a conv.
+            If using @c wxMBConvUTF16(), the file should be opened in
+            @c std::ios::binary mode.
+
+        @warning
+            If a log message contains any characters that cannot be converted
+            to the character set given by @a conv, that message will be
+            silently ignored, i.e. it will not be written at all.
     */
-    wxLogStream(std::ostream *ostr = NULL);
+    wxLogStream(std::ostream *ostr = NULL,
+                const wxMBConv &conv = wxConvWhateverWorks);
 };
 
 
@@ -780,8 +830,24 @@ public:
     /**
         Constructs a log target which sends all the log messages to the given
         @c FILE. If it is @NULL, the messages are sent to @c stderr.
+        The messages will be written in the encoding specified by the
+        given @c wxMBConv.
+
+        The @a conv argument is only available in wxWidgets 3.1.1 and later.
+
+        @note
+            In practice, it is only advisable to specify @c wxConvUTF8 as
+            the @a conv.
+            If using @c wxMBConvUTF16(), the file should be opened in
+            @c "wb" mode.
+
+        @warning
+            If a log message contains any characters that cannot be converted
+            to the character set given by @a conv, that message will be
+            silently ignored, i.e. it will not be written at all.
     */
-    wxLogStderr(FILE* fp = NULL);
+    wxLogStderr(FILE *fp = NULL,
+                const wxMBConv &conv = wxConvWhateverWorks);
 };
 
 
@@ -1202,18 +1268,23 @@ public:
         message string.
     @param text
         The text to show to the user.
+    @return
+        @true If a message box was actually shown or @false if the message was
+        logged to the console because there is no safe to show it currently
+        (the return value is only available since wxWidgets 3.1.5, the function
+        doesn't return anything in the previous versions).
 
     @see wxLogFatalError()
 
     @header{wx/log.h}
 */
-void wxSafeShowMessage(const wxString& title, const wxString& text);
+bool wxSafeShowMessage(const wxString& title, const wxString& text);
 
 /**
     Returns the error code from the last system call. This function uses
     @c errno on Unix platforms and @c GetLastError under Win32.
 
-    @see wxSysErrorMsg(), wxLogSysError()
+    @see wxSysErrorMsgStr(), wxLogSysError()
 
     @header{wx/log.h}
 */
@@ -1223,6 +1294,25 @@ unsigned long wxSysErrorCode();
     Returns the error message corresponding to the given system error code. If
     @a errCode is 0 (default), the last error code (as returned by
     wxSysErrorCode()) is used.
+
+    Use this function instead of wxSysErrorMsg(), as the latter one is not
+    thread-safe.
+
+    @since 3.1.0
+
+    @see wxSysErrorCode(), wxLogSysError()
+
+    @header{wx/log.h}
+*/
+wxString wxSysErrorMsgStr(unsigned long errCode = 0);
+
+/**
+    Returns the error message corresponding to the given system error code. If
+    @a errCode is 0 (default), the last error code (as returned by
+    wxSysErrorCode()) is used.
+
+    Use wxSysErrorMsgStr() instead of this function especially in a
+    multi-threaded application.
 
     @see wxSysErrorCode(), wxLogSysError()
 
@@ -1259,9 +1349,31 @@ void wxVLogMessage(const char* formatString, va_list argPtr);
 /** @addtogroup group_funcmacro_log */
 //@{
 /**
-    For verbose output. Normally, it is suppressed, but might be activated if
-    the user wishes to know more details about the program progress (another,
-    but possibly confusing name for the same function could be @c wxLogInfo).
+    For low priority messages.
+
+    They are handled in the same way as messages logged by wxLogMessage() by
+    the default logger but could be handled differently by the custom loggers.
+
+    @header{wx/log.h}
+*/
+void wxLogInfo(const char* formatString, ... );
+void wxVLogInfo(const char* formatString, va_list argPtr);
+//@}
+
+/** @addtogroup group_funcmacro_log */
+//@{
+/**
+    For verbose output.
+
+    Messages generated by these functions are suppressed by default, even if
+    the log level is higher than ::wxLOG_Info and need to be explicitly
+    activated by calling wxLog::SetVerbose().
+
+    Notice that this is done automatically by wxWidgets, unless the standard
+    command line handling is overridden, if @c \--verbose option is specified on
+    the program command line, so using these functions provides a simple way of
+    having some diagnostic messages not shown by default but which can be
+    easily shown by the user if needed.
 
     @header{wx/log.h}
 */
@@ -1323,8 +1435,8 @@ void wxVLogError(const char* formatString, va_list argPtr);
     make sense to separate them from other debug messages.
 
     Trace messages can be separated into different categories; these functions in facts
-    only log the message if the given @a mask is currently enabled in wxLog. 
-    This lets you selectively trace only some operations and not others by enabling the 
+    only log the message if the given @a mask is currently enabled in wxLog.
+    This lets you selectively trace only some operations and not others by enabling the
     desired trace masks with wxLog::AddTraceMask() or by setting the
     @ref overview_envvars "@c WXTRACE environment variable".
 
@@ -1416,7 +1528,7 @@ void wxVLogStatus(const char* formatString, va_list argPtr);
     form of this function takes the error code explicitly as the first
     argument.
 
-    @see wxSysErrorCode(), wxSysErrorMsg()
+    @see wxSysErrorCode(), wxSysErrorMsgStr()
 
     @header{wx/log.h}
 */

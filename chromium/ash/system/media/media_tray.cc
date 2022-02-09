@@ -6,7 +6,6 @@
 
 #include "ash/constants/ash_pref_names.h"
 #include "ash/focus_cycler.h"
-#include "ash/public/cpp/media_notification_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
@@ -14,6 +13,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/system/media/media_notification_provider.h"
 #include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
@@ -172,10 +172,11 @@ void MediaTray::SetPinnedToShelf(bool pinned) {
 }
 
 MediaTray::PinButton::PinButton()
-    : TopShortcutButton(
+    : IconButton(
           base::BindRepeating(&PinButton::ButtonPressed,
                               base::Unretained(this)),
-          MediaTray::IsPinnedToShelf() ? kPinnedIcon : kUnpinnedIcon,
+          IconButton::Type::kSmall,
+          MediaTray::IsPinnedToShelf() ? &kPinnedIcon : &kUnpinnedIcon,
           MediaTray::IsPinnedToShelf()
               ? IDS_ASH_GLOBAL_MEDIA_CONTROLS_PINNED_BUTTON_TOOLTIP_TEXT
               : IDS_ASH_GLOBAL_MEDIA_CONTROLS_UNPINNED_BUTTON_TOOLTIP_TEXT) {}

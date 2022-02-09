@@ -16,7 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_string_value_serializer.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
@@ -60,7 +60,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
-#include "components/web_package/test_support/web_bundle_builder.h"
+#include "components/web_package/web_bundle_builder.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -171,7 +171,7 @@ class RulesetLoadObserver : public RulesMonitorService::TestObserver {
       run_loop_.Quit();
   }
 
-  RulesMonitorService* const service_;
+  const raw_ptr<RulesMonitorService> service_;
   const ExtensionId extension_id_;
   base::RunLoop run_loop_;
 };
@@ -184,7 +184,8 @@ class DeclarativeNetRequestBrowserTest
     feature_list_.InitWithFeatures(
         /*enabled_features=*/
         {blink::features::kInterestGroupStorage,
-         blink::features::kAdInterestGroupAPI, blink::features::kFledge},
+         blink::features::kAdInterestGroupAPI, blink::features::kFledge,
+         blink::features::kFencedFrames},
         /*disabled_features=*/
         {});
     net::test_server::RegisterDefaultHandlers(embedded_test_server());
@@ -730,11 +731,9 @@ class DeclarativeNetRequestBrowserTest
         current_ruleset_count + expected_extensions_with_rulesets_count_change);
 
     size_t expected_enabled_rulesets_count = has_dynamic_ruleset ? 1 : 0;
-    size_t expected_manifest_rules_count = 0;
     size_t expected_manifest_enabled_rules_count = 0;
     for (const TestRulesetInfo& info : rulesets) {
       size_t rules_count = info.rules_value.GetList().size();
-      expected_manifest_rules_count += rules_count;
 
       if (info.enabled) {
         expected_enabled_rulesets_count++;
@@ -2698,8 +2697,10 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
 
 // Tests that redirecting requests using the declarativeNetRequest API works
 // with runtime host permissions.
+// Disabled due to flakes across all desktop platforms; see
+// https://crbug.com/1274533
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
-                       WithheldPermissions_Redirect) {
+                       DISABLED_WithheldPermissions_Redirect) {
   // Load an extension which redirects all script requests made to
   // "b.com/subresources/not_a_valid_script.js", to
   // "b.com/subresources/script.js".
@@ -5426,6 +5427,75 @@ class DeclarativeNetRequestSubresourceWebBundlesBrowserTest
         }));
   }
 
+  void RunUuidUrlTest(const std::string& pass_js_url,
+                      const std::string& cancel_js_url) {
+    TestRule rule = CreateGenericRule();
+    std::vector<TestRule> rules;
+    rule.id = kMinValidID;
+    rule.condition->url_filter = cancel_js_url + "|";
+    rule.condition->resource_types = {"script"};
+    rule.priority = 1;
+    rules.push_back(rule);
+    ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules(rules));
+
+    static constexpr char kHtmlTemplate[] = R"(
+        <title>Loaded</title>
+        <body>
+        <script>
+        (() => {
+          const wbn_url =
+              new URL('./web_bundle.wbn', location.href).toString();
+          const pass_js_url = '%s';
+          const cancel_js_url = '%s';
+          const link = document.createElement('link');
+          link.rel = 'webbundle';
+          link.href = wbn_url;
+          link.resources = pass_js_url + ' ' + cancel_js_url;
+          document.body.appendChild(link);
+        })();
+        </script>
+        </body>
+      )";
+    const std::string page_html = base::StringPrintf(
+        kHtmlTemplate, pass_js_url.c_str(), cancel_js_url.c_str());
+
+    std::string web_bundle;
+    RegisterWebBundleRequestHandler("/web_bundle.wbn", &web_bundle);
+    RegisterRequestHandler("/test.html", "text/html", page_html);
+    ASSERT_TRUE(embedded_test_server()->Start());
+
+    // Create a web bundle.
+    // Currently the web bundle format requires a valid GURL for the fallback
+    // URL of a web bundle. So we use |pass_js_url_str| for the fallback URL.
+    // TODO(crbug.com/966753): Stop using |pass_js_url_str| when
+    // https://github.com/WICG/webpackage/issues/590 is resolved.
+    web_package::WebBundleBuilder builder(pass_js_url, "");
+    auto pass_js_location = builder.AddResponse(
+        {{":status", "200"}, {"content-type", "application/javascript"}},
+        "document.title = 'script loaded';");
+    auto cancel_js_location = builder.AddResponse(
+        {{":status", "200"}, {"content-type", "application/javascript"}}, "");
+    builder.AddIndexEntry(pass_js_url, "", {pass_js_location});
+    builder.AddIndexEntry(cancel_js_url, "", {cancel_js_location});
+    std::vector<uint8_t> bundle = builder.CreateBundle();
+    web_bundle = std::string(bundle.begin(), bundle.end());
+
+    GURL page_url = embedded_test_server()->GetURL("/test.html");
+    content::WebContents* web_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page_url));
+    EXPECT_EQ(page_url, web_contents->GetLastCommittedURL());
+
+    std::u16string expected_title = u"script loaded";
+    content::TitleWatcher title_watcher(web_contents, expected_title);
+    EXPECT_TRUE(TryLoadScript(pass_js_url));
+    // Check that the pass_js_url script in the web bundle is correctly loaded
+    // even when the extension with blocking handler intercepted the request.
+    EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
+
+    EXPECT_FALSE(TryLoadScript(cancel_js_url));
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
 };
@@ -5477,7 +5547,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
   // of a web bundle. So we use |pass_js_url_str| for the fallback URL.
   // TODO(crbug.com/966753): Stop using |pass_js_url_str| when
   // https://github.com/WICG/webpackage/issues/590 is resolved.
-  web_package::test::WebBundleBuilder builder(pass_js_url_str, "");
+  web_package::WebBundleBuilder builder(pass_js_url_str, "");
   auto pass_js_location = builder.AddResponse(
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'script loaded';");
@@ -5505,76 +5575,19 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
 }
 
 // Ensure DeclarativeNetRequest API can block the requests for the subresources
+// inside the web bundle whose URL is uuid-in-package:.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
+                       RequestCanceledUuidInPackageUrl) {
+  RunUuidUrlTest("uuid-in-package:fc80c15b-69e9-4a45-ab41-9c90d2b55976",
+                 "uuid-in-package:15d749ad-7d9f-49d9-94f7-83a866e7fef8");
+}
+
+// Ensure DeclarativeNetRequest API can block the requests for the subresources
 // inside the web bundle which URL is urn uuid.
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
                        RequestCanceledUrnUUIDUrl) {
-  TestRule rule = CreateGenericRule();
-  std::string pass_js_url = "urn:uuid:fc80c15b-69e9-4a45-ab41-9c90d2b55976";
-  std::string cancel_js_url = "urn:uuid:15d749ad-7d9f-49d9-94f7-83a866e7fef8";
-  std::vector<TestRule> rules;
-  rule.id = kMinValidID;
-  rule.condition->url_filter = cancel_js_url + "|";
-  rule.condition->resource_types = std::vector<std::string>({"script"});
-  rule.priority = 1;
-  rules.push_back(rule);
-  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules(rules));
-
-  const std::string page_html =
-      base::StringPrintf(R"(
-        <title>Loaded</title>
-        <body>
-        <script>
-        (() => {
-          const wbn_url =
-              new URL('./web_bundle.wbn', location.href).toString();
-          const pass_js_url = '%s';
-          const cancel_js_url = '%s';
-          const link = document.createElement('link');
-          link.rel = 'webbundle';
-          link.href = wbn_url;
-          link.resources = pass_js_url + ' ' + cancel_js_url;
-          document.body.appendChild(link);
-        })();
-        </script>
-        </body>
-      )",
-                         pass_js_url.c_str(), cancel_js_url.c_str());
-
-  std::string web_bundle;
-  RegisterWebBundleRequestHandler("/web_bundle.wbn", &web_bundle);
-  RegisterRequestHandler("/test.html", "text/html", page_html);
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  // Create a web bundle.
-  // Currently the web bundle format requires a valid GURL for the fallback URL
-  // of a web bundle. So we use |pass_js_url_str| for the fallback URL.
-  // TODO(crbug.com/966753): Stop using |pass_js_url_str| when
-  // https://github.com/WICG/webpackage/issues/590 is resolved.
-  web_package::test::WebBundleBuilder builder(pass_js_url, "");
-  auto pass_js_location = builder.AddResponse(
-      {{":status", "200"}, {"content-type", "application/javascript"}},
-      "document.title = 'script loaded';");
-  auto cancel_js_location = builder.AddResponse(
-      {{":status", "200"}, {"content-type", "application/javascript"}}, "");
-  builder.AddIndexEntry(pass_js_url, "", {pass_js_location});
-  builder.AddIndexEntry(cancel_js_url, "", {cancel_js_location});
-  std::vector<uint8_t> bundle = builder.CreateBundle();
-  web_bundle = std::string(bundle.begin(), bundle.end());
-
-  GURL page_url = embedded_test_server()->GetURL("/test.html");
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page_url));
-  EXPECT_EQ(page_url, web_contents->GetLastCommittedURL());
-
-  std::u16string expected_title = u"script loaded";
-  content::TitleWatcher title_watcher(web_contents, expected_title);
-  EXPECT_TRUE(TryLoadScript(pass_js_url));
-  // Check that the pass_js_url script in the web bundle is correctly loaded
-  // even when the extension with blocking handler intercepted the request.
-  EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
-
-  EXPECT_FALSE(TryLoadScript(cancel_js_url));
+  RunUuidUrlTest("urn:uuid:fc80c15b-69e9-4a45-ab41-9c90d2b55976",
+                 "urn:uuid:15d749ad-7d9f-49d9-94f7-83a866e7fef8");
 }
 
 // Ensure DeclarativeNetRequest API can redirect the requests for the
@@ -5629,7 +5642,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
   // of a web bundle. So we use |redirect_js_url_str| for the fallback URL.
   // TODO(crbug.com/966753): Stop using |redirect_js_url_str| when
   // https://github.com/WICG/webpackage/issues/590 is resolved.
-  web_package::test::WebBundleBuilder builder(redirect_js_url_str, "");
+  web_package::WebBundleBuilder builder(redirect_js_url_str, "");
   auto redirect_js_location = builder.AddResponse(
       {{":status", "200"}, {"content-type", "application/javascript"}},
       "document.title = 'redirect';");
@@ -5719,7 +5732,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
 
   // Create a web bundle.
   std::string js_url_str = embedded_test_server()->GetURL("/script.js").spec();
-  web_package::test::WebBundleBuilder builder(js_url_str, "");
+  web_package::WebBundleBuilder builder(js_url_str, "");
   builder.AddExchange(
       js_url_str,
       {{":status", "200"}, {"content-type", "application/javascript"}},
@@ -5732,8 +5745,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestSubresourceWebBundlesBrowserTest,
   rule.id = kMinValidID;
   rule.priority = 1;
   rule.condition->url_filter = "redirect.wbn|";
-  // TODO(crbug.com/1246214): Introduce a new resource type for web bundles.
-  rule.condition->resource_types = std::vector<std::string>({"other"});
+  rule.condition->resource_types = std::vector<std::string>({"webbundle"});
   rule.action->type = "redirect";
   rule.action->redirect.emplace();
   rule.action->redirect->url =

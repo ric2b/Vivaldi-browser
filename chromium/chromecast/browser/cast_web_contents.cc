@@ -4,15 +4,29 @@
 
 #include "chromecast/browser/cast_web_contents.h"
 
+#include <utility>
+
+#include "base/bind.h"
+#include "base/callback.h"
+#include "base/check.h"
+
 namespace chromecast {
 
 CastWebContents::CastWebContents() = default;
 
 CastWebContents::~CastWebContents() = default;
 
-void CastWebContents::BindReceiver(
+void CastWebContents::BindOwnerReceiver(
     mojo::PendingReceiver<mojom::CastWebContents> receiver) {
-  receivers_.Add(this, std::move(receiver));
+  DCHECK(!owner_receiver_.is_bound());
+  owner_receiver_.Bind(std::move(receiver));
+  owner_receiver_.set_disconnect_handler(
+      base::BindOnce(&CastWebContents::OnDisconnect, base::Unretained(this)));
+}
+
+void CastWebContents::BindSharedReceiver(
+    mojo::PendingReceiver<mojom::CastWebContents> receiver) {
+  shared_receivers_.Add(this, std::move(receiver));
 }
 
 void CastWebContents::AddObserver(
@@ -28,6 +42,16 @@ void CastWebContents::AddObserver(CastWebContents::Observer* observer) {
 void CastWebContents::RemoveObserver(CastWebContents::Observer* observer) {
   DCHECK(observer);
   sync_observers_.RemoveObserver(observer);
+}
+
+void CastWebContents::SetDisconnectCallback(base::OnceClosure cb) {
+  disconnect_cb_ = std::move(cb);
+}
+
+void CastWebContents::OnDisconnect() {
+  if (disconnect_cb_) {
+    std::move(disconnect_cb_).Run();
+  }
 }
 
 CastWebContents::Observer::Observer() : cast_web_contents_(nullptr) {}

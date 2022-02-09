@@ -15,9 +15,7 @@
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/task/post_task.h"
-#include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/devtools/shared_worker_devtools_agent_host.h"
 #include "content/browser/loader/file_url_loader_factory.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
@@ -54,11 +52,9 @@ namespace content {
 
 SharedWorkerServiceImpl::SharedWorkerServiceImpl(
     StoragePartitionImpl* storage_partition,
-    scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
-    scoped_refptr<ChromeAppCacheService> appcache_service)
+    scoped_refptr<ServiceWorkerContextWrapper> service_worker_context)
     : storage_partition_(storage_partition),
-      service_worker_context_(std::move(service_worker_context)),
-      appcache_service_(std::move(appcache_service)) {
+      service_worker_context_(std::move(service_worker_context)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -284,8 +280,6 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
 
   StoragePartitionImpl* partition =
       static_cast<StoragePartitionImpl*>(creator.GetStoragePartition());
-  bool is_guest =
-      !partition->site_for_guest_service_worker_or_shared_worker().is_empty();
 
   // Use the `creator`'s SiteInstance by default, but if that SiteInstance is
   // cross-origin-isolated, create a new non-isolated SiteInstance for the
@@ -297,10 +291,9 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
   // account.
   scoped_refptr<SiteInstanceImpl> site_instance = creator.GetSiteInstance();
   if (site_instance->IsCrossOriginIsolated()) {
-    if (is_guest) {
+    if (partition->is_guest()) {
       site_instance = SiteInstanceImpl::CreateForGuest(
-          partition->browser_context(),
-          partition->site_for_guest_service_worker_or_shared_worker());
+          partition->browser_context(), partition->GetConfig());
     } else {
       site_instance = SiteInstanceImpl::CreateForUrlInfo(
           partition->browser_context(),
@@ -331,14 +324,6 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
           creator.cross_origin_embedder_policy()));
   DCHECK(insertion_result.second);
   SharedWorkerHost* host = insertion_result.first->get();
-
-  base::WeakPtr<AppCacheHost> appcache_host;
-  if (appcache_service_) {
-    auto appcache_handle = std::make_unique<AppCacheNavigationHandle>(
-        appcache_service_.get(), worker_process_host->GetID());
-    appcache_host = appcache_handle->host()->GetWeakPtr();
-    host->SetAppCacheHandle(std::move(appcache_handle));
-  }
 
   auto service_worker_handle =
       std::make_unique<ServiceWorkerMainResourceHandle>(
@@ -376,8 +361,8 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
       << " should be the same.";
   WorkerScriptFetcher::CreateAndStart(
       worker_process_host->GetID(), host->token(), host->instance().url(),
-      &creator, net::SiteForCookies::FromOrigin(worker_origin),
-      host->instance().storage_key().origin(),
+      &creator, &creator, net::SiteForCookies::FromOrigin(worker_origin),
+      host->instance().storage_key().origin(), host->instance().storage_key(),
       net::IsolationInfo::Create(
           net::IsolationInfo::RequestType::kOther, worker_origin, worker_origin,
           net::SiteForCookies::FromOrigin(worker_origin),
@@ -388,10 +373,9 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
       credentials_mode, std::move(outside_fetch_client_settings_object),
       network::mojom::RequestDestination::kSharedWorker,
       service_worker_context_, service_worker_handle_raw,
-      std::move(appcache_host), std::move(blob_url_loader_factory),
-      url_loader_factory_override_, storage_partition_, storage_domain,
-      host->ukm_source_id(), SharedWorkerDevToolsAgentHost::GetFor(host),
-      host->GetDevToolsToken(),
+      std::move(blob_url_loader_factory), url_loader_factory_override_,
+      storage_partition_, storage_domain, host->ukm_source_id(),
+      SharedWorkerDevToolsAgentHost::GetFor(host), host->GetDevToolsToken(),
       base::BindOnce(&SharedWorkerServiceImpl::StartWorker,
                      weak_factory_.GetWeakPtr(), weak_host, message_port,
                      std::move(cloned_outside_fetch_client_settings_object)));

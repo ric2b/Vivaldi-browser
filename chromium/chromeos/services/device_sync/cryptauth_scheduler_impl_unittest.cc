@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
@@ -40,6 +39,12 @@ const char kSessionId[] = "sessionId";
 }  // namespace
 
 class DeviceSyncCryptAuthSchedulerImplTest : public testing::Test {
+ public:
+  DeviceSyncCryptAuthSchedulerImplTest(
+      const DeviceSyncCryptAuthSchedulerImplTest&) = delete;
+  DeviceSyncCryptAuthSchedulerImplTest& operator=(
+      const DeviceSyncCryptAuthSchedulerImplTest&) = delete;
+
  protected:
   DeviceSyncCryptAuthSchedulerImplTest() = default;
 
@@ -357,8 +362,6 @@ class DeviceSyncCryptAuthSchedulerImplTest : public testing::Test {
       false /* use_default_devices_and_services */};
   std::string wifi_network_service_path_;
   std::unique_ptr<CryptAuthScheduler> scheduler_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceSyncCryptAuthSchedulerImplTest);
 };
 
 TEST_F(DeviceSyncCryptAuthSchedulerImplTest,

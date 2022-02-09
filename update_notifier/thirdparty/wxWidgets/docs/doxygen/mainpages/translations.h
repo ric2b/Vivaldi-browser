@@ -448,29 +448,25 @@ Here are the steps you should follow:
 
 -# Get the latest version of the file <tt>locale/wxstd.pot</tt> from the
    wxWidgets source tree: if you're using
-   <a href="http://www.wxwidgets.org/develop/svn.htm">Subversion</a>
-   or the <a href="http://wxwindows.sourceforge.net/snapshots/">daily snapshots</a>
-   you should already have it.
-   Otherwise you can always retrieve it directly from the Subversion repository via the
-   <a href="http://svn.wxwidgets.org/viewvc/wx/wxWidgets/trunk/locale/wxstd.pot?view=co">Web interface</a>.
--# Rename it to <tt>XY.po</tt> where <tt>"XY"</tt> is the 2 letter
+   <a href="https://www.wxwidgets.org/develop/code-repository/">git</a>
+   you should already have it. Otherwise you can always retrieve it directly
+   from the git repository:
+   <a href="https://raw.githubusercontent.com/wxWidgets/wxWidgets/master/locale/wxstd.pot">locale/wxstd.pot</a>.
+-# Initialize an <tt>XY.po</tt> file for your language by using the command
+   <tt>msginit -l XY</tt> in the same folder where you placed <tt>wxstd.pot</tt>.
+   The <tt>"XY"</tt> is the 2 letter
    <a href="http://www.loc.gov/standards/iso639-2/php/English_list.php">ISO 639-2 language code</a>
-   for your language.
+   for your language. Initialization can be also done using e.g. Poedit (see next item).
 -# Translate the strings in this file using either your favourite text
    editor or a specialized tool such as Vaclav Slavik's excellent
    <a href="http://www.poedit.net/">poEdit</a> utility.
 -# Verify that your translations can at least be compiled (even if they
-   are yet incomplete) by running <tt>msgfmt -v XY.po</tt> command:
-   please note that you <i>must</i> use the <tt>-v</tt> option. In
+   are yet incomplete) by running <tt>msgfmt -vc XY.po</tt> command:
+   please note that you <i>must</i> use the <tt>-c</tt> option. In
    particular, please fill the header fields because @c msgfmt doesn't
    accept the default values for them.
 -# Send the finished translation to <a href="mailto:vadim@wxwidgets.org">Vadim Zeitlin</a>
    and it will be added to the next wxWidgets release or snapshot.
-
-In addition, please consider subscribing to the very low volume
-<a href="http://lists.wxwidgets.org/mailman/listinfo/wx-translators">
-wxWidgets translators</a> mailing list on which the news especially important
-for the translators are announced.
 
 Thank you in advance for your help!
 

@@ -11,6 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/debug/stack_trace.h"
 #include "base/format_macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "net/http/http_response_headers.h"
@@ -24,10 +25,9 @@ namespace net {
 
 namespace {
 
-std::vector<const http2::adapter::Header> GenerateHeaders(
-    HttpStatusCode status,
-    base::StringPairs headers) {
-  std::vector<const http2::adapter::Header> response_vector;
+std::vector<http2::adapter::Header> GenerateHeaders(HttpStatusCode status,
+                                                    base::StringPairs headers) {
+  std::vector<http2::adapter::Header> response_vector;
   response_vector.emplace_back(
       http2::adapter::HeaderRep(std::string(":status")),
       http2::adapter::HeaderRep(base::NumberToString(status)));
@@ -74,7 +74,7 @@ class Http2Connection::DataFrameSource
     const int64_t result = connection_->OnReadyToSend(concatenated);
     // Write encountered error.
     if (result < 0) {
-      connection_->OnConnectionError();
+      connection_->OnConnectionError(ConnectionError::kSendError);
       return false;
     }
 
@@ -88,7 +88,7 @@ class Http2Connection::DataFrameSource
       // Probably need to handle this better within this test class.
       QUICHE_LOG(DFATAL)
           << "DATA frame not fully flushed. Connection will be corrupt!";
-      connection_->OnConnectionError();
+      connection_->OnConnectionError(ConnectionError::kSendError);
       return false;
     }
 
@@ -113,7 +113,7 @@ class Http2Connection::DataFrameSource
   }
 
  private:
-  Http2Connection* const connection_;
+  const raw_ptr<Http2Connection> connection_;
   const StreamId& stream_id_;
   std::queue<std::string> chunks_;
   bool last_frame_ = false;
@@ -148,7 +148,7 @@ class Http2Connection::ResponseDelegate : public HttpResponseDelegate {
     scoped_refptr<HttpResponseHeaders> parsed_headers =
         HttpResponseHeaders::TryToCreate(headers);
     if (parsed_headers->response_code() == 0) {
-      connection_->OnConnectionError();
+      connection_->OnConnectionError(ConnectionError::kParseError);
       LOG(ERROR) << "raw headers could not be parsed";
     }
     base::StringPairs header_pairs;
@@ -200,8 +200,8 @@ class Http2Connection::ResponseDelegate : public HttpResponseDelegate {
  private:
   std::vector<std::unique_ptr<HttpResponse>> responses_;
   StreamId stream_id_;
-  Http2Connection* const connection_;
-  DataFrameSource* data_frame_;
+  const raw_ptr<Http2Connection> connection_;
+  raw_ptr<DataFrameSource> data_frame_;
   base::WeakPtrFactory<ResponseDelegate> weak_factory_{this};
 };
 
@@ -436,7 +436,8 @@ int Http2Connection::OnFrameSent(uint8_t frame_type,
   return 0;
 }
 
-bool Http2Connection::OnInvalidFrame(StreamId stream_id, int error_code) {
+bool Http2Connection::OnInvalidFrame(StreamId stream_id,
+                                     InvalidFrameError error) {
   return true;
 }
 

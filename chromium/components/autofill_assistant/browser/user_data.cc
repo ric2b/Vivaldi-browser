@@ -24,8 +24,14 @@ LoginChoice::LoginChoice(
       preselect_priority(_preselect_priority),
       info_popup(_info_popup),
       edit_button_content_description(_edit_button_content_description) {}
+LoginChoice::LoginChoice() = default;
 LoginChoice::LoginChoice(const LoginChoice& another) = default;
 LoginChoice::~LoginChoice() = default;
+
+bool LoginChoice::CompareByPriority(const LoginChoice& lhs,
+                                    const LoginChoice& rhs) {
+  return lhs.preselect_priority < rhs.preselect_priority;
+}
 
 PaymentInstrument::PaymentInstrument() = default;
 PaymentInstrument::PaymentInstrument(
@@ -33,6 +39,21 @@ PaymentInstrument::PaymentInstrument(
     std::unique_ptr<autofill::AutofillProfile> _billing_address)
     : card(std::move(_card)), billing_address(std::move(_billing_address)) {}
 PaymentInstrument::~PaymentInstrument() = default;
+
+Contact::Contact() = default;
+Contact::Contact(std::unique_ptr<autofill::AutofillProfile> _profile)
+    : profile(std::move(_profile)) {}
+Contact::~Contact() = default;
+
+Address::Address() = default;
+Address::Address(std::unique_ptr<autofill::AutofillProfile> _profile)
+    : profile(std::move(_profile)) {}
+Address::~Address() = default;
+
+UserDataMetrics::UserDataMetrics() = default;
+UserDataMetrics::~UserDataMetrics() = default;
+UserDataMetrics::UserDataMetrics(const UserDataMetrics&) = default;
+UserDataMetrics& UserDataMetrics::operator=(const UserDataMetrics&) = default;
 
 UserData::UserData() = default;
 UserData::~UserData() = default;
@@ -56,6 +77,10 @@ const autofill::AutofillProfile* UserData::selected_address(
 
 const autofill::CreditCard* UserData::selected_card() const {
   return selected_card_.get();
+}
+
+const LoginChoice* UserData::selected_login_choice() const {
+  return selected_login_choice_.get();
 }
 
 void UserData::SetAdditionalValue(const std::string& key,

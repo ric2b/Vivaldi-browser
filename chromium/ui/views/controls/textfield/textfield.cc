@@ -36,6 +36,7 @@
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/canvas_painter.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display.h"
@@ -2537,6 +2538,12 @@ void Textfield::UpdateContextMenu() {
   context_menu_runner_ = std::make_unique<MenuRunner>(
       context_menu_contents_.get(),
       MenuRunner::HAS_MNEMONICS | MenuRunner::CONTEXT_MENU);
+}
+
+void Textfield::InvalidateContextMenu() {
+  // Ensure that the Runner doesn't outlive the Model.
+  context_menu_runner_.reset();
+  context_menu_contents_.reset();
 }
 
 bool Textfield::ImeEditingAllowed() const {

@@ -13,9 +13,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -252,15 +252,7 @@ void AddToHomescreenDataFetcher::OnDidGetManifestAndIcons(
   shortcut_info_.best_primary_icon_url = data.primary_icon_url;
 
   // Save the splash screen URL for the later download.
-  shortcut_info_.ideal_splash_image_size_in_px =
-      WebappsIconUtils::GetIdealSplashImageSizeInPx();
-  shortcut_info_.minimum_splash_image_size_in_px =
-      WebappsIconUtils::GetMinimumSplashImageSizeInPx();
-  shortcut_info_.splash_image_url =
-      blink::ManifestIconSelector::FindBestMatchingSquareIcon(
-          data.manifest.icons, shortcut_info_.ideal_splash_image_size_in_px,
-          shortcut_info_.minimum_splash_image_size_in_px,
-          blink::mojom::ManifestImageResource_Purpose::ANY);
+  shortcut_info_.UpdateBestSplashIcon(data.manifest);
 
   installable_manager_->GetData(
       ParamsToPerformInstallableCheck(),

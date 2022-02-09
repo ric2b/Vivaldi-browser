@@ -8,6 +8,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -16,11 +17,11 @@
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -405,6 +406,11 @@ void FakeSessionManagerClient::NotifyLockScreenDismissed() {
   screen_is_locked_ = false;
 }
 
+bool FakeSessionManagerClient::RequestBrowserDataMigration(
+    const cryptohome::AccountIdentifier& cryptohome_id) {
+  return true;
+}
+
 void FakeSessionManagerClient::RetrieveActiveSessions(
     ActiveSessionsCallback callback) {
   PostReply(FROM_HERE, std::move(callback), user_sessions_);
@@ -624,10 +630,15 @@ void FakeSessionManagerClient::SetFeatureFlagsForUser(
 
 void FakeSessionManagerClient::GetServerBackedStateKeys(
     StateKeysCallback callback) {
-  if (force_state_keys_missing_) {
+  if (state_keys_handling_ == ServerBackedStateKeysHandling::kNoResponse) {
+    return;
+  }
+  if (state_keys_handling_ ==
+      ServerBackedStateKeysHandling::kForceNotAvailable) {
     PostReply(FROM_HERE, std::move(callback), std::vector<std::string>());
     return;
   }
+  DCHECK_EQ(state_keys_handling_, ServerBackedStateKeysHandling::kRegular);
 
   if (policy_storage_ == PolicyStorageType::kOnDisk) {
     base::FilePath owner_key_path;
@@ -642,6 +653,11 @@ void FakeSessionManagerClient::GetServerBackedStateKeys(
   } else {
     PostReply(FROM_HERE, std::move(callback), server_backed_state_keys_);
   }
+}
+
+void FakeSessionManagerClient::GetPsmDeviceActiveSecret(
+    PsmDeviceActiveSecretCallback callback) {
+  PostReply(FROM_HERE, std::move(callback), psm_device_active_secret_);
 }
 
 void FakeSessionManagerClient::StartArcMiniContainer(

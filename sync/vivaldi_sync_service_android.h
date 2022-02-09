@@ -5,7 +5,6 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/macros.h"
 #include "components/sync/driver/sync_service_observer.h"
 
 namespace vivaldi {

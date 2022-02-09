@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -43,8 +44,10 @@ class PromptActionTest : public testing::Test {
 
   void SetUp() override {
     ON_CALL(mock_web_controller_, FindElement(_, _, _))
-        .WillByDefault(RunOnceCallback<2>(
-            ClientStatus(ELEMENT_RESOLUTION_FAILED), nullptr));
+        .WillByDefault(WithArgs<2>([](auto&& callback) {
+          std::move(callback).Run(ClientStatus(ELEMENT_RESOLUTION_FAILED),
+                                  std::make_unique<ElementFinder::Result>());
+        }));
     EXPECT_CALL(mock_action_delegate_, WaitForDom(_, _, _, _, _))
         .WillRepeatedly(Invoke(this, &PromptActionTest::FakeWaitForDom));
     ON_CALL(mock_action_delegate_, Prompt(_, _, _, _, _))
@@ -136,7 +139,7 @@ class PromptActionTest : public testing::Test {
   base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>
       fake_wait_for_dom_done_;
   ActionProto proto_;
-  PromptProto* prompt_proto_;
+  raw_ptr<PromptProto> prompt_proto_;
   std::unique_ptr<std::vector<UserAction>> user_actions_;
   std::unique_ptr<BatchElementChecker> checker_;
   bool has_check_elements_result_ = false;
@@ -186,32 +189,7 @@ TEST_F(PromptActionTest, SelectButtons) {
           Property(&ProcessedActionProto::prompt_choice,
                    Property(&PromptProto::Result::server_payload, "ok"))))));
   EXPECT_TRUE((*user_actions_)[0].HasCallback());
-  (*user_actions_)[0].Call(std::make_unique<TriggerContext>());
-}
-
-TEST_F(PromptActionTest, ReportDirectAction) {
-  // Ok has a chip and a direct action.
-  auto* ok_proto = prompt_proto_->add_choices();
-  ok_proto->mutable_chip()->set_text("Ok");
-  ok_proto->mutable_direct_action()->add_names("ok");
-  ok_proto->set_server_payload("ok");
-
-  // Maybe only has a mappings to direct actions.
-  auto* maybe_proto = prompt_proto_->add_choices();
-  maybe_proto->mutable_direct_action()->add_names("maybe");
-  maybe_proto->mutable_direct_action()->add_names("I_guess");
-  maybe_proto->set_server_payload("maybe");
-
-  PromptAction action(&mock_action_delegate_, proto_);
-  action.ProcessAction(callback_.Get());
-
-  ASSERT_THAT(user_actions_, Pointee(SizeIs(2)));
-
-  EXPECT_THAT((*user_actions_)[0].direct_action().names, ElementsAre("ok"));
-  EXPECT_FALSE((*user_actions_)[0].chip().empty());
-  EXPECT_THAT((*user_actions_)[1].direct_action().names,
-              UnorderedElementsAre("maybe", "I_guess"));
-  EXPECT_TRUE((*user_actions_)[1].chip().empty());
+  (*user_actions_)[0].RunCallback();
 }
 
 TEST_F(PromptActionTest, ShowOnlyIfElementExists) {
@@ -236,8 +214,10 @@ TEST_F(PromptActionTest, ShowOnlyIfElementExists) {
   ASSERT_THAT(user_actions_, Pointee(SizeIs(1)));
 
   EXPECT_CALL(mock_web_controller_, FindElement(Selector({"element"}), _, _))
-      .WillRepeatedly(
-          RunOnceCallback<2>(ClientStatus(ELEMENT_RESOLUTION_FAILED), nullptr));
+      .WillRepeatedly(WithArgs<2>([](auto&& callback) {
+        std::move(callback).Run(ClientStatus(ELEMENT_RESOLUTION_FAILED),
+                                std::make_unique<ElementFinder::Result>());
+      }));
   task_env_.FastForwardBy(base::Seconds(1));
   ASSERT_THAT(user_actions_, Pointee(IsEmpty()));
 }
@@ -274,7 +254,7 @@ TEST_F(PromptActionTest, TimingStatsUserAction) {
   ProcessedActionProto capture;
   EXPECT_CALL(callback_, Run(_)).WillOnce(SaveArgPointee<0>(&capture));
   EXPECT_TRUE((*user_actions_)[0].HasCallback());
-  (*user_actions_)[0].Call(std::make_unique<TriggerContext>());
+  (*user_actions_)[0].RunCallback();
   EXPECT_EQ(capture.timing_stats().active_time_ms(), 700);
   EXPECT_EQ(capture.timing_stats().wait_time_ms(), 2500);
 }
@@ -301,8 +281,10 @@ TEST_F(PromptActionTest, DisabledUnlessElementExists) {
   EXPECT_TRUE((*user_actions_)[0].enabled());
 
   EXPECT_CALL(mock_web_controller_, FindElement(Selector({"element"}), _, _))
-      .WillRepeatedly(
-          RunOnceCallback<2>(ClientStatus(ELEMENT_RESOLUTION_FAILED), nullptr));
+      .WillRepeatedly(WithArgs<2>([](auto&& callback) {
+        std::move(callback).Run(ClientStatus(ELEMENT_RESOLUTION_FAILED),
+                                std::make_unique<ElementFinder::Result>());
+      }));
   task_env_.FastForwardBy(base::Seconds(1));
   ASSERT_THAT(user_actions_, Pointee(SizeIs(1)));
   EXPECT_FALSE((*user_actions_)[0].enabled());
@@ -403,7 +385,7 @@ TEST_F(PromptActionTest, Terminate) {
   // Chips pointing to a deleted action do nothing.
   ASSERT_THAT(user_actions_, Pointee(SizeIs(1)));
   EXPECT_TRUE((*user_actions_)[0].HasCallback());
-  (*user_actions_)[0].Call(std::make_unique<TriggerContext>());
+  (*user_actions_)[0].RunCallback();
 }
 
 TEST_F(PromptActionTest, NoMessageSet) {

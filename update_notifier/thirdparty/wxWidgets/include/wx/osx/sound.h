@@ -16,9 +16,9 @@
 
 #include "wx/object.h"
 
-class WXDLLIMPEXP_FWD_ADV wxSoundTimer;
+class WXDLLIMPEXP_FWD_CORE wxSoundTimer;
 
-class WXDLLIMPEXP_ADV wxSoundData
+class WXDLLIMPEXP_CORE wxSoundData
 {
 public :
     wxSoundData();
@@ -27,23 +27,19 @@ public :
     virtual bool Play(unsigned int flags) = 0;
     // stops the sound and deletes the optional timer
     virtual void Stop();
-    // can be called by a timer for repeated tasks during playback
-    virtual void SoundTask();
     // mark this to be deleted
     virtual void MarkForDeletion();
     virtual bool IsMarkedForDeletion() const { return m_markedForDeletion; }
 
     // does the true work of stopping and cleaning up
     virtual void DoStop() = 0;
-protected :
-    void CreateAndStartTimer();
 
+protected:
     unsigned int m_flags;
-    wxSoundTimer* m_pTimer;
     bool m_markedForDeletion;
 } ;
 
-class WXDLLIMPEXP_ADV wxSound : public wxSoundBase
+class WXDLLIMPEXP_CORE wxSound : public wxSoundBase
 {
 public:
     wxSound();
@@ -68,7 +64,7 @@ public:
     static void SoundStopped(const wxSoundData* data);
 
 protected:
-    bool    DoPlay(unsigned flags) const;
+    bool    DoPlay(unsigned flags) const wxOVERRIDE;
     void    Init();
 
 private:

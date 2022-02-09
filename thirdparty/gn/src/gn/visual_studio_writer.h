@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "gn/path_output.h"
 
 namespace base {
@@ -31,6 +30,7 @@ class VisualStudioWriter {
     Vs2015,      // Visual Studio 2015
     Vs2017,      // Visual Studio 2017
     Vs2019,      // Visual Studio 2019
+    Vs2022,      // Visual Studio 2022
   };
 
   // Writes Visual Studio project and solution files. |sln_name| is the optional
@@ -47,6 +47,7 @@ class VisualStudioWriter {
                                const std::string& filters,
                                const std::string& win_sdk,
                                const std::string& ninja_extra_args,
+                               const std::string& ninja_executable,
                                bool no_deps,
                                Err* err);
 
@@ -55,6 +56,7 @@ class VisualStudioWriter {
   FRIEND_TEST_ALL_PREFIXES(VisualStudioWriterTest,
                            ResolveSolutionFolders_AbsPath);
   FRIEND_TEST_ALL_PREFIXES(VisualStudioWriterTest, NoDotSlash);
+  FRIEND_TEST_ALL_PREFIXES(VisualStudioWriterTest, NinjaExecutable);
 
   // Solution project or folder.
   struct SolutionEntry {
@@ -109,11 +111,13 @@ class VisualStudioWriter {
 
   bool WriteProjectFiles(const Target* target,
                          const std::string& ninja_extra_args,
+                         const std::string& ninja_executable,
                          Err* err);
   bool WriteProjectFileContents(std::ostream& out,
                                 const SolutionProject& solution_project,
                                 const Target* target,
                                 const std::string& ninja_extra_args,
+                                const std::string& ninja_executable,
                                 SourceFileCompileTypePairs* source_types,
                                 Err* err);
   void WriteFiltersFileContents(std::ostream& out,
@@ -162,7 +166,8 @@ class VisualStudioWriter {
   // Windows 10 SDK version string (e.g. 10.0.14393.0)
   std::string windows_sdk_version_;
 
-  DISALLOW_COPY_AND_ASSIGN(VisualStudioWriter);
+  VisualStudioWriter(const VisualStudioWriter&) = delete;
+  VisualStudioWriter& operator=(const VisualStudioWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_VISUAL_STUDIO_WRITER_H_

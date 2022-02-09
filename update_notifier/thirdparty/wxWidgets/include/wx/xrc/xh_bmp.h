@@ -16,22 +16,22 @@
 
 class WXDLLIMPEXP_XRC wxBitmapXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxBitmapXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxBitmapXmlHandler);
 
 public:
     wxBitmapXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 };
 
 class WXDLLIMPEXP_XRC wxIconXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxIconXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxIconXmlHandler);
 
 public:
     wxIconXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 };
 
 #endif // wxUSE_XRC

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/app_list/search/ranking/types.h"
 
+#include <stddef.h>
+
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -29,6 +31,20 @@ double Scoring::FinalScore() const {
              scoring.FinalScore(), scoring.normalized_relevance,
              scoring.category_item_score, scoring.category_usage_score,
              scoring.usage_score, scoring.top_match);
+}
+
+CategoriesList CreateAllCategories() {
+  CategoriesList res(
+      {{.category = Category::kApps, .score = 0.0},
+       {.category = Category::kAppShortcuts, .score = 0.0},
+       {.category = Category::kWeb, .score = 0.0},
+       {.category = Category::kFiles, .score = 0.0},
+       {.category = Category::kSettings, .score = 0.0},
+       {.category = Category::kHelp, .score = 0.0},
+       {.category = Category::kPlayStore, .score = 0.0},
+       {.category = Category::kSearchAndAssistant, .score = 0.0}});
+  DCHECK_EQ(res.size(), static_cast<size_t>(Category::kMaxValue));
+  return res;
 }
 
 }  // namespace app_list

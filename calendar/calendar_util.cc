@@ -37,14 +37,6 @@ calendar::EventRow GetEventRow(
     row.is_recurring = *event.is_recurring.get();
   }
 
-  if (event.start_recurring.get()) {
-    row.start_recurring = GetTime(*event.start_recurring.get());
-  }
-
-  if (event.end_recurring.get()) {
-    row.end_recurring = GetTime(*event.end_recurring.get());
-  }
-
   if (event.location.get()) {
     row.location = base::UTF8ToUTF16(*event.location);
   }
@@ -161,6 +153,14 @@ calendar::EventRow GetEventRow(
 
   if (event.completed.get()) {
     row.completed = GetTime(*event.completed.get());
+  }
+
+  if (event.sync_pending.get()) {
+    row.sync_pending = *event.sync_pending;
+  }
+
+  if (event.delete_pending.get()) {
+    row.delete_pending = *event.delete_pending;
   }
 
   return row;

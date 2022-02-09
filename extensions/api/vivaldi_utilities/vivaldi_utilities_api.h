@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2015-2022 Vivaldi Technologies AS. All rights reserved.
 //
 
 #ifndef EXTENSIONS_API_VIVALDI_UTILITIES_VIVALDI_UTILITIES_API_H_
@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/queue.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/power_monitor/power_observer.h"
@@ -28,6 +29,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
+#include "browser/translate/vivaldi_translate_server_request.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "ui/lights/razer_chroma_handler.h"
@@ -42,6 +44,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                             public base::PowerSuspendObserver,
                             public content::DownloadManager::Observer {
  public:
+  using MutexAvailableCallback = base::OnceCallback<void(int)>;
+
   explicit VivaldiUtilitiesAPI(content::BrowserContext* context);
   ~VivaldiUtilitiesAPI() override;
 
@@ -69,6 +73,11 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // Looks up an existing key/value pair, returns nullptr if the key does not
   // exist.
   const base::Value* GetSharedData(const std::string& key);
+
+  bool TakeMutex(const std::string& name,
+                 bool wait,
+                 MutexAvailableCallback callback);
+  bool ReleaseMutex(const std::string& name, int release_token);
 
   // Sets anchor rect for the named dialog. Returns true if the key didn't not
   // exist previously, false if it updated an existing value
@@ -133,6 +142,17 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>;
 
+  struct MutexData {
+    explicit MutexData(int release_token);
+    ~MutexData();
+
+    MutexData(MutexData&&);
+    MutexData& operator=(MutexData&&);
+
+    int release_token;
+    base::queue<std::pair<int, MutexAvailableCallback>> wait_list;
+  };
+
   void OsReauthCall(
       password_manager::ReauthPurpose purpose,
       password_manager::PasswordAccessAuthenticator::AuthResultCallback
@@ -147,6 +167,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // Map used for the *sharedData apis.
   std::map<std::string, base::Value*> key_to_values_map_;
+
+  std::map<std::string, MutexData> mutexes_;
 
   // List used for the dialog position apis.
   std::vector<std::unique_ptr<DialogPosition>> dialog_to_point_list_;
@@ -381,6 +403,31 @@ class UtilitiesGetSharedDataFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesGetSharedDataFunction() override = default;
+
+  ResponseAction Run() override;
+};
+
+class UtilitiesTakeMutexFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.takeMutex", UTILITIES_TAKEMUTEX)
+
+  UtilitiesTakeMutexFunction() = default;
+
+ private:
+  ~UtilitiesTakeMutexFunction() override = default;
+
+  ResponseAction Run() override;
+  void OnMutexAcquired(std::string name, int release_token);
+};
+
+class UtilitiesReleaseMutexFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.releaseMutex", UTILITIES_RELEASEMUTEX)
+
+  UtilitiesReleaseMutexFunction() = default;
+
+ private:
+  ~UtilitiesReleaseMutexFunction() override = default;
 
   ResponseAction Run() override;
 };
@@ -804,6 +851,28 @@ class UtilitiesGetMOAuthClientIdFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class UtilitiesGetYOAuthClientIdFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getYOAuthClientId",
+                             UTILITIES_GET_YAHOO_API_CLIENT_ID)
+  UtilitiesGetYOAuthClientIdFunction() = default;
+
+ private:
+  ~UtilitiesGetYOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetYOAuthClientSecretFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getYOAuthClientSecret",
+                             UTILITIES_GET_YAHOO_API_CLIENT_SECRET)
+  UtilitiesGetYOAuthClientSecretFunction() = default;
+
+ private:
+  ~UtilitiesGetYOAuthClientSecretFunction() override = default;
+  ResponseAction Run() override;
+};
+
 class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getCommandLineValue",
@@ -837,6 +906,23 @@ class UtilitiesOsDecryptFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnDecryptDone(std::unique_ptr<std::string> decrypted, bool result);
+};
+
+class UtilitiesTranslateTextFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.translateText", UTILITIES_TRANSLATE_TEXT)
+  UtilitiesTranslateTextFunction();
+
+ private:
+  ~UtilitiesTranslateTextFunction() override;
+  ResponseAction Run() override;
+
+  void OnTranslateFinished(::vivaldi::TranslateError error,
+                           std::string detected_source_language,
+                           std::vector<std::string> sourceText,
+                           std::vector<std::string> translatedText);
+
+  std::unique_ptr<::vivaldi::VivaldiTranslateServerRequest> request_;
 };
 
 }  // namespace extensions

@@ -5,7 +5,10 @@
 #include "chromeos/services/bluetooth_config/scoped_bluetooth_config_test_helper.h"
 
 #include "chromeos/services/bluetooth_config/fake_adapter_state_controller.h"
+#include "chromeos/services/bluetooth_config/fake_bluetooth_device_status_notifier.h"
+#include "chromeos/services/bluetooth_config/fake_bluetooth_power_controller.h"
 #include "chromeos/services/bluetooth_config/fake_device_cache.h"
+#include "chromeos/services/bluetooth_config/fake_device_name_manager.h"
 #include "chromeos/services/bluetooth_config/fake_device_operation_handler.h"
 #include "chromeos/services/bluetooth_config/fake_discovery_session_manager.h"
 #include "chromeos/services/bluetooth_config/in_process_instance.h"
@@ -31,9 +34,37 @@ ScopedBluetoothConfigTestHelper::CreateAdapterStateController(
   return fake_adapter_state_controller;
 }
 
+std::unique_ptr<BluetoothDeviceStatusNotifier>
+ScopedBluetoothConfigTestHelper::CreateBluetoothDeviceStatusNotifier(
+    DeviceCache* device_cache) {
+  auto fake_bluetooth_device_status_notifier =
+      std::make_unique<FakeBluetoothDeviceStatusNotifier>();
+  fake_bluetooth_device_status_notifier_ =
+      fake_bluetooth_device_status_notifier.get();
+  return fake_bluetooth_device_status_notifier;
+}
+
+std::unique_ptr<BluetoothPowerController>
+ScopedBluetoothConfigTestHelper::CreateBluetoothPowerController(
+    AdapterStateController* adapter_state_controller) {
+  auto fake_bluetooth_power_controller =
+      std::make_unique<FakeBluetoothPowerController>(adapter_state_controller);
+  fake_bluetooth_power_controller_ = fake_bluetooth_power_controller.get();
+  return fake_bluetooth_power_controller;
+}
+
+std::unique_ptr<DeviceNameManager>
+ScopedBluetoothConfigTestHelper::CreateDeviceNameManager(
+    scoped_refptr<device::BluetoothAdapter> bluetooth_adapter) {
+  auto fake_device_name_manager = std::make_unique<FakeDeviceNameManager>();
+  fake_device_name_manager_ = fake_device_name_manager.get();
+  return fake_device_name_manager;
+}
+
 std::unique_ptr<DeviceCache> ScopedBluetoothConfigTestHelper::CreateDeviceCache(
     AdapterStateController* adapter_state_controller,
-    scoped_refptr<device::BluetoothAdapter> bluetooth_adapter) {
+    scoped_refptr<device::BluetoothAdapter> bluetooth_adapter,
+    DeviceNameManager* device_name_manager) {
   auto fake_device_cache =
       std::make_unique<FakeDeviceCache>(adapter_state_controller);
   fake_device_cache_ = fake_device_cache.get();

@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
 #include "v8/include/v8.h"
 
 namespace extensions {
@@ -67,10 +66,6 @@ class APIBindingHooks {
 
   // Returns a JS interface that can be used to register hooks.
   v8::Local<v8::Object> GetJSHookInterface(v8::Local<v8::Context> context);
-
-  // Gets the custom-set JS callback for the given method, if one exists.
-  v8::Local<v8::Function> GetCustomJSCallback(const std::string& method_name,
-                                              v8::Local<v8::Context> context);
 
   // Creates a new JS event for the given |event_name|, if a custom event is
   // provided. Returns true if an event was created.

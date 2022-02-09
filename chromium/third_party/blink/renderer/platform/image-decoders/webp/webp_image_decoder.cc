@@ -46,34 +46,34 @@ namespace {
 
 // Returns two point ranges (<left, width> pairs) at row |canvasY| which belong
 // to |src| but not |dst|. A range is empty if its width is 0.
-inline void findBlendRangeAtRow(const blink::IntRect& src,
-                                const blink::IntRect& dst,
+inline void findBlendRangeAtRow(const gfx::Rect& src,
+                                const gfx::Rect& dst,
                                 int canvasY,
                                 int& left1,
                                 int& width1,
                                 int& left2,
                                 int& width2) {
-  SECURITY_DCHECK(canvasY >= src.Y() && canvasY < src.MaxY());
+  SECURITY_DCHECK(canvasY >= src.y() && canvasY < src.bottom());
   left1 = -1;
   width1 = 0;
   left2 = -1;
   width2 = 0;
 
-  if (canvasY < dst.Y() || canvasY >= dst.MaxY() || src.X() >= dst.MaxX() ||
-      src.MaxX() <= dst.X()) {
-    left1 = src.X();
-    width1 = src.Width();
+  if (canvasY < dst.y() || canvasY >= dst.bottom() || src.x() >= dst.right() ||
+      src.right() <= dst.x()) {
+    left1 = src.x();
+    width1 = src.width();
     return;
   }
 
-  if (src.X() < dst.X()) {
-    left1 = src.X();
-    width1 = dst.X() - src.X();
+  if (src.x() < dst.x()) {
+    left1 = src.x();
+    width1 = dst.x() - src.x();
   }
 
-  if (src.MaxX() > dst.MaxX()) {
-    left2 = dst.MaxX();
-    width2 = src.MaxX() - dst.MaxX();
+  if (src.right() > dst.right()) {
+    left2 = dst.right();
+    width2 = src.right() - dst.right();
   }
 }
 
@@ -399,7 +399,7 @@ void WEBPImageDecoder::OnInitFrameBuffer(wtf_size_t frame_index) {
       buffer.RequiredPreviousFrameIndex();
   if (required_previous_frame_index == kNotFound) {
     frame_background_has_alpha_ =
-        !buffer.OriginalFrameRect().Contains(IntRect(IntPoint(), Size()));
+        !buffer.OriginalFrameRect().Contains(gfx::Rect(Size()));
   } else {
     const ImageFrame& prev_buffer =
         frame_buffer_cache_[required_previous_frame_index];
@@ -439,26 +439,26 @@ void WEBPImageDecoder::DecodeToYUV() {
   }
 }
 
-IntSize WEBPImageDecoder::DecodedYUVSize(cc::YUVIndex index) const {
+gfx::Size WEBPImageDecoder::DecodedYUVSize(cc::YUVIndex index) const {
   DCHECK(IsDecodedSizeAvailable());
   switch (index) {
     case cc::YUVIndex::kY:
       return Size();
     case cc::YUVIndex::kU:
     case cc::YUVIndex::kV:
-      return IntSize((Size().Width() + 1) / 2, (Size().Height() + 1) / 2);
+      return gfx::Size((Size().width() + 1) / 2, (Size().height() + 1) / 2);
   }
   NOTREACHED();
-  return IntSize(0, 0);
+  return gfx::Size(0, 0);
 }
 
 wtf_size_t WEBPImageDecoder::DecodedYUVWidthBytes(cc::YUVIndex index) const {
   switch (index) {
     case cc::YUVIndex::kY:
-      return base::checked_cast<wtf_size_t>(Size().Width());
+      return base::checked_cast<wtf_size_t>(Size().width());
     case cc::YUVIndex::kU:
     case cc::YUVIndex::kV:
-      return base::checked_cast<wtf_size_t>((Size().Width() + 1) / 2);
+      return base::checked_cast<wtf_size_t>((Size().width() + 1) / 2);
   }
   NOTREACHED();
   return 0;
@@ -533,11 +533,11 @@ void WEBPImageDecoder::ApplyPostProcessing(wtf_size_t frame_index) {
   if (decoded_height <= 0)
     return;
 
-  const IntRect& frame_rect = buffer.OriginalFrameRect();
-  SECURITY_DCHECK(width == frame_rect.Width());
-  SECURITY_DCHECK(decoded_height <= frame_rect.Height());
-  const int left = frame_rect.X();
-  const int top = frame_rect.Y();
+  const gfx::Rect& frame_rect = buffer.OriginalFrameRect();
+  SECURITY_DCHECK(width == frame_rect.width());
+  SECURITY_DCHECK(decoded_height <= frame_rect.height());
+  const int left = frame_rect.x();
+  const int top = frame_rect.y();
 
   // TODO (msarett):
   // Here we apply the color space transformation to the dst space.
@@ -586,7 +586,7 @@ void WEBPImageDecoder::ApplyPostProcessing(wtf_size_t frame_index) {
         blend_function_(buffer, prev_buffer, top + y, left, width);
       }
     } else if (prev_disposal_method == ImageFrame::kDisposeOverwriteBgcolor) {
-      const IntRect& prev_rect = prev_buffer.OriginalFrameRect();
+      const gfx::Rect& prev_rect = prev_buffer.OriginalFrameRect();
       // We need to blend a transparent pixel with the starting value (from just
       // after the InitFrame() call). If the pixel belongs to prev_rect, the
       // starting value was fully transparent, so this is a no-op. Otherwise, we
@@ -625,10 +625,9 @@ void WEBPImageDecoder::InitializeNewFrame(wtf_size_t index) {
   WebPDemuxGetFrame(demux_, index + 1, &animated_frame);
   DCHECK_EQ(animated_frame.complete, 1);
   ImageFrame* buffer = &frame_buffer_cache_[index];
-  IntRect frame_rect(animated_frame.x_offset, animated_frame.y_offset,
-                     animated_frame.width, animated_frame.height);
-  buffer->SetOriginalFrameRect(
-      Intersection(frame_rect, IntRect(IntPoint(), Size())));
+  gfx::Rect frame_rect(animated_frame.x_offset, animated_frame.y_offset,
+                       animated_frame.width, animated_frame.height);
+  buffer->SetOriginalFrameRect(IntersectRects(frame_rect, gfx::Rect(Size())));
   buffer->SetDuration(base::Milliseconds(animated_frame.duration));
   buffer->SetDisposalMethod(animated_frame.dispose_method ==
                                     WEBP_MUX_DISPOSE_BACKGROUND
@@ -713,13 +712,13 @@ bool WEBPImageDecoder::DecodeSingleFrameToYUV(const uint8_t* data_bytes,
     // libwebp only supports YUV 420 subsampling
     decoder_buffer_.u.YUVA.y_stride = image_planes->RowBytes(cc::YUVIndex::kY);
     decoder_buffer_.u.YUVA.y_size = decoder_buffer_.u.YUVA.y_stride *
-                                    DecodedYUVSize(cc::YUVIndex::kY).Height();
+                                    DecodedYUVSize(cc::YUVIndex::kY).height();
     decoder_buffer_.u.YUVA.u_stride = image_planes->RowBytes(cc::YUVIndex::kU);
     decoder_buffer_.u.YUVA.u_size = decoder_buffer_.u.YUVA.u_stride *
-                                    DecodedYUVSize(cc::YUVIndex::kU).Height();
+                                    DecodedYUVSize(cc::YUVIndex::kU).height();
     decoder_buffer_.u.YUVA.v_stride = image_planes->RowBytes(cc::YUVIndex::kV);
     decoder_buffer_.u.YUVA.v_size = decoder_buffer_.u.YUVA.v_stride *
-                                    DecodedYUVSize(cc::YUVIndex::kV).Height();
+                                    DecodedYUVSize(cc::YUVIndex::kV).height();
 
     decoder_buffer_.is_external_memory = 1;
     decoder_ = WebPINewDecoder(&decoder_buffer_);
@@ -752,7 +751,7 @@ bool WEBPImageDecoder::DecodeSingleFrame(const uint8_t* data_bytes,
   DCHECK_NE(buffer.GetStatus(), ImageFrame::kFrameComplete);
 
   if (buffer.GetStatus() == ImageFrame::kFrameEmpty) {
-    if (!buffer.AllocatePixelData(Size().Width(), Size().Height(),
+    if (!buffer.AllocatePixelData(Size().width(), Size().height(),
                                   ColorSpaceForSkImages())) {
       return SetFailed();
     }
@@ -762,25 +761,25 @@ bool WEBPImageDecoder::DecodeSingleFrame(const uint8_t* data_bytes,
     // is loading. The correct alpha value for the frame will be set when
     // it is fully decoded.
     buffer.SetHasAlpha(true);
-    buffer.SetOriginalFrameRect(IntRect(IntPoint(), Size()));
+    buffer.SetOriginalFrameRect(gfx::Rect(Size()));
   }
 
-  const IntRect& frame_rect = buffer.OriginalFrameRect();
+  const gfx::Rect& frame_rect = buffer.OriginalFrameRect();
   if (!decoder_) {
     // Set up decoder_buffer_ with output mode
     WebPInitDecBuffer(&decoder_buffer_);
     decoder_buffer_.colorspace = RGBOutputMode();
     decoder_buffer_.u.RGBA.stride =
-        Size().Width() * sizeof(ImageFrame::PixelData);
+        Size().width() * sizeof(ImageFrame::PixelData);
     decoder_buffer_.u.RGBA.size =
-        decoder_buffer_.u.RGBA.stride * frame_rect.Height();
+        decoder_buffer_.u.RGBA.stride * frame_rect.height();
     decoder_buffer_.is_external_memory = 1;
     decoder_ = WebPINewDecoder(&decoder_buffer_);
     if (!decoder_)
       return SetFailed();
   }
   decoder_buffer_.u.RGBA.rgba = reinterpret_cast<uint8_t*>(
-      buffer.GetAddr(frame_rect.X(), frame_rect.Y()));
+      buffer.GetAddr(frame_rect.x(), frame_rect.y()));
 
   switch (WebPIUpdate(decoder_, data_bytes, data_size)) {
     case VP8_STATUS_OK:

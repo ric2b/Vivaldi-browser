@@ -9,7 +9,6 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "media/base/callback_registry.h"
 #include "media/base/cdm_context.h"
 #include "media/base/cdm_promise_adapter.h"
@@ -45,6 +44,9 @@ class FuchsiaCdm : public ContentDecryptionModule,
   FuchsiaCdm(fuchsia::media::drm::ContentDecryptionModulePtr cdm,
              ReadyCB ready_cb,
              SessionCallbacks callbacks);
+
+  FuchsiaCdm(const FuchsiaCdm&) = delete;
+  FuchsiaCdm& operator=(const FuchsiaCdm&) = delete;
 
   // ContentDecryptionModule implementation:
   void SetServerCertificate(const std::vector<uint8_t>& certificate,
@@ -118,8 +120,6 @@ class FuchsiaCdm : public ContentDecryptionModule,
       GUARDED_BY(new_key_callbacks_lock_);
 
   CallbackRegistry<EventCB::RunType> event_callbacks_;
-
-  DISALLOW_COPY_AND_ASSIGN(FuchsiaCdm);
 };
 
 }  // namespace media

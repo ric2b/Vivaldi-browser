@@ -13,10 +13,10 @@
 
 #include "base/containers/queue.h"
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "media/base/bitrate.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/vaapi/vaapi_utils.h"
@@ -29,7 +29,8 @@ namespace media {
 // A VideoEncodeAccelerator implementation that uses VA-API
 // (https://01.org/vaapi) for HW-accelerated video encode.
 class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
-    : public VideoEncodeAccelerator {
+    : public VideoEncodeAccelerator,
+      public base::trace_event::MemoryDumpProvider {
  public:
   VaapiVideoEncodeAccelerator();
 
@@ -53,10 +54,15 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   void Flush(FlushCallback flush_callback) override;
   bool IsFlushSupported() override;
 
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
  private:
   friend class VaapiVideoEncodeAcceleratorTest;
 
   using EncodeJob = VaapiVideoEncoderDelegate::EncodeJob;
+  using EncodeResult = VaapiVideoEncoderDelegate::EncodeResult;
 
   // Encoder state.
   enum State {
@@ -75,11 +81,15 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
 
   // Maximum size is four to support the worst case of a given input of a
   // different resolution than the maximum number of spatial layers (3).
+  static constexpr size_t kMaxNumSpatialLayersPlusOne = 3 + 1;
   using ScopedVASurfacesMap =
       base::small_map<std::map<gfx::Size,
                                std::vector<std::unique_ptr<ScopedVASurface>>,
                                SizeComparator>,
-                      4>;
+                      kMaxNumSpatialLayersPlusOne>;
+  using ScopedVASurfacesCountMap =
+      base::small_map<std::map<gfx::Size, size_t, SizeComparator>,
+                      kMaxNumSpatialLayersPlusOne>;
 
   // Holds input frames coming from the client ready to be encoded.
   struct InputFrameRef;
@@ -136,6 +146,7 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   bool CreateSurfacesIfNeeded(
       VaapiWrapper& vaapi_wrapper,
       ScopedVASurfacesMap& scoped_surfaces_map,
+      ScopedVASurfacesCountMap& scoped_surfaces_count_map,
       const gfx::Size& encode_size,
       const std::vector<VaapiWrapper::SurfaceUsageHint>& surface_usage_hints,
       size_t num_surfaces);
@@ -163,15 +174,6 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   // able to create new EncodeJobs.
   void EncodePendingInputs();
 
-  // Uploads image data from |frame| to |va_surface_id|.
-  void UploadFrame(scoped_refptr<VideoFrame> frame,
-                   VASurfaceID va_surface_id,
-                   const gfx::Size& va_surface_size);
-
-  // Executes encode in hardware. This does not block and may return before
-  // the job is finished.
-  void ExecuteEncode(VASurfaceID va_surface_id);
-
   // Callback that returns a no longer used ScopedVASurface to
   // |va_surfaces| for reuse and kicks EncodePendingInputs() again.
   void RecycleVASurface(
@@ -184,14 +186,14 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   scoped_refptr<VASurface> GetAvailableVASurfaceAsRefCounted(
       std::vector<std::unique_ptr<ScopedVASurface>>* va_surfaces);
 
-  // Returns a bitstream buffer to the client if both a previously executed job
-  // awaits to be completed and we have bitstream buffers available to download
+  // Returns pending bitstream buffers to the client if we have both pending
+  // encoded data to be completed and bitstream buffers available to download
   // the encoded data into.
-  void TryToReturnBitstreamBuffer();
+  void TryToReturnBitstreamBuffers();
 
-  // Downloads encoded data produced as a result of running |encode_job| into
+  // Downloads encoded data produced as a result of running |encode_result| into
   // |buffer|, and returns it to the client.
-  void ReturnBitstreamBuffer(std::unique_ptr<EncodeJob> encode_job,
+  void ReturnBitstreamBuffer(std::unique_ptr<EncodeResult> encode_result,
                              std::unique_ptr<BitstreamBufferRef> buffer);
 
   // Puts the encoder into en error state and notifies the client
@@ -252,6 +254,13 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   // surfaces for encoding indexed by a layer resolution..
   ScopedVASurfacesMap available_vpp_dest_surfaces_;
 
+  // Map of the number of allocated input or reconstructed surfaces for encoding
+  // indexed by a layer resolution.
+  ScopedVASurfacesCountMap encode_surfaces_count_;
+  // Map of the number of allocated destination surfaces for scaling and
+  // cropping, and input surfaces for encoding indexed by a layer resolution..
+  ScopedVASurfacesCountMap vpp_dest_surfaces_count_;
+
   // VA buffers for coded frames.
   std::vector<VABufferID> available_va_buffer_ids_;
 
@@ -261,9 +270,9 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   // BitstreamBuffers mapped, ready to be filled with encoded stream data.
   base::queue<std::unique_ptr<BitstreamBufferRef>> available_bitstream_buffers_;
 
-  // Jobs submitted to driver for encode, awaiting bitstream buffers to become
-  // available.
-  base::queue<std::unique_ptr<EncodeJob>> submitted_encode_jobs_;
+  // VASurfaces already encoded and waiting for the bitstream buffer to
+  // be downloaded.
+  base::queue<std::unique_ptr<EncodeResult>> pending_encode_results_;
 
   // Task runner for interacting with the client, and its checker.
   const scoped_refptr<base::SingleThreadTaskRunner> child_task_runner_;

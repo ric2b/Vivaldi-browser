@@ -11,18 +11,30 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
 
 <histograms>
 
+<variants name="CleanupHandler">
+  <variant name="BrowsingData" summary="Handler for browsing data"/>
+  <variant name="Clipboard" summary="Handler for clipboard"/>
+  <variant name="Extension" summary="Handler for extensions"/>
+  <variant name="Files" summary="Handler for files"/>
+  <variant name="OpenWindows" summary="Handler for open browser windows"/>
+  <variant name="PrintJobs" summary="Handler for print jobs"/>
+</variants>
+
 <variants name="Enterprise_RemoteCommandType">
   <variant name=".BrowserClearBrowsingData" summary="Clear Browsing Data"/>
+  <variant name=".BrowserRotateAttestationCredential"
+      summary="Rotate Attestation Credential"/>
   <variant name=".CommandEchoTest" summary="Command echo test"/>
   <variant name=".DeviceFetchStatus" summary="Fetch status"/>
   <variant name=".DeviceGetAvailableDiagnosticRoutines"
@@ -63,7 +75,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.ActiveDirectoryJoin"
-    enum="ActiveDirectoryDomainJoinType" expires_after="M97">
+    enum="ActiveDirectoryDomainJoinType" expires_after="M104">
   <owner>fsandrade@chromium.org</owner>
   <owner>tomdobro@chromium.org</owner>
   <summary>
@@ -155,9 +167,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Enterprise.AutoEnrollmentHashDanceSuccessTime{EnterpriseAutoEnrollmentType}"
-    units="ms" expires_after="2022-01-09">
-  <owner>amraboelkher@google.com</owner>
-  <owner>mpolzer@google.com</owner>
+    units="ms" expires_after="2022-07-09">
+  <owner>amraboelkher@chromium.org</owner>
+  <owner>igorcov@chromium.org</owner>
   <summary>
     Duration of the hash dance to determine enrollment state of the device. Only
     recorded if the hash dance finished successfully.
@@ -233,12 +245,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Enterprise.AutoEnrollmentPsmDmServerRequestStatus{EnterpriseAutoEnrollmentType}"
-    enum="EnterpriseDeviceManagementStatus" expires_after="2021-10-31">
-  <owner>amraboelkher@google.com</owner>
-  <owner>mpolzer@google.com</owner>
+    enum="EnterpriseDeviceManagementStatus" expires_after="2022-10-31">
+  <owner>amraboelkher@chromium.org</owner>
+  <owner>igorcov@chromium.org</owner>
   <summary>
     Device management server request status for auto-enrollment PSM requests.
     {EnterpriseAutoEnrollmentType}
+
+    The histogram was expired (not recording data) from 2021-10-31 until
+    2021-11-09.
   </summary>
   <token key="EnterpriseAutoEnrollmentType"
       variants="EnterpriseAutoEnrollmentType">
@@ -264,12 +279,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Enterprise.AutoEnrollmentPsmRequestNetworkErrorCode{EnterpriseAutoEnrollmentType}"
-    enum="NetErrorCodes" expires_after="2021-10-31">
-  <owner>amraboelkher@google.com</owner>
-  <owner>mpolzer@google.com</owner>
+    enum="NetErrorCodes" expires_after="2022-10-31">
+  <owner>amraboelkher@chromium.org</owner>
+  <owner>igorcov@chromium.org</owner>
   <summary>
     Network error code (if applicable) for auto-enrollment PSM requests.
     {EnterpriseAutoEnrollmentType}
+
+    The histogram was expired (not recording data) from 2021-10-31 until
+    2021-11-09.
   </summary>
   <token key="EnterpriseAutoEnrollmentType"
       variants="EnterpriseAutoEnrollmentType">
@@ -279,13 +297,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Enterprise.AutoEnrollmentPsmResult{EnterpriseAutoEnrollmentType}"
-    enum="PsmResult" expires_after="2021-10-31">
-  <owner>amraboelkher@google.com</owner>
-  <owner>mpolzer@google.com</owner>
+    enum="PsmResult" expires_after="2022-10-31">
+  <owner>amraboelkher@chromium.org</owner>
+  <owner>igorcov@chromium.org</owner>
   <summary>
     All possible PSM protocol results after it has executed succcessfully or
     terminated due to an error or timeout. This request is used to determine the
     initial enrollment state of the device. {EnterpriseAutoEnrollmentType}
+
+    The histogram was expired (not recording data) from 2021-10-31 until
+    2021-11-09.
   </summary>
   <token key="EnterpriseAutoEnrollmentType"
       variants="EnterpriseAutoEnrollmentType">
@@ -367,7 +388,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMPolicyInvalidations"
-    enum="EnterprisePolicyInvalidations" expires_after="2022-01-01">
+    enum="EnterprisePolicyInvalidations" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -379,7 +400,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMPolicyRefresh" enum="EnterprisePolicyRefresh"
-    expires_after="2022-04-24">
+    expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -420,7 +441,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMRemoteCommand.Executed"
-    enum="RemoteCommandExecutionStatus" expires_after="2022-01-01">
+    enum="RemoteCommandExecutionStatus" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -431,7 +452,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMRemoteCommand.Executed.Unsigned"
-    enum="RemoteCommandExecutionStatus" expires_after="2022-01-01">
+    enum="RemoteCommandExecutionStatus" expires_after="2023-01-15">
+  <obsolete>
+    Removed in M97 since unsigned commands are no longer supported.
+  </obsolete>
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -442,7 +466,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMRemoteCommand.Received"
-    enum="RemoteCommandReceivedStatus" expires_after="2022-01-01">
+    enum="RemoteCommandReceivedStatus" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -454,7 +478,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMRemoteCommand.Received.Unsigned"
-    enum="RemoteCommandReceivedStatus" expires_after="2022-01-01">
+    enum="RemoteCommandReceivedStatus" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -466,7 +490,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.CBCMRemoteCommandInvalidations"
-    enum="EnterprisePolicyInvalidations" expires_after="2022-01-01">
+    enum="EnterprisePolicyInvalidations" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -639,6 +663,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="Enterprise.DeviceRemoteCommand.Executed.Unsigned{Enterprise_RemoteCommandType}"
     enum="RemoteCommandExecutionStatus" expires_after="2022-03-01">
+  <obsolete>
+    Removed in M97 since unsigned commands are no longer supported.
+  </obsolete>
   <owner>asumaneev@google.com</owner>
   <owner>managed-platforms@google.com</owner>
   <summary>
@@ -713,7 +740,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Enterprise.DeviceSettings.MissingPolicyMitigated"
     units="BooleanSuccess" expires_after="2022-10-04">
-  <owner>poromov@chromium.org</owner>
+  <owner>rbock@google.com</owner>
   <owner>managed-devices@google.com</owner>
   <summary>
     Recorded every time policy file is missing or corrupted on Chrome OS. Should
@@ -724,13 +751,142 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Enterprise.DeviceSettings.UpdatedStatus"
     enum="DeviceSettingsStatus" expires_after="2022-10-04">
-  <owner>poromov@chromium.org</owner>
+  <owner>rbock@google.com</owner>
   <owner>managed-devices@google.com</owner>
   <summary>
     Recorded every time as DeviceSettingsProvider updates its current state.
     Used to compare rate of Enterprise.DeviceSettings.MissingPolicyMitigated
     event.
   </summary>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.Attestation.Funnel"
+    enum="DTAttestationFunnelStep" expires_after="2022-08-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Various steps recorded when a device goes through the device trust connector
+    attestation flow with a partner website.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.Attestation.ResponseLatency.{Variant}"
+    units="ms" expires_after="2022-07-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Latency of a {Variant} attestation step in the overarching Device Trust
+    connector's attestation flow. This measures the amount of time required to
+    generate and return a response to the given challenge, which is effectively
+    the last step in the overall attestation flow.
+  </summary>
+  <token key="Variant">
+    <variant name="Failure" summary="failed"/>
+    <variant name="Success" summary="successful"/>
+  </token>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.Attestation.Result"
+    enum="DTAttestationResult" expires_after="2022-08-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Result of the attestation step in the overarching Device Trust connector's
+    attestation flow. Logged whenever the attestation step finishes, success or
+    failure, and right before the throttled request resumes.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.Key.TrustLevel" enum="DTKeyTrustLevel"
+    expires_after="2022-08-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Recorded every time a Device Trust signing key is successfully loaded from
+    persistence. This captures what trust level this key has, which in turn
+    gives insights into how it was created (e.g. via a TPM or not).
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.Key.Type" enum="DTKeyType"
+    expires_after="2022-08-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Recorded every time a Device Trust signing key is successfully loaded from
+    persistence. This captures what algorithm this key was generated with.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.Key.{Variant}Result"
+    enum="DTKeyRotationResult" expires_after="2022-08-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Recorded every time the browser attempted to {Variant} a Device Trust
+    signing key. This captures the result from this process.
+  </summary>
+  <token key="Variant">
+    <variant name="Creation" summary="create (i.e. without nonce)"/>
+    <variant name="Rotation" summary="rotate (i.e. with nonce)"/>
+  </token>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.RotateSigningKey.Tries" units="tries"
+    expires_after="2022-07-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Recorded when a device attempts to rotate its device trust signing key.
+    Chrome will retry a fixed number of times until the operation either
+    succeeds or fails. A value of 1 means the rotation worked on the first try.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.RotateSigningKey.{Nonce}.Status"
+    enum="DeviceTrustKeyRotationStatus" expires_after="2022-07-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Recorded when a device attempts to rotate its device trust signing key.
+    {Nonce}
+  </summary>
+  <token key="Nonce">
+    <variant name="NoNonce"
+        summary="This occurs right after the device is enrolled with CBCM."/>
+    <variant name="WithNonce"
+        summary="This occurs when a device receives a command from the admin
+                 console."/>
+  </token>
+</histogram>
+
+<histogram name="Enterprise.DeviceTrust.SignalsDecorator.Latency.{Variant}"
+    units="ms" expires_after="2022-07-01">
+  <owner>hmare@google.com</owner>
+  <owner>rogerta@chromium.org</owner>
+  <owner>seblalancette@chromium.org</owner>
+  <summary>
+    Latency recorded when the {Variant} decorator(s) finish collecting their
+    signals. Captures the amount of time required to collect the signals under
+    this scope.
+  </summary>
+  <token key="Variant">
+    <variant name="Ash" summary="Ash"/>
+    <variant name="Browser" summary="Browser (without cache)"/>
+    <variant name="Browser.WithCache" summary="Browser (with cache)"/>
+    <variant name="Common" summary="Common (without cache)"/>
+    <variant name="Common.WithCache" summary="Common (with cache)"/>
+    <variant name="Content" summary="Content"/>
+    <variant name="Full" summary="full set of"/>
+  </token>
 </histogram>
 
 <histogram name="Enterprise.Dlp.CaptureModeInitBlocked" enum="BooleanBlocked"
@@ -849,6 +1005,27 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.Dlp.ReportedWarnLevelRestriction"
+    enum="EnterpriseDlpPolicyRestriction" expires_after="2022-05-01">
+  <owner>jkopanski@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when Data Leak Prevention event with &quot;warn&quot; level was
+    reported. Identifies which restriction was reported.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.Dlp.ReportedWarnProceedLevelRestriction"
+    enum="EnterpriseDlpPolicyRestriction" expires_after="2022-05-01">
+  <owner>jkopanski@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when Data Leak Prevention event with &quot;warn&quot; level was
+    reported after a user proceeded with a restricted action. Identifies which
+    restriction was reported.
+  </summary>
+</histogram>
+
 <histogram name="Enterprise.Dlp.RestrictionConfigured"
     enum="EnterpriseDlpPolicyRestriction" expires_after="2022-05-01">
   <owner>poromov@chromium.org</owner>
@@ -883,12 +1060,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
-    Result of Data Leak Prevention evaluation for taking a screenshot.
+    Result of Data Leak Prevention evaluation for taking a screenshot or a video
+    capture.
   </summary>
 </histogram>
 
 <histogram name="Enterprise.Dlp.VideoCaptureBlocked" enum="BooleanBlocked"
-    expires_after="2022-05-01">
+    expires_after="M98">
+  <obsolete>
+    Deprecated after M98. Events of this type are now included in
+    Enterprise.Dlp.ScreenshotBlocked.
+  </obsolete>
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -906,8 +1088,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.DMServerRequestSuccess{EnterpriseDMServerRequest}"
-    enum="EnterpriseDMServerRequestSuccess" expires_after="2021-12-12">
-  <owner>poromov@chromium.org</owner>
+    enum="EnterpriseDMServerRequestSuccess" expires_after="2022-11-30">
+  <owner>rbock@google.com</owner>
   <owner>managed-devices@google.com</owner>
   <summary>
     Number of retries the client did to execute a DeviceManagementServer
@@ -919,105 +1101,105 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     <variant name=""/>
     <variant name=".ActiveDirectoryEnrollPlayUser"
         summary="Active Directory Enroll Play User.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".ActiveDirectoryPlayActivity"
         summary="Active Directory Play Activity.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".AndroidManagementCheck" summary="Android Management Check.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".ApiAuthCodeFetch" summary="Api Auth Code Fetch.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".AttributeUpdate" summary="Attribute Update.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".AttributeUpdatePermission"
         summary="Attribute Update Permission.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".AutoEnrollment" summary="Auto Enrollment.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".CertBasedRegistration" summary="Cert Based Registration.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".ChromeDesktopReport" summary="Chrome Desktop Report.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".DeviceStateRetrieval" summary="Device State Retrieval.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".GcmIdUpdate" summary="Gcm Id Update.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".InitialEnrollmentStateRetrieval"
         summary="Initial Enrollment State Retrieval.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".Invalid" summary="Invalid.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".PolicyFetch" summary="Policy Fetch.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".Registration" summary="Registration.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".RemoteCommands" summary="Remote Commands.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".RequestLicenseTypes" summary="Request License Types.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".TokenEnrollment" summary="Token Enrollment.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".Unregistration" summary="Unregistration.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".UploadAppInstallReport"
         summary="Upload App Install Report.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".UploadCertificate" summary="Upload Certificate.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".UploadPolicyValidationReport"
         summary="Upload Policy Validation Report.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".UploadrealtimeReport"
         summary="Upload of real-time reports.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
     <variant name=".UploadStatus" summary="Upload Status.">
-      <owner>poromov@chromium.org</owner>
+      <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
   </token>
@@ -1264,7 +1446,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.FCMInvalidationService.CBCMPolicyInvalidations"
-    enum="EnterprisePolicyInvalidations" expires_after="2022-05-01">
+    enum="EnterprisePolicyInvalidations" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>chrome-enterprise-team-core@google.com</owner>
   <summary>
@@ -1278,7 +1460,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.FCMInvalidationService.CBCMPolicyRefresh"
-    enum="EnterprisePolicyRefresh" expires_after="2022-01-01">
+    enum="EnterprisePolicyRefresh" expires_after="2023-01-15">
   <owner>anthonyvd@chromium.org</owner>
   <owner>chrome-enterprise-team-core@google.com</owner>
   <summary>
@@ -1538,6 +1720,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.LoginApiCleanup.{CleanupHandler}.Success"
+    enum="BooleanSuccess" expires_after="2022-12-31">
+  <owner>jityao@google.com</owner>
+  <owner>hendrich@chromium.org</owner>
+  <summary>ChromeOS only. Records if cleanup handler succeeded.</summary>
+  <token key="CleanupHandler" variants="CleanupHandler"/>
+</histogram>
+
+<histogram name="Enterprise.LoginApiCleanup.{CleanupHandler}.Timing" units="ms"
+    expires_after="2022-12-31">
+  <owner>jityao@google.com</owner>
+  <owner>hendrich@chromium.org</owner>
+  <summary>
+    ChromeOS only. Records the duration the cleanup handler took.
+  </summary>
+  <token key="CleanupHandler" variants="CleanupHandler"/>
+</histogram>
+
 <histogram
     name="Enterprise.MachineLevelUserCloudPolicyEnrollment.RequestFailureTime"
     units="ms" expires_after="2022-06-01">
@@ -1664,6 +1864,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Enterprise.Policies.SourceConflicts" enum="PolicyAtomicGroups"
     expires_after="2021-11-01">
+  <obsolete>
+    Removed in Oct 2021.
+  </obsolete>
   <owner>ydago@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1789,7 +1992,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Enterprise.PolicyUserVerification"
     enum="EnterprisePolicyUserVerification" expires_after="2022-04-17">
   <owner>poromov@chromium.org</owner>
-  <owner>chromeos-commercial-stability@google.com</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>Tracking the results of policy user verification.</summary>
 </histogram>
 
@@ -2097,7 +2300,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.UserPolicyChromeOS.ChildUser.OAuthTokenError"
-    enum="GoogleServiceAuthError" expires_after="2022-02-20">
+    enum="GoogleServiceAuthError" expires_after="2022-04-24">
   <owner>agawronska@chromium.org</owner>
   <owner>michaelpg@chromium.org</owner>
   <summary>Failure reason for OAuth token fetch for child user.</summary>
@@ -2207,6 +2410,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="Enterprise.UserRemoteCommand.Executed.Unsigned{Enterprise_RemoteCommandType}"
     enum="RemoteCommandExecutionStatus" expires_after="2022-03-01">
+  <obsolete>
+    Removed in M97 since unsigned commands are no longer supported.
+  </obsolete>
   <owner>asumaneev@google.com</owner>
   <owner>managed-platforms@google.com</owner>
   <summary>
@@ -2304,7 +2510,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Enterprise.VpdUpdateStatus" units="units"
-    expires_after="2022-03-13">
+    expires_after="2022-05-15">
   <owner>igorcov@chromium.org</owner>
   <owner>tnagel@chromium.org</owner>
   <summary>
@@ -2356,7 +2562,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="EnterpriseCheck.InvalidJsonPolicies" enum="EnterprisePolicies"
     expires_after="2021-07-01">
   <owner>olsen@chromium.org</owner>
-  <owner>chromeos-commercial-stability@google.com</owner>
+  <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
     A set of policy rules that failed validation due to unparsable JSON, or JSON
     that did not match the schema. This validation happens on start-up and when

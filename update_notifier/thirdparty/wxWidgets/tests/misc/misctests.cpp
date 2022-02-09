@@ -13,11 +13,10 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/defs.h"
+
+#include "wx/math.h"
 
 // just some classes using wxRTTI for wxStaticCast() test
 #include "wx/tarstrm.h"
@@ -35,15 +34,19 @@ public:
 private:
     CPPUNIT_TEST_SUITE( MiscTestCase );
         CPPUNIT_TEST( Assert );
+#ifdef HAVE_VARIADIC_MACROS
+        CPPUNIT_TEST( CallForEach );
+#endif // HAVE_VARIADIC_MACROS
         CPPUNIT_TEST( Delete );
         CPPUNIT_TEST( StaticCast );
     CPPUNIT_TEST_SUITE_END();
 
     void Assert();
+    void CallForEach();
     void Delete();
     void StaticCast();
 
-    DECLARE_NO_COPY_CLASS(MiscTestCase)
+    wxDECLARE_NO_COPY_CLASS(MiscTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -74,6 +77,20 @@ void MiscTestCase::Assert()
     AssertIfOdd(17);
     wxSetAssertHandler(oldHandler);
 }
+
+#ifdef HAVE_VARIADIC_MACROS
+void MiscTestCase::CallForEach()
+{
+    #define MY_MACRO(pos, str) s += str;
+
+    wxString s;
+    wxCALL_FOR_EACH(MY_MACRO, "foo", "bar", "baz");
+
+    CPPUNIT_ASSERT_EQUAL( "foobarbaz", s );
+
+    #undef MY_MACRO
+}
+#endif // HAVE_VARIADIC_MACROS
 
 void MiscTestCase::Delete()
 {
@@ -132,3 +149,41 @@ void MiscTestCase::StaticCast()
 #endif // wxUSE_TARSTREAM
 }
 
+TEST_CASE("wxCTZ", "[math]")
+{
+    CHECK( wxCTZ(1) == 0 );
+    CHECK( wxCTZ(4) == 2 );
+    CHECK( wxCTZ(17) == 0 );
+    CHECK( wxCTZ(0x80000000) == 31 );
+
+    WX_ASSERT_FAILS_WITH_ASSERT( wxCTZ(0) );
+}
+
+TEST_CASE("wxRound", "[math]")
+{
+    CHECK( wxRound(2.3) == 2 );
+    CHECK( wxRound(3.7) == 4 );
+    CHECK( wxRound(-0.5f) == -1 );
+
+    WX_ASSERT_FAILS_WITH_ASSERT( wxRound(2.0*INT_MAX) );
+    WX_ASSERT_FAILS_WITH_ASSERT( wxRound(1.1*INT_MIN) );
+
+    // For compatibility reasons, we allow using wxRound() with integer types
+    // as well, even if this doesn't really make sense/
+#if WXWIN_COMPATIBILITY_3_0
+    #ifdef __VISUALC__
+        #pragma warning(push)
+        #pragma warning(disable:4996)
+    #endif
+    wxGCC_WARNING_SUPPRESS(deprecated-declarations)
+
+    CHECK( wxRound(-9) == -9 );
+    CHECK( wxRound((size_t)17) == 17 );
+    CHECK( wxRound((short)289) == 289 );
+
+    wxGCC_WARNING_RESTORE(deprecated-declarations)
+    #ifdef __VISUALC__
+        #pragma warning(pop)
+    #endif
+#endif // WXWIN_COMPATIBILITY_3_0
+}

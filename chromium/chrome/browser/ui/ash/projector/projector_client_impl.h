@@ -25,8 +25,7 @@ class OnDeviceSpeechRecognizer;
 // The client implementation for the ProjectorController in ash/. This client is
 // responsible for handling requests that have browser dependencies.
 class ProjectorClientImpl : public ash::ProjectorClient,
-                            public SpeechRecognizerDelegate,
-                            public speech::SodaInstaller::Observer {
+                            public SpeechRecognizerDelegate {
  public:
   // RecordingOverlayViewImpl calls this function to initialize the annotator
   // tool.
@@ -48,6 +47,8 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   bool GetDriveFsMountPointPath(base::FilePath* result) const override;
   bool IsDriveFsMounted() const override;
   void OpenProjectorApp() const override;
+  void MinimizeProjectorApp() const override;
+  void OnNewScreencastPreconditionChanged(bool can_start) const override;
 
   // SpeechRecognizerDelegate:
   void OnSpeechResult(
@@ -58,18 +59,6 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   void OnSpeechSoundLevelChanged(int16_t level) override {}
   void OnSpeechRecognitionStateChanged(
       SpeechRecognizerStatus new_state) override;
-
-  // speech::SodaInstaller::Observer:
-  void OnSodaInstalled() override;
-  // We are not utilizing the following methods. Mark them as empty overrides.
-  void OnSodaLanguagePackInstalled(
-      speech::LanguageCode language_code) override {}
-  void OnSodaError() override {}
-  void OnSodaLanguagePackError(speech::LanguageCode language_code) override {}
-  void OnSodaProgress(int combined_progress) override {}
-  void OnSodaLanguagePackProgress(int language_progress,
-                                  speech::LanguageCode language_code) override {
-  }
 
  private:
   ash::ProjectorController* const controller_;

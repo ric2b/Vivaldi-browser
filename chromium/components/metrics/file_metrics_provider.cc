@@ -23,10 +23,10 @@
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
+#include "base/task/task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner.h"
-#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -64,14 +64,14 @@ constexpr SourceOptions kSourceOptions[] = {
     // SOURCE_HISTOGRAMS_ATOMIC_FILE
     {
         // Ensure that no other process reads this at the same time.
-        STD_OPEN | base::File::FLAG_EXCLUSIVE_READ,
+        STD_OPEN | base::File::FLAG_WIN_EXCLUSIVE_READ,
         base::MemoryMappedFile::READ_ONLY,
         true,
     },
     // SOURCE_HISTOGRAMS_ATOMIC_DIR
     {
         // Ensure that no other process reads this at the same time.
-        STD_OPEN | base::File::FLAG_EXCLUSIVE_READ,
+        STD_OPEN | base::File::FLAG_WIN_EXCLUSIVE_READ,
         base::MemoryMappedFile::READ_ONLY,
         true,
     },

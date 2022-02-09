@@ -17,6 +17,7 @@
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -765,7 +766,7 @@ class End2EndTest : public ::testing::Test {
     // this, the receiver will produce smoothly-progressing playout times.
     // Both first-order and second-order effects are tested.
     if (!last_video_playout_time_.is_null() &&
-        min_video_playout_delta_ > base::TimeDelta()) {
+        min_video_playout_delta_.is_positive()) {
       const base::TimeDelta delta = playout_time - last_video_playout_time_;
       VLOG(1) << "Video frame playout time delta (compared to last frame) is "
               << delta.InMicroseconds() << " usec.";
@@ -773,9 +774,9 @@ class End2EndTest : public ::testing::Test {
                 delta.InMicroseconds());
       EXPECT_GE(max_video_playout_delta_.InMicroseconds(),
                 delta.InMicroseconds());
-      if (last_video_playout_delta_ > base::TimeDelta()) {
+      if (last_video_playout_delta_.is_positive()) {
         base::TimeDelta abs_curvature = delta - last_video_playout_delta_;
-        if (abs_curvature < base::TimeDelta())
+        if (abs_curvature.is_negative())
           abs_curvature = -abs_curvature;
         EXPECT_GE(max_video_playout_curvature_.InMicroseconds(),
                   abs_curvature.InMicroseconds());
@@ -840,8 +841,8 @@ class End2EndTest : public ::testing::Test {
   scoped_refptr<CastEnvironment> cast_environment_sender_;
   scoped_refptr<CastEnvironment> cast_environment_receiver_;
 
-  LoopBackTransport* receiver_to_sender_;  // Owned by CastTransport.
-  LoopBackTransport* sender_to_receiver_;  // Owned by CastTransport.
+  raw_ptr<LoopBackTransport> receiver_to_sender_;  // Owned by CastTransport.
+  raw_ptr<LoopBackTransport> sender_to_receiver_;  // Owned by CastTransport.
 
   std::unique_ptr<CastTransportImpl> transport_sender_;
   std::unique_ptr<CastTransportImpl> transport_receiver_;
@@ -873,6 +874,9 @@ class TransportClient : public CastTransport::Client {
                   End2EndTest* e2e_test)
       : log_event_dispatcher_(log_event_dispatcher), e2e_test_(e2e_test) {}
 
+  TransportClient(const TransportClient&) = delete;
+  TransportClient& operator=(const TransportClient&) = delete;
+
   void OnStatusChanged(media::cast::CastTransportStatus status) final {
     EXPECT_EQ(TRANSPORT_STREAM_INITIALIZED, status);
   }
@@ -888,10 +892,9 @@ class TransportClient : public CastTransport::Client {
   }
 
  private:
-  LogEventDispatcher* const log_event_dispatcher_;  // Not owned by this class.
-  End2EndTest* const e2e_test_;                     // Not owned by this class.
-
-  DISALLOW_COPY_AND_ASSIGN(TransportClient);
+  const raw_ptr<LogEventDispatcher>
+      log_event_dispatcher_;             // Not owned by this class.
+  const raw_ptr<End2EndTest> e2e_test_;  // Not owned by this class.
 };
 
 // Cast E2E tests are not designed to run on official builds, primarily due
@@ -909,13 +912,13 @@ void End2EndTest::Create() {
       &testing_clock_sender_, base::Milliseconds(1),
       std::make_unique<TransportClient>(cast_environment_sender_->logger(),
                                         nullptr),
-      base::WrapUnique(sender_to_receiver_), task_runner_sender_);
+      base::WrapUnique(sender_to_receiver_.get()), task_runner_sender_);
 
   transport_receiver_ = std::make_unique<CastTransportImpl>(
       &testing_clock_sender_, base::Milliseconds(1),
       std::make_unique<TransportClient>(cast_environment_receiver_->logger(),
                                         this),
-      base::WrapUnique(receiver_to_sender_), task_runner_sender_);
+      base::WrapUnique(receiver_to_sender_.get()), task_runner_sender_);
 
   cast_receiver_ =
       CastReceiver::Create(cast_environment_receiver_, audio_receiver_config_,

@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 
@@ -79,34 +80,23 @@ bool IsChromeOsDataMandatory();
 // Returns true if sync should install web apps locally by default.
 bool AreAppsLocallyInstalledBySync();
 
-// Returns true if `new_handlers` are effectively the same or less broad than
-// the file handlers for PWAs installed under the same origin as `url` in
-// `profile`. In other words, if `new_handlers` would not change the text
-// returned by `GetFileHandlersForAllWebAppsWithOrigin()`, then this will return
-// true, otherwise false.
-bool AreFileHandlersAlreadyRegistered(Profile* profile,
-                                      const GURL& url,
-                                      const apps::FileHandlers& new_handlers);
-
-// Returns all file handlers associated with any apps at the origin of `url`, in
-// the `profile`. This is not limited to a particular app's scope because it's
-// used for display in permissions contexts, and permissions are origin-bound.
-apps::FileHandlers GetFileHandlersForAllWebAppsWithOrigin(Profile* profile,
-                                                          const GURL& url);
+// Returns whether `old_handlers` contains all handlers in `new_handlers`.
+// Useful for determining whether the user's approval of the API needs to be
+// reset during app update.
+bool AreNewFileHandlersASubsetOfOld(const apps::FileHandlers& old_handlers,
+                                    const apps::FileHandlers& new_handlers);
 
 // Returns a display-ready string that holds all file type associations handled
-// by all installed apps that are scoped under the origin of `url`. This means
-// that if the provided URL is example.com/app/, the returned value will also
-// include file types for example.com/alternate_app/. On Linux, where files are
-// associated via MIME types, this will return MIME types like "text/plain,
-// image/png". On all other platforms, where files are associated via file
-// extensions, this will return capitalized file extensions with the period
-// truncated, like "TXT, PNG". `found_multiple`, when non-null, will be set to
-// indicate whether the returned string is a list (false indicates it's a single
-// object).
-std::u16string GetFileTypeAssociationsHandledByWebAppsForDisplay(
+// by the app referenced by `app_id`. This will return capitalized file
+// extensions with the period truncated, like "TXT, PNG". `found_multiple`, when
+// non-null, will be set to indicate whether the returned string is a list
+// (false indicates it's a single object). Note that on Linux, the files must
+// actually match both the specified MIME types as well as the specified file
+// extensions, so this list of extensions is an incomplete picture (subset) of
+// which file types will be accepted.
+std::u16string GetFileTypeAssociationsHandledByWebAppForDisplay(
     Profile* profile,
-    const GURL& url,
+    const AppId& app_id,
     bool* found_multiple = nullptr);
 
 // Updates the approved or disallowed protocol list for the given app. If
@@ -118,10 +108,34 @@ void PersistProtocolHandlersUserChoice(
     bool allowed,
     base::OnceClosure update_finished_callback);
 
+// Updates the File Handling API approval state for the given app. If
+// necessary, it also updates the registration with the OS.
+void PersistFileHandlersUserChoice(Profile* profile,
+                                   const AppId& app_id,
+                                   bool allowed,
+                                   base::OnceClosure update_finished_callback);
+
+// Check if only |specified_sources| exist in the |sources|
+bool HasAnySpecifiedSourcesAndNoOtherSources(WebAppSources sources,
+                                             WebAppSources specified_sources);
+
+// Check if all types of |sources| are uninstallable by the user.
+bool CanUserUninstallWebApp(WebAppSources sources);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// The kLacrosPrimary and kWebAppsCrosapi features are each independently
+// sufficient to enable the web apps Crosapi (used for Lacros web app
+// management).
+bool IsWebAppsCrosapiEnabled();
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 // Enables System Web Apps so we can test SWA features in Lacros, even we don't
 // have actual SWAs in Lacros.
 void EnableSystemWebAppsInLacrosForTesting();
+
+// Allow user web apps on profiles other than the main profile.
+void SkipMainProfileCheckForTesting();
 #endif
 
 }  // namespace web_app

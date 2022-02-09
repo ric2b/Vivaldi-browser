@@ -28,7 +28,7 @@ PROPERTIES = {
 
 # On select platforms, link the GN executable against rpmalloc for a small 10% speed boost.
 RPMALLOC_GIT_URL = 'https://fuchsia.googlesource.com/third_party/github.com/mjansson/rpmalloc'
-RPMALLOC_REVISION = '6bb6ca97a8d6a72d626153fd8431ef8477a21145'
+RPMALLOC_REVISION = 'f4b7c52c858675f732a76bd1c73447e0fcf84b1e'
 
 # Used to convert os and arch strings to rpmalloc format
 RPMALLOC_MAP = {
@@ -159,7 +159,7 @@ def RunSteps(api, repository):
           'args': ['--use-lto', '--use-icf'],
           'targets': release_targets(),
           # TODO: Enable this for OS X and Windows.
-          'use_rpmalloc': api.platform.is_linux
+          'use_rpmalloc': api.platform.is_linux,
       },
   ]
 

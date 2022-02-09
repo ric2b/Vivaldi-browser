@@ -111,14 +111,9 @@ would like to build, separated by commas. Valid values are:
 
     autoconf      GNU autoconf Makefile.in files
     borland       Borland C/C++ makefiles
-    dmars         Digital Mars makefiles
-    dmars_smake   Digital Mars makefiles for SMAKE
     gnu           GNU toolchain makefiles (Unix)
     mingw         MinGW makefiles (mingw32-make)
-    msevc4prj     MS eMbedded Visual C++ 4 project files
     msvc          MS Visual C++ nmake makefiles
-    msvc6prj      MS Visual C++ 6.0 project files
-    watcom        OpenWatcom makefiles
 
 TIP: autoconf Project Type
 ---------------------------
@@ -266,6 +261,7 @@ This concludes our basic tutorial of the cross-platform Bakefile build system
 management tool. From here, please be sure to take a good look at the Bakefile
 documentation to see what else it is capable of. Please post questions to the
 bakefile-devel@lists.sourceforge.net list, or if you have questions specific
-to the wx template Bakefile, send an email to wx-users@lists.wxwidgets.org.
+to the wx template Bakefile, send an email to the wxWidgets users mailing list:
+https://www.wxwidgets.org/support/mailing-lists/
 
 Enjoy using Bakefile!

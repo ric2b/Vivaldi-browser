@@ -15,8 +15,8 @@
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
 #include "components/services/storage/public/cpp/buckets/constants.h"
@@ -50,11 +50,11 @@ std::u16string ConstructVfsFileName(const url::Origin& origin,
   return base::UTF8ToUTF16(identifier) + u"/" + name + u"#" + suffix;
 }
 
-}  // namespace
-
 class WebDatabaseHostImplTest : public ::testing::Test {
- protected:
+ public:
   WebDatabaseHostImplTest() = default;
+  WebDatabaseHostImplTest(const WebDatabaseHostImplTest&) = delete;
+  WebDatabaseHostImplTest& operator=(const WebDatabaseHostImplTest&) = delete;
   ~WebDatabaseHostImplTest() override = default;
 
   void SetUp() override {
@@ -90,6 +90,7 @@ class WebDatabaseHostImplTest : public ::testing::Test {
     RunUntilIdle();
   }
 
+ protected:
   template <typename Callable>
   void CheckUnauthorizedOrigin(const Callable& func) {
     mojo::test::BadMessageObserver bad_message_observer;
@@ -137,6 +138,8 @@ class WebDatabaseHostImplTest : public ::testing::Test {
         process_id(), url);
   }
 
+  storage::MockQuotaManager* quota_manager() { return quota_manager_.get(); }
+
   storage::QuotaManagerProxy* quota_manager_proxy() {
     return quota_manager_proxy_.get();
   }
@@ -151,8 +154,6 @@ class WebDatabaseHostImplTest : public ::testing::Test {
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   scoped_refptr<storage::MockQuotaManager> quota_manager_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebDatabaseHostImplTest);
 };
 
 TEST_F(WebDatabaseHostImplTest, OpenFileCreatesBucket) {
@@ -192,6 +193,37 @@ TEST_F(WebDatabaseHostImplTest, OpenFileCreatesBucket) {
   EXPECT_EQ(result->storage_key,
             blink::StorageKey::CreateFromStringForTesting(example_url));
   EXPECT_GT(result->id.value(), 0);
+}
+
+TEST_F(WebDatabaseHostImplTest, GetOrCreateBucketError) {
+  const char* example_url = "http://example.com";
+  const GURL example_gurl(example_url);
+  const url::Origin example_origin = url::Origin::Create(example_gurl);
+  const std::u16string db_name = u"db_name";
+  const std::u16string suffix(u"suffix");
+  const std::u16string vfs_file_name =
+      ConstructVfsFileName(example_origin, db_name, suffix);
+
+  auto* security_policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  security_policy->AddFutureIsolatedOrigins(
+      {example_origin}, ChildProcessSecurityPolicy::IsolatedOriginSource::TEST);
+  LockProcessToURL(example_gurl);
+
+  quota_manager()->SetDisableDatabase(true);
+  storage::QuotaManagerProxySync quota_manager_proxy_sync(
+      quota_manager_proxy());
+
+  base::RunLoop run_loop;
+  task_runner()->PostTask(
+      FROM_HERE, base::BindLambdaForTesting([&]() {
+        mojo::FakeMessageDispatchContext fake_dispatch_context;
+        host()->OpenFile(vfs_file_name, /*desired_flags=*/0,
+                         base::BindLambdaForTesting([&](base::File file) {
+                           EXPECT_FALSE(file.IsValid());
+                           run_loop.Quit();
+                         }));
+      }));
+  run_loop.Run();
 }
 
 TEST_F(WebDatabaseHostImplTest, BadMessagesUnauthorized) {
@@ -340,5 +372,7 @@ TEST_F(WebDatabaseHostImplTest, ProcessShutdown) {
 
   mojo::SetDefaultProcessErrorHandler(base::NullCallback());
 }
+
+}  // namespace
 
 }  // namespace content

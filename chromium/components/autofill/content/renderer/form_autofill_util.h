@@ -13,7 +13,6 @@
 
 #include "base/containers/flat_map.h"
 #include "base/i18n/rtl.h"
-#include "base/macros.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -32,7 +31,6 @@ class WebDocument;
 class WebElement;
 class WebFormControlElement;
 class WebFormElement;
-class WebFrame;
 class WebInputElement;
 class WebLocalFrame;
 class WebNode;
@@ -95,6 +93,21 @@ enum ExtractMask {
 //
 // Exposed for testing purposes.
 bool IsVisibleIframe(const blink::WebElement& iframe_element);
+
+// Returns the topmost <form> ancestor of |node|, or an IsNull() pointer.
+//
+// Generally, WebFormElements must not be nested [1]. When parsing HTML, Blink
+// ignores nested form tags; the inner forms therefore never make it into the
+// DOM. Howevery, nested forms can be created and added to the DOM dynamically,
+// in which case Blink associates each field with its closest ancestor.
+//
+// For some elements, Autofill determines the associated form without Blink's
+// help (currently, these are only iframe elements). For consistency with
+// Blink's behaviour, we associate them with their closest form element
+// ancestor.
+//
+// [1] https://html.spec.whatwg.org/multipage/forms.html#the-form-element
+blink::WebFormElement GetClosestAncestorFormElement(blink::WebNode node);
 
 // Returns true if a DOM traversal (pre-order, depth-first) visits |x| before
 // |y|. |common_ancestor| can be any shared ancestor of |x| and |y| (including
@@ -159,9 +172,6 @@ bool IsAutofillableElement(const blink::WebFormControlElement& element);
 // checks if the element takes up space in the layout, ie. this element or a
 // descendant has a non-empty bounding bounding client rect.
 bool IsWebElementVisible(const blink::WebElement& element);
-
-// The number of edges from |frame| to its main frame.
-size_t GetFrameDepth(const blink::WebFrame* frame);
 
 // Returns the form's |name| attribute if non-empty; otherwise the form's |id|
 // attribute.

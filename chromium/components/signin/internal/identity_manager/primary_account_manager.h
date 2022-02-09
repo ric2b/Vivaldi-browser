@@ -20,14 +20,14 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "build/chromeos_buildflags.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service_observer.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_client.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/primary_account_change_event.h"
 
 class AccountTrackerService;
@@ -172,12 +172,12 @@ class PrimaryAccountManager : public ProfileOAuth2TokenServiceObserver {
     return primary_account_info_;
   }
 
-  SigninClient* client_;
+  raw_ptr<SigninClient> client_;
 
   // The ProfileOAuth2TokenService instance associated with this object. Must
   // outlive this object.
-  ProfileOAuth2TokenService* token_service_ = nullptr;
-  AccountTrackerService* account_tracker_service_ = nullptr;
+  raw_ptr<ProfileOAuth2TokenService> token_service_ = nullptr;
+  raw_ptr<AccountTrackerService> account_tracker_service_ = nullptr;
 
   bool initialized_ = false;
 

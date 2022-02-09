@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 (async function() {
-  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadLegacyModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   TestRunner.addResult("Test frontend's timeout support.\n");
 
   const executionContext = UI.context.flavor(SDK.ExecutionContext);
@@ -51,9 +51,14 @@
   }
 
   function printDetails(result) {
-    const customFormatters = {};
-    for (let name of ['runtimeModelInternal', 'runtimeAgent'])
-      customFormatters[name] = 'formatAsTypeNameOrNull';
-    TestRunner.dump(result, customFormatters);
+    if (result.error) {
+      TestRunner.addResult(`Error: ${result.error}`);
+    } else {
+      TestRunner.addResult('Result:');
+      TestRunner.addResult(`  Description: ${result.object.description}`);
+      TestRunner.addResult(`  Value:       ${result.object.value}`);
+      TestRunner.addResult(`  Type:        ${result.object.type}`);
+
+    }
   }
 })();

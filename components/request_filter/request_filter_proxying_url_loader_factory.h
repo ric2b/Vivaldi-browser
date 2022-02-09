@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -154,7 +155,7 @@ class RequestFilterProxyingURLLoaderFactory
         int error_code,
         bool collapse_initiator = false);
 
-    RequestFilterProxyingURLLoaderFactory* const factory_;
+    const raw_ptr<RequestFilterProxyingURLLoaderFactory> factory_;
     network::ResourceRequest request_;
     const absl::optional<url::Origin> original_initiator_;
     const uint64_t request_id_ = 0;
@@ -297,12 +298,12 @@ class RequestFilterProxyingURLLoaderFactory
   void RemoveRequest(int32_t network_service_request_id, uint64_t request_id);
   void MaybeRemoveProxy();
 
-  content::BrowserContext* const browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
   const int render_process_id_;
   const int frame_routing_id_;
   const int view_routing_id_;
-  RequestFilterManager::RequestHandler* request_handler_;
-  RequestFilterManager::RequestIDGenerator* const request_id_generator_;
+  const raw_ptr<RequestFilterManager::RequestHandler> request_handler_;
+  const raw_ptr<RequestFilterManager::RequestIDGenerator> request_id_generator_;
   absl::optional<int64_t> navigation_id_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
   mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
@@ -311,7 +312,7 @@ class RequestFilterProxyingURLLoaderFactory
   mojo::Remote<network::mojom::TrustedURLLoaderHeaderClient>
       forwarding_url_loader_header_client_;
   // Owns |this|.
-  RequestFilterManager::ProxySet* const proxies_;
+  const raw_ptr<RequestFilterManager::ProxySet> proxies_;
 
   const content::ContentBrowserClient::URLLoaderFactoryType
       loader_factory_type_;

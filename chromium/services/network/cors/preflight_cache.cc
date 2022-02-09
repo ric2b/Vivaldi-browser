@@ -76,7 +76,7 @@ void PreflightCache::AppendEntry(
     std::unique_ptr<PreflightResult> preflight_result) {
   DCHECK(preflight_result);
 
-  // Do not cache |preflight_result| if |url| is too long.
+  // Do not cache `preflight_result` if `url` is too long.
   const std::string url_spec = url.spec();
   if (url_spec.length() >= kMaxKeyLength)
     return;
@@ -114,11 +114,11 @@ bool PreflightCache::CheckIfRequestCanSkipPreflight(
 
   // Check if the entry is still valid.
   if (!cache_entry->second->IsExpired()) {
-    // Both |origin| and |url| are in cache. Check if the entry is sufficient to
+    // Both `origin` and `url` are in cache. Check if the entry is sufficient to
     // skip CORS-preflight.
     if (cache_entry->second->EnsureAllowedRequest(
             credentials_mode, method, request_headers, is_revalidating,
-            PreflightResult::WithNonWildcardRequestHeadersSupport(true))) {
+            NonWildcardRequestHeadersSupport(true))) {
       // Note that we always use the "with non-wildcard request headers"
       // variant, because it is hard to generate the correct error information
       // from here, and cache miss is in most case recoverable.

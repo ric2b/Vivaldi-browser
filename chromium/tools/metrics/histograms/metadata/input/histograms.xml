@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -214,6 +215,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="InputMethod.Assistive.MultiWord.InputState"
+    enum="IMEAssistiveTextInputState" expires_after="2022-06-01">
+  <owner>curtismcmullan@google.com</owner>
+  <owner>essential-inputs-team@google.com</owner>
+  <summary>
+    This records the state of an assistive feature in relation to a particular
+    input field. The feature could be enabled or disabled for a number of
+    reasons and this metric captures that information. The metric is recorded
+    once when a user focuses on a new input field.
+  </summary>
+</histogram>
+
 <histogram name="InputMethod.Assistive.NotAllowed" enum="IMEAssistiveAction"
     expires_after="2022-03-19">
   <owner>jiwan@google.com</owner>
@@ -364,7 +377,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InputMethod.Commit.Index" units="units"
-    expires_after="2021-12-12">
+    expires_after="2022-04-24">
   <owner>shend@chromium.org</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -481,6 +494,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     The number of milliseconds taken to load the language model required for the
     handwriting input method. Recorded every time a new language model is loaded
     for the handwriting input method.
+  </summary>
+</histogram>
+
+<histogram name="InputMethod.Handwriting.LanguagePackState"
+    enum="LanguagePackState" expires_after="2022-06-01">
+  <owner>curtismcmullan@chromium.org</owner>
+  <owner>essential-inputs-team@google.com</owner>
+  <summary>
+    The state of the requested language pack on initialization of the required
+    handwriting service connection. Recorded once whenever a new handwriting
+    service connection is requested.
   </summary>
 </histogram>
 
@@ -632,7 +656,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InputMethod.MultilingualExperiment.Autocorrect.Actions"
-    enum="IMEAutocorrectActions" expires_after="2021-12-31">
+    enum="IMEAutocorrectActions" expires_after="2022-06-30">
   <owner>tranbaoduy@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -642,7 +666,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InputMethod.MultilingualExperiment.Autocorrect.Count"
-    enum="IMETextInputClient" expires_after="2021-12-31">
+    enum="IMETextInputClient" expires_after="2022-06-30">
   <owner>tranbaoduy@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -652,7 +676,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InputMethod.MultilingualExperiment.Autocorrect.Delay"
-    units="ms" expires_after="2021-12-31">
+    units="ms" expires_after="2022-06-30">
   <owner>tranbaoduy@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -663,7 +687,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="InputMethod.MultilingualExperiment.DiacriticalAutocorrect.Actions"
-    enum="IMEAutocorrectActions" expires_after="2021-12-31">
+    enum="IMEAutocorrectActions" expires_after="2022-06-30">
   <owner>tranbaoduy@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -673,7 +697,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InputMethod.MultilingualExperiment.NonAutocorrect"
-    enum="IMENonAutocorrectDiacriticStatus" expires_after="2021-12-31">
+    enum="IMENonAutocorrectDiacriticStatus" expires_after="2022-06-30">
   <owner>tranbaoduy@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -1050,6 +1074,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Type of action performed by the user in Paprika. Recorded when the action is
     performed. Only for Chrome OS
+  </summary>
+</histogram>
+
+<histogram name="InputMethod.VirtualKeyboard.Paprika.StartedWritingAfterEdu"
+    enum="Boolean" expires_after="M105">
+  <owner>jopalmer@chromium.org</owner>
+  <owner>essential-inputs-team@google.com</owner>
+  <summary>
+    Did the user start handwriting in Paprika after dismissing the Edu dialog?
+    Recorded when Paprika is closed.
   </summary>
 </histogram>
 

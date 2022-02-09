@@ -1,15 +1,18 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
-<link rel="import" href="chrome://resources/html/assert.html">
-<link rel="import" href="chrome://resources/html/i18n_behavior.html">
-<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
+<link rel="import" href="chrome://resources/cr_components/chromeos/localized_link/localized_link.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_button/cr_button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/load_time_data.html">
+<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="multidevice_browser_proxy.html">
 <link rel="import" href="multidevice_constants.html">
-<link rel="import" href="chrome://resources/cr_components/chromeos/localized_link/localized_link.html">
+<link rel="import" href="multidevice_screen_lock_subpage.html">
 <link rel="import" href="../os_icons.html">
 <link rel="import" href="../../settings_shared_css.html">
 
@@ -26,17 +29,32 @@
       }
 
       div[slot='title'] {
+        color: var(--cr-primary-text-color);
         flex-direction: column;
-        font-weight: bold;
+        font-family: 'Google Sans';
+        font-size: 16px;
+        font-weight: medium;
         height: auto;
+        line-height: 24px;
+        padding-bottom: 24px;
+        padding-inline-end: 24px;
+        padding-inline-start: 24px;
+        padding-top: 24px;
+      }
+
+      #subtitle {
+        color: var(--cr-secondary-text-color);
+        font-family: 'Roboto';
+        font-size: 14px;
+        font-weight: medium;
+        line-height: 20px;
       }
 
       div[slot='body'] {
         display: flex;
         flex-direction: column;
-        height: auto;
-        justify-content: center;
-        width: 464px;
+        padding-inline-end: 24px;
+        padding-inline-start: 24px;
       }
 
       div[slot='button-container'] {
@@ -44,6 +62,10 @@
         display: flex;
         flex-direction: row;
         justify-content: space-between;
+        padding-bottom: 20px;
+        padding-inline-end: 24px;
+        padding-inline-start: 24px;
+        padding-top: 40px;
       }
 
       #failure-icon {
@@ -52,12 +74,12 @@
       }
 
       #feature-icon {
-        --iron-icon-fill-color: var(--google-blue-600);
+        --iron-icon-fill-color: var(--cros-icon-color-prominent);
         padding-bottom: 13px;
       }
 
       #instruction-icon {
-        --iron-icon-fill-color: var(--google-gray-500);
+        --iron-icon-fill-color: var(--cros-icon-color-secondary);
         height: 14px;
         width: 14px;
       }
@@ -68,6 +90,7 @@
       }
 
       #description {
+        color: var(--cros-text-color-secondary);
         display: flex;
         flex-direction: column;
         gap: 12px;
@@ -94,6 +117,7 @@
 
       #instruction {
         align-items: center;
+        color: var(--cros-text-color-secondary);
         display: flex;
         flex-direction: row;
         font-size: 9px;
@@ -149,27 +173,40 @@
           </iron-icon>
         </template>
         <div id="title">[[title_]]</div>
+        <template is="dom-if" if="[[shouldShowScreenLockInstructions_(flowState_)]]" restamp>
+          <div id="subtitle">
+            $i18n{multideviceNotificationAccessSetupScreenLockSubtitle}
+          </div>
+        </template>
       </div>
       <div id="dialogBody" slot="body">
         <template is="dom-if" if="[[!hasStartedSetupAttempt_]]" restamp>
-          <div id="start-setup-description">
-            <div id="half-container">
-              <div id="illustration"></div>
-            </div>
-            <div id="half-container">
-              <div id="description">
-                <template is="dom-if" if="[[description_]]" restamp>
-                  <div id="feature-details-container">
-                    <iron-icon id="feature-icon"
-                        icon="os-settings:multidevice-better-together-suite">
-                    </iron-icon>
-                    <localized-link localized-string="[[description_]]">
-                    </localized-link>
-                  </div>
-                </template>
+          <template is="dom-if" if="[[shouldShowScreenLockInstructions_(flowState_)]]" restamp>
+            <settings-multidevice-screen-lock-subpage
+                is-screen-lock-enabled="{{isScreenLockEnabled_}}"
+                is-password-dialog-showing="{{isPasswordDialogShowing}}">
+            </settings-multidevice-screen-lock-subpage>
+          </template>
+          <template is="dom-if" if="[[!shouldShowScreenLockInstructions_(flowState_)]]" restamp>
+            <div id="start-setup-description">
+              <div id="half-container">
+                <div id="illustration"></div>
+              </div>
+              <div id="half-container">
+                <div id="description">
+                  <template is="dom-if" if="[[description_]]" restamp>
+                    <div id="feature-details-container">
+                      <iron-icon id="feature-icon"
+                          icon="os-settings:multidevice-better-together-suite">
+                      </iron-icon>
+                      <localized-link localized-string="[[description_]]">
+                      </localized-link>
+                    </div>
+                  </template>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </template>
         <template is="dom-if" if="[[hasStartedSetupAttempt_]]" restamp>
           <div id="illustration"></div>
@@ -180,21 +217,23 @@
         </template>
         <template is="dom-if" if="[[shouldShowSetupInstructionsSeparately_]]"
             restamp>
-          <div id="instruction">
-            <iron-icon id="instruction-icon" icon="os-settings:failure-alert">
-            </iron-icon>
-            <div>
+          <template is="dom-if" if="[[!shouldShowScreenLockInstructions_(flowState_)]]" restamp>
+            <div id="instruction">
+              <iron-icon id="instruction-icon" icon="os-settings:failure-alert">
+              </iron-icon>
               $i18n{multideviceNotificationAccessSetupInstructions}
             </div>
-          </div>
+          </template>
         </template>
       </div>
       <div id="buttonContainer" slot="button-container">
         <div id="half-container">
           <template is="dom-if" if="[[!hasStartedSetupAttempt_]]" restamp>
-            <cr-button id="learnMore" on-click="onLearnMoreClicked_">
-              $i18n{multideviceLearnMoreWithoutURL}
-            </cr-button>
+            <template is="dom-if" if="[[!shouldShowScreenLockInstructions_(flowState_)]]" restamp>
+              <cr-button id="learnMore" on-click="onLearnMoreClicked_">
+                $i18n{multideviceLearnMoreWithoutURL}
+              </cr-button>
+            </template>
           </template>
         </div>
         <div id="button-detail">
@@ -220,14 +259,14 @@
           </template>
           <template is="dom-if" if="[[!hasStartedSetupAttempt_]]" restamp>
             <cr-button id="getStartedButton" class="action-button"
-                on-click="attemptNotificationSetup_">
+                on-click="nextPage_">
               $i18n{next}
             </cr-button>
           </template>
           <template is="dom-if" if="[[shouldShowTryAgainButton_(setupState_)]]"
               restamp>
             <cr-button id="tryAgainButton" class="action-button"
-                on-click="attemptNotificationSetup_">
+                on-click="nextPage_">
               $i18n{multideviceNotificationAccessSetupTryAgain}
             </cr-button>
           </template>

@@ -81,11 +81,6 @@ NSString* WebClient::GetDocumentStartScriptForMainFrame(
   return @"";
 }
 
-bool WebClient::IsLegacyTLSAllowedForHost(WebState* web_state,
-                                          const std::string& hostname) {
-  return false;
-}
-
 void WebClient::PrepareErrorPage(WebState* web_state,
                                  const GURL& url,
                                  NSError* error,
@@ -113,6 +108,8 @@ bool WebClient::EnableLongPressUIContextMenu() const {
 bool WebClient::RestoreSessionFromCache(web::WebState* web_state) const {
   return false;
 }
+
+void WebClient::CleanupNativeRestoreURLs(web::WebState* web_state) const {}
 
 UserAgentType WebClient::GetDefaultUserAgent(id<UITraitEnvironment> web_view,
                                              const GURL& url) {

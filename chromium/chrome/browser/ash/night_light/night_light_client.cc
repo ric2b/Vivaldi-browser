@@ -29,7 +29,7 @@ NightLightClient::NightLightClient(
     scoped_refptr<network::SharedURLLoaderFactory> factory)
     : provider_(
           std::move(factory),
-          chromeos::SimpleGeolocationProvider::DefaultGeolocationProviderURL()),
+          ash::SimpleGeolocationProvider::DefaultGeolocationProviderURL()),
       night_light_controller_(ash::NightLightController::GetInstance()),
       backoff_delay_(kMinimumDelayAfterFailure),
       timer_(std::make_unique<base::OneShotTimer>()) {}
@@ -37,11 +37,11 @@ NightLightClient::NightLightClient(
 NightLightClient::~NightLightClient() {
   if (night_light_controller_)
     night_light_controller_->RemoveObserver(this);
-  chromeos::system::TimezoneSettings::GetInstance()->RemoveObserver(this);
+  ash::system::TimezoneSettings::GetInstance()->RemoveObserver(this);
 }
 
 void NightLightClient::Start() {
-  auto* timezone_settings = chromeos::system::TimezoneSettings::GetInstance();
+  auto* timezone_settings = ash::system::TimezoneSettings::GetInstance();
   current_timezone_id_ = timezone_settings->GetCurrentTimezoneID();
   timezone_settings->AddObserver(this);
   night_light_controller_->AddObserver(this);
@@ -76,7 +76,7 @@ void NightLightClient::OnScheduleTypeChanged(
 
 void NightLightClient::TimezoneChanged(const icu::TimeZone& timezone) {
   const std::u16string timezone_id =
-      chromeos::system::TimezoneSettings::GetTimezoneID(timezone);
+      ash::system::TimezoneSettings::GetTimezoneID(timezone);
   if (current_timezone_id_ == timezone_id)
     return;
 
@@ -108,7 +108,7 @@ void NightLightClient::SetCurrentTimezoneIdForTesting(
   current_timezone_id_ = timezone_id;
 }
 
-void NightLightClient::OnGeoposition(const chromeos::Geoposition& position,
+void NightLightClient::OnGeoposition(const ash::Geoposition& position,
                                      bool server_error,
                                      const base::TimeDelta elapsed) {
   if (!using_geoposition_) {

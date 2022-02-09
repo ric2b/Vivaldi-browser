@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -95,7 +94,8 @@ TEST_F(TranslateScriptTest, CheckScriptParameters) {
   GURL expected_url(TranslateScript::kScriptURL);
   GURL url = last_resource_request.url;
   EXPECT_TRUE(url.is_valid());
-  EXPECT_EQ(expected_url.GetOrigin().spec(), url.GetOrigin().spec());
+  EXPECT_EQ(expected_url.DeprecatedGetOriginAsURL().spec(),
+            url.DeprecatedGetOriginAsURL().spec());
   EXPECT_EQ(expected_url.path(), url.path());
 
   EXPECT_EQ(network::mojom::CredentialsMode::kOmit,
@@ -152,7 +152,8 @@ TEST_F(TranslateScriptTest, CheckScriptURL) {
   GURL expected_url(script_url);
   GURL url = last_resource_request.url;
   EXPECT_TRUE(url.is_valid());
-  EXPECT_EQ(expected_url.GetOrigin().spec(), url.GetOrigin().spec());
+  EXPECT_EQ(expected_url.DeprecatedGetOriginAsURL().spec(),
+            url.DeprecatedGetOriginAsURL().spec());
   EXPECT_EQ(expected_url.path(), url.path());
 }
 

@@ -11,11 +11,6 @@
  public:
   void ShowPageInfo(gfx::Point pos);
 
-  void ExtendedLoadProgressChanged(double progress,
-                                   double loaded_bytes,
-                                   int loaded_elements,
-                                   int total_elements) override;
-
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
@@ -76,10 +71,6 @@
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
 
-  blink::SecurityStyle GetSecurityStyle(
-      content::WebContents* web_contents,
-      content::SecurityStyleExplanations* security_style_explanations) override;
-
   // Vivaldi WebContentsObserver implementation.
   void OnVisibilityChanged(content::Visibility visibility) override;
 
@@ -113,13 +104,13 @@
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();
 
-  content::WebContents::CreateParams GetWebContentsCreateParams(
-      content::BrowserContext* context,
-      const GURL site,
-      bool is_vivaldi_embedded);
+  void VivaldiCreateWebContents(const base::DictionaryValue& create_params,
+                                  WebContentsCreatedCallback callback);
 
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;
+
+  void VivaldiSetLoadProgressEventExtraArgs(base::Value& dictionary);
 
   bool is_fullscreen_;
   ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;

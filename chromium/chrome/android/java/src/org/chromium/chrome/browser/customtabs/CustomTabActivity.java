@@ -42,8 +42,8 @@ import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
+import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.components.page_info.PageInfoController;
 import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -54,7 +54,6 @@ import org.chromium.ui.util.ColorUtils;
  */
 public class CustomTabActivity extends BaseCustomTabActivity {
     private CustomTabsSessionToken mSession;
-    private CustomTabHeightStrategy mCustomTabHeightStrategy;
 
     private final CustomTabsConnection mConnection = CustomTabsConnection.getInstance();
 
@@ -95,8 +94,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
     @Override
     protected void changeBackgroundColorForResizing() {
-        if (mCustomTabHeightStrategy == null
-                || !mCustomTabHeightStrategy.changeBackgroundColorForResizing()) {
+        if (!mBaseCustomTabRootUiCoordinator.changeBackgroundColorForResizing()) {
             super.changeBackgroundColorForResizing();
         }
     }
@@ -111,10 +109,6 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         mSession = mIntentDataProvider.getSession();
 
         CustomTabNavigationBarController.update(getWindow(), mIntentDataProvider, getResources());
-
-        mCustomTabHeightStrategy = CustomTabHeightStrategy.createStrategy(this,
-                mIntentDataProvider.getInitialActivityHeight(), getMultiWindowModeStateDispatcher(),
-                mConnection, mSession, getLifecycleDispatcher());
     }
 
     @Override
@@ -219,8 +213,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             String publisher = getToolbarManager().getContentPublisher();
             new ChromePageInfo(getModalDialogManagerSupplier(), publisher, OpenedFromSource.MENU,
                     () -> mRootUiCoordinator.getMerchantTrustSignalsCoordinatorSupplier().get())
-                    .show(tab, PageInfoController.NO_HIGHLIGHTED_PERMISSION,
-                            /*fromStoreIcon=*/false);
+                    .show(tab, ChromePageInfoHighlight.noHighlight());
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);

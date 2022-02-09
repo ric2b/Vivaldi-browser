@@ -93,8 +93,8 @@ float DOMVisualViewport::pageLeft() const {
     return 0;
 
   frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
-  float viewport_x = page->GetVisualViewport().GetScrollOffset().Width() +
-                     view->LayoutViewport()->GetScrollOffset().Width();
+  float viewport_x = page->GetVisualViewport().GetScrollOffset().x() +
+                     view->LayoutViewport()->GetScrollOffset().x();
   return AdjustForAbsoluteZoom::AdjustScroll(viewport_x,
                                              frame->PageZoomFactor());
 }
@@ -113,8 +113,8 @@ float DOMVisualViewport::pageTop() const {
     return 0;
 
   frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
-  float viewport_y = page->GetVisualViewport().GetScrollOffset().Height() +
-                     view->LayoutViewport()->GetScrollOffset().Height();
+  float viewport_y = page->GetVisualViewport().GetScrollOffset().y() +
+                     view->LayoutViewport()->GetScrollOffset().y();
   return AdjustForAbsoluteZoom::AdjustScroll(viewport_y,
                                              frame->PageZoomFactor());
 }
@@ -130,7 +130,7 @@ double DOMVisualViewport::width() const {
         DocumentUpdateReason::kJavaScript);
     auto* scrollable_area = frame->View()->LayoutViewport();
     float width =
-        scrollable_area->VisibleContentRect(kExcludeScrollbars).Width();
+        scrollable_area->VisibleContentRect(kExcludeScrollbars).width();
     return AdjustForAbsoluteZoom::AdjustInt(ClampTo<int>(ceilf(width)),
                                             frame->PageZoomFactor());
   }
@@ -152,7 +152,7 @@ double DOMVisualViewport::height() const {
         DocumentUpdateReason::kJavaScript);
     auto* scrollable_area = frame->View()->LayoutViewport();
     float height =
-        scrollable_area->VisibleContentRect(kExcludeScrollbars).Height();
+        scrollable_area->VisibleContentRect(kExcludeScrollbars).height();
     return AdjustForAbsoluteZoom::AdjustInt(ClampTo<int>(ceilf(height)),
                                             frame->PageZoomFactor());
   }
@@ -204,7 +204,7 @@ absl::optional<HeapVector<Member<DOMRect>>> DOMVisualViewport::segments()
   const float page_zoom_factor = frame->PageZoomFactor();
   const float scale_factor = dips_to_blink / page_zoom_factor;
   for (auto const& web_segment : web_segments) {
-    blink::FloatQuad quad = blink::FloatQuad(IntRect(web_segment));
+    blink::FloatQuad quad = blink::FloatQuad(web_segment);
     quad.Scale(scale_factor, scale_factor);
     viewport_segments.push_back(DOMRect::FromFloatRect(quad.BoundingBox()));
   }

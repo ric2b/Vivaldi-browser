@@ -90,11 +90,25 @@ public:
     void SetMin(ValueType min);
 
     /**
+        Gets the minimal value accepted by the validator.
+
+        @since 3.1.3
+     */
+    ValueType GetMin() const;
+
+    /**
         Sets the maximal value accepted by the validator.
 
         This value is inclusive, i.e. the value equal to @a max is accepted.
      */
     void SetMax(ValueType max);
+
+    /**
+        Gets the maximum value accepted by the validator.
+
+        @since 3.1.3
+     */
+    ValueType GetMax() const;
 
     /**
         Sets both minimal and maximal values accepted by the validator.
@@ -103,6 +117,12 @@ public:
      */
     void SetRange(ValueType min, ValueType max);
 
+    /**
+        Gets both minimal and maximal values accepted by the validator.
+
+        @since 3.1.3
+     */
+    void GetRange(ValueType& min, ValueType& max) const;
 
     /**
         Change the validator style.
@@ -137,6 +157,57 @@ public:
         It does nothing if there is no associated variable.
      */
     virtual bool TransferFromWindow();
+
+protected:
+    /**
+        Pointer to the value associated with this validator.
+
+        This is the same pointer which is passed to the validator class ctor,
+        so please note that it can be null.
+
+        This field can be useful for the derived classes overriding the base
+        class TransferToWindow() and/or TransferFromWindow() methods, for
+        example here is a class which treats the absent value as @c 1
+        (similarly to how using wxNUM_VAL_ZERO_AS_BLANK would treat it as @c 0):
+
+        @code
+        class MyMultiplierValidator : public wxFloatingPointValidator<double>
+        {
+        public:
+            explicit MyMultiplierValidator(double& value)
+                : wxFloatingPointValidator(&value)
+            {
+                SetMin(0); // Multiplier is always positive.
+            }
+
+            bool TransferFromWindow() override
+            {
+                if ( GetTextEntry()->IsEmpty() )
+                {
+                    *m_value = 1.0;
+                    return true;
+                }
+
+                if ( !wxFloatingPointValidator<double>::TransferFromWindow() )
+                    return false;
+
+                // Multiplier must be strictly positive.
+                if ( *m_value == 0 )
+                    return false;
+
+                return true;
+            }
+
+            wxObject* Clone() const override
+            {
+                return new MyMultiplierValidator(*this);
+            }
+        };
+        @endcode
+
+        @since 3.1.5
+     */
+    ValueType* const m_value;
 };
 
 /**
@@ -346,12 +417,25 @@ public:
         constructor.
      */
     void SetPrecision(unsigned precision);
+
+    /**
+        Set factor used for displaying the value.
+
+        The value associated with the validator is multiplied by the factor
+        before displaying it and divided by it when retrieving its value from
+        the control. By default, the @a factor is 1, so the actual value is not
+        affected by it, but it can be set to, for example, 100, to display the
+        value in percents while still storing it as absolute value.
+
+        @since 3.1.1
+     */
+    void SetFactor(double factor);
 };
 
 /**
     Creates a wxFloatingPointValidator object with automatic type deduction.
 
-    Similarly to wxMakeIntegerValidator(), this function allows to avoid
+    Similarly to wxMakeIntegerValidator(), this function allows avoiding
     explicitly specifying the validator type.
 
     @since 2.9.2

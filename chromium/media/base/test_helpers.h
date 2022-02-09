@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
@@ -89,6 +88,9 @@ class WaitableMessageLoopEvent {
 // don't care about detailed parameters of the config.
 class TestVideoConfig {
  public:
+  TestVideoConfig(const TestVideoConfig&) = delete;
+  TestVideoConfig& operator=(const TestVideoConfig&) = delete;
+
   // Returns a configuration that is invalid.
   static VideoDecoderConfig Invalid();
 
@@ -123,9 +125,6 @@ class TestVideoConfig {
   static gfx::Size NormalCodedSize();
   static gfx::Size LargeCodedSize();
   static gfx::Size ExtraLargeCodedSize();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestVideoConfig);
 };
 
 // Provides pre-canned AudioDecoderConfig. These types are used for tests that
@@ -147,10 +146,10 @@ class TestAudioConfig {
 // Provides pre-canned AudioParameters objects.
 class TestAudioParameters {
  public:
-  static AudioParameters Normal();
+  TestAudioParameters(const TestAudioParameters&) = delete;
+  TestAudioParameters& operator=(const TestAudioParameters&) = delete;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestAudioParameters);
+  static AudioParameters Normal();
 };
 
 // Create an AudioBuffer containing |frames| frames of data, where each sample

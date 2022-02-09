@@ -734,41 +734,6 @@ IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest,
   EXPECT_TRUE(GetAllProvidedCertificates().empty());
 }
 
-// Tests the RSA MD5/SHA-1 signature algorithm. Note that TLS 1.1 is used in
-// order to make this algorithm employed.
-IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest, RsaMd5Sha1) {
-  ASSERT_TRUE(StartHttpsServer(net::SSL_PROTOCOL_VERSION_TLS1_1));
-
-  // Bypass the legacy TLS interstitial. Future connections to the test server
-  // will now succeed.
-  SetInterstitialBypass();
-
-  ExecuteJavascript("supportedAlgorithms = ['RSASSA_PKCS1_v1_5_MD5_SHA1'];");
-  ExecuteJavascript("registerForSignatureRequests();");
-  ExecuteJavascriptAndWaitForCallback("setCertificates();");
-  TestNavigationToCertificateRequestingWebPage("RSASSA_PKCS1_v1_5_MD5_SHA1",
-                                               SSL_SIGN_RSA_PKCS1_MD5_SHA1,
-                                               /*is_raw_data=*/true);
-}
-
-// Tests the RSA MD5/SHA-1 signature algorithm using the legacy version of the
-// API. Note that TLS 1.1 is used in order to make this algorithm employed.
-IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest,
-                       LegacyRsaMd5Sha1) {
-  ASSERT_TRUE(StartHttpsServer(net::SSL_PROTOCOL_VERSION_TLS1_1));
-
-  // Bypass the legacy TLS interstitial. Future connections to the test server
-  // will now succeed.
-  SetInterstitialBypass();
-
-  ExecuteJavascript("supportedLegacyHashes = ['MD5_SHA1'];");
-  ExecuteJavascript("registerAsLegacyCertificateProvider();");
-  ExecuteJavascript("registerForLegacySignatureRequests();");
-  TestNavigationToCertificateRequestingWebPage("MD5_SHA1",
-                                               SSL_SIGN_RSA_PKCS1_MD5_SHA1,
-                                               /*is_raw_data=*/false);
-}
-
 // Tests the RSA SHA-1 signature algorithm.
 IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest, RsaSha1) {
   ASSERT_TRUE(StartHttpsServer(net::SSL_PROTOCOL_VERSION_TLS1_2));
@@ -878,27 +843,6 @@ IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest,
                                                /*is_raw_data=*/true);
 }
 
-// Tests that the RSA MD5/SHA-1 signature algorithm is used in case of TLS 1.1,
-// even when there are other algorithms specified (which are stronger but aren't
-// supported on TLS 1.1).
-IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest,
-                       RsaMd5Sha1AndOthers) {
-  ASSERT_TRUE(StartHttpsServer(net::SSL_PROTOCOL_VERSION_TLS1_1));
-
-  // Bypass the legacy TLS interstitial. Future connections to the test server
-  // will now succeed.
-  SetInterstitialBypass();
-
-  ExecuteJavascript(
-      "supportedAlgorithms = ['RSASSA_PKCS1_v1_5_SHA512', "
-      "'RSASSA_PKCS1_v1_5_SHA1', 'RSASSA_PKCS1_v1_5_MD5_SHA1'];");
-  ExecuteJavascript("registerForSignatureRequests();");
-  ExecuteJavascriptAndWaitForCallback("setCertificates();");
-  TestNavigationToCertificateRequestingWebPage("RSASSA_PKCS1_v1_5_MD5_SHA1",
-                                               SSL_SIGN_RSA_PKCS1_MD5_SHA1,
-                                               /*is_raw_data=*/true);
-}
-
 // Tests the RSA-PSS SHA-256 signature algorithm.
 IN_PROC_BROWSER_TEST_F(CertificateProviderApiMockedExtensionTest,
                        RsaPssSha256) {
@@ -944,10 +888,10 @@ IN_PROC_BROWSER_TEST_F(CertificateProviderApiTest, LazyBackgroundPage) {
   extensions::ProcessManager::SetEventPageSuspendingTimeForTesting(1);
 
   // Load the test extension.
-  TestCertificateProviderExtension test_certificate_provider_extension(
+  ash::TestCertificateProviderExtension test_certificate_provider_extension(
       profile());
   extensions::ExtensionHostTestHelper host_helper(
-      profile(), TestCertificateProviderExtension::extension_id());
+      profile(), ash::TestCertificateProviderExtension::extension_id());
   host_helper.RestrictToType(
       extensions::mojom::ViewType::kExtensionBackgroundPage);
   const extensions::Extension* const extension =
@@ -956,14 +900,15 @@ IN_PROC_BROWSER_TEST_F(CertificateProviderApiTest, LazyBackgroundPage) {
                         .AppendASCII("test_certificate_provider")
                         .AppendASCII("extension"));
   ASSERT_TRUE(extension);
-  EXPECT_EQ(extension->id(), TestCertificateProviderExtension::extension_id());
+  EXPECT_EQ(extension->id(),
+            ash::TestCertificateProviderExtension::extension_id());
   host_helper.WaitForHostCompletedFirstLoad();
 
   // Navigate to the page that requests the client authentication. Use the
   // incognito profile in order to force re-authentication in the later request
   // made by the test.
-  const std::string client_cert_fingerprint =
-      GetCertFingerprint1(*TestCertificateProviderExtension::GetCertificate());
+  const std::string client_cert_fingerprint = GetCertFingerprint1(
+      *ash::TestCertificateProviderExtension::GetCertificate());
   Browser* const incognito_browser = CreateIncognitoBrowser(profile());
   ASSERT_TRUE(incognito_browser);
   ui_test_utils::NavigateToURLWithDisposition(
@@ -975,7 +920,7 @@ IN_PROC_BROWSER_TEST_F(CertificateProviderApiTest, LazyBackgroundPage) {
                 incognito_browser->tab_strip_model()->GetActiveWebContents()),
             "got client cert with fingerprint: " + client_cert_fingerprint);
   CheckCertificateProvidedByExtension(
-      *TestCertificateProviderExtension::GetCertificate(), *extension);
+      *ash::TestCertificateProviderExtension::GetCertificate(), *extension);
 
   // Let the extension's background page become idle.
   WaitForExtensionIdle(extension->id());

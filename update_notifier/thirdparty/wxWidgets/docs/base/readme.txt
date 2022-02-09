@@ -30,7 +30,7 @@ executing simultaneously (portably!) and so on.
 --------------------------------------
 
  wxBase can be compiled and used under Win32, mostly any modern Unix system
-(including Mac OS X), VMS and BeOS (this release couldn't be tested under
+(including macOS), VMS and BeOS (this release couldn't be tested under
 these platforms so you might encounter some problems but they should be easy
 to solve -- please contact us in this case!)
 
@@ -65,23 +65,10 @@ b) Cygwin
 
 c) Borland
 
-   Please refer to the docs/msw/install.txt. The console sample compiles and
+   Please refer to the docs/msw/install.md. The console sample compiles and
    runs but does not pass all tests.
 
-d) Watcom
-
-   The compilation has been tested only with OpenWatcom but should also work
-   with Watcom 11.0 but probably not the earlier versions.
-
-   To build wxBase itself (only static library build is supported), enter the
-   directory src\msw and type "wmake -f makebase.wat". See also Watcom notes in
-   docs/msw/install.txt.
-
-   There is makefile.wat in samples\console which can be used to build the
-   console sample with Watcom and also shows how can you write your own
-   makefiles for wxBase and Watcom compiler.
-
-e) Other compilers
+d) Other compilers
 
    Unfortunately we don't have the makefiles for any other compilers yet.
 Please contact us if you would like to help us with creating one for the
@@ -127,11 +114,8 @@ documentation instead.
  Support for wxBase is available from the same places as for wxWidgets itself,
 namely:
 
-* Usenet newsgroup comp.soft-sys.wxwindows
-
-* Mailing lists: see http://lists.wxwidgets.org/ for more information
-
-* WWW page: http://www.wxwidgets.org/
+* Website: https://www.wxwidgets.org/
+* Mailing Lists: https://www.wxwidgets.org/support/mailing-lists/
 
 
  Hope you will find wxBase useful!

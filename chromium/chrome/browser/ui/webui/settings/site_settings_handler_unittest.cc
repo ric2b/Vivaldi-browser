@@ -14,6 +14,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -40,6 +41,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/browsing_data/content/mock_cookie_helper.h"
 #include "components/browsing_data/content/mock_local_storage_helper.h"
+#include "components/client_hints/common/client_hints.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -172,8 +174,8 @@ class ContentSettingSourceSetter {
   }
 
  private:
-  sync_preferences::TestingPrefServiceSyncable* prefs_;
-  HostContentSettingsMap* host_content_settings_map_;
+  raw_ptr<sync_preferences::TestingPrefServiceSyncable> prefs_;
+  raw_ptr<HostContentSettingsMap> host_content_settings_map_;
   ContentSettingsType content_type_;
 };
 
@@ -452,7 +454,6 @@ class SiteSettingsHandlerTest : public testing::Test {
         mock_browsing_data_cookie_helper,
         /*database_helper=*/nullptr, mock_browsing_data_local_storage_helper,
         /*session_storage_helper=*/nullptr,
-        /*appcache_helper=*/nullptr,
         /*indexed_db_helper=*/nullptr,
         /*file_system_helper=*/nullptr,
         /*quota_helper=*/nullptr,
@@ -513,7 +514,7 @@ class SiteSettingsHandlerTest : public testing::Test {
  private:
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-  TestingProfile* incognito_profile_;
+  raw_ptr<TestingProfile> incognito_profile_;
   content::TestWebUI web_ui_;
   std::unique_ptr<SiteSettingsHandler> handler_;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2195,7 +2196,8 @@ TEST_F(SiteSettingsHandlerChooserExceptionTest,
   EXPECT_EQ(exceptions.GetList().size(), 5u);
 
   // Don't include WebUI schemes.
-  const std::string kWebUIOriginStr = kWebUIUrl.GetOrigin().spec();
+  const std::string kWebUIOriginStr =
+      kWebUIUrl.DeprecatedGetOriginAsURL().spec();
   EXPECT_FALSE(ChooserExceptionContainsSiteException(exceptions, "Gizmo",
                                                      kWebUIOriginStr));
 }
@@ -2244,9 +2246,12 @@ TEST_F(SiteSettingsHandlerChooserExceptionTest,
   const auto kAndroidOrigin = url::Origin::Create(kAndroidUrl);
   const auto kChromiumOrigin = url::Origin::Create(kChromiumUrl);
   const auto kGoogleOrigin = url::Origin::Create(kGoogleUrl);
-  const std::string kAndroidOriginStr = kAndroidUrl.GetOrigin().spec();
-  const std::string kChromiumOriginStr = kChromiumUrl.GetOrigin().spec();
-  const std::string kGoogleOriginStr = kGoogleUrl.GetOrigin().spec();
+  const std::string kAndroidOriginStr =
+      kAndroidUrl.DeprecatedGetOriginAsURL().spec();
+  const std::string kChromiumOriginStr =
+      kChromiumUrl.DeprecatedGetOriginAsURL().spec();
+  const std::string kGoogleOriginStr =
+      kGoogleUrl.DeprecatedGetOriginAsURL().spec();
 
   {
     const base::Value& exceptions = GetChooserExceptionListFromWebUiCallData(
@@ -2431,6 +2436,54 @@ TEST_F(SiteSettingsHandlerTest, HandleClearEtldPlus1DataAndCookies) {
 
   storage_and_cookie_list = GetOnStorageFetchedSentListView();
   EXPECT_EQ(0U, storage_and_cookie_list.size());
+}
+
+// TODO(crbug.com/1271155, crbug.com/1268626): Add Validation for cookies nodes
+// deleted correctly.
+TEST_F(SiteSettingsHandlerTest, HandleClearUsage) {
+  SetUpCookiesTreeModel();
+
+  EXPECT_EQ(22, handler()->cookies_tree_model_->GetRoot()->GetTotalNodeCount());
+
+  GURL hosts[] = {GURL("https://example.com/"), GURL("https://google.com/")};
+
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile());
+  ContentSettingsForOneType client_hints_settings;
+
+  // Add setting for the two hosts host[0], host[1].
+  base::Value client_hint_platform_version(14);
+  base::Value client_hint_bitness(16);
+
+  base::Value client_hints_list(base::Value::Type::LIST);
+  client_hints_list.Append(std::move(client_hint_platform_version));
+  client_hints_list.Append(std::move(client_hint_bitness));
+
+  base::Value client_hints_dictionary(base::Value::Type::DICTIONARY);
+  client_hints_dictionary.SetKey(client_hints::kClientHintsSettingKey,
+                                 std::move(client_hints_list));
+
+  // Add setting for the hosts.
+  for (const auto& host : hosts) {
+    host_content_settings_map->SetWebsiteSettingDefaultScope(
+        host, GURL(), ContentSettingsType::CLIENT_HINTS,
+        base::Value::ToUniquePtrValue(client_hints_dictionary.Clone()));
+  }
+
+  // Clear usage data.
+  base::Value args(base::Value::Type::LIST);
+  args.Append("https://example.com/");
+  handler()->HandleClearUsage(&base::Value::AsListValue(args));
+
+  // Validate the client hint has been cleared.
+  host_content_settings_map->GetSettingsForOneType(
+      ContentSettingsType::CLIENT_HINTS, &client_hints_settings);
+  EXPECT_EQ(1U, client_hints_settings.size());
+  EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(hosts[1]),
+            client_hints_settings.at(0).primary_pattern);
+  EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+            client_hints_settings.at(0).secondary_pattern);
+  EXPECT_EQ(client_hints_dictionary, client_hints_settings.at(0).setting_value);
 }
 
 TEST_F(SiteSettingsHandlerTest, CookieSettingDescription) {

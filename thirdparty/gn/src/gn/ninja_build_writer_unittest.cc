@@ -248,8 +248,8 @@ TEST_F(NinjaBuildWriterTest, DuplicateOutputs) {
       "setting an output_name on one of them.\n"
       "\n"
       "Collisions:\n"
-      "  //foo:bar\n"
-      "  //bar:bar\n";
+      "  //foo:bar()\n"
+      "  //bar:bar()\n";
 
   EXPECT_EQ(expected_help_test, err.help_text());
 }

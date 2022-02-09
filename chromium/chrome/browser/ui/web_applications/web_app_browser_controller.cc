@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -28,15 +29,17 @@
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/mojom/types.mojom-forward.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image.h"
+#include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/public/cpp/style/color_provider.h"
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 
 namespace {
@@ -66,7 +69,7 @@ class SystemAppTabMenuModelFactory : public TabMenuModelFactory {
   }
 
  private:
-  const web_app::SystemWebAppDelegate* system_app_;
+  raw_ptr<const web_app::SystemWebAppDelegate> system_app_;
 };
 
 }  // namespace
@@ -224,13 +227,14 @@ absl::optional<SkColor> WebAppBrowserController::GetThemeColor() const {
   if (web_theme_color)
     return web_theme_color;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  absl::optional<SkColor> dark_mode_color =
-      registrar().GetAppDarkModeThemeColor(app_id());
-  if (ash::ColorProvider::Get()->IsDarkModeEnabled() && dark_mode_color) {
-    return dark_mode_color;
+  if (ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()) {
+    absl::optional<SkColor> dark_mode_color =
+        registrar().GetAppDarkModeThemeColor(app_id());
+
+    if (dark_mode_color) {
+      return dark_mode_color;
+    }
   }
-#endif
 
   return registrar().GetAppThemeColor(app_id());
 }
@@ -238,6 +242,14 @@ absl::optional<SkColor> WebAppBrowserController::GetThemeColor() const {
 absl::optional<SkColor> WebAppBrowserController::GetBackgroundColor() const {
   if (auto color = AppBrowserController::GetBackgroundColor())
     return color;
+
+  if (ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()) {
+    absl::optional<SkColor> dark_mode_color =
+        registrar().GetAppDarkModeBackgroundColor(app_id());
+    if (dark_mode_color) {
+      return dark_mode_color;
+    }
+  }
 
   return registrar().GetAppBackgroundColor(app_id());
 }
@@ -247,6 +259,9 @@ GURL WebAppBrowserController::GetAppStartUrl() const {
 }
 
 bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
+  if (system_app() && system_app()->IsUrlInSystemAppScope(url))
+    return true;
+
   GURL app_scope = registrar().GetAppScope(app_id());
   if (!app_scope.is_valid())
     return false;
@@ -254,7 +269,7 @@ bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
   // https://w3c.github.io/manifest/#navigation-scope
   // If url is same origin as scope and url path starts with scope path, return
   // true. Otherwise, return false.
-  if (app_scope.GetOrigin() != url.GetOrigin()) {
+  if (app_scope.DeprecatedGetOriginAsURL() != url.DeprecatedGetOriginAsURL()) {
     // We allow an upgrade from http |app_scope| to https |url|.
     if (app_scope.scheme() != url::kHttpScheme)
       return false;
@@ -262,7 +277,8 @@ bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
     GURL::Replacements rep;
     rep.SetSchemeStr(url::kHttpsScheme);
     GURL secure_app_scope = app_scope.ReplaceComponents(rep);
-    if (secure_app_scope.GetOrigin() != url.GetOrigin())
+    if (secure_app_scope.DeprecatedGetOriginAsURL() !=
+        url.DeprecatedGetOriginAsURL())
       return false;
   }
 
@@ -342,15 +358,24 @@ const WebAppRegistrar& WebAppBrowserController::registrar() const {
 void WebAppBrowserController::LoadAppIcon(bool allow_placeholder_icon) const {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
-  proxy->LoadIcon(proxy->AppRegistryCache().GetAppType(app_id()), app_id(),
-                  apps::mojom::IconType::kStandard, kWebAppIconSmall,
-                  allow_placeholder_icon,
-                  base::BindOnce(&WebAppBrowserController::OnLoadIcon,
-                                 weak_ptr_factory_.GetWeakPtr()));
+  auto app_type = proxy->AppRegistryCache().GetAppType(app_id());
+  if (base::FeatureList::IsEnabled(features::kAppServiceLoadIconWithoutMojom)) {
+    proxy->LoadIcon(apps::ConvertMojomAppTypToAppType(app_type), app_id(),
+                    apps::IconType::kStandard, kWebAppIconSmall,
+                    allow_placeholder_icon,
+                    base::BindOnce(&WebAppBrowserController::OnLoadIcon,
+                                   weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    proxy->LoadIcon(app_type, app_id(), apps::mojom::IconType::kStandard,
+                    kWebAppIconSmall, allow_placeholder_icon,
+                    apps::MojomIconValueToIconValueCallback(
+                        base::BindOnce(&WebAppBrowserController::OnLoadIcon,
+                                       weak_ptr_factory_.GetWeakPtr())));
+  }
 }
 
-void WebAppBrowserController::OnLoadIcon(apps::mojom::IconValuePtr icon_value) {
-  if (icon_value->icon_type != apps::mojom::IconType::kStandard)
+void WebAppBrowserController::OnLoadIcon(apps::IconValuePtr icon_value) {
+  if (!icon_value || icon_value->icon_type != apps::IconType::kStandard)
     return;
 
   app_icon_ = ui::ImageModel::FromImageSkia(icon_value->uncompressed);
@@ -391,7 +416,7 @@ void WebAppBrowserController::PerformDigitalAssetLinkVerification(
   if (!apk_web_app_service || !apk_web_app_service->IsWebOnlyTwa(app_id()))
     return;
 
-  const std::string origin = GetAppStartUrl().GetOrigin().spec();
+  const std::string origin = GetAppStartUrl().DeprecatedGetOriginAsURL().spec();
   const absl::optional<std::string> package_name =
       apk_web_app_service->GetPackageNameForWebApp(app_id());
   const absl::optional<std::string> fingerprint =

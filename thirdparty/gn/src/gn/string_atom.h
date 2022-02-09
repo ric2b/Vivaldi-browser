@@ -119,8 +119,10 @@ class StringAtom {
 
   size_t hash() const { return std::hash<std::string>()(value_); }
 
-  // Use the following structs to implement containers that use StringAtom
-  // values as keys, but only compare/hash the pointer values for speed.
+  // Use the following method and structs to implement containers that
+  // use StringAtom values as keys, but only compare/hash the pointer
+  // values for speed.
+  //
   // E.g.:
   //    using FastSet = std::unordered_set<StringAtom, PtrHash, PtrEqual>;
   //    using FastMap = std::map<StringAtom, Value, PtrCompare>;
@@ -128,9 +130,11 @@ class StringAtom {
   // IMPORTANT: Note that FastMap above is ordered based in the StringAtom
   //            pointer value, not the string content.
   //
+  size_t ptr_hash() const { return std::hash<const std::string*>()(&value_); }
+
   struct PtrHash {
     size_t operator()(const StringAtom& key) const noexcept {
-      return std::hash<const std::string*>()(&key.value_);
+      return key.ptr_hash();
     }
   };
 

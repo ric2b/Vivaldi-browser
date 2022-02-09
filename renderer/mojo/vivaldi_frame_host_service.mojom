@@ -4,11 +4,18 @@ interface VivaldiFrameHostService {
   [EnableIfNot=is_android]
   NotifyMediaElementAdded();
 
-  // The call supply extra information for LocalFrameHost::DidChangeLoadProgress
+  // The call supply extra information for
+  // LocalFrameHost::DidChangeLoadProgress.
+  //
+  // `loaded_bytes_delta` is the number of bytes read since the last call.
+  //
+  // `loaded_resource_delta` and `started_resource_delta` are the numbers of
+  // resources like images, scripts, css, frames etc. that are fully loaded or
+  // started to load since the previous call. The main document is also included
+  // into the counters.
   [EnableIfNot=is_android]
-  DidChangeLoadProgressExtended(double load_progress,
-                                double loaded_bytes,
-                                int32 loaded_elements,
-                                int32 total_elements);
+  DidChangeLoadProgressExtended(int64 loaded_bytes_delta,
+                                int32 loaded_resource_delta,
+                                int32 started_resource_delta);
 
 };

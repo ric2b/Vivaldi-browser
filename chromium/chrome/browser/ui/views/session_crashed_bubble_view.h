@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "chrome/browser/ui/session_crashed_bubble.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
@@ -28,6 +27,8 @@ class SessionCrashedBubbleView : public SessionCrashedBubble {
   static void Show(std::unique_ptr<BrowserRemovalObserver> browser_observer,
                    bool skip_tab_checking,
                    bool uma_opted_in_already);
+
+  static views::BubbleDialogDelegate* GetInstanceForTest();
 
  private:
   friend class SessionCrashedBubbleViewTest;

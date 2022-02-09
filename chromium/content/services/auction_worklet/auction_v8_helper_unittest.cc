@@ -49,17 +49,19 @@ class AuctionV8HelperTest : public testing::Test {
   ~AuctionV8HelperTest() override = default;
 
   void CompileAndRunScriptOnV8Thread(
-      int context_group_id,
+      scoped_refptr<AuctionV8Helper::DebugId> debug_id,
       const std::string& function_name,
       const GURL& url,
       const std::string& body,
       bool expect_success = true,
       base::OnceClosure done = base::OnceClosure(),
       int* result_out = nullptr) {
+    DCHECK(debug_id);
     helper_->v8_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(
-            [](scoped_refptr<AuctionV8Helper> helper, int context_group_id,
+            [](scoped_refptr<AuctionV8Helper> helper,
+               scoped_refptr<AuctionV8Helper::DebugId> debug_id,
                std::string function_name, GURL url, std::string body,
                bool expect_success, base::OnceClosure done, int* result_out) {
               AuctionV8Helper::FullIsolateScope isolate_scope(helper.get());
@@ -68,7 +70,7 @@ class AuctionV8HelperTest : public testing::Test {
                 v8::Context::Scope ctx(helper->scratch_context());
                 absl::optional<std::string> error_msg;
                 ASSERT_TRUE(
-                    helper->Compile(body, url, context_group_id, error_msg)
+                    helper->Compile(body, url, debug_id.get(), error_msg)
                         .ToLocal(&script));
                 EXPECT_FALSE(error_msg.has_value());
               }
@@ -76,8 +78,13 @@ class AuctionV8HelperTest : public testing::Test {
               std::vector<std::string> error_msgs;
               v8::Context::Scope ctx(context);
               v8::Local<v8::Value> result;
+              // This is here since it needs to be before RunScript() ---
+              // doing it before Compile() doesn't work.
+              helper->MaybeTriggerInstrumentationBreakpoint(*debug_id, "start");
+              helper->MaybeTriggerInstrumentationBreakpoint(*debug_id,
+                                                            "start2");
               bool success = helper
-                                 ->RunScript(context, script, context_group_id,
+                                 ->RunScript(context, script, debug_id.get(),
                                              function_name,
                                              base::span<v8::Local<v8::Value>>(),
                                              error_msgs)
@@ -98,25 +105,27 @@ class AuctionV8HelperTest : public testing::Test {
               if (!done.is_null())
                 std::move(done).Run();
             },
-            helper_, context_group_id, function_name, url, body, expect_success,
-            std::move(done), result_out));
+            helper_, std::move(debug_id), function_name, url, body,
+            expect_success, std::move(done), result_out));
   }
 
   void ConnectToDevToolsAgent(
-      int context_group_id,
+      scoped_refptr<AuctionV8Helper::DebugId> debug_id,
       mojo::PendingReceiver<blink::mojom::DevToolsAgent> agent_receiver) {
+    DCHECK(debug_id);
     helper_->v8_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(
             [](scoped_refptr<AuctionV8Helper> helper,
                mojo::PendingReceiver<blink::mojom::DevToolsAgent>
                    agent_receiver,
-               scoped_refptr<base::SequencedTaskRunner> mojo_thread, int id) {
+               scoped_refptr<base::SequencedTaskRunner> mojo_thread,
+               scoped_refptr<AuctionV8Helper::DebugId> debug_id) {
               helper->ConnectDevToolsAgent(std::move(agent_receiver),
-                                           std::move(mojo_thread), id);
+                                           std::move(mojo_thread), *debug_id);
             },
             helper_, std::move(agent_receiver),
-            base::SequencedTaskRunnerHandle::Get(), context_group_id));
+            base::SequencedTaskRunnerHandle::Get(), std::move(debug_id)));
   }
 
  protected:
@@ -132,11 +141,11 @@ TEST_F(AuctionV8HelperTest, Basic) {
   {
     v8::Context::Scope ctx(helper_->scratch_context());
     absl::optional<std::string> error_msg;
-    ASSERT_TRUE(
-        helper_
-            ->Compile("function foo() { return 1;}", GURL("https://foo.test/"),
-                      AuctionV8Helper::kNoDebugContextGroupId, error_msg)
-            .ToLocal(&script));
+    ASSERT_TRUE(helper_
+                    ->Compile("function foo() { return 1;}",
+                              GURL("https://foo.test/"),
+                              /*debug_id=*/nullptr, error_msg)
+                    .ToLocal(&script));
     EXPECT_FALSE(error_msg.has_value());
   }
 
@@ -147,7 +156,7 @@ TEST_F(AuctionV8HelperTest, Basic) {
     v8::Local<v8::Value> result;
     ASSERT_TRUE(helper_
                     ->RunScript(context, script,
-                                AuctionV8Helper::kNoDebugContextGroupId, "foo",
+                                /*debug_id=*/nullptr, "foo",
                                 base::span<v8::Local<v8::Value>>(), error_msgs)
                     .ToLocal(&result));
     int int_result = 0;
@@ -192,15 +201,14 @@ TEST_F(AuctionV8HelperTest, Timeout) {
     absl::optional<std::string> compile_error;
     ASSERT_TRUE(helper_
                     ->Compile(hanging_script.script, GURL("https://foo.test/"),
-                              AuctionV8Helper::kNoDebugContextGroupId,
-                              compile_error)
+                              /*debug_id=*/nullptr, compile_error)
                     .ToLocal(&script));
     EXPECT_FALSE(compile_error.has_value());
 
     std::vector<std::string> error_msgs;
-    v8::MaybeLocal<v8::Value> result = helper_->RunScript(
-        context, script, AuctionV8Helper::kNoDebugContextGroupId, "foo",
-        base::span<v8::Local<v8::Value>>(), error_msgs);
+    v8::MaybeLocal<v8::Value> result =
+        helper_->RunScript(context, script, /*debug_id=*/nullptr, "foo",
+                           base::span<v8::Local<v8::Value>>(), error_msgs);
     EXPECT_TRUE(result.IsEmpty());
     EXPECT_THAT(
         error_msgs,
@@ -222,18 +230,18 @@ TEST_F(AuctionV8HelperTest, Timeout) {
   v8::Context::Scope context_scope(context);
   v8::Local<v8::UnboundScript> script;
   absl::optional<std::string> compile_error;
-  ASSERT_TRUE(
-      helper_
-          ->Compile("function foo() { return 1;}", GURL("https://foo.test/"),
-                    AuctionV8Helper::kNoDebugContextGroupId, compile_error)
-          .ToLocal(&script));
+  ASSERT_TRUE(helper_
+                  ->Compile("function foo() { return 1;}",
+                            GURL("https://foo.test/"),
+                            /*debug_id=*/nullptr, compile_error)
+                  .ToLocal(&script));
   EXPECT_FALSE(compile_error.has_value());
 
   std::vector<std::string> error_msgs;
   v8::Local<v8::Value> result;
   ASSERT_TRUE(helper_
                   ->RunScript(context, script,
-                              AuctionV8Helper::kNoDebugContextGroupId, "foo",
+                              /*debug_id=*/nullptr, "foo",
                               base::span<v8::Local<v8::Value>>(), error_msgs)
                   .ToLocal(&result));
   EXPECT_TRUE(error_msgs.empty());
@@ -254,14 +262,13 @@ TEST_F(AuctionV8HelperTest, NoTime) {
   ASSERT_TRUE(helper_
                   ->Compile("function foo() { return Date();}",
                             GURL("https://foo.test/"),
-                            AuctionV8Helper::kNoDebugContextGroupId,
-                            compile_error)
+                            /*debug_id=*/nullptr, compile_error)
                   .ToLocal(&script));
   EXPECT_FALSE(compile_error.has_value());
   std::vector<std::string> error_msgs;
   EXPECT_TRUE(helper_
                   ->RunScript(context, script,
-                              AuctionV8Helper::kNoDebugContextGroupId, "foo",
+                              /*debug_id=*/nullptr, "foo",
                               base::span<v8::Local<v8::Value>>(), error_msgs)
                   .IsEmpty());
   ASSERT_EQ(1u, error_msgs.size());
@@ -277,7 +284,7 @@ TEST_F(AuctionV8HelperTest, CompileError) {
   absl::optional<std::string> error_msg;
   ASSERT_FALSE(helper_
                    ->Compile("function foo() { ", GURL("https://foo.test/"),
-                             AuctionV8Helper::kNoDebugContextGroupId, error_msg)
+                             /*debug_id=*/nullptr, error_msg)
                    .ToLocal(&script));
   ASSERT_TRUE(error_msg.has_value());
   EXPECT_THAT(error_msg.value(), StartsWith("https://foo.test/:1 "));
@@ -293,8 +300,7 @@ TEST_F(AuctionV8HelperTest, RunErrorTopLevel) {
     ASSERT_TRUE(helper_
                     ->Compile("\n\nthrow new Error('I am an error');",
                               GURL("https://foo.test/"),
-                              AuctionV8Helper::kNoDebugContextGroupId,
-                              error_msg)
+                              /*debug_id=*/nullptr, error_msg)
                     .ToLocal(&script));
     EXPECT_FALSE(error_msg.has_value());
   }
@@ -305,7 +311,7 @@ TEST_F(AuctionV8HelperTest, RunErrorTopLevel) {
   v8::Local<v8::Value> result;
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
-                               AuctionV8Helper::kNoDebugContextGroupId, "foo",
+                               /*debug_id=*/nullptr, "foo",
                                base::span<v8::Local<v8::Value>>(), error_msgs)
                    .ToLocal(&result));
   EXPECT_THAT(
@@ -319,11 +325,11 @@ TEST_F(AuctionV8HelperTest, TargetFunctionNotFound) {
   {
     v8::Context::Scope ctx(helper_->scratch_context());
     absl::optional<std::string> error_msg;
-    ASSERT_TRUE(
-        helper_
-            ->Compile("function foo() { return 1;}", GURL("https://foo.test/"),
-                      AuctionV8Helper::kNoDebugContextGroupId, error_msg)
-            .ToLocal(&script));
+    ASSERT_TRUE(helper_
+                    ->Compile("function foo() { return 1;}",
+                              GURL("https://foo.test/"),
+                              /*debug_id=*/nullptr, error_msg)
+                    .ToLocal(&script));
     EXPECT_FALSE(error_msg.has_value());
   }
 
@@ -334,7 +340,7 @@ TEST_F(AuctionV8HelperTest, TargetFunctionNotFound) {
   v8::Local<v8::Value> result;
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
-                               AuctionV8Helper::kNoDebugContextGroupId, "bar",
+                               /*debug_id=*/nullptr, "bar",
                                base::span<v8::Local<v8::Value>>(), error_msgs)
                    .ToLocal(&result));
 
@@ -352,8 +358,7 @@ TEST_F(AuctionV8HelperTest, TargetFunctionError) {
     ASSERT_TRUE(helper_
                     ->Compile("function foo() { return notfound;}",
                               GURL("https://foo.test/"),
-                              AuctionV8Helper::kNoDebugContextGroupId,
-                              error_msg)
+                              /*debug_id=*/nullptr, error_msg)
                     .ToLocal(&script));
     EXPECT_FALSE(error_msg.has_value());
   }
@@ -365,7 +370,7 @@ TEST_F(AuctionV8HelperTest, TargetFunctionError) {
   v8::Local<v8::Value> result;
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
-                               AuctionV8Helper::kNoDebugContextGroupId, "foo",
+                               /*debug_id=*/nullptr, "foo",
                                base::span<v8::Local<v8::Value>>(), error_msgs)
                    .ToLocal(&result));
   ASSERT_EQ(1u, error_msgs.size());
@@ -394,8 +399,7 @@ TEST_F(AuctionV8HelperTest, LogThenError) {
     absl::optional<std::string> error_msg;
     ASSERT_TRUE(helper_
                     ->Compile(kScript, GURL("https://foo.test/"),
-                              AuctionV8Helper::kNoDebugContextGroupId,
-                              error_msg)
+                              /*debug_id=*/nullptr, error_msg)
                     .ToLocal(&script));
     EXPECT_FALSE(error_msg.has_value());
   }
@@ -407,7 +411,7 @@ TEST_F(AuctionV8HelperTest, LogThenError) {
   v8::Local<v8::Value> result;
   ASSERT_FALSE(helper_
                    ->RunScript(context, script,
-                               AuctionV8Helper::kNoDebugContextGroupId, "foo",
+                               /*debug_id=*/nullptr, "foo",
                                base::span<v8::Local<v8::Value>>(), error_msgs)
                    .ToLocal(&result));
   ASSERT_EQ(error_msgs.size(), 6u);
@@ -428,7 +432,7 @@ TEST_F(AuctionV8HelperTest, FormatScriptName) {
   ASSERT_TRUE(helper_
                   ->Compile("function foo() { return 1;}",
                             GURL("https://foo.test:8443/foo.js?v=3"),
-                            AuctionV8Helper::kNoDebugContextGroupId, error_msg)
+                            /*debug_id=*/nullptr, error_msg)
                   .ToLocal(&script));
   EXPECT_EQ("https://foo.test:8443/foo.js?v=3",
             helper_->FormatScriptName(script));
@@ -439,67 +443,72 @@ TEST_F(AuctionV8HelperTest, ContextIDs) {
   base::RepeatingClosure count_resume_callback_invocation =
       base::BindLambdaForTesting([&]() { ++resume_callback_invocations; });
 
-  int id1 = helper_->AllocContextGroupIdAndSetResumeCallback(
-      count_resume_callback_invocation);
-  EXPECT_NE(AuctionV8Helper::kNoDebugContextGroupId, id1);
+  auto id1 = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  id1->SetResumeCallback(count_resume_callback_invocation);
+  EXPECT_GT(id1->context_group_id(), 0);
   ASSERT_EQ(0, resume_callback_invocations);
 
   // Invoking resume the first time invokes the callback.
-  helper_->Resume(id1);
+  helper_->Resume(id1->context_group_id());
   ASSERT_EQ(1, resume_callback_invocations);
 
   // Later invocations don't do anything.
-  helper_->Resume(id1);
+  helper_->Resume(id1->context_group_id());
   ASSERT_EQ(1, resume_callback_invocations);
 
-  helper_->FreeContextGroupId(id1);
   // ... including after free.
-  helper_->Resume(id1);
+  int save_id1 = id1->context_group_id();
+  id1->AbortDebuggerPauses();
+  id1.reset();
+  helper_->Resume(save_id1);
   ASSERT_EQ(1, resume_callback_invocations);
 
   // Or before allocation.
-  helper_->Resume(id1 + 1);
+  helper_->Resume(save_id1 + 1);
   ASSERT_EQ(1, resume_callback_invocations);
 
   // Try with free before Resume call, too.
-  int id2 = helper_->AllocContextGroupIdAndSetResumeCallback(
-      count_resume_callback_invocation);
-  EXPECT_NE(AuctionV8Helper::kNoDebugContextGroupId, id2);
+  auto id2 = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  id2->SetResumeCallback(count_resume_callback_invocation);
+  EXPECT_GT(id2->context_group_id(), 0);
   ASSERT_EQ(1, resume_callback_invocations);
-  helper_->FreeContextGroupId(id2);
-  helper_->Resume(id2);
+  int save_id2 = id2->context_group_id();
+  id2->AbortDebuggerPauses();
+  id2.reset();
+  helper_->Resume(save_id2);
   ASSERT_EQ(1, resume_callback_invocations);
 
   // Rudimentary test that two live IDs aren't the same.
-  int id3 = helper_->AllocContextGroupIdAndSetResumeCallback(
-      count_resume_callback_invocation);
-  int id4 = helper_->AllocContextGroupIdAndSetResumeCallback(
-      count_resume_callback_invocation);
-  EXPECT_NE(AuctionV8Helper::kNoDebugContextGroupId, id3);
-  EXPECT_NE(AuctionV8Helper::kNoDebugContextGroupId, id4);
-  EXPECT_NE(id3, id4);
-  helper_->Resume(id4);
+  auto id3 = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  id3->SetResumeCallback(count_resume_callback_invocation);
+  auto id4 = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  id4->SetResumeCallback(count_resume_callback_invocation);
+  int save_id3 = id3->context_group_id();
+  int save_id4 = id4->context_group_id();
+  EXPECT_GT(save_id3, 0);
+  EXPECT_GT(save_id4, 0);
+  EXPECT_NE(save_id3, save_id4);
+  helper_->Resume(save_id4);
   ASSERT_EQ(2, resume_callback_invocations);
-  helper_->Resume(id3);
+  helper_->Resume(save_id3);
   ASSERT_EQ(3, resume_callback_invocations);
-  helper_->FreeContextGroupId(id3);
-  helper_->FreeContextGroupId(id4);
+
+  id3->AbortDebuggerPauses();
+  id4->AbortDebuggerPauses();
 }
 
 TEST_F(AuctionV8HelperTest, AllocWrap) {
   // Check what the ID allocator does when numbers wrap around and collide.
-  int id1 =
-      helper_->AllocContextGroupIdAndSetResumeCallback(base::OnceClosure());
-  EXPECT_GT(id1, 0);
+  auto id1 = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  EXPECT_GT(id1->context_group_id(), 0);
   helper_->SetLastContextGroupIdForTesting(std::numeric_limits<int>::max());
-  int id2 =
-      helper_->AllocContextGroupIdAndSetResumeCallback(base::OnceClosure());
+  auto id2 = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
   // `id2` should be positive and distinct from `id1`.
-  EXPECT_GT(id2, 0);
-  EXPECT_NE(id1, id2);
+  EXPECT_GT(id2->context_group_id(), 0);
+  EXPECT_NE(id1->context_group_id(), id2->context_group_id());
 
-  helper_->FreeContextGroupId(id1);
-  helper_->FreeContextGroupId(id2);
+  id1->AbortDebuggerPauses();
+  id2->AbortDebuggerPauses();
 }
 
 TEST_F(AuctionV8HelperTest, DebuggerBasics) {
@@ -512,8 +521,9 @@ TEST_F(AuctionV8HelperTest, DebuggerBasics) {
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
   ScopedInspectorSupport inspector_support(helper_.get());
 
-  int id = AllocContextGroupIdAndWait(helper_);
-  TestChannel* channel = inspector_support.ConnectDebuggerSession(id);
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  TestChannel* channel =
+      inspector_support.ConnectDebuggerSession(id->context_group_id());
   channel->RunCommandAndWaitForResult(
       1, "Runtime.enable", R"({"id":1,"method":"Runtime.enable","params":{}})");
   channel->RunCommandAndWaitForResult(
@@ -568,7 +578,7 @@ TEST_F(AuctionV8HelperTest, DebuggerBasics) {
   ASSERT_TRUE(parsed_src);
   EXPECT_EQ(kScriptSrc, *parsed_src);
 
-  FreeContextGroupIdAndWait(helper_, id);
+  id->AbortDebuggerPauses();
 }
 
 TEST_F(AuctionV8HelperTest, DebugCompileError) {
@@ -580,8 +590,9 @@ TEST_F(AuctionV8HelperTest, DebugCompileError) {
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
   ScopedInspectorSupport inspector_support(helper_.get());
 
-  int id = AllocContextGroupIdAndWait(helper_);
-  TestChannel* channel = inspector_support.ConnectDebuggerSession(id);
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+  TestChannel* channel =
+      inspector_support.ConnectDebuggerSession(id->context_group_id());
   channel->RunCommandAndWaitForResult(
       1, "Runtime.enable", R"({"id":1,"method":"Runtime.enable","params":{}})");
   channel->RunCommandAndWaitForResult(
@@ -591,15 +602,16 @@ TEST_F(AuctionV8HelperTest, DebugCompileError) {
   helper_->v8_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(
-          [](scoped_refptr<AuctionV8Helper> helper, int context_group_id,
-             std::string url, std::string body) {
+          [](scoped_refptr<AuctionV8Helper> helper,
+             scoped_refptr<AuctionV8Helper::DebugId> debug_id, std::string url,
+             std::string body) {
             AuctionV8Helper::FullIsolateScope isolate_scope(helper.get());
             v8::Local<v8::UnboundScript> script;
             {
               v8::Context::Scope ctx(helper->scratch_context());
               absl::optional<std::string> error_msg;
               ASSERT_FALSE(
-                  helper->Compile(body, GURL(url), context_group_id, error_msg)
+                  helper->Compile(body, GURL(url), debug_id.get(), error_msg)
                       .ToLocal(&script));
             }
           },
@@ -615,7 +627,7 @@ TEST_F(AuctionV8HelperTest, DebugCompileError) {
   TestChannel::Event context_destroyed_event =
       channel->WaitForMethodNotification("Runtime.executionContextDestroyed");
 
-  FreeContextGroupIdAndWait(helper_, id);
+  id->AbortDebuggerPauses();
 }
 
 TEST_F(AuctionV8HelperTest, DevToolsDebuggerBasics) {
@@ -633,7 +645,7 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerBasics) {
     v8_scope_.reset();
     helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
-    int id = AllocContextGroupIdAndWait(helper_);
+    auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
     mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
     ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
@@ -721,7 +733,129 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerBasics) {
     result_run_loop.Run();
     EXPECT_EQ(30, result);
 
-    FreeContextGroupIdAndWait(helper_, id);
+    id->AbortDebuggerPauses();
+  }
+}
+
+TEST_F(AuctionV8HelperTest, DevToolsAgentDebuggerInstrumentationBreakpoint) {
+  const char kSession[] = "123-456";
+  const char kScript[] = R"(
+    function compute() {
+      return 42;
+    }
+  )";
+
+  for (bool use_binary_protocol : {false, true}) {
+    for (bool use_multiple_breakpoints : {false, true}) {
+      std::string test_name =
+          std::string(use_binary_protocol ? "Binary " : "JSON ") +
+          (use_multiple_breakpoints ? "Multi" : "Single");
+      SCOPED_TRACE(test_name);
+      // Need to use a separate thread for debugger stuff.
+      v8_scope_.reset();
+      helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
+
+      auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
+
+      mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
+      ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
+
+      TestDevToolsAgentClient debug_client(std::move(agent_remote), kSession,
+                                           use_binary_protocol);
+      debug_client.RunCommandAndWaitForResult(
+          TestDevToolsAgentClient::Channel::kMain, 1, "Runtime.enable",
+          R"({"id":1,"method":"Runtime.enable","params":{}})");
+      debug_client.RunCommandAndWaitForResult(
+          TestDevToolsAgentClient::Channel::kMain, 2, "Debugger.enable",
+          R"({"id":2,"method":"Debugger.enable","params":{}})");
+
+      debug_client.RunCommandAndWaitForResult(
+          TestDevToolsAgentClient::Channel::kMain, 3,
+          "EventBreakpoints.setInstrumentationBreakpoint",
+          MakeInstrumentationBreakpointCommand(3, "set", "start"));
+      debug_client.RunCommandAndWaitForResult(
+          TestDevToolsAgentClient::Channel::kMain, 4,
+          "EventBreakpoints.setInstrumentationBreakpoint",
+          MakeInstrumentationBreakpointCommand(4, "set", "start2"));
+      debug_client.RunCommandAndWaitForResult(
+          TestDevToolsAgentClient::Channel::kMain, 5,
+          "EventBreakpoints.setInstrumentationBreakpoint",
+          MakeInstrumentationBreakpointCommand(5, "set", "start3"));
+      if (!use_multiple_breakpoints) {
+        debug_client.RunCommandAndWaitForResult(
+            TestDevToolsAgentClient::Channel::kMain, 6,
+            "EventBreakpoints.removeInstrumentationBreakpoint",
+            MakeInstrumentationBreakpointCommand(6, "remove", "start2"));
+      }
+
+      int result = -1;
+      base::RunLoop result_run_loop;
+      CompileAndRunScriptOnV8Thread(
+          id, "compute", GURL("https://example.com/test.js"), kScript,
+          /*expect_success=*/true, result_run_loop.QuitClosure(), &result);
+
+      // Wait for the pause.
+      TestDevToolsAgentClient::Event breakpoint_hit =
+          debug_client.WaitForMethodNotification("Debugger.paused");
+
+      // Make sure we identify the event the way DevTools frontend expects.
+      if (use_multiple_breakpoints) {
+        // Expect both 'start' and 'start2' to hit, so the event will list both
+        // inside the 'data.reasons' list, and top-level 'reason' field to say
+        // 'ambiguous' to reflect it.
+        const std::string* reason =
+            breakpoint_hit.value.FindStringPath("params.reason");
+        ASSERT_TRUE(reason);
+        EXPECT_EQ("ambiguous", *reason);
+
+        const base::Value* reasons =
+            breakpoint_hit.value.FindListPath("params.data.reasons");
+        ASSERT_TRUE(reasons);
+        base::Value::ConstListView reasons_list = reasons->GetList();
+        ASSERT_EQ(2u, reasons_list.size());
+        ASSERT_TRUE(reasons_list[0].is_dict());
+        ASSERT_TRUE(reasons_list[1].is_dict());
+        const std::string* ev1 =
+            reasons_list[0].FindStringPath("auxData.eventName");
+        const std::string* ev2 =
+            reasons_list[1].FindStringPath("auxData.eventName");
+        const std::string* r1 = reasons_list[0].FindStringPath("reason");
+        const std::string* r2 = reasons_list[1].FindStringPath("reason");
+        ASSERT_TRUE(ev1);
+        ASSERT_TRUE(ev2);
+        ASSERT_TRUE(r1);
+        ASSERT_TRUE(r2);
+        EXPECT_EQ("instrumentation:start", *ev1);
+        EXPECT_EQ("instrumentation:start2", *ev2);
+        EXPECT_EQ("EventListener", *r1);
+        EXPECT_EQ("EventListener", *r2);
+      } else {
+        // Here we expect 'start' to be the only event, since we remove
+        // 'start2', and 'start3' isn't checked by
+        // CompileAndRunScriptOnV8Thread.
+        EXPECT_FALSE(breakpoint_hit.value.FindPath("params.data.reasons"));
+        const std::string* reason =
+            breakpoint_hit.value.FindStringPath("params.reason");
+        ASSERT_TRUE(reason);
+        EXPECT_EQ("EventListener", *reason);
+
+        const std::string* event_name =
+            breakpoint_hit.value.FindStringPath("params.data.eventName");
+        ASSERT_TRUE(event_name);
+        EXPECT_EQ("instrumentation:start", *event_name);
+      }
+
+      // Resume.
+      debug_client.RunCommandAndWaitForResult(
+          TestDevToolsAgentClient::Channel::kIO, 10, "Debugger.resume",
+          R"({"id":10,"method":"Debugger.resume","params":{}})");
+
+      // Wait for result.
+      result_run_loop.Run();
+      EXPECT_EQ(42, result);
+
+      id->AbortDebuggerPauses();
+    }
   }
 }
 
@@ -733,7 +867,7 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerInvalidCommand) {
     v8_scope_.reset();
     helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
-    int id = AllocContextGroupIdAndWait(helper_);
+    auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
     mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
     ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
@@ -745,7 +879,8 @@ TEST_F(AuctionV8HelperTest, DevToolsDebuggerInvalidCommand) {
             TestDevToolsAgentClient::Channel::kMain, 1, "NoSuchThing.enable",
             R"({"id":1,"method":"NoSuchThing.enable","params":{}})");
     EXPECT_TRUE(result.value.FindDictKey("error"));
-    FreeContextGroupIdAndWait(helper_, id);
+
+    id->AbortDebuggerPauses();
   }
 }
 
@@ -757,7 +892,7 @@ TEST_F(AuctionV8HelperTest, DevToolsDeleteSessionPipeLate) {
   v8_scope_.reset();
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
-  int id = AllocContextGroupIdAndWait(helper_);
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
 
   mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
   ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
@@ -766,7 +901,8 @@ TEST_F(AuctionV8HelperTest, DevToolsDeleteSessionPipeLate) {
                                        use_binary_protocol);
   task_environment_.RunUntilIdle();
 
-  FreeContextGroupIdAndWait(helper_, id);
+  id->AbortDebuggerPauses();
+  id.reset();
   helper_.reset();
   task_environment_.RunUntilIdle();
 }
@@ -804,7 +940,7 @@ TEST_F(MockTimeAuctionV8HelperTest, TimelimitDebug) {
   v8_scope_.reset();
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
-  int id = AllocContextGroupIdAndWait(helper_);
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
   mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
   ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
 
@@ -851,7 +987,7 @@ TEST_F(MockTimeAuctionV8HelperTest, TimelimitDebug) {
   result_run_loop.Run();
   EXPECT_EQ(3, result);
 
-  FreeContextGroupIdAndWait(helper_, id);
+  id->AbortDebuggerPauses();
 }
 
 TEST_F(AuctionV8HelperTest, DebugTimeout) {
@@ -872,7 +1008,7 @@ TEST_F(AuctionV8HelperTest, DebugTimeout) {
   v8_scope_.reset();
   helper_ = AuctionV8Helper::Create(AuctionV8Helper::CreateTaskRunner());
 
-  int id = AllocContextGroupIdAndWait(helper_);
+  auto id = base::MakeRefCounted<AuctionV8Helper::DebugId>(helper_.get());
   mojo::Remote<blink::mojom::DevToolsAgent> agent_remote;
   ConnectToDevToolsAgent(id, agent_remote.BindNewPipeAndPassReceiver());
 
@@ -916,8 +1052,7 @@ TEST_F(AuctionV8HelperTest, DebugTimeout) {
 
   result_run_loop.Run();
   EXPECT_EQ(-1, result);
-
-  FreeContextGroupIdAndWait(helper_, id);
+  id->AbortDebuggerPauses();
 }
 
 }  // namespace auction_worklet

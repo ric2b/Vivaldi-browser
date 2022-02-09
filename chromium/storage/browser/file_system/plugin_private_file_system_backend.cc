@@ -16,7 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "storage/browser/file_system/async_file_util_adapter.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -114,7 +114,7 @@ PluginPrivateFileSystemBackend::PluginPrivateFileSystemBackend(
       std::make_unique<ObfuscatedFileUtil>(
           std::move(special_storage_policy), base_path_, env_override,
           base::BindRepeating(&FileSystemIDToPluginMap::GetPluginIDForURL,
-                              base::Owned(plugin_map_)),
+                              base::Owned(plugin_map_.get())),
           std::set<std::string>(), nullptr,
           file_system_options.is_incognito()));
 }

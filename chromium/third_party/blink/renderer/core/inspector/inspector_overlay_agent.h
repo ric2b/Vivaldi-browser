@@ -43,7 +43,7 @@
 #include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_highlight.h"
 #include "third_party/blink/renderer/core/inspector/inspector_overlay_host.h"
-#include "third_party/blink/renderer/core/inspector/protocol/Overlay.h"
+#include "third_party/blink/renderer/core/inspector/protocol/overlay.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
@@ -292,7 +292,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   bool IsEmpty();
 
   LocalFrame* OverlayMainFrame();
-  void Reset(const IntSize& viewport_size,
+  void Reset(const gfx::Size& viewport_size,
              const DoubleSize& visual_viewport_size);
   void OnResizeTimer(TimerBase*);
   void PaintOverlayPage();
@@ -326,7 +326,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   bool disposed_;
   v8_inspector::V8InspectorSession* v8_session_;
   Member<InspectorDOMAgent> dom_agent_;
-  std::unique_ptr<FrameOverlay> frame_overlay_;
+  Member<FrameOverlay> frame_overlay_;
   Member<InspectTool> inspect_tool_;
   Member<PersistentTool> persistent_tool_;
   Member<Hinge> hinge_;

@@ -4,7 +4,7 @@
 // Author:      Vadim Zeitlin
 // Modified by:
 // Created:     19.08.03
-// Copyright:   (c) 2003 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2003 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_LISTBOOK
 
@@ -36,25 +33,18 @@
 #include "wx/imaglist.h"
 
 // ----------------------------------------------------------------------------
-// various wxWidgets macros
-// ----------------------------------------------------------------------------
-
-// check that the page index is valid
-#define IS_VALID_PAGE(nPage) ((nPage) < GetPageCount())
-
-// ----------------------------------------------------------------------------
 // event table
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxListbook, wxBookCtrlBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxListbook, wxBookCtrlBase);
 
 wxDEFINE_EVENT( wxEVT_LISTBOOK_PAGE_CHANGING, wxBookCtrlEvent );
 wxDEFINE_EVENT( wxEVT_LISTBOOK_PAGE_CHANGED,  wxBookCtrlEvent );
 
-BEGIN_EVENT_TABLE(wxListbook, wxBookCtrlBase)
+wxBEGIN_EVENT_TABLE(wxListbook, wxBookCtrlBase)
     EVT_SIZE(wxListbook::OnSize)
     EVT_LIST_ITEM_SELECTED(wxID_ANY, wxListbook::OnListSelected)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ============================================================================
 // wxListbook implementation
@@ -102,16 +92,10 @@ wxListbook::Create(wxWindow *parent,
     if ( GetListView()->InReportView() )
         GetListView()->InsertColumn(0, wxS("Pages"));
 
-#ifdef __WXMSW__
-    // On XP with themes enabled the GetViewRect used in GetControllerSize() to
-    // determine the space needed for the list view will incorrectly return
-    // (0,0,0,0) the first time.  So send a pending event so OnSize will be
-    // called again after the window is ready to go.  Technically we don't
-    // need to do this on non-XP windows, but if things are already sized
-    // correctly then nothing changes and so there is no harm.
-    wxSizeEvent evt;
-    GetEventHandler()->AddPendingEvent(evt);
-#endif
+    // Ensure that we rearrange the items in our list view after all the pages
+    // are added.
+    PostSizeEvent();
+
     return true;
 }
 
@@ -149,6 +133,10 @@ long wxListbook::GetListCtrlFlags() const
         {
             flags |= wxLC_LIST;
         }
+        
+#ifdef __WXQT__
+        flags |= wxLC_NO_HEADER;
+#endif
     }
 
     // Use single selection in any case.
@@ -168,7 +156,13 @@ void wxListbook::OnSize(wxSizeEvent& event)
     // the other one is not accounted for in client size computations)
     wxListView * const list = GetListView();
     if ( list )
+    {
         list->Arrange();
+
+        const int sel = GetSelection();
+        if ( sel != wxNOT_FOUND )
+            list->EnsureVisible(sel);
+    }
 
     event.Skip();
 }
@@ -240,6 +234,7 @@ int wxListbook::GetPageImage(size_t n) const
 {
     wxListItem item;
     item.SetId(n);
+    item.SetMask(wxLIST_MASK_IMAGE);
 
     if (GetListView()->GetItem(item))
     {
@@ -295,7 +290,6 @@ void wxListbook::SetImageList(wxImageList *imageList)
 
 void wxListbook::UpdateSelectedPage(size_t newsel)
 {
-    m_selection = newsel;
     GetListView()->Select(newsel);
     GetListView()->Focus(newsel);
 }

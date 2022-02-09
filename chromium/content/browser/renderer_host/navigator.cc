@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/debug_urls.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -26,6 +27,7 @@
 #include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
+#include "content/browser/site_info.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/browser/web_package/web_bundle_handle_tracker.h"
@@ -60,49 +62,94 @@ namespace content {
 
 namespace {
 
+using WebFeature = blink::mojom::WebFeature;
+using CrossOriginOpenerPolicyValue =
+    network::mojom::CrossOriginOpenerPolicyValue;
+using CrossOriginEmbedderPolicyValue =
+    network::mojom::CrossOriginEmbedderPolicyValue;
+
+// Map Cross-Origin-Opener-Policy header value to its corresponding WebFeature.
+absl::optional<WebFeature> FeatureCoop(CrossOriginOpenerPolicyValue value) {
+  switch (value) {
+    case CrossOriginOpenerPolicyValue::kUnsafeNone:
+      return absl::nullopt;
+    case CrossOriginOpenerPolicyValue::kSameOrigin:
+      return WebFeature::kCrossOriginOpenerPolicySameOrigin;
+    case CrossOriginOpenerPolicyValue::kSameOriginAllowPopups:
+      return WebFeature::kCrossOriginOpenerPolicySameOriginAllowPopups;
+    case CrossOriginOpenerPolicyValue::kSameOriginPlusCoep:
+      return WebFeature::kCoopAndCoepIsolated;
+  }
+}
+
+// Map Cross-Origin-Opener-Policy-Report-Only header value to its corresponding
+// WebFeature.
+absl::optional<WebFeature> FeatureCoopRO(CrossOriginOpenerPolicyValue value) {
+  switch (value) {
+    case CrossOriginOpenerPolicyValue::kUnsafeNone:
+      return absl::nullopt;
+    case CrossOriginOpenerPolicyValue::kSameOrigin:
+      return WebFeature::kCrossOriginOpenerPolicySameOriginReportOnly;
+    case CrossOriginOpenerPolicyValue::kSameOriginAllowPopups:
+      return WebFeature::
+          kCrossOriginOpenerPolicySameOriginAllowPopupsReportOnly;
+    case CrossOriginOpenerPolicyValue::kSameOriginPlusCoep:
+      return WebFeature::kCoopAndCoepIsolatedReportOnly;
+  }
+}
+
+// Map Cross-Origin-Embedder-Policy header value to its
+// corresponding WebFeature.
+absl::optional<WebFeature> FeatureCoep(CrossOriginEmbedderPolicyValue value) {
+  switch (value) {
+    case CrossOriginEmbedderPolicyValue::kNone:
+      return absl::nullopt;
+    case CrossOriginEmbedderPolicyValue::kCredentialless:
+      return WebFeature::kCrossOriginEmbedderPolicyCredentialless;
+    case CrossOriginEmbedderPolicyValue::kRequireCorp:
+      return WebFeature::kCrossOriginEmbedderPolicyRequireCorp;
+  }
+}
+
+// Map Cross-Origin-Embedder-Policy-Report-Only header value to its
+// corresponding WebFeature.
+absl::optional<WebFeature> FeatureCoepRO(CrossOriginEmbedderPolicyValue value) {
+  switch (value) {
+    case CrossOriginEmbedderPolicyValue::kNone:
+      return absl::nullopt;
+    case CrossOriginEmbedderPolicyValue::kCredentialless:
+      return WebFeature::kCrossOriginEmbedderPolicyCredentiallessReportOnly;
+    case CrossOriginEmbedderPolicyValue::kRequireCorp:
+      return WebFeature::kCrossOriginEmbedderPolicyRequireCorpReportOnly;
+  }
+}
+
 // TODO(titouan): Move the feature computation logic into `NavigationRequest`,
 // and use `NavigationRequest::TakeWebFeatureToLog()` to record them later.
 void RecordWebPlatformSecurityMetrics(RenderFrameHostImpl* rfh,
                                       bool has_embedding_control,
                                       bool is_error_page) {
   ContentBrowserClient* client = GetContentClient()->browser();
-  if (rfh->cross_origin_opener_policy().value ==
-      network::mojom::CrossOriginOpenerPolicyValue::kSameOrigin) {
-    client->LogWebFeatureForCurrentPage(
-        rfh, blink::mojom::WebFeature::kCrossOriginOpenerPolicySameOrigin);
-  }
-  if (rfh->cross_origin_opener_policy().value ==
-      network::mojom::CrossOriginOpenerPolicyValue::kSameOriginAllowPopups) {
-    client->LogWebFeatureForCurrentPage(
-        rfh, blink::mojom::WebFeature::
-                 kCrossOriginOpenerPolicySameOriginAllowPopups);
+
+  auto log = [&](absl::optional<WebFeature> feature) {
+    if (feature)
+      client->LogWebFeatureForCurrentPage(rfh, feature.value());
+  };
+
+  // [COOP]
+  if (rfh->IsInPrimaryMainFrame()) {
+    log(FeatureCoop(rfh->cross_origin_opener_policy().value));
+    log(FeatureCoopRO(rfh->cross_origin_opener_policy().report_only_value));
+
+    if (rfh->cross_origin_opener_policy().reporting_endpoint ||
+        rfh->cross_origin_opener_policy().report_only_reporting_endpoint) {
+      log(WebFeature::kCrossOriginOpenerPolicyReporting);
+    }
   }
 
-  switch (rfh->cross_origin_embedder_policy().value) {
-    case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
-      break;
-    case network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless:
-      client->LogWebFeatureForCurrentPage(
-          rfh,
-          blink::mojom::WebFeature::kCrossOriginEmbedderPolicyCredentialless);
-      break;
-    case network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp:
-      client->LogWebFeatureForCurrentPage(
-          rfh, blink::mojom::WebFeature::kCrossOriginEmbedderPolicyRequireCorp);
-      break;
-  }
-
-  if (rfh->cross_origin_opener_policy().value ==
-      network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep) {
-    client->LogWebFeatureForCurrentPage(
-        rfh, blink::mojom::WebFeature::kCoopAndCoepIsolated);
-  }
-
-  if (rfh->cross_origin_opener_policy().reporting_endpoint ||
-      rfh->cross_origin_opener_policy().report_only_reporting_endpoint) {
-    client->LogWebFeatureForCurrentPage(
-        rfh, blink::mojom::WebFeature::kCrossOriginOpenerPolicyReporting);
-  }
+  // [COEP]
+  log(FeatureCoep(rfh->cross_origin_embedder_policy().value));
+  log(FeatureCoepRO(rfh->cross_origin_embedder_policy().report_only_value));
 
   // Record iframes embedded in cross-origin contexts without a CSP
   // frame-ancestor directive.
@@ -119,9 +166,7 @@ void RecordWebPlatformSecurityMetrics(RenderFrameHostImpl* rfh,
 
   if (is_embedded_in_cross_origin_context && !has_embedding_control &&
       !is_error_page) {
-    client->LogWebFeatureForCurrentPage(
-        rfh,
-        blink::mojom::WebFeature::kCrossOriginSubframeWithoutEmbeddingControl);
+    log(WebFeature::kCrossOriginSubframeWithoutEmbeddingControl);
     RenderFrameHostImpl* main_frame = rfh->GetMainFrame();
     ukm::builders::CrossOriginSubframeWithoutEmbeddingControl(
         main_frame->GetPageUkmSourceId())
@@ -219,7 +264,6 @@ struct Navigator::NavigationMetricsData {
   GURL url_;
   ukm::SourceId ukm_source_id_;
   bool is_browser_initiated_before_unload_;
-  base::TimeDelta before_unload_delay_;
 
   // Timestamps before_unload_(start|end)_ give the time it took to run
   // beforeunloads dispatched from the browser process. For browser-initated
@@ -266,12 +310,8 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
   if (RenderProcessHost::run_renderer_in_process())
     return true;
 
-  ChildProcessSecurityPolicyImpl* security_policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-  ProcessLock process_lock =
-      security_policy->GetProcessLock(render_frame_host->GetProcess()->GetID());
-
   // In the case of error page process, any URL is allowed to commit.
+  ProcessLock process_lock = render_frame_host->GetProcess()->GetProcessLock();
   if (process_lock.is_error_page())
     return true;
 
@@ -296,7 +336,7 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
     // the browser process must be terminated.
     // TODO(nasko): Convert to CHECK() once it is confirmed this is not
     // violated in reality.
-    if (!security_policy->HasWebUIBindings(
+    if (!ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
             render_frame_host->GetProcess()->GetID())) {
       base::debug::DumpWithoutCrashing();
     }
@@ -326,13 +366,16 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
   // If `url` is one that is allowed in WebUI renderer process, ensure that its
   // origin is either opaque or its process lock matches the RFH process lock.
   if (is_allowed_in_web_ui_renderer) {
-    url::Origin url_origin = url::Origin::Create(url.GetOrigin());
+    url::Origin url_origin =
+        url::Origin::Create(url.DeprecatedGetOriginAsURL());
 
     // Verify `site_info`'s process lock matches the RFH's process lock, if one
     // is in place.
     if (should_lock_process) {
-      if (!url_origin.opaque() && process_lock != ProcessLock(site_info))
+      if (!url_origin.opaque() &&
+          process_lock != ProcessLock::FromSiteInfo(site_info)) {
         return false;
+      }
     }
   }
 
@@ -426,7 +469,7 @@ void Navigator::DidNavigate(
   // run unload handlers.  Those unload handlers should still see the old
   // frame's origin.  See https://crbug.com/825283.
   frame_tree_node->render_manager()->DidNavigateFrame(
-      render_frame_host, params.gesture == NavigationGestureUser,
+      render_frame_host, navigation_request->common_params().has_user_gesture,
       was_within_same_document,
       navigation_request->coop_status()
           .require_browsing_instance_swap() /* clear_proxies_on_commit */,
@@ -480,8 +523,7 @@ void Navigator::DidNavigate(
   // node to consider itself no longer on the initial empty document. Record
   // whether we're leaving the initial empty document before that.
   bool was_on_initial_empty_document =
-      frame_tree_node
-          ->is_on_initial_empty_document_or_subsequent_empty_documents();
+      frame_tree_node->is_on_initial_empty_document();
 
   render_frame_host->DidNavigate(params, navigation_request.get(),
                                  was_within_same_document);
@@ -574,12 +616,10 @@ void Navigator::DidNavigate(
   // Run post-commit tasks.
   if (delegate_) {
     if (details.is_main_frame) {
-      delegate_->DidNavigateMainFramePostCommit(render_frame_host, details,
-                                                params);
+      delegate_->DidNavigateMainFramePostCommit(render_frame_host, details);
     }
 
-    delegate_->DidNavigateAnyFramePostCommit(render_frame_host, details,
-                                             params);
+    delegate_->DidNavigateAnyFramePostCommit(render_frame_host, details);
   }
 }
 
@@ -976,21 +1016,18 @@ void Navigator::LogCommitNavigationSent() {
 void Navigator::LogBeforeUnloadTime(
     base::TimeTicks renderer_before_unload_start_time,
     base::TimeTicks renderer_before_unload_end_time,
-    base::TimeTicks before_unload_sent_time) {
+    base::TimeTicks before_unload_sent_time,
+    bool for_legacy) {
   if (!navigation_data_)
     return;
 
-  // Only stores the beforeunload delay if we're tracking a browser initiated
-  // navigation and it happened later than the navigation request.
-  if (navigation_data_->is_browser_initiated_before_unload_ &&
-      renderer_before_unload_start_time > navigation_data_->start_time_) {
-    navigation_data_->before_unload_delay_ =
-        renderer_before_unload_end_time - renderer_before_unload_start_time;
-  }
   // LogBeforeUnloadTime is called once for each cross-process frame. Once all
   // beforeunloads complete, the timestamps in navigation_data will be the
   // timestamps of the beforeunload that blocked the navigation the longest.
-  if (!base::TimeTicks::IsConsistentAcrossProcesses()) {
+  // `for_legacy` indicates this is being called as the result of a PostTask(),
+  // which did not go to the renderer so that the times do not need to be
+  // adjusted.
+  if (!base::TimeTicks::IsConsistentAcrossProcesses() && !for_legacy) {
     // These timestamps come directly from the renderer so they might need to be
     // converted to local time stamps.
     blink::InterProcessTimeTicksConverter converter(

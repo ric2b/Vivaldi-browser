@@ -63,8 +63,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
         super.initialize(autocompleteCoordinator, urlCoordinator, statusCoordinator,
                 locationBarDataProvider, searchEngineLogoUtils);
         mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
-        getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
-                mPendingSearchPromoDecision);
+        mAutocompleteCoordinator.setShouldPreventOmniboxAutocomplete(mPendingSearchPromoDecision);
         findViewById(R.id.url_action_container).setVisibility(View.VISIBLE);
     }
 
@@ -73,21 +72,19 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
         super.onFinishNativeInitialization();
 
         mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
-        getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
-                mPendingSearchPromoDecision);
+        mAutocompleteCoordinator.setShouldPreventOmniboxAutocomplete(mPendingSearchPromoDecision);
     }
 
     /** Called when the SearchActivity has finished initialization. */
     void onDeferredStartup(@SearchType int searchType,
             @NonNull VoiceRecognitionHandler voiceRecognitionHandler,
             @NonNull WindowAndroid windowAndroid) {
-        getAutocompleteCoordinator().prefetchZeroSuggestResults();
+        mAutocompleteCoordinator.prefetchZeroSuggestResults();
 
         SearchActivityPreferencesManager.updateFeatureAvailability(getContext(), windowAndroid);
         assert !LocaleManager.getInstance().needToCheckForSearchEnginePromo();
         mPendingSearchPromoDecision = false;
-        getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
-                mPendingSearchPromoDecision);
+        mAutocompleteCoordinator.setShouldPreventOmniboxAutocomplete(mPendingSearchPromoDecision);
         String textWithAutocomplete = mUrlCoordinator.getTextWithAutocomplete();
         if (!TextUtils.isEmpty(textWithAutocomplete)) {
             mAutocompleteCoordinator.onTextChanged(
@@ -216,9 +213,13 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
      */
     void focusTextBox() {
         mUrlBar.post(() -> {
+            if (mUrlCoordinator == null || mAutocompleteCoordinator == null) {
+                return;
+            }
+
             mUrlBar.requestFocus();
             mUrlCoordinator.setKeyboardVisibility(true, false);
-            getAutocompleteCoordinator().startCachedZeroSuggest();
+            mAutocompleteCoordinator.startCachedZeroSuggest();
         });
     }
 

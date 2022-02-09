@@ -10,9 +10,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
 #endif
@@ -33,6 +30,11 @@ enum
     IDInputCustom,
     IDInputEntry,
     IDInputText,
+
+#if wxUSE_HOTKEY
+    HotKeyRegister,
+    HotKeyUnregister,
+#endif // wxUSE_HOTKEY
 
     TestAccelA,
     TestAccelCtrlA,
@@ -58,6 +60,33 @@ private:
         { m_logText->AppendText("Test accelerator \"Ctrl-A\" used.\n"); }
     void OnTestAccelEsc(wxCommandEvent& WXUNUSED(event))
         { m_logText->AppendText("Test accelerator \"Esc\" used.\n"); }
+
+#if wxUSE_HOTKEY
+    void OnRegisterHotKey(wxCommandEvent& WXUNUSED(event))
+    {
+        if ( RegisterHotKey(0, wxMOD_ALT | wxMOD_SHIFT, WXK_HOME) )
+        {
+            m_logText->AppendText("Try pressing Alt-Shift-Home anywhere now.\n");
+        }
+        else
+        {
+            m_logText->AppendText("Failed to register hot key.\n");
+        }
+    }
+
+    void OnUnregisterHotKey(wxCommandEvent& WXUNUSED(event))
+    {
+        if ( !UnregisterHotKey(0) )
+        {
+            m_logText->AppendText("Failed to unregister hot key.\n");
+        }
+    }
+
+    void OnHotkey(wxKeyEvent& event)
+    {
+        LogEvent("Hot key", event);
+    }
+#endif // wxUSE_HOTKEY
 
     void OnClear(wxCommandEvent& WXUNUSED(event)) { m_logText->Clear(); }
     void OnSkipDown(wxCommandEvent& event) { m_skipDown = event.IsChecked(); }
@@ -114,7 +143,7 @@ class MyApp : public wxApp
 {
 public:
     // 'Main program' equivalent: the program execution "starts" here
-    virtual bool OnInit()
+    virtual bool OnInit() wxOVERRIDE
     {
         // create the main application window
         new MyFrame("Keyboard wxWidgets App");
@@ -129,7 +158,7 @@ public:
 // static object for many reasons) and also declares the accessor function
 // wxGetApp() which will return the reference of the right type (i.e. MyApp and
 // not wxApp)
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 
 // ============================================================================
@@ -186,6 +215,14 @@ MyFrame::MyFrame(const wxString& title)
     // now append the freshly created menu to the menu bar...
     wxMenuBar *menuBar = new wxMenuBar();
     menuBar->Append(menuFile, "&File");
+
+#if wxUSE_HOTKEY
+    wxMenu* menuHotkey = new wxMenu;
+    menuHotkey->Append(HotKeyRegister, "&Register hot key");
+    menuHotkey->Append(HotKeyUnregister, "&Unregister hot key");
+    menuBar->Append(menuHotkey, "Hot&key");
+#endif // wxUSE_HOTKEY
+
     menuBar->Append(menuHelp, "&Help");
 
     // ... and attach this menu bar to the frame
@@ -206,8 +243,7 @@ MyFrame::MyFrame(const wxString& title)
                                wxTE_MULTILINE|wxTE_READONLY|wxTE_RICH|wxHSCROLL);
 
     // set monospace font to have output in nice columns
-    wxFont font(10, wxFONTFAMILY_TELETYPE,
-                wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+    wxFont font(wxFontInfo(10).Family(wxFONTFAMILY_TELETYPE));
     headerText->SetFont(font);
     m_logText->SetFont(font);
 
@@ -224,35 +260,24 @@ MyFrame::MyFrame(const wxString& title)
 
     // connect menu event handlers
 
-    Connect(QuitID, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnQuit));
-
-    Connect(wxID_ABOUT, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnAbout));
-
-    Connect(ClearID, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnClear));
-
-    Connect(SkipHook, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnSkipHook));
-    Connect(SkipDown, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnSkipDown));
-
-    Connect(IDInputCustom, IDInputText, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnInputWindowKind));
-
-    Connect(TestAccelA, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnTestAccelA));
-
-    Connect(TestAccelCtrlA, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnTestAccelCtrlA));
-
-    Connect(TestAccelEsc, wxEVT_MENU,
-            wxCommandEventHandler(MyFrame::OnTestAccelEsc));
+    Bind(wxEVT_MENU, &MyFrame::OnQuit, this, QuitID);
+    Bind(wxEVT_MENU, &MyFrame::OnAbout, this, wxID_ABOUT);
+    Bind(wxEVT_MENU, &MyFrame::OnClear, this, ClearID);
+    Bind(wxEVT_MENU, &MyFrame::OnSkipHook, this, SkipHook);
+    Bind(wxEVT_MENU, &MyFrame::OnSkipDown, this, SkipDown);
+    Bind(wxEVT_MENU, &MyFrame::OnInputWindowKind, this, IDInputCustom, IDInputText);
+    Bind(wxEVT_MENU, &MyFrame::OnTestAccelA, this, TestAccelA);
+    Bind(wxEVT_MENU, &MyFrame::OnTestAccelCtrlA, this, TestAccelCtrlA);
+    Bind(wxEVT_MENU, &MyFrame::OnTestAccelEsc, this, TestAccelEsc);
+#if wxUSE_HOTKEY
+    Bind(wxEVT_MENU, &MyFrame::OnRegisterHotKey, this, HotKeyRegister);
+    Bind(wxEVT_MENU, &MyFrame::OnUnregisterHotKey, this, HotKeyUnregister);
+    Bind(wxEVT_HOTKEY, &MyFrame::OnHotkey, this);
+#endif // wxUSE_HOTKEY
 
     // notice that we don't connect OnCharHook() to the input window, unlike
     // the usual key events this one is propagated upwards
-    Connect(wxEVT_CHAR_HOOK, wxKeyEventHandler(MyFrame::OnCharHook));
+    Bind(wxEVT_CHAR_HOOK, &MyFrame::OnCharHook, this);
 
     // status bar is useful for showing the menu items help strings
     CreateStatusBar();
@@ -300,18 +325,13 @@ void MyFrame::DoCreateInputWindow(InputKind inputKind)
     m_inputWin->SetForegroundColour(*wxWHITE);
 
     // connect event handlers for the blue input window
-    m_inputWin->Connect(wxEVT_KEY_DOWN, wxKeyEventHandler(MyFrame::OnKeyDown),
-                        NULL, this);
-    m_inputWin->Connect(wxEVT_KEY_UP, wxKeyEventHandler(MyFrame::OnKeyUp),
-                        NULL, this);
-    m_inputWin->Connect(wxEVT_CHAR, wxKeyEventHandler(MyFrame::OnChar),
-                        NULL, this);
+    m_inputWin->Bind(wxEVT_KEY_DOWN, &MyFrame::OnKeyDown, this);
+    m_inputWin->Bind(wxEVT_KEY_UP, &MyFrame::OnKeyUp, this);
+    m_inputWin->Bind(wxEVT_CHAR, &MyFrame::OnChar, this);
 
     if ( inputKind == Input_Custom )
     {
-        m_inputWin->Connect(wxEVT_PAINT,
-                            wxPaintEventHandler(MyFrame::OnPaintInputWin),
-                            NULL, this);
+        m_inputWin->Bind(wxEVT_PAINT, &MyFrame::OnPaintInputWin, this);
     }
 
     if ( oldWin )
@@ -456,6 +476,23 @@ const char* GetVirtualKeyCodeName(int keycode)
 #ifdef __WXOSX__
         WXK_(RAW_CONTROL)
 #endif
+        WXK_(BROWSER_BACK)
+        WXK_(BROWSER_FORWARD)
+        WXK_(BROWSER_REFRESH)
+        WXK_(BROWSER_STOP)
+        WXK_(BROWSER_SEARCH)
+        WXK_(BROWSER_FAVORITES)
+        WXK_(BROWSER_HOME)
+        WXK_(VOLUME_MUTE)
+        WXK_(VOLUME_DOWN)
+        WXK_(VOLUME_UP)
+        WXK_(MEDIA_NEXT_TRACK)
+        WXK_(MEDIA_PREV_TRACK)
+        WXK_(MEDIA_STOP)
+        WXK_(MEDIA_PLAY_PAUSE)
+        WXK_(LAUNCH_MAIL)
+        WXK_(LAUNCH_APP1)
+        WXK_(LAUNCH_APP2)
 #undef WXK_
 
     default:

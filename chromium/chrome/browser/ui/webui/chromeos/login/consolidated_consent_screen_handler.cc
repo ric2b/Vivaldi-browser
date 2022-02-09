@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/consolidated_consent_screen_handler.h"
 
+#include "ash/constants/ash_switches.h"
+#include "base/command_line.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
 #include "chrome/grit/chromium_strings.h"
@@ -34,14 +36,18 @@ void ConsolidatedConsentScreenHandler::DeclareLocalizedValues(
   builder->Add("consolidatedConsentHeader", IDS_CONSOLIDATED_CONSENT_HEADER);
   builder->Add("consolidatedConsentHeaderChild",
                IDS_CONSOLIDATED_CONSENT_HEADER_CHILD);
+  builder->Add("consolidatedConsentHeaderManaged",
+               IDS_CONSOLIDATED_CONSENT_HEADER_MANAGED);
   builder->Add("consolidatedConsentSubheader",
                IDS_CONSOLIDATED_CONSENT_SUBHEADER);
+  builder->Add("consolidatedConsentSubheaderArcDisabled",
+               IDS_CONSOLIDATED_CONSENT_SUBHEADER_ARC_DISABLED);
   builder->Add("consolidatedConsentTermsDescriptionTitle",
-               IDS_CONSOLIDATED_CONSENT_TOS_TITLE);
+               IDS_CONSOLIDATED_CONSENT_TERMS_TITLE);
   builder->Add("consolidatedConsentTermsDescription",
-               IDS_CONSOLIDATED_CONSENT_TOS);
+               IDS_CONSOLIDATED_CONSENT_TERMS);
   builder->Add("consolidatedConsentTermsDescriptionArcDisabled",
-               IDS_CONSOLIDATED_CONSENT_TOS_ARC_DISABLED);
+               IDS_CONSOLIDATED_CONSENT_TERMS_ARC_DISABLED);
   builder->Add("consolidatedConsentUsageOptInTitle",
                IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_TITLE);
   builder->Add("consolidatedConsentUsageOptIn",
@@ -83,38 +89,57 @@ void ConsolidatedConsentScreenHandler::DeclareLocalizedValues(
   builder->Add("consolidatedConsentLocationOptInLearnMoreChild",
                IDS_CONSOLIDATED_CONSENT_LOCATION_OPT_IN_LEARN_MORE_CHILD);
   builder->Add("consolidatedConsentFooterLearnMore",
-               IDS_CONSOLIDATED_FOOTER_LEARN_MORE);
+               IDS_CONSOLIDATED_CONSENT_FOOTER_LEARN_MORE);
   builder->Add("consolidatedConsentLearnMore",
                IDS_CONSOLIDATED_CONSENT_LEARN_MORE);
   builder->Add("consolidatedConsentAcceptAndContinue",
                IDS_CONSOLIDATED_CONSENT_ACCEPT_AND_CONTINUE);
-  builder->Add("consolidatedConsentLoading", IDS_CONSOLIDATED_LOADING);
+  builder->Add("consolidatedConsentLoading", IDS_CONSOLIDATED_CONSENT_LOADING);
   builder->Add("consolidatedConsentErrorTitle",
                IDS_OOBE_GENERIC_FATAL_ERROR_TITLE);
   builder->Add("consolidatedConsentErrorMessage",
-               IDS_CONSOLIDATED_TERMS_LOAD_ERROR);
-  builder->Add("consolidatedConsentRetry", IDS_CONSOLIDATED_TERMS_RETRY);
-  builder->Add("consolidatedConsentOK", IDS_CONSOLIDATED_OK);
-  builder->Add("consolidatedConsentEulaTermsTitle",
-               IDS_CONSOLIDATED_EULA_TERMS_TITLE);
-  builder->Add("consolidatedConsentAdditionalTermsTitle",
-               IDS_CONSOLIDATED_ADDITIONAL_TERMS_TITLE);
+               IDS_CONSOLIDATED_CONSENT_TERMS_LOAD_ERROR);
+  builder->Add("consolidatedConsentRetry", IDS_CONSOLIDATED_CONSENT_RETRY);
+  builder->Add("consolidatedConsentOK", IDS_CONSOLIDATED_CONSENT_OK);
+  builder->Add("consolidatedConsentGoogleEulaTitle",
+               IDS_CONSOLIDATED_CONSENT_GOOGLE_EULA_TITLE);
+  builder->Add("consolidatedConsentCrosEulaTitle",
+               IDS_CONSOLIDATED_CONSENT_CROS_EULA_TITLE);
   builder->Add("consolidatedConsentArcTermsTitle",
-               IDS_CONSOLIDATED_ARC_TERMS_TITLE);
-  builder->Add("consolidatedConsentPrivacyTermsTitle",
-               IDS_CONSOLIDATED_PRIVACY_POLICY_TERMS_TITLE);
+               IDS_CONSOLIDATED_CONSENT_ARC_TITLE);
+  builder->Add("consolidatedConsentPrivacyTitle",
+               IDS_CONSOLIDATED_CONSENT_PRIVACY_POLICY_TITLE);
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kArcTosHostForTests)) {
+    builder->Add("consolidatedConsentArcTosHostNameForTesting",
+                 base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                     switches::kArcTosHostForTests));
+  }
 }
 
 void ConsolidatedConsentScreenHandler::Initialize() {}
 
 void ConsolidatedConsentScreenHandler::Show(const ScreenConfig& config) {
   base::DictionaryValue data;
+  // If ARC is enabled, show the ARC ToS and the related opt-ins.
   data.SetBoolean("isArcEnabled", config.is_arc_enabled);
+  // In demo mode, don't show any opt-ins related to ARC and allow showing the
+  // offline ARC ToS if the online version failed to load.
   data.SetBoolean("isDemo", config.is_demo);
+  // Child accounts have alternative strings for the opt-ins.
   data.SetBoolean("isChildAccount", config.is_child_account);
+  // Managed account will not be shown any terms of service, and the title
+  // string will be updated.
+  data.SetBoolean("isEnterpriseManagedAccount",
+                  config.is_enterprise_managed_account);
+  // Country code is needed to load the ARC ToS.
   data.SetString("countryCode", config.country_code);
-  data.SetString("eulaUrl", config.eula_url);
-  data.SetString("additionalTosUrl", config.additional_tos_url);
+  // URL for EULA, the URL should include the locale.
+  data.SetString("googleEulaUrl", config.google_eula_url);
+  // URL for Chrome and ChromeOS additional terms of service, the URL should
+  // include the locale.
+  data.SetString("crosEulaUrl", config.cros_eula_url);
   ShowScreenWithData(kScreenId, &data);
 }
 
@@ -139,13 +164,15 @@ void ConsolidatedConsentScreenHandler::HandleAccept(
     bool enable_backup_restore,
     bool enable_location_services,
     const std::string& tos_content) {
-  screen_->OnAccept(enable_stats_usage, enable_backup_restore,
-                    enable_location_services, tos_content);
+  if (screen_) {
+    screen_->OnAccept(enable_stats_usage, enable_backup_restore,
+                      enable_location_services, tos_content);
+  }
 }
 
 void ConsolidatedConsentScreenHandler::SetUsageMode(bool enabled,
                                                     bool managed) {
-  CallJS("login.ConsolidatedConsentScreen.SetUsageMode", enabled, managed);
+  CallJS("login.ConsolidatedConsentScreen.setUsageMode", enabled, managed);
 }
 
 void ConsolidatedConsentScreenHandler::SetBackupMode(bool enabled,

@@ -72,8 +72,6 @@ UIWindow* GetAnyKeyWindow() {
 }
 }  // namespace chrome_test_util
 
-GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
-
 @interface ChromeEarlGreyImpl ()
 
 // Waits for session restoration to finish within a timeout, or a GREYAssert is
@@ -732,12 +730,8 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   [ChromeEarlGreyAppInterface clearSyncServerData];
 }
 
-- (void)revokeSyncConsent {
-  [ChromeEarlGreyAppInterface revokeSyncConsent];
-}
-
-- (void)clearSyncFirstSetupComplete {
-  [ChromeEarlGreyAppInterface clearSyncFirstSetupComplete];
+- (void)signInWithoutSyncWithIdentity:(FakeChromeIdentity*)identity {
+  [ChromeEarlGreyAppInterface signInWithoutSyncWithIdentity:identity];
 }
 
 - (void)startSync {
@@ -1192,6 +1186,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (BOOL)isUKMEnabled {
   return [ChromeEarlGreyAppInterface isUKMEnabled];
+}
+
+- (BOOL)isSynthesizedRestoreSessionEnabled {
+  return [ChromeEarlGreyAppInterface isSynthesizedRestoreSessionEnabled];
 }
 
 - (BOOL)isTestFeatureEnabled {

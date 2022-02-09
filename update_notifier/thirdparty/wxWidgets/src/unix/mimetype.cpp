@@ -11,9 +11,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_MIMETYPE && wxUSE_FILE
 
@@ -49,8 +46,8 @@ public:
     }
 
     wxMimeTextFile(const wxString& fname)
+       : m_fname(fname)
     {
-       m_fname = fname;
     }
 
     bool Open()
@@ -61,7 +58,7 @@ public:
 
        size_t size = file.Length();
        wxCharBuffer buffer( size );
-       file.Read( (void*) (const char*) buffer, size );
+       file.Read(buffer.data(), size);
 
        // Check for valid UTF-8 here?
        wxString all = wxString::FromUTF8( buffer, size );
@@ -229,11 +226,7 @@ void wxMimeTypesManagerImpl::LoadXDGAppsFilesFromDir(const wxString& dirname)
         cont = dir.GetNext(&filename);
     }
 
-#if 0
-    // RR: I'm not sure this makes any sense. On my system we'll just
-    //     scan the YAST2 and other useless directories
-
-    // Look recursively into subdirs
+    // Recurse into subdirs, which on KDE may hold most of the .desktop files
     cont = dir.GetFirst(&filename, wxEmptyString, wxDIR_DIRS);
     while (cont)
     {
@@ -242,7 +235,6 @@ void wxMimeTypesManagerImpl::LoadXDGAppsFilesFromDir(const wxString& dirname)
         LoadXDGAppsFilesFromDir( p.GetPath() );
         cont = dir.GetNext(&filename);
     }
-#endif
 }
 
 
@@ -267,7 +259,9 @@ void wxMimeTypesManagerImpl::LoadXDGGlobs(const wxString& filename)
        wxArrayString exts;
        exts.Add( ext );
 
-       AddToMimeData(mime, wxEmptyString, NULL, exts, wxEmptyString, true );
+       wxString icon = GetIconFromMimeType(mime);
+
+       AddToMimeData(mime, icon, NULL, exts, wxEmptyString, true );
     }
 }
 
@@ -523,6 +517,14 @@ void wxMimeTypesManagerImpl::InitIfNeeded()
 }
 
 
+static bool AppendToPathIfExists(wxString& pathvar, const wxString& dir)
+{
+    if ( !wxFileName::DirExists(dir) )
+        return false;
+
+    pathvar << ":" << dir;
+    return true;
+}
 
 // read system and user mailcaps and other files
 void wxMimeTypesManagerImpl::Initialize(int mailcapStyles,
@@ -549,10 +551,27 @@ void wxMimeTypesManagerImpl::Initialize(int mailcapStyles,
         if ( xdgDataDirs.empty() )
         {
             xdgDataDirs = "/usr/local/share:/usr/share";
-            if (mailcapStyles & wxMAILCAP_GNOME)
-                xdgDataDirs += ":/usr/share/gnome:/opt/gnome/share";
-            if (mailcapStyles & wxMAILCAP_KDE)
-                xdgDataDirs += ":/usr/share/kde3:/opt/kde3/share";
+
+            if ( mailcapStyles & wxMAILCAP_GNOME )
+            {
+                AppendToPathIfExists(xdgDataDirs, "/usr/share/gnome");
+                AppendToPathIfExists(xdgDataDirs, "/opt/gnome/share");
+            }
+
+            if ( mailcapStyles & wxMAILCAP_KDE )
+            {
+                for ( int kdeVer = 5; kdeVer >= 3; kdeVer-- )
+                {
+                    const wxString& kdeDir = wxString::Format("kde%d", kdeVer);
+                    if ( AppendToPathIfExists(xdgDataDirs, "/usr/share/" + kdeDir)
+                            || AppendToPathIfExists(xdgDataDirs, "/opt/" + kdeDir + "/share") )
+                    {
+                        // We don't need to use earlier versions if we found a
+                        // later one.
+                        break;
+                    }
+                }
+            }
         }
         if ( !sExtraDir.empty() )
         {
@@ -561,7 +580,7 @@ void wxMimeTypesManagerImpl::Initialize(int mailcapStyles,
         }
 
         wxArrayString dirs;
-        wxStringTokenizer tokenizer(xdgDataDirs, ":");
+        wxStringTokenizer tokenizer(xdgDataDirs, ":", wxTOKEN_STRTOK);
         while ( tokenizer.HasMoreTokens() )
         {
             wxString p = tokenizer.GetNextToken();
@@ -690,6 +709,11 @@ wxFileType * wxMimeTypesManagerImpl::Associate(const wxFileTypeInfo& ftInfo)
         return NULL;
 
     return GetFileTypeFromMimeType(strType);
+}
+
+wxString wxMimeTypesManagerImpl::GetIconFromMimeType(const wxString& WXUNUSED(mime))
+{
+    return wxString();
 }
 
 bool wxMimeTypesManagerImpl::DoAssociation(const wxString& strType,
@@ -835,6 +859,7 @@ wxFileType * wxMimeTypesManagerImpl::GetFileTypeFromExtension(const wxString& ex
 
     InitIfNeeded();
 
+    wxFileType* fileTypeFallback = NULL;
     size_t count = m_aExtensions.GetCount();
     for ( size_t n = 0; n < count; n++ )
     {
@@ -849,12 +874,32 @@ wxFileType * wxMimeTypesManagerImpl::GetFileTypeFromExtension(const wxString& ex
                 wxFileType *fileType = new wxFileType;
                 fileType->m_impl->Init(this, n);
 
-                return fileType;
+                // See if this one has a known open-command. If not, keep
+                // looking for another one that does, as a file that can't be
+                // opened is not very useful, but store this one as a fallback.
+                wxString type, desc, open;
+                fileType->GetMimeType(&type);
+                fileType->GetDescription(&desc);
+                wxFileType::MessageParameters params("filename."+ext, type);
+                if ( fileType->GetOpenCommand(&open, params) )
+                {
+                    delete fileTypeFallback;
+                    return fileType;
+                }
+                else
+                {
+                    // Override the previous fallback, if any, with the new
+                    // one: we consider that later entries have priority.
+                    delete fileTypeFallback;
+                    fileTypeFallback = fileType;
+                }
             }
         }
     }
 
-    return NULL;
+    // If we couldn't find a filetype with a known open-command, return any
+    // without one
+    return fileTypeFallback;
 }
 
 wxFileType * wxMimeTypesManagerImpl::GetFileTypeFromMimeType(const wxString& mimeType)
@@ -951,7 +996,7 @@ void wxMimeTypesManagerImpl::AddMimeTypeInfo(const wxString& strMimeType,
     // reading mailcap may find image/* , while
     // reading mime.types finds image/gif and no match is made
     // this means all the get functions don't work  fix this
-    wxString strIcon;
+    const wxString strIcon = GetIconFromMimeType(strMimeType);
     wxString sTmp = strExtensions;
 
     wxArrayString sExts;

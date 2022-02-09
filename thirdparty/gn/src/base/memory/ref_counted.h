@@ -12,7 +12,6 @@
 #include "base/atomic_ref_count.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "util/build_config.h"
 
@@ -73,7 +72,8 @@ class RefCountedBase {
 
   mutable uint32_t ref_count_ = 0;
 
-  DISALLOW_COPY_AND_ASSIGN(RefCountedBase);
+  RefCountedBase(const RefCountedBase&) = delete;
+  RefCountedBase& operator=(const RefCountedBase&) = delete;
 };
 
 class RefCountedThreadSafeBase {
@@ -117,7 +117,8 @@ class RefCountedThreadSafeBase {
 
   mutable AtomicRefCount ref_count_{0};
 
-  DISALLOW_COPY_AND_ASSIGN(RefCountedThreadSafeBase);
+  RefCountedThreadSafeBase(const RefCountedThreadSafeBase&) = delete;
+  RefCountedThreadSafeBase& operator=(const RefCountedThreadSafeBase&) = delete;
 };
 
 }  // namespace subtle
@@ -227,7 +228,8 @@ class RefCounted : public subtle::RefCountedBase {
     delete x;
   }
 
-  DISALLOW_COPY_AND_ASSIGN(RefCounted);
+  RefCounted(const RefCounted&) = delete;
+  RefCounted& operator=(const RefCounted&) = delete;
 };
 
 // Forward declaration.
@@ -290,7 +292,8 @@ class RefCountedThreadSafe : public subtle::RefCountedThreadSafeBase {
     delete x;
   }
 
-  DISALLOW_COPY_AND_ASSIGN(RefCountedThreadSafe);
+  RefCountedThreadSafe(const RefCountedThreadSafe&) = delete;
+  RefCountedThreadSafe& operator=(const RefCountedThreadSafe&) = delete;
 };
 
 //

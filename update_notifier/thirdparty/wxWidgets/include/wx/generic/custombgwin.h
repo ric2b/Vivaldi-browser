@@ -11,6 +11,9 @@
 #define _WX_GENERIC_CUSTOMBGWIN_H_
 
 #include "wx/bitmap.h"
+#include "wx/dc.h"
+#include "wx/event.h"
+#include "wx/window.h"
 
 // A helper to avoid template bloat: this class contains all type-independent
 // code of wxCustomBackgroundWindow<> below.
@@ -58,24 +61,24 @@ public:
     wxCustomBackgroundWindow() { }
 
 protected:
-    virtual void DoSetBackgroundBitmap(const wxBitmap& bmp)
+    virtual void DoSetBackgroundBitmap(const wxBitmap& bmp) wxOVERRIDE
     {
         m_bitmapBg = bmp;
 
         if ( m_bitmapBg.IsOk() )
         {
-            BaseWindowClass::Connect
+            BaseWindowClass::Bind
             (
                 wxEVT_ERASE_BACKGROUND,
-                wxEraseEventHandler(wxCustomBackgroundWindow::OnEraseBackground)
+                &wxCustomBackgroundWindow::OnEraseBackground, this
             );
         }
         else
         {
-            BaseWindowClass::Disconnect
+            BaseWindowClass::Unbind
             (
                 wxEVT_ERASE_BACKGROUND,
-                wxEraseEventHandler(wxCustomBackgroundWindow::OnEraseBackground)
+                &wxCustomBackgroundWindow::OnEraseBackground, this
             );
         }
     }

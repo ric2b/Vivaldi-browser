@@ -55,6 +55,7 @@ flat::ResourceType ResourceTypeFromRequest(
   switch (request.request.destination) {
     case network::mojom::RequestDestination::kIframe:
     case network::mojom::RequestDestination::kFrame:
+    case network::mojom::RequestDestination::kFencedframe:
       return flat::ResourceType_SUBDOCUMENT;
     case network::mojom::RequestDestination::kStyle:
     case network::mojom::RequestDestination::kXslt:

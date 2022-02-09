@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">&amp;Språkinnstillinger</translation>
 <translation id="150411034776756821">Fjern <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Denne utvidelsen har endret hvilken side som vises når du klikker på Hjem-knappen.</translation>
+<translation id="1552752544932680961">Administrer utvidelsen</translation>
 <translation id="15662109988763471">Den valgte skriveren er ikke tilgjengelig, eller ikke installert riktig. Sjekk skriveren eller velg en annen skriver.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Åpne lenke med...</translation>
@@ -121,7 +122,7 @@
 <translation id="3080207940057008665">Et annet program på datamaskinen la til et tema som kan endre hvordan Vivaldi virker.</translation>
 <translation id="3084548735795614657">Slipp for å installere</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">BRUKER-håndtak</translation>
+<translation id="3124111068741548686">USER-håndtak</translation>
 <translation id="3127156390846601284">Dette sletter all data lagret på din enhet for alle viste nettsider. Ønsker du å fortsette?</translation>
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Åpne lenken som</translation>
@@ -234,7 +235,7 @@
 <translation id="5154108062446123722">Avanserte innstillinger for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5171343362375269016">Virtuelt minne</translation>
 <translation id="5233019165164992427">NaCl-feilsøkingsport</translation>
-<translation id="5233231016133573565">Prosess-iD</translation>
+<translation id="5233231016133573565">Prosess-ID</translation>
 <translation id="5233736638227740678">&amp;Lim inn</translation>
 <translation id="5256861893479663409">På alle nettsteder</translation>
 <translation id="5265562206369321422">Offline i mer enn en uke</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">Skriptbuffer</translation>
 <translation id="6169666352732958425">Kunne ikke caste skrivebord.</translation>
 <translation id="6196854373336333322">Utvidelsen "<ph name="EXTENSION_NAME" />" har tatt kontroll over proxy-innstillingene dine, noe som betyr at den kan endre, ødelegge og tjuvlytte på alt du gjør på nettet. Hvis du er usikker på hvorfor denne endringen oppstod, vil du trolig ikke beholde den.</translation>
+<translation id="6200151268994853226">Administrer utvidelsen</translation>
 <translation id="6206311232642889873">Kop&amp;ier bilde</translation>
 <translation id="6239558157302047471">Last inn rammen på nytt</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -333,7 +335,6 @@
 <translation id="6892812721183419409">Åpne lenken som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunns-app: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Fjern filtilgang</translation>
-<translation id="6916590542764765824">Administrer utvidelser</translation>
 <translation id="6945221475159498467">Velg</translation>
 <translation id="6955446738988643816">Inspiser oppsprett</translation>
 <translation id="6970856801391541997">Skriv ut bestemte sider</translation>
@@ -364,7 +365,7 @@
 <translation id="7663719505383602579">Mottaker: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
-<translation id="7701869757853594372">BRUKER-håndtak</translation>
+<translation id="7701869757853594372">USER-håndtak</translation>
 <translation id="7704305437604973648">Oppgave</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7750228210027921155">Bilde-i-bilde</translation>
@@ -401,7 +402,6 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8032244173881942855">Kunne ikke caste fane.</translation>
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8137559199583651773">Administrer utvidelser</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Nedlasting pågår} other {Nedlastinger pågår}}</translation>
 <translation id="8230134520748321204">Lagre passord for <ph name="ORIGIN" />?</translation>

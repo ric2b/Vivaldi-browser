@@ -85,10 +85,7 @@ WiredDisplayMediaRouteProvider::WiredDisplayMediaRouteProvider(
     Profile* profile)
     : receiver_(this, std::move(receiver)),
       media_router_(std::move(media_router)),
-      profile_(profile) {
-  media_router_->OnSinkAvailabilityUpdated(
-      kProviderId, mojom::MediaRouter::SinkAvailability::PER_SOURCE);
-}
+      profile_(profile) {}
 
 WiredDisplayMediaRouteProvider::~WiredDisplayMediaRouteProvider() = default;
 
@@ -141,21 +138,6 @@ void WiredDisplayMediaRouteProvider::JoinRoute(
   std::move(callback).Run(
       absl::nullopt, nullptr,
       std::string("Join should be handled by the presentation manager"),
-      RouteRequestResult::UNKNOWN_ERROR);
-}
-
-void WiredDisplayMediaRouteProvider::ConnectRouteByRouteId(
-    const std::string& media_source,
-    const std::string& route_id,
-    const std::string& presentation_id,
-    const url::Origin& origin,
-    int32_t tab_id,
-    base::TimeDelta timeout,
-    bool off_the_record,
-    ConnectRouteByRouteIdCallback callback) {
-  std::move(callback).Run(
-      absl::nullopt, nullptr,
-      std::string("Connect should be handled by the presentation manager"),
       RouteRequestResult::UNKNOWN_ERROR);
 }
 
@@ -352,7 +334,6 @@ void WiredDisplayMediaRouteProvider::NotifyRouteObservers() const {
 void WiredDisplayMediaRouteProvider::NotifySinkObservers() {
   std::vector<MediaSinkInternal> sinks = GetSinks();
   device_count_metrics_.RecordDeviceCountsIfNeeded(sinks.size(), sinks.size());
-  ReportSinkAvailability(sinks);
   for (const auto& sink_query : sink_queries_)
     media_router_->OnSinksReceived(kProviderId, sink_query, sinks, {});
 }
@@ -391,14 +372,6 @@ std::vector<Display> WiredDisplayMediaRouteProvider::GetAvailableDisplays()
   // If all the displays are mirrored, the user should not be able to present to
   // them.
   return displays.size() == 1 ? std::vector<Display>() : displays;
-}
-
-void WiredDisplayMediaRouteProvider::ReportSinkAvailability(
-    const std::vector<MediaSinkInternal>& sinks) {
-  mojom::MediaRouter::SinkAvailability sink_availability =
-      sinks.empty() ? mojom::MediaRouter::SinkAvailability::UNAVAILABLE
-                    : mojom::MediaRouter::SinkAvailability::PER_SOURCE;
-  media_router_->OnSinkAvailabilityUpdated(kProviderId, sink_availability);
 }
 
 void WiredDisplayMediaRouteProvider::RemovePresentationById(

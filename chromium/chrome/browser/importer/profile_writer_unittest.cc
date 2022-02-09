@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -45,7 +44,7 @@ using password_manager::TestPasswordStore;
 PasswordForm MakePasswordForm() {
   PasswordForm form;
   form.url = GURL("https://example.com/");
-  form.signon_realm = form.url.GetOrigin().spec();
+  form.signon_realm = form.url.DeprecatedGetOriginAsURL().spec();
   form.username_value = u"user@gmail.com";
   form.password_value = u"s3cre3t";
   form.in_store = PasswordForm::Store::kProfileStore;

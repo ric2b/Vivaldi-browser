@@ -41,7 +41,7 @@ void ViewPainter::Paint(const PaintInfo& paint_info) {
 // BaseBackgroundColor on the LocalFrameView.
 // https://drafts.fxtf.org/compositing/#rootgroup
 void ViewPainter::PaintRootGroup(const PaintInfo& paint_info,
-                                 const IntRect& pixel_snapped_background_rect,
+                                 const gfx::Rect& pixel_snapped_background_rect,
                                  const Document& document,
                                  const DisplayItemClient& client,
                                  const PropertyTreeStateOrAlias& state) {
@@ -80,6 +80,9 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   bool painting_background_in_contents_space =
       BoxDecorationData::IsPaintingBackgroundInContentsSpace(paint_info,
                                                              layout_view_);
+
+  Element* element = DynamicTo<Element>(layout_view_.GetNode());
+  bool has_region_capture_data = element && element->GetRegionCaptureCropId();
   bool paints_scroll_hit_test =
       !painting_background_in_contents_space &&
       layout_view_.FirstFragment().PaintProperties()->Scroll();
@@ -100,7 +103,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   }
 
   if (!layout_view_.HasBoxDecorationBackground() && !has_hit_test_data &&
-      !paints_scroll_hit_test)
+      !paints_scroll_hit_test && !has_region_capture_data)
     return;
 
   // The background rect always includes at least the visible content size.
@@ -135,7 +138,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
                              ->GetScrollingBackgroundDisplayItemClient();
   }
 
-  IntRect pixel_snapped_background_rect(PixelSnappedIntRect(background_rect));
+  gfx::Rect pixel_snapped_background_rect = ToPixelSnappedRect(background_rect);
 
   auto root_element_background_painting_state =
       layout_view_.FirstFragment().ContentsProperties();
@@ -210,6 +213,13 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
                            *background_client);
   }
 
+  if (has_region_capture_data) {
+    BoxPainter(layout_view_)
+        .RecordRegionCaptureData(paint_info,
+                                 PhysicalRect(pixel_snapped_background_rect),
+                                 *background_client);
+  }
+
   // Record the scroll hit test after the non-scrolling background so
   // background squashing is not affected. Hit test order would be equivalent
   // if this were immediately before the non-scrolling background.
@@ -237,7 +247,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
 //    possible.
 void ViewPainter::PaintRootElementGroup(
     const PaintInfo& paint_info,
-    const IntRect& pixel_snapped_background_rect,
+    const gfx::Rect& pixel_snapped_background_rect,
     const PropertyTreeStateOrAlias& background_paint_state,
     const DisplayItemClient& background_client,
     bool painted_separate_backdrop,
@@ -289,7 +299,7 @@ void ViewPainter::PaintRootElementGroup(
   // transforms apply. The strategy is to issue draw commands in the root
   // element's local space, which requires mapping the document background rect.
   bool background_renderable = true;
-  IntRect paint_rect = pixel_snapped_background_rect;
+  gfx::Rect paint_rect = pixel_snapped_background_rect;
   // Offset for BackgroundImageGeometry to offset the image's origin. This makes
   // background tiling start at the root element's origin instead of the view.
   // This is different from the offset for painting, which is in |paint_rect|.
@@ -308,7 +318,7 @@ void ViewPainter::PaintRootElementGroup(
       // With transforms, paint offset is encoded in paint property nodes but we
       // can use the |paint_rect|'s adjusted location as the offset from the
       // view to the root element.
-      background_image_offset = PhysicalOffset(paint_rect.Location());
+      background_image_offset = PhysicalOffset(paint_rect.origin());
     } else {
       background_image_offset = -root_object->FirstFragment().PaintOffset();
     }

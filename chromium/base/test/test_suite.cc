@@ -22,7 +22,6 @@
 #include "base/i18n/icu_util.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/tagging.h"
 #include "base/no_destructor.h"
@@ -47,6 +46,7 @@
 #include "base/time/time.h"
 #include "base/tracing_buildflags.h"
 #include "build/build_config.h"
+#include "build/os_buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
@@ -69,11 +69,7 @@
 #endif
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
-#include "third_party/test_fonts/fontconfig_util_linux.h"
-#endif
-
-#if defined(OS_FUCHSIA)
-#include "base/base_paths_fuchsia.h"
+#include "third_party/test_fonts/fontconfig/fontconfig_util_linux.h"
 #endif
 
 #if defined(OS_WIN)
@@ -273,8 +269,13 @@ const std::string& GetProfileName() {
 }
 
 void InitializeLogging() {
-  CHECK(logging::InitLogging({.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG |
-                                              logging::LOG_TO_STDERR}));
+#if BUILDFLAG(IS_FUCHSIA)
+  constexpr auto kLoggingDest = logging::LOG_TO_STDERR;
+#else
+  constexpr auto kLoggingDest =
+      logging::LOG_TO_SYSTEM_DEBUG_LOG | logging::LOG_TO_STDERR;
+#endif
+  CHECK(logging::InitLogging({.logging_dest = kLoggingDest}));
 
   // We want process and thread IDs because we may have multiple processes.
 #if defined(OS_ANDROID)

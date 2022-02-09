@@ -36,6 +36,7 @@ import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareT
 import org.chromium.chrome.browser.cryptids.ProbabilisticCryptidRenderer;
 import org.chromium.chrome.browser.explore_sites.ExperimentalExploreSitesSection;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesBridge;
+import org.chromium.chrome.browser.feed.FeedSurfaceScrollDelegate;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
 import org.chromium.chrome.browser.lens.LensMetrics;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -152,40 +153,9 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
      */
     private int mSearchBoxBoundsVerticalInset;
 
-    private ScrollDelegate mScrollDelegate;
+    private FeedSurfaceScrollDelegate mScrollDelegate;
 
     private NewTabPageUma mNewTabPageUma;
-
-    /**
-     * A delegate used to obtain information about scroll state and perform various scroll
-     * functions.
-     */
-    public interface ScrollDelegate {
-        /**
-         * @return Whether the scroll view is initialized. If false, the other delegate methods
-         *         may not be valid.
-         */
-        boolean isScrollViewInitialized();
-
-        /**
-         * Checks whether the child at a given position is visible.
-         * @param position The position of the child to check.
-         * @return True if the child is at least partially visible.
-         */
-        boolean isChildVisibleAtPosition(int position);
-
-        /**
-         * @return The vertical scroll offset of the view containing this layout in pixels. Not
-         *         valid until scroll view is initialized.
-         */
-        int getVerticalScrollOffset();
-
-        /**
-         * Snaps the scroll point of the scroll view to prevent the user from scrolling to midway
-         * through a transition.
-         */
-        void snapScroll();
-    }
 
     /**
      * Constructor for inflating from XML.
@@ -233,7 +203,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
      */
     public void initialize(NewTabPageManager manager, Activity activity,
             TileGroup.Delegate tileGroupDelegate, boolean searchProviderHasLogo,
-            boolean searchProviderIsGoogle, ScrollDelegate scrollDelegate,
+            boolean searchProviderIsGoogle, FeedSurfaceScrollDelegate scrollDelegate,
             ContextMenuManager contextMenuManager, UiConfig uiConfig, Supplier<Tab> tabProvider,
             ActivityLifecycleDispatcher lifecycleDispatcher, NewTabPageUma uma, boolean isIncognito,
             WindowAndroid windowAndroid) {
@@ -291,8 +261,8 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         mSearchProviderLogoView.showSearchProviderInitialView();
 
         if (searchProviderIsGoogle && QueryTileUtils.isQueryTilesEnabledOnNTP()) {
-            mQueryTileSection = new QueryTileSection(findViewById(R.id.query_tiles),
-                    mSearchBoxCoordinator, profile, mManager::performSearchQuery);
+            mQueryTileSection = new QueryTileSection(
+                    findViewById(R.id.query_tiles), profile, mManager::performSearchQuery);
         }
 
         mTileGroup.startObserving(maxRows * getMaxColumnsForMostVisitedTiles());
@@ -307,9 +277,9 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     }
 
     /**
-     * @return The {@link ScrollDelegate} for this class.
+     * @return The {@link FeedSurfaceScrollDelegate} for this class.
      */
-    ScrollDelegate getScrollDelegate() {
+    FeedSurfaceScrollDelegate getScrollDelegate() {
         return mScrollDelegate;
     }
 
@@ -329,8 +299,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     private void initializeSearchBoxTextView() {
         TraceEvent.begin(TAG + ".initializeSearchBoxTextView()");
 
-        mSearchBoxCoordinator.setSearchBoxClickListener(
-                v -> mManager.focusSearchBox(false, null, false));
+        mSearchBoxCoordinator.setSearchBoxClickListener(v -> mManager.focusSearchBox(false, null));
         mSearchBoxCoordinator.setSearchBoxTextWatcher(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -341,9 +310,8 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
             @Override
             public void afterTextChanged(Editable s) {
                 if (s.length() == 0) return;
-                mManager.focusSearchBox(
-                        false, s.toString(), mSearchBoxCoordinator.isTextChangeFromTiles());
-                mSearchBoxCoordinator.setSearchText("", false);
+                mManager.focusSearchBox(false, s.toString());
+                mSearchBoxCoordinator.setSearchText("");
             }
         });
         TraceEvent.end(TAG + ".initializeSearchBoxTextView()");
@@ -352,7 +320,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     private void initializeVoiceSearchButton() {
         TraceEvent.begin(TAG + ".initializeVoiceSearchButton()");
         mSearchBoxCoordinator.addVoiceSearchButtonClickListener(
-                v -> mManager.focusSearchBox(true, null, false));
+                v -> mManager.focusSearchBox(true, null));
         updateActionButtonVisibility();
         TraceEvent.end(TAG + ".initializeVoiceSearchButton()");
     }

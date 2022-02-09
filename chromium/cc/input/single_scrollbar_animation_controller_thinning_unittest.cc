@@ -4,8 +4,8 @@
 
 #include "cc/input/single_scrollbar_animation_controller_thinning.h"
 
+#include "base/memory/raw_ptr.h"
 #include "cc/layers/solid_color_scrollbar_layer_impl.h"
-#include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_tree_impl_test_base.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -46,7 +46,7 @@ class MockSingleScrollbarAnimationControllerClient
   MOCK_METHOD0(DidChangeScrollbarVisibility, void());
 
  private:
-  LayerTreeHostImpl* host_impl_;
+  raw_ptr<LayerTreeHostImpl> host_impl_;
 };
 
 class SingleScrollbarAnimationControllerThinningTest
@@ -93,7 +93,7 @@ class SingleScrollbarAnimationControllerThinningTest
 
   std::unique_ptr<SingleScrollbarAnimationControllerThinning>
       scrollbar_controller_;
-  SolidColorScrollbarLayerImpl* scrollbar_layer_;
+  raw_ptr<SolidColorScrollbarLayerImpl> scrollbar_layer_;
   NiceMock<MockSingleScrollbarAnimationControllerClient> client_;
 };
 

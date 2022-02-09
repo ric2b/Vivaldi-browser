@@ -129,9 +129,7 @@ wxIcon LoadNamedIcon(HMODULE module, const wchar_t* iconName, int size) {
     return wxNullIcon;
 
   wxIcon icon;
-  icon.SetHICON(static_cast<WXHICON>(hIcon));
-  icon.SetWidth(size);
-  icon.SetHeight(size);
+  icon.InitFromHICON(static_cast<WXHICON>(hIcon), size, size);
 
   return icon;
 }
@@ -717,7 +715,7 @@ void UpdateDialog::StateUpdateError(Error error) {
   HIDE(m_runInstallerButtonSizer);
   HIDE(m_releaseNotesSizer);
   HIDE(m_updateButtonsSizer);
-  MakeResizable(false);
+  MakeResizable(true);
 }
 
 void UpdateDialog::StateUpdateAvailable() {
@@ -824,7 +822,7 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
         return;
       HIDE(m_progressLabel);
       break;
-    case DownloadReport::kDeltaExtraction:
+    case DownloadReport::kUnpacking:
       m_progress->Pulse();
       if (!SetMessage(GetLocalizedString(
               IDS_UPDATE_NOTIFICATION_EXTRACTING_MESSAGE_BASE)))
@@ -1164,7 +1162,6 @@ void UIThread::Run() {
   UIThreadAccess::OnUIThreadStarted(wxGetApp());
 
   // Run the app:
-  wxMSWDisableSettingHighDPIAware();
   HINSTANCE h_instance = GetModuleHandle(NULL);
   wxEntry(h_instance);
 }

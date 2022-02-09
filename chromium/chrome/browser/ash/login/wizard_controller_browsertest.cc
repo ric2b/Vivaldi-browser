@@ -5,12 +5,14 @@
 #include "chrome/browser/ash/login/wizard_controller.h"
 
 #include "ash/components/audio/cras_audio_handler.h"
+#include "ash/components/geolocation/simple_geolocation_provider.h"
+#include "ash/components/settings/timezone_settings.h"
+#include "ash/components/timezone/timezone_request.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -85,14 +87,11 @@
 #include "chromeos/dbus/shill/fake_shill_manager_client.h"
 #include "chromeos/dbus/system_clock/system_clock_client.h"
 #include "chromeos/dbus/userdataauth/fake_install_attributes_client.h"
-#include "chromeos/geolocation/simple_geolocation_provider.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
-#include "chromeos/settings/timezone_settings.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/test/chromeos_test_utils.h"
-#include "chromeos/timezone/timezone_request.h"
 #include "chromeos/tpm/stub_install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -644,7 +643,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
         NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE, 204);
   }
 
-  chromeos::SimpleGeolocationProvider* GetGeolocationProvider() {
+  SimpleGeolocationProvider* GetGeolocationProvider() {
     return WizardController::default_controller()->geolocation_provider_.get();
   }
 
@@ -678,7 +677,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
                                                  kGeolocationResponseBody);
           } else if (base::StartsWith(
                          request.url.spec(),
-                         chromeos::DefaultTimezoneProviderURL().spec(),
+                         DefaultTimezoneProviderURL().spec(),
                          base::CompareCase::SENSITIVE)) {
             test_url_loader_factory_.AddResponse(request.url.spec(),
                                                  kTimezoneResponseBody);
@@ -729,8 +728,8 @@ class WizardControllerFlowTest : public WizardControllerTest {
     WaitUntilTimezoneResolved();
     EXPECT_EQ(
         "America/Anchorage",
-        base::UTF16ToUTF8(chromeos::system::TimezoneSettings::GetInstance()
-                              ->GetCurrentTimezoneID()));
+        base::UTF16ToUTF8(
+            system::TimezoneSettings::GetInstance()->GetCurrentTimezoneID()));
   }
 
   // All of the *Screen types are owned by WizardController. The views are owned

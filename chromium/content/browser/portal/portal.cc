@@ -131,21 +131,23 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
 
   // Create a FrameTreeNode in the outer WebContents to host the portal, in
   // response to the creation of a portal in the renderer process.
-  FrameTreeNode* outer_node = outer_contents_impl->GetFrameTree()->AddFrame(
-      owner_render_frame_host_, owner_render_frame_host_->GetProcess()->GetID(),
-      owner_render_frame_host_->GetProcess()->GetNextRoutingID(),
-      // The renderer frame doesn't exist yet and will be created later with the
-      // CreateRenderView message.
-      /*frame_remote=*/mojo::NullAssociatedRemote(),
-      /*browser_interface_broker_receiver=*/mojo::NullReceiver(),
-      // The PolicyContainerHost remote is sent to Blink in the CreateRenderView
-      // mojo message.
-      /*policy_container_bind_params=*/nullptr,
-      blink::mojom::TreeScopeType::kDocument, "", "", true,
-      blink::LocalFrameToken(), base::UnguessableToken::Create(),
-      blink::FramePolicy(), blink::mojom::FrameOwnerProperties(), false,
-      blink::FrameOwnerElementType::kPortal,
-      /*is_dummy_frame_for_inner_tree=*/true);
+  FrameTreeNode* outer_node =
+      outer_contents_impl->GetPrimaryFrameTree().AddFrame(
+          owner_render_frame_host_,
+          owner_render_frame_host_->GetProcess()->GetID(),
+          owner_render_frame_host_->GetProcess()->GetNextRoutingID(),
+          // The renderer frame doesn't exist yet and will be created later with
+          // the CreateRenderView message.
+          /*frame_remote=*/mojo::NullAssociatedRemote(),
+          /*browser_interface_broker_receiver=*/mojo::NullReceiver(),
+          // The PolicyContainerHost remote is sent to Blink in the
+          // CreateRenderView mojo message.
+          /*policy_container_bind_params=*/nullptr,
+          blink::mojom::TreeScopeType::kDocument, "", "", true,
+          blink::LocalFrameToken(), base::UnguessableToken::Create(),
+          blink::FramePolicy(), blink::mojom::FrameOwnerProperties(), false,
+          blink::FrameOwnerElementType::kPortal,
+          /*is_dummy_frame_for_inner_tree=*/true);
   outer_node->AddObserver(this);
 
   bool web_contents_created = false;
@@ -170,8 +172,11 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
 
   // Create the view for all RenderViewHosts that don't have a
   // RenderWidgetHostViewChildFrame view.
+  // TODO(https://crbug.com/1264031): With MPArch a WebContents might have
+  // multiple FrameTrees. Make sure this code really just needs the
+  // primary one.
   for (auto& render_view_host :
-       portal_contents_->GetFrameTree()->render_view_hosts()) {
+       portal_contents_->GetPrimaryFrameTree().render_view_hosts()) {
     if (!render_view_host.second->GetWidget()->GetView() ||
         !render_view_host.second->GetWidget()
              ->GetView()
@@ -204,14 +209,18 @@ void Portal::Close() {
   is_closing_ = true;
   receiver_.reset();
 
-  // If the contents is unowned, it would need to be properly detached from the
-  // WebContentsTreeNode before it can be cleanly closed. Otherwise a race is
-  // possible.
+  // If the contents is attached to its outer `WebContents`, and therefore not
+  // owned by `portal_contents_`, we can destroy ourself right now.
   if (!portal_contents_.OwnsContents()) {
     DestroySelf();  // Deletes this.
     return;
   }
 
+  // Otherwise if the portal contents is not attached to an outer `WebContents`,
+  // we have to manage the destruction process ourself. We start by calling
+  // `WebContentsImpl::ClosePage()`, which will go through the proper unload
+  // handler dance, and eventually come back and call `Portal::CloseContents()`,
+  // which for orphaned contents, will finally invoke `DestroySelf()`.
   portal_contents_->ClosePage();
 }
 
@@ -228,7 +237,7 @@ void Portal::Navigate(const GURL& url,
   owner_render_frame_host_->GetSiteInstance()->GetProcess()->FilterURL(
       false, &out_validated_url);
 
-  FrameTreeNode* portal_root = portal_contents_->GetFrameTree()->root();
+  FrameTreeNode* portal_root = portal_contents_->GetPrimaryFrameTree().root();
   RenderFrameHostImpl* portal_frame = portal_root->current_frame_host();
 
   // TODO(crbug.com/1237547): Change our implementation to disallow downloads for
@@ -401,7 +410,7 @@ void Portal::WebContentsDestroyed() {
 }
 
 void Portal::LoadingStateChanged(WebContents* source,
-                                 bool to_different_document) {
+                                 bool should_show_loading_ui) {
   DCHECK_EQ(source, portal_contents_.get());
   if (!source->IsLoading())
     client_->DispatchLoadEvent();
@@ -487,7 +496,8 @@ std::pair<bool, blink::mojom::PortalActivateResult> Portal::CanActivate() {
 
   // If no navigation has yet committed in the portal, it cannot be activated as
   // this would lead to an empty tab contents (without even an about:blank).
-  if (portal_controller.GetLastCommittedEntryIndex() < 0) {
+  if (!portal_controller.GetLastCommittedEntry() ||
+      portal_controller.GetLastCommittedEntry()->IsInitialEntry()) {
     return std::make_pair(
         false,
         blink::mojom::PortalActivateResult::kRejectedDueToPortalNotReady);
@@ -573,8 +583,11 @@ void Portal::ActivateImpl(blink::TransferableMessage data,
     // attached to an outer WebContents, and may not have an outer frame tree
     // node created (i.e. CreateProxyAndAttachPortal isn't called). In this
     // case, we can skip a few of the detachment steps above.
+    // TODO(https://crbug.com/1264031): With MPArch a WebContents might have
+    // multiple FrameTrees. Make sure this code really just needs the
+    // primary one.
     for (auto& render_view_host :
-         portal_contents_->GetFrameTree()->render_view_hosts()) {
+         portal_contents_->GetPrimaryFrameTree().render_view_hosts()) {
       CreatePortalRenderWidgetHostView(portal_contents_.get(),
                                        render_view_host.second);
     }
@@ -589,8 +602,8 @@ void Portal::ActivateImpl(blink::TransferableMessage data,
 
   auto* outer_contents_main_frame_view = static_cast<RenderWidgetHostViewBase*>(
       outer_contents->GetMainFrame()->GetView());
-  DCHECK(!outer_contents->GetFrameTree()
-              ->root()
+  DCHECK(!outer_contents->GetPrimaryFrameTree()
+              .root()
               ->render_manager()
               ->speculative_frame_host());
   auto* portal_contents_main_frame_view =

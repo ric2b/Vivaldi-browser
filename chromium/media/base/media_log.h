@@ -15,7 +15,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/thread_annotations.h"
 #include "build/build_config.h"
@@ -166,6 +166,9 @@ class MEDIA_EXPORT MediaLog {
   struct ParentLogRecord : base::RefCountedThreadSafe<ParentLogRecord> {
     explicit ParentLogRecord(MediaLog* log);
 
+    ParentLogRecord(const ParentLogRecord&) = delete;
+    ParentLogRecord& operator=(const ParentLogRecord&) = delete;
+
     // A unique (to this process) id for this MediaLog.
     int32_t id;
 
@@ -173,13 +176,11 @@ class MEDIA_EXPORT MediaLog {
     base::Lock lock;
 
     // Original media log, or null.
-    MediaLog* media_log GUARDED_BY(lock) = nullptr;
+    raw_ptr<MediaLog> media_log GUARDED_BY(lock) = nullptr;
 
    protected:
     friend class base::RefCountedThreadSafe<ParentLogRecord>;
     virtual ~ParentLogRecord();
-
-    DISALLOW_COPY_AND_ASSIGN(ParentLogRecord);
   };
 
  private:
@@ -210,7 +211,7 @@ class MEDIA_EXPORT LogHelper {
 
  private:
   const MediaLogMessageLevel level_;
-  MediaLog* const media_log_;
+  const raw_ptr<MediaLog> media_log_;
   std::stringstream stream_;
 };
 

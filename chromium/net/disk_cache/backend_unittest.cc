@@ -12,14 +12,15 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/memory/memory_pressure_listener.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -5018,7 +5019,7 @@ TEST_F(DiskCacheBackendTest, SimpleOwnershipTransferBackendDestroyRace) {
       *ran_ptr = true;
     }
 
-    bool* ran_ptr;
+    raw_ptr<bool> ran_ptr;
   };
 
   const char kKey[] = "skeleton";
@@ -5166,7 +5167,7 @@ TEST_F(DiskCacheBackendTest, SimpleCancelOpPendingDoom) {
     explicit CleanupContext(bool* ran_ptr) : ran_ptr(ran_ptr) {}
     ~CleanupContext() { *ran_ptr = true; }
 
-    bool* ran_ptr;
+    raw_ptr<bool> ran_ptr;
   };
 
   const char kKey[] = "skeleton";

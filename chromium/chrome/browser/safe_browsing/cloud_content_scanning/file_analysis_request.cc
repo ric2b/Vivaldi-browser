@@ -29,13 +29,15 @@ namespace safe_browsing {
 
 namespace {
 
+constexpr size_t kReadFileChunkSize = 4096;
+
 std::string GetFileMimeType(const base::FilePath& path,
-                            const base::MemoryMappedFile& file) {
+                            base::StringPiece first_bytes) {
   std::string sniffed_mime_type;
   bool sniff_found = net::SniffMimeType(
-      base::StringPiece(
-          reinterpret_cast<const char*>(file.data()),
-          std::min(file.length(), static_cast<size_t>(net::kMaxBytesToSniff))),
+      base::StringPiece(first_bytes.data(),
+                        std::min(first_bytes.size(),
+                                 static_cast<size_t>(net::kMaxBytesToSniff))),
       net::FilePathToFileURL(path),
       /*type_hint*/ std::string(), net::ForceSniffFileUrlsForHtml::kDisabled,
       &sniffed_mime_type);
@@ -66,10 +68,10 @@ std::string GetFileMimeType(const base::FilePath& path,
 
 std::pair<BinaryUploadService::Result, BinaryUploadService::Request::Data>
 GetFileDataBlocking(const base::FilePath& path, bool detect_mime_type) {
-  // FLAG_SHARE_DELETE is necessary to allow the file to be renamed by the user
-  // clicking "Open Now" without causing download errors.
+  // FLAG_WIN_SHARE_DELETE is necessary to allow the file to be renamed by the
+  // user clicking "Open Now" without causing download errors.
   base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
-                            base::File::FLAG_SHARE_DELETE);
+                            base::File::FLAG_WIN_SHARE_DELETE);
 
   if (!file.IsValid()) {
     return std::make_pair(BinaryUploadService::Result::UNKNOWN,
@@ -82,21 +84,34 @@ GetFileDataBlocking(const base::FilePath& path, bool detect_mime_type) {
                           BinaryUploadService::Request::Data());
   }
 
-  base::MemoryMappedFile mm_file;
-  if (!mm_file.Initialize(std::move(file)) || !mm_file.IsValid()) {
-    return std::make_pair(BinaryUploadService::Result::UNKNOWN,
-                          BinaryUploadService::Request::Data());
-  }
-
   BinaryUploadService::Request::Data file_data;
   file_data.size = file_size;
   file_data.path = path;
-  if (detect_mime_type)
-    file_data.mime_type = GetFileMimeType(path, mm_file);
 
   std::unique_ptr<crypto::SecureHash> secure_hash =
       crypto::SecureHash::Create(crypto::SecureHash::SHA256);
-  secure_hash->Update(mm_file.data(), file_size);
+  size_t bytes_read = 0;
+  std::string buf;
+  buf.reserve(kReadFileChunkSize);
+
+  while (bytes_read < file_size) {
+    int64_t bytes_currently_read =
+        file.ReadAtCurrentPos(&buf[0], kReadFileChunkSize);
+    if (bytes_currently_read == -1) {
+      return {BinaryUploadService::Result::UNKNOWN,
+              BinaryUploadService::Request::Data()};
+    }
+
+    // Use the first read chunk to get the mimetype as necessary.
+    if (detect_mime_type && (bytes_read == 0)) {
+      file_data.mime_type = GetFileMimeType(
+          path, base::StringPiece(buf.data(), bytes_currently_read));
+    }
+
+    secure_hash->Update(buf.data(), bytes_currently_read);
+    bytes_read += bytes_currently_read;
+  }
+
   file_data.hash.resize(crypto::kSHA256Length);
   secure_hash->Finish(base::data(file_data.hash), crypto::kSHA256Length);
   file_data.hash =
@@ -105,7 +120,7 @@ GetFileDataBlocking(const base::FilePath& path, bool detect_mime_type) {
   return {file_size <= BinaryUploadService::kMaxUploadSizeBytes
               ? BinaryUploadService::Result::SUCCESS
               : BinaryUploadService::Result::FILE_TOO_LARGE,
-          file_data};
+          std::move(file_data)};
 }
 
 bool IsZipFile(const base::FilePath::StringType& extension,
@@ -181,13 +196,8 @@ bool FileAnalysisRequest::FileSupportedByDlp(
     const std::string& mime_type) const {
   for (const std::string& tag : content_analysis_request().tags()) {
     if (tag == "dlp") {
-      if (FileTypeSupportedForDlp(file_name_)) {
-        return true;
-      } else if (base::FeatureList::IsEnabled(
-                     safe_browsing::kFileAnalysisMimeTypeSniff)) {
-        return MimeTypeSupportedForDlp(mime_type);
-      }
-      return false;
+      return FileTypeSupportedForDlp(file_name_) ||
+             MimeTypeSupportedForDlp(mime_type);
     }
   }
 
@@ -288,7 +298,14 @@ void FileAnalysisRequest::CacheResultAndData(BinaryUploadService::Result result,
 
 void FileAnalysisRequest::RunCallback() {
   if (!data_callback_.is_null()) {
-    std::move(data_callback_).Run(cached_result_, cached_data_);
+    // Manually copy `cached_data_` since it is move-only.
+    BinaryUploadService::Request::Data data;
+    data.hash = cached_data_.hash;
+    data.mime_type = cached_data_.mime_type;
+    data.path = cached_data_.path;
+    data.size = cached_data_.size;
+
+    std::move(data_callback_).Run(cached_result_, std::move(data));
   }
 }
 

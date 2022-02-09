@@ -8,6 +8,11 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/browser/web_applications/web_application_info.h"
@@ -143,26 +148,25 @@ std::vector<apps::UrlHandlerInfo> CreateRandomUrlHandlers(uint32_t suffix) {
   return url_handlers;
 }
 
-std::vector<WebApplicationShortcutsMenuItemInfo>
-CreateRandomShortcutsMenuItemInfos(const GURL& scope, RandomHelper& random) {
+std::vector<WebAppShortcutsMenuItemInfo> CreateRandomShortcutsMenuItemInfos(
+    const GURL& scope,
+    RandomHelper& random) {
   const uint32_t suffix = random.next_uint();
-  std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos;
+  std::vector<WebAppShortcutsMenuItemInfo> shortcuts_menu_item_infos;
   for (int i = random.next_uint(4) + 1; i >= 0; --i) {
     std::string suffix_str =
         base::NumberToString(suffix) + base::NumberToString(i);
-    WebApplicationShortcutsMenuItemInfo shortcut_info;
+    WebAppShortcutsMenuItemInfo shortcut_info;
     shortcut_info.url = scope.Resolve("shortcut" + suffix_str);
     shortcut_info.name = base::UTF8ToUTF16("shortcut" + suffix_str);
 
-    std::vector<WebApplicationShortcutsMenuItemInfo::Icon> shortcut_icons_any;
-    std::vector<WebApplicationShortcutsMenuItemInfo::Icon>
-        shortcut_icons_maskable;
-    std::vector<WebApplicationShortcutsMenuItemInfo::Icon>
-        shortcut_icons_monochrome;
+    std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_icons_any;
+    std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_icons_maskable;
+    std::vector<WebAppShortcutsMenuItemInfo::Icon> shortcut_icons_monochrome;
 
     for (int j = random.next_uint(4) + 1; j >= 0; --j) {
       std::string icon_suffix_str = suffix_str + base::NumberToString(j);
-      WebApplicationShortcutsMenuItemInfo::Icon shortcut_icon;
+      WebAppShortcutsMenuItemInfo::Icon shortcut_icon;
       shortcut_icon.url = scope.Resolve("/shortcuts/icon" + icon_suffix_str);
       // Within each shortcut_icons_*, square_size_px must be unique.
       shortcut_icon.square_size_px = (j * 10) + random.next_uint(10);
@@ -250,6 +254,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   const absl::optional<SkColor> theme_color = random.next_uint();
   absl::optional<SkColor> dark_mode_theme_color;
   const absl::optional<SkColor> background_color = random.next_uint();
+  absl::optional<SkColor> dark_mode_background_color;
   const absl::optional<SkColor> synced_theme_color = random.next_uint();
   auto app = std::make_unique<WebApp>(app_id);
 
@@ -272,6 +277,11 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
     dark_mode_theme_color = SkColorSetA(random.next_uint(), SK_AlphaOPAQUE);
   }
 
+  if (random.next_bool()) {
+    dark_mode_background_color =
+        SkColorSetA(random.next_uint(), SK_AlphaOPAQUE);
+  }
+
   app->SetName(name);
   app->SetDescription(description);
   app->SetManifestId(manifest_id);
@@ -280,6 +290,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   app->SetThemeColor(theme_color);
   app->SetDarkModeThemeColor(dark_mode_theme_color);
   app->SetBackgroundColor(background_color);
+  app->SetDarkModeBackgroundColor(dark_mode_background_color);
   app->SetIsLocallyInstalled(random.next_bool());
   app->SetIsFromSyncAndPendingInstallation(random.next_bool());
 
@@ -392,8 +403,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   app->SetStorageIsolated(random.next_bool());
 
-  app->SetFileHandlerPermissionBlocked(false);
-
   app->SetWindowControlsOverlayEnabled(false);
 
   WebApp::SyncFallbackData sync_fallback_data;
@@ -414,6 +423,9 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   const base::Time manifest_update_time =
       base::Time::UnixEpoch() + base::Milliseconds(random.next_uint());
   app->SetManifestUpdateTime(manifest_update_time);
+
+  if (random.next_bool())
+    app->SetParentAppId(base::NumberToString(random.next_uint()));
 
   // `random` should not be used after the chromeos block if the result
   // is expected to be deterministic across cros and non-cros builds.
@@ -448,6 +460,19 @@ void TestDeclineDialogCallback(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(acceptance_callback),
                                 false /*accept*/, std::move(web_app_info)));
+}
+
+AppId InstallPwaForCurrentUrl(Browser* browser) {
+  // Depending on the installability criteria, different dialogs can be used.
+  chrome::SetAutoAcceptWebAppDialogForTesting(true, true);
+  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(true);
+  WebAppTestInstallObserver observer(browser->profile());
+  observer.BeginListening();
+  CHECK(chrome::ExecuteCommand(browser, IDC_INSTALL_PWA));
+  AppId app_id = observer.Wait();
+  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(false);
+  chrome::SetAutoAcceptWebAppDialogForTesting(false, false);
+  return app_id;
 }
 
 }  // namespace test

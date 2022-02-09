@@ -20,8 +20,8 @@
 #if BUILDFLAG(ENABLE_LIBVPX)
 // TODO(dalecurtis): This technically should not be allowed in media/base. See
 // TODO below about moving outside of base.
-#include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"
-#include "third_party/libvpx/source/libvpx/vpx/vpx_codec.h"
+#include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"      // nogncheck
+#include "third_party/libvpx/source/libvpx/vpx/vpx_codec.h"  // nogncheck
 #endif
 
 #if defined(OS_ANDROID)
@@ -214,6 +214,8 @@ bool IsAudioCodecProprietary(AudioCodec codec) {
     case AudioCodec::kGSM_MS:
     case AudioCodec::kALAC:
     case AudioCodec::kMpegHAudio:
+    case AudioCodec::kDTS:
+    case AudioCodec::kDTSXP2:
       return true;
 
     case AudioCodec::kFLAC:
@@ -277,6 +279,8 @@ bool IsDefaultSupportedAudioType(const AudioType& type) {
     case AudioCodec::kALAC:
     case AudioCodec::kAC3:
     case AudioCodec::kMpegHAudio:
+    case AudioCodec::kDTS:
+    case AudioCodec::kDTSXP2:
     case AudioCodec::kUnknown:
       return false;
   }

@@ -13,7 +13,6 @@
 #include "base/i18n/rtl.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
@@ -510,7 +509,7 @@ bool NewTabPageBindings::HasOrigin(const GURL& origin) {
   if (!frame)
     return false;
   GURL url(frame->GetDocument().Url());
-  return url.GetOrigin() == origin.GetOrigin();
+  return url.DeprecatedGetOriginAsURL() == origin.DeprecatedGetOriginAsURL();
 }
 
 // static

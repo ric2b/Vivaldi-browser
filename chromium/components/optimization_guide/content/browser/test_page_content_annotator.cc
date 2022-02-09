@@ -12,61 +12,57 @@ TestPageContentAnnotator::TestPageContentAnnotator() = default;
 void TestPageContentAnnotator::Annotate(BatchAnnotationCallback callback,
                                         const std::vector<std::string>& inputs,
                                         AnnotationType annotation_type) {
-  std::vector<BatchAnnotationResult> results =
-      FillResultWithStatus(inputs, status_);
-  if (status_ != ExecutionStatus::kSuccess) {
-    std::move(callback).Run(results);
-    return;
-  }
+  std::vector<BatchAnnotationResult> results;
 
   if (annotation_type == AnnotationType::kPageTopics) {
-    for (BatchAnnotationResult& result : results) {
-      auto it = topics_by_input_.find(result.input);
+    for (const std::string& input : inputs) {
+      auto it = topics_by_input_.find(input);
+      absl::optional<std::vector<WeightedString>> output;
       if (it != topics_by_input_.end()) {
-        result.topics =
-            std::vector<WeightedString>{it->second.front(), it->second.back()};
+        output = it->second;
       }
+      results.emplace_back(
+          BatchAnnotationResult::CreatePageTopicsResult(input, output));
     }
   }
 
   if (annotation_type == AnnotationType::kPageEntities) {
-    for (BatchAnnotationResult& result : results) {
-      auto it = entities_by_input_.find(result.input);
+    for (const std::string& input : inputs) {
+      auto it = entities_by_input_.find(input);
+      absl::optional<std::vector<ScoredEntityMetadata>> output;
       if (it != entities_by_input_.end()) {
-        result.entites =
-            std::vector<WeightedString>{it->second.front(), it->second.back()};
+        output = it->second;
       }
+      results.emplace_back(
+          BatchAnnotationResult::CreatePageEntitiesResult(input, output));
     }
   }
 
   if (annotation_type == AnnotationType::kContentVisibility) {
-    for (BatchAnnotationResult& result : results) {
-      auto it = visibility_scores_for_input_.find(result.input);
+    for (const std::string& input : inputs) {
+      auto it = visibility_scores_for_input_.find(input);
+      absl::optional<double> output;
       if (it != visibility_scores_for_input_.end()) {
-        result.visibility_score = it->second;
+        output = it->second;
       }
+      results.emplace_back(
+          BatchAnnotationResult::CreateContentVisibilityResult(input, output));
     }
   }
 
   std::move(callback).Run(results);
 }
 
-void TestPageContentAnnotator::UseExecutionStatus(ExecutionStatus status) {
-  status_ = status;
-}
-
 void TestPageContentAnnotator::UsePageTopics(
     const base::flat_map<std::string, std::vector<WeightedString>>&
         topics_by_input) {
-  topics_by_input_ = base::flat_map<std::string, std::vector<WeightedString>>{
-      topics_by_input.begin(), topics_by_input.end()};
+  topics_by_input_ = topics_by_input;
 }
 
 void TestPageContentAnnotator::UsePageEntities(
-    const base::flat_map<std::string, std::vector<WeightedString>>&
+    const base::flat_map<std::string, std::vector<ScoredEntityMetadata>>&
         entities_by_input) {
-  entities_by_input_ = base::flat_map<std::string, std::vector<WeightedString>>{
-      entities_by_input.begin(), entities_by_input.end()};
+  entities_by_input_ = entities_by_input;
 }
 
 void TestPageContentAnnotator::UseVisibilityScores(

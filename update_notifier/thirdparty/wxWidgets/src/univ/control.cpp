@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_CONTROLS
 
@@ -39,11 +36,11 @@
 // implementation
 // ============================================================================
 
-IMPLEMENT_DYNAMIC_CLASS(wxControl, wxWindow)
+wxIMPLEMENT_DYNAMIC_CLASS(wxControl, wxWindow);
 
-BEGIN_EVENT_TABLE(wxControl, wxControlBase)
+wxBEGIN_EVENT_TABLE(wxControl, wxControlBase)
     WX_EVENT_TABLE_INPUT_CONSUMER(wxControl)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 WX_FORWARD_TO_INPUT_CONSUMER(wxControl)
 

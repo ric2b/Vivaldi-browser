@@ -19,9 +19,9 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
@@ -341,6 +341,9 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
   if (target->PerformAction(data))
     return;
 
+  if (!root.MaybeUpdateLayoutAndCheckValidity())
+    return;
+
   switch (data.action) {
     case ax::mojom::Action::kBlur: {
       ui::AXActionData action_data;
@@ -357,13 +360,6 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
     case ax::mojom::Action::kSetSelection:
       anchor->SetSelection(anchor.get(), data.anchor_offset, focus.get(),
                            data.focus_offset);
-      // Selection alters layout, so update layout before firing an
-      // event or we'll hit an assertion failure when trying to access
-      // |root| because layout isn't clean.
-      if (root.MaybeUpdateLayoutAndCheckValidity()) {
-        HandleAXEvent(
-            ui::AXEvent(root.AxID(), ax::mojom::Event::kLayoutComplete));
-      }
       break;
     case ax::mojom::Action::kScrollToMakeVisible:
       target->ScrollToMakeVisibleWithSubFocus(
@@ -1114,7 +1110,6 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
   base::TimeDelta elapsed_time_ms = timer.Elapsed();
   if (elapsed_time_ms > slowest_serialization_time_) {
     last_ukm_source_id_ = document.GetUkmSourceId();
-    last_ukm_url_ = document.CanonicalUrlForSharing().GetString().Utf8();
     slowest_serialization_time_ = elapsed_time_ms;
   }
   // Also log the time taken in this function to track serialization
@@ -1516,7 +1511,6 @@ void RenderAccessibilityImpl::ResetUKMData() {
   slowest_serialization_time_ = base::TimeDelta();
   ukm_timer_ = std::make_unique<base::ElapsedTimer>();
   last_ukm_source_id_ = ukm::kInvalidSourceId;
-  last_ukm_url_ = "";
 }
 
 AXDirtyObject::AXDirtyObject() = default;

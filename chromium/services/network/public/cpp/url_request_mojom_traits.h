@@ -141,15 +141,19 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
 
 template <>
 struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
-    StructTraits<network::mojom::NetLogParamsDataView,
-                 network::ResourceRequest::NetLogParams> {
-  static uint32_t source_id(
-      const network::ResourceRequest::NetLogParams& params) {
-    return params.source_id;
+    StructTraits<network::mojom::NetLogSourceDataView, net::NetLogSource> {
+  static uint32_t source_id(const net::NetLogSource& params) {
+    return params.id;
+  }
+  static uint32_t source_type(const net::NetLogSource& params) {
+    return static_cast<uint32_t>(params.type);
+  }
+  static base::TimeTicks start_time(const net::NetLogSource& params) {
+    return params.start_time;
   }
 
-  static bool Read(network::mojom::NetLogParamsDataView data,
-                   network::ResourceRequest::NetLogParams* out);
+  static bool Read(network::mojom::NetLogSourceDataView data,
+                   net::NetLogSource* out);
 };
 
 template <>
@@ -172,6 +176,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const absl::optional<url::Origin>& request_initiator(
       const network::ResourceRequest& request) {
     return request.request_initiator;
+  }
+  static const std::vector<GURL> navigation_redirect_chain(
+      const network::ResourceRequest& request) {
+    return request.navigation_redirect_chain;
   }
   static const absl::optional<url::Origin>& isolated_world_origin(
       const network::ResourceRequest& request) {
@@ -201,9 +209,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static net::RequestPriority priority(
       const network::ResourceRequest& request) {
     return request.priority;
-  }
-  static bool should_reset_appcache(const network::ResourceRequest& request) {
-    return request.should_reset_appcache;
   }
   static bool is_external_request(const network::ResourceRequest& request) {
     return request.is_external_request;
@@ -313,6 +318,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static bool obey_origin_policy(const network::ResourceRequest& request) {
     return request.obey_origin_policy;
   }
+  static network::mojom::RequestDestination original_destination(
+      const network::ResourceRequest& request) {
+    return request.original_destination;
+  }
   static const absl::optional<std::vector<net::SourceStream::SourceType>>&
   devtools_accepted_stream_types(const network::ResourceRequest& request) {
     return request.devtools_accepted_stream_types;
@@ -333,9 +342,13 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   web_bundle_token_params(const network::ResourceRequest& request) {
     return request.web_bundle_token_params;
   }
-  static const absl::optional<network::ResourceRequest::NetLogParams>&
-  net_log_params(const network::ResourceRequest& request) {
-    return request.net_log_params;
+  static const absl::optional<net::NetLogSource>& net_log_create_info(
+      const network::ResourceRequest& request) {
+    return request.net_log_create_info;
+  }
+  static const absl::optional<net::NetLogSource>& net_log_reference_info(
+      const network::ResourceRequest& request) {
+    return request.net_log_reference_info;
   }
   static network::mojom::IPAddressSpace target_ip_address_space(
       const network::ResourceRequest& request) {

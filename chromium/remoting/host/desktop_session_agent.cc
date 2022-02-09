@@ -11,7 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/platform_shared_memory_region.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/read_only_shared_memory_region.h"
@@ -28,17 +27,16 @@
 #include "remoting/base/constants.h"
 #include "remoting/host/action_executor.h"
 #include "remoting/host/audio_capturer.h"
+#include "remoting/host/base/screen_controls.h"
+#include "remoting/host/base/screen_resolution.h"
 #include "remoting/host/chromoting_messages.h"
 #include "remoting/host/crash_process.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/input_injector.h"
 #include "remoting/host/keyboard_layout_monitor.h"
 #include "remoting/host/mojom/desktop_session.mojom-shared.h"
-#include "remoting/host/process_stats_sender.h"
 #include "remoting/host/remote_input_filter.h"
 #include "remoting/host/remote_open_url/url_forwarder_configurator.h"
-#include "remoting/host/screen_controls.h"
-#include "remoting/host/screen_resolution.h"
 #include "remoting/proto/action.pb.h"
 #include "remoting/proto/audio.pb.h"
 #include "remoting/proto/control.pb.h"
@@ -231,8 +229,7 @@ DesktopSessionAgent::DesktopSessionAgent(
     : audio_capture_task_runner_(audio_capture_task_runner),
       caller_task_runner_(caller_task_runner),
       input_task_runner_(input_task_runner),
-      io_task_runner_(io_task_runner),
-      current_process_stats_("DesktopSessionAgent") {
+      io_task_runner_(io_task_runner) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 }
 
@@ -246,14 +243,6 @@ bool DesktopSessionAgent::OnMessageReceived(const IPC::Message& message) {
                           OnCaptureFrame)
       IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_SelectSource,
                           OnSelectSource)
-      IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_InjectKeyEvent,
-                          OnInjectKeyEvent)
-      IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_InjectTextEvent,
-                          OnInjectTextEvent)
-      IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_InjectMouseEvent,
-                          OnInjectMouseEvent)
-      IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_InjectTouchEvent,
-                          OnInjectTouchEvent)
       IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_ExecuteActionRequest,
                           OnExecuteActionRequestEvent)
       IPC_MESSAGE_HANDLER(ChromotingNetworkDesktopMsg_SetScreenResolution,
@@ -276,10 +265,6 @@ bool DesktopSessionAgent::OnMessageReceived(const IPC::Message& message) {
       IPC_MESSAGE_FORWARD(ChromotingNetworkDesktopMsg_CancelFile,
                           &*session_file_operations_handler_,
                           SessionFileOperationsHandler::Cancel)
-      IPC_MESSAGE_HANDLER(ChromotingNetworkToAnyMsg_StartProcessStatsReport,
-                          StartProcessStatsReport)
-      IPC_MESSAGE_HANDLER(ChromotingNetworkToAnyMsg_StopProcessStatsReport,
-                          StopProcessStatsReport)
       IPC_MESSAGE_UNHANDLED(handled = false)
     IPC_END_MESSAGE_MAP()
   } else {
@@ -339,7 +324,6 @@ DesktopSessionAgent::~DesktopSessionAgent() {
   DCHECK(!network_channel_);
   DCHECK(!screen_controls_);
   DCHECK(!video_capturer_);
-  DCHECK(!stats_sender_);
   DCHECK(!session_file_operations_handler_);
 }
 
@@ -386,12 +370,6 @@ void DesktopSessionAgent::OnDesktopDisplayChanged(
       *layout.get()));
 }
 
-void DesktopSessionAgent::OnProcessStats(
-    const protocol::AggregatedProcessResourceUsage& usage) {
-  SendToNetwork(
-      std::make_unique<ChromotingAnyToNetworkMsg_ReportProcessStats>(usage));
-}
-
 void DesktopSessionAgent::OnStartSessionAgent(
     const std::string& authenticated_jid,
     const ScreenResolution& resolution,
@@ -414,7 +392,8 @@ void DesktopSessionAgent::OnStartSessionAgent(
 
   // Create a desktop environment for the new session.
   desktop_environment_ = delegate_->desktop_environment_factory().Create(
-      weak_factory_.GetWeakPtr(), options);
+      weak_factory_.GetWeakPtr(), /* client_session_events= */ nullptr,
+      options);
 
   // Create the session controller and set the initial screen resolution.
   screen_controls_ = desktop_environment_->CreateScreenControls();
@@ -593,8 +572,6 @@ void DesktopSessionAgent::Stop() {
 
   delegate_.reset();
 
-  stats_sender_.reset();
-
   // Make sure the channel is closed.
   network_channel_.reset();
 
@@ -663,15 +640,8 @@ void DesktopSessionAgent::InjectClipboardEvent(
   input_injector_->InjectClipboardEvent(event);
 }
 
-void DesktopSessionAgent::OnInjectKeyEvent(
-    const std::string& serialized_event) {
+void DesktopSessionAgent::InjectKeyEvent(const protocol::KeyEvent& event) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-
-  protocol::KeyEvent event;
-  if (!event.ParseFromString(serialized_event)) {
-    LOG(ERROR) << "Failed to parse protocol::KeyEvent.";
-    return;
-  }
 
   // InputStub implementations must verify events themselves, so we need only
   // basic verification here. This matches HostEventDispatcher.
@@ -683,15 +653,8 @@ void DesktopSessionAgent::OnInjectKeyEvent(
   remote_input_filter_->InjectKeyEvent(event);
 }
 
-void DesktopSessionAgent::OnInjectTextEvent(
-    const std::string& serialized_event) {
+void DesktopSessionAgent::InjectTextEvent(const protocol::TextEvent& event) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-
-  protocol::TextEvent event;
-  if (!event.ParseFromString(serialized_event)) {
-    LOG(ERROR) << "Failed to parse protocol::TextEvent.";
-    return;
-  }
 
   // InputStub implementations must verify events themselves, so we need only
   // basic verification here. This matches HostEventDispatcher.
@@ -703,15 +666,8 @@ void DesktopSessionAgent::OnInjectTextEvent(
   remote_input_filter_->InjectTextEvent(event);
 }
 
-void DesktopSessionAgent::OnInjectMouseEvent(
-    const std::string& serialized_event) {
+void DesktopSessionAgent::InjectMouseEvent(const protocol::MouseEvent& event) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-
-  protocol::MouseEvent event;
-  if (!event.ParseFromString(serialized_event)) {
-    LOG(ERROR) << "Failed to parse protocol::MouseEvent.";
-    return;
-  }
 
   if (video_capturer_)
     video_capturer_->SetComposeEnabled(event.has_delta_x() ||
@@ -722,15 +678,8 @@ void DesktopSessionAgent::OnInjectMouseEvent(
   remote_input_filter_->InjectMouseEvent(event);
 }
 
-void DesktopSessionAgent::OnInjectTouchEvent(
-    const std::string& serialized_event) {
+void DesktopSessionAgent::InjectTouchEvent(const protocol::TouchEvent& event) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-
-  protocol::TouchEvent event;
-  if (!event.ParseFromString(serialized_event)) {
-    LOG(ERROR) << "Failed to parse protocol::TouchEvent.";
-    return;
-  }
 
   remote_input_filter_->InjectTouchEvent(event);
 }
@@ -786,26 +735,6 @@ void DesktopSessionAgent::StopAudioCapturer() {
   audio_capturer_.reset();
 }
 
-void DesktopSessionAgent::StartProcessStatsReport(base::TimeDelta interval) {
-  DCHECK(caller_task_runner_->BelongsToCurrentThread());
-  DCHECK(!stats_sender_);
-
-  if (interval <= base::Seconds(0)) {
-    interval = kDefaultProcessStatsInterval;
-  }
-
-  stats_sender_.reset(new ProcessStatsSender(
-      this,
-      interval,
-      { &current_process_stats_ }));
-}
-
-void DesktopSessionAgent::StopProcessStatsReport() {
-  DCHECK(caller_task_runner_->BelongsToCurrentThread());
-  DCHECK(stats_sender_);
-  stats_sender_.reset();
-}
-
 void DesktopSessionAgent::SetUpUrlForwarder() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
   url_forwarder_configurator_->SetUpUrlForwarder(base::BindRepeating(
@@ -814,6 +743,15 @@ void DesktopSessionAgent::SetUpUrlForwarder() {
 
 void DesktopSessionAgent::OnCheckUrlForwarderSetUpResult(bool is_set_up) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
+  if (!desktop_session_event_handler_) {
+    // Callback passed to UrlForwarderConfiguratorWin::IsUrlForwarderSetUp()
+    // may be called after the configurator is deleted and the agent is
+    // stopped, so we need to null-check |desktop_session_event_handler_|.
+    //
+    // TODO(yuweih): Scope callback of IsUrlForwarderSetUp() to the lifetime of
+    //     the UrlForwarderConfiguratorWin instance.
+    return;
+  }
   desktop_session_event_handler_->OnUrlForwarderStateChange(
       is_set_up ? mojom::UrlForwarderState::kSetUp
                 : mojom::UrlForwarderState::kNotSetUp);

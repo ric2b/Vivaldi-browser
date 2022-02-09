@@ -67,12 +67,13 @@
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/text_run_paint_info.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/stroke_data.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/text/bidi_text_run.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -141,6 +142,10 @@ CanvasRenderingContext2D::CanvasRenderingContext2D(
 
 V8RenderingContext* CanvasRenderingContext2D::AsV8RenderingContext() {
   return MakeGarbageCollected<V8RenderingContext>(this);
+}
+
+NoAllocDirectCallHost* CanvasRenderingContext2D::AsNoAllocDirectCallHost() {
+  return this;
 }
 
 CanvasRenderingContext2D::~CanvasRenderingContext2D() = default;
@@ -348,7 +353,7 @@ void CanvasRenderingContext2D::ScrollPathIntoViewInternal(const Path& path) {
   // Apply transformation and get the bounding rect
   Path transformed_path = path;
   transformed_path.Transform(GetState().GetAffineTransform());
-  FloatRect bounding_rect = transformed_path.BoundingRect();
+  gfx::RectF bounding_rect = transformed_path.BoundingRect();
 
   // We first map canvas coordinates to layout coordinates.
   PhysicalRect path_rect = PhysicalRect::EnclosingRect(bounding_rect);
@@ -434,7 +439,7 @@ cc::PaintCanvas* CanvasRenderingContext2D::GetPaintCanvasForDraw(
     return nullptr;
   CanvasRenderingContext::DidDraw(dirty_rect, draw_type);
   // Always draw everything during printing.
-  if (!layer_count_ && !canvas()->IsPrinting()) {
+  if (!layer_count_) {
     // TODO(crbug.com/1246486): Make auto-flushing layer friendly.
     canvas()
         ->GetCanvas2DLayerBridge()
@@ -442,6 +447,13 @@ cc::PaintCanvas* CanvasRenderingContext2D::GetPaintCanvasForDraw(
         ->FlushIfRecordingLimitExceeded();
   }
   return canvas()->GetCanvas2DLayerBridge()->GetPaintCanvas();
+}
+
+void CanvasRenderingContext2D::FlushCanvas() {
+  if (canvas() && canvas()->GetCanvas2DLayerBridge() &&
+      canvas()->GetCanvas2DLayerBridge()->ResourceProvider()) {
+    canvas()->GetCanvas2DLayerBridge()->ResourceProvider()->FlushCanvas();
+  }
 }
 
 String CanvasRenderingContext2D::font() const {
@@ -622,11 +634,11 @@ void CanvasRenderingContext2D::SetOriginTainted() {
 }
 
 int CanvasRenderingContext2D::Width() const {
-  return Host()->Size().Width();
+  return Host()->Size().width();
 }
 
 int CanvasRenderingContext2D::Height() const {
-  return Host()->Size().Height();
+  return Host()->Size().height();
 }
 
 bool CanvasRenderingContext2D::CanCreateCanvas2dResourceProvider() const {
@@ -650,15 +662,19 @@ ImageData* CanvasRenderingContext2D::getImageDataInternal(
       sx, sy, sw, sh, image_data_settings, exception_state);
 }
 
-void CanvasRenderingContext2D::FinalizeFrame() {
+void CanvasRenderingContext2D::FinalizeFrame(bool printing) {
   TRACE_EVENT0("blink", "CanvasRenderingContext2D::FinalizeFrame");
   if (IsPaintable())
-    canvas()->GetCanvas2DLayerBridge()->FinalizeFrame();
+    canvas()->GetCanvas2DLayerBridge()->FinalizeFrame(printing);
 }
 
 CanvasRenderingContextHost*
 CanvasRenderingContext2D::GetCanvasRenderingContextHost() {
   return Host();
+}
+
+ExecutionContext* CanvasRenderingContext2D::GetTopExecutionContext() const {
+  return Host()->GetTopExecutionContext();
 }
 
 bool CanvasRenderingContext2D::ParseColorOrCurrentColor(
@@ -717,34 +733,27 @@ void CanvasRenderingContext2D::setDirection(const String& direction_string) {
   GetState().SetDirection(direction);
 }
 
-void CanvasRenderingContext2D::setLetterSpacing(const double letter_spacing) {
+void CanvasRenderingContext2D::setLetterSpacing(const String& letter_spacing) {
   UseCounter::Count(canvas()->GetTopExecutionContext(),
                     WebFeature::kCanvasRenderingContext2DLetterSpacing);
-  if (UNLIKELY(!std::isfinite(letter_spacing)))
-    return;
   // TODO(crbug.com/1234113): Instrument new canvas APIs.
   identifiability_study_helper_.set_encountered_skipped_ops();
-
   if (!GetState().HasRealizedFont())
     setFont(font());
 
-  float letter_spacing_float = ClampTo<float>(letter_spacing);
-  GetState().SetLetterSpacing(letter_spacing_float, Host()->GetFontSelector());
+  GetState().SetLetterSpacing(letter_spacing);
 }
 
-void CanvasRenderingContext2D::setWordSpacing(const double word_spacing) {
+void CanvasRenderingContext2D::setWordSpacing(const String& word_spacing) {
   UseCounter::Count(canvas()->GetTopExecutionContext(),
                     WebFeature::kCanvasRenderingContext2DWordSpacing);
-  if (UNLIKELY(!std::isfinite(word_spacing)))
-    return;
   // TODO(crbug.com/1234113): Instrument new canvas APIs.
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   if (!GetState().HasRealizedFont())
     setFont(font());
 
-  float word_spacing_float = ClampTo<float>(word_spacing);
-  GetState().SetWordSpacing(word_spacing_float, Host()->GetFontSelector());
+  GetState().SetWordSpacing(word_spacing);
 }
 
 void CanvasRenderingContext2D::setTextRendering(
@@ -998,8 +1007,8 @@ void CanvasRenderingContext2D::DrawTextInternal(
                    bidi_override);
   text_run.SetNormalizeSpace(true);
   // Draw the item text at the correct point.
-  FloatPoint location(ClampTo<float>(x),
-                      ClampTo<float>(y + GetFontBaseline(*font_data)));
+  gfx::PointF location(ClampTo<float>(x),
+                       ClampTo<float>(y + GetFontBaseline(*font_data)));
   double font_width = font.Width(text_run);
 
   bool use_max_width = (max_width && *max_width < font_width);
@@ -1013,18 +1022,18 @@ void CanvasRenderingContext2D::DrawTextInternal(
 
   switch (align) {
     case kCenterTextAlign:
-      location.SetX(location.X() - width / 2);
+      location.set_x(location.x() - width / 2);
       break;
     case kRightTextAlign:
-      location.SetX(location.X() - width);
+      location.set_x(location.x() - width);
       break;
     default:
       break;
   }
 
-  FloatRect bounds(
-      location.X() - font_metrics.Height() / 2,
-      location.Y() - font_metrics.Ascent() - font_metrics.LineGap(),
+  gfx::RectF bounds(
+      location.x() - font_metrics.Height() / 2,
+      location.y() - font_metrics.Ascent() - font_metrics.LineGap(),
       ClampTo<float>(width + font_metrics.Height()),
       font_metrics.LineSpacing());
   if (paint_type == CanvasRenderingContext2DState::kStrokePaintType)
@@ -1038,7 +1047,7 @@ void CanvasRenderingContext2D::DrawTextInternal(
     // match the given maxwidth, update text location so it appears on desired
     // place.
     c->scale(ClampTo<float>(width / font_width), 1);
-    location.SetX(location.X() / ClampTo<float>(width / font_width));
+    location.set_x(location.x() / ClampTo<float>(width / font_width));
   }
 
   Draw<OverdrawOp::kNone>(
@@ -1055,7 +1064,8 @@ void CanvasRenderingContext2D::DrawTextInternal(
       },
       [](const SkIRect& rect)  // overdraw test lambda
       { return false; },
-      bounds, paint_type, CanvasRenderingContext2DState::kNoImage,
+      gfx::RectFToSkRect(bounds), paint_type,
+      CanvasRenderingContext2DState::kNoImage,
       CanvasPerformanceMonitor::DrawType::kText);
 }
 

@@ -73,14 +73,17 @@ const char kToolsetVersionVs2013[] = "v120";               // Visual Studio 2013
 const char kToolsetVersionVs2015[] = "v140";               // Visual Studio 2015
 const char kToolsetVersionVs2017[] = "v141";               // Visual Studio 2017
 const char kToolsetVersionVs2019[] = "v142";               // Visual Studio 2019
+const char kToolsetVersionVs2022[] = "v143";               // Visual Studio 2022
 const char kProjectVersionVs2013[] = "12.0";               // Visual Studio 2013
 const char kProjectVersionVs2015[] = "14.0";               // Visual Studio 2015
 const char kProjectVersionVs2017[] = "15.0";               // Visual Studio 2017
 const char kProjectVersionVs2019[] = "16.0";               // Visual Studio 2019
+const char kProjectVersionVs2022[] = "17.0";               // Visual Studio 2022
 const char kVersionStringVs2013[] = "Visual Studio 2013";  // Visual Studio 2013
 const char kVersionStringVs2015[] = "Visual Studio 2015";  // Visual Studio 2015
 const char kVersionStringVs2017[] = "Visual Studio 2017";  // Visual Studio 2017
 const char kVersionStringVs2019[] = "Visual Studio 2019";  // Visual Studio 2019
+const char kVersionStringVs2022[] = "Visual Studio 2022";  // Visual Studio 2022
 const char kWindowsKitsVersion[] = "10";                   // Windows 10 SDK
 const char kWindowsKitsDefaultVersion[] = "10";            // Windows 10 SDK
 
@@ -241,6 +244,10 @@ bool UnicodeTarget(const Target* target) {
   return true;
 }
 
+std::string GetNinjaExecutable(const std::string& ninja_executable) {
+  return ninja_executable.empty() ? "ninja.exe" : ninja_executable;
+}
+
 }  // namespace
 
 VisualStudioWriter::SolutionEntry::SolutionEntry(const std::string& _name,
@@ -307,8 +314,11 @@ VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings,
       toolset_version_ = kToolsetVersionVs2019;
       version_string_ = kVersionStringVs2019;
       break;
-    default:
-      NOTREACHED() << "Not a valid Visual Studio Version: " << version;
+    case Version::Vs2022:
+      project_version_ = kProjectVersionVs2022;
+      toolset_version_ = kToolsetVersionVs2022;
+      version_string_ = kVersionStringVs2022;
+      break;
   }
 
   windows_kits_include_dirs_ = GetWindowsKitsIncludeDirs(win_kit);
@@ -324,6 +334,7 @@ bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
                                           const std::string& filters,
                                           const std::string& win_sdk,
                                           const std::string& ninja_extra_args,
+                                          const std::string& ninja_executable,
                                           bool no_deps,
                                           Err* err) {
   std::vector<const Target*> targets;
@@ -361,7 +372,8 @@ bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
       continue;
     }
 
-    if (!writer.WriteProjectFiles(target, ninja_extra_args, err))
+    if (!writer.WriteProjectFiles(target, ninja_extra_args, ninja_executable,
+                                  err))
       return false;
   }
 
@@ -384,6 +396,7 @@ bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
 
 bool VisualStudioWriter::WriteProjectFiles(const Target* target,
                                            const std::string& ninja_extra_args,
+                                           const std::string& ninja_executable,
                                            Err* err) {
   std::string project_name = target->label().name();
   const char* project_config_platform = config_platform_;
@@ -416,7 +429,8 @@ bool VisualStudioWriter::WriteProjectFiles(const Target* target,
   std::ostream vcxproj_string_out(&vcxproj_storage);
   SourceFileCompileTypePairs source_types;
   if (!WriteProjectFileContents(vcxproj_string_out, *projects_.back(), target,
-                                ninja_extra_args, &source_types, err)) {
+                                ninja_extra_args, ninja_executable,
+                                &source_types, err)) {
     projects_.pop_back();
     return false;
   }
@@ -440,6 +454,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
     const SolutionProject& solution_project,
     const Target* target,
     const std::string& ninja_extra_args,
+    const std::string& ninja_executable,
     SourceFileCompileTypePairs* source_types,
     Err* err) {
   PathOutput path_output(
@@ -526,6 +541,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
   project.SubElement("PropertyGroup", XmlAttributes("Label", "UserMacros"));
 
   std::string ninja_target = GetNinjaTarget(target);
+  std::string ninja_exe = GetNinjaExecutable(ninja_executable);
 
   {
     std::unique_ptr<XmlElementWriter> properties =
@@ -547,8 +563,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
         std::unique_ptr<XmlElementWriter> include_dirs =
             cl_compile->SubElement("AdditionalIncludeDirectories");
         RecursiveTargetConfigToStream<SourceDir>(
-            target, &ConfigValues::include_dirs, IncludeDirWriter(path_output),
-            include_dirs->StartContent(false));
+            kRecursiveWriterSkipDuplicates, target, &ConfigValues::include_dirs,
+            IncludeDirWriter(path_output), include_dirs->StartContent(false));
         include_dirs->Text(windows_kits_include_dirs_ +
                            "$(VSInstallDir)\\VC\\atlmfc\\include;" +
                            "%(AdditionalIncludeDirectories)");
@@ -583,7 +599,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
         std::unique_ptr<XmlElementWriter> preprocessor_definitions =
             cl_compile->SubElement("PreprocessorDefinitions");
         RecursiveTargetConfigToStream<std::string>(
-            target, &ConfigValues::defines, SemicolonSeparatedWriter(),
+            kRecursiveWriterSkipDuplicates, target, &ConfigValues::defines,
+            SemicolonSeparatedWriter(),
             preprocessor_definitions->StartContent(false));
         preprocessor_definitions->Text("%(PreprocessorDefinitions)");
       }
@@ -621,9 +638,9 @@ bool VisualStudioWriter::WriteProjectFileContents(
         compile_type = "CustomBuild";
         std::unique_ptr<XmlElementWriter> build = group->SubElement(
             compile_type, "Include", SourceFileWriter(path_output, file));
-        build->SubElement("Command")->Text("call ninja.exe -C $(OutDir) " +
-                                           ninja_extra_args + " " +
-                                           tool_outputs[0].value());
+        build->SubElement("Command")->Text("call " + ninja_exe +
+                                           " -C $(OutDir) " + ninja_extra_args +
+                                           " " + tool_outputs[0].value());
         build->SubElement("Outputs")->Text("$(OutDir)" +
                                            tool_outputs[0].value());
       } else {
@@ -649,7 +666,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
         project.SubElement("Target", XmlAttributes("Name", "Build"));
     build->SubElement(
         "Exec",
-        XmlAttributes("Command", "call ninja.exe -C $(OutDir) " +
+        XmlAttributes("Command", "call " + ninja_exe + " -C $(OutDir) " +
                                      ninja_extra_args + " " + ninja_target));
   }
 
@@ -659,7 +676,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
     clean->SubElement(
         "Exec",
         XmlAttributes("Command",
-                      "call ninja.exe -C $(OutDir) -tclean " + ninja_target));
+                      "call " + ninja_exe + " -C $(OutDir) -tclean " +
+                      ninja_target));
   }
 
   return true;

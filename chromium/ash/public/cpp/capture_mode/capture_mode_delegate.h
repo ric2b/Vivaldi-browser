@@ -39,6 +39,16 @@ namespace ash {
 
 class RecordingOverlayView;
 
+// Defines the type of the callback that will be invoked when the DLP (Data Leak
+// Prevention) manager is checked for any restricted content related to screen
+// capture. DLP is checked multiple times (before entering a capture session,
+// when performing the capture, during video recording, and at the end when
+// video recording ends). If the callback was invoked with `proceed` set to
+// true, then capture mode will proceed with any operation that triggered the
+// check. Otherwise, capture mode will abort the operation.
+using OnCaptureModeDlpRestrictionChecked =
+    base::OnceCallback<void(bool proceed)>;
+
 // Defines the interface for the delegate of CaptureModeController, that can be
 // implemented by an ash client (e.g. Chrome). The CaptureModeController owns
 // the instance of this delegate.
@@ -66,11 +76,25 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   // Leak Prevention applied to the currently visible content.
   virtual bool IsCaptureModeInitRestrictedByDlp() const = 0;
 
-  // Returns whether capture of the region defined by |window| and |bounds|
-  // is currently allowed by Data Leak Prevention feature.
+  // Called when capture mode is being started to check if there are any content
+  // currently on the screen that are restricted by DLP. `callback` will be
+  // triggered by the DLP manager with `proceed` set to true if capture mode
+  // initialization is allowed to continue, or set to false if it should be
+  // aborted.
+  virtual void CheckCaptureModeInitRestrictionByDlp(
+      OnCaptureModeDlpRestrictionChecked callback) = 0;
+
+  // Checks whether capture of the region defined by |window| and |bounds|
+  // is currently allowed by the Data Leak Prevention feature. `callback` will
+  // be triggered by the DLP manager with `proceed` set to true if capture of
+  // that region is allowed, or set to false otherwise.
+  virtual void CheckCaptureOperationRestrictionByDlp(
+      const aura::Window* window,
+      const gfx::Rect& bounds,
+      OnCaptureModeDlpRestrictionChecked callback) = 0;
+
   virtual bool IsCaptureAllowedByDlp(const aura::Window* window,
-                                     const gfx::Rect& bounds,
-                                     bool for_video) const = 0;
+                                     const gfx::Rect& bounds) const = 0;
 
   // Returns whether screen capture is allowed by an enterprise policy.
   virtual bool IsCaptureAllowedByPolicy() const = 0;
@@ -84,8 +108,15 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
       const gfx::Rect& bounds,
       base::OnceClosure on_area_restricted_callback) = 0;
 
-  // Called when the running video capture is stopped.
-  virtual void StopObservingRestrictedContent() = 0;
+  // Called when the running video capture is stopped. DLP will be checked to
+  // determine if there were any restricted content warnings during the
+  // recording, which didn't merit force-stopping it via the above
+  // `on_area_restricted_callback`. In this case, DLP shows a warning dialog and
+  // delegates the decision to the user to decide whether to keep the video (if
+  // `proceed` is set to true), or delete it (if `proceed` is set
+  // to false).
+  virtual void StopObservingRestrictedContent(
+      OnCaptureModeDlpRestrictionChecked callback) = 0;
 
   // Launches the Recording Service into a separate utility process.
   virtual mojo::Remote<recording::mojom::RecordingService>
@@ -101,6 +132,17 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   // Called after the controller resets its |mojo::Remote| instance of the
   // service.
   virtual void OnServiceRemoteReset() = 0;
+
+  // Gets the DriveFS mount point. Returns true if the Drive is mounted false
+  // otherwise.
+  // TODO(michelefan): Now we have both CaptureModeDelegate and ProjectorClient
+  // expose the GetDriveFsMountPointPath. Add the APIs in ShellDelegate which is
+  // implemented by ChromeShellDelegate in chrome and TestShellDelegate in
+  // ash_unittests to reduce the duplication.
+  virtual bool GetDriveFsMountPointPath(base::FilePath* path) const = 0;
+
+  // Returns the absolute path for the user's Android Play files.
+  virtual base::FilePath GetAndroidFilesPath() const = 0;
 
   // Creates and returns the view that will be used as the contents view of the
   // overlay widget, which is added as a child of the recorded surface to host

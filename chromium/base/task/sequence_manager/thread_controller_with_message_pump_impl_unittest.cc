@@ -11,9 +11,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/sequence_manager/thread_controller_power_monitor.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -111,21 +112,24 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
   explicit FakeSequencedTaskSource(TickClock* clock) : clock_(clock) {}
   ~FakeSequencedTaskSource() override = default;
 
-  Task* SelectNextTask(SelectTaskOption option) override {
+  absl::optional<SelectedTask> SelectNextTask(
+      SelectTaskOption option) override {
     if (tasks_.empty())
-      return nullptr;
+      return absl::nullopt;
     if (tasks_.front().delayed_run_time > clock_->NowTicks())
-      return nullptr;
+      return absl::nullopt;
     if (option == SequencedTaskSource::SelectTaskOption::kSkipDelayedTask &&
         !tasks_.front().delayed_run_time.is_null()) {
-      return nullptr;
+      return absl::nullopt;
     }
     running_stack_.push_back(std::move(tasks_.front()));
     tasks_.pop();
-    return &running_stack_.back();
+    return SelectedTask(running_stack_.back(), TaskExecutionTraceLogger());
   }
 
   void DidRunTask() override { running_stack_.pop_back(); }
+
+  void RemoveAllCanceledDelayedTasksFromFront(LazyNow* lazy_now) override {}
 
   TimeTicks GetNextTaskTime(LazyNow* lazy_now,
                             SelectTaskOption option) const override {
@@ -147,9 +151,9 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
                TimeTicks delayed_run_time) {
     DCHECK(tasks_.empty() || delayed_run_time.is_null() ||
            tasks_.back().delayed_run_time < delayed_run_time);
-    tasks_.push(
-        Task(internal::PostedTask(nullptr, std::move(task), posted_from),
-             delayed_run_time, EnqueueOrder::FromIntForTesting(13)));
+    tasks_.push(Task(internal::PostedTask(nullptr, std::move(task), posted_from,
+                                          delayed_run_time),
+                     EnqueueOrder::FromIntForTesting(13)));
   }
 
   bool HasPendingHighResolutionTasks() override {
@@ -163,7 +167,7 @@ class FakeSequencedTaskSource : public internal::SequencedTaskSource {
   bool OnSystemIdle() override { return false; }
 
  private:
-  TickClock* clock_;
+  raw_ptr<TickClock> clock_;
   std::queue<Task> tasks_;
   std::vector<Task> running_stack_;
   bool has_pending_high_resolution_tasks = false;
@@ -202,7 +206,7 @@ class ThreadControllerWithMessagePumpTest : public testing::Test {
   }
 
  protected:
-  MockMessagePump* message_pump_;
+  raw_ptr<MockMessagePump> message_pump_;
   SequenceManager::Settings settings_;
   SimpleTestTickClock clock_;
   ThreadControllerForTest thread_controller_;

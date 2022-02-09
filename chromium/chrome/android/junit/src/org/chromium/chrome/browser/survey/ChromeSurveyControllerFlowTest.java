@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 import android.app.Activity;
 import android.content.Context;
@@ -53,6 +54,7 @@ import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.SurveyInfoBar;
 import org.chromium.chrome.browser.infobar.SurveyInfoBarDelegate;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.survey.ChromeSurveyController.InfoBarClosingState;
@@ -65,6 +67,7 @@ import org.chromium.components.messages.DismissReason;
 import org.chromium.components.messages.MessageBannerProperties;
 import org.chromium.components.messages.MessageDispatcher;
 import org.chromium.components.messages.MessageIdentifier;
+import org.chromium.components.messages.MessageScopeType;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -179,6 +182,7 @@ public class ChromeSurveyControllerFlowTest {
 
     private TabModelSelectorObserver mTabModelSelectorObserver;
     private TabObserver mTabObserver;
+    private PauseResumeWithNativeObserver mLifecycleObserver;
 
     @Before
     public void setup() {
@@ -574,6 +578,36 @@ public class ChromeSurveyControllerFlowTest {
     }
 
     @Test
+    public void testMessages_NotShownOnExpiredSurvey() {
+        ShadowChromeFeatureList.sEnableMessages = true;
+        setupTabMocks();
+        initializeChromeSurveyController();
+        assertCallbackAssignedInSurveyController();
+        mockTabReady();
+        // Simulate an expired survey.
+        mTestSurveyController.isSurveyExpired = true;
+        mTestSurveyController.onDownloadSuccessRunnable.run();
+        verifyZeroInteractions(mMessageDispatcher);
+        Assert.assertEquals("showSurvey should not be called.", 0,
+                mTestSurveyController.showSurveyIfAvailableCallback.getCallCount());
+    }
+
+    @Test
+    public void testMessages_EnqueuedMessageDismissedOnExpiredSurvey() throws Exception {
+        presentMessages();
+
+        // Simulate survey expiration after the message is enqueued.
+        mTestSurveyController.isSurveyExpired = true;
+
+        PropertyModel messageModel = mMessagePropertyCaptor.getValue();
+        boolean shouldShow =
+                messageModel.get(MessageBannerProperties.ON_STARTED_SHOWING).getAsBoolean();
+        Assert.assertFalse(
+                "The enqueued message should not be shown if the survey has expired.", shouldShow);
+        verify(mMessageDispatcher).dismissMessage(messageModel, DismissReason.DISMISSED_BY_FEATURE);
+    }
+
+    @Test
     public void testMessages_Dismiss_PrimaryAction() {
         presentMessages();
         PropertyModel messageModel = mMessagePropertyCaptor.getValue();
@@ -636,6 +670,24 @@ public class ChromeSurveyControllerFlowTest {
         assertInfoBarClosingStateRecorded(InfoBarClosingState.UNKNOWN);
     }
 
+    @Test
+    public void testMessages_Dismiss_OnResumeActivity() {
+        presentMessages();
+        PropertyModel messageModel = mMessagePropertyCaptor.getValue();
+
+        // Simulate survey expiration.
+        mTestSurveyController.isSurveyExpired = true;
+        mLifecycleObserver.onResumeWithNative();
+        verify(mMessageDispatcher).dismissMessage(messageModel, DismissReason.DISMISSED_BY_FEATURE);
+
+        // Simulate the invocation of the message dismissal callback.
+        messageModel.get(MessageBannerProperties.ON_DISMISSED)
+                .onResult(DismissReason.DISMISSED_BY_FEATURE);
+        Assert.assertFalse("SharedPreference for InfoBarShown should not be recorded.",
+                SharedPreferencesManager.getInstance().contains(mPrefKeyPromptShown));
+        assertInfoBarClosingStateRecorded(InfoBarClosingState.UNKNOWN);
+    }
+
     private void initializeChromeSurveyController() {
         ChromeSurveyController.initialize(
                 mMockModelSelector, mMockLifecycleDispatcher, mActivity, mMessageDispatcher);
@@ -663,12 +715,19 @@ public class ChromeSurveyControllerFlowTest {
         setupTabMocks();
         initializeChromeSurveyController();
         assertCallbackAssignedInSurveyController();
+        Mockito.doAnswer(invocation -> {
+                   mLifecycleObserver = invocation.getArgument(0);
+                   return null;
+               })
+                .when(mMockLifecycleDispatcher)
+                .register(any());
 
         // Verify the survey should be attempted to present on a valid tab.
         mockTabReady();
         mTestSurveyController.onDownloadSuccessRunnable.run();
         assertSurveyMessagesEnqueued();
         Assert.assertNotNull("mTabObserver is null.", mTabObserver);
+        Assert.assertNotNull("mLifecycleObserver is null.", mLifecycleObserver);
     }
 
     private void mockTabReady() {
@@ -715,7 +774,8 @@ public class ChromeSurveyControllerFlowTest {
 
     private void assertSurveyMessagesEnqueued() {
         verify(mMessageDispatcher)
-                .enqueueWindowScopedMessage(mMessagePropertyCaptor.capture(), eq(false));
+                .enqueueMessage(mMessagePropertyCaptor.capture(), eq(mMockWebContent),
+                        eq(MessageScopeType.NAVIGATION), eq(false));
         Assert.assertNotNull("Message captor is null.", mMessagePropertyCaptor.getValue());
     }
 
@@ -730,6 +790,9 @@ public class ChromeSurveyControllerFlowTest {
     private void assertInfoBarDisplayedRecorded() {
         if (mTabObserver != null) {
             verify(mMockTab).removeObserver(mTabObserver);
+        }
+        if (mLifecycleObserver != null) {
+            verify(mMockLifecycleDispatcher).unregister(mLifecycleObserver);
         }
         Assert.assertTrue("SharedPreference for InfoBarShown is not recorded.",
                 SharedPreferencesManager.getInstance().contains(mPrefKeyPromptShown));
@@ -760,6 +823,7 @@ public class ChromeSurveyControllerFlowTest {
     private static class TestSurveyController extends SurveyController {
         public final CallbackHelper downloadIfApplicableCallback = new CallbackHelper();
         public final CallbackHelper showSurveyIfAvailableCallback = new CallbackHelper();
+        public boolean isSurveyExpired;
 
         @Nullable
         public Runnable onDownloadSuccessRunnable;
@@ -780,6 +844,11 @@ public class ChromeSurveyControllerFlowTest {
                 boolean showAsBottomSheet, int displayLogoResId,
                 @Nullable ActivityLifecycleDispatcher lifecycleDispatcher) {
             showSurveyIfAvailableCallback.notifyCalled();
+        }
+
+        @Override
+        public boolean isSurveyExpired(String triggerId) {
+            return isSurveyExpired;
         }
     }
 }

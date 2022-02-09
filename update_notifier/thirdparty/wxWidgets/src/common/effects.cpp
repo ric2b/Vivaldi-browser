@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/effects.h"
 
@@ -30,7 +27,7 @@
  * wxEffectsImpl: various 3D effects
  */
 
-IMPLEMENT_CLASS(wxEffectsImpl, wxObject)
+wxIMPLEMENT_CLASS(wxEffectsImpl, wxObject);
 
 // Assume system colours
 wxEffectsImpl::wxEffectsImpl()

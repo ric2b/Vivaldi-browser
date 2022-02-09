@@ -15,11 +15,8 @@
 
 #include "wx/osx/private.h"
 #include "wx/graphics.h"
-#if wxOSX_USE_COCOA_OR_CARBON
-#include "wx/osx/private/glgrab.h"
-#endif
 
-IMPLEMENT_ABSTRACT_CLASS(wxScreenDCImpl, wxWindowDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxScreenDCImpl, wxWindowDCImpl);
 
 // TODO : for the Screenshot use case, which doesn't work in Quartz
 // we should do a GetAsBitmap using something like
@@ -29,37 +26,20 @@ IMPLEMENT_ABSTRACT_CLASS(wxScreenDCImpl, wxWindowDCImpl)
 wxScreenDCImpl::wxScreenDCImpl( wxDC *owner ) :
    wxWindowDCImpl( owner )
 {
-#if wxOSX_USE_COCOA_OR_CARBON
+#if !wxOSX_USE_IPHONE
     CGRect cgbounds ;
     cgbounds = CGDisplayBounds(CGMainDisplayID());
     m_width = (wxCoord)cgbounds.size.width;
     m_height = (wxCoord)cgbounds.size.height;
-#else
-    wxDisplaySize( &m_width, &m_height );
-#endif
-#if wxOSX_USE_COCOA_OR_IPHONE
     SetGraphicsContext( wxGraphicsContext::Create() );
-#else
-    Rect bounds;
-    bounds.top = (short)cgbounds.origin.y;
-    bounds.left = (short)cgbounds.origin.x;
-    bounds.bottom = bounds.top + (short)cgbounds.size.height;
-    bounds.right = bounds.left  + (short)cgbounds.size.width;
-    WindowAttributes overlayAttributes  = kWindowIgnoreClicksAttribute;
-    CreateNewWindow( kOverlayWindowClass, overlayAttributes, &bounds, (WindowRef*) &m_overlayWindow );
-    ShowWindow((WindowRef)m_overlayWindow);
-    SetGraphicsContext( wxGraphicsContext::CreateFromNativeWindow( m_overlayWindow ) );
-#endif
     m_ok = true ;
+#endif
+    m_contentScaleFactor = wxOSXGetMainScreenContentScaleFactor();
 }
 
 wxScreenDCImpl::~wxScreenDCImpl()
 {
     wxDELETE(m_graphicContext);
-#if wxOSX_USE_COCOA_OR_IPHONE
-#else
-    DisposeWindow((WindowRef) m_overlayWindow );
-#endif
 }
 
 #if wxOSX_USE_IPHONE
@@ -90,16 +70,7 @@ wxBitmap wxScreenDCImpl::DoGetAsBitmap(const wxRect *subrect) const
 
     CGImageRef image = NULL;
     
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
-    if ( UMAGetSystemVersion() >= 0x1060)
-    {
-        image = CGDisplayCreateImage(kCGDirectMainDisplay);
-    }
-    else
-#endif
-    {
-        image = grabViaOpenGL(kCGNullDirectDisplay, srcRect);
-    }
+    image = CGDisplayCreateImage(kCGDirectMainDisplay);
 
     wxASSERT_MSG(image, wxT("wxScreenDC::GetAsBitmap - unable to get screenshot."));
 

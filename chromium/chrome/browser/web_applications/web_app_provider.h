@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
@@ -80,7 +81,7 @@ class WebAppProvider : public KeyedService {
   static WebAppProvider* GetForLocalAppsUnchecked(Profile* profile);
 
   // Return the WebAppProvider for tests, regardless of whether this is running
-  // in Lacros/Ash.
+  // in Lacros/Ash. Blocks if the web app registry is not yet ready.
   static WebAppProvider* GetForTest(Profile* profile);
 
   static WebAppProvider* GetForWebContents(content::WebContents* web_contents);
@@ -100,6 +101,7 @@ class WebAppProvider : public KeyedService {
 
   // The app registry model.
   WebAppRegistrar& registrar();
+  const WebAppRegistrar& registrar() const;
   // The app registry controller.
   WebAppSyncBridge& sync_bridge();
   // UIs can use WebAppInstallManager for user-initiated Web Apps install.
@@ -175,7 +177,7 @@ class WebAppProvider : public KeyedService {
 
   base::OneShotEvent on_registry_ready_;
 
-  Profile* const profile_;
+  const raw_ptr<Profile> profile_;
 
   // Ensures that ConnectSubsystems() is not called after Start().
   bool started_ = false;

@@ -27,18 +27,31 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_backend.h"
 #include "components/password_manager/core/browser/password_store_factory_util.h"
-#include "components/password_manager/core/browser/password_store_impl.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_user_settings.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
+using password_manager::AffiliatedMatchHelper;
 using password_manager::PasswordStore;
 using password_manager::PasswordStoreInterface;
+
+namespace {
+
+bool IsSyncingPasswords(Profile* profile) {
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(profile);
+  return sync_service && sync_service->IsSyncFeatureEnabled() &&
+         sync_service->GetUserSettings()->GetSelectedTypes().Has(
+             syncer::UserSelectableType::kPasswords);
+}
+
+}  // namespace
 
 // static
 scoped_refptr<PasswordStoreInterface> PasswordStoreFactory::GetForProfile(
@@ -81,23 +94,32 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   scoped_refptr<PasswordStore> ps;
 #if defined(OS_WIN) || defined(OS_ANDROID) || defined(OS_MAC) || \
     defined(USE_OZONE)
-
-  // TODO(crbug.com/1217071): Remove feature-guard once PasswordStoreImpl does
-  // not implement the PasswordStore abstract class anymore.
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kUnifiedPasswordManagerAndroid)) {
-    ps = new password_manager::PasswordStore(
-        password_manager::PasswordStoreBackend::Create(std::move(login_db)));
-  } else {
-    ps = new password_manager::PasswordStore(
-        std::make_unique<password_manager::PasswordStoreImpl>(
-            std::move(login_db)));
-  }
+  // Since SyncService has dependency on PasswordStore keyed service, there
+  // are no guarantees that during the construction of the password store
+  // about the sync service existence. And hence we cannot directly query the
+  // status of password syncing. However, status of password syncing is
+  // relevant for migrating passwords from the built-in backend to the Android
+  // backend. Since migration does *not* start immediately after start up, we
+  // inject a repeating callback that queries the sync service. Assumption is
+  // by the time the migration starts, the sync service will have been
+  // created. As a safety mechanism, if the sync service isn't created yet, we
+  // proceed as if the user isn't syncing which forces moving the passwords to
+  // the Android backend to avoid data loss.
+  ps = new password_manager::PasswordStore(
+      password_manager::PasswordStoreBackend::Create(
+          std::move(login_db), profile->GetPrefs(),
+          base::BindRepeating(&IsSyncingPasswords, profile)));
 #else
   NOTIMPLEMENTED();
 #endif
   DCHECK(ps);
-  if (!ps->Init(profile->GetPrefs())) {
+
+  password_manager::AffiliationService* affiliation_service =
+      AffiliationServiceFactory::GetForProfile(profile);
+  std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper =
+      std::make_unique<AffiliatedMatchHelper>(affiliation_service);
+
+  if (!ps->Init(profile->GetPrefs(), std::move(affiliated_match_helper))) {
     // TODO(crbug.com/479725): Remove the LOG once this error is visible in the
     // UI.
     LOG(WARNING) << "Could not initialize password store.";
@@ -115,10 +137,6 @@ PasswordStoreFactory::BuildServiceInstanceFor(
       CredentialsCleanerRunnerFactory::GetForProfile(profile), ps,
       profile->GetPrefs(), base::Seconds(60), network_context_getter);
 
-  password_manager::AffiliationService* affiliation_service =
-      AffiliationServiceFactory::GetForProfile(profile);
-  password_manager::EnableAffiliationBasedMatching(ps.get(),
-                                                   affiliation_service);
   DelayReportingPasswordStoreMetrics(profile);
   return ps;
 }

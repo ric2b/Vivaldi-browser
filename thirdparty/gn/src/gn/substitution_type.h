@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
-#include "base/macros.h"
 
 class Err;
 class ParseNode;
@@ -18,7 +17,8 @@ class ParseNode;
 struct Substitution {
   const char* name;
   const char* ninja_name;
-  DISALLOW_COPY_AND_ASSIGN(Substitution);
+  Substitution(const Substitution&) = delete;
+  Substitution& operator=(const Substitution&) = delete;
 };
 
 using SubstitutionTypes = const std::vector<const Substitution*>;

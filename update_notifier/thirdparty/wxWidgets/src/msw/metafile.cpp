@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/utils.h"
@@ -43,8 +40,8 @@
 // wxWin macros
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxMetafile, wxObject)
-IMPLEMENT_ABSTRACT_CLASS(wxMetafileDC, wxDC)
+wxIMPLEMENT_DYNAMIC_CLASS(wxMetafile, wxObject);
+wxIMPLEMENT_ABSTRACT_CLASS(wxMetafileDC, wxDC);
 
 // ============================================================================
 // implementation
@@ -236,7 +233,7 @@ void wxMetafileDCImpl::DoGetTextExtent(const wxString& string,
 
     SIZE sizeRect;
     TEXTMETRIC tm;
-    ::GetTextExtentPoint32(dc, WXSTRINGCAST string, wxStrlen(WXSTRINGCAST string), &sizeRect);
+    ::GetTextExtentPoint32(dc, string.c_str(), string.length(), &sizeRect);
     ::GetTextMetrics(dc, &tm);
 
     if ( x )
@@ -283,21 +280,21 @@ void wxMetafileDCImpl::SetMapMode(wxMappingMode mode)
     //  int mm_width = 0;
     //  int mm_height = 0;
 
-    float mm2pixelsX = 10.0;
-    float mm2pixelsY = 10.0;
+    const double mm2pixelsX = 10;
+    const double mm2pixelsY = 10;
 
     switch (mode)
     {
         case wxMM_TWIPS:
             {
-                m_logicalScaleX = (float)(twips2mm * mm2pixelsX);
-                m_logicalScaleY = (float)(twips2mm * mm2pixelsY);
+                m_logicalScaleX = twips2mm * mm2pixelsX;
+                m_logicalScaleY = twips2mm * mm2pixelsY;
                 break;
             }
         case wxMM_POINTS:
             {
-                m_logicalScaleX = (float)(pt2mm * mm2pixelsX);
-                m_logicalScaleY = (float)(pt2mm * mm2pixelsY);
+                m_logicalScaleX = pt2mm * mm2pixelsX;
+                m_logicalScaleY = pt2mm * mm2pixelsY;
                 break;
             }
         case wxMM_METRIC:
@@ -308,8 +305,8 @@ void wxMetafileDCImpl::SetMapMode(wxMappingMode mode)
             }
         case wxMM_LOMETRIC:
             {
-                m_logicalScaleX = (float)(mm2pixelsX/10.0);
-                m_logicalScaleY = (float)(mm2pixelsY/10.0);
+                m_logicalScaleX = mm2pixelsX / 10;
+                m_logicalScaleY = mm2pixelsY / 10;
                 break;
             }
         default:
@@ -326,7 +323,6 @@ void wxMetafileDCImpl::SetMapMode(wxMappingMode mode)
 // wxMakeMetafilePlaceable
 // ----------------------------------------------------------------------------
 
-#ifdef __WIN32__
 struct RECT32
 {
   short left;
@@ -343,16 +339,6 @@ struct mfPLACEABLEHEADER {
     DWORD    reserved;
     WORD    checksum;
 };
-#else
-struct mfPLACEABLEHEADER {
-    DWORD    key;
-    HANDLE    hmf;
-    RECT    bbox;
-    WORD    inch;
-    DWORD    reserved;
-    WORD    checksum;
-};
-#endif
 
 /*
  * Pass filename of existing non-placeable metafile, and bounding box.
@@ -467,7 +453,7 @@ bool wxMakeMetafilePlaceable(const wxString& filename, int x1, int y1, int x2, i
 }
 
 
-#if wxUSE_DRAG_AND_DROP
+#if wxUSE_DATAOBJ
 
 // ----------------------------------------------------------------------------
 // wxMetafileDataObject
@@ -526,6 +512,6 @@ bool wxMetafileDataObject::SetData(size_t WXUNUSED(len), const void *buf)
     return true;
 }
 
-#endif // wxUSE_DRAG_AND_DROP
+#endif // wxUSE_DATAOBJ
 
 #endif // wxUSE_METAFILE

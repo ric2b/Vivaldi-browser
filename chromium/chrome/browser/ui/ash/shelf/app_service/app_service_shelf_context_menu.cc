@@ -239,7 +239,7 @@ bool AppServiceShelfContextMenu::IsCommandIdChecked(int command_id) const {
       }
       return ShelfContextMenu::IsCommandIdChecked(command_id);
     }
-    case apps::mojom::AppType::kExtension:
+    case apps::mojom::AppType::kChromeApp:
       if (command_id >= ash::LAUNCH_TYPE_PINNED_TAB &&
           command_id <= ash::LAUNCH_TYPE_WINDOW) {
         return GetExtensionLaunchType() ==
@@ -293,7 +293,7 @@ void AppServiceShelfContextMenu::OnGetMenuModel(
   // The special rule to ensure that FilesManager's first menu item is "New
   // window".
   const bool build_extension_menu_before_pin =
-      (app_type_ == apps::mojom::AppType::kExtension &&
+      (app_type_ == apps::mojom::AppType::kChromeApp &&
        item().id.app_id == extension_misc::kFilesManagerAppId);
 
   if (build_extension_menu_before_pin)
@@ -340,7 +340,8 @@ void AppServiceShelfContextMenu::OnGetMenuModel(
   }
 
   if (app_type_ == apps::mojom::AppType::kWeb ||
-      app_type_ == apps::mojom::AppType::kSystemWeb) {
+      app_type_ == apps::mojom::AppType::kSystemWeb ||
+      app_type_ == apps::mojom::AppType::kCrostini) {
     BuildAppShortcutsMenu(std::move(menu_items), std::move(menu_model),
                           std::move(callback), shortcut_index);
     return;
@@ -476,7 +477,7 @@ void AppServiceShelfContextMenu::SetLaunchType(int command_id) {
       }
       return;
     }
-    case apps::mojom::AppType::kExtension:
+    case apps::mojom::AppType::kChromeApp:
       SetExtensionLaunchType(command_id);
       return;
     case apps::mojom::AppType::kArc:
@@ -566,10 +567,10 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
     }
     case apps::mojom::AppType::kCrostini:
     case apps::mojom::AppType::kBorealis:
-    case apps::mojom::AppType::kExtension:
+    case apps::mojom::AppType::kChromeApp:
     case apps::mojom::AppType::kWeb:
     case apps::mojom::AppType::kSystemWeb:
-    case apps::mojom::AppType::kStandaloneBrowserExtension:
+    case apps::mojom::AppType::kStandaloneBrowserChromeApp:
       return true;
     case apps::mojom::AppType::kStandaloneBrowser:
       // Lacros behaves like the Chrome browser icon and cannot be unpinned.
@@ -580,6 +581,7 @@ bool AppServiceShelfContextMenu::ShouldAddPinMenu() {
       return false;
     case apps::mojom::AppType::kMacOs:
     case apps::mojom::AppType::kRemote:
+    case apps::mojom::AppType::kExtension:
       NOTREACHED() << "Type " << app_type_ << " should not appear in shelf.";
       return false;
   }

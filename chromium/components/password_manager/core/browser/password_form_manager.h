@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -31,6 +31,10 @@
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace password_manager {
+
+// Filling timeout for waiting server predictions
+constexpr base::TimeDelta kMaxFillingDelayForServerPredictions =
+    base::Milliseconds(500);
 
 class PasswordFormMetricsRecorder;
 class PasswordManagerClient;
@@ -333,8 +337,12 @@ class PasswordFormManager : public PasswordFormManagerForUI,
       const autofill::FormData& observed_form_data,
       const std::map<autofill::FormSignature, FormPredictions>& predictions);
 
+  // Delays form filling by |kMaxFillingDelayForServerPredictions| while waiting
+  // for server-side predictions.
+  void DelayFillForServerSidePredictions();
+
   // The client which implements embedder-specific PasswordManager operations.
-  PasswordManagerClient* client_;
+  raw_ptr<PasswordManagerClient> client_;
 
   base::WeakPtr<PasswordManagerDriver> driver_;
 
@@ -364,7 +372,7 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   std::unique_ptr<FormFetcher> owned_form_fetcher_;
 
   // FormFetcher instance which owns the login data from PasswordStore.
-  FormFetcher* form_fetcher_;
+  raw_ptr<FormFetcher> form_fetcher_;
 
   std::unique_ptr<PasswordSaveManager> password_save_manager_;
 

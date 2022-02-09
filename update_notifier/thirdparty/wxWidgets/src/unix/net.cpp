@@ -64,11 +64,11 @@ class WXDLLEXPORT wxDialUpManagerImpl : public wxDialUpManager
 {
 public:
    wxDialUpManagerImpl()
+        : m_BeaconHost(WXDIALUP_MANAGER_DEFAULT_BEACONHOST)
       {
          m_IsOnline = -1; // unknown
          m_timer = NULL;
          m_CanUseIfconfig = -1; // unknown
-         m_BeaconHost = WXDIALUP_MANAGER_DEFAULT_BEACONHOST;
          m_BeaconPort = 80;
       }
 
@@ -84,7 +84,7 @@ public:
        ISP (exact meaning of the parameter depends on the platform), returns
        TRUE on success or FALSE on failure and logs the appropriate error
        message in the latter case.
-       @param nameOfISP optional paramater for dial program
+       @param nameOfISP optional parameter for dial program
        @param username unused
        @param password unused
    */
@@ -185,10 +185,10 @@ public:
    virtual bool Start( int millisecs = -1 )
       { m_started = true; return wxTimer::Start(millisecs, false); }
 
-   virtual void Notify()
+   virtual void Notify() wxOVERRIDE
       { wxLogTrace("Checking dial up network status."); m_dupman->CheckStatus(); }
 
-   virtual void Stop()
+   virtual void Stop() wxOVERRIDE
       { if ( m_started ) wxTimer::Stop(); }
 public:
    bool m_started;
@@ -382,7 +382,6 @@ wxDialUpManagerImpl::CheckStatusInternal(void)
    }
 
    // second method: try to connect to well known host:
-   // This can be used under Win 9x, too!
    struct hostent     *hp;
    struct sockaddr_in  serv_addr;
    int sockfd;

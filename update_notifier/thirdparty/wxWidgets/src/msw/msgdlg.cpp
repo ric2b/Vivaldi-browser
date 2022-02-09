@@ -11,19 +11,8 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_MSGDLG
-
-// there is no hook support under CE so we can't use the code for message box
-// positioning there
-#ifndef __WXWINCE__
-    #define wxUSE_MSGBOX_HOOK 1
-#else
-    #define wxUSE_MSGBOX_HOOK 0
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/msgdlg.h"
@@ -31,9 +20,7 @@
     #include "wx/intl.h"
     #include "wx/utils.h"
     #include "wx/msw/private.h"
-    #if wxUSE_MSGBOX_HOOK
-        #include "wx/hashmap.h"
-    #endif
+    #include "wx/hashmap.h"
 #endif
 
 #include "wx/ptr_scpd.h"
@@ -43,16 +30,8 @@
 #include "wx/msw/private/msgdlg.h"
 #include "wx/modalhook.h"
 #include "wx/fontutil.h"
-
-#if wxUSE_MSGBOX_HOOK
-    #include "wx/textbuf.h"
-    #include "wx/display.h"
-#endif
-
-// For MB_TASKMODAL
-#ifdef __WXWINCE__
-    #include "wx/msw/wince/missing.h"
-#endif
+#include "wx/textbuf.h"
+#include "wx/display.h"
 
 // Interestingly, this symbol currently seems to be absent from Platform SDK
 // headers but it is documented at MSDN.
@@ -62,9 +41,7 @@
 
 using namespace wxMSWMessageDialog;
 
-IMPLEMENT_CLASS(wxMessageDialog, wxDialog)
-
-#if wxUSE_MSGBOX_HOOK
+wxIMPLEMENT_CLASS(wxMessageDialog, wxDialog);
 
 // there can potentially be one message box per thread so we use a hash map
 // with thread ids as keys and (currently shown) message boxes as values
@@ -156,7 +133,7 @@ wxMessageDialog::HookFunction(int code, WXWPARAM wParam, WXLPARAM lParam)
         wnd->m_hook = NULL;
         HookMap().erase(tid);
 
-        wnd->SetHWND((HWND)wParam);
+        TempHWNDSetter set(wnd, (WXHWND)wParam);
 
         // replace the static text with an edit control if the message box is
         // too big to fit the display
@@ -171,9 +148,6 @@ wxMessageDialog::HookFunction(int code, WXWPARAM wParam, WXLPARAM lParam)
         if ( wnd->GetMessageDialogStyle() & wxCENTER )
             wnd->Center(); // center on parent
         //else: default behaviour, center on screen
-
-        // there seems to be no reason to leave it set
-        wnd->SetHWND(NULL);
     }
 
     return rc;
@@ -182,10 +156,7 @@ wxMessageDialog::HookFunction(int code, WXWPARAM wParam, WXLPARAM lParam)
 void wxMessageDialog::ReplaceStaticWithEdit()
 {
     // check if the message box fits the display
-    int nDisplay = wxDisplay::GetFromWindow(this);
-    if ( nDisplay == wxNOT_FOUND )
-        nDisplay = 0;
-    const wxRect rectDisplay = wxDisplay(nDisplay).GetClientArea();
+    const wxRect rectDisplay = wxDisplay(this).GetClientArea();
 
     if ( rectDisplay.Contains(GetRect()) )
     {
@@ -219,8 +190,8 @@ void wxMessageDialog::ReplaceStaticWithEdit()
     // some space above and below it
     const int hText = (7*rectDisplay.height)/8 -
                       (
-                         2*::GetSystemMetrics(SM_CYFIXEDFRAME) +
-                         ::GetSystemMetrics(SM_CYCAPTION) +
+                         2*wxGetSystemMetrics(SM_CYFIXEDFRAME, this) +
+                         wxGetSystemMetrics(SM_CYCAPTION, this) +
                          5*GetCharHeight() // buttons + margins
                       );
     const int dh = (rc.bottom - rc.top) - hText; // vertical space we save
@@ -233,8 +204,8 @@ void wxMessageDialog::ReplaceStaticWithEdit()
     // NB: you would have thought that 2*SM_CXEDGE would be enough but it
     //     isn't, somehow, and the text control breaks lines differently from
     //     the static one so fudge by adding some extra space
-    const int dw = ::GetSystemMetrics(SM_CXVSCROLL) +
-                        4*::GetSystemMetrics(SM_CXEDGE);
+    const int dw = wxGetSystemMetrics(SM_CXVSCROLL, this) +
+                        4*wxGetSystemMetrics(SM_CXEDGE, this);
     rc.right += dw;
 
 
@@ -372,9 +343,9 @@ void wxMessageDialog::AdjustButtonLabels()
     // resize the message box to be wider if needed
     const int wBoxOld = wxGetClientRect(GetHwnd()).right;
 
-    const int CHAR_WIDTH = GetCharWidth();
-    const int MARGIN_OUTER = 2*CHAR_WIDTH;  // margin between box and buttons
-    const int MARGIN_INNER = CHAR_WIDTH;    // margin between buttons
+    const int CHAR_WIDTH_IN_PIXELS = GetCharWidth();
+    const int MARGIN_OUTER = 2*CHAR_WIDTH_IN_PIXELS;  // margin between box and buttons
+    const int MARGIN_INNER = CHAR_WIDTH_IN_PIXELS;    // margin between buttons
 
     RECT rcBox = wxGetWindowRect(GetHwnd());
 
@@ -419,18 +390,19 @@ void wxMessageDialog::AdjustButtonLabels()
     }
 }
 
-#endif // wxUSE_MSGBOX_HOOK
-
 /* static */
 wxFont wxMessageDialog::GetMessageFont()
 {
-    const NONCLIENTMETRICS& ncm = wxMSWImpl::GetNonClientMetrics();
-    return wxNativeFontInfo(ncm.lfMessageFont);
+    const wxWindow* win = wxApp::GetMainTopWindow();
+    const wxNativeFontInfo
+        info(wxMSWImpl::GetNonClientMetrics(win).lfMessageFont, win);
+
+    return info;
 }
 
 int wxMessageDialog::ShowMessageBox()
 {
-    if ( !wxTheApp->GetTopWindow() )
+    if ( wxTheApp && !wxTheApp->GetTopWindow() )
     {
         // when the message box is shown from wxApp::OnInit() (i.e. before the
         // message loop is entered), this must be done or the next message box
@@ -482,11 +454,9 @@ int wxMessageDialog::ShowMessageBox()
     const long wxStyle = GetMessageDialogStyle();
     if ( wxStyle & wxYES_NO )
     {
-#if !(defined(__SMARTPHONE__) && defined(__WXWINCE__))
-        if (wxStyle & wxCANCEL)
+        if ( wxStyle & wxCANCEL )
             msStyle = MB_YESNOCANCEL;
         else
-#endif // !(__SMARTPHONE__ && __WXWINCE__)
             msStyle = MB_YESNO;
 
         if ( wxStyle & wxNO_DEFAULT )
@@ -537,30 +507,14 @@ int wxMessageDialog::ShowMessageBox()
     if ( wxStyle & wxSTAY_ON_TOP )
         msStyle |= MB_TOPMOST;
 
-#ifndef __WXWINCE__
-    if ( wxTheApp->GetLayoutDirection() == wxLayout_RightToLeft )
+    if ( wxApp::MSWGetDefaultLayout(m_parent) == wxLayout_RightToLeft )
         msStyle |= MB_RTLREADING | MB_RIGHT;
-#endif
 
     if (hWnd)
         msStyle |= MB_APPLMODAL;
     else
         msStyle |= MB_TASKMODAL;
 
-    // per MSDN documentation for MessageBox() we can prefix the message with 2
-    // right-to-left mark characters to tell the function to use RTL layout
-    // (unfortunately this only works in Unicode builds)
-    wxString message = GetFullMessage();
-#if wxUSE_UNICODE
-    if ( wxTheApp->GetLayoutDirection() == wxLayout_RightToLeft )
-    {
-        // NB: not all compilers support \u escapes
-        static const wchar_t wchRLM = 0x200f;
-        message.Prepend(wxString(wchRLM, 2));
-    }
-#endif // wxUSE_UNICODE
-
-#if wxUSE_MSGBOX_HOOK
     // install the hook in any case as we don't know in advance if the message
     // box is not going to be too big (requiring the replacement of the static
     // control with an edit one)
@@ -568,10 +522,15 @@ int wxMessageDialog::ShowMessageBox()
     m_hook = ::SetWindowsHookEx(WH_CBT,
                                 &wxMessageDialog::HookFunction, NULL, tid);
     HookMap()[tid] = this;
-#endif // wxUSE_MSGBOX_HOOK
 
     // do show the dialog
-    int msAns = MessageBox(hWnd, message.t_str(), m_caption.t_str(), msStyle);
+    const int msAns = MessageBox
+                      (
+                        hWnd,
+                        GetFullMessage().t_str(),
+                        m_caption.t_str(),
+                        msStyle
+                      );
 
     return MSWTranslateReturnCode(msAns);
 }
@@ -702,7 +661,7 @@ void wxMSWTaskDialogConfig::MSWCommonTaskDialogInit(TASKDIALOGCONFIG &tdc)
     // use the top level window as parent if none specified
     tdc.hwndParent = parent ? GetHwndOf(parent) : NULL;
 
-    if ( wxTheApp->GetLayoutDirection() == wxLayout_RightToLeft )
+    if ( wxApp::MSWGetDefaultLayout(parent) == wxLayout_RightToLeft )
         tdc.dwFlags |= TDF_RTL_LAYOUT;
 
     // If we have both the main and extended messages, just use them as
@@ -868,7 +827,7 @@ int wxMSWMessageDialog::MSWTranslateReturnCode(int msAns)
     {
         default:
             wxFAIL_MSG(wxT("unexpected return code"));
-            // fall through
+            wxFALLTHROUGH;
 
         case IDCANCEL:
             ans = wxID_CANCEL;

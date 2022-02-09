@@ -75,6 +75,8 @@ bool EventDatabase::CreateEventTable() {
       "component_class LONGVARCHAR,"
       "attachment LONGVARCHAR,"
       "completed INTEGER,"
+      "sync_pending INTEGER,"
+      "delete_pending INTEGER,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -87,50 +89,53 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       SQL_FROM_HERE,
       "INSERT OR REPLACE INTO events "
       "(calendar_id, alarm_id, title, description, "
-      "start, end, all_day, is_recurring, start_recurring, end_recurring, "
+      "start, end, all_day, is_recurring, "
       "location, url, etag, href, uid, event_type_id, task, complete, trash, "
       "trash_time, sequence, ical, rrule, organizer, timezone, is_template, "
       "due, priority, status, percentage_complete, categories, "
-      "component_class, attachment, completed, created, last_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-      "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )"));
+      "component_class, attachment, completed, sync_pending, delete_pending, "
+      "created, " "last_modified) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+      "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )"));
 
-  statement.BindInt64(0, row.calendar_id);
-  statement.BindInt64(1, row.alarm_id);
-  statement.BindString16(2, row.title);
-  statement.BindString16(3, row.description);
-  statement.BindInt64(4, row.start.ToInternalValue());
-  statement.BindInt64(5, row.end.ToInternalValue());
-  statement.BindInt(6, row.all_day ? 1 : 0);
-  statement.BindInt(7, row.is_recurring ? 1 : 0);
-  statement.BindInt64(8, row.start_recurring.ToInternalValue());
-  statement.BindInt64(9, row.end_recurring.ToInternalValue());
-  statement.BindString16(10, row.location);
-  statement.BindString16(11, row.url);
-  statement.BindString(12, row.etag);
-  statement.BindString(13, row.href);
-  statement.BindString(14, row.uid);
-  statement.BindInt64(15, row.event_type_id);
-  statement.BindInt(16, row.task ? 1 : 0);
-  statement.BindInt(17, row.complete ? 1 : 0);
-  statement.BindInt(18, row.trash ? 1 : 0);
-  statement.BindInt64(19, row.trash ? base::Time().Now().ToInternalValue() : 0);
-  statement.BindInt64(20, row.sequence);
-  statement.BindString16(21, row.ical);
-  statement.BindString(22, row.rrule);
-  statement.BindString(23, row.organizer);
-  statement.BindString(24, row.timezone);
-  statement.BindInt(25, row.is_template ? 1 : 0);
-  statement.BindInt64(26, row.due.ToInternalValue());
-  statement.BindInt(27, row.priority);
-  statement.BindString(28, row.status);
-  statement.BindInt(29, row.percentage_complete);
-  statement.BindString16(30, row.categories);
-  statement.BindString16(31, row.component_class);
-  statement.BindString16(32, row.attachment);
-  statement.BindInt64(33, row.completed.ToInternalValue());
-  statement.BindInt64(34, base::Time().Now().ToInternalValue());
-  statement.BindInt64(35, base::Time().Now().ToInternalValue());
+  int column_index = 0;
+  statement.BindInt64(column_index++, row.calendar_id);
+  statement.BindInt64(column_index++, row.alarm_id);
+  statement.BindString16(column_index++, row.title);
+  statement.BindString16(column_index++, row.description);
+  statement.BindInt64(column_index++, row.start.ToInternalValue());
+  statement.BindInt64(column_index++, row.end.ToInternalValue());
+  statement.BindInt(column_index++, row.all_day ? 1 : 0);
+  statement.BindInt(column_index++, row.is_recurring ? 1 : 0);
+  statement.BindString16(column_index++, row.location);
+  statement.BindString16(column_index++, row.url);
+  statement.BindString(column_index++, row.etag);
+  statement.BindString(column_index++, row.href);
+  statement.BindString(column_index++, row.uid);
+  statement.BindInt64(column_index++, row.event_type_id);
+  statement.BindInt(column_index++, row.task ? 1 : 0);
+  statement.BindInt(column_index++, row.complete ? 1 : 0);
+  statement.BindInt(column_index++, row.trash ? 1 : 0);
+  statement.BindInt64(column_index++,
+                      row.trash ? base::Time().Now().ToInternalValue() : 0);
+  statement.BindInt64(column_index++, row.sequence);
+  statement.BindString16(column_index++, row.ical);
+  statement.BindString(column_index++, row.rrule);
+  statement.BindString(column_index++, row.organizer);
+  statement.BindString(column_index++, row.timezone);
+  statement.BindInt(column_index++, row.is_template ? 1 : 0);
+  statement.BindInt64(column_index++, row.due.ToInternalValue());
+  statement.BindInt(column_index++, row.priority);
+  statement.BindString(column_index++, row.status);
+  statement.BindInt(column_index++, row.percentage_complete);
+  statement.BindString16(column_index++, row.categories);
+  statement.BindString16(column_index++, row.component_class);
+  statement.BindString16(column_index++, row.attachment);
+  statement.BindInt64(column_index++, row.completed.ToInternalValue());
+  statement.BindInt(column_index++, row.sync_pending ? 1 : 0);
+  statement.BindInt(column_index++, row.delete_pending ? 1 : 0);
+  statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
+  statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
 
   if (!statement.Run()) {
     return 0;
@@ -187,49 +192,51 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
                                                       "UPDATE events SET \
         calendar_id=?, alarm_id=?, title=?, description=?, start=?, end=?, \
-        all_day=?, is_recurring=?, start_recurring=?, end_recurring=?, \
+        all_day=?, is_recurring=?, \
         location=?, url=?, etag=?, href=?, uid=?, event_type_id=?, \
         task=?, complete=?, trash=?, trash_time=?, sequence=?, ical=?, \
         rrule=?, organizer=?, timezone=?, \
         due=?, priority=?, status=?, percentage_complete=?,  \
-        categories=?, component_class=?, attachment=?, completed=? \
+        categories=?, component_class=?, attachment=?, completed=?, \
+        sync_pending=?, delete_pending=? \
         WHERE id=?"));
-  statement.BindInt64(0, event.calendar_id);
-  statement.BindInt64(1, event.alarm_id);
-  statement.BindString16(2, event.title);
-  statement.BindString16(3, event.description);
-  statement.BindInt64(4, event.start.ToInternalValue());
-  statement.BindInt64(5, event.end.ToInternalValue());
-  statement.BindInt(6, event.all_day ? 1 : 0);
-  statement.BindInt(7, event.is_recurring ? 1 : 0);
-  statement.BindInt64(8, event.start_recurring.ToInternalValue());
-  statement.BindInt64(9, event.end_recurring.ToInternalValue());
-  statement.BindString16(10, event.location);
-  statement.BindString16(11, event.url);
-  statement.BindString(12, event.etag);
-  statement.BindString(13, event.href);
-  statement.BindString(14, event.uid);
-  statement.BindInt64(15, event.event_type_id);
-  statement.BindInt(16, event.task ? 1 : 0);
-  statement.BindInt(17, event.complete ? 1 : 0);
-  statement.BindInt(18, event.trash ? 1 : 0);
-  statement.BindInt64(19,
+  int column_index = 0;
+  statement.BindInt64(column_index++, event.calendar_id);
+  statement.BindInt64(column_index++, event.alarm_id);
+  statement.BindString16(column_index++, event.title);
+  statement.BindString16(column_index++, event.description);
+  statement.BindInt64(column_index++, event.start.ToInternalValue());
+  statement.BindInt64(column_index++, event.end.ToInternalValue());
+  statement.BindInt(column_index++, event.all_day ? 1 : 0);
+  statement.BindInt(column_index++, event.is_recurring ? 1 : 0);
+  statement.BindString16(column_index++, event.location);
+  statement.BindString16(column_index++, event.url);
+  statement.BindString(column_index++, event.etag);
+  statement.BindString(column_index++, event.href);
+  statement.BindString(column_index++, event.uid);
+  statement.BindInt64(column_index++, event.event_type_id);
+  statement.BindInt(column_index++, event.task ? 1 : 0);
+  statement.BindInt(column_index++, event.complete ? 1 : 0);
+  statement.BindInt(column_index++, event.trash ? 1 : 0);
+  statement.BindInt64(column_index++,
                       event.trash ? base::Time().Now().ToInternalValue() : 0);
-  statement.BindInt(20, event.sequence);
-  statement.BindString16(21, event.ical);
-  statement.BindString(22, event.rrule);
-  statement.BindString(23, event.organizer);
-  statement.BindString(24, event.timezone);
-  statement.BindInt64(25, event.due.ToInternalValue());
-  statement.BindInt64(26, event.priority);
-  statement.BindString(27, event.status);
-  statement.BindInt(28, event.percentage_complete);
-  statement.BindString16(29, event.categories);
-  statement.BindString16(30, event.component_class);
-  statement.BindString16(31, event.attachment);
-  statement.BindInt64(32, event.completed.ToInternalValue());
+  statement.BindInt(column_index++, event.sequence);
+  statement.BindString16(column_index++, event.ical);
+  statement.BindString(column_index++, event.rrule);
+  statement.BindString(column_index++, event.organizer);
+  statement.BindString(column_index++, event.timezone);
+  statement.BindInt64(column_index++, event.due.ToInternalValue());
+  statement.BindInt64(column_index++, event.priority);
+  statement.BindString(column_index++, event.status);
+  statement.BindInt(column_index++, event.percentage_complete);
+  statement.BindString16(column_index++, event.categories);
+  statement.BindString16(column_index++, event.component_class);
+  statement.BindString16(column_index++, event.attachment);
+  statement.BindInt64(column_index++, event.completed.ToInternalValue());
+  statement.BindInt64(column_index++, event.sync_pending ? 1 : 0);
+  statement.BindInt64(column_index++, event.delete_pending ? 1 : 0);
 
-  statement.BindInt64(33, event.id);
+  statement.BindInt64(column_index++, event.id);
 
   return statement.Run();
 }
@@ -237,40 +244,44 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
 // Must be in sync with CALENDAR_EVENT_ROW_FIELDS.
 // static
 void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
-  EventID id = s.ColumnInt64(0);
-  CalendarID calendar_id = s.ColumnInt64(1);
-  AlarmID alarm_id = s.ColumnInt64(2);
-  std::u16string title = s.ColumnString16(3);
-  std::u16string description = s.ColumnString16(4);
-  base::Time start = base::Time::FromInternalValue(s.ColumnInt64(5));
-  base::Time end = base::Time::FromInternalValue(s.ColumnInt64(6));
-  int all_day = s.ColumnInt(7);
-  int is_recurring = s.ColumnInt(8);
-  base::Time start_recurring = base::Time::FromInternalValue(s.ColumnInt64(9));
-  base::Time end_recurring = base::Time::FromInternalValue(s.ColumnInt64(10));
-  std::u16string location = s.ColumnString16(11);
-  std::u16string url = s.ColumnString16(12);
-  std::string etag = s.ColumnString(13);
-  std::string href = s.ColumnString(14);
-  std::string uid = s.ColumnString(15);
-  EventTypeID event_type_id = s.ColumnInt64(16);
-  int task = s.ColumnInt(17);
-  int complete = s.ColumnInt(18);
-  int trash = s.ColumnInt(19);
-  base::Time trash_time = base::Time::FromInternalValue(s.ColumnInt64(20));
-  int sequence = s.ColumnInt(21);
-  std::u16string ical = s.ColumnString16(22);
-  std::string rrule = s.ColumnString(23);
-  std::string organizer = s.ColumnString(24);
-  std::string timezone = s.ColumnString(25);
-  base::Time due = base::Time::FromInternalValue(s.ColumnInt64(26));
-  int priority = s.ColumnInt(27);
-  std::string status = s.ColumnString(28);
-  int percentage_complete = s.ColumnInt(29);
-  std::u16string categories = s.ColumnString16(30);
-  std::u16string component_class = s.ColumnString16(31);
-  std::u16string attachment = s.ColumnString16(32);
-  base::Time completed = base::Time::FromInternalValue(s.ColumnInt64(33));
+  int column_index = 0;
+  EventID id = s.ColumnInt64(column_index++);
+  CalendarID calendar_id = s.ColumnInt64(column_index++);
+  AlarmID alarm_id = s.ColumnInt64(column_index++);
+  std::u16string title = s.ColumnString16(column_index++);
+  std::u16string description = s.ColumnString16(column_index++);
+  base::Time start =
+      base::Time::FromInternalValue(s.ColumnInt64(column_index++));
+  base::Time end = base::Time::FromInternalValue(s.ColumnInt64(column_index++));
+  int all_day = s.ColumnInt(column_index++);
+  int is_recurring = s.ColumnInt(column_index++);
+  std::u16string location = s.ColumnString16(column_index++);
+  std::u16string url = s.ColumnString16(column_index++);
+  std::string etag = s.ColumnString(column_index++);
+  std::string href = s.ColumnString(column_index++);
+  std::string uid = s.ColumnString(column_index++);
+  EventTypeID event_type_id = s.ColumnInt64(column_index++);
+  int task = s.ColumnInt(column_index++);
+  int complete = s.ColumnInt(column_index++);
+  int trash = s.ColumnInt(column_index++);
+  base::Time trash_time =
+      base::Time::FromInternalValue(s.ColumnInt64(column_index++));
+  int sequence = s.ColumnInt(column_index++);
+  std::u16string ical = s.ColumnString16(column_index++);
+  std::string rrule = s.ColumnString(column_index++);
+  std::string organizer = s.ColumnString(column_index++);
+  std::string timezone = s.ColumnString(column_index++);
+  base::Time due = base::Time::FromInternalValue(s.ColumnInt64(column_index++));
+  int priority = s.ColumnInt(column_index++);
+  std::string status = s.ColumnString(column_index++);
+  int percentage_complete = s.ColumnInt(column_index++);
+  std::u16string categories = s.ColumnString16(column_index++);
+  std::u16string component_class = s.ColumnString16(column_index++);
+  std::u16string attachment = s.ColumnString16(column_index++);
+  base::Time completed =
+      base::Time::FromInternalValue(s.ColumnInt64(column_index++));
+  int sync_pending = s.ColumnInt(column_index++);
+  int delete_pending = s.ColumnInt(column_index++);
 
   event->id = id;
   event->calendar_id = calendar_id;
@@ -281,8 +292,6 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->end = end;
   event->all_day = all_day == 1 ? true : false;
   event->is_recurring = is_recurring == 1 ? true : false;
-  event->start_recurring = start_recurring;
-  event->end_recurring = end_recurring;
   event->location = location;
   event->url = url;
   event->etag = etag;
@@ -306,6 +315,8 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->component_class = component_class;
   event->attachment = attachment;
   event->completed = completed;
+  event->sync_pending = sync_pending == 1 ? true : false;
+  event->delete_pending = delete_pending == 1 ? true : false;
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {
@@ -473,6 +484,29 @@ bool EventDatabase::MigrateCalendarToVersion9() {
   if (!GetDB().DoesColumnExist("events", "completed")) {
     if (!GetDB().Execute("ALTER TABLE events "
                          "ADD COLUMN completed INTEGER"))
+      return false;
+  }
+  return true;
+}
+
+// Updates to version 11. Adds columns syncPending and deletePending to events
+bool EventDatabase::MigrateCalendarToVersion11() {
+  if (!GetDB().DoesTableExist("events")) {
+    NOTREACHED() << "Events table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "sync_pending")) {
+    LOG(ERROR) << "Dalkurinn sync_pending ekki til i events";
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN sync_pending INTEGER"))
+      return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "delete_pending")) {
+    LOG(ERROR) << "Dalkurinn delete_pending ekki til i events";
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN delete_pending INTEGER"))
       return false;
   }
   return true;

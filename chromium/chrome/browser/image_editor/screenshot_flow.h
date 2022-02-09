@@ -10,20 +10,25 @@
 
 #include "base/callback.h"
 #include "build/build_config.h"
-#include "ui/base/cursor/cursor.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_delegate.h"
 #include "ui/events/event.h"
 #include "ui/events/event_handler.h"
+#include "ui/events/event_target.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
 
 #if defined(OS_MAC)
 #include "chrome/browser/image_editor/event_capture_mac.h"
+#else
+#include "base/scoped_observation.h"
 #endif
 
 namespace content {
 class WebContents;
+enum class Visibility;
 }
 
 namespace gfx {
@@ -67,7 +72,9 @@ typedef base::OnceCallback<void(const ScreenshotCaptureResult&)>
 // ScreenshotFlow allows the user to enter a capture mode where they may drag
 // a capture rectangle over a WebContents. The class calls a OnceCallback with
 // the screenshot data contained in the region of interest.
-class ScreenshotFlow : public ui::LayerDelegate, public ui::EventHandler {
+class ScreenshotFlow : public content::WebContentsObserver,
+                       public ui::LayerDelegate,
+                       public ui::EventHandler {
  public:
   enum class CaptureMode {
     // Default, capture is not active.
@@ -98,6 +105,10 @@ class ScreenshotFlow : public ui::LayerDelegate, public ui::EventHandler {
 
   // Returns whether the capture mode is open or not.
   bool IsCaptureModeActive();
+
+  // content::WebContentsObserver:
+  void WebContentsDestroyed() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
  private:
   class UnderlyingWebContentsObserver;
@@ -167,6 +178,12 @@ class ScreenshotFlow : public ui::LayerDelegate, public ui::EventHandler {
   // Mac-specific
 #if defined(OS_MAC)
   std::unique_ptr<EventCaptureMac> event_capture_mac_;
+#else
+  base::ScopedObservation<ui::EventTarget,
+                          ui::EventHandler,
+                          &ui::EventTarget::AddPreTargetHandler,
+                          &ui::EventTarget::RemovePreTargetHandler>
+      event_capture_{this};
 #endif
 
   // Selection rectangle coordinates.

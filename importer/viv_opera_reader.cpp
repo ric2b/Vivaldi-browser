@@ -46,7 +46,7 @@ bool OperaAdrFileReader::LoadFile(const base::FilePath& file) {
     if (line[0] == '-' || line[0] == '#') {
       if (!category.empty())
         HandleEntry(category, entries);
-      entries.Clear();
+      entries.DictClear();
       if (line[0] == '-') {
         HandleEntry("-", entries);
         category = "";

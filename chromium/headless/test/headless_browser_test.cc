@@ -9,7 +9,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task/current_thread.h"
@@ -63,7 +63,7 @@ class SynchronousLoadObserver {
   }
 
  private:
-  HeadlessWebContents* web_contents_;  // Not owned.
+  raw_ptr<HeadlessWebContents> web_contents_;  // Not owned.
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
   std::unique_ptr<LoadObserver> load_observer_;
 };
@@ -99,8 +99,8 @@ class EvaluateHelper {
   }
 
  private:
-  HeadlessBrowserTest* browser_test_;  // Not owned.
-  HeadlessWebContents* web_contents_;  // Not owned.
+  raw_ptr<HeadlessBrowserTest> browser_test_;  // Not owned.
+  raw_ptr<HeadlessWebContents> web_contents_;  // Not owned.
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
 
   std::unique_ptr<runtime::EvaluateResult> result_;
@@ -169,11 +169,11 @@ HeadlessBrowserTest::~HeadlessBrowserTest() = default;
 void HeadlessBrowserTest::PreRunTestOnMainThread() {
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 #if defined(USE_V8_CONTEXT_SNAPSHOT)
-  constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-      gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+  constexpr gin::V8SnapshotFileType kSnapshotType =
+      gin::V8SnapshotFileType::kWithAdditionalContext;
 #else
-  constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-      gin::V8Initializer::V8SnapshotFileType::kDefault;
+  constexpr gin::V8SnapshotFileType kSnapshotType =
+      gin::V8SnapshotFileType::kDefault;
 #endif  // USE_V8_CONTEXT_SNAPSHOT
   gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
 #endif

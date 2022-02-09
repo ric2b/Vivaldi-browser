@@ -5,7 +5,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/i18n/time_formatting.h"
-#include "base/macros.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"

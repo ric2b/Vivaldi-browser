@@ -32,7 +32,7 @@
 
 namespace blink {
 
-CanvasGradient::CanvasGradient(const FloatPoint& p0, const FloatPoint& p1)
+CanvasGradient::CanvasGradient(const gfx::PointF& p0, const gfx::PointF& p1)
     : gradient_(
           Gradient::CreateLinear(p0,
                                  p1,
@@ -41,13 +41,13 @@ CanvasGradient::CanvasGradient(const FloatPoint& p0, const FloatPoint& p1)
                                  Gradient::DegenerateHandling::kDisallow)) {
   if (identifiability_study_helper_.ShouldUpdateBuilder()) {
     identifiability_study_helper_.UpdateBuilder(
-        CanvasOps::kCreateLinearGradient, p0.X(), p0.Y(), p1.X(), p1.Y());
+        CanvasOps::kCreateLinearGradient, p0.x(), p0.y(), p1.x(), p1.y());
   }
 }
 
-CanvasGradient::CanvasGradient(const FloatPoint& p0,
+CanvasGradient::CanvasGradient(const gfx::PointF& p0,
                                float r0,
-                               const FloatPoint& p1,
+                               const gfx::PointF& p1,
                                float r1)
     : gradient_(
           Gradient::CreateRadial(p0,
@@ -60,14 +60,14 @@ CanvasGradient::CanvasGradient(const FloatPoint& p0,
                                  Gradient::DegenerateHandling::kDisallow)) {
   if (identifiability_study_helper_.ShouldUpdateBuilder()) {
     identifiability_study_helper_.UpdateBuilder(
-        CanvasOps::kCreateRadialGradient, p0.X(), p0.Y(), r0, p1.X(), p1.Y(),
+        CanvasOps::kCreateRadialGradient, p0.x(), p0.y(), r0, p1.x(), p1.y(),
         r1);
   }
 }
 
 // CanvasRenderingContext2D.createConicGradient only takes one angle argument
 // it makes sense to make that rotation here and always make the angles 0 -> 2pi
-CanvasGradient::CanvasGradient(float startAngle, const FloatPoint& center)
+CanvasGradient::CanvasGradient(float startAngle, const gfx::PointF& center)
     : gradient_(
           Gradient::CreateConic(center,
                                 startAngle,

@@ -72,7 +72,7 @@ const base::Feature kAllowSharedArrayBuffersUnconditionally{
 // to use CryptoToken via a Deprecation Trail with the same name.
 // TODO(1224886): Delete together with CryptoToken code.
 const base::Feature kU2FSecurityKeyAPI{"U2FSecurityKeyAPI",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Allows Manifest V3 (and greater) extensions to use web assembly. Note that
 // this allows extensions to use remotely hosted web assembly which we don't
@@ -82,4 +82,11 @@ const base::Feature kU2FSecurityKeyAPI{"U2FSecurityKeyAPI",
 // crbug.com/1173354.
 const base::Feature kAllowWasmInMV3{"AllowWasmInMV3",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, causes Manifest V3 (and greater) extensions to use structured
+// cloning (instead of JSON serialization) for extension messaging, except when
+// communicating with native messaging hosts.
+const base::Feature kStructuredCloningForMV3Messaging{
+    "StructuredCloningForMV3Messaging", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace extensions_features

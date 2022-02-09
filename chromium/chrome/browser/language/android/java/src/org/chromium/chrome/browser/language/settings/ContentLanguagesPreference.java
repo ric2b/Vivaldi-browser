@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.language.R;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.translate.TranslateBridge;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
@@ -65,8 +66,8 @@ public class ContentLanguagesPreference extends Preference {
                 ListItem item = buildMenuListItemWithEndIcon(
                         R.string.languages_item_option_offer_to_translate, 0, endIconResId,
                         info.isTranslateSupported());
-                item.model.set(
-                        ListMenuItemProperties.TINT_COLOR_ID, R.color.default_icon_color_blue);
+                item.model.set(ListMenuItemProperties.TINT_COLOR_ID,
+                        R.color.default_icon_color_accent1_tint_list);
 
                 // Add checked icon at the end.
                 menuItems.add(item);
@@ -153,10 +154,11 @@ public class ContentLanguagesPreference extends Preference {
         assert mLauncher != null;
 
         mAddLanguageButton = (TextView) holder.findViewById(R.id.add_language);
+        final TintedDrawable tintedDrawable =
+                TintedDrawable.constructTintedDrawable(getContext(), R.drawable.plus);
+        tintedDrawable.setTint(SemanticColorUtils.getDefaultControlColorActive(getContext()));
         mAddLanguageButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                TintedDrawable.constructTintedDrawable(
-                        getContext(), R.drawable.plus, R.color.default_control_color_active),
-                null, null, null);
+                tintedDrawable, null, null, null);
         mAddLanguageButton.setOnClickListener(view -> { mLauncher.launchAddLanguage(); });
 
         mRecyclerView = (RecyclerView) holder.findViewById(R.id.language_list);

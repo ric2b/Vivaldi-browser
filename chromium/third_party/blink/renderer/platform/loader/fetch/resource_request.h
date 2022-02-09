@@ -158,6 +158,15 @@ class PLATFORM_EXPORT ResourceRequestHead {
     requestor_origin_ = std::move(origin);
   }
 
+  // The chain of URLs seen during navigation redirects.  This should only
+  // contain values if the mode is `RedirectMode::kNavigate`.
+  const WTF::Vector<KURL>& NavigationRedirectChain() const {
+    return navigation_redirect_chain_;
+  }
+  void SetNavigationRedirectChain(const WTF::Vector<KURL>& value) {
+    navigation_redirect_chain_ = value;
+  }
+
   // The origin of the isolated world - set if this is a fetch/XHR initiated by
   // an isolated world.
   const scoped_refptr<const SecurityOrigin>& IsolatedWorldOrigin() const {
@@ -513,6 +522,14 @@ class PLATFORM_EXPORT ResourceRequestHead {
     return allowHTTP1ForStreamingUpload_;
   }
 
+  // The original destination of a request passed through by a service worker.
+  network::mojom::RequestDestination GetOriginalDestination() const {
+    return original_destination_;
+  }
+  void SetOriginalDestination(network::mojom::RequestDestination value) {
+    original_destination_ = value;
+  }
+
   const absl::optional<ResourceRequestHead::WebBundleTokenParams>&
   GetWebBundleTokenParams() const {
     return web_bundle_token_params_;
@@ -543,6 +560,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   scoped_refptr<const SecurityOrigin> top_frame_origin_;
 
   scoped_refptr<const SecurityOrigin> requestor_origin_;
+  WTF::Vector<KURL> navigation_redirect_chain_;
   scoped_refptr<const SecurityOrigin> isolated_world_origin_;
 
   AtomicString http_method_;
@@ -602,6 +620,9 @@ class PLATFORM_EXPORT ResourceRequestHead {
   ukm::SourceId ukm_source_id_ = ukm::kInvalidSourceId;
 
   base::UnguessableToken fetch_window_id_;
+
+  network::mojom::RequestDestination original_destination_ =
+      network::mojom::RequestDestination::kEmpty;
 
   uint64_t inspector_id_ = 0;
 

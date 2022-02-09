@@ -43,6 +43,8 @@ void SVGImagePainter::Paint(const PaintInfo& paint_info) {
   {
     ScopedSVGPaintState paint_state(layout_svg_image_, paint_info);
     SVGModelObjectPainter::RecordHitTestData(layout_svg_image_, paint_info);
+    SVGModelObjectPainter::RecordRegionCaptureData(layout_svg_image_,
+                                                   paint_info);
     if (!DrawingRecorder::UseCachedDrawingIfPossible(
             paint_info.context, layout_svg_image_, paint_info.phase)) {
       SVGDrawingRecorder recorder(paint_info.context, layout_svg_image_,
@@ -57,21 +59,21 @@ void SVGImagePainter::Paint(const PaintInfo& paint_info) {
 void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
   const LayoutImageResource& image_resource =
       *layout_svg_image_.ImageResource();
-  FloatSize image_viewport_size = ComputeImageViewportSize();
+  gfx::SizeF image_viewport_size = ComputeImageViewportSize();
   image_viewport_size.Scale(layout_svg_image_.StyleRef().EffectiveZoom());
   if (image_viewport_size.IsEmpty())
     return;
 
   scoped_refptr<Image> image = image_resource.GetImage(image_viewport_size);
-  FloatRect dest_rect = layout_svg_image_.ObjectBoundingBox();
+  gfx::RectF dest_rect = layout_svg_image_.ObjectBoundingBox();
   auto* image_element = To<SVGImageElement>(layout_svg_image_.GetElement());
   RespectImageOrientationEnum respect_orientation =
       image_resource.ImageOrientation();
 
-  FloatRect src_rect(FloatPoint(), image->SizeAsFloat(respect_orientation));
+  gfx::RectF src_rect(image->SizeAsFloat(respect_orientation));
   if (respect_orientation && !image->HasDefaultOrientation()) {
     // We need the oriented source rect for adjusting the aspect ratio
-    FloatSize unadjusted_size(src_rect.Size());
+    gfx::SizeF unadjusted_size = src_rect.size();
     image_element->preserveAspectRatio()->CurrentValue()->TransformRect(
         dest_rect, src_rect);
 
@@ -102,24 +104,24 @@ void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
     ImageElementTiming::From(*window).NotifyImagePainted(
         layout_svg_image_, *image_content,
         paint_info.context.GetPaintController().CurrentPaintChunkProperties(),
-        EnclosingIntRect(dest_rect));
+        gfx::ToEnclosingRect(dest_rect));
   }
   PaintTimingDetector::NotifyImagePaint(
       layout_svg_image_, image->Size(), *image_content,
       paint_info.context.GetPaintController().CurrentPaintChunkProperties(),
-      EnclosingIntRect(dest_rect));
+      gfx::ToEnclosingRect(dest_rect));
   PaintTiming& timing = PaintTiming::From(layout_svg_image_.GetDocument());
   timing.MarkFirstContentfulPaint();
 }
 
-FloatSize SVGImagePainter::ComputeImageViewportSize() const {
+gfx::SizeF SVGImagePainter::ComputeImageViewportSize() const {
   DCHECK(layout_svg_image_.ImageResource()->HasImage());
 
   if (To<SVGImageElement>(layout_svg_image_.GetElement())
           ->preserveAspectRatio()
           ->CurrentValue()
           ->Align() != SVGPreserveAspectRatio::kSvgPreserveaspectratioNone)
-    return layout_svg_image_.ObjectBoundingBox().Size();
+    return layout_svg_image_.ObjectBoundingBox().size();
 
   ImageResourceContent* cached_image =
       layout_svg_image_.ImageResource()->CachedImage();
@@ -132,11 +134,11 @@ FloatSize SVGImagePainter::ComputeImageViewportSize() const {
 
   // Avoid returning the size of the broken image.
   if (cached_image->ErrorOccurred())
-    return FloatSize();
+    return gfx::SizeF();
   Image* image = cached_image->GetImage();
   if (auto* svg_image = DynamicTo<SVGImage>(image)) {
     return svg_image->ConcreteObjectSize(
-        layout_svg_image_.ObjectBoundingBox().Size());
+        layout_svg_image_.ObjectBoundingBox().size());
   }
   // The orientation here does not matter. Just use kRespectImageOrientation.
   return image->SizeAsFloat(kRespectImageOrientation);

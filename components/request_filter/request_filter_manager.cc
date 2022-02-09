@@ -218,11 +218,10 @@ void RequestFilterManager::ProxyWebSocket(
 
 /*static*/
 void RequestFilterManager::ProxiedProxyWebTransport(
-    content::BrowserContext* context,
     int process_id,
-    int frame_id,
-    const url::Origin& frame_origin,
+    int frame_routing_id,
     const GURL& url,
+    const url::Origin& initiator_origin,
     content::ContentBrowserClient::WillCreateWebTransportCallback callback,
     mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
         handshake_client,
@@ -231,23 +230,30 @@ void RequestFilterManager::ProxiedProxyWebTransport(
     std::move(callback).Run(std::move(handshake_client), std::move(error));
     return;
   }
+  auto* render_process_host = content::RenderProcessHost::FromID(process_id);
+  if (!render_process_host) {
+    std::move(callback).Run(std::move(handshake_client), absl::nullopt);
+    return;
+  }
   auto* request_filter_manager =
-      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context);
-  request_filter_manager->ProxyWebTransport(process_id, frame_id, frame_origin,
-                                            url, std::move(callback),
-                                            std::move(handshake_client));
+      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(
+          render_process_host->GetBrowserContext());
+
+  request_filter_manager->ProxyWebTransport(
+      *render_process_host, frame_routing_id, url, initiator_origin,
+      std::move(callback), std::move(handshake_client));
 }
 
 void RequestFilterManager::ProxyWebTransport(
-    int process_id,
-    int frame_id,
-    const url::Origin& frame_origin,
+    content::RenderProcessHost& render_process_host,
+    int frame_routing_id,
     const GURL& url,
+    const url::Origin& initiator_origin,
     content::ContentBrowserClient::WillCreateWebTransportCallback callback,
     mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
         handshake_client) {
   StartWebRequestProxyingWebTransport(
-      browser_context_, process_id, frame_id, frame_origin, url,
+      render_process_host, frame_routing_id, url, initiator_origin,
       std::move(handshake_client),
       request_id_generator_.Generate(MSG_ROUTING_NONE, 0), &request_handler_,
       *proxies_.get(), std::move(callback));

@@ -27,7 +27,7 @@ enum wxHtmlOpeningStatus
 
 /**
    @class wxHtmlWindowInterface
-   
+
    Abstract interface to a HTML rendering window (such as wxHtmlWindow or
    wxHtmlListBox) that is passed to wxHtmlWinParser. It encapsulates all
    communication from the parser to the window.
@@ -110,22 +110,20 @@ public:
 /**
     @class wxHtmlWindow
 
-    wxHtmlWindow is probably the only class you will directly use unless you want
-    to do something special (like adding new tag handlers or MIME filters).
+    wxHtmlWindow is probably the only class you will directly use unless you
+    want to do something special (like adding new tag handlers or MIME filters).
 
-    The purpose of this class is to display rich content pages (either local file or
-    downloaded via HTTP protocol) in a window based on a subset of the HTML standard.
-    The width of the window is constant - given in the constructor - and virtual height
-    is changed dynamically depending on page size.
-    Once the window is created you can set its content by calling SetPage() with raw HTML,
-    LoadPage() with a wxFileSystem location or LoadFile() with a filename.
+    The purpose of this class is to display rich content pages (either local
+    file or downloaded via HTTP protocol) in a window based on a subset of the
+    HTML standard. The width of the window is constant, given in the constructor
+    and virtual height is changed dynamically depending on page size. Once the
+    window is created you can set its content by calling SetPage() with raw
+    HTML, LoadPage() with a wxFileSystem location or LoadFile() with a filename.
 
-    @note
-    If you want complete HTML/CSS support as well as a Javascript engine, see instead
-    wxWebView.
+    @note If you want complete HTML/CSS support as well as a Javascript engine,
+          consider using wxWebView instead.
 
-    @note
-    wxHtmlWindow uses the wxImage class for displaying images, as such you need to
+    wxHtmlWindow uses the wxImage class for displaying images, so you need to
     initialize the handlers for any image formats you use before loading a page.
     See ::wxInitAllImageHandlers and wxImage::AddHandler.
 
@@ -139,14 +137,13 @@ public:
            Don't allow the user to select text.
     @endStyleTable
 
-
     @beginEventEmissionTable{wxHtmlCellEvent, wxHtmlLinkEvent}
     @event{EVT_HTML_CELL_CLICKED(id, func)}
         A wxHtmlCell was clicked.
     @event{EVT_HTML_CELL_HOVER(id, func)}
         The mouse passed over a wxHtmlCell.
     @event{EVT_HTML_LINK_CLICKED(id, func)}
-        A wxHtmlCell which contains an hyperlink was clicked.
+        A wxHtmlCell which contains a hyperlink was clicked.
     @endEventTable
 
     @library{wxhtml}
@@ -164,6 +161,7 @@ public:
 
     /**
         Constructor.
+
         The parameters are the same as wxScrolled::wxScrolled() constructor.
     */
     wxHtmlWindow(wxWindow *parent, wxWindowID id = wxID_ANY,
@@ -173,11 +171,16 @@ public:
                  const wxString& name = "htmlWindow");
 
     /**
-        Adds @ref overview_html_filters "input filter" to the static list of available
-        filters. These filters are present by default:
-        - @c text/html MIME type
-        - @c image/* MIME types
-        - Plain Text filter (this filter is used if no other filter matches)
+        Adds an @ref overview_html_filters "input filter" to the static list of
+        available filters. These filters are present by default:
+
+        @code
+            text/html
+            text/plain
+            image/*
+        @endcode
+
+        The plain text filter will be used if no other filter matches.
     */
     static void AddFilter(wxHtmlFilter* filter);
 
@@ -217,6 +220,11 @@ public:
         contain \<TITLE\> tag.
     */
     wxString GetOpenedPageTitle() const;
+
+    /**
+       Returns a pointer to the current parser.
+    */
+    wxHtmlWinParser *GetParser() const;
 
     /**
         Returns the related frame.
@@ -390,7 +398,7 @@ public:
                   const int* sizes = NULL);
 
     /**
-        Sets default font sizes and/or default font size. 
+        Sets default font sizes and/or default font size.
         See wxHtmlDCRenderer::SetStandardFonts for detailed description.
         @see SetFonts()
     */
@@ -465,13 +473,38 @@ public:
     */
     virtual void WriteCustomization(wxConfigBase* cfg,
                                     wxString path = wxEmptyString);
-    
+
+    /**
+        Retrieves the default cursor for a given HTMLCursor type.
+
+        @param type
+            HTMLCursor type to retrieve.
+
+        @since 3.1.0
+    */
+    static wxCursor GetDefaultHTMLCursor(HTMLCursor type);
+
+    /**
+        Sets the default cursor for a given HTMLCursor type.
+
+        These cursors are used for all wxHtmlWindow objects by default, but can
+        be overridden on a per-window basis.
+
+        @param type
+            HTMLCursor type to retrieve.
+        @param cursor
+            The default cursor for the specified cursor type.
+
+        @since 3.1.0
+    */
+    static void SetDefaultHTMLCursor(HTMLCursor type, const wxCursor& cursor);
+
 protected:
 
     /**
         This method is called when a mouse button is clicked inside wxHtmlWindow.
         The default behaviour is to emit a wxHtmlCellEvent and, if the event was
-        not processed or skipped, call OnLinkClicked() if the cell contains an
+        not processed or skipped, call OnLinkClicked() if the cell contains a
         hypertext link.
 
         Overloading this method is deprecated; intercept the event instead.
@@ -522,7 +555,7 @@ wxEventType wxEVT_HTML_LINK_CLICKED;
 
     @beginEventTable{wxHtmlLinkEvent}
     @event{EVT_HTML_LINK_CLICKED(id, func)}
-        User clicked on an hyperlink.
+        User clicked on a hyperlink.
     @endEventTable
 
     @library{wxhtml}
@@ -589,6 +622,11 @@ public:
     wxPoint GetPoint() const;
 
     /**
+        Returns the wxMouseEvent associated with the event.
+    */
+    wxMouseEvent GetMouseEvent() const;
+
+    /**
         Call this function with @a linkclicked set to @true if the cell which has
         been clicked contained a link or @false otherwise (which is the default).
 
@@ -597,4 +635,3 @@ public:
     */
     void SetLinkClicked(bool linkclicked);
 };
-

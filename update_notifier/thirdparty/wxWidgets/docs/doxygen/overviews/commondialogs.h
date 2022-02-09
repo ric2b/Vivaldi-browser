@@ -48,11 +48,11 @@ controls to select a precise colour, and add it to the custom colour palette.
 
 Under non-MS Windows platforms, the colour selector is a simulation of most of
 the features of the MS Windows selector. Two palettes of 48 standard and 16
-custom colours are presented, with the right-hand area containing three sliders
-for the user to select a colour from red, green and blue components. This
+custom colours are presented, with the right-hand area containing three or four sliders
+for the user to select a colour from red, green, blue and opacity (optionally) components. This
 colour may be added to the custom colour palette, and will replace either the
 currently selected custom colour, or the first one in the palette if none is
-selected. The RGB colour sliders are not optional in the generic colour
+selected. The RGB or ARGB colour sliders are not optional in the generic colour
 selector. The generic colour selector is also available under MS Windows; use
 the name wxGenericColourDialog.
 
@@ -78,7 +78,7 @@ if (dialog.ShowModal() == wxID_OK)
 {
     wxColourData retData = dialog.GetColourData();
     wxColour col = retData.GetColour();
-    wxBrush brush(col, wxSOLID);
+    wxBrush brush(col, wxBRUSHSTYLE_SOLID);
     myWindow->SetBackground(brush);
     myWindow->Clear();
     myWindow->Refresh();
@@ -202,6 +202,25 @@ Classes: wxPasswordEntryDialog
 
 This is a dialog with a password entry field. The value that the user entered
 is obtained using wxTextEntryDialog::GetValue().
+
+
+
+@section overview_cmndlg_numeric wxNumberEntryDialog Overview
+
+Classes: wxNumberEntryDialog
+
+This is a dialog with a numeric entry field. The value that the user entered
+is obtained using wxNumberEntryDialog::GetValue().
+
+
+
+@section overview_cmndlg_cred wxCredentialEntryDialog Overview
+
+Classes: wxCredentialEntryDialog
+
+This is a dialog with user and password entry fields. The values that the
+user entered are obtained using wxCredentialEntryDialog::GetUser() and
+wxCredentialEntryDialog::GetPassword().
 
 
 

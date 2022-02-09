@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/app_history/app_history_destination.h"
 #include "third_party/blink/renderer/core/app_history/app_history_entry.h"
 #include "third_party/blink/renderer/core/app_history/app_history_navigate_event.h"
+#include "third_party/blink/renderer/core/app_history/app_history_transition.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/events/error_event.h"
@@ -40,7 +41,7 @@
 
 namespace blink {
 
-class NavigateReaction final : public ScriptFunction {
+class NavigateReaction final : public NewScriptFunction::Callable {
  public:
   enum class ResolveType { kFulfill, kReject };
   static void React(ScriptState* script_state,
@@ -48,52 +49,40 @@ class NavigateReaction final : public ScriptFunction {
                     AppHistoryApiNavigation* navigation,
                     AppHistoryTransition* transition,
                     AbortSignal* signal) {
-    promise.Then(CreateFunction(script_state, navigation, transition, signal,
-                                ResolveType::kFulfill),
-                 CreateFunction(script_state, navigation, transition, signal,
-                                ResolveType::kReject));
+    promise.Then(MakeGarbageCollected<NewScriptFunction>(
+                     script_state, MakeGarbageCollected<NavigateReaction>(
+                                       navigation, transition, signal,
+                                       ResolveType::kFulfill)),
+                 MakeGarbageCollected<NewScriptFunction>(
+                     script_state, MakeGarbageCollected<NavigateReaction>(
+                                       navigation, transition, signal,
+                                       ResolveType::kReject)));
   }
 
-  NavigateReaction(ScriptState* script_state,
-                   AppHistoryApiNavigation* navigation,
+  NavigateReaction(AppHistoryApiNavigation* navigation,
                    AppHistoryTransition* transition,
                    AbortSignal* signal,
                    ResolveType type)
-      : ScriptFunction(script_state),
-        window_(LocalDOMWindow::From(script_state)),
-        navigation_(navigation),
+      : navigation_(navigation),
         transition_(transition),
         signal_(signal),
         type_(type) {}
 
   void Trace(Visitor* visitor) const final {
-    ScriptFunction::Trace(visitor);
-    visitor->Trace(window_);
+    NewScriptFunction::Callable::Trace(visitor);
     visitor->Trace(navigation_);
     visitor->Trace(transition_);
     visitor->Trace(signal_);
   }
 
- private:
-  static v8::Local<v8::Function> CreateFunction(
-      ScriptState* script_state,
-      AppHistoryApiNavigation* navigation,
-      AppHistoryTransition* transition,
-      AbortSignal* signal,
-      ResolveType type) {
-    return MakeGarbageCollected<NavigateReaction>(script_state, navigation,
-                                                  transition, signal, type)
-        ->BindToV8Function();
-  }
-
-  ScriptValue Call(ScriptValue value) final {
-    DCHECK(window_);
+  ScriptValue Call(ScriptState* script_state, ScriptValue value) final {
+    auto* window = LocalDOMWindow::From(script_state);
+    DCHECK(window);
     if (signal_->aborted()) {
-      window_ = nullptr;
       return ScriptValue();
     }
 
-    AppHistory* app_history = AppHistory::appHistory(*window_);
+    AppHistory* app_history = AppHistory::appHistory(*window);
     app_history->ongoing_navigation_signal_ = nullptr;
     if (type_ == ResolveType::kFulfill) {
       if (navigation_) {
@@ -109,11 +98,10 @@ class NavigateReaction final : public ScriptFunction {
       app_history->transition_ = nullptr;
     }
 
-    window_ = nullptr;
     return ScriptValue();
   }
 
-  Member<LocalDOMWindow> window_;
+ private:
   Member<AppHistoryApiNavigation> navigation_;
   Member<AppHistoryTransition> transition_;
   Member<AbortSignal> signal_;
@@ -173,8 +161,11 @@ String DetermineNavigationType(WebFrameLoadType type) {
 const char AppHistory::kSupplementName[] = "AppHistory";
 
 AppHistory* AppHistory::appHistory(LocalDOMWindow& window) {
-  if (!RuntimeEnabledFeatures::AppHistoryEnabled(&window))
-    return nullptr;
+  return RuntimeEnabledFeatures::AppHistoryEnabled(&window) ? From(window)
+                                                            : nullptr;
+}
+
+AppHistory* AppHistory::From(LocalDOMWindow& window) {
   auto* app_history = Supplement<LocalDOMWindow>::From<AppHistory>(window);
   if (!app_history) {
     app_history = MakeGarbageCollected<AppHistory>(window);
@@ -197,11 +188,37 @@ void AppHistory::PopulateKeySet() {
     keys_to_indices_.insert(entries_[i]->key(), i);
 }
 
-void AppHistory::InitializeForNavigation(
+void AppHistory::InitializeForNewWindow(
     HistoryItem& current,
+    WebFrameLoadType load_type,
+    CommitReason commit_reason,
+    AppHistory* previous,
     const WebVector<WebHistoryItem>& back_entries,
     const WebVector<WebHistoryItem>& forward_entries) {
   DCHECK(entries_.IsEmpty());
+
+  // This can happen even when commit_reason is not kInitialization, e.g. when
+  // navigating from about:blank#1 to about:blank#2 where both are initial
+  // about:blanks.
+  if (HasEntriesAndEventsDisabled())
+    return;
+
+  // Under most circumstances, the browser process provides the information
+  // need to initialize appHistory's entries array from
+  // |app_history_back_entries_| and |app_history_forward_entries_|.
+  // However, these are not available when the renderer handles the
+  // navigation entirely, so in those cases (javascript: urls, XSLT commits,
+  // and non-back/forward about:blank), copy the array from the previous
+  // window and use the same update algorithm as same-document navigations.
+  if (commit_reason != CommitReason::kRegular ||
+      (current.Url() == BlankURL() && !IsBackForwardLoadType(load_type)) ||
+      (current.Url().IsAboutSrcdocURL() && !IsBackForwardLoadType(load_type))) {
+    if (previous && !previous->entries_.IsEmpty()) {
+      CloneFromPrevious(*previous);
+      UpdateForNavigation(current, load_type);
+      return;
+    }
+  }
 
   // Construct |entries_|. Any back entries are inserted, then the current
   // entry, then any forward entries.
@@ -246,9 +263,9 @@ void AppHistory::CloneFromPrevious(AppHistory& previous) {
 }
 
 void AppHistory::UpdateForNavigation(HistoryItem& item, WebFrameLoadType type) {
-  // A same-document navigation (e.g., a document.open()) in a newly created
-  // iframe will try to operate on an empty |entries_|. appHistory considers
-  // this a no-op.
+  // A same-document navigation (e.g., a document.open()) in a
+  // |HasEntriesAndEventsDisabled()| situation will try to operate on an empty
+  // |entries_|. appHistory considers this a no-op.
   if (entries_.IsEmpty())
     return;
 
@@ -306,16 +323,15 @@ void AppHistory::UpdateForNavigation(HistoryItem& item, WebFrameLoadType type) {
 AppHistoryEntry* AppHistory::current() const {
   // current_index_ is initialized to -1 and set >= 0 when entries_ is
   // populated. It will still be negative if the appHistory of an initial empty
-  // document is accessed.
-  return current_index_ >= 0 && GetSupplementable()->GetFrame()
+  // document or opaque-origin document is accessed.
+  return !HasEntriesAndEventsDisabled() && current_index_ >= 0
              ? entries_[current_index_]
              : nullptr;
 }
 
 HeapVector<Member<AppHistoryEntry>> AppHistory::entries() {
-  return GetSupplementable()->GetFrame()
-             ? entries_
-             : HeapVector<Member<AppHistoryEntry>>();
+  return HasEntriesAndEventsDisabled() ? HeapVector<Member<AppHistoryEntry>>()
+                                       : entries_;
 }
 
 void AppHistory::updateCurrent(AppHistoryUpdateCurrentOptions* options,
@@ -325,8 +341,7 @@ void AppHistory::updateCurrent(AppHistoryUpdateCurrentOptions* options,
   if (!current_entry) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
-        "updateCurrent() cannot be called when on the initial about:blank "
-        "Document, or when the Window is detached.");
+        "updateCurrent() cannot be called when appHistory.current is null.");
     return;
   }
 
@@ -469,24 +484,6 @@ AppHistoryResult* AppHistory::goTo(ScriptState* script_state,
       MakeGarbageCollected<AppHistoryApiNavigation>(script_state, this, options,
                                                     key);
   upcoming_traversals_.insert(key, ongoing_navigation);
-
-  AppHistoryEntry* destination = entries_[keys_to_indices_.at(key)];
-
-  // TODO(japhet): We will fire the navigate event for same-document navigations
-  // at commit time, but not cross-document. This should probably move to a more
-  // central location if we want to fire the navigate event for cross-document
-  // back-forward navigations in general.
-  if (!destination->sameDocument()) {
-    if (DispatchNavigateEvent(
-            destination->url(), nullptr, NavigateEventType::kCrossDocument,
-            WebFrameLoadType::kBackForward, UserNavigationInvolvement::kNone,
-            nullptr,
-            destination->GetItem()) != AppHistory::DispatchResult::kContinue) {
-      return EarlyErrorResult(script_state, DOMExceptionCode::kAbortError,
-                              "Navigation was aborted");
-    }
-  }
-
   GetSupplementable()
       ->GetFrame()
       ->GetLocalFrameHostRemote()
@@ -496,11 +493,11 @@ AppHistoryResult* AppHistory::goTo(ScriptState* script_state,
 }
 
 bool AppHistory::canGoBack() const {
-  return GetSupplementable()->GetFrame() && current_index_ > 0;
+  return !HasEntriesAndEventsDisabled() && current_index_ > 0;
 }
 
 bool AppHistory::canGoForward() const {
-  return GetSupplementable()->GetFrame() && current_index_ != -1 &&
+  return !HasEntriesAndEventsDisabled() && current_index_ != -1 &&
          static_cast<size_t>(current_index_) < entries_.size() - 1;
 }
 
@@ -563,6 +560,16 @@ void AppHistory::PromoteUpcomingNavigationToOngoing(const String& key) {
   }
 }
 
+bool AppHistory::HasEntriesAndEventsDisabled() const {
+  auto* frame = GetSupplementable()->GetFrame();
+  return !frame ||
+         !GetSupplementable()
+              ->GetFrame()
+              ->Loader()
+              .HasLoadedNonInitialEmptyDocument() ||
+         GetSupplementable()->GetSecurityOrigin()->IsOpaque();
+}
+
 AppHistory::DispatchResult AppHistory::DispatchNavigateEvent(
     const KURL& url,
     HTMLFormElement* form,
@@ -583,7 +590,7 @@ AppHistory::DispatchResult AppHistory::DispatchNavigateEvent(
       destination_item ? destination_item->GetAppHistoryKey() : String();
   PromoteUpcomingNavigationToOngoing(key);
 
-  if (!GetSupplementable()->GetFrame()->Loader().HasLoadedNonEmptyDocument()) {
+  if (HasEntriesAndEventsDisabled()) {
     if (ongoing_navigation_) {
       CleanupApiNavigation(*ongoing_navigation_);
     }
@@ -593,6 +600,16 @@ AppHistory::DispatchResult AppHistory::DispatchNavigateEvent(
   auto* script_state =
       ToScriptStateForMainWorld(GetSupplementable()->GetFrame());
   ScriptState::Scope scope(script_state);
+
+  if (type == WebFrameLoadType::kBackForward &&
+      event_type == NavigateEventType::kFragment &&
+      !keys_to_indices_.Contains(key)) {
+    // This same document history traversal was preempted by another navigation
+    // that removed this entry from the back/forward list. Proceeding will leave
+    // entries_ out of sync with the browser process.
+    FinalizeWithAbortedNavigationError(script_state, ongoing_navigation_);
+    return DispatchResult::kAbort;
+  }
 
   auto* init = AppHistoryNavigateEventInit::Create();
   const String& navigation_type = DetermineNavigationType(type);
@@ -615,8 +632,7 @@ AppHistory::DispatchResult AppHistory::DispatchNavigateEvent(
   }
   init->setDestination(destination);
 
-  init->setCancelable(involvement != UserNavigationInvolvement::kBrowserUI ||
-                      type != WebFrameLoadType::kBackForward);
+  init->setCancelable(type != WebFrameLoadType::kBackForward);
   init->setCanTransition(
       CanChangeToUrlForHistoryApi(url, GetSupplementable()->GetSecurityOrigin(),
                                   current_url) &&
@@ -747,7 +763,7 @@ void AppHistory::FinalizeWithAbortedNavigationError(
     ongoing_navigate_event_ = nullptr;
   }
   if (ongoing_navigation_signal_) {
-    ongoing_navigation_signal_->SignalAbort();
+    ongoing_navigation_signal_->SignalAbort(script_state);
     ongoing_navigation_signal_ = nullptr;
   }
 

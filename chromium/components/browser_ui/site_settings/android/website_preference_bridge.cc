@@ -18,7 +18,6 @@
 #include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
 #include "components/browser_ui/site_settings/android/site_settings_jni_headers/WebsitePreferenceBridge_jni.h"
@@ -398,8 +397,8 @@ static void JNI_WebsitePreferenceBridge_ReportNotificationRevokedForOrigin(
 
   permissions::PermissionUmaUtil::PermissionRevoked(
       ContentSettingsType::NOTIFICATIONS,
-      permissions::PermissionSourceUI::ANDROID_SETTINGS, url.GetOrigin(),
-      unwrap(jbrowser_context_handle));
+      permissions::PermissionSourceUI::ANDROID_SETTINGS,
+      url.DeprecatedGetOriginAsURL(), unwrap(jbrowser_context_handle));
 }
 
 static jint JNI_WebsitePreferenceBridge_GetPermissionSettingForOrigin(

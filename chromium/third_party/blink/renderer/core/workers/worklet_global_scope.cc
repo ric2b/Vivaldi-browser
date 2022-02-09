@@ -10,7 +10,6 @@
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
@@ -137,8 +136,9 @@ WorkletGlobalScope::WorkletGlobalScope(
   DCHECK_EQ(creation_params->ukm_source_id, ukm::kInvalidSourceId);
 
   if (creation_params->code_cache_host_interface.is_valid()) {
-    code_cache_host_.Bind(std::move(creation_params->code_cache_host_interface),
-                          GetTaskRunner(TaskType::kInternalDefault));
+    code_cache_host_ =
+        std::make_unique<CodeCacheHost>(mojo::Remote<mojom::CodeCacheHost>(
+            std::move(creation_params->code_cache_host_interface)));
   }
 }
 
@@ -229,7 +229,7 @@ const base::UnguessableToken& WorkletGlobalScope::GetDevToolsToken() const {
   return GetThread()->GetDevToolsWorkerToken();
 }
 
-blink::mojom::CodeCacheHost* WorkletGlobalScope::GetCodeCacheHost() {
+CodeCacheHost* WorkletGlobalScope::GetCodeCacheHost() {
   if (IsMainThreadWorkletGlobalScope())
     return frame_->Loader().GetDocumentLoader()->GetCodeCacheHost();
   if (!code_cache_host_)

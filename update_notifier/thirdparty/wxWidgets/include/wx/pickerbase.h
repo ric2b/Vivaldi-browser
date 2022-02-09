@@ -50,7 +50,7 @@ public:
                     const wxSize& size = wxDefaultSize,
                     long style = 0,
                     const wxValidator& validator = wxDefaultValidator,
-                    const wxString& name = wxButtonNameStr);
+                    const wxString& name = wxASCII_STR(wxButtonNameStr));
 
 public:     // public API
 
@@ -76,26 +76,14 @@ public:     // public API
         { return (GetTextCtrlItem()->GetFlag() & wxGROW) != 0; }
     void SetTextCtrlGrowable(bool grow = true)
     {
-        int f = GetDefaultTextCtrlFlag();
-        if ( grow )
-            f |= wxGROW;
-        else
-            f &= ~wxGROW;
-
-        GetTextCtrlItem()->SetFlag(f);
+        DoSetGrowableFlagFor(GetTextCtrlItem(), grow);
     }
 
     bool IsPickerCtrlGrowable() const
         { return (GetPickerCtrlItem()->GetFlag() & wxGROW) != 0; }
     void SetPickerCtrlGrowable(bool grow = true)
     {
-        int f = GetDefaultPickerCtrlFlag();
-        if ( grow )
-            f |= wxGROW;
-        else
-            f &= ~wxGROW;
-
-        GetPickerCtrlItem()->SetFlag(f);
+        DoSetGrowableFlagFor(GetPickerCtrlItem(), grow);
     }
 
     bool HasTextCtrl() const
@@ -117,7 +105,7 @@ public:     // public API
 protected:
     // overridden base class methods
 #if wxUSE_TOOLTIPS
-    virtual void DoSetToolTip(wxToolTip *tip);
+    virtual void DoSetToolTip(wxToolTip *tip) wxOVERRIDE;
 #endif // wxUSE_TOOLTIPS
 
 
@@ -149,28 +137,19 @@ protected:
         return m_sizer->GetItem((size_t)0);
     }
 
+#if WXWIN_COMPATIBILITY_3_0
+    wxDEPRECATED_MSG("useless and will be removed in the future")
     int GetDefaultPickerCtrlFlag() const
     {
-        // on macintosh, without additional borders
-        // there's not enough space for focus rect
-        return wxALIGN_CENTER_VERTICAL|wxGROW
-#ifdef __WXMAC__
-            | wxTOP | wxRIGHT | wxBOTTOM
-#endif
-            ;
+        return wxALIGN_CENTER_VERTICAL;
     }
 
+    wxDEPRECATED_MSG("useless and will be removed in the future")
     int GetDefaultTextCtrlFlag() const
     {
-        // on macintosh, without wxALL there's not enough space for focus rect
-        return wxALIGN_CENTER_VERTICAL
-#ifdef __WXMAC__
-            | wxALL
-#else
-            | wxRIGHT
-#endif
-            ;
+        return wxALIGN_CENTER_VERTICAL | wxRIGHT;
     }
+#endif // WXWIN_COMPATIBILITY_3_0
 
     void PostCreation();
 
@@ -180,7 +159,10 @@ protected:
     wxBoxSizer *m_sizer;
 
 private:
-    DECLARE_ABSTRACT_CLASS(wxPickerBase)
+    // Common implementation of Set{Text,Picker}CtrlGrowable().
+    void DoSetGrowableFlagFor(wxSizerItem* item, bool grow);
+
+    wxDECLARE_ABSTRACT_CLASS(wxPickerBase);
 };
 
 

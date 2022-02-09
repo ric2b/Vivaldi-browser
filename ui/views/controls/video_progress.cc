@@ -123,8 +123,7 @@ void VideoProgress::UpdateProgress(
 
   // Time formatting can't yet represent durations greater than 24 hours in
   // base::DURATION_WIDTH_NUMERIC format.
-  base::DurationFormatWidth time_format =
-      duration_delta_ >= base::TimeDelta::FromDays(1)
+  base::DurationFormatWidth time_format = duration_delta_ >= base::Days(1)
           ? base::DURATION_WIDTH_NARROW
           : base::DURATION_WIDTH_NUMERIC;
 
@@ -139,7 +138,7 @@ void VideoProgress::UpdateProgress(
   if (elapsed_time_received && total_time_received) {
     // If |duration| is less than an hour, we don't want to show  "0:" hours on
     // the progress times.
-    if (duration_delta_ < base::TimeDelta::FromHours(1)) {
+    if (duration_delta_ < base::Hours(1)) {
       elapsed_time = StripHour(elapsed_time);
       total_time = StripHour(total_time);
     }
@@ -147,7 +146,7 @@ void VideoProgress::UpdateProgress(
 
     // A duration higher than a day is likely a fake number given to
     // undetermined durations on eg. twitch.tv, so ignore it.
-    if (duration_delta_ < base::TimeDelta::FromDays(1)) {
+    if (duration_delta_ < base::Days(1)) {
       SetProgressTime(elapsed_time);
       SetDuration(total_time);
     } else {
@@ -156,7 +155,8 @@ void VideoProgress::UpdateProgress(
   }
 
   if (media_position.playback_rate() != 0) {
-    base::TimeDelta update_frequency = base::TimeDelta::FromSecondsD(
+    base::TimeDelta update_frequency =
+        base::Seconds(
         std::abs(1 / media_position.playback_rate()));
     update_progress_timer_.Start(
         FROM_HERE, update_frequency,
@@ -201,8 +201,7 @@ views::View* VideoProgress::GetTooltipHandlerForPoint(const gfx::Point& point) {
 std::u16string VideoProgress::GetTooltipText(const gfx::Point& p) const {
   std::u16string time;
   if (allows_click_ && progress_bar_->bounds().Contains(p)) {
-    base::DurationFormatWidth time_format =
-        duration_delta_ >= base::TimeDelta::FromDays(1)
+    base::DurationFormatWidth time_format = duration_delta_ >= base::Days(1)
             ? base::DURATION_WIDTH_NARROW
             : base::DURATION_WIDTH_NUMERIC;
 
@@ -214,9 +213,9 @@ std::u16string VideoProgress::GetTooltipText(const gfx::Point& p) const {
         static_cast<double>(location_in_bar.x()) / progress_bar_->width();
 
     base::TimeDelta delta =
-        base::TimeDelta::FromSecondsD(duration_delta_.InSecondsF() * progress);
+        base::Seconds(duration_delta_.InSecondsF() * progress);
     bool has_time = GetStringFromPosition(time_format, delta, time);
-    if (has_time && duration_delta_ < base::TimeDelta::FromHours(1)) {
+    if (has_time && duration_delta_ < base::Hours(1)) {
       time = StripHour(time);
     }
   }

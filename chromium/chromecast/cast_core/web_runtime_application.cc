@@ -4,9 +4,10 @@
 
 #include "chromecast/cast_core/web_runtime_application.h"
 
+#include "chromecast/browser/cast_web_service.h"
 #include "chromecast/cast_core/bindings_manager_web_runtime.h"
 #include "chromecast/cast_core/grpc_webui_controller_factory.h"
-#include "chromecast/cast_core/url_rewrite_rules_adapter.h"
+#include "chromecast/common/feature_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -24,66 +25,24 @@ WebRuntimeApplication::~WebRuntimeApplication() {
   StopApplication();
 }
 
-bool WebRuntimeApplication::Load(
-    const cast::runtime::LoadApplicationRequest& request) {
-  if (!RuntimeApplicationBase::Load(request)) {
-    return false;
-  }
-
-  url_rewrite_adapter_ =
-      std::make_unique<UrlRewriteRulesAdapter>(request.url_rewrite_rules());
-  app_url_ = request.application_config().cast_web_app_config().url();
-
-  return true;
-}
-
-void WebRuntimeApplication::SetUrlRewriteRules(
-    const cast::v2::SetUrlRewriteRulesRequest& request,
-    cast::v2::SetUrlRewriteRulesResponse* response,
-    GrpcMethod* callback) {
-  if (cast_session_id().empty()) {
-    callback->StepGRPC(
-        grpc::Status(grpc::StatusCode::NOT_FOUND,
-                     "No active cast session for SetUrlRewriteRules"));
-    return;
-  }
-  if (request.has_rules()) {
-    url_rewrite_adapter_->UpdateRules(request.rules());
-  }
-
-  RuntimeApplicationBase::SetUrlRewriteRules(request, response, callback);
-}
-
 void WebRuntimeApplication::HandleMessage(
     const cast::web::Message& message,
     cast::web::MessagePortStatus* response) {
   bindings_manager_->HandleMessage(message, response);
 }
 
-void WebRuntimeApplication::RenderFrameCreated(
-    int render_process_id,
-    int render_frame_id,
-    mojo::PendingAssociatedRemote<
-        chromecast::mojom::IdentificationSettingsManager> settings_manager) {
-  mojo::AssociatedRemote<mojom::IdentificationSettingsManager>
-      remote_settings_manager(std::move(settings_manager));
-  url_rewrite_adapter_->AddRenderFrame(std::move(remote_settings_manager));
-}
+void WebRuntimeApplication::InitializeApplication(
+    CoreApplicationServiceGrpc* grpc_stub,
+    CastWebContents* cast_web_contents) {
+  DCHECK(app_url().is_empty());
+  set_app_url(GURL(app_config().cast_web_app_config().url()));
 
-CastWebView::Scoped WebRuntimeApplication::CreateWebView(
-    CoreApplicationServiceGrpc* grpc_stub) {
   // Register GrpcWebUI for handling Cast apps with URLs in the form
   // chrome*://* that use WebUIs.
   const std::vector<std::string> hosts = {"home", "error", "cast_resources"};
   content::WebUIControllerFactory::RegisterFactory(
       new GrpcWebUiControllerFactory(std::move(hosts), *grpc_stub));
 
-  return RuntimeApplicationBase::CreateWebView(grpc_stub);
-}
-
-GURL WebRuntimeApplication::ProcessWebView(
-    CoreApplicationServiceGrpc* grpc_stub,
-    CastWebContents* cast_web_contents) {
   cast::bindings::GetAllResponse bindings_response;
   {
     grpc::ClientContext context;
@@ -92,8 +51,7 @@ GURL WebRuntimeApplication::ProcessWebView(
         grpc_stub->GetAll(&context, bindings_request, &bindings_response);
   }
 
-  // Call to CastWebContents::Observer::Observe().
-  Observe(cast_web_contents);
+  CastWebContents::Observer::Observe(cast_web_contents);
 
   bindings_manager_ =
       std::make_unique<BindingsManagerWebRuntime>(grpc_cq_, grpc_stub);
@@ -105,8 +63,38 @@ GURL WebRuntimeApplication::ProcessWebView(
       bindings_manager_->CreateRemote());
 
   SetApplicationStarted();
+}
 
-  return GURL(app_url_);
+void WebRuntimeApplication::InnerContentsCreated(
+    CastWebContents* inner_contents,
+    CastWebContents* outer_contents) {
+  DCHECK(inner_contents);
+
+  LOG(INFO) << "Inner web contents created";
+
+#if DCHECK_IS_ON()
+  base::Value features(base::Value::Type::DICTIONARY);
+  base::Value dev_mode_config(base::Value::Type::DICTIONARY);
+  dev_mode_config.SetKey(feature::kDevModeOrigin,
+                         base::Value(app_url().spec()));
+  features.SetKey(feature::kEnableDevMode, std::move(dev_mode_config));
+  inner_contents->AddRendererFeatures(std::move(features));
+#endif
+
+  const std::vector<int32_t> feature_permissions;
+  const std::vector<std::string> additional_feature_permission_origins;
+
+  // Bind inner CastWebContents with the same session id and app id as the
+  // root CastWebContents so that the same url rewrites are applied.
+  inner_contents->SetAppProperties(
+      app_config().app_id(), cast_session_id(), false /*is_audio_app*/,
+      app_url(), false /*enforce_feature_permissions*/, feature_permissions,
+      additional_feature_permission_origins);
+
+  CastWebContents::Observer::Observe(inner_contents);
+
+  // Attach URL request rewrire rules to the inner CastWebContents.
+  GetUrlRewriteRulesManager()->AddWebContents(inner_contents->web_contents());
 }
 
 }  // namespace chromecast

@@ -27,7 +27,7 @@ class DefaultDelegateImpl : public CrostiniThrottle::Delegate {
   ~DefaultDelegateImpl() override = default;
 
   void SetCpuRestriction(bool do_restrict) override {
-    chromeos::ConciergeHelperService::GetForBrowserContext(context_)
+    ash::ConciergeHelperService::GetForBrowserContext(context_)
         ->SetTerminaVmCpuRestriction(do_restrict);
   }
 
@@ -92,15 +92,15 @@ void CrostiniThrottle::Shutdown() {
 }
 
 void CrostiniThrottle::ThrottleInstance(
-    chromeos::ThrottleObserver::PriorityLevel level) {
+    ash::ThrottleObserver::PriorityLevel level) {
   switch (level) {
-    case chromeos::ThrottleObserver::PriorityLevel::CRITICAL:
-    case chromeos::ThrottleObserver::PriorityLevel::IMPORTANT:
-    case chromeos::ThrottleObserver::PriorityLevel::NORMAL:
+    case ash::ThrottleObserver::PriorityLevel::CRITICAL:
+    case ash::ThrottleObserver::PriorityLevel::IMPORTANT:
+    case ash::ThrottleObserver::PriorityLevel::NORMAL:
       delegate_->SetCpuRestriction(false);
       break;
-    case chromeos::ThrottleObserver::PriorityLevel::LOW:
-    case chromeos::ThrottleObserver::PriorityLevel::UNKNOWN:
+    case ash::ThrottleObserver::PriorityLevel::LOW:
+    case ash::ThrottleObserver::PriorityLevel::UNKNOWN:
       delegate_->SetCpuRestriction(true);
       break;
   }

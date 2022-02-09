@@ -70,12 +70,11 @@ VivaldiTranslateClient::VivaldiTranslateClient(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
   translate_driver_ = std::make_unique<translate::ContentTranslateDriver>(
-      *web_contents, &web_contents->GetController(),
+      *web_contents,
       UrlLanguageHistogramFactory::GetForBrowserContext(
           web_contents->GetBrowserContext()),
-      TranslateModelServiceFactory::GetOrBuildForKey(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext())
-              ->GetProfileKey()));
+      TranslateModelServiceFactory::GetForProfile(
+          Profile::FromBrowserContext(web_contents->GetBrowserContext())));
   translate_manager_ = std::make_unique<translate::TranslateManager>(
       this,
       translate::TranslateRankerFactory::GetForBrowserContext(

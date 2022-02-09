@@ -13,16 +13,6 @@
 namespace policy {
 namespace features {
 
-// Feature that controls whether the browser registers for FCM invalidations for
-// Machine Level Policies. If enabled, |kCBCMServiceAccounts| must also be
-// enabled.
-POLICY_EXPORT extern const base::Feature kCBCMPolicyInvalidations;
-
-// Feature that controls if remote commands are enabled in CBCM. If enabled,
-// the browser will register for remote commands FCM invalidations, and fetch
-// remote commands when fetching policies.
-POLICY_EXPORT extern const base::Feature kCBCMRemoteCommands;
-
 // Enable chrome://management page on Android.
 POLICY_EXPORT extern const base::Feature kChromeManagementPageAndroid;
 
@@ -37,9 +27,6 @@ POLICY_EXPORT extern const base::FeatureParam<base::TimeDelta>
 // Update browser device identifier during enrollment and fetching policies.
 POLICY_EXPORT extern const base::Feature kUploadBrowserDeviceIdentifier;
 
-// Enable Chrome Remote Desktop for Managed Guest Sessions and affiliated users.
-POLICY_EXPORT extern const base::Feature kCrdForManagedUserSessions;
-
 // Enable reporting Login events to the reporting connector when the Password
 // Manager detects that the user logged in to a web page.
 POLICY_EXPORT extern const base::Feature kLoginEventReporting;
@@ -47,6 +34,11 @@ POLICY_EXPORT extern const base::Feature kLoginEventReporting;
 // Enable reporting password leaks to the reporting connector when the Password
 // Manager's Leak Detector has found some compromised credentials.
 POLICY_EXPORT extern const base::Feature kPasswordBreachEventReporting;
+
+// Enable the UserCloudSigninRestrictionPolicyFetcher to get the
+// ManagedAccountsSigninRestriction policy for a dasher account.
+POLICY_EXPORT extern const base::Feature
+    kEnableUserCloudSigninRestrictionPolicyFetcher;
 
 }  // namespace features
 }  // namespace policy

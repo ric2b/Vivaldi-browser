@@ -94,7 +94,7 @@ Arguments:
       unspecified or the empty list which means no arguments.
 
   input_conversion:
-      Controls how the file is read and parsed. See "gn help io_conversion".
+      Controls how the file is read and parsed. See `gn help io_conversion`.
 
       If unspecified, defaults to the empty string which causes the script
       result to be discarded. exec script will return None.

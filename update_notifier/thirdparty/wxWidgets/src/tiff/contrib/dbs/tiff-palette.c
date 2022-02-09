@@ -1,4 +1,3 @@
-
 /*
  * tiff-palette.c -- create a Class P (palette) TIFF file
  *

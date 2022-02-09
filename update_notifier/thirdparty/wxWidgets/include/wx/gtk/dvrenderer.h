@@ -25,18 +25,16 @@ public:
                         wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                         int align = wxDVR_DEFAULT_ALIGNMENT );
 
-    virtual void SetMode( wxDataViewCellMode mode );
-    virtual wxDataViewCellMode GetMode() const;
+    virtual void SetMode( wxDataViewCellMode mode ) wxOVERRIDE;
+    virtual wxDataViewCellMode GetMode() const wxOVERRIDE;
 
-    virtual void SetAlignment( int align );
-    virtual int GetAlignment() const;
+    virtual void SetAlignment( int align ) wxOVERRIDE;
+    virtual int GetAlignment() const wxOVERRIDE;
 
-    virtual void EnableEllipsize(wxEllipsizeMode mode = wxELLIPSIZE_MIDDLE);
-    virtual wxEllipsizeMode GetEllipsizeMode() const;
+    virtual void EnableEllipsize(wxEllipsizeMode mode = wxELLIPSIZE_MIDDLE) wxOVERRIDE;
+    virtual wxEllipsizeMode GetEllipsizeMode() const wxOVERRIDE;
 
-#if wxABI_VERSION >= 30003
-    virtual bool FinishEditing();
-#endif
+    virtual bool FinishEditing() wxOVERRIDE;
 
     // GTK-specific implementation
     // ---------------------------
@@ -49,59 +47,64 @@ public:
 
     // called when the cell value was edited by user with the new value
     //
-    // it validates the new value and notifies the model about the change by
-    // calling GtkOnCellChanged() if it was accepted
-    virtual void GtkOnTextEdited(const char *itempath, const wxString& value);
+    // it uses GtkGetValueFromString() to parse the new value, then validates
+    // it by calling Validate() and notifies the model about the change if it
+    // passes validation
+    void GtkOnTextEdited(const char *itempath, const wxString& value);
 
     GtkCellRenderer* GetGtkHandle() { return m_renderer; }
     void GtkInitHandlers();
-    void GtkUpdateAlignment() { GtkApplyAlignment(m_renderer); }
-
-    // should be overridden to return true if the renderer supports properties
-    // corresponding to wxDataViewItemAttr field, see wxGtkTreeCellDataFunc()
-    // for details
-    virtual bool GtkSupportsAttrs() const { return false; }
-
-    // if GtkSupportsAttrs() returns true, this function will be called to
-    // effectively set the attribute to use for rendering the next item
-    //
-    // it should return true if the attribute had any non-default properties
-    virtual bool GtkSetAttr(const wxDataViewItemAttr& WXUNUSED(attr))
-        { return false; }
-
-
-    // these functions are only called if GtkSupportsAttrs() returns true and
-    // are used to remember whether the renderer currently uses the default
-    // attributes or if we changed (and not reset them)
-    bool GtkIsUsingDefaultAttrs() const { return m_usingDefaultAttrs; }
-    void GtkSetUsingDefaultAttrs(bool def) { m_usingDefaultAttrs = def; }
+    virtual void GtkUpdateAlignment() { GtkApplyAlignment(m_renderer); }
 
     // return the text renderer used by this renderer for setting text cell
     // specific attributes: can return NULL if this renderer doesn't render any
     // text
     virtual GtkCellRendererText *GtkGetTextRenderer() const { return NULL; }
-    
-    wxDataViewCellMode GtkGetMode() { return m_mode; }
+
+    // return the widget actually used by the renderer for editing, this may be
+    // different from the editor control widget for the custom renderers
+    virtual GtkWidget* GtkGetEditorWidget() const;
+
+    void GtkSetCurrentItem(const wxDataViewItem& item) { m_itemBeingRendered = item; }
+
+private:
+    // Change the mode at GTK level without touching m_mode, this is useful for
+    // temporarily making the renderer insensitive but does mean that GetMode()
+    // may return a value different from the actual GTK renderer mode.
+    void GtkSetMode(wxDataViewCellMode mode);
 
 protected:
-    virtual void GtkOnCellChanged(const wxVariant& value,
-                                  const wxDataViewItem& item,
-                                  unsigned col);
+    virtual void SetAttr(const wxDataViewItemAttr& attr) wxOVERRIDE;
+    virtual void SetEnabled(bool enabled) wxOVERRIDE;
+
+    virtual bool IsHighlighted() const wxOVERRIDE;
 
     // Apply our effective alignment (i.e. m_alignment if specified or the
     // associated column alignment by default) to the given renderer.
     void GtkApplyAlignment(GtkCellRenderer *renderer);
 
+    // This method is used to interpret the string entered by user and by
+    // default just uses it as is, but can be overridden for classes requiring
+    // special treatment.
+    virtual wxVariant GtkGetValueFromString(const wxString& str) const;
+
+
     GtkCellRenderer    *m_renderer;
     int                 m_alignment;
+
+    // We store the renderer mode at wx level as it can differ from the mode of
+    // the corresponding GTK+ renderer as explained above.
     wxDataViewCellMode  m_mode;
 
     // true if we hadn't changed any visual attributes or restored them since
     // doing this
     bool m_usingDefaultAttrs;
 
+    // the item currently being rendered
+    wxDataViewItem m_itemBeingRendered;
+
 protected:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewRenderer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewRenderer);
 };
 
 #endif // _WX_GTK_DVRENDERER_H_

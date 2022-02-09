@@ -54,7 +54,7 @@ bool AreCookieIsolatedPrincipals(url::Origin src_origin,
 std::unique_ptr<NavigationThrottle>
 FederatedAuthNavigationThrottle::MaybeCreateThrottleFor(
     NavigationHandle* handle) {
-  if (!IsWebIDEnabled() || !handle->IsInMainFrame())
+  if (!IsFedCmInterceptionEnabled() || !handle->IsInMainFrame())
     return nullptr;
 
   return std::make_unique<FederatedAuthNavigationThrottle>(handle);
@@ -163,7 +163,8 @@ bool FederatedAuthNavigationThrottle::IsFederationResponse(GURL url) {
   }
   GURL redirect_url = GURL(
       RedirectUriData::Get(navigation_handle()->GetWebContents())->Value());
-  if (url.GetOrigin() == redirect_url.GetOrigin() &&
+  if (url.DeprecatedGetOriginAsURL() ==
+          redirect_url.DeprecatedGetOriginAsURL() &&
       url.path() == redirect_url.path()) {
     return true;
   }

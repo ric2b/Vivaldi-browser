@@ -11,14 +11,13 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -133,7 +132,8 @@ class UserCloudPolicyManagerAshTest
   void MakeManagerWithPreloadedStore(const base::TimeDelta& fetch_timeout) {
     std::unique_ptr<MockCloudPolicyStore> store =
         std::make_unique<MockCloudPolicyStore>();
-    store->policy_ = std::make_unique<em::PolicyData>(policy_data_);
+    store->set_policy_data_for_testing(
+        std::make_unique<em::PolicyData>(policy_data_));
     store->policy_map_ = policy_map_.Clone();
     store->NotifyStoreLoaded();
     CreateManager(std::move(store), fetch_timeout,
@@ -515,7 +515,8 @@ TEST_P(UserCloudPolicyManagerAshTest, BlockingRefreshFetch) {
 
   // Set the initially cached data and initialize the CloudPolicyService.
   // The initial policy fetch is issued using the cached DMToken.
-  store_->policy_ = std::make_unique<em::PolicyData>(policy_data_);
+  store_->set_policy_data_for_testing(
+      std::make_unique<em::PolicyData>(policy_data_));
   FetchPolicy(base::BindOnce(&MockCloudPolicyStore::NotifyStoreLoaded,
                              base::Unretained(store_)),
               false);
@@ -804,7 +805,8 @@ TEST_P(UserCloudPolicyManagerAshTest, BlockingRefreshFetchWithTimeout) {
   EXPECT_FALSE(manager_->core()->service()->IsInitializationComplete());
   EXPECT_FALSE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
   EXPECT_CALL(observer_, OnUpdatePolicy(manager_.get()));
-  store_->policy_ = std::make_unique<em::PolicyData>(policy_data_);
+  store_->set_policy_data_for_testing(
+      std::make_unique<em::PolicyData>(policy_data_));
   store_->policy_map_ = policy_map_.Clone();
 
   // Mock out the initial policy fetch and have it trigger a timeout.
@@ -1180,7 +1182,8 @@ class UserCloudPolicyManagerAshChildTest
 
   // Sets the initially cached data and initializes the CloudPolicyService.
   void LoadStoreWithCachedData() {
-    store_->policy_ = std::make_unique<em::PolicyData>(policy_data_);
+    store_->set_policy_data_for_testing(
+        std::make_unique<em::PolicyData>(policy_data_));
     store_->policy_map_ = policy_map_.Clone();
     store_->NotifyStoreLoaded();
     EXPECT_TRUE(manager_->IsInitializationComplete(POLICY_DOMAIN_CHROME));

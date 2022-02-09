@@ -7,6 +7,10 @@
 #include <memory>
 #include <set>
 #include <utility>
+
+#include "base/bind.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
@@ -19,15 +23,52 @@ namespace {
 constexpr gfx::Rect kDefaultOutputRect(20, 20);
 constexpr gfx::Rect kDefaultDamageRect(0, 0);
 
+constexpr CompositorRenderPassId kInvalidRenderPassId;
+
+// A stub CopyOutputRequest for testing that ignores the result.
+class StubCopyOutputRequest : public CopyOutputRequest {
+ public:
+  StubCopyOutputRequest()
+      : CopyOutputRequest(
+            ResultFormat::RGBA,
+            ResultDestination::kSystemMemory,
+            base::BindOnce([](std::unique_ptr<CopyOutputResult>) {})) {}
+  ~StubCopyOutputRequest() override = default;
+
+  base::WeakPtr<CopyOutputRequest> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+
+ private:
+  base::WeakPtrFactory<CopyOutputRequest> weak_factory_{this};
+};
+
 }  // namespace
+
+RenderPassBuilder::RenderPassBuilder(CompositorRenderPassId id,
+                                     const gfx::Size& output_size)
+    : RenderPassBuilder(id, gfx::Rect(output_size)) {}
 
 RenderPassBuilder::RenderPassBuilder(CompositorRenderPassId id,
                                      const gfx::Rect& output_rect)
     : pass_(CompositorRenderPass::Create()) {
-  pass_->SetNew(id, output_rect, output_rect, gfx::Transform());
+  CHECK(!output_rect.IsEmpty());
+  pass_->id = id;
+  pass_->output_rect = output_rect;
+  pass_->damage_rect = output_rect;  // Full damage by default.
 }
 
+RenderPassBuilder::RenderPassBuilder(const gfx::Size& output_size)
+    : RenderPassBuilder(kInvalidRenderPassId, output_size) {}
+
+RenderPassBuilder::RenderPassBuilder(const gfx::Rect& output_rect)
+    : RenderPassBuilder(kInvalidRenderPassId, output_rect) {}
+
 RenderPassBuilder::~RenderPassBuilder() = default;
+
+bool RenderPassBuilder::IsValid() const {
+  return pass_ && !pass_->quad_list.empty();
+}
 
 std::unique_ptr<CompositorRenderPass> RenderPassBuilder::Build() {
   return std::move(pass_);
@@ -48,6 +89,27 @@ RenderPassBuilder& RenderPassBuilder::SetCacheRenderPass(bool val) {
 RenderPassBuilder& RenderPassBuilder::SetHasDamageFromContributingContent(
     bool val) {
   pass_->has_damage_from_contributing_content = val;
+  return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::AddFilter(
+    const cc::FilterOperation& filter) {
+  pass_->filters.Append(filter);
+  return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::AddBackdropFilter(
+    const cc::FilterOperation& filter) {
+  pass_->backdrop_filters.Append(filter);
+  return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::AddStubCopyOutputRequest(
+    base::WeakPtr<CopyOutputRequest>* request_out) {
+  auto request = std::make_unique<StubCopyOutputRequest>();
+  if (request_out)
+    *request_out = request->GetWeakPtr();
+  pass_->copy_requests.push_back(std::move(request));
   return *this;
 }
 
@@ -87,6 +149,7 @@ RenderPassBuilder& RenderPassBuilder::AddSurfaceQuad(
   quad->SetNew(sqs, rect, visible_rect, surface_range,
                params.default_background_color,
                params.stretch_content_to_fill_bounds);
+  quad->is_reflection = params.is_reflection;
   quad->allow_merge = params.allow_merge;
 
   return *this;
@@ -166,6 +229,20 @@ RenderPassBuilder& RenderPassBuilder::SetQuadClipRect(
   return *this;
 }
 
+RenderPassBuilder& RenderPassBuilder::SetBlendMode(SkBlendMode blend_mode) {
+  GetLastQuadSharedQuadState()->blend_mode = blend_mode;
+  return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::SetMaskFilter(
+    const gfx::MaskFilterInfo& mask_filter_info,
+    bool is_fast_rounded_corner) {
+  auto* sqs = GetLastQuadSharedQuadState();
+  sqs->mask_filter_info = mask_filter_info;
+  sqs->is_fast_rounded_corner = is_fast_rounded_corner;
+  return *this;
+}
+
 SharedQuadState* RenderPassBuilder::AppendDefaultSharedQuadState(
     const gfx::Rect rect,
     const gfx::Rect visible_rect) {
@@ -216,14 +293,35 @@ CompositorFrameBuilder& CompositorFrameBuilder::AddRenderPass(
   // Give the render pass a unique id if one hasn't been assigned.
   if (render_pass->id.is_null())
     render_pass->id = render_pass_id_generator_.GenerateNextId();
+
+  // Populate referenced_surfaces if there are any SurfaceDrawQuads.
+  for (auto* quad : render_pass->quad_list) {
+    if (quad->material == DrawQuad::Material::kSurfaceContent) {
+      auto* surface_quad = SurfaceDrawQuad::MaterialCast(quad);
+      frame_->metadata.referenced_surfaces.push_back(
+          surface_quad->surface_range);
+    }
+  }
+
   frame_->render_pass_list.push_back(std::move(render_pass));
+  return *this;
+}
+
+CompositorFrameBuilder& CompositorFrameBuilder::AddRenderPass(
+    RenderPassBuilder& builder) {
+  CHECK(builder.IsValid());
+  AddRenderPass(builder.Build());
   return *this;
 }
 
 CompositorFrameBuilder& CompositorFrameBuilder::SetRenderPassList(
     CompositorRenderPassList render_pass_list) {
-  DCHECK(frame_->render_pass_list.empty());
-  frame_->render_pass_list = std::move(render_pass_list);
+  CHECK(frame_->render_pass_list.empty());
+
+  // Call AddRenderPass() for each pass as it contains additional logic.
+  for (auto& render_pass : render_pass_list)
+    AddRenderPass(std::move(render_pass));
+
   return *this;
 }
 
@@ -316,8 +414,27 @@ CompositorFrame CompositorFrameBuilder::MakeInitCompositorFrame() const {
   return frame;
 }
 
+CompositorRenderPassList CopyRenderPasses(
+    const CompositorRenderPassList& render_pass_list) {
+  CompositorRenderPassList copy_list;
+  for (auto& render_pass : render_pass_list)
+    copy_list.push_back(render_pass->DeepCopy());
+  return copy_list;
+}
+
 CompositorFrame MakeDefaultCompositorFrame() {
   return CompositorFrameBuilder().AddDefaultRenderPass().Build();
+}
+
+CompositorFrame MakeCompositorFrame(
+    std::unique_ptr<CompositorRenderPass> render_pass) {
+  return CompositorFrameBuilder().AddRenderPass(std::move(render_pass)).Build();
+}
+
+CompositorFrame MakeCompositorFrame(CompositorRenderPassList render_pass_list) {
+  return CompositorFrameBuilder()
+      .SetRenderPassList(std::move(render_pass_list))
+      .Build();
 }
 
 AggregatedFrame MakeDefaultAggregatedFrame(size_t num_render_passes) {

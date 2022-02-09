@@ -140,6 +140,10 @@
   return self.hasManagedSyncDataType;
 }
 
+- (BOOL)unifiedConsentCoordinatorHasAccountRestrictions {
+  return self.hasAccountRestrictions;
+}
+
 - (void)unifiedConsentViewControllerViewDidAppear:
     (UnifiedConsentViewController*)controller {
   if (!self.autoOpenIdentityPicker)
@@ -163,6 +167,11 @@
   DCHECK(!self.settingsLinkWasTapped);
   self.settingsLinkWasTapped = YES;
   [self.delegate unifiedConsentCoordinatorDidTapSettingsLink:self];
+}
+
+- (void)unifiedConsentViewControllerDidTapLearnMoreLink:
+    (UnifiedConsentViewController*)controller {
+  [self.delegate unifiedConsentCoordinatorDidTapLearnMoreLink:self];
 }
 
 - (void)unifiedConsentViewControllerDidTapIdentityButtonControl:

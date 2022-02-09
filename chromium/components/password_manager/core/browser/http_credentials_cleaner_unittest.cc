@@ -5,7 +5,6 @@
 #include "components/password_manager/core/browser/http_credentials_cleaner.h"
 
 #include "base/containers/contains.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -143,7 +142,8 @@ TEST_P(HttpCredentialCleanerTest, ReportHttpMigrationMetrics) {
   static const std::u16string password[2] = {u"pass0", u"pass1"};
 
   base::test::TaskEnvironment task_environment;
-  ASSERT_TRUE(store_->Init(nullptr));
+  ASSERT_TRUE(
+      store_->Init(/*prefs=*/nullptr, /*affiliated_match_helper=*/nullptr));
   TestCase test = GetParam();
   SCOPED_TRACE(testing::Message()
                << "is_hsts_enabled=" << test.is_hsts_enabled
@@ -254,7 +254,8 @@ TEST(HttpCredentialCleaner, StartCleanUpTest) {
 
     base::test::TaskEnvironment task_environment;
     auto password_store = base::MakeRefCounted<TestPasswordStore>();
-    ASSERT_TRUE(password_store->Init(nullptr));
+    ASSERT_TRUE(password_store->Init(/*prefs=*/nullptr,
+                                     /*affiliated_match_helper=*/nullptr));
 
     double last_time = (base::Time::Now() - base::Minutes(10)).ToDoubleT();
     if (should_start_clean_up) {

@@ -12,6 +12,7 @@
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "ash/test/ash_test_base.h"
+#include "base/memory/scoped_refptr.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/views/view_observer.h"
@@ -33,7 +34,7 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
   // AshTestBase:
   void SetUp() override {
     AshTestBase::SetUp();
-    model_ = std::make_unique<UnifiedSystemTrayModel>(nullptr);
+    model_ = base::MakeRefCounted<UnifiedSystemTrayModel>(nullptr);
     controller_ = std::make_unique<UnifiedSystemTrayController>(model_.get());
     container_ = std::make_unique<FeaturePodsContainerView>(
         controller_.get(), true /* initially_expanded */);
@@ -61,11 +62,14 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
   }
 
  protected:
+  void AddButton(FeaturePodButton* button) {
+    buttons_.push_back(button);
+    container()->AddChildView(button);
+  }
+
   void AddButtons(int count) {
-    for (int i = 0; i < count; ++i) {
-      buttons_.push_back(new FeaturePodButton(this));
-      container()->AddChildView(buttons_.back());
-    }
+    for (int i = 0; i < count; ++i)
+      AddButton(new FeaturePodButton(this));
     container()->SetBoundsRect(gfx::Rect(container_->GetPreferredSize()));
     container()->Layout();
   }
@@ -84,7 +88,7 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
 
  private:
   std::unique_ptr<FeaturePodsContainerView> container_;
-  std::unique_ptr<UnifiedSystemTrayModel> model_;
+  scoped_refptr<UnifiedSystemTrayModel> model_;
   std::unique_ptr<UnifiedSystemTrayController> controller_;
   int preferred_size_changed_count_ = 0;
 };
@@ -438,7 +442,7 @@ TEST_F(FeaturePodsContainerViewTest, PaginationMouseWheelHandling) {
 
 TEST_F(FeaturePodsContainerViewTest, NonTogglableButton) {
   // Add one togglable and one non-tobblable button.
-  buttons_.push_back(new FeaturePodButton(this, /*is_togglable=*/false));
+  AddButton(new FeaturePodButton(this, /*is_togglable=*/false));
   AddButtons(1);
 
   // Non-togglable buttons should be labelled as a regular button for

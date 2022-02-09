@@ -42,7 +42,9 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.vivaldi.browser.common.VivaldiColorUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
+import org.vivaldi.browser.themes.VivaldiAccentColor;
 
 /**
  * Maintains the status bar color for a {@link Window}.
@@ -336,9 +338,14 @@ public class StatusBarColorController
         }
 
         // Return status bar color to match the toolbar.
-        // Note(david@vivaldi.com): Always return the current tab color.
         if (ChromeApplicationImpl.isVivaldi()) {
             if (!VivaldiUtils.isTopToolbarOn()) return calculateDefaultStatusBarColor();
+            // Note(nagamani): Check and apply if a different accent is enabled in Themes settings.
+            final int accentColorValue = VivaldiPreferences.getSharedPreferencesManager().readInt(
+                    VivaldiPreferences.UI_ACCENT_COLOR_SETTING, VivaldiAccentColor.ADAPTIVE);
+            if (accentColorValue != 0 && !mIsIncognito)
+                return VivaldiUtils.getSelectedAccentColor(mWindow.getContext());
+            // Return the current tab color otherwise.
             if (mCurrentTab != null) return mCurrentTab.getThemeColor();
         }
 

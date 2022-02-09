@@ -13,7 +13,6 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -65,6 +64,9 @@ class MEDIA_EXPORT DecoderBuffer
 
   // Allocates buffer with |size| >= 0. |is_key_frame_| will default to false.
   explicit DecoderBuffer(size_t size);
+
+  DecoderBuffer(const DecoderBuffer&) = delete;
+  DecoderBuffer& operator=(const DecoderBuffer&) = delete;
 
   // Create a DecoderBuffer whose |data_| is copied from |data|. |data| must not
   // be NULL and |size| >= 0. The buffer's |is_key_frame_| will default to
@@ -266,8 +268,6 @@ class MEDIA_EXPORT DecoderBuffer
 
   // Constructor helper method for memory allocations.
   void Initialize();
-
-  DISALLOW_COPY_AND_ASSIGN(DecoderBuffer);
 };
 
 }  // namespace media

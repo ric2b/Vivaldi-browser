@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "build/build_config.h"
 #include "net/ssl/client_cert_identity.h"
 
 class GURL;
@@ -18,9 +19,10 @@ class Profile;
 namespace chrome {
 namespace enterprise_util {
 
-// Determines whether policies have been applied to this browser at the profile
-// or machine level.
-bool HasBrowserPoliciesApplied(Profile* profile);
+// Determines whether the browser with `profile` as its primary profile is
+// managed. This is determined by looking it there are any policies applied or
+// if `profile` is an enterprise profile.
+bool IsBrowserManaged(Profile* profile);
 
 // Extracts the domain from provided |email| if it's an email address and
 // returns an empty string, otherwise.
@@ -55,6 +57,14 @@ bool UserAcceptedAccountManagement(Profile* profile);
 // Returns true if the user has consented to sync or has accepted account
 // management through the enterprise account confirmation dialog.
 bool ProfileCanBeManaged(Profile* profile);
+
+#if defined(OS_ANDROID)
+
+// Returns the UTF8-encoded string representation of the entity that manages
+// `profile` or nullopt if unmanaged. `profile` must be not-null.
+std::string GetAccountManagerName(Profile* profile);
+
+#endif  // defined(OS_ANDROID)
 
 }  // namespace enterprise_util
 }  // namespace chrome

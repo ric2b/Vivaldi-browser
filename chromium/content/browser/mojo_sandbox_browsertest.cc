@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
-#include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -25,7 +24,9 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/test_service.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "sandbox/policy/sandbox.h"
+#include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
@@ -37,6 +38,9 @@ const std::string kTestMessage = "My hovercraft is full of eels!";
 class MojoSandboxTest : public ContentBrowserTest {
  public:
   MojoSandboxTest() = default;
+
+  MojoSandboxTest(const MojoSandboxTest&) = delete;
+  MojoSandboxTest& operator=(const MojoSandboxTest&) = delete;
 
   using BeforeStartCallback = base::OnceCallback<void(UtilityProcessHost*)>;
 
@@ -59,10 +63,6 @@ class MojoSandboxTest : public ContentBrowserTest {
 
  protected:
   std::unique_ptr<UtilityProcessHost> host_;
-
- private:
-
-  DISALLOW_COPY_AND_ASSIGN(MojoSandboxTest);
 };
 
 // Ensures that a read-only shared memory region can be created within a
@@ -160,7 +160,7 @@ IN_PROC_BROWSER_TEST_F(MojoSandboxTest, IsProcessSandboxed) {
 
 IN_PROC_BROWSER_TEST_F(MojoSandboxTest, NotIsProcessSandboxed) {
   StartProcess(base::BindOnce([](UtilityProcessHost* host) {
-    host->SetSandboxType(sandbox::policy::SandboxType::kNoSandbox);
+    host->SetSandboxType(sandbox::mojom::Sandbox::kNoSandbox);
   }));
   mojo::Remote<mojom::TestService> test_service = BindTestService();
 

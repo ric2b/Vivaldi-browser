@@ -10,6 +10,10 @@
 
 #include "ash/accessibility/ui/focus_ring_controller.h"
 #include "ash/components/audio/sounds.h"
+#include "ash/components/settings/cros_settings_names.h"
+#include "ash/components/settings/cros_settings_provider.h"
+#include "ash/components/settings/timezone_settings.h"
+#include "ash/components/timezone/timezone_resolver.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/public/cpp/login_accelerators.h"
@@ -22,13 +26,9 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -82,10 +82,6 @@
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/login/login_state/login_state.h"
-#include "chromeos/settings/cros_settings_names.h"
-#include "chromeos/settings/cros_settings_provider.h"
-#include "chromeos/settings/timezone_settings.h"
-#include "chromeos/timezone/timezone_resolver.h"
 #include "components/account_id/account_id.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/locale_util.h"
@@ -103,6 +99,7 @@
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ime/ash/input_method_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -340,19 +337,17 @@ void TriggerShowLoginWizardFinish(
 std::string GetManagedLoginScreenLocale() {
   auto* cros_settings = CrosSettings::Get();
   const base::ListValue* login_screen_locales = nullptr;
-  if (!cros_settings->GetList(chromeos::kDeviceLoginScreenLocales,
-                              &login_screen_locales))
+  if (!cros_settings->GetList(kDeviceLoginScreenLocales, &login_screen_locales))
     return std::string();
 
   // Currently, only the first element is used. The setting is a list for future
   // compatibility, if dynamically switching locales on the login screen will be
   // implemented.
-  std::string login_screen_locale;
   if (login_screen_locales->GetList().empty() ||
-      !login_screen_locales->GetString(0, &login_screen_locale))
+      !login_screen_locales->GetList()[0].is_string())
     return std::string();
 
-  return login_screen_locale;
+  return login_screen_locales->GetList()[0].GetString();
 }
 
 // Disables virtual keyboard overscroll. Login UI will scroll user pods
@@ -712,7 +707,8 @@ content::WebContents* LoginDisplayHostWebUI::GetOobeWebContents() const {
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostWebUI, WebContentsObserver:
 
-void LoginDisplayHostWebUI::RenderProcessGone(base::TerminationStatus status) {
+void LoginDisplayHostWebUI::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
   // Do not try to restore on shutdown
   if (browser_shutdown::HasShutdownStarted())
     return;
@@ -792,6 +788,11 @@ void LoginDisplayHostWebUI::UpScaleOobe() {
   } else if (longest_side >= kMediumDisplay.longest_side) {
     display_manager->UpdateZoomFactor(display_id, kMediumDisplay.scale_factor);
   }
+}
+
+void LoginDisplayHostWebUI::OnShowWebUITimeout() {
+  VLOG(1) << "Login WebUI >> Show WebUI because of timeout";
+  ShowWebUI();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -877,6 +878,9 @@ void LoginDisplayHostWebUI::LoadURL(const GURL& url) {
 }
 
 void LoginDisplayHostWebUI::ShowWebUI() {
+  session_observation_.Reset();
+  show_webui_guard_.AbandonAndStop();
+
   DCHECK(login_window_);
   DCHECK(login_view_);
 
@@ -938,6 +942,10 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
   // Delay showing the window until the login webui is ready.
   VLOG(1) << "Login WebUI >> login window is hidden on create";
   login_view_->set_is_hidden(true);
+
+  // A minute should be enough time for the UI to load.
+  show_webui_guard_.Start(FROM_HERE, base::Minutes(1), this,
+                          &LoginDisplayHostWebUI::OnShowWebUITimeout);
 }
 
 void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
@@ -1090,13 +1098,11 @@ void LoginDisplayHostWebUI::RemoveObserver(
 void LoginDisplayHostWebUI::OnNetworkErrorScreenShown() {
   VLOG(1) << "Login WebUI >> WEBUI_VISIBLE(ERROR_SCREEN)";
   ShowWebUI();
-  session_observation_.Reset();
 }
 
 void LoginDisplayHostWebUI::OnLoginOrLockScreenVisible() {
   VLOG(1) << "Login WebUI >> WEBUI_VISIBLE";
   ShowWebUI();
-  session_observation_.Reset();
 }
 
 SigninUI* LoginDisplayHostWebUI::GetSigninUI() {
@@ -1113,6 +1119,10 @@ bool LoginDisplayHostWebUI::GetKeyboardRemappedPrefValue(
     const std::string& pref_name,
     int* value) const {
   return false;
+}
+
+bool LoginDisplayHostWebUI::IsWebUIStarted() const {
+  return true;
 }
 
 void LoginDisplayHostWebUI::PlayStartupSoundIfPossible() {
@@ -1286,37 +1296,9 @@ void ShowLoginWizard(OobeScreenId first_screen) {
   TriggerShowLoginWizardFinish(locale, std::move(data));
 }
 
-class WebUIToViewsSwitchMetricsReporter
-    : public session_manager::SessionManagerObserver {
- public:
-  WebUIToViewsSwitchMetricsReporter() {
-    session_observation_.Observe(session_manager::SessionManager::Get());
-  }
-
-  // session_manager::SessionManagerObserver:
-  void OnLoginOrLockScreenVisible() override {
-    if (LoginDisplayHost::default_host()->GetOobeUI()) {
-      DCHECK_EQ(OobeUI::kGaiaSigninDisplay,
-                LoginDisplayHost::default_host()->GetOobeUI()->display_type());
-    }
-    base::UmaHistogramTimes("OOBE.WebUIToViewsSwitch.Duration",
-                            timer_.Elapsed());
-    base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
-  }
-
- private:
-  base::ScopedObservation<session_manager::SessionManager,
-                          session_manager::SessionManagerObserver>
-      session_observation_{this};
-  base::ElapsedTimer timer_;
-};
-
 void SwitchWebUItoMojo() {
   DCHECK_EQ(LoginDisplayHost::default_host()->GetOobeUI()->display_type(),
             OobeUI::kOobeDisplay);
-
-  // The object deletes itself.
-  new WebUIToViewsSwitchMetricsReporter();
 
   // This replaces WebUI host with the Mojo (views) host.
   ShowLoginWizard(OobeScreen::SCREEN_UNKNOWN);

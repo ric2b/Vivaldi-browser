@@ -50,8 +50,13 @@ class PasswordStoreConsumerHelper : public PasswordStoreConsumer {
     return std::move(result_);
   }
 
+  base::WeakPtr<PasswordStoreConsumer> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
  private:
   std::vector<std::unique_ptr<PasswordForm>> result_;
+  base::WeakPtrFactory<PasswordStoreConsumerHelper> weak_ptr_factory_{this};
 };
 
 @implementation PasswordManagerAppInterface
@@ -74,7 +79,8 @@ class PasswordStoreConsumerHelper : public PasswordStoreConsumer {
   password_manager::PasswordForm passwordCredentialForm;
   passwordCredentialForm.username_value = base::SysNSStringToUTF16(username);
   passwordCredentialForm.password_value = base::SysNSStringToUTF16(password);
-  passwordCredentialForm.url = net::GURLWithNSURL(URL).GetOrigin();
+  passwordCredentialForm.url =
+      net::GURLWithNSURL(URL).DeprecatedGetOriginAsURL();
   passwordCredentialForm.signon_realm = passwordCredentialForm.url.spec();
   passwordCredentialForm.scheme = password_manager::PasswordForm::Scheme::kHtml;
   passwordStore->AddLogin(passwordCredentialForm);
@@ -111,7 +117,7 @@ class PasswordStoreConsumerHelper : public PasswordStoreConsumer {
           .get();
 
   PasswordStoreConsumerHelper consumer;
-  passwordStore->GetAllLogins(&consumer);
+  passwordStore->GetAllLogins(consumer.GetWeakPtr());
 
   std::vector<std::unique_ptr<PasswordForm>> credentials =
       consumer.WaitForResult();

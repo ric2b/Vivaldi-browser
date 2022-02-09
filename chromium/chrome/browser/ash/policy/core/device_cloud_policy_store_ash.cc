@@ -11,7 +11,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/policy/core/device_policy_decoder.h"
 #include "chrome/browser/ash/policy/value_validation/onc_device_policy_value_validator.h"
@@ -195,15 +195,22 @@ void DeviceCloudPolicyStoreAsh::UpdateFromService() {
   const ash::DeviceSettingsService::Status service_status =
       device_settings_service_->status();
   if (service_status == ash::DeviceSettingsService::STORE_SUCCESS) {
-    policy_ = std::make_unique<em::PolicyData>();
+    auto new_policy_fetch_response =
+        std::make_unique<em::PolicyFetchResponse>();
+    auto new_policy = std::make_unique<em::PolicyData>();
+    const em::PolicyFetchResponse* policy_fetch_response =
+        device_settings_service_->policy_fetch_response();
     const em::PolicyData* policy_data = device_settings_service_->policy_data();
     if (policy_data) {
-      policy_->MergeFrom(*policy_data);
+      DCHECK(policy_fetch_response);
+      new_policy_fetch_response->MergeFrom(*policy_fetch_response);
+      new_policy->MergeFrom(*policy_data);
 
       RecordDeviceIdValidityMetric(
           "Enterprise.CachedDevicePolicyDeviceIdValidity", *policy_data,
           *install_attributes_);
     }
+    SetPolicy(std::move(new_policy_fetch_response), std::move(new_policy));
 
     PolicyMap new_policy_map;
     if (is_managed()) {

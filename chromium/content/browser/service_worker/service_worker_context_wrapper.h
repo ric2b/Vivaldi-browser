@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_threadsafe.h"
@@ -28,14 +28,11 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 
 namespace base {
 class FilePath;
-}
-
-namespace blink {
-class StorageKey;
-}  // namespace blink
+}  // namespace base
 
 namespace storage {
 class QuotaManagerProxy;
@@ -88,6 +85,10 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   explicit ServiceWorkerContextWrapper(BrowserContext* browser_context);
 
+  ServiceWorkerContextWrapper(const ServiceWorkerContextWrapper&) = delete;
+  ServiceWorkerContextWrapper& operator=(const ServiceWorkerContextWrapper&) =
+      delete;
+
   // Init and Shutdown called when the StoragePartition is being setup and torn
   // down.
   void Init(const base::FilePath& user_data_directory,
@@ -118,7 +119,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void OnRegistrationStored(int64_t registration_id,
                             const GURL& scope,
                             const blink::StorageKey& key) override;
-  void OnAllRegistrationsDeletedForOrigin(const url::Origin& origin) override;
+  void OnAllRegistrationsDeletedForStorageKey(
+      const blink::StorageKey& key) override;
   void OnErrorReported(
       int64_t version_id,
       const GURL& scope,
@@ -171,7 +173,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       int64_t service_worker_version_id,
       const std::string& request_uuid) override;
   size_t CountExternalRequestsForTest(const blink::StorageKey& key) override;
-  bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
+  bool MaybeHasRegistrationForStorageKey(const blink::StorageKey& key) override;
   void GetAllOriginsInfo(GetUsageInfoCallback callback) override;
   void DeleteForStorageKey(const blink::StorageKey& key,
                            ResultCallback callback) override;
@@ -510,6 +512,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& key_prefix,
       StatusCallback callback);
 
+  void ClearRunningServiceWorkers();
+
   scoped_refptr<network::SharedURLLoaderFactory>
   GetLoaderFactoryForBrowserInitiatedRequest(
       const GURL& scope,
@@ -531,19 +535,22 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // Initialized in Init(); true if the user data directory is empty.
   bool is_incognito_ = false;
 
+  // Indicates if we are in the middle of deleting the `context_core_` in
+  // order to start over.
+  bool is_deleting_and_starting_over_ = false;
+
   // Raw pointer to the StoragePartitionImpl owning |this|.
-  StoragePartitionImpl* storage_partition_ = nullptr;
+  raw_ptr<StoragePartitionImpl> storage_partition_ = nullptr;
 
   // Map that contains all service workers that are considered "running". Used
   // to dispatch OnVersionStartedRunning()/OnVersionStoppedRunning() events.
   base::flat_map<int64_t /* version_id */, ServiceWorkerRunningInfo>
       running_service_workers_;
 
-  // A set of origins that have at least one registration. See
-  // HasRegistrationForOrigin() for details.
+  // A set of StorageKeys that have at least one registration.
   // TODO(http://crbug.com/824858): This can be removed when service workers are
   // fully converted to running on the UI thread.
-  std::set<url::Origin> registered_origins_;
+  std::set<blink::StorageKey> registered_storage_keys_;
   bool registrations_initialized_ = false;
   base::OnceClosure on_registrations_initialized_;
 
@@ -562,8 +569,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   // A loader factory used to register a service worker. Used for tests.
   scoped_refptr<network::SharedURLLoaderFactory> loader_factory_for_test_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerContextWrapper);
 };
 
 }  // namespace content

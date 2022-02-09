@@ -11,6 +11,7 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -60,6 +61,10 @@ class URLLoaderInterceptor::IOState
                                         BrowserThread::DeleteOnIOThread> {
  public:
   explicit IOState(URLLoaderInterceptor* parent) : parent_(parent) {}
+
+  IOState(const IOState&) = delete;
+  IOState& operator=(const IOState&) = delete;
+
   void Initialize(
       const URLLoaderCompletionStatusCallback& completion_status_callback,
       base::OnceClosure closure);
@@ -137,7 +142,7 @@ class URLLoaderInterceptor::IOState
   // This lock guarantees that when URLLoaderInterceptor is destroyed,
   // no intercept callbacks will be called.
   base::Lock intercept_lock_;
-  URLLoaderInterceptor* parent_ GUARDED_BY(intercept_lock_);
+  raw_ptr<URLLoaderInterceptor> parent_ GUARDED_BY(intercept_lock_);
 
   URLLoaderCompletionStatusCallback completion_status_callback_;
 
@@ -152,8 +157,6 @@ class URLLoaderInterceptor::IOState
       subresource_wrappers_;
   std::set<std::unique_ptr<URLLoaderFactoryNavigationWrapper>>
       navigation_wrappers_;
-
-  DISALLOW_COPY_AND_ASSIGN(IOState);
 };
 
 class URLLoaderClientInterceptor : public network::mojom::URLLoaderClient {
@@ -292,7 +295,7 @@ class URLLoaderInterceptor::Interceptor
       std::move(error_handler_).Run();
   }
 
-  URLLoaderInterceptor::IOState* parent_;
+  raw_ptr<URLLoaderInterceptor::IOState> parent_;
   ProcessIdGetter process_id_getter_;
   OriginalFactoryGetter original_factory_getter_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
@@ -427,14 +430,11 @@ URLLoaderInterceptor::RequestParams::RequestParams(RequestParams&& other) =
 URLLoaderInterceptor::RequestParams& URLLoaderInterceptor::RequestParams::
 operator=(RequestParams&& other) = default;
 
-URLLoaderInterceptor::URLLoaderInterceptor(InterceptCallback callback)
-    : URLLoaderInterceptor(std::move(callback), {}, {}) {}
-
 URLLoaderInterceptor::URLLoaderInterceptor(
-    InterceptCallback callback,
+    InterceptCallback intercept_callback,
     const URLLoaderCompletionStatusCallback& completion_status_callback,
     base::OnceClosure ready_callback)
-    : callback_(std::move(callback)),
+    : callback_(std::move(intercept_callback)),
       io_thread_(base::MakeRefCounted<IOState>(this)) {
   DCHECK(!BrowserThread::IsThreadInitialized(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::UI));
@@ -545,7 +545,8 @@ URLLoaderInterceptor::ServeFilesFromDirectoryAtOrigin(
   return std::make_unique<URLLoaderInterceptor>(base::BindLambdaForTesting(
       [=](content::URLLoaderInterceptor::RequestParams* params) -> bool {
         // Ignore requests for other origins.
-        if (params->url_request.url.GetOrigin() != origin.GetOrigin())
+        if (params->url_request.url.DeprecatedGetOriginAsURL() !=
+            origin.DeprecatedGetOriginAsURL())
           return false;
 
         // Remove the leading slash from the url path, so that it can be

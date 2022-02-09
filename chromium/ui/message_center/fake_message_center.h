@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/message_center_types.h"
@@ -38,8 +37,8 @@ class FakeMessageCenter : public MessageCenter {
   bool IsQuietMode() const override;
   bool IsSpokenFeedbackEnabled() const override;
   Notification* FindNotificationById(const std::string& id) override;
-  Notification* FindOldestNotificationByNotiferId(
-      const NotifierId& notifier_id) override;
+  Notification* FindParentNotificationForOriginUrl(
+      const GURL& origin_url) override;
   Notification* FindPopupNotificationById(const std::string& id) override;
   Notification* FindVisibleNotificationById(const std::string& id) override;
   NotificationList::Notifications FindNotificationsByAppId(

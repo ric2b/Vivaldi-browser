@@ -87,6 +87,9 @@ class WebState : public base::SupportsUserData {
                   ui::PageTransition transition,
                   bool is_renderer_initiated);
     OpenURLParams(const OpenURLParams& params);
+    OpenURLParams& operator=(const OpenURLParams& params);
+    OpenURLParams(OpenURLParams&& params);
+    OpenURLParams& operator=(OpenURLParams&& params);
     ~OpenURLParams();
 
     // The URL/virtualURL/referrer to be opened.
@@ -178,6 +181,39 @@ class WebState : public base::SupportsUserData {
   // Gets/Sets the delegate.
   virtual WebStateDelegate* GetDelegate() = 0;
   virtual void SetDelegate(WebStateDelegate* delegate) = 0;
+
+  // Returns whether the WebState is realized.
+  //
+  // What does "realized" mean? When creating a WebState from session storage
+  // with |CreateWithStorageSession()|, it may not yet have been fully created.
+  // Instead, it has all information to fully instantiate it and its history
+  // available, but the underlying objects (WKWebView, NavigationManager, ...)
+  // have not been created.
+  //
+  // This is an optimisation to reduce the amount of memory consumed by tabs
+  // that have been restored after the browser has been shutdown. If the user
+  // has many tabs, but only consult a subset of them, then there is no point
+  // in creating them eagerly at startup. Instead, the creation is delayed
+  // until the tabs are activated by the user.
+  //
+  // When the WebState becomes realized, the WebStateRealized() event will be
+  // sent to all its WebStateObservers. They can listen to that event if they
+  // need to support this optimisation (by delaying the creation of their own
+  // state until the WebState is really used).
+  //
+  // See //docs/ios/unrealized_web_state.md for more information.
+  virtual bool IsRealized() const = 0;
+
+  // Forcefully bring the WebState in "realized" state. This method can safely
+  // be called multiple time on a WebState, though it should not be necessary
+  // to call it as the WebState will lazily switch to "realized" state when
+  // needed.
+  //
+  // Returns `this` so that the method can be chained such as:
+  //
+  //    WebState* web_state = ...;
+  //    web_state->ForceRealized()->SetDelegate(this);
+  virtual WebState* ForceRealized() = 0;
 
   // Whether or not a web view is allowed to exist in this WebState. Defaults
   // to false; this should be enabled before attempting to access the view.

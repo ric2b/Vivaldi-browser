@@ -289,6 +289,8 @@ Label Label::Resolve(const SourceDir& current_dir,
                  input_string, &ret.dir_, &ret.name_, &ret.toolchain_dir_,
                  &ret.toolchain_name_, err))
     return Label();
+
+  ret.hash_ = ret.ComputeHash();
   return ret;
 }
 

@@ -27,6 +27,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_pointer_constraints.h"
+#include "ui/platform_window/common/platform_window_defaults.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -53,6 +54,11 @@ WaylandToplevelWindow::WaylandToplevelWindow(PlatformWindowDelegate* delegate,
 WaylandToplevelWindow::~WaylandToplevelWindow() = default;
 
 bool WaylandToplevelWindow::CreateShellToplevel() {
+  // Certain Wayland compositors (E.g. Mutter) expects wl_surface to have no
+  // buffer attached when xdg-surface role is created.
+  wl_surface_attach(root_surface()->surface(), nullptr, 0, 0);
+  root_surface()->Commit(false);
+
   ShellObjectFactory factory;
   shell_toplevel_ = factory.CreateShellToplevelWrapper(connection(), this);
   if (!shell_toplevel_) {
@@ -128,10 +134,6 @@ void WaylandToplevelWindow::Hide() {
 
   shell_toplevel_.reset();
   connection()->ScheduleFlush();
-
-  // Detach buffer from surface in order to completely shutdown menus and
-  // tooltips, and release resources.
-  connection()->buffer_manager_host()->ResetSurfaceContents(root_surface());
 }
 
 bool WaylandToplevelWindow::IsVisible() const {
@@ -211,10 +213,17 @@ void WaylandToplevelWindow::Activate() {
   //
   // TODO(crbug.com/1175327): add support for xdg-activation.
   if (aura_surface_ && zaura_surface_get_version(aura_surface_.get()) >=
-                           ZAURA_SURFACE_ACTIVATE_SINCE_VERSION)
+                           ZAURA_SURFACE_ACTIVATE_SINCE_VERSION) {
     zaura_surface_activate(aura_surface_.get());
-  else if (gtk_surface1_)
+  } else if (gtk_surface1_) {
     gtk_surface1_->RequestFocus();
+  }
+  // This is required as the high level activation might not get a flush for
+  // a while. Example: Ash calls OpenURL in Lacros, which activates a window
+  // but nothing more happens (until the user moves the mouse over a Lacros
+  // window in which case events will start and the activation will come
+  // through).
+  connection()->ScheduleFlush();
 }
 
 void WaylandToplevelWindow::SizeConstraintsChanged() {
@@ -350,7 +359,7 @@ void WaylandToplevelWindow::HandleToplevelConfigure(int32_t width_dip,
   // bounds.
   if (width_dip > 1 && height_dip > 1) {
     pending_bounds_dip_ = gfx::Rect(0, 0, width_dip, height_dip);
-    if (frame_insets_px()) {
+    if (is_normal && frame_insets_px()) {
       pending_bounds_dip_.Inset(
           -gfx::ScaleToRoundedInsets(*frame_insets_px(), 1.f / window_scale()));
       pending_bounds_dip_.set_origin({0, 0});
@@ -380,70 +389,20 @@ void WaylandToplevelWindow::HandleToplevelConfigure(int32_t width_dip,
 }
 
 void WaylandToplevelWindow::HandleSurfaceConfigure(uint32_t serial) {
-  if (pending_bounds_dip_.IsEmpty() &&
-      state_ == PlatformWindowState::kMinimized &&
-      pending_configures_.empty()) {
-    // In exo, widget creation is deferred until the surface has contents and
-    // |initial_show_state_| for a widget is ignored. Exo sends a configure
-    // callback with empty bounds expecting client to suggest a size.
-    shell_toplevel()->SetWindowGeometry(gfx::Rect(0, 0, 1, 1));
-    shell_toplevel()->AckConfigure(serial);
-    root_surface()->Commit();
-  } else if (pending_bounds_dip_ ==
-                 gfx::ScaleToRoundedRect(GetBounds(), 1.f / window_scale()) &&
-             pending_configures_.empty()) {
-    // If |pending_bounds_dip_| matches GetBounds(), and |pending_configures_|
-    // is empty, implying that the window is already rendering at
-    // |pending_bounds_dip_|, then a frame matching |pending_bounds_dip_| may
-    // not arrive soon, despite the window delegate receives the updated bounds.
-    // Without a new frame, UpdateVisualSize() is not invoked, leaving this
-    // |configure| unacknowledged.
-    //   E.g. With static window content, |configure| that does not
-    //     change window size will not cause the window to redraw.
-    // Hence, acknowledge this |configure| now to tell the Wayland compositor
-    // that this window has been configured.
-    SetWindowGeometry(pending_bounds_dip_);
-    shell_toplevel()->AckConfigure(serial);
-    connection()->ScheduleFlush();
-  } else if (!pending_configures_.empty() &&
-             pending_bounds_dip_.size() ==
-                 pending_configures_.back().bounds_dip.size()) {
-    // There is an existing pending_configure with the same size, do not push a
-    // new one. Instead, update the serial of the pending_configure.
-    pending_configures_.back().serial = serial;
-  } else {
-    // Otherwise, push the pending |configure| to |pending_configures_|, wait
-    // for a frame update, which will invoke UpdateVisualSize().
-    DCHECK_LT(pending_configures_.size(), 100u);
-    pending_configures_.push_back({pending_bounds_dip_, serial});
-    // The Wayland compositor can generate xdg-shell.configure events more
-    // frequently than frame updates from gpu process. Throttle
-    // ApplyPendingBounds() such that we forward new bounds to
-    // PlatformWindowDelegate at most once per frame.
-    if (pending_configures_.size() <= 1)
-      ApplyPendingBounds();
-  }
+  ProcessPendingBoundsDip(serial);
   pending_bounds_dip_ = gfx::Rect();
 }
 
-void WaylandToplevelWindow::UpdateVisualSize(const gfx::Size& size_px) {
-  WaylandWindow::UpdateVisualSize(size_px);
+void WaylandToplevelWindow::UpdateVisualSize(const gfx::Size& size_px,
+                                             float scale_factor) {
+  WaylandWindow::UpdateVisualSize(size_px, scale_factor);
 
   if (!shell_toplevel_)
     return;
-  auto size_dip = gfx::ScaleToRoundedSize(size_px, 1.f / window_scale());
-  auto result =
-      std::find_if(pending_configures_.begin(), pending_configures_.end(),
-                   [&size_dip](auto& configure) {
-                     return size_dip == configure.bounds_dip.size();
-                   });
 
-  if (result != pending_configures_.end()) {
-    SetWindowGeometry(gfx::Rect(size_dip));
-    shell_toplevel()->AckConfigure(result->serial);
-    connection()->ScheduleFlush();
-    pending_configures_.erase(pending_configures_.begin(), ++result);
-  } else if (set_geometry_on_next_frame_) {
+  if (!ProcessVisualSizeUpdate(size_px, scale_factor) &&
+      set_geometry_on_next_frame_) {
+    auto size_dip = gfx::ScaleToRoundedSize(size_px, 1.f / scale_factor);
     SetWindowGeometry(gfx::Rect(size_dip));
     set_geometry_on_next_frame_ = false;
   }
@@ -494,11 +453,15 @@ void WaylandToplevelWindow::SetWindowGeometry(gfx::Rect bounds_dip) {
   if (!shell_toplevel_)
     return;
 
-  if (frame_insets_px()) {
+  if (state_ == PlatformWindowState::kNormal && frame_insets_px()) {
     bounds_dip.Inset(
         gfx::ScaleToRoundedInsets(*frame_insets_px(), 1.f / window_scale()));
   }
   shell_toplevel_->SetWindowGeometry(bounds_dip);
+}
+
+void WaylandToplevelWindow::AckConfigure(uint32_t serial) {
+  shell_toplevel()->AckConfigure(serial);
 }
 
 void WaylandToplevelWindow::UpdateDecorations() {
@@ -584,7 +547,8 @@ void WaylandToplevelWindow::SetImmersiveFullscreenStatus(bool status) {
 }
 
 void WaylandToplevelWindow::ShowSnapPreview(
-    WaylandWindowSnapDirection snap_direction) {
+    WaylandWindowSnapDirection snap_direction,
+    bool allow_haptic_feedback) {
   if (aura_surface_ && zaura_surface_get_version(aura_surface_.get()) >=
                            ZAURA_SURFACE_INTENT_TO_SNAP_SINCE_VERSION) {
     uint32_t zaura_shell_snap_direction = ZAURA_SURFACE_SNAP_DIRECTION_NONE;
@@ -643,6 +607,14 @@ void WaylandToplevelWindow::SetPip() {
                            ZAURA_SURFACE_SET_PIP_SINCE_VERSION) {
     zaura_surface_set_pip(aura_surface_.get());
   }
+}
+
+void WaylandToplevelWindow::Lock(WaylandOrientationLockType lock_type) {
+  shell_toplevel_->Lock(lock_type);
+}
+
+void WaylandToplevelWindow::Unlock() {
+  shell_toplevel_->Unlock();
 }
 
 bool WaylandToplevelWindow::SupportsPointerLock() {
@@ -800,7 +772,6 @@ void WaylandToplevelWindow::SetOrResetRestoredBounds() {
 void WaylandToplevelWindow::SetUpShellIntegration() {
   // This method should be called after the XDG surface is initialized.
   DCHECK(shell_toplevel_);
-
   if (connection()->zaura_shell() && !aura_surface_) {
     static constexpr zaura_surface_listener zaura_surface_listener = {
         &OcclusionChanged,
@@ -811,7 +782,6 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
     };
     aura_surface_.reset(zaura_shell_get_aura_surface(
         connection()->zaura_shell()->wl_object(), root_surface()->surface()));
-
     zaura_surface_add_listener(aura_surface_.get(), &zaura_surface_listener,
                                this);
     zaura_surface_set_occlusion_tracking(aura_surface_.get());
@@ -893,6 +863,10 @@ void WaylandToplevelWindow::UpdateWindowShape() {
   SkPath window_mask_in_dips =
       wl::ConvertPathToDIP(window_mask_in_pixels, window_scale());
   window_shape_in_dips_ = wl::CreateRectsFromSkPath(window_mask_in_dips);
+}
+
+bool WaylandToplevelWindow::GetTabletMode() {
+  return connection()->GetTabletMode();
 }
 
 }  // namespace ui

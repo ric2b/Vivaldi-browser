@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "ui/base/ime/ash/input_method_manager.h"
 
 class AccountId;
@@ -36,8 +35,8 @@ class InputMethodPersistence : public InputMethodManager::Observer {
                           Profile* profile,
                           bool show_message) override;
 
-  // Update user last keyboard layout for login screen.
-  static void SetUserLastLoginInputMethod(
+  // Update user last input method ID for login screen.
+  static void SetUserLastLoginInputMethodId(
       const std::string& input_method_id,
       const InputMethodManager* const manager,
       Profile* profile);

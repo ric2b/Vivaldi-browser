@@ -4,9 +4,9 @@
 
 #include "components/autofill_assistant/browser/script_executor.h"
 
-#include <map>
 #include <utility>
 
+#include "base/containers/flat_map.h"
 #include "base/strings/strcat.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -37,15 +37,20 @@ using ::testing::InvokeWithoutArgs;
 using ::testing::IsEmpty;
 using ::testing::NiceMock;
 using ::testing::Not;
-using ::testing::Pair;
 using ::testing::Property;
-using ::testing::ReturnRef;
 using ::testing::SaveArg;
 using ::testing::SizeIs;
 using ::testing::StrEq;
 using ::testing::StrictMock;
 using ::testing::UnorderedElementsAreArray;
 using ::testing::WithArgs;
+
+ElementAreaProto MakeElementAreaProto(const std::string& id) {
+  Selector touchable_element({id});
+  ElementAreaProto area;
+  *area.add_touchable()->add_elements() = touchable_element.proto;
+  return area;
+}
 
 const char* kScriptPath = "script_path";
 
@@ -63,7 +68,7 @@ class ScriptExecutorTest : public testing::Test,
         kScriptPath,
         std::make_unique<TriggerContext>(
             std::make_unique<ScriptParameters>(
-                std::map<std::string, std::string>{
+                base::flat_map<std::string, std::string>{
                     {"additional_param", "additional_param_value"}}),
             options),
         /* global_payload= */ "initial global payload",
@@ -72,11 +77,6 @@ class ScriptExecutorTest : public testing::Test,
         /* delegate= */ &delegate_);
 
     test_util::MockFindAnyElement(mock_web_controller_);
-
-    // In this test, "tell" actions always succeed and "highlight element"
-    // actions always fail.
-    ON_CALL(mock_web_controller_, HighlightElement(_, _))
-        .WillByDefault(RunOnceCallback<1>(ClientStatus(UNEXPECTED_JS_ERROR)));
   }
 
  protected:
@@ -188,7 +188,7 @@ TEST_F(ScriptExecutorTest, ForwardParameters) {
   options.experiment_ids = "exp";
   delegate_.SetTriggerContext(std::make_unique<TriggerContext>(
       std::make_unique<ScriptParameters>(
-          std::map<std::string, std::string>{{"param", "value"}}),
+          base::flat_map<std::string, std::string>{{"param", "value"}}),
       options));
   EXPECT_CALL(mock_service_, OnGetActions(StrEq(kScriptPath), _, _, _, _, _))
       .WillOnce(Invoke([](const std::string& script_path, const GURL& url,
@@ -204,7 +204,7 @@ TEST_F(ScriptExecutorTest, ForwardParameters) {
 
         EXPECT_THAT(
             trigger_context.GetScriptParameters().ToProto(),
-            UnorderedElementsAreArray(std::map<std::string, std::string>(
+            UnorderedElementsAreArray(base::flat_map<std::string, std::string>(
                 {{"additional_param", "additional_param_value"},
                  {"param", "value"}})));
 
@@ -218,9 +218,7 @@ TEST_F(ScriptExecutorTest, ForwardParameters) {
 
 TEST_F(ScriptExecutorTest, RunOneActionReportAndReturn) {
   ActionsResponseProto actions_response;
-  *actions_response.add_actions()
-       ->mutable_highlight_element()
-       ->mutable_element() = ToSelectorProto("will fail");
+  actions_response.add_actions()->mutable_js_click();  // Invalid.
 
   EXPECT_CALL(mock_service_, OnGetActions(_, _, _, _, _, _))
       .WillOnce(RunOnceCallback<5>(net::HTTP_OK, Serialize(actions_response)));
@@ -236,7 +234,7 @@ TEST_F(ScriptExecutorTest, RunOneActionReportAndReturn) {
   executor_->Run(&user_data_, executor_callback_.Get());
 
   ASSERT_EQ(1u, processed_actions_capture.size());
-  EXPECT_EQ(UNEXPECTED_JS_ERROR, processed_actions_capture[0].status());
+  EXPECT_EQ(INVALID_ACTION, processed_actions_capture[0].status());
   EXPECT_TRUE(processed_actions_capture[0].has_run_time_ms());
   EXPECT_GE(processed_actions_capture[0].run_time_ms(), 0);
 }
@@ -750,9 +748,7 @@ TEST_F(ScriptExecutorTest, InterruptActionListOnError) {
   ActionsResponseProto initial_actions_response;
   initial_actions_response.add_actions()->mutable_tell()->set_message(
       "will pass");
-  *initial_actions_response.add_actions()
-       ->mutable_highlight_element()
-       ->mutable_element() = ToSelectorProto("will fail");
+  initial_actions_response.add_actions()->mutable_js_click();  // Invalid.
   initial_actions_response.add_actions()->mutable_tell()->set_message(
       "never run");
 
@@ -777,7 +773,7 @@ TEST_F(ScriptExecutorTest, InterruptActionListOnError) {
 
   ASSERT_EQ(2u, processed_actions1_capture.size());
   EXPECT_EQ(ACTION_APPLIED, processed_actions1_capture[0].status());
-  EXPECT_EQ(UNEXPECTED_JS_ERROR, processed_actions1_capture[1].status());
+  EXPECT_EQ(INVALID_ACTION, processed_actions1_capture[1].status());
 
   ASSERT_EQ(1u, processed_actions2_capture.size());
   EXPECT_EQ(ACTION_APPLIED, processed_actions2_capture[0].status());
@@ -1207,12 +1203,33 @@ TEST_F(ScriptExecutorTest, InterruptReturnsShutdown) {
 }
 
 TEST_F(ScriptExecutorTest, RunInterruptDuringPrompt) {
-  SetupInterrupt("interrupt", "interrupt_trigger");
+  RegisterInterrupt("interrupt", "interrupt_trigger");
+
+  ActionsResponseProto interrupt_actions;
+  InitInterruptActions(&interrupt_actions, "interrupt");
+  ElementAreaProto interrupt_area =
+      MakeElementAreaProto(/* id = */ "interrupt_area");
+  *interrupt_actions.add_actions()
+       ->mutable_set_touchable_area()
+       ->mutable_element_area() = interrupt_area;
+  auto* interrupt_prompt = interrupt_actions.add_actions()->mutable_prompt();
+  *interrupt_prompt->add_choices()
+       ->mutable_auto_select_when()
+       ->mutable_match() = ToSelectorProto("end_prompt");
+
+  EXPECT_CALL(mock_service_, OnGetActions("interrupt", _, _, _, _, _))
+      .WillRepeatedly(
+          RunOnceCallback<5>(net::HTTP_OK, Serialize(interrupt_actions)));
 
   // Main script has a prompt with an "auto_select" element. This functions very
   // much like a WaitForDom, except for the UI changes triggered by the switches
   // between PROMPT and RUNNING states.
   ActionsResponseProto interruptible;
+  ElementAreaProto interruptible_area =
+      MakeElementAreaProto(/* id = */ "interruptible_area");
+  *interruptible.add_actions()
+       ->mutable_set_touchable_area()
+       ->mutable_element_area() = interruptible_area;
   auto* prompt_action = interruptible.add_actions()->mutable_prompt();
   prompt_action->set_allow_interrupt(true);
   *prompt_action->add_choices()->mutable_auto_select_when()->mutable_match() =
@@ -1248,15 +1265,30 @@ TEST_F(ScriptExecutorTest, RunInterruptDuringPrompt) {
   // - show prompt (enter PROMPT state)
   // - notice interrupt_trigger element
   // - run interrupt (enter RUNNING state)
+  // - show the interrupt's prompt (enter PROMPT state)
+  // - the interrupt finishes (enter RUNNING state)
   // - show prompt again (enter PROMPT state)
   // - notice end_prompt element
   // - end prompt, continue main script (enter RUNNING state)
   // - run tell, which sets message to "done"
-  EXPECT_THAT(delegate_.GetStateHistory(),
-              ElementsAre(AutofillAssistantState::PROMPT,
-                          AutofillAssistantState::RUNNING,
-                          AutofillAssistantState::PROMPT,
-                          AutofillAssistantState::RUNNING));
+  EXPECT_THAT(
+      delegate_.GetStateHistory(),
+      ElementsAre(
+          AutofillAssistantState::PROMPT, AutofillAssistantState::RUNNING,
+          AutofillAssistantState::PROMPT, AutofillAssistantState::RUNNING,
+          AutofillAssistantState::PROMPT, AutofillAssistantState::RUNNING));
+  // Expected scenario:
+  // - the main script's SetTouchableArea sets |interruptible_area|
+  // - the interrupt starts
+  // - the interrupt's SetTouchableArea sets |interrupt_area|
+  // - the area is cleaned up at the end of the interrupt's prompt
+  // - when the main script resumes, we restore |interruptible_area|
+  // - the area is cleaned up again at the end of the main script's prompt
+  EXPECT_THAT(
+      delegate_.GetTouchableElementAreaHistory(),
+      ElementsAre(interruptible_area, interrupt_area,
+                  ElementAreaProto::default_instance(), interruptible_area,
+                  ElementAreaProto::default_instance()));
   EXPECT_EQ("done", delegate_.GetStatusMessage());
 }
 
@@ -1368,7 +1400,6 @@ TEST_F(ScriptExecutorTest, UpdateScriptListGetNext) {
       next_actions_response.mutable_update_script_list()->add_scripts();
   script->set_path("path");
   auto* presentation = script->mutable_presentation();
-  presentation->mutable_chip()->set_text("name");
   presentation->mutable_precondition();
 
   EXPECT_CALL(mock_service_, OnGetNextActions(_, _, _, _, _, _))
@@ -1384,7 +1415,6 @@ TEST_F(ScriptExecutorTest, UpdateScriptListGetNext) {
   EXPECT_THAT(scripts_update_, SizeIs(1));
   EXPECT_THAT(scripts_update_count_, Eq(1));
   EXPECT_THAT("path", scripts_update_[0]->handle.path);
-  EXPECT_THAT("name", scripts_update_[0]->handle.chip.text);
 }
 
 TEST_F(ScriptExecutorTest, UpdateScriptListShouldNotifyMultipleTimes) {
@@ -1397,7 +1427,6 @@ TEST_F(ScriptExecutorTest, UpdateScriptListShouldNotifyMultipleTimes) {
   auto* script = actions_response.mutable_update_script_list()->add_scripts();
   script->set_path("path");
   auto* presentation = script->mutable_presentation();
-  presentation->mutable_chip()->set_text("name");
   presentation->mutable_precondition();
 
   EXPECT_CALL(mock_service_, OnGetActions(StrEq(kScriptPath), _, _, _, _, _))
@@ -1435,7 +1464,6 @@ TEST_F(ScriptExecutorTest, UpdateScriptListFromInterrupt) {
   auto* script = interrupt_actions.mutable_update_script_list()->add_scripts();
   script->set_path("path");
   auto* presentation = script->mutable_presentation();
-  presentation->mutable_chip()->set_text("update_from_interrupt");
   presentation->mutable_precondition();
 
   // We expect a call from the interrupt which will update the script list and a
@@ -1454,7 +1482,6 @@ TEST_F(ScriptExecutorTest, UpdateScriptListFromInterrupt) {
   EXPECT_THAT(scripts_update_, SizeIs(1));
   EXPECT_THAT(scripts_update_count_, Eq(1));
   EXPECT_THAT("path", scripts_update_[0]->handle.path);
-  EXPECT_THAT("update_from_interrupt", scripts_update_[0]->handle.chip.text);
 }
 
 TEST_F(ScriptExecutorTest, RestorePreInterruptStatusMessage) {
@@ -1898,36 +1925,8 @@ TEST_F(ScriptExecutorTest, InterceptUserActions) {
   // in this test.
   EXPECT_CALL(mock_service_, OnGetNextActions(_, _, _, _, _, _));
 
-  (*delegate_.GetUserActions())[0].Call(std::make_unique<TriggerContext>());
+  (*delegate_.GetUserActions())[0].RunCallback();
   EXPECT_EQ(AutofillAssistantState::RUNNING, delegate_.GetState());
-}
-
-TEST_F(ScriptExecutorTest, ReportDirectActionsChoices) {
-  ActionsResponseProto actions_response;
-  actions_response.add_actions()
-      ->mutable_prompt()
-      ->add_choices()
-      ->mutable_direct_action()
-      ->add_names("done");
-
-  EXPECT_CALL(mock_service_, OnGetActions(_, _, _, _, _, _))
-      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, Serialize(actions_response)));
-
-  std::vector<ProcessedActionProto> processed_actions_capture;
-  EXPECT_CALL(mock_service_, OnGetNextActions(_, _, _, _, _, _))
-      .WillOnce(SaveArg<3>(&processed_actions_capture));
-
-  executor_->Run(&user_data_, executor_callback_.Get());
-
-  ASSERT_NE(nullptr, delegate_.GetUserActions());
-  ASSERT_THAT(*delegate_.GetUserActions(), SizeIs(1));
-  TriggerContext::Options options;
-  options.is_direct_action = true;
-  (*delegate_.GetUserActions())[0].Call(std::make_unique<TriggerContext>(
-      std::make_unique<ScriptParameters>(), options));
-
-  ASSERT_THAT(processed_actions_capture, SizeIs(1));
-  EXPECT_TRUE(processed_actions_capture[0].direct_action());
 }
 
 TEST_F(ScriptExecutorTest, PauseAndResume) {
@@ -1956,7 +1955,7 @@ TEST_F(ScriptExecutorTest, PauseAndResume) {
                            AllOf(Field(&Chip::text, StrEq("Button")),
                                  Field(&Chip::type, HIGHLIGHTED_ACTION)))));
 
-  (*delegate_.GetUserActions())[0].Call(std::make_unique<TriggerContext>());
+  (*delegate_.GetUserActions())[0].RunCallback();
   EXPECT_EQ("Tell", delegate_.GetStatusMessage());
   EXPECT_THAT(delegate_.GetStateHistory(),
               ElementsAre(AutofillAssistantState::PROMPT,
@@ -2003,7 +2002,7 @@ TEST_F(ScriptExecutorTest, PauseAndResumeWithOngoingAction) {
   // not advance to the next action (i.e. |PromptAction|), so the status
   // status message is the one from |TellAction|.
   EXPECT_CALL(mock_web_controller_, FindElement(_, _, _)).Times(0);
-  (*delegate_.GetUserActions())[0].Call(std::make_unique<TriggerContext>());
+  (*delegate_.GetUserActions())[0].RunCallback();
   EXPECT_EQ("Tell", delegate_.GetStatusMessage());
   EXPECT_EQ(AutofillAssistantState::RUNNING, delegate_.GetState());
 

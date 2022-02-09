@@ -8,12 +8,6 @@ namespace policy {
 
 namespace features {
 
-const base::Feature kCBCMPolicyInvalidations{"CBCMPolicyInvalidations",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kCBCMRemoteCommands{"CBCMRemoteCommands",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kPolicyBlocklistThrottleRequiresPoliciesLoaded{
     "PolicyBlocklistThrottleRequiresPoliciesLoaded",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -26,9 +20,6 @@ const base::FeatureParam<base::TimeDelta>
 const base::Feature kUploadBrowserDeviceIdentifier{
     "UploadBrowserDeviceIdentifier", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kCrdForManagedUserSessions{
-    "CRDForManagedUserSessions", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kLoginEventReporting{"LoginEventReporting",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -37,6 +28,10 @@ const base::Feature kPasswordBreachEventReporting{
 
 const base::Feature kChromeManagementPageAndroid{
     "ChromeManagementPageAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableUserCloudSigninRestrictionPolicyFetcher{
+    "UserCloudSigninRestrictionPolicyFetcher",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 

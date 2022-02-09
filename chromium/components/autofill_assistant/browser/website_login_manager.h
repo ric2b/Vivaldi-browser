@@ -10,9 +10,10 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
+#include "base/time/time.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/signatures.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace autofill_assistant {
@@ -61,12 +62,20 @@ class WebsiteLoginManager {
       const std::string& new_password,
       base::OnceCallback<void(bool)> callback) = 0;
 
+  // Read the last date a password was used for |login|. In case no match is
+  // found for the given login returns nullptr.
+  virtual void GetGetLastTimePasswordUsed(
+      const Login& login,
+      base::OnceCallback<void(absl::optional<base::Time>)> callback) = 0;
+
   // Generates new strong password. |form/field_signature| are used to fetch
   // password requirements. |max_length| is the "max_length" attribute of input
-  // field that limits the length of value.
-  virtual std::string GeneratePassword(autofill::FormSignature form_signature,
-                                       autofill::FieldSignature field_signature,
-                                       uint64_t max_length) = 0;
+  // field that limits the length of value. Returns |absl::nullopt| if the
+  // password cannot be generated for some reason.
+  virtual absl::optional<std::string> GeneratePassword(
+      autofill::FormSignature form_signature,
+      autofill::FieldSignature field_signature,
+      uint64_t max_length) = 0;
 
   // Presaves generated passwod for the form. Password will be saved after
   // successful form submission.

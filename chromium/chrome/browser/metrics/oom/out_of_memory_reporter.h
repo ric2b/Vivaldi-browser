@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "base/time/tick_clock.h"
@@ -63,7 +62,8 @@ class OutOfMemoryReporter
 
   // content::WebContentsObserver:
   void DidFinishNavigation(content::NavigationHandle* handle) override;
-  void RenderProcessGone(base::TerminationStatus termination_status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus termination_status) override;
 
 #if defined(OS_ANDROID)
   // crash_reporter::CrashMetricsReporter::Observer:

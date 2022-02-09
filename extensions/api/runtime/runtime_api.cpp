@@ -195,7 +195,7 @@ RuntimePrivateGetAllFeatureFlagsFunction::Run() {
     flag.name = name;
     flag.friendly_name = feature.friendly_name;
     flag.description = feature.description;
-    flag.locked = feature.forced.has_value();
+    flag.locked = feature.locked;
     flag.value = enabled_set && enabled_set->contains(name);
     results.push_back(std::move(flag));
   }
@@ -228,8 +228,7 @@ ExtensionFunction::ResponseAction RuntimePrivateIsGuestSessionFunction::Run() {
   if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
     for (auto* browser : *BrowserList::GetInstance()) {
       if (browser->session_id().id() == params->id) {
-        is_guest = !browser->profile()->IsSupervised() &&
-                   browser->profile()->IsGuestSession();
+        is_guest = browser->profile()->IsGuestSession();
         break;
       }
     }

@@ -10,20 +10,16 @@
 #include <vector>
 
 #include "ash/public/cpp/shelf_types.h"
-#include "base/macros.h"
 #include "base/scoped_multi_source_observation.h"
-#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_forward.h"
 #include "chrome/browser/ui/ash/shelf/app_service/app_service_instance_registry_helper.h"
 #include "chrome/browser/ui/ash/shelf/app_window_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/arc_app_window_delegate.h"
 #include "components/services/app_service/public/cpp/instance_registry.h"
+#include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
-
-namespace apps {
-class InstanceUpdate;
-}  // namespace apps
 
 class AppServiceAppWindowCrostiniTracker;
 class AppServiceAppWindowArcTracker;
@@ -143,11 +139,15 @@ class AppServiceAppWindowShelfController
                                  const ash::ShelfID& shelf_id,
                                  content::BrowserContext* browser_context);
 
+  // Stop handling browser windows, because BrowserAppShelfController is used to
+  // handle browser windows.
+  void StopHandleWindow(aura::Window* window);
+
   AuraWindowToAppWindow aura_window_to_app_window_;
   base::ScopedMultiSourceObservation<aura::Window, aura::WindowObserver>
       observed_windows_{this};
 
-  apps::AppServiceProxyChromeOs* proxy_ = nullptr;
+  apps::AppServiceProxy* proxy_ = nullptr;
   std::unique_ptr<AppServiceInstanceRegistryHelper>
       app_service_instance_helper_;
   std::unique_ptr<AppServiceAppWindowArcTracker> arc_tracker_;

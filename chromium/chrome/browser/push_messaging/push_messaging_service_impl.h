@@ -13,10 +13,9 @@
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
-#include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
@@ -149,9 +148,10 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   void DidDeleteServiceWorkerDatabase() override;
 
   // content_settings::Observer implementation.
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override;
 
   // Fires the `pushsubscriptionchange` event to the associated service worker
   // of |app_identifier|, which is the app identifier for |old_subscription|
@@ -418,7 +418,7 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
     message_dispatched_callback_for_testing_ = callback;
   }
 
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
   std::unique_ptr<AbusiveOriginPermissionRevocationRequest>
       abusive_origin_revocation_request_;
   std::queue<PendingMessage> messages_pending_permission_check_;

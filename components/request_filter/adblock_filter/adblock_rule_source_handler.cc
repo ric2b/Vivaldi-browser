@@ -71,14 +71,14 @@ constexpr char kTrackerInfoFileSuffix[] = "_tracker_infos.json";
 base::Time CalculateNextUpdateTime(const RuleSource& source) {
   return source.last_update +
          std::min(std::max(source.unsafe_adblock_metadata.expires,
-                           base::TimeDelta::FromHours(kMinTimeBetweenUpdates)),
-                  base::TimeDelta::FromDays(kMaxTimeBetweenUpdates)) +
-         base::TimeDelta::FromMinutes(base::RandDouble() * kUpdateTimeJitter);
+                           base::Hours(kMinTimeBetweenUpdates)),
+                  base::Days(kMaxTimeBetweenUpdates)) +
+         base::Minutes(base::RandDouble() * kUpdateTimeJitter);
 }
 
 base::Time GetNextUpdateTimeAfterFailUpdate(base::Time last_update_time) {
-  return last_update_time + base::TimeDelta::FromHours(kMinTimeBetweenUpdates) +
-         base::TimeDelta::FromMinutes(base::RandDouble() * kUpdateTimeJitter);
+  return last_update_time + base::Hours(kMinTimeBetweenUpdates) +
+         base::Minutes(base::RandDouble() * kUpdateTimeJitter);
 }
 
 template <typename T>
@@ -546,9 +546,8 @@ void RuleSourceHandler::StartUpdateTimer() {
       FROM_HERE,
       rule_source_.next_fetch > base::Time::Now()
           ? rule_source_.next_fetch - base::Time::Now()
-          : base::TimeDelta::FromMinutes(kInitialUpdateDelay) +
-                base::TimeDelta::FromMinutes(base::RandDouble() *
-                                             kUpdateTimeJitter),
+          : base::Minutes(kInitialUpdateDelay) +
+                base::Minutes(base::RandDouble() * kUpdateTimeJitter),
       base::BindOnce(&RuleSourceHandler::DoFetch, base::Unretained(this)));
 }
 

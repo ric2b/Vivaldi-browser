@@ -37,7 +37,7 @@ class CordzInfo;
 
 // Default feature enable states for cord ring buffers
 enum CordFeatureDefaults {
-  kCordEnableBtreeDefault = false,
+  kCordEnableBtreeDefault = true,
   kCordEnableRingBufferDefault = false,
   kCordShallowSubcordsDefault = false
 };
@@ -171,6 +171,7 @@ struct CordRepConcat;
 struct CordRepExternal;
 struct CordRepFlat;
 struct CordRepSubstring;
+struct CordRepCrc;
 class CordRepRing;
 class CordRepBtree;
 
@@ -178,18 +179,22 @@ class CordRepBtree;
 enum CordRepKind {
   CONCAT = 0,
   SUBSTRING = 1,
-  BTREE = 2,
-  RING = 3,
-  EXTERNAL = 4,
+  CRC = 2,
+  BTREE = 3,
+  RING = 4,
+  EXTERNAL = 5,
 
   // We have different tags for different sized flat arrays,
-  // starting with FLAT, and limited to MAX_FLAT_TAG. The 225 value is based on
-  // the current 'size to tag' encoding of 8 / 32 bytes. If a new tag is needed
-  // in the future, then 'FLAT' and 'MAX_FLAT_TAG' should be adjusted as well
-  // as the Tag <---> Size logic so that FLAT stil represents the minimum flat
-  // allocation size. (32 bytes as of now).
-  FLAT = 5,
-  MAX_FLAT_TAG = 225
+  // starting with FLAT, and limited to MAX_FLAT_TAG. The below values map to an
+  // allocated range of 32 bytes to 256 KB. The current granularity is:
+  // - 8 byte granularity for flat sizes in [32 - 512]
+  // - 64 byte granularity for flat sizes in (512 - 8KiB]
+  // - 4KiB byte granularity for flat sizes in (8KiB, 256 KiB]
+  // If a new tag is needed in the future, then 'FLAT' and 'MAX_FLAT_TAG' should
+  // be adjusted as well as the Tag <---> Size mapping logic so that FLAT still
+  // represents the minimum flat allocation size. (32 bytes as of now).
+  FLAT = 6,
+  MAX_FLAT_TAG = 248
 };
 
 // There are various locations where we want to check if some rep is a 'plain'
@@ -204,6 +209,18 @@ static_assert(EXTERNAL == RING + 1, "BTREE and EXTERNAL not consecutive");
 static_assert(FLAT == EXTERNAL + 1, "EXTERNAL and FLAT not consecutive");
 
 struct CordRep {
+  // Result from an `extract edge` operation. Contains the (possibly changed)
+  // tree node as well as the extracted edge, or {tree, nullptr} if no edge
+  // could be extracted.
+  // On success, the returned `tree` value is null if `extracted` was the only
+  // data edge inside the tree, a data edge if there were only two data edges in
+  // the tree, or the (possibly new / smaller) remaining tree with the extracted
+  // data edge removed.
+  struct ExtractResult {
+    CordRep* tree;
+    CordRep* extracted;
+  };
+
   CordRep() = default;
   constexpr CordRep(RefcountAndFlags::Immortal immortal, size_t l)
       : length(l), refcount(immortal), tag(EXTERNAL), storage{} {}
@@ -230,6 +247,7 @@ struct CordRep {
   constexpr bool IsRing() const { return tag == RING; }
   constexpr bool IsConcat() const { return tag == CONCAT; }
   constexpr bool IsSubstring() const { return tag == SUBSTRING; }
+  constexpr bool IsCrc() const { return tag == CRC; }
   constexpr bool IsExternal() const { return tag == EXTERNAL; }
   constexpr bool IsFlat() const { return tag >= FLAT; }
   constexpr bool IsBtree() const { return tag == BTREE; }
@@ -240,6 +258,8 @@ struct CordRep {
   inline const CordRepConcat* concat() const;
   inline CordRepSubstring* substring();
   inline const CordRepSubstring* substring() const;
+  inline CordRepCrc* crc();
+  inline const CordRepCrc* crc() const;
   inline CordRepExternal* external();
   inline const CordRepExternal* external() const;
   inline CordRepFlat* flat();
@@ -268,6 +288,13 @@ struct CordRepConcat : public CordRep {
 
   uint8_t depth() const { return storage[0]; }
   void set_depth(uint8_t depth) { storage[0] = depth; }
+
+  // Extracts the right-most flat in the provided concat tree if the entire path
+  // to that flat is not shared, and the flat has the requested extra capacity.
+  // Returns the (potentially new) top level tree node and the extracted flat,
+  // or {tree, nullptr} if no flat was extracted.
+  static ExtractResult ExtractAppendBuffer(CordRepConcat* tree,
+                                           size_t extra_capacity);
 };
 
 struct CordRepSubstring : public CordRep {

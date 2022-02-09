@@ -6,7 +6,6 @@
 #define BASE_MAC_MAC_LOGGING_H_
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "util/build_config.h"
 
 #if defined(OS_IOS)
@@ -42,7 +41,8 @@ class OSStatusLogMessage : public logging::LogMessage {
  private:
   OSStatus status_;
 
-  DISALLOW_COPY_AND_ASSIGN(OSStatusLogMessage);
+  OSStatusLogMessage(const OSStatusLogMessage&) = delete;
+  OSStatusLogMessage& operator=(const OSStatusLogMessage&) = delete;
 };
 
 }  // namespace logging

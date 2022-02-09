@@ -2,19 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './shimless_rma_shared_css.js';
-import './base_page.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import './base_page.js';
+import './shimless_rma_shared_css.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {getShimlessRmaService} from './mojo_interface_provider.js';
+import {PowerCableStateObserverInterface, PowerCableStateObserverReceiver, ShimlessRmaServiceInterface} from './shimless_rma_types.js';
 
 /**
  * @fileoverview
  * 'wrapup-repair-complete-page' is the main landing page for the shimless rma
  * process.
  */
-export class WrapupRepairCompletePage extends PolymerElement {
+
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ * @implements {I18nBehaviorInterface}
+ */
+const WrapupRepairCompletePageBase =
+    mixinBehaviors([I18nBehavior], PolymerElement);
+
+/** @polymer */
+export class WrapupRepairCompletePage extends WrapupRepairCompletePageBase {
   static get is() {
     return 'wrapup-repair-complete-page';
   }
@@ -23,23 +37,49 @@ export class WrapupRepairCompletePage extends PolymerElement {
     return html`{__html_template__}`;
   }
 
-  /** @override */
-  ready() {
-    super.ready();
-    this.dispatchEvent(new CustomEvent(
-        'disable-next-button',
-        {bubbles: true, composed: true, detail: false},
-        ));
+  static get properties() {
+    return {
+      /** @protected */
+      log_: {
+        type: String,
+        value: '',
+      },
+
+      /**
+       * @protected
+       * Assume plugged in is true until first observation.
+       */
+      pluggedIn_: {
+        type: Boolean,
+        value: true,
+      }
+    };
+  }
+
+  constructor() {
+    super();
+    /** @private {ShimlessRmaServiceInterface} */
+    this.shimlessRmaService_ = getShimlessRmaService();
+
+    /** @private {!PowerCableStateObserverReceiver} */
+    this.powerCableStateReceiver_ = new PowerCableStateObserverReceiver(
+        /** @type {!PowerCableStateObserverInterface} */ (this));
+
+    this.shimlessRmaService_.observePowerCableState(
+        this.powerCableStateReceiver_.$.bindNewPipeAndPassRemote());
   }
 
   /** @protected */
-  onDiagnosticsButtonClick_() {}
+  onDiagnosticsButtonClick_() {
+    this.shimlessRmaService_.launchDiagnostics();
+  }
 
   /** @protected */
   onShutdownClick_() {}
 
   /** @protected */
   onRmaLogButtonClick_() {
+    this.shimlessRmaService_.getLog().then((res) => this.log_ = res.log);
     const dialog = /** @type {!CrDialogElement} */ (
         this.shadowRoot.querySelector('#logsDialog'));
     if (!dialog.open) {
@@ -57,6 +97,12 @@ export class WrapupRepairCompletePage extends PolymerElement {
   }
 
   /** @protected */
+  batteryCutInstructions_() {
+    return this.pluggedIn_ ? this.i18n('batteryShutoffUnplugMessageText') :
+                             this.i18n('batteryShutoffShutdownMessageText');
+  }
+
+  /** @protected */
   onCancelClick_() {
     const dialogs = /** @type {!NodeList<!CrDialogElement>} */ (
         this.shadowRoot.querySelectorAll('cr-dialog'));
@@ -64,6 +110,14 @@ export class WrapupRepairCompletePage extends PolymerElement {
       dialog.close();
     });
   }
-};
+
+  /**
+   * Implements PowerCableStateObserver.onPowerCableStateChanged()
+   * @param {boolean} pluggedIn
+   */
+  onPowerCableStateChanged(pluggedIn) {
+    this.pluggedIn_ = pluggedIn;
+  }
+}
 
 customElements.define(WrapupRepairCompletePage.is, WrapupRepairCompletePage);

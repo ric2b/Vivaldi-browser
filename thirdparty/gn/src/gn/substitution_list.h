@@ -17,6 +17,8 @@ class SubstitutionList {
   SubstitutionList(const SubstitutionList& other);
   ~SubstitutionList();
 
+  SubstitutionList& operator=(const SubstitutionList&) = default;
+
   bool Parse(const Value& value, Err* err);
   bool Parse(const std::vector<std::string>& values,
              const ParseNode* origin,

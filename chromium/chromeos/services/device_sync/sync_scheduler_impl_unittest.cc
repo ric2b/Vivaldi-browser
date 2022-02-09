@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/timer/mock_timer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -85,6 +84,11 @@ class DeviceSyncSyncSchedulerImplTest : public testing::Test,
                                              base_recovery_period_,
                                              0)) {}
 
+  DeviceSyncSyncSchedulerImplTest(const DeviceSyncSyncSchedulerImplTest&) =
+      delete;
+  DeviceSyncSyncSchedulerImplTest& operator=(
+      const DeviceSyncSyncSchedulerImplTest&) = delete;
+
   ~DeviceSyncSyncSchedulerImplTest() override {}
 
   void OnSyncRequested(
@@ -103,8 +107,6 @@ class DeviceSyncSyncSchedulerImplTest : public testing::Test,
   std::unique_ptr<TestSyncSchedulerImpl> scheduler_;
 
   std::unique_ptr<SyncScheduler::SyncRequest> sync_request_;
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceSyncSyncSchedulerImplTest);
 };
 
 TEST_F(DeviceSyncSyncSchedulerImplTest, ForceSyncSuccess) {

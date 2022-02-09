@@ -15,11 +15,11 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/null_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -200,7 +200,7 @@ class TestWindowObserver : public aura::WindowObserver {
 
  private:
   // Window that we're observing, or nullptr if it's been destroyed.
-  aura::Window* window_;
+  raw_ptr<aura::Window> window_;
 
   // Was |window_| destroyed?
   bool destroyed_;
@@ -282,7 +282,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
   }
 
   gfx::Size last_frame_size_;
-  FakeWindowEventDispatcher* dispatcher_;
+  raw_ptr<FakeWindowEventDispatcher> dispatcher_;
 };
 
 // A layout manager that always resizes a child to the root window size.
@@ -315,7 +315,7 @@ class FullscreenLayoutManager : public aura::LayoutManager {
   }
 
  private:
-  aura::Window* owner_;
+  raw_ptr<aura::Window> owner_;
 };
 
 class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
@@ -377,13 +377,13 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   // Instance self-delete when its |agent_scheduling_groups|'s process will
   // exit.
   static MockRenderWidgetHostImpl* Create(
-      FrameTree* frame_tree,
+      FrameTree& frame_tree,
       RenderWidgetHostDelegate* delegate,
       AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t routing_id,
       bool hidden) {
     return new MockRenderWidgetHostImpl(
-        frame_tree, delegate, agent_scheduling_group, routing_id, hidden);
+        &frame_tree, delegate, agent_scheduling_group, routing_id, hidden);
   }
 
   MockWidgetInputHandler* input_handler() { return &input_handler_; }
@@ -486,6 +486,10 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
         0);
   }
 
+  RenderWidgetHostViewAuraTest(const RenderWidgetHostViewAuraTest&) = delete;
+  RenderWidgetHostViewAuraTest& operator=(const RenderWidgetHostViewAuraTest&) =
+      delete;
+
   static void InstallDelegatedFrameHostClient(RenderWidgetHostViewAura* view) {
     // Follow RWHVAura code that does not create DelegateFrameHost when there is
     // no valid frame sink id.
@@ -508,9 +512,10 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     return new FakeRenderWidgetHostViewAura(widget_host);
   }
 
-  FrameTree* GetFrameTree() {
+  FrameTree& GetFrameTree() {
     DCHECK(web_contents_);
-    return static_cast<WebContentsImpl*>(web_contents_.get())->GetFrameTree();
+    return static_cast<WebContentsImpl*>(web_contents_.get())
+        ->GetPrimaryFrameTree();
   }
 
   void DestroyView(FakeRenderWidgetHostViewAura* view) {
@@ -708,22 +713,19 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   // Tests should set these to nullptr if they've already triggered their
   // destruction.
-  RenderWidgetHostImpl* parent_host_;
-  RenderWidgetHostViewAura* parent_view_;
+  raw_ptr<RenderWidgetHostImpl> parent_host_;
+  raw_ptr<RenderWidgetHostViewAura> parent_view_;
 
   // Tests should set these to nullptr if they've already triggered their
   // destruction.
-  MockRenderWidgetHostImpl* widget_host_;
-  FakeRenderWidgetHostViewAura* view_;
+  raw_ptr<MockRenderWidgetHostImpl> widget_host_;
+  raw_ptr<FakeRenderWidgetHostViewAura> view_;
 
-  IPC::TestSink* sink_ = nullptr;
+  raw_ptr<IPC::TestSink> sink_ = nullptr;
   base::test::ScopedFeatureList mojo_feature_list_;
   base::test::ScopedFeatureList feature_list_;
 
   viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraTest);
 };
 
 void InstallDelegatedFrameHostClient(
@@ -738,6 +740,11 @@ class RenderWidgetHostViewAuraOverscrollTest
     : public RenderWidgetHostViewAuraTest {
  public:
   RenderWidgetHostViewAuraOverscrollTest() : RenderWidgetHostViewAuraTest() {}
+
+  RenderWidgetHostViewAuraOverscrollTest(
+      const RenderWidgetHostViewAuraOverscrollTest&) = delete;
+  RenderWidgetHostViewAuraOverscrollTest& operator=(
+      const RenderWidgetHostViewAuraOverscrollTest&) = delete;
 
   // We explicitly invoke SetUp to allow gesture debounce customization.
   void SetUp() override {}
@@ -1058,8 +1065,6 @@ class RenderWidgetHostViewAuraOverscrollTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraOverscrollTest);
 };
 
 class RenderWidgetHostViewAuraShutdownTest
@@ -1067,12 +1072,14 @@ class RenderWidgetHostViewAuraShutdownTest
  public:
   RenderWidgetHostViewAuraShutdownTest() {}
 
+  RenderWidgetHostViewAuraShutdownTest(
+      const RenderWidgetHostViewAuraShutdownTest&) = delete;
+  RenderWidgetHostViewAuraShutdownTest& operator=(
+      const RenderWidgetHostViewAuraShutdownTest&) = delete;
+
   void TearDown() override {
     // No TearDownEnvironment here, we do this explicitly during the test.
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraShutdownTest);
 };
 
 // Checks that a popup is positioned correctly relative to its parent using
@@ -3883,8 +3890,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 // Tests that a fling in the opposite direction of the overscroll cancels the
 // overscroll instead of completing it.
 // Flaky on Fuchsia:  http://crbug.com/810690.
-#if defined(OS_FUCHSIA) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
-    defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 #define MAYBE_ReverseFlingCancelsOverscroll \
   DISABLED_ReverseFlingCancelsOverscroll
 #else
@@ -4393,9 +4399,8 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
 
 // Tests that touch-gesture end is dispatched to the renderer at the end of a
 // touch-gesture initiated overscroll.
-// TODO(crbug.com/776424): Disabled due to flakiness on Fuchsia and Linux tsan.
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
-       DISABLED_TouchGestureEndDispatchedAfterOverscrollComplete) {
+       TouchGestureEndDispatchedAfterOverscrollComplete) {
   SetUpOverscrollEnvironmentWithDebounce(10);
   auto touch_event_consumers = blink::mojom::TouchEventConsumers::New(
       HasTouchEventHandlers(true), HasHitTestableScrollbar(false));
@@ -5352,6 +5357,9 @@ class MockWindowEventTarget : public ui::WindowEventTarget {
  public:
   MockWindowEventTarget() = default;
 
+  MockWindowEventTarget(const MockWindowEventTarget&) = delete;
+  MockWindowEventTarget& operator=(const MockWindowEventTarget&) = delete;
+
   LRESULT HandleMouseMessage(unsigned int message,
                              WPARAM w_param,
                              LPARAM l_param,
@@ -5411,9 +5419,6 @@ class MockWindowEventTarget : public ui::WindowEventTarget {
   void ApplyPanGestureFlingBegin() override {}
   void ApplyPanGestureFlingEnd() override {}
   void ApplyPanGestureScrollEnd(bool tranisitioning_to_pinch) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockWindowEventTarget);
 };
 
 // On Windows, a native HWND (Chrome_RenderWidgetHostHWND) forwards mouse events
@@ -5838,7 +5843,7 @@ class RenderWidgetHostViewAuraWithViewHarnessTest
   }
 
  private:
-  RenderWidgetHostViewAura* view_;
+  raw_ptr<RenderWidgetHostViewAura> view_;
 };
 
 // Provides a mock implementation of the WebContentsViewDelegate class.
@@ -5864,7 +5869,7 @@ class MockWebContentsViewDelegate : public WebContentsViewDelegate {
   }
 
   // WebContentsViewDelegate overrides.
-  void ShowContextMenu(RenderFrameHost* render_frame_host,
+  void ShowContextMenu(RenderFrameHost& render_frame_host,
                        const ContextMenuParams& params) override {
     context_menu_request_received_ = true;
     context_menu_params_ = params;
@@ -5901,7 +5906,7 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
   ContextMenuParams context_menu_params;
   context_menu_params.source_type = ui::MENU_SOURCE_MOUSE;
   contents()->ShowContextMenu(
-      contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
+      *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate->context_menu_request_received());
   EXPECT_EQ(delegate->context_menu_source_type(), ui::MENU_SOURCE_MOUSE);
@@ -5913,7 +5918,7 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
   delegate->ClearState();
   context_menu_params.source_type = ui::MENU_SOURCE_TOUCH;
   contents()->ShowContextMenu(
-      contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
+      *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate->context_menu_request_received());
 
@@ -5924,7 +5929,7 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
   delegate->ClearState();
   context_menu_params.source_type = ui::MENU_SOURCE_LONG_TAP;
   contents()->ShowContextMenu(
-      contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
+      *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate->context_menu_request_received());
 
@@ -5935,7 +5940,7 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
   delegate->ClearState();
   context_menu_params.source_type = ui::MENU_SOURCE_LONG_PRESS;
   contents()->ShowContextMenu(
-      contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
+      *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate->context_menu_request_received());
 
@@ -6071,16 +6076,16 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
     view_->Show();
   }
 
-  MockRenderWidgetHostImpl* widget_host_for_first_process_;
-  TestRenderWidgetHostView* view_for_first_process_;
+  raw_ptr<MockRenderWidgetHostImpl> widget_host_for_first_process_;
+  raw_ptr<TestRenderWidgetHostView> view_for_first_process_;
   std::unique_ptr<MockRenderProcessHost> second_process_host_;
   std::unique_ptr<AgentSchedulingGroupHost> second_agent_scheduling_group_host_;
-  MockRenderWidgetHostImpl* widget_host_for_second_process_;
-  TestRenderWidgetHostView* view_for_second_process_;
+  raw_ptr<MockRenderWidgetHostImpl> widget_host_for_second_process_;
+  raw_ptr<TestRenderWidgetHostView> view_for_second_process_;
   std::unique_ptr<MockRenderProcessHost> third_process_host_;
   std::unique_ptr<AgentSchedulingGroupHost> third_agent_scheduling_group_host_;
-  MockRenderWidgetHostImpl* widget_host_for_third_process_;
-  TestRenderWidgetHostView* view_for_third_process_;
+  raw_ptr<MockRenderWidgetHostImpl> widget_host_for_third_process_;
+  raw_ptr<TestRenderWidgetHostView> view_for_third_process_;
 };
 
 // A group of tests which verify that the IME method results are routed to the
@@ -6635,12 +6640,11 @@ class RenderWidgetHostViewAuraInputMethodTest
   }
   void OnTextInputStateChanged(const ui::TextInputClient* client) override {}
   void OnInputMethodDestroyed(const ui::InputMethod* input_method) override {}
-  void OnShowVirtualKeyboardIfEnabled() override {}
 
  protected:
   // Not owned.
-  ui::MockInputMethod* input_method_ = nullptr;
-  const ui::TextInputClient* text_input_client_;
+  raw_ptr<ui::MockInputMethod> input_method_ = nullptr;
+  raw_ptr<const ui::TextInputClient> text_input_client_;
 };
 
 // This test is for notifying InputMethod for surrounding text changes.
@@ -6702,6 +6706,11 @@ class MockVirtualKeyboardController final
     : public ui::VirtualKeyboardController {
  public:
   MockVirtualKeyboardController() = default;
+
+  MockVirtualKeyboardController(const MockVirtualKeyboardController&) = delete;
+  MockVirtualKeyboardController& operator=(
+      const MockVirtualKeyboardController&) = delete;
+
   bool DisplayVirtualKeyboard() override {
     virtual_keyboard_requested_ = true;
     return virtual_keyboard_requested_;
@@ -6727,8 +6736,6 @@ class MockVirtualKeyboardController final
  private:
   size_t observer_count_ = 0;
   bool virtual_keyboard_requested_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(MockVirtualKeyboardController);
 };
 
 class RenderWidgetHostViewAuraKeyboardMockInputMethod
@@ -6736,6 +6743,12 @@ class RenderWidgetHostViewAuraKeyboardMockInputMethod
  public:
   RenderWidgetHostViewAuraKeyboardMockInputMethod()
       : MockInputMethod(nullptr) {}
+
+  RenderWidgetHostViewAuraKeyboardMockInputMethod(
+      const RenderWidgetHostViewAuraKeyboardMockInputMethod&) = delete;
+  RenderWidgetHostViewAuraKeyboardMockInputMethod& operator=(
+      const RenderWidgetHostViewAuraKeyboardMockInputMethod&) = delete;
+
   ui::VirtualKeyboardController* GetVirtualKeyboardController() override {
     return &keyboard_controller_;
   }
@@ -6756,7 +6769,6 @@ class RenderWidgetHostViewAuraKeyboardMockInputMethod
 
  private:
   MockVirtualKeyboardController keyboard_controller_;
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraKeyboardMockInputMethod);
 };
 
 class RenderWidgetHostViewAuraKeyboardTest
@@ -6784,7 +6796,8 @@ class RenderWidgetHostViewAuraKeyboardTest
 
  private:
   // Not owned.
-  RenderWidgetHostViewAuraKeyboardMockInputMethod* input_method_ = nullptr;
+  raw_ptr<RenderWidgetHostViewAuraKeyboardMockInputMethod> input_method_ =
+      nullptr;
 };
 #endif
 

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/macros.h"
 #include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
@@ -227,6 +226,12 @@ class FakeAuthenticatedChannelFactory
 }  // namespace
 
 class SecureChannelBleConnectionManagerImplTest : public testing::Test {
+ public:
+  SecureChannelBleConnectionManagerImplTest(
+      const SecureChannelBleConnectionManagerImplTest&) = delete;
+  SecureChannelBleConnectionManagerImplTest& operator=(
+      const SecureChannelBleConnectionManagerImplTest&) = delete;
+
  protected:
   SecureChannelBleConnectionManagerImplTest()
       : task_environment_(
@@ -777,8 +782,6 @@ class SecureChannelBleConnectionManagerImplTest : public testing::Test {
   std::unique_ptr<base::SimpleTestClock> test_clock_;
 
   std::unique_ptr<BleConnectionManager> manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(SecureChannelBleConnectionManagerImplTest);
 };
 
 TEST_F(SecureChannelBleConnectionManagerImplTest,

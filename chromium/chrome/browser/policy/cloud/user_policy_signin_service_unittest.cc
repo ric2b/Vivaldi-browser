@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -278,9 +279,9 @@ class UserPolicySigninServiceTest : public testing::Test {
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_adaptor_;
-  MockUserCloudPolicyStore* mock_store_ = nullptr;  // Not owned.
+  raw_ptr<MockUserCloudPolicyStore> mock_store_ = nullptr;  // Not owned.
   SchemaRegistry schema_registry_;
-  UserCloudPolicyManager* manager_ = nullptr;  // Not owned.
+  raw_ptr<UserCloudPolicyManager> manager_ = nullptr;  // Not owned.
 
   // BrowserPolicyConnector and UrlFetcherFactory want to initialize and free
   // various components asynchronously via tasks, so create fake threads here.
@@ -439,7 +440,7 @@ TEST_F(UserPolicySigninServiceTest, SignInWithNonEnterpriseUser) {
   // signed-in user.
   ASSERT_FALSE(manager_->core()->service());
 
-  // Now sign in a non-enterprise user (blacklisted gmail.com domain).
+  // Now sign in a non-enterprise user (gmail.com domain).
   identity_test_env()->SetPrimaryAccount("non_enterprise_user@gmail.com",
                                          signin::ConsentLevel::kSync);
 
@@ -503,9 +504,10 @@ TEST_F(UserPolicySigninServiceTest, RegisteredClient) {
   ASSERT_FALSE(manager_->IsClientRegistered());
   ASSERT_FALSE(IsRequestActive());
 
-  mock_store_->policy_ = std::make_unique<enterprise_management::PolicyData>();
-  mock_store_->policy_->set_request_token("fake token");
-  mock_store_->policy_->set_device_id("fake client id");
+  auto data = std::make_unique<enterprise_management::PolicyData>();
+  data->set_request_token("fake token");
+  data->set_device_id("fake client id");
+  mock_store_->set_policy_data_for_testing(std::move(data));
 
   // Complete initialization of the store.
   mock_store_->NotifyStoreLoaded();

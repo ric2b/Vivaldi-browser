@@ -125,7 +125,7 @@ bool wxChoice::Create( wxWindow *parent, wxWindowID id,
     {
         // if our m_strings != NULL, Append() will check for it and insert
         // items in the correct order
-        m_strings = new wxSortedArrayString;
+        m_strings = new wxSortedArrayString(wxDictionaryStringSortAscending);
     }
 
     // begin with no selection
@@ -541,7 +541,6 @@ wxSize wxChoice::DoGetBestSize() const
     if (ret.y <= 18)
         ret.y = 8 + GetCharHeight();
 
-    CacheBestSize(ret);
     return ret;
 }
 

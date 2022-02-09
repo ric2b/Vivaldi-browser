@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/evtloop.h"
 
@@ -34,7 +31,6 @@
 #include "wx/thread.h"
 #include "wx/except.h"
 #include "wx/msw/private.h"
-#include "wx/scopeguard.h"
 
 #include "wx/tooltip.h"
 #if wxUSE_THREADS
@@ -135,10 +131,8 @@ bool wxGUIEventLoop::PreProcessMessage(WXMSG *msg)
         if ( wnd->MSWTranslateMessage((WXMSG *)msg))
             return true;
 
-        // stop at first top level window, i.e. don't try to process the key
-        // strokes originating in a dialog using the accelerators of the parent
-        // frame - this doesn't make much sense
-        if ( wnd->IsTopLevel() )
+        // stop at top navigation domain, i.e. typically a top level window
+        if ( wnd->IsTopNavigationDomain(wxWindow::Navigation_Accel) )
             break;
     }
 
@@ -152,7 +146,7 @@ bool wxGUIEventLoop::PreProcessMessage(WXMSG *msg)
         // if we don't do this, pressing ESC on a modal dialog shown as child
         // of a modal dialog with wxID_CANCEL will cause the parent dialog to
         // be closed, for example
-        if ( wnd->IsTopLevel() )
+        if ( wnd->IsTopNavigationDomain(wxWindow::Navigation_Accel) )
             break;
     }
 
@@ -251,11 +245,6 @@ void wxGUIEventLoop::OnNextIteration()
 #endif // wxUSE_THREADS
 }
 
-void wxGUIEventLoop::WakeUp()
-{
-    ::PostMessage(NULL, WM_NULL, 0, 0);
-}
-
 
 // ----------------------------------------------------------------------------
 // Yield to incoming messages
@@ -264,23 +253,8 @@ void wxGUIEventLoop::WakeUp()
 #include <wx/arrimpl.cpp>
 WX_DEFINE_OBJARRAY(wxMSGArray);
 
-bool wxGUIEventLoop::YieldFor(long eventsToProcess)
+void wxGUIEventLoop::DoYieldFor(long eventsToProcess)
 {
-    // set the flag and don't forget to reset it before returning
-    m_isInsideYield = true;
-    m_eventsToProcessInsideYield = eventsToProcess;
-
-    wxON_BLOCK_EXIT_SET(m_isInsideYield, false);
-
-#if wxUSE_LOG
-    // disable log flushing from here because a call to wxYield() shouldn't
-    // normally result in message boxes popping up &c
-    wxLog::Suspend();
-
-    // ensure the logs will be flashed again when we exit
-    wxON_BLOCK_EXIT0(wxLog::Resume);
-#endif // wxUSE_LOG
-
     // we don't want to process WM_QUIT from here - it should be processed in
     // the main event loop in order to stop it
     MSG msg;
@@ -326,7 +300,6 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
         bool processNow;
         switch (msg.message)
         {
-#if !defined(__WXWINCE__)
             case WM_NCMOUSEMOVE:
 
             case WM_NCLBUTTONDOWN:
@@ -338,7 +311,6 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
             case WM_NCMBUTTONDOWN:
             case WM_NCMBUTTONUP:
             case WM_NCMBUTTONDBLCLK:
-#endif
 
             case WM_KEYDOWN:
             case WM_KEYUP:
@@ -348,9 +320,7 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
             case WM_SYSKEYUP:
             case WM_SYSCHAR:
             case WM_SYSDEADCHAR:
-#ifdef WM_UNICHAR
             case WM_UNICHAR:
-#endif
             case WM_HOTKEY:
             case WM_IME_STARTCOMPOSITION:
             case WM_IME_ENDCOMPOSITION:
@@ -367,13 +337,9 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
             case WM_IME_KEYDOWN:
             case WM_IME_KEYUP:
 
-#if !defined(__WXWINCE__)
             case WM_MOUSEHOVER:
             case WM_MOUSELEAVE:
-#endif
-#ifdef WM_NCMOUSELEAVE
             case WM_NCMOUSELEAVE:
-#endif
 
             case WM_CUT:
             case WM_COPY:
@@ -434,9 +400,7 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
         }
     }
 
-    // if there are pending events, we must process them.
-    if (wxTheApp)
-        wxTheApp->ProcessPendingEvents();
+    wxEventLoopBase::DoYieldFor(eventsToProcess);
 
     // put back unprocessed events in the queue
     DWORD id = GetCurrentThreadId();
@@ -447,6 +411,4 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
     }
 
     m_arrMSG.Clear();
-
-    return true;
 }

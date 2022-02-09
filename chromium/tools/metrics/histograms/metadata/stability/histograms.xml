@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -142,7 +143,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.Autofill"
-    enum="BadMessageReasonAutofill" expires_after="2022-09-16">
+    enum="BadMessageReasonAutofill" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by auto-fill. -->
+
   <owner>vollick@chromium.org</owner>
   <owner>battre@chromium.org</owner>
   <summary>
@@ -152,7 +155,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.Chrome"
-    enum="BadMessageReasonChrome" expires_after="2021-12-12">
+    enum="BadMessageReasonChrome" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by //chrome. -->
+
   <owner>creis@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <summary>
@@ -163,7 +168,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.Content"
-    enum="BadMessageReasonContent" expires_after="2022-03-20">
+    enum="BadMessageReasonContent" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by //content. -->
+
   <owner>jam@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <summary>
@@ -173,9 +180,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.Extensions"
-    enum="BadMessageReasonExtensions" expires_after="2022-04-03">
-  <owner>jamescook@chromium.org</owner>
-  <owner>karandeepb@chromium.org</owner>
+    enum="BadMessageReasonExtensions" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by //extensions. -->
+
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <owner>extensions-core@chromium.org</owner>
   <summary>
     Count of extension processes killed because they sent an IPC that couldn't
     be properly handled. Categories are the reasons (code locations) for the
@@ -184,31 +193,45 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.GuestView"
-    enum="BadMessageReasonGuestView" expires_after="M85">
+    enum="BadMessageReasonGuestView" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by GuestView. -->
+
   <owner>mcnee@chromium.org</owner>
+  <owner>wjmaclean@chromium.org</owner>
   <summary>
     Count of processes killed because they sent a bad IPC that couldn't be
     properly handled. Categories are the reasons (code locations) for the kills.
+
+    Warning: this histogram was expired from M85 to M97; data may be missing.
   </summary>
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.NaCl"
-    enum="BadMessageReasonNaCl" expires_after="2020-11-01">
+    enum="BadMessageReasonNaCl" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by NaCl. -->
+
   <owner>creis@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <summary>
     Count of processes killed because they sent a NaCl IPC that couldn't be
     properly handled. Categories are the reasons (code locations) for the kills.
+
+    Warning: this histogram was expired from 2020-11-01 to 2021-12-07; data may
+    be missing.
   </summary>
 </histogram>
 
 <histogram name="Stability.BadMessageTerminated.PasswordManager"
-    enum="BadMessageReasonPasswordManager" expires_after="M85">
+    enum="BadMessageReasonPasswordManager" expires_after="never">
+<!-- expires-never: Monitoring renderer kills triggered by password manager. -->
+
   <owner>creis@chromium.org</owner>
   <owner>jamescook@chromium.org</owner>
   <summary>
     Count of processes killed because they sent a bad IPC that couldn't be
     properly handled. Categories are the reasons (code locations) for the kills.
+
+    Warning: this histogram was expired from M85 to M97; data may be missing.
   </summary>
 </histogram>
 
@@ -473,6 +496,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Stability.IOS.Crashpad.Initialized" enum="BooleanSuccess"
+    expires_after="2022-06-15">
+  <owner>justincohen@chromium.org</owner>
+  <owner>olivierrobin@chromium.org</owner>
+  <summary>
+    Records whether Crashpad init was successful. Recorded on every app startup.
+  </summary>
+</histogram>
+
 <histogram name="Stability.IOS.Experimental.Counts"
     enum="IOSStabilityUserVisibleTerminationType" expires_after="2022-06-15">
   <owner>ajuma@chromium.org</owner>
@@ -539,7 +571,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.BatteryCharge" units="%"
-    expires_after="2021-12-12">
+    expires_after="2022-05-01">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -552,7 +584,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.DeviceThermalState"
-    enum="IOSDeviceThermalState" expires_after="2021-12-12">
+    enum="IOSDeviceThermalState" expires_after="2022-05-01">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -574,6 +606,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Stability.iOS.UTE.LowPowerModeEnabled" enum="BooleanEnabled"
     expires_after="2021-12-12">
+  <obsolete>
+    Removed 11/2021
+  </obsolete>
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -583,7 +618,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.MobileSessionAppState" enum="IOSAppState"
-    expires_after="2021-12-05">
+    expires_after="2022-12-11">
   <owner>justincohen@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -594,8 +629,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.MobileSessionAppWillTerminateWasReceived"
-    enum="AppWillTerminateReceived" expires_after="2021-11-14">
-  <owner>eugenebut@google.com</owner>
+    enum="AppWillTerminateReceived" expires_after="2022-11-14">
+  <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
     Recorded when app starts after Unexplained Termination Event (UTE) or
@@ -619,7 +654,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.OSRestartedAfterPreviousSession"
-    enum="BooleanRebooted" expires_after="2021-12-12">
+    enum="BooleanRebooted" expires_after="2022-05-01">
   <owner>olivierrobin@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
@@ -630,7 +665,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.OSVersion" enum="VersionComparison"
-    expires_after="2021-12-12">
+    expires_after="2022-05-01">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -653,7 +688,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Stability.MobileSessionShutdownType"
-    enum="MobileSessionShutdownType" expires_after="2021-10-25">
+    enum="MobileSessionShutdownType" expires_after="2022-05-01">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>

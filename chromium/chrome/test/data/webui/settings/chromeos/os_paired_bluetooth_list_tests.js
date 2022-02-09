@@ -9,7 +9,7 @@
 
 // #import {flush, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {assertTrue, assertEquals} from '../../../chai_assert.js';
-// #import {eventToPromise} from 'chrome://test/test_util.m.js';
+// #import {eventToPromise} from 'chrome://test/test_util.js';
 // #import {createDefaultBluetoothDevice} from 'chrome://test/cr_components/chromeos/bluetooth/fake_bluetooth_config.js';
 // clang-format on
 
@@ -36,7 +36,9 @@ suite('OsPairedBluetoothListTest', function() {
 
   test('Device list change renders items correctly', async function() {
     const device = createDefaultBluetoothDevice(
-        /*id=*/ '123456789', /*publicName=*/ 'BeatsX', /*connected=*/ true);
+        /*id=*/ '123456789', /*publicName=*/ 'BeatsX',
+        /*connectionState=*/
+        chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected);
 
     pairedBluetoothList.devices = [device, device, device];
     await flushAsync();
@@ -54,5 +56,48 @@ suite('OsPairedBluetoothListTest', function() {
     await ironResizePromise;
     Polymer.dom.flush();
     assertEquals(getListItems().length, 5);
+  });
+
+  test('Tooltip is shown', async function() {
+    const getTooltip = () => {
+      return pairedBluetoothList.$$('#tooltip');
+    };
+
+    assertFalse(getTooltip()._showing);
+    const device = createDefaultBluetoothDevice(
+        /*id=*/ '123456789', /*publicName=*/ 'BeatsX',
+        /*connectionState=*/
+        chromeos.bluetoothConfig.mojom.DeviceConnectionState.kConnected);
+
+    pairedBluetoothList.devices = [device];
+    await flushAsync();
+
+    const listItem = pairedBluetoothList.shadowRoot.querySelector(
+        'os-settings-paired-bluetooth-list-item');
+
+    listItem.dispatchEvent(new CustomEvent('managed-tooltip-state-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        address: 'device-address',
+        show: true,
+        element: document.createElement('div'),
+      }
+    }));
+
+    await flushAsync();
+    assertTrue(getTooltip()._showing);
+
+    listItem.dispatchEvent(new CustomEvent('managed-tooltip-state-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        address: 'device-address',
+        show: false,
+        element: document.createElement('div'),
+      }
+    }));
+    await flushAsync();
+    assertFalse(getTooltip()._showing);
   });
 });

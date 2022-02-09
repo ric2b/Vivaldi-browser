@@ -17,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -40,7 +41,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -74,7 +74,7 @@
 #include "ui/snapshot/snapshot.h"
 
 #if defined(OS_POSIX)
-#include "base/deferred_sequenced_task_runner.h"
+#include "base/task/deferred_sequenced_task_runner.h"
 #include "base/tracing/perfetto_task_runner.h"
 #include "services/tracing/perfetto/system_test_utils.h"
 #endif
@@ -90,34 +90,6 @@ using testing::ElementsAre;
 namespace content {
 
 namespace {
-
-// If |params| contains an explanation with a non-empty certificate list,
-// returns true and points |certificate| to the certificate list of the first
-// explanation that contains a nonempty certificate list. Otherwise returns
-// false. |params| is expected to be the parameters of a securityStateChanged
-// notification.
-bool GetCertificateFromNotificationParams(base::DictionaryValue* params,
-                                          const base::ListValue** certificate) {
-  const base::ListValue* explanations;
-  if (!params->GetList("explanations", &explanations)) {
-    return false;
-  }
-  for (const auto& explanation : explanations->GetList()) {
-    const base::DictionaryValue* explanation_dict;
-    if (explanation.GetAsDictionary(&explanation_dict) &&
-        explanation_dict->GetList("certificate", certificate) &&
-        (*certificate)->GetList().size() > 0u) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool SecurityStateChangedHasCertificateExplanation(
-    base::DictionaryValue* params) {
-  const base::ListValue* unused;
-  return GetCertificateFromNotificationParams(params, &unused);
-}
 
 class TestJavaScriptDialogManager : public JavaScriptDialogManager,
                                     public WebContentsDelegate {
@@ -293,7 +265,8 @@ IN_PROC_BROWSER_TEST_F(SyntheticKeyEventTest, DISABLED_KeyboardEventAck) {
   EXPECT_EQ(3u, result_ids_.size());
 }
 
-IN_PROC_BROWSER_TEST_F(SyntheticMouseEventTest, MouseEventAck) {
+// Flaky: https://crbug.com/1263461
+IN_PROC_BROWSER_TEST_F(SyntheticMouseEventTest, DISABLED_MouseEventAck) {
   NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
   Attach();
   ASSERT_TRUE(content::ExecJs(
@@ -1520,13 +1493,15 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, BrowserGetTargets) {
   base::ListValue* target_infos;
   EXPECT_TRUE(result_->GetList("targetInfos", &target_infos));
   EXPECT_EQ(1u, target_infos->GetList().size());
-  base::DictionaryValue* target_info;
-  EXPECT_TRUE(target_infos->GetDictionary(0u, &target_info));
+  const base::Value& target_info_value = target_infos->GetList()[0u];
+  EXPECT_TRUE(target_info_value.is_dict());
+  const base::DictionaryValue& target_info =
+      base::Value::AsDictionaryValue(target_info_value);
   std::string target_id, type, title, url;
-  EXPECT_TRUE(target_info->GetString("targetId", &target_id));
-  EXPECT_TRUE(target_info->GetString("type", &type));
-  EXPECT_TRUE(target_info->GetString("title", &title));
-  EXPECT_TRUE(target_info->GetString("url", &url));
+  EXPECT_TRUE(target_info.GetString("targetId", &target_id));
+  EXPECT_TRUE(target_info.GetString("type", &type));
+  EXPECT_TRUE(target_info.GetString("title", &title));
+  EXPECT_TRUE(target_info.GetString("url", &url));
   EXPECT_EQ("page", type);
   EXPECT_EQ("about:blank", title);
   EXPECT_EQ("about:blank", url);
@@ -1582,7 +1557,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateError) {
   GURL test_url = https_server.GetURL("/devtools/navigation.html");
   std::unique_ptr<base::DictionaryValue> params;
   std::unique_ptr<base::DictionaryValue> command_params;
-  int eventId;
+  absl::optional<int> eventId;
 
   shell()->LoadURL(GURL("about:blank"));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
@@ -1605,9 +1580,10 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateError) {
   EXPECT_EQ(
       test_url,
       shell()->web_contents()->GetController().GetPendingEntry()->GetURL());
-  EXPECT_TRUE(params->GetInteger("eventId", &eventId));
+  eventId = params->FindIntKey("eventId");
+  ASSERT_TRUE(eventId);
   command_params = std::make_unique<base::DictionaryValue>();
-  command_params->SetInteger("eventId", eventId);
+  command_params->SetInteger("eventId", *eventId);
   command_params->SetString("action", "cancel");
   SendCommand("Security.handleCertificateError", std::move(command_params),
               false);
@@ -1625,9 +1601,10 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateError) {
   TestNavigationObserver continue_observer(shell()->web_contents(), 1);
   shell()->LoadURL(test_url);
   params = WaitForNotification("Security.certificateError", false);
-  EXPECT_TRUE(params->GetInteger("eventId", &eventId));
+  eventId = params->FindIntKey("eventId");
+  EXPECT_TRUE(eventId);
   command_params = std::make_unique<base::DictionaryValue>();
-  command_params->SetInteger("eventId", eventId);
+  command_params->SetInteger("eventId", *eventId);
   command_params->SetString("action", "continue");
   SendCommand("Security.handleCertificateError", std::move(command_params),
               false);
@@ -1747,7 +1724,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, SubresourceWithCertificateError) {
   GURL test_url = https_server.GetURL("/image.html");
   std::unique_ptr<base::DictionaryValue> params;
   std::unique_ptr<base::DictionaryValue> command_params;
-  int eventId;
+  absl::optional<int> eventId;
 
   shell()->LoadURL(GURL("about:blank"));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
@@ -1764,18 +1741,20 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, SubresourceWithCertificateError) {
 
   // Expect certificateError event for main frame.
   params = WaitForNotification("Security.certificateError", false);
-  EXPECT_TRUE(params->GetInteger("eventId", &eventId));
+  eventId = params->FindIntKey("eventId");
+  ASSERT_TRUE(eventId);
   command_params = std::make_unique<base::DictionaryValue>();
-  command_params->SetInteger("eventId", eventId);
+  command_params->SetInteger("eventId", *eventId);
   command_params->SetString("action", "continue");
   SendCommand("Security.handleCertificateError", std::move(command_params),
               false);
 
   // Expect certificateError event for image.
   params = WaitForNotification("Security.certificateError", false);
-  EXPECT_TRUE(params->GetInteger("eventId", &eventId));
+  eventId = params->FindIntKey("eventId");
+  ASSERT_TRUE(eventId);
   command_params = std::make_unique<base::DictionaryValue>();
-  command_params->SetInteger("eventId", eventId);
+  command_params->SetInteger("eventId", *eventId);
   command_params->SetString("action", "continue");
   SendCommand("Security.handleCertificateError", std::move(command_params),
               false);
@@ -1878,7 +1857,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, TargetDiscovery) {
   EXPECT_TRUE(notifications_.empty());
 
   WebContents::CreateParams create_params(
-      ShellContentBrowserClient::Get()->browser_context(), nullptr);
+      ShellContentBrowserClient::Get()->browser_context());
   std::unique_ptr<content::WebContents> web_contents(
       content::WebContents::Create(create_params));
   EXPECT_TRUE(notifications_.empty());
@@ -1939,12 +1918,14 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, SetAndGetCookies) {
   EXPECT_TRUE(result_->GetList("cookies", &cookies));
   EXPECT_EQ(1u, cookies->GetList().size());
 
-  base::DictionaryValue* cookie;
+  const base::Value& cookie_value = cookies->GetList()[0];
+  EXPECT_TRUE(cookie_value.is_dict());
+  const base::DictionaryValue& cookie =
+      base::Value::AsDictionaryValue(cookie_value);
   std::string name;
   std::string value;
-  EXPECT_TRUE(cookies->GetDictionary(0, &cookie));
-  EXPECT_TRUE(cookie->GetString("name", &name));
-  EXPECT_TRUE(cookie->GetString("value", &value));
+  EXPECT_TRUE(cookie.GetString("name", &name));
+  EXPECT_TRUE(cookie.GetString("value", &value));
   EXPECT_EQ("cookie_for_this_url", name);
   EXPECT_EQ("mendacious", value);
 
@@ -1957,15 +1938,17 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, SetAndGetCookies) {
 
   // Note: the cookies will be returned in unspecified order.
   size_t found = 0;
-  for (size_t i = 0; i < cookies->GetList().size(); i++) {
-    EXPECT_TRUE(cookies->GetDictionary(i, &cookie));
-    EXPECT_TRUE(cookie->GetString("name", &name));
+  for (const base::Value& cookie_value : cookies->GetList()) {
+    EXPECT_TRUE(cookie_value.is_dict());
+    const base::DictionaryValue& cookie =
+        base::Value::AsDictionaryValue(cookie_value);
+    EXPECT_TRUE(cookie.GetString("name", &name));
     if (name == "cookie_for_this_url") {
-      EXPECT_TRUE(cookie->GetString("value", &value));
+      EXPECT_TRUE(cookie.GetString("value", &value));
       EXPECT_EQ("mendacious", value);
       found++;
     } else if (name == "cookie_for_another_url") {
-      EXPECT_TRUE(cookie->GetString("value", &value));
+      EXPECT_TRUE(cookie.GetString("value", &value));
       EXPECT_EQ("polyglottal", value);
       found++;
     } else {
@@ -2157,62 +2140,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTouchTest, EnableTouch) {
   SendCommand("Page.reload", std::move(params), false);
   WaitForNotification("Page.frameStoppedLoading");
   EXPECT_EQ(true, EvalJs(shell()->web_contents(), "checkProtos(false)"));
-}
-
-// Tests that when a security explanation contains a certificate, it is properly
-// serialized into the protocol message.
-IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateExplanations) {
-  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_server.AddDefaultHandlers(GetTestDataFilePath());
-  ASSERT_TRUE(https_server.Start());
-
-  shell()->LoadURL(GURL("about:blank"));
-  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
-
-  // Navigate to a page on the server in order to retrieve its certificate
-  // chain.
-  NavigateToURLBlockUntilNavigationsComplete(
-      shell(), https_server.GetURL("/title1.html"), 1);
-  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
-  NavigationEntry* entry = wc->GetController().GetLastCommittedEntry();
-  ASSERT_TRUE(entry);
-  scoped_refptr<net::X509Certificate> cert = entry->GetSSL().certificate;
-
-  // Provide |cert| as the certificate on the security style explanations. When
-  // the security handler is enabled, DidChangeVisibleSecurityState() is called
-  // and the explanations with |cert| are sent to DevTools.
-  SetSecurityExplanationCert(cert);
-  Attach();
-  SendCommand("Security.enable", nullptr, false);
-  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
-  params = WaitForMatchingNotification(
-      "Security.securityStateChanged",
-      base::BindRepeating(&SecurityStateChangedHasCertificateExplanation));
-
-  // There should be one explanation containing the server's certificate chain.
-  net::SHA256HashValue cert_chain_fingerprint =
-      cert->CalculateChainFingerprint256();
-
-  // Read the certificate out of the first explanation.
-  const base::ListValue* certificate_list;
-  ASSERT_TRUE(
-      GetCertificateFromNotificationParams(params.get(), &certificate_list));
-  std::vector<std::string> der_certs;
-  for (const auto& certificate : certificate_list->GetList()) {
-    std::string decoded;
-    ASSERT_TRUE(base::Base64Decode(certificate.GetString(), &decoded));
-    der_certs.push_back(decoded);
-  }
-  std::vector<base::StringPiece> cert_string_piece;
-  for (const auto& str : der_certs)
-    cert_string_piece.push_back(str);
-
-  // Check that the explanation certificate is correct.
-  scoped_refptr<net::X509Certificate> explanation_cert =
-      net::X509Certificate::CreateFromDERCertChain(cert_string_piece);
-  ASSERT_TRUE(explanation_cert);
-  EXPECT_EQ(cert_chain_fingerprint,
-            explanation_cert->CalculateChainFingerprint256());
 }
 
 class DevToolsProtocolBackForwardCacheTest : public DevToolsProtocolTest {
@@ -2722,6 +2649,27 @@ IN_PROC_BROWSER_TEST_F(DevToolsDownloadContentTest, DISABLED_MultiDownload) {
       file2, GetTestFilePath("download", "download-test.lib")));
 }
 #endif  // !defined(ANDROID)
+
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, UnsafeOperations) {
+  NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
+  Attach();
+
+  base::Value params(base::Value::Type::DICTIONARY);
+  params.SetStringKey("url", "http://www.example.com/hello.js");
+  params.SetStringKey("data", "Tm90aGluZyB0byBzZWUgaGVyZSE=");
+
+  SendCommand("Page.addCompilationCache",
+              std::make_unique<base::Value>(params.Clone()));
+  EXPECT_TRUE(result_);
+  Detach();
+  SetAllowUnsafeOperations(false);
+  Attach();
+  SendCommand("Page.addCompilationCache",
+              std::make_unique<base::Value>(params.Clone()));
+  EXPECT_THAT(error_, base::test::DictionaryHasValue(
+                          "code", base::Value(static_cast<int>(
+                                      crdtp::DispatchCode::SERVER_ERROR))));
+}
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, TracingWithPerfettoConfig) {
   std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());

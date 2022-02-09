@@ -16,16 +16,16 @@
 #include "base/containers/stack.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -173,8 +173,8 @@ class FaviconChangeObserver : public bookmarks::BookmarkModelObserver {
   }
 
  private:
-  BookmarkModel* model_;
-  const BookmarkNode* node_;
+  raw_ptr<BookmarkModel> model_;
+  raw_ptr<const BookmarkNode> node_;
   base::RunLoop run_loop_;
 };
 

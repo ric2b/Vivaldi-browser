@@ -71,6 +71,31 @@ enum wxPenStyle
 };
 
 /**
+    Possible values for pen quality.
+
+    Pen quality is currently only used in wxMSW, the other ports ignore it and
+    always use the same default pen quality.
+
+    In wxMSW the choice of quality affects whether "cosmetic" or "geometric"
+    native pens are used in situations when both are usable. Notably, for
+    dotted and dashed pens of width 1, high quality geometric pens are used by
+    default since wxWidgets 3.1.4, while previous versions used lower quality
+    but much faster cosmetic pens. If drawing performance is more important
+    than the exact appearance of the lines drawn using this pen, low quality
+    may be explicitly selected.
+
+    See wxPenInfo::Quality() and wxPen::SetQuality().
+
+    @since 3.1.5
+ */
+enum wxPenQuality
+{
+    wxPEN_QUALITY_DEFAULT,  ///< Select the appropriate quality automatically.
+    wxPEN_QUALITY_LOW,      ///< Less good looking but faster.
+    wxPEN_QUALITY_HIGH      ///< Best looking, at the expense of speed.
+};
+
+/**
     The possible join values of a wxPen.
 
     @todo use wxPENJOIN_ prefix
@@ -97,6 +122,88 @@ enum wxPenCap
     wxCAP_ROUND = 130,
     wxCAP_PROJECTING,
     wxCAP_BUTT
+};
+
+
+
+/**
+    @class wxPenInfo
+
+    This class is a helper used for wxPen creation using named parameter
+    idiom: it allows specifying various wxPen attributes using the chained
+    calls to its clearly named methods instead of passing them in the fixed
+    order to wxPen constructors.
+
+    For instance, to create a dotted blue pen with the given join style you
+    could do
+    @code
+    wxPen pen(wxPenInfo(*wxBLUE).Style(wxPENSTYLE_DOT).Join(wxJOIN_BEVEL));
+    @endcode
+
+    @since 3.1.1
+ */
+class wxPenInfo
+{
+public:
+    explicit wxPenInfo(const wxColour& colour = wxColour(),
+                       int width = 1,
+                       wxPenStyle style = wxPENSTYLE_SOLID);
+
+    wxPenInfo& Colour(const wxColour& col);
+
+    wxPenInfo& Width(int width);
+
+    wxPenInfo& Style(wxPenStyle style);
+
+    wxPenInfo& Stipple(const wxBitmap& stipple);
+
+    wxPenInfo& Dashes(int nb_dashes, const wxDash *dash);
+
+    wxPenInfo& Join(wxPenJoin join);
+
+    wxPenInfo& Cap(wxPenCap cap);
+
+    /**
+        Set the pen quality.
+
+        Using LowQuality() or HighQuality() is usually more convenient.
+
+        @see wxPen::SetQuality()
+
+        @since 3.1.5
+     */
+    wxPenInfo& Quality(wxPenQuality quality);
+
+    /**
+        Set low pen quality.
+
+        This is the same as calling Quality() with ::wxPEN_QUALITY_LOW.
+
+        @since 3.1.5
+     */
+    wxPenInfo& LowQuality();
+
+    /**
+        Set high pen quality.
+
+        This is the same as calling Quality() with ::wxPEN_QUALITY_HIGH.
+
+        @since 3.1.5
+     */
+    wxPenInfo& HighQuality();
+
+    wxPenInfo& LowQuality();
+    wxColour GetColour() const;
+    wxBitmap GetStipple() const;
+    wxPenStyle GetStyle() const;
+    wxPenJoin GetJoin() const;
+    wxPenCap GetCap() const;
+    wxPenQuality GetQuality() const;
+    int GetDashes(wxDash **ptr);
+    int GetDashCount() const;
+    wxDash* GetDash() const;
+    bool IsTransparent() const;    
+    int GetWidth() const;
 };
 
 
@@ -158,6 +265,11 @@ public:
     wxPen();
 
     /**
+        Creates a pen object using the specified pen description.
+    */
+    wxPen(const wxPenInfo& info);
+
+    /**
         Constructs a pen from a colour object, pen width and style.
 
         @param colour
@@ -171,7 +283,6 @@ public:
 
         @remarks Different versions of Windows and different versions of other
                  platforms support very different subsets of the styles above
-                 - there is no similarity even between Windows95 and Windows98 -
                  so handle with care.
 
         @see SetStyle(), SetColour(), SetWidth()
@@ -223,6 +334,15 @@ public:
         @see SetCap()
     */
     virtual wxPenCap GetCap() const;
+
+    /**
+        Returns the pen quality.
+
+        The default is ::wxPEN_QUALITY_DEFAULT.
+
+        @see wxPenQuality, SetQuality()
+     */
+    wxPenQuality GetQuality() const;
 
     /**
         Returns a reference to the pen colour.
@@ -319,6 +439,19 @@ public:
         @see GetCap()
     */
     virtual void SetCap(wxPenCap capStyle);
+
+    /**
+        Sets the pen quality.
+
+        Explicitly selecting low pen quality may be useful in wxMSW if drawing
+        performance is more important than the exact appearance of the lines
+        drawn with this pen.
+
+        @see wxPenQuality
+
+        @since 3.1.5
+     */
+    void SetQuality(wxPenQuality quality);
 
     //@{
     /**

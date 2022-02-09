@@ -5,7 +5,6 @@
 #include "media/base/android/media_player_bridge.h"
 
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/test/task_environment.h"
 #include "net/cookies/site_for_cookies.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -42,6 +41,9 @@ class MediaPlayerBridgeTest : public testing::Test {
                 false,
                 false) {}
 
+  MediaPlayerBridgeTest(const MediaPlayerBridgeTest&) = delete;
+  MediaPlayerBridgeTest& operator=(const MediaPlayerBridgeTest&) = delete;
+
  protected:
   void SimulateDurationChange(base::TimeDelta duration) {
     bridge_.PropagateDuration(duration);
@@ -58,8 +60,6 @@ class MediaPlayerBridgeTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_;
   StrictMock<MockMediaPlayerBridgeClient> client_;
   MediaPlayerBridge bridge_;
-
-  DISALLOW_COPY_AND_ASSIGN(MediaPlayerBridgeTest);
 };
 
 TEST_F(MediaPlayerBridgeTest, Client_OnMediaMetadataChanged) {

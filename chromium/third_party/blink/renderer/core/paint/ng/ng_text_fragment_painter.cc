@@ -63,7 +63,7 @@ inline PhysicalRect BoxInPhysicalSpace(
     const LayoutNGTextCombine* text_combine) {
   PhysicalRect box_rect;
   if (const auto* svg_data = cursor.CurrentItem()->SvgFragmentData())
-    box_rect = PhysicalRect::FastAndLossyFromFloatRect(svg_data->rect);
+    box_rect = PhysicalRect::FastAndLossyFromRectF(svg_data->rect);
   else
     box_rect = cursor.CurrentItem()->RectInContainerFragment();
   box_rect.offset.left += paint_offset.left;
@@ -216,7 +216,7 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
       return;
   }
 
-  IntRect visual_rect;
+  gfx::Rect visual_rect;
   const auto* const svg_inline_text =
       DynamicTo<LayoutSVGInlineText>(layout_object);
   float scaling_factor = 1.0f;
@@ -224,13 +224,13 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
     DCHECK_EQ(text_item.Type(), NGFragmentItem::kSvgText);
     scaling_factor = svg_inline_text->ScalingFactor();
     DCHECK_NE(scaling_factor, 0.0f);
-    visual_rect = EnclosingIntRect(
+    visual_rect = gfx::ToEnclosingRect(
         svg_inline_text->Parent()->VisualRectInLocalSVGCoordinates());
   } else {
     DCHECK_NE(text_item.Type(), NGFragmentItem::kSvgText);
     PhysicalRect ink_overflow = text_item.SelfInkOverflow();
     ink_overflow.Move(physical_box.offset);
-    visual_rect = EnclosingIntRect(ink_overflow);
+    visual_rect = ToEnclosingRect(ink_overflow);
   }
 
   // Ensure the selection bounds are recorded on the paint chunk regardless of
@@ -299,13 +299,10 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
   }
 
   // Set our font.
-  const Font& font = UNLIKELY(svg_inline_text)
-                         ? svg_inline_text->ScaledFont()
-                         : UNLIKELY(text_combine)
-                               ? text_combine->UsesCompressedFont()
-                                     ? text_combine->CompressedFont()
-                                     : style.GetFont()
-                               : style.GetFont();
+  const Font& font =
+      UNLIKELY(text_combine && text_combine->UsesCompressedFont())
+          ? text_combine->CompressedFont()
+          : text_item.ScaledFont();
   const SimpleFontData* font_data = font.PrimaryFont();
   DCHECK(font_data);
 
@@ -369,8 +366,9 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
     }
 
     // We need to use physical coordinates when invalidating.
-    if (paint_marker_backgrounds && recorder)
-      recorder->UniteVisualRect(EnclosingIntRect(physical_selection));
+    if (paint_marker_backgrounds && recorder) {
+      recorder->UniteVisualRect(ToEnclosingRect(physical_selection));
+    }
   }
 
   NGTextDecorationPainter decoration_painter(
@@ -392,7 +390,7 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
   }
 
   AutoDarkMode auto_dark_mode(
-      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kText));
+      PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground));
 
   const unsigned length = fragment_paint_info.to - fragment_paint_info.from;
   const unsigned start_offset = fragment_paint_info.from;

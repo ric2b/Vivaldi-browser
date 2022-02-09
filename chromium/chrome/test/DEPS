@@ -23,6 +23,7 @@ include_rules = [
   "+components/feature_engagement",
   "+components/find_in_page",
   "+components/gcm_driver/instance_id",
+  "+components/global_media_controls",
   "+components/google/core/common",
   "+components/guest_view/browser",
   "+components/history/content",
@@ -96,5 +97,4 @@ include_rules = [
   "+third_party/blink/public",
   "+third_party/webrtc",
   "+third_party/re2",
-  "+ui/base",
 ]

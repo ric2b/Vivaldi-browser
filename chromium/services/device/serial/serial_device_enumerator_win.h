@@ -5,7 +5,6 @@
 #ifndef SERVICES_DEVICE_SERIAL_SERIAL_DEVICE_ENUMERATOR_WIN_H_
 #define SERVICES_DEVICE_SERIAL_SERIAL_DEVICE_ENUMERATOR_WIN_H_
 
-#include "base/macros.h"
 #include "base/win/windows_types.h"
 #include "device/base/device_monitor_win.h"
 #include "services/device/serial/serial_device_enumerator.h"
@@ -34,7 +33,9 @@ class SerialDeviceEnumeratorWin : public SerialDeviceEnumerator {
   class UiThreadHelper;
 
   void DoInitialEnumeration();
-  void EnumeratePort(HDEVINFO dev_info, SP_DEVINFO_DATA* dev_info_data);
+  void EnumeratePort(HDEVINFO dev_info,
+                     SP_DEVINFO_DATA* dev_info_data,
+                     bool check_port_name);
 
   std::map<base::FilePath, base::UnguessableToken> paths_;
 

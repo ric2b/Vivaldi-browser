@@ -19,15 +19,15 @@
 #include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/base/breakpad.h"
 #include "remoting/base/host_settings.h"
+#include "remoting/base/logging.h"
+#include "remoting/host/base/host_exit_codes.h"
+#include "remoting/host/base/switches.h"
 #include "remoting/host/chromoting_host_context.h"
-#include "remoting/host/host_exit_codes.h"
 #include "remoting/host/it2me/it2me_native_messaging_host.h"
-#include "remoting/host/logging.h"
 #include "remoting/host/native_messaging/native_messaging_pipe.h"
 #include "remoting/host/native_messaging/pipe_messaging_channel.h"
 #include "remoting/host/policy_watcher.h"
 #include "remoting/host/resources.h"
-#include "remoting/host/switches.h"
 #include "remoting/host/usage_stats_consent.h"
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
@@ -49,8 +49,6 @@
 #include <windows.h>
 
 #include <commctrl.h>
-
-#include "remoting/host/switches.h"
 #endif  // defined(OS_WIN)
 
 namespace remoting {
@@ -188,12 +186,12 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
   } else {
     // GetStdHandle() returns pseudo-handles for stdin and stdout even if
     // the hosting executable specifies "Windows" subsystem. However the
-    // returned  handles are invalid in that case unless standard input and
+    // returned handles are invalid in that case unless standard input and
     // output are redirected to a pipe or file.
     read_file = base::File(GetStdHandle(STD_INPUT_HANDLE));
     write_file = base::File(GetStdHandle(STD_OUTPUT_HANDLE));
 
-    // After the native messaging channel starts the native messaging reader
+    // After the native messaging channel starts, the native messaging reader
     // will keep doing blocking read operations on the input named pipe.
     // If any other thread tries to perform any operation on STDIN, it will also
     // block because the input named pipe is synchronous (non-overlapped).

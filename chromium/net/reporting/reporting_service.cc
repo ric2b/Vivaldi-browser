@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -27,6 +26,7 @@
 #include "net/reporting/reporting_uploader.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace net {
 
@@ -113,7 +113,7 @@ class ReportingServiceImpl : public ReportingService {
         depth, queued_ticks));
   }
 
-  void ProcessReportToHeader(const GURL& url,
+  void ProcessReportToHeader(const url::Origin& origin,
                              const NetworkIsolationKey& network_isolation_key,
                              const std::string& header_string) override {
     if (header_string.size() > kMaxJsonSize)
@@ -125,10 +125,10 @@ class ReportingServiceImpl : public ReportingService {
     if (!header_value)
       return;
 
-    DVLOG(1) << "Received Reporting policy for " << url.GetOrigin();
+    DVLOG(1) << "Received Reporting policy for " << origin;
     DoOrBacklogTask(base::BindOnce(
         &ReportingServiceImpl::DoProcessReportToHeader, base::Unretained(this),
-        FixupNetworkIsolationKey(network_isolation_key), url,
+        FixupNetworkIsolationKey(network_isolation_key), origin,
         std::move(header_value)));
   }
 
@@ -167,6 +167,11 @@ class ReportingServiceImpl : public ReportingService {
     std::vector<const net::ReportingReport*> reports;
     context_->cache()->GetReports(&reports);
     return reports;
+  }
+
+  base::flat_map<url::Origin, std::vector<ReportingEndpoint>>
+  GetV1ReportingEndpointsByOrigin() const override {
+    return context_->cache()->GetV1ReportingEndpointsByOrigin();
   }
 
   void AddReportingCacheObserver(ReportingCacheObserver* observer) override {
@@ -213,11 +218,11 @@ class ReportingServiceImpl : public ReportingService {
   }
 
   void DoProcessReportToHeader(const NetworkIsolationKey& network_isolation_key,
-                               const GURL& url,
+                               const url::Origin& origin,
                                std::unique_ptr<base::Value> header_value) {
     DCHECK(initialized_);
     ReportingHeaderParser::ParseReportToHeader(
-        context_.get(), network_isolation_key, url, std::move(header_value));
+        context_.get(), network_isolation_key, origin, std::move(header_value));
   }
 
   void DoSetDocumentReportingEndpoints(

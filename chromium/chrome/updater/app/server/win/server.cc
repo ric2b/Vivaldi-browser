@@ -4,10 +4,11 @@
 
 #include "chrome/updater/app/server/win/server.h"
 
-#include <wrl/implements.h>
+#include <wrl/module.h>
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/bind.h"
@@ -17,6 +18,8 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -36,7 +39,7 @@
 #include "chrome/updater/win/setup/setup_util.h"
 #include "chrome/updater/win/setup/uninstall.h"
 #include "chrome/updater/win/win_constants.h"
-#include "chrome/updater/win/wrl_module.h"
+#include "chrome/updater/win/win_util.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -45,6 +48,43 @@ namespace {
 
 bool IsCOMService() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kComServiceSwitch);
+}
+
+std::wstring GetCOMGroup(const std::wstring& prefix, UpdaterScope scope) {
+  return base::StrCat({prefix, base::ASCIIToWide(UpdaterScopeToString(scope))});
+}
+
+std::wstring COMGroup(UpdaterScope scope) {
+  return GetCOMGroup(L"Active", scope);
+}
+
+std::wstring COMGroupInternal(UpdaterScope scope) {
+  return GetCOMGroup(L"Internal", scope);
+}
+
+// Update the registry value for the "UninstallCmdLine" under the UPDATER_KEY.
+bool SwapUninstallCmdLine(UpdaterScope scope,
+                          const base::FilePath& updater_path,
+                          HKEY root,
+                          WorkItemList* list) {
+  DCHECK(list);
+
+  base::CommandLine uninstall_if_unused_command(updater_path);
+
+  // TODO(crbug.com/1270520) - use a switch that can uninstall immediately if
+  // unused, instead of requiring server starts.
+  uninstall_if_unused_command.AppendSwitch(kUninstallIfUnusedSwitch);
+  if (scope == UpdaterScope::kSystem)
+    uninstall_if_unused_command.AppendSwitch(kSystemSwitch);
+  uninstall_if_unused_command.AppendSwitch(kEnableLoggingSwitch);
+  uninstall_if_unused_command.AppendSwitchASCII(kLoggingModuleSwitch,
+                                                kLoggingModuleSwitchValue);
+  list->AddCreateRegKeyWorkItem(root, UPDATER_KEY, Wow6432(0));
+  list->AddSetRegValueWorkItem(
+      root, UPDATER_KEY, Wow6432(0), kRegValueUninstallCmdLine,
+      uninstall_if_unused_command.GetCommandLineString(), true);
+
+  return true;
 }
 
 }  // namespace
@@ -84,99 +124,26 @@ void ComServerApp::InitializeThreadPool() {
 }
 
 HRESULT ComServerApp::RegisterClassObjects() {
-  Microsoft::WRL::ComPtr<IUnknown> factory;
-  unsigned int flags = Microsoft::WRL::ModuleType::OutOfProc;
-
-  HRESULT hr = Microsoft::WRL::Details::CreateClassFactory<
-      Microsoft::WRL::SimpleClassFactory<UpdaterImpl>>(
-      &flags, nullptr, __uuidof(IClassFactory), &factory);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Factory creation for UpdaterImpl failed; hr: " << hr;
-    return hr;
-  }
-
-  Microsoft::WRL::ComPtr<IClassFactory> class_factory_updater;
-  hr = factory.As(&class_factory_updater);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "IClassFactory object creation failed; hr: " << hr;
-    return hr;
-  }
-  factory.Reset();
-
-  hr = Microsoft::WRL::Details::CreateClassFactory<
-      Microsoft::WRL::SimpleClassFactory<LegacyOnDemandImpl>>(
-      &flags, nullptr, __uuidof(IClassFactory), &factory);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Factory creation for LegacyOnDemandImpl failed; hr: " << hr;
-    return hr;
-  }
-
-  Microsoft::WRL::ComPtr<IClassFactory> class_factory_legacy_ondemand;
-  hr = factory.As(&class_factory_legacy_ondemand);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "IClassFactory object creation failed; hr: " << hr;
-    return hr;
-  }
-
-  // The pointer in this array is unowned. Do not release it.
-  IClassFactory* class_factories[] = {class_factory_updater.Get(),
-                                      class_factory_legacy_ondemand.Get()};
-  std::vector<CLSID> class_ids = GetActiveServers(updater_scope());
-  std::vector<DWORD> cookies(class_ids.size());
-  hr = Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
-           .RegisterCOMObject(nullptr, &class_ids[0], class_factories,
-                              &cookies[0], class_ids.size());
-  if (FAILED(hr)) {
-    LOG(ERROR) << "RegisterCOMObject failed; hr: " << hr;
-    return hr;
-  }
-
-  cookies.swap(cookies_);
-  return hr;
+  // Register COM class objects that are under either the ActiveSystem or the
+  // ActiveUser group.
+  // See wrl_classes.cc for details on the COM classes within the group.
+  return Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
+      .RegisterObjects(COMGroup(updater_scope()).c_str());
 }
 
 HRESULT ComServerApp::RegisterInternalClassObjects() {
-  Microsoft::WRL::ComPtr<IUnknown> factory;
-  unsigned int flags = Microsoft::WRL::ModuleType::OutOfProc;
-
-  HRESULT hr = Microsoft::WRL::Details::CreateClassFactory<
-      Microsoft::WRL::SimpleClassFactory<UpdaterInternalImpl>>(
-      &flags, nullptr, __uuidof(IClassFactory), &factory);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "Factory creation for UpdaterInternalImpl failed; hr: " << hr;
-    return hr;
-  }
-
-  Microsoft::WRL::ComPtr<IClassFactory> class_factory_updater_internal;
-  hr = factory.As(&class_factory_updater_internal);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "IClassFactory object creation failed; hr: " << hr;
-    return hr;
-  }
-  factory.Reset();
-
-  // The pointer in this array is unowned. Do not release it.
-  IClassFactory* class_factories[] = {class_factory_updater_internal.Get()};
-  std::vector<CLSID> class_ids = GetSideBySideServers(updater_scope());
-  std::vector<DWORD> cookies(class_ids.size());
-  hr = Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
-           .RegisterCOMObject(nullptr, &class_ids[0], class_factories,
-                              &cookies[0], class_ids.size());
-  if (FAILED(hr)) {
-    LOG(ERROR) << "RegisterCOMObject failed; hr: " << hr;
-    return hr;
-  }
-
-  cookies.swap(cookies_);
-  return hr;
+  // Register COM class objects that are under either the InternalSystem or the
+  // InternalUser group.
+  // See wrl_classes.cc for details on the COM classes within the group.
+  return Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
+      .RegisterObjects(COMGroupInternal(updater_scope()).c_str());
 }
 
 void ComServerApp::UnregisterClassObjects() {
-  auto& module = Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule();
   const HRESULT hr =
-      module.UnregisterCOMObject(nullptr, cookies_.data(), cookies_.size());
-  if (FAILED(hr))
-    LOG(ERROR) << "UnregisterCOMObject failed; hr: " << hr;
+      Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
+          .UnregisterObjects();
+  LOG_IF(ERROR, FAILED(hr)) << "UnregisterObjects failed; hr: " << hr;
 }
 
 void ComServerApp::CreateWRLModule() {
@@ -214,7 +181,7 @@ void ComServerApp::UninstallSelf() {
   UninstallCandidate(updater_scope());
 }
 
-bool ComServerApp::SwapRPCInterfaces() {
+bool ComServerApp::SwapInNewVersion() {
   std::unique_ptr<WorkItemList> list(WorkItem::CreateWorkItemList());
 
   const absl::optional<base::FilePath> versioned_directory =
@@ -225,19 +192,21 @@ bool ComServerApp::SwapRPCInterfaces() {
   const base::FilePath updater_path =
       versioned_directory->Append(FILE_PATH_LITERAL("updater.exe"));
 
-  if (IsCOMService()) {
-    AddComServiceWorkItems(updater_path, false, list.get());
-    return list->Do();
-  }
-
   HKEY root = (updater_scope() == UpdaterScope::kSystem) ? HKEY_LOCAL_MACHINE
                                                          : HKEY_CURRENT_USER;
-  for (const CLSID& clsid : GetActiveServers(updater_scope())) {
-    AddInstallServerWorkItems(root, clsid, updater_path, false, list.get());
-  }
+  if (!SwapUninstallCmdLine(updater_scope(), updater_path, root, list.get()))
+    return false;
 
-  for (const GUID& iid : GetActiveInterfaces()) {
-    AddInstallComInterfaceWorkItems(root, updater_path, iid, list.get());
+  if (IsCOMService()) {
+    AddComServiceWorkItems(updater_path, false, list.get());
+  } else {
+    for (const CLSID& clsid : GetActiveServers(updater_scope())) {
+      AddInstallServerWorkItems(root, clsid, updater_path, false, list.get());
+    }
+
+    for (const GUID& iid : GetActiveInterfaces()) {
+      AddInstallComInterfaceWorkItems(root, updater_path, iid, list.get());
+    }
   }
 
   return list->Do();

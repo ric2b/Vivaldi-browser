@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/cpu.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_functions.h"
@@ -92,7 +93,7 @@ class IndependentFlattener : public base::HistogramFlattener {
   }
 
  private:
-  MetricsLog* const log_;
+  const raw_ptr<MetricsLog> log_;
 };
 
 // Convenience function to return the given time at a resolution in seconds.
@@ -179,34 +180,30 @@ MetricsLog::MetricsLog(const std::string& client_id,
                  session_id,
                  log_type,
                  base::DefaultClock::GetInstance(),
-                 nullptr,
+                 client->GetNetworkTimeTracker(),
                  client) {}
 
-MetricsLog::MetricsLog(
-    const std::string& client_id,
-    int session_id,
-    LogType log_type,
-    base::Clock* clock,
-    network_time::NetworkTimeTracker* network_clock_for_testing,
-    MetricsServiceClient* client)
+MetricsLog::MetricsLog(const std::string& client_id,
+                       int session_id,
+                       LogType log_type,
+                       base::Clock* clock,
+                       const network_time::NetworkTimeTracker* network_clock,
+                       MetricsServiceClient* client)
     : closed_(false),
       log_type_(log_type),
       client_(client),
       creation_time_(base::TimeTicks::Now()),
       has_environment_(false),
       clock_(clock),
-      network_clock_for_testing_(network_clock_for_testing) {
+      network_clock_(network_clock) {
   uma_proto_.set_client_id(Hash(client_id));
   uma_proto_.set_session_id(session_id);
 
   if (log_type == MetricsLog::ONGOING_LOG) {
-    auto* network_clock = network_clock_for_testing_
-                              ? network_clock_for_testing_
-                              : client_->GetNetworkTimeTracker();
     // Don't record the time when creating a log because creating a log happens
     // on startups and setting the timezone requires ICU initialization that is
     // too expensive to run during this critical time.
-    RecordCurrentTime(clock_, network_clock,
+    RecordCurrentTime(clock_, network_clock_,
                       /*record_time_zone=*/false,
                       uma_proto_.mutable_time_log_created());
   }
@@ -372,24 +369,34 @@ void MetricsLog::RecordHistogramDelta(const std::string& histogram_name,
 }
 
 void MetricsLog::RecordPreviousSessionData(
-    DelegatingProvider* delegating_provider) {
+    DelegatingProvider* delegating_provider,
+    PrefService* local_state) {
   delegating_provider->ProvidePreviousSessionData(uma_proto());
+  // Schedule a Local State write to flush updated prefs to disk. This is done
+  // because a side effect of providing data—namely stability data—is updating
+  // Local State prefs.
+  local_state->CommitPendingWrite();
 }
 
 void MetricsLog::RecordCurrentSessionData(
-    DelegatingProvider* delegating_provider,
     base::TimeDelta incremental_uptime,
-    base::TimeDelta uptime) {
+    base::TimeDelta uptime,
+    DelegatingProvider* delegating_provider,
+    PrefService* local_state) {
   DCHECK(!closed_);
   DCHECK(has_environment_);
 
-  // Record recent delta for critical stability metrics.  We can't wait for a
+  // Record recent delta for critical stability metrics. We can't wait for a
   // restart to gather these, as that delay biases our observation away from
   // users that run happily for a looooong time.  We send increments with each
-  // uma log upload, just as we send histogram data.
+  // UMA log upload, just as we send histogram data.
   WriteRealtimeStabilityAttributes(incremental_uptime, uptime);
 
   delegating_provider->ProvideCurrentSessionData(uma_proto());
+  // Schedule a Local State write to flush updated prefs to disk. This is done
+  // because a side effect of providing data—namely stability data—is updating
+  // Local State prefs.
+  local_state->CommitPendingWrite();
 }
 
 void MetricsLog::WriteMetricsEnableDefault(EnableMetricsDefault metrics_default,
@@ -464,18 +471,13 @@ const SystemProfileProto& MetricsLog::RecordEnvironment(
   return *system_profile;
 }
 
-bool MetricsLog::LoadSavedEnvironmentFromPrefs(PrefService* local_state,
-                                               std::string* app_version) {
+bool MetricsLog::LoadSavedEnvironmentFromPrefs(PrefService* local_state) {
   DCHECK(!has_environment_);
   has_environment_ = true;
-  app_version->clear();
 
   SystemProfileProto* system_profile = uma_proto()->mutable_system_profile();
   EnvironmentRecorder recorder(local_state);
-  bool success = recorder.LoadEnvironmentFromPrefs(system_profile);
-  if (success)
-    *app_version = system_profile->app_version();
-  return success;
+  return recorder.LoadEnvironmentFromPrefs(system_profile);
 }
 
 void MetricsLog::RecordLogWrittenByAppVersionIfNeeded() {
@@ -489,10 +491,7 @@ void MetricsLog::RecordLogWrittenByAppVersionIfNeeded() {
 void MetricsLog::CloseLog() {
   DCHECK(!closed_);
   if (log_type_ == MetricsLog::ONGOING_LOG) {
-    auto* network_clock = network_clock_for_testing_
-                              ? network_clock_for_testing_
-                              : client_->GetNetworkTimeTracker();
-    RecordCurrentTime(clock_, network_clock,
+    RecordCurrentTime(clock_, network_clock_,
                       /*record_time_zone=*/true,
                       uma_proto_.mutable_time_log_closed());
   }

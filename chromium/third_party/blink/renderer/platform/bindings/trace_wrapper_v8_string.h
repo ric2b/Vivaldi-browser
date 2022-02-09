@@ -7,6 +7,7 @@
 
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
+#include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "v8/include/v8.h"
 
@@ -25,10 +26,10 @@ class PLATFORM_EXPORT TraceWrapperV8String final {
   ~TraceWrapperV8String() = default;
 
   bool IsEmpty() const { return string_.IsEmpty(); }
-  void Clear() { string_.Clear(); }
+  void Clear() { string_.Reset(); }
 
   v8::Local<v8::String> V8Value(v8::Isolate* isolate) {
-    return string_.NewLocal(isolate);
+    return string_.Get(isolate);
   }
 
   void Concat(v8::Isolate*, const String&);

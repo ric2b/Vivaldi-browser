@@ -7,7 +7,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_device_description.h"
@@ -28,6 +27,12 @@ namespace media {
 class AudioSystemCallbackExpectations {
  public:
   AudioSystemCallbackExpectations() = default;
+
+  AudioSystemCallbackExpectations(const AudioSystemCallbackExpectations&) =
+      delete;
+  AudioSystemCallbackExpectations& operator=(
+      const AudioSystemCallbackExpectations&) = delete;
+
   AudioSystem::OnAudioParamsCallback GetAudioParamsCallback(
       const base::Location& location,
       base::OnceClosure on_cb_received,
@@ -85,7 +90,6 @@ class AudioSystemCallbackExpectations {
                   const absl::optional<std::string>& result_id);
 
   THREAD_CHECKER(thread_checker_);
-  DISALLOW_COPY_AND_ASSIGN(AudioSystemCallbackExpectations);
 };
 
 // Template test case to test AudioSystem implementations.

@@ -162,6 +162,27 @@ void FakeCrosHealthdClient::EmitAudioUnderrunEventForTesting() {
   fake_service_.EmitAudioUnderrunEventForTesting();
 }
 
+void FakeCrosHealthdClient::EmitAudioSevereUnderrunEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitAudioSevereUnderrunEventForTesting();
+}
+
+void FakeCrosHealthdClient::EmitThunderboltAddEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitThunderboltAddEventForTesting();
+}
+
+void FakeCrosHealthdClient::EmitUsbAddEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitUsbAddEventForTesting();
+}
+
 void FakeCrosHealthdClient::EmitConnectionStateChangedEventForTesting(
     const std::string& network_guid,
     chromeos::network_health::mojom::NetworkState state) {

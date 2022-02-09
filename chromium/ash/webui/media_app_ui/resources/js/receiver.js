@@ -5,7 +5,7 @@
 import './sandboxed_load_time_data.js';
 
 import {assertCast, MessagePipe} from './message_pipe.m.js';
-import {FileContext, LoadFilesMessage, Message, OverwriteFileMessage, OverwriteViaFilePickerResponse, RenameFileResponse, RenameResult, RequestSaveFileMessage, RequestSaveFileResponse, SaveAsMessage, SaveAsResponse} from './message_types.m.js';
+import {FileContext, LoadFilesMessage, Message, OpenAllowedFileMessage, OpenAllowedFileResponse, OpenFilesWithPickerMessage, OverwriteFileMessage, OverwriteViaFilePickerResponse, RenameFileResponse, RenameResult, RequestSaveFileMessage, RequestSaveFileResponse, SaveAsMessage, SaveAsResponse} from './message_types.js';
 import {loadPiex} from './piex_module_loader.js';
 
 /** A pipe through which we can send messages to the parent frame. */
@@ -127,6 +127,22 @@ class ReceivedFile {
   }
 
   /**
+   * @override
+   * @return {!Promise<!File>}
+   */
+  async openFile() {
+    /** @type {!OpenAllowedFileMessage} */
+    const msg = {
+      fileToken: this.token,
+    };
+    const response =
+        /** @type {!OpenAllowedFileResponse} */ (
+            await parentMessagePipe.sendMessage(
+                Message.OPEN_ALLOWED_FILE, msg));
+    return response.file;
+  }
+
+  /**
    * Updates the wrapped file to reflect a change written to disk.
    * @private
    * @param {!Blob} blob
@@ -143,8 +159,8 @@ class ReceivedFile {
 }
 
 /**
- * Source of truth for what files are loaded in the app. This can
- * be appended to via `ReceivedFileList.addFiles()`.
+ * Source of truth for what files are loaded in the app. This can be appended to
+ * via `ReceivedFileList.addFiles()`.
  * @type {?ReceivedFileList}
  */
 let lastLoadedReceivedFileList = null;
@@ -200,8 +216,28 @@ export class ReceivedFileList {
     this.observers.push(observer);
   }
 
+  /** @override */
   async openFile() {
     await parentMessagePipe.sendMessage(Message.OPEN_FILE);
+  }
+
+  /**
+   * @override
+   * @param {!Array<string>} acceptTypeKeys
+   * @param {?mediaApp.AbstractFile} startInFolder
+   * @return {!Promise<undefined>}
+   */
+  async openFilesWithFilePicker(acceptTypeKeys, startInFolder) {
+    // AbstractFile doesn't guarantee tokens. Use one from a ReceivedFile if
+    // there is one, after ensuring it is valid.
+    const fileRep = /** @type {{token: (number|undefined)}} */ (startInFolder);
+    const startInToken = startInFolder ? (fileRep.token || 0) : 0;
+    /** @type {!OpenFilesWithPickerMessage} */
+    const msg = {
+      startInToken: startInToken > 0 ? startInToken : 0,
+      accept: acceptTypeKeys,
+    };
+    await parentMessagePipe.sendMessage(Message.OPEN_FILES_WITH_PICKER, msg);
   }
 
   /** @param {!Array<!ReceivedFile>} files */
@@ -247,6 +283,9 @@ const DELEGATE = {
         await parentMessagePipe.sendMessage(Message.OPEN_FEEDBACK_DIALOG);
     return /** @type {?string} */ (response['errorMessage']);
   },
+  async toggleBrowserFullscreenMode() {
+    await parentMessagePipe.sendMessage(Message.TOGGLE_BROWSER_FULLSCREEN_MODE);
+  },
   /**
    * @param {string} suggestedName
    * @param {string} mimeType
@@ -267,6 +306,13 @@ const DELEGATE = {
    */
   async openFile() {
     await parentMessagePipe.sendMessage(Message.OPEN_FILE);
+  },
+  /**
+   * @param {string|undefined} name
+   * @param {string|undefined} type
+   */
+  notifyCurrentFile(name, type) {
+    parentMessagePipe.sendMessage(Message.NOTIFY_CURRENT_FILE, {name, type});
   },
   /**
    * @param {!Blob} file

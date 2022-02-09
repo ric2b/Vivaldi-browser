@@ -12,18 +12,18 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "components/breadcrumbs/core/breadcrumb_manager.h"
 #include "components/breadcrumbs/core/breadcrumb_persistent_storage_manager.h"
+#include "components/breadcrumbs/core/breadcrumb_util.h"
 #include "components/breadcrumbs/core/features.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/timer_update_scheduler.h"
@@ -51,7 +51,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state_manager_impl.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
-#import "ios/chrome/browser/crash_report/breadcrumbs/application_breadcrumbs_logger_ios.h"
+#import "ios/chrome/browser/crash_report/breadcrumbs/application_breadcrumbs_logger.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_util.h"
 #include "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -66,6 +66,7 @@
 #include "ios/chrome/browser/safe_browsing/safe_browsing_service_impl.h"
 #include "ios/chrome/browser/update_client/ios_chrome_update_query_params_delegate.h"
 #include "ios/chrome/common/channel_info.h"
+#include "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -162,9 +163,10 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
   }
 
   if (base::FeatureList::IsEnabled(breadcrumbs::kLogBreadcrumbs)) {
-    breadcrumb_manager_ = std::make_unique<breadcrumbs::BreadcrumbManager>();
+    breadcrumb_manager_ = std::make_unique<breadcrumbs::BreadcrumbManager>(
+        breadcrumbs::GetStartTime());
     application_breadcrumbs_logger_ =
-        std::make_unique<ApplicationBreadcrumbsLoggerIOS>(
+        std::make_unique<ApplicationBreadcrumbsLogger>(
             breadcrumb_manager_.get());
 
     base::FilePath storage_dir;
@@ -412,7 +414,8 @@ ApplicationContextImpl::GetComponentUpdateService() {
     component_updater_ = component_updater::ComponentUpdateServiceFactory(
         component_updater::MakeIOSComponentUpdaterConfigurator(
             base::CommandLine::ForCurrentProcess()),
-        std::make_unique<component_updater::TimerUpdateScheduler>());
+        std::make_unique<component_updater::TimerUpdateScheduler>(),
+        ios::provider::GetBrandCode());
   }
   return component_updater_.get();
 }

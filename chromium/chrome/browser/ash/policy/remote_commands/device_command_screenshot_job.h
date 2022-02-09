@@ -12,11 +12,10 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "chrome/browser/ash/policy/uploading/upload_job.h"
 #include "components/policy/core/common/remote_commands/remote_command_job.h"
 #include "ui/snapshot/snapshot.h"

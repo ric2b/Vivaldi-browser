@@ -5,18 +5,20 @@
 #ifndef ASH_SHELF_LAUNCHER_NUDGE_CONTROLLER_H_
 #define ASH_SHELF_LAUNCHER_NUDGE_CONTROLLER_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "ash/public/cpp/app_list/app_list_controller_observer.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/time/time.h"
 
 namespace base {
 class Clock;
 class TickClock;
-class Time;
-class TimeDelta;
 class WallClockTimer;
 }  // namespace base
 
@@ -36,7 +38,14 @@ class ASH_EXPORT LauncherNudgeController : public SessionObserver,
   // Maximum number of times that the nudge will be shown to the users.
   static constexpr int kMaxShownCount = 3;
 
-  explicit LauncherNudgeController();
+  // To prevent showing the nudge to users right after the home button appears
+  // (e.g. at the moment when the user logs in or change to the clamshell mode),
+  // a minimum time delta is used here to guarantee the nudge is shown after a
+  // certain amount of time since the home button shows up.
+  static constexpr base::TimeDelta kMinIntervalAfterHomeButtonAppears =
+      base::Minutes(2);
+
+  LauncherNudgeController();
   LauncherNudgeController(const LauncherNudgeController&) = delete;
   LauncherNudgeController& operator=(const LauncherNudgeController&) = delete;
   ~LauncherNudgeController() override;
@@ -52,7 +61,9 @@ class ASH_EXPORT LauncherNudgeController : public SessionObserver,
 
   // Returns the time delta between user's first login and the first time
   // showing the nudge if `is_first_time` is true. Otherwise, returns the time
-  // delta between each time showing the nudge to the user.
+  // delta between each time showing the nudge to the user. If the
+  // `kLauncherNudgeShortInterval` feature is enabled, use a short interval for
+  // testing.
   base::TimeDelta GetNudgeInterval(bool is_first_time) const;
 
   // Sets custom Clock and TickClock for testing. Note that this should be
@@ -96,6 +107,10 @@ class ASH_EXPORT LauncherNudgeController : public SessionObserver,
   // The timer that keeps track of when should the nudge be shown next time.
   std::unique_ptr<base::WallClockTimer> show_nudge_timer_;
 
+  // The earliest available time for the nudge to be shown next time. Could be
+  // null or earlier than GetNow().
+  base::Time earliest_available_time_;
+
   ScopedSessionObserver session_observer_{this};
   base::ScopedObservation<TabletModeController, TabletModeObserver>
       tablet_mode_observation_{this};
@@ -105,4 +120,4 @@ class ASH_EXPORT LauncherNudgeController : public SessionObserver,
 
 }  // namespace ash
 
-#endif
+#endif  // ASH_SHELF_LAUNCHER_NUDGE_CONTROLLER_H_

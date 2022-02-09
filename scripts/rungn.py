@@ -248,7 +248,7 @@ if args.refresh or not args.args:
   if produce_ide and not ide_kind:
     if platform.system() == "Windows":
       ide_kind = "vs2017"
-    elif platform.system()== "darwin":
+    elif platform.system()== "Darwin":
       ide_kind = "xcode"
     else:
       ide_kind = "eclipse"

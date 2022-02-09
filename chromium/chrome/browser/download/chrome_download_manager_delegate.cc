@@ -13,7 +13,6 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
@@ -22,8 +21,8 @@
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -1269,13 +1268,23 @@ bool ChromeDownloadManagerDelegate::ShouldShowDownloadLaterDialog(
     met_network_condition = true;
   }
 
+  if (met_network_condition)
+    return true;
+
+  // If the options to user are "download now" and "download on wifi" and the
+  // user is already on wifi, then don't show.
+  if (network_type == ConnectionType::CONNECTION_WIFI &&
+      !DownloadDialogBridge::ShouldShowDateTimePicker()) {
+    return false;
+  }
+
   int64_t min_file_size_kb =
       static_cast<int64_t>(DownloadDialogBridge::GetDownloadLaterMinFileSize());
 
   // Show download later dialog on large download file.
   bool met_file_size_condition =
       download && download->GetTotalBytes() >= min_file_size_kb * 1024;
-  return (met_network_condition || met_file_size_condition);
+  return met_file_size_condition;
 }
 #endif  // defined(OS_ANDROID)
 
@@ -1616,7 +1625,7 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
           web_contents ? web_contents->GetTopLevelNativeWindow() : nullptr;
       if (native_window && item) {
         MixedContentDownloadDialogBridge::GetInstance()->CreateDialog(
-            item, target_path.BaseName(), mcs, native_window,
+            item, target_path.BaseName(), native_window,
             base::BindOnce(HandleMixedDownloadInfoBarResult, item,
                            std::move(target_info), std::move(callback)));
         return;

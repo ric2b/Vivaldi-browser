@@ -164,14 +164,14 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
     return base::FilePath();
 
   std::string ext;
-  const char* mime_type;
+  //const char* mime_type;
   switch (image_format) {
     case ImageFormat::kJPEG:
-      mime_type = "image/jpeg";  // kMimeTypeJpeg;
+      //mime_type = "image/jpeg";  // kMimeTypeJpeg;
       ext = ".jpg";
       break;
     case ImageFormat::kPNG:
-      mime_type = "image/png";  // kMimeTypePng;
+      //mime_type = "image/png";  // kMimeTypePng;
       ext = ".png";
       break;
   }

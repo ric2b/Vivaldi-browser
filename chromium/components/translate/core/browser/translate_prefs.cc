@@ -16,7 +16,6 @@
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/json/values_util.h"
-#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -81,6 +80,64 @@ void PurgeUnsupportedLanguagesInLanguageFamily(base::StringPiece language,
   });
 }
 
+// Merge old always-translate languages from the deprecated pref to the new
+// version. Because of crbug/1291356, it's possible that on iOS the client
+// started using the new pref without properly migrating and clearing the old
+// pref. This function will avoid merging values from the old pref that seem to
+// conflict with values already present in the new pref.
+void MigrateObsoleteAlwaysTranslateLanguagesPref(PrefService* prefs) {
+  const base::Value* deprecated_dictionary = prefs->GetUserPrefValue(
+      TranslatePrefs::kPrefAlwaysTranslateListDeprecated);
+  // Migration is performed only once per client, since the deprecated pref is
+  // cleared after migration. This will make subsequent calls to migrate no-ops.
+  if (!deprecated_dictionary)
+    return;
+
+  DictionaryPrefUpdate always_translate_dictionary_update(
+      prefs, prefs::kPrefAlwaysTranslateList);
+  base::Value* always_translate_dictionary =
+      always_translate_dictionary_update.Get();
+
+  for (const auto old_language_pair : deprecated_dictionary->DictItems()) {
+    // If the old pref's language pair conflicts with any of the new pref's
+    // language pairs, where either the new pref already specifies behavior
+    // about always translating from or to the old source language, or always
+    // translating from the old target language, then skip merging this pair
+    // into the new pref.
+    const auto& new_language_pairs = always_translate_dictionary->DictItems();
+    if (std::any_of(new_language_pairs.begin(), new_language_pairs.end(),
+                    [&old_language_pair](const auto& new_language_pair) {
+                      return old_language_pair.first ==
+                                 new_language_pair.first ||
+                             old_language_pair.first ==
+                                 new_language_pair.second.GetString() ||
+                             old_language_pair.second.GetString() ==
+                                 new_language_pair.first;
+                    })) {
+      continue;
+    }
+
+    // If the old pair's source language matches any of the never-translate
+    // languages, it probably means that this source language was set to never
+    // be translated after the old pref was deprecated, so avoid this conflict.
+    const auto& never_translate_languages =
+        prefs->GetList(prefs::kBlockedLanguages)->GetList();
+    if (std::any_of(
+            never_translate_languages.begin(), never_translate_languages.end(),
+            [&old_language_pair](const base::Value& never_translate_language) {
+              return old_language_pair.first ==
+                     never_translate_language.GetString();
+            })) {
+      continue;
+    }
+
+    always_translate_dictionary->SetStringKey(
+        old_language_pair.first, old_language_pair.second.GetString());
+  }
+
+  prefs->ClearPref(TranslatePrefs::kPrefAlwaysTranslateListDeprecated);
+}
+
 }  // namespace
 
 const char TranslatePrefs::kPrefForceTriggerTranslateCount[] =
@@ -95,6 +152,10 @@ const char TranslatePrefs::kPrefTranslateIgnoredCount[] =
     "translate_ignored_count_for_language";
 const char TranslatePrefs::kPrefTranslateAcceptedCount[] =
     "translate_accepted_count";
+
+// Deprecated 10/2021.
+const char TranslatePrefs::kPrefAlwaysTranslateListDeprecated[] =
+    "translate_whitelists";
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 const char TranslatePrefs::kPrefTranslateAutoAlwaysCount[] =
@@ -120,6 +181,9 @@ const base::Feature kTranslateRecentTarget{"TranslateRecentTarget",
 
 const base::Feature kTranslate{"Translate", base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kMigrateAlwaysTranslateLanguagesFix{
+    "MigrateAlwaysTranslateLanguagesFix", base::FEATURE_DISABLED_BY_DEFAULT};
+
 TranslateLanguageInfo::TranslateLanguageInfo() = default;
 
 TranslateLanguageInfo::TranslateLanguageInfo(const TranslateLanguageInfo&) =
@@ -136,15 +200,16 @@ TranslatePrefs::TranslatePrefs(PrefService* user_prefs)
       language_prefs_(std::make_unique<language::LanguagePrefs>(user_prefs)) {
   MigrateNeverPromptSites();
   ResetEmptyBlockedLanguagesToDefaults();
+
+  if (base::FeatureList::IsEnabled(kMigrateAlwaysTranslateLanguagesFix))
+    MigrateObsoleteAlwaysTranslateLanguagesPref(user_prefs);
 }
 
 TranslatePrefs::~TranslatePrefs() = default;
 
 // static
 std::string TranslatePrefs::MapPreferenceName(const std::string& pref_name) {
-  if (pref_name == prefs::kPrefAlwaysTranslateList) {
-    return "translate_allowlists";
-  } else if (pref_name == kPrefNeverPromptSitesDeprecated) {
+  if (pref_name == kPrefNeverPromptSitesDeprecated) {
     return "translate_site_blocklist";
   }
   return pref_name;
@@ -939,6 +1004,15 @@ void TranslatePrefs::RegisterProfilePrefs(
       kPrefExplicitLanguageAskShown, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #endif
+
+  RegisterProfilePrefsForMigration(registry);
+}
+
+// static
+void TranslatePrefs::RegisterProfilePrefsForMigration(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // Deprecated 10/2021.
+  registry->RegisterDictionaryPref(kPrefAlwaysTranslateListDeprecated);
 }
 
 void TranslatePrefs::MigrateNeverPromptSites() {
@@ -961,6 +1035,24 @@ void TranslatePrefs::MigrateNeverPromptSites() {
     }
     deprecated_list->ClearList();
   }
+}
+
+// static
+void TranslatePrefs::MigrateObsoleteProfilePrefs(PrefService* profile_prefs) {
+  // TODO(crbug/1291356): Remove this method.
+  const base::Value* deprecated_always_translate_list =
+      profile_prefs->GetUserPrefValue(kPrefAlwaysTranslateListDeprecated);
+  if (deprecated_always_translate_list &&
+      !profile_prefs->GetUserPrefValue(prefs::kPrefAlwaysTranslateList)) {
+    profile_prefs->Set(prefs::kPrefAlwaysTranslateList,
+                       *deprecated_always_translate_list);
+  }
+}
+
+// static
+void TranslatePrefs::ClearObsoleteProfilePrefs(PrefService* profile_prefs) {
+  // TODO(crbug/1291356): Remove this method.
+  profile_prefs->ClearPref(kPrefAlwaysTranslateListDeprecated);
 }
 
 bool TranslatePrefs::IsValueOnNeverPromptList(const char* pref_id,

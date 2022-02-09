@@ -109,7 +109,7 @@ void ClearBrowsingDataHandler::RegisterMessages() {
 
 void ClearBrowsingDataHandler::OnJavascriptAllowed() {
   if (sync_service_)
-    sync_service_observation_.Observe(sync_service_);
+    sync_service_observation_.Observe(sync_service_.get());
 
   dse_service_observation_.Observe(
       TemplateURLServiceFactory::GetForProfile(profile_));
@@ -214,18 +214,17 @@ ClearBrowsingDataHandler::ProcessInstalledApps(
   for (const auto& item : installed_apps) {
     const base::DictionaryValue* site = nullptr;
     CHECK(item.GetAsDictionary(&site));
-    bool is_checked = false;
-    CHECK(site->GetBoolean(kIsCheckedField, &is_checked));
+    bool is_checked = site->FindBoolPath(kIsCheckedField).value();
     std::string domain;
     CHECK(site->GetString(kRegisterableDomainField, &domain));
-    int domain_reason = -1;
-    CHECK(site->GetInteger(kReasonBitfieldField, &domain_reason));
+    absl::optional<int> domain_reason = site->FindIntKey(kReasonBitfieldField);
+    CHECK(domain_reason);
     if (is_checked) {  // Selected installed apps should be deleted.
       ignored_domains.push_back(domain);
-      ignored_domain_reasons.push_back(domain_reason);
+      ignored_domain_reasons.push_back(*domain_reason);
     } else {  // Unselected sites should be kept.
       excluded_domains.push_back(domain);
-      excluded_domain_reasons.push_back(domain_reason);
+      excluded_domain_reasons.push_back(*domain_reason);
     }
   }
   if (!excluded_domains.empty() || !ignored_domains.empty()) {
@@ -249,7 +248,6 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
   std::string webui_callback_id = args_list[0].GetString();
 
   PrefService* prefs = profile_->GetPrefs();
-
   int site_data_mask = chrome_browsing_data_remover::DATA_TYPE_SITE_DATA;
   // Don't try to clear LSO data if it's not supported.
   if (!prefs->GetBoolean(prefs::kClearPluginLSODataEnabled))
@@ -419,8 +417,7 @@ void ClearBrowsingDataHandler::OnClearingTaskFinished(
 
 void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
   AllowJavascript();
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
+  const base::Value& callback_id = args->GetList()[0];
 
   // Needed because WebUI doesn't handle renderer crashes. See crbug.com/610450.
   weak_ptr_factory_.InvalidateWeakPtrs();
@@ -432,7 +429,7 @@ void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
   for (const auto& counter : counters_)
     counter->Restart();
 
-  ResolveJavascriptCallback(*callback_id, base::Value() /* Promise<void> */);
+  ResolveJavascriptCallback(callback_id, base::Value() /* Promise<void> */);
 }
 
 void ClearBrowsingDataHandler::OnStateChanged(syncer::SyncService* sync) {

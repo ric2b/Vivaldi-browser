@@ -196,7 +196,7 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolean("interesting", android_node->IsInterestingOnAndroid());
 
   // String attributes.
-  dict->SetString("name", android_node->GetInnerText());
+  dict->SetString("name", android_node->GetTextContentUTF16());
   dict->SetString("hint", android_node->GetHint());
   dict->SetString("role_description", android_node->GetRoleDescription());
   dict->SetString("state_description", android_node->GetStateDescription());
@@ -240,8 +240,7 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
 
   std::string line;
   if (show_ids()) {
-    int id_value;
-    dict.GetInteger("id", &id_value);
+    int id_value = dict.FindIntKey("id").value_or(0);
     WriteAttribute(true, base::NumberToString(id_value), &line);
   }
 
@@ -275,8 +274,8 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
 
   for (unsigned i = 0; i < base::size(INT_ATTRIBUTES); i++) {
     const char* attribute_name = INT_ATTRIBUTES[i];
-    int value;
-    if (!dict.GetInteger(attribute_name, &value) || value == 0)
+    int value = dict.FindIntKey(attribute_name).value_or(0);
+    if (value == 0)
       continue;
     WriteAttribute(true, StringPrintf("%s=%d", attribute_name, value), &line);
   }

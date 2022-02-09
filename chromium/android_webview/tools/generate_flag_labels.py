@@ -49,6 +49,8 @@ KNOWN_MISTAKES = {
     'EnableSharedImageForWebView': 'EnableSharedImageForWebview',
     'GmsCoreEmoji': 'GMSCoreEmoji',
     'KeyboardAccessoryPaymentVirtualCardFeature': 'IPH_KeyboardAccessoryPaymentVirtualCard',  # pylint: disable=line-too-long
+    'CompositeBgColorAnimation': 'CompositeBGColorAnimation',
+    'RtcDisallowPlanBOutsideDeprecationTrial': 'RTCDisallowPlanBOutsideDeprecationTrial',  # pylint: disable=line-too-long
 }
 
 

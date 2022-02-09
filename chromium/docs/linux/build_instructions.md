@@ -15,8 +15,8 @@ Are you a Google employee? See
 *   A 64-bit Intel machine with at least 8GB of RAM. More than 16GB is highly
     recommended.
 *   At least 100GB of free disk space.
-*   You must have Git and Python v3 installed already (and `python3` must point
-    to a Python v3 binary).
+*   You must have Git and Python v3.6+ installed already (and `python3` must point
+    to a Python v3.6+ binary).
 
 Most development is done on Ubuntu (currently 18.04, Bionic Beaver). There are
 some instructions for other distros below, but they are mostly unsupported.
@@ -161,11 +161,12 @@ By default GN produces a build with all of the debug assertions enabled
 line-by-line debugging. Setting `symbol_level=0` will include no debug
 symbols at all. Either will speed up the build compared to full symbols.
 
-#### Disable debug symbols for Blink
+#### Disable debug symbols for Blink and v8
 
 Due to its extensive use of templates, the Blink code produces about half
 of our debug symbols. If you don't ever need to debug Blink, you can set
-the GN arg `blink_symbol_level=0`.
+the GN arg `blink_symbol_level=0`. Similarly, if you don't need to debug v8 you
+can improve build speeds by setting the GN arg `v8_symbol_level=0`.
 
 #### Use Icecc
 

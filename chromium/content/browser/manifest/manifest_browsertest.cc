@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -65,8 +65,8 @@ class MockWebContentsDelegate : public WebContentsDelegate {
                               const std::u16string& source_id) override;
 
  private:
-  WebContents* web_contents_;
-  ManifestBrowserTest* test_;
+  raw_ptr<WebContents> web_contents_;
+  raw_ptr<ManifestBrowserTest> test_;
 };
 
 class ManifestBrowserTest : public ContentBrowserTest,
@@ -80,6 +80,9 @@ class ManifestBrowserTest : public ContentBrowserTest,
     cors_embedded_test_server_->ServeFilesFromSourceDirectory(
         GetTestDataFilePath());
   }
+
+  ManifestBrowserTest(const ManifestBrowserTest&) = delete;
+  ManifestBrowserTest& operator=(const ManifestBrowserTest&) = delete;
 
   ~ManifestBrowserTest() override {}
 
@@ -181,8 +184,6 @@ class ManifestBrowserTest : public ContentBrowserTest,
   std::vector<std::string> console_errors_;
   std::vector<GURL> reported_manifest_urls_;
   std::vector<size_t> manifests_reported_when_favicon_url_updated_;
-
-  DISALLOW_COPY_AND_ASSIGN(ManifestBrowserTest);
 };
 
 // The implementation of DidAddMessageToConsole isn't inlined because it needs

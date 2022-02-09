@@ -11,7 +11,6 @@
 #include "platform_media/common/feature_toggles.h"
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "media/base/media_export.h"
 

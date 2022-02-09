@@ -24,11 +24,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/current_thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/values.h"
@@ -1965,7 +1965,8 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
   // by introducing "include incognito" option to Event constructor.
   // https://crbug.com/726022.
   Profile* restrict_to_browser_context =
-      (include_incognito && !profile_->IsOffTheRecord()) ? nullptr : profile_;
+      (include_incognito && !profile_->IsOffTheRecord()) ? nullptr
+                                                         : profile_.get();
   auto event = std::make_unique<Event>(histogram_value, event_name,
                                        std::move(*args).TakeList(),
                                        restrict_to_browser_context);

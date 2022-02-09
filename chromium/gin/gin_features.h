@@ -11,7 +11,12 @@
 
 namespace features {
 
+GIN_EXPORT extern const base::Feature kV8CompactCodeSpaceWithStack;
+GIN_EXPORT extern const base::Feature kV8CompactWithStack;
 GIN_EXPORT extern const base::Feature kV8ConcurrentInlining;
+GIN_EXPORT extern const base::Feature kV8ConcurrentSparkplug;
+GIN_EXPORT extern const base::FeatureParam<int>
+    kV8ConcurrentSparkplugMaxThreads;
 GIN_EXPORT extern const base::Feature kV8ExperimentalRegexpEngine;
 GIN_EXPORT extern const base::Feature kV8FlushBytecode;
 GIN_EXPORT extern const base::Feature kV8FlushBaselineCode;
@@ -29,6 +34,8 @@ GIN_EXPORT extern const base::FeatureParam<int> kV8ScriptDelayMs;
 GIN_EXPORT extern const base::FeatureParam<int> kV8ScriptDelayOnceMs;
 GIN_EXPORT extern const base::Feature kV8ShortBuiltinCalls;
 GIN_EXPORT extern const base::Feature kV8SlowHistograms;
+GIN_EXPORT extern const base::Feature
+    kV8SlowHistogramsCodeMemoryWriteProtection;
 GIN_EXPORT extern const base::Feature kV8SlowHistogramsSparkplug;
 GIN_EXPORT extern const base::Feature kV8SlowHistogramsSparkplugAndroid;
 GIN_EXPORT extern const base::Feature kV8SlowHistogramsScriptAblation;

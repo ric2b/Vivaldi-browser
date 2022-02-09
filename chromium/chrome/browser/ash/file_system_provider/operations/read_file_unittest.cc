@@ -13,7 +13,6 @@
 #include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "chrome/browser/ash/file_system_provider/icon_set.h"
@@ -121,8 +120,8 @@ TEST_F(FileSystemProviderOperationsReadFileTest, Execute) {
   base::ListValue* event_args = event->event_args.get();
   ASSERT_EQ(1u, event_args->GetList().size());
 
-  const base::DictionaryValue* options_as_value = NULL;
-  ASSERT_TRUE(event_args->GetDictionary(0, &options_as_value));
+  const base::Value* options_as_value = &event_args->GetList()[0];
+  ASSERT_TRUE(options_as_value->is_dict());
 
   ReadFileRequestedOptions options;
   ASSERT_TRUE(ReadFileRequestedOptions::Populate(*options_as_value, &options));

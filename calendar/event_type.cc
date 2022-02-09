@@ -27,6 +27,8 @@ EventRow::EventRow() {
   is_template = false;
   priority = 0;
   percentage_complete = 0;
+  sync_pending = false;
+  delete_pending = false;
   updateFields = 0;
 }
 
@@ -41,8 +43,6 @@ void EventRow::Swap(EventRow* other) {
   std::swap(end, other->end);
   std::swap(all_day, other->all_day);
   std::swap(is_recurring, other->is_recurring);
-  std::swap(start_recurring, other->start_recurring);
-  std::swap(end_recurring, other->end_recurring);
   std::swap(location, other->location);
   std::swap(url, other->url);
   std::swap(recurrence_exceptions, other->recurrence_exceptions);
@@ -72,6 +72,8 @@ void EventRow::Swap(EventRow* other) {
   std::swap(component_class, other->component_class);
   std::swap(attachment, other->attachment);
   std::swap(completed, other->completed);
+  std::swap(sync_pending, other->sync_pending);
+  std::swap(delete_pending, other->delete_pending);
   std::swap(updateFields, other->updateFields);
 }
 
@@ -88,8 +90,6 @@ EventRow::EventRow(const EventRow&& other) noexcept
       end(other.end),
       all_day(other.all_day),
       is_recurring(other.is_recurring),
-      start_recurring(other.start_recurring),
-      end_recurring(other.end_recurring),
       location(other.location),
       url(other.url),
       recurrence_exceptions(other.recurrence_exceptions),
@@ -115,6 +115,8 @@ EventRow::EventRow(const EventRow&& other) noexcept
       due(other.due),
       priority(other.priority),
       percentage_complete(other.percentage_complete),
+      sync_pending(other.sync_pending),
+      delete_pending(other.delete_pending),
       updateFields(other.updateFields) {}
 
 EventResult::EventResult() {}

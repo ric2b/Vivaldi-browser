@@ -7,6 +7,7 @@
 #include <set>
 #include <string>
 
+#include "ash/app_list/app_list_badge_controller.h"
 #include "ash/app_list/app_list_bubble_presenter.h"
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_presenter_impl.h"
@@ -55,7 +56,6 @@
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
-#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -83,6 +83,10 @@ void PressHomeButton() {
 
 bool IsTabletMode() {
   return Shell::Get()->tablet_mode_controller()->InTabletMode();
+}
+
+AppListModel* GetAppListModel() {
+  return AppListModelProvider::Get()->model();
 }
 
 AppListView* GetAppListView() {
@@ -170,11 +174,12 @@ class AppListControllerImplTest : public AshTestBase {
   }
 
   void PopulateItem(int num) {
+    AppListModel* const model = GetAppListModel();
     for (int i = 0; i < num; i++) {
       std::unique_ptr<AppListItem> item(new AppListItem(
           "app_id" +
           base::UTF16ToUTF8(base::FormatNumber(populated_item_count_))));
-      Shell::Get()->app_list_controller()->GetModel()->AddItem(std::move(item));
+      model->AddItem(std::move(item));
       ++populated_item_count_;
     }
   }
@@ -184,6 +189,16 @@ class AppListControllerImplTest : public AshTestBase {
     ui::Layer* widget_layer =
         app_list_view ? app_list_view->GetWidget()->GetLayer() : nullptr;
     return widget_layer && widget_layer->GetAnimator()->is_animating();
+  }
+
+  int CountPageBreakItems() {
+    auto* top_list = GetAppListModel()->top_level_item_list();
+    int count = 0;
+    for (size_t index = 0; index < top_list->item_count(); ++index) {
+      if (top_list->item_at(index)->is_page_break())
+        ++count;
+    }
+    return count;
   }
 
  private:
@@ -694,10 +709,9 @@ TEST_F(AppListControllerImplTest,
 // https://crbug.com/1130901).
 TEST_F(AppListControllerImplTest, SimulateProfileSwapNoCrashOnDestruct) {
   // Add a folder, whose AppListItemList the AppListModel will observe.
+  AppListModel* model = GetAppListModel();
   const std::string folder_id("folder_1");
-  auto folder = std::make_unique<AppListFolderItem>(folder_id);
-  AppListModel* model = Shell::Get()->app_list_controller()->GetModel();
-  model->AddItem(std::move(folder));
+  model->AddFolderItemForTest(folder_id);
 
   for (int i = 0; i < 2; ++i) {
     auto item = std::make_unique<AppListItem>(base::StringPrintf("app_%d", i));
@@ -706,9 +720,13 @@ TEST_F(AppListControllerImplTest, SimulateProfileSwapNoCrashOnDestruct) {
 
   // Set a new model, simulating profile switching in multi-profile mode. This
   // should cleanly drop the reference to the folder added earlier.
-  Shell::Get()->app_list_controller()->SetModelData(
-      /*profile_id=*/12, /*apps=*/{}, /*is_search_engine_google=*/false);
+  auto updated_model = std::make_unique<test::AppListTestModel>();
+  auto update_search_model = std::make_unique<SearchModel>();
+  Shell::Get()->app_list_controller()->SetActiveModel(
+      /*profile_id=*/1, updated_model.get(), update_search_model.get());
 
+  Shell::Get()->app_list_controller()->ClearActiveModel();
+  updated_model.reset();
   // Test that there is no crash on ~AppListModel() when the test finishes.
 }
 
@@ -733,9 +751,8 @@ class AppListControllerImplTestWithNotificationBadging
     else
       test_app.has_badge = apps::mojom::OptionalBool::kFalse;
 
-    apps::AppUpdate test_update(nullptr, &test_app /* delta */, account_id);
-    static_cast<apps::AppRegistryCache::Observer*>(controller)
-        ->OnAppUpdate(test_update);
+    apps::AppUpdate test_update(nullptr, /*delta=*/&test_app, account_id);
+    controller->badge_controller_for_test()->OnAppUpdate(test_update);
   }
 };
 
@@ -774,10 +791,11 @@ TEST_F(AppListControllerImplTest, DragItemFromAppsGridView) {
   // Add icons with the same app id to Shelf and AppsGridView respectively.
   ShelfViewTestAPI shelf_view_test_api(shelf->GetShelfViewForTesting());
   std::string app_id = shelf_view_test_api.AddItem(TYPE_PINNED_APP).app_id;
-  Shell::Get()->app_list_controller()->GetModel()->AddItem(
-      std::make_unique<AppListItem>(app_id));
+  GetAppListModel()->AddItem(std::make_unique<AppListItem>(app_id));
 
   AppsGridView* apps_grid_view = GetAppsGridView();
+  apps_grid_view->Layout();
+
   AppListItemView* app_list_item_view =
       test::AppsGridViewTestApi(apps_grid_view).GetViewAtIndex(GridIndex(0, 0));
   views::View* shelf_icon_view =
@@ -802,112 +820,6 @@ TEST_F(AppListControllerImplTest, DragItemFromAppsGridView) {
   // spite that drag is canceled.
   EXPECT_TRUE(shelf_icon_view->GetVisible());
   EXPECT_EQ(1.0f, shelf_icon_view->layer()->opacity());
-}
-
-// Tests for GetInitialAppListItemScreenBoundsForWindow.
-TEST_F(AppListControllerImplTest, GetItemBoundsForWindow) {
-  // Populate app list model with 25 items, of which items at indices in
-  // |folders| are folders containing a single item.
-  const std::set<int> folders = {5, 23};
-  AppListModel* model = Shell::Get()->app_list_controller()->GetModel();
-  for (int i = 0; i < 25; ++i) {
-    if (folders.count(i)) {
-      const std::string folder_id = base::StringPrintf("fake_folder_%d", i);
-      auto folder = std::make_unique<AppListFolderItem>(folder_id);
-      model->AddItem(std::move(folder));
-      auto item = std::make_unique<AppListItem>(
-          base::StringPrintf("fake_id_in_folder_%d", i));
-      model->AddItemToFolder(std::move(item), folder_id);
-    } else {
-      auto item =
-          std::make_unique<AppListItem>(base::StringPrintf("fake_id_%d", i));
-      model->AddItem(std::move(item));
-    }
-  }
-  // Enable tablet mode - this should also show the app list.
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-
-  AppsGridView* apps_grid_view = GetAppListView()
-                                     ->app_list_main_view()
-                                     ->contents_view()
-                                     ->apps_container_view()
-                                     ->apps_grid_view();
-  auto apps_grid_test_api =
-      std::make_unique<test::AppsGridViewTestApi>(apps_grid_view);
-
-  const struct {
-    // The kAppIDKey property value for the test window.
-    std::string window_app_id;
-    // If set the grid position of the app list item whose screen bounds should
-    // be returned by GetInitialAppListItemScreenBoundsForWindow().
-    // If nullopt, GetInitialAppListItemScreenBoundsForWindow() is expected to
-    // return the apps grid center rect.
-    absl::optional<GridIndex> grid_position;
-  } kTestCases[] = {{"fake_id_0", GridIndex(0, 0)},
-                    {"fake_id_2", GridIndex(0, 2)},
-                    {"fake_id_in_folder_5", absl::nullopt},
-                    {"fake_id_15", GridIndex(0, 15)},
-                    {"fake_id_in_folder_23", absl::nullopt},
-                    {"non_existent", absl::nullopt},
-                    {"", absl::nullopt},
-                    {"fake_id_22", absl::nullopt}};
-
-  // Tests the case app ID property is not set on the window.
-  gfx::Rect init_bounds(0, 0, 400, 400);
-  std::unique_ptr<views::Widget> widget_without_app_id =
-      TestWidgetBuilder().SetBounds(init_bounds).BuildOwnsNativeWidget();
-
-  AppListControllerImpl* app_list_controller =
-      Shell::Get()->app_list_controller();
-  // NOTE: Calculate the apps grid bounds after test window is shown, as showing
-  // the window can change the app list layout (due to the change in the shelf
-  // height).
-  const gfx::Rect apps_grid_bounds = apps_grid_view->GetBoundsInScreen();
-  const gfx::Rect apps_grid_center =
-      gfx::Rect(apps_grid_bounds.CenterPoint(), gfx::Size(1, 1));
-
-  EXPECT_EQ(apps_grid_center,
-            app_list_controller->GetInitialAppListItemScreenBoundsForWindow(
-                widget_without_app_id->GetNativeWindow()));
-
-  // Run tests cases, both for when the first and the second apps grid page is
-  // selected - the returned bounds should be the same in both cases, as
-  // GetInitialAppListItemScreenBoundsForWindow() always returns bounds state
-  // for the first page.
-  for (int selected_page = 0; selected_page < 2; ++selected_page) {
-    GetAppListView()->GetAppsPaginationModel()->SelectPage(selected_page,
-                                                           false);
-    for (const auto& test_case : kTestCases) {
-      SCOPED_TRACE(::testing::Message()
-                   << "Test case: {" << test_case.window_app_id << ", "
-                   << (test_case.grid_position.has_value()
-                           ? test_case.grid_position->ToString()
-                           : "null")
-                   << "} with selected page " << selected_page);
-
-      std::unique_ptr<views::Widget> widget =
-          TestWidgetBuilder()
-              .SetWindowProperty(kAppIDKey,
-                                 new std::string(test_case.window_app_id))
-              .SetBounds(init_bounds)
-              .BuildOwnsNativeWidget();
-
-      const gfx::Rect item_bounds =
-          app_list_controller->GetInitialAppListItemScreenBoundsForWindow(
-              widget->GetNativeWindow());
-      if (!test_case.grid_position.has_value()) {
-        EXPECT_EQ(apps_grid_center, item_bounds);
-      } else {
-        const int kItemsPerRow = 5;
-        gfx::Rect expected_bounds =
-            apps_grid_test_api->GetItemTileRectOnCurrentPageAt(
-                test_case.grid_position->slot / kItemsPerRow,
-                test_case.grid_position->slot % kItemsPerRow);
-        expected_bounds.Offset(apps_grid_bounds.x(), apps_grid_bounds.y());
-        EXPECT_EQ(expected_bounds, item_bounds);
-      }
-    }
-  }
 }
 
 // Verifies that apps grid and hotseat bounds do not overlap when switching from
@@ -968,6 +880,21 @@ TEST_F(AppListControllerImplTest,
 
   EXPECT_TRUE(
       Shell::Get()->app_list_controller()->GetHomeScreenWindow()->IsVisible());
+}
+
+TEST_F(AppListControllerImplTest, CreatePage) {
+  ShowAppListNow(AppListViewState::kFullscreenAllApps);
+  PagedAppsGridView* apps_grid_view = GetAppsGridView();
+  test::AppsGridViewTestApi test_api(apps_grid_view);
+  PopulateItem(test_api.TilesPerPage(0));
+  EXPECT_EQ(1, apps_grid_view->pagination_model()->total_pages());
+
+  // Add an extra item and verify that the page count is 2 now.
+  PopulateItem(1);
+  EXPECT_EQ(2, apps_grid_view->pagination_model()->total_pages());
+
+  // Verify that there is no page break items.
+  EXPECT_EQ(0, CountPageBreakItems());
 }
 
 // The test parameter indicates whether the shelf should auto-hide. In either
@@ -1456,74 +1383,6 @@ TEST_F(AppListControllerWithAssistantTest, TriggerSearchKeyWhenAppListClosing) {
 
   // The Assistant should be closed.
   EXPECT_EQ(AssistantVisibility::kClosed, GetAssistantVisibility());
-}
-
-class AppListSortTest : public AppListControllerImplTest {
- public:
-  AppListSortTest() {
-    feature_list_.InitWithFeatures(
-        {ash::features::kLauncherAppSort, ash::features::kProductivityLauncher},
-        {});
-  }
-  ~AppListSortTest() override = default;
-
-  views::View* GetLeftSortButton() {
-    return GetAppsContainerView()
-        ->sort_button_container_for_test()
-        ->children()[0];
-  }
-
-  views::View* GetRightSortButton() {
-    return GetAppsContainerView()
-        ->sort_button_container_for_test()
-        ->children()[1];
-  }
-
-  int CountPageBreakItems() {
-    auto* top_list =
-        Shell::Get()->app_list_controller()->GetModel()->top_level_item_list();
-    int count = 0;
-    for (size_t index = 0; index < top_list->item_count(); ++index) {
-      if (top_list->item_at(index)->is_page_break())
-        ++count;
-    }
-    return count;
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Verifies basic UI elements for the app list sort.
-TEST_F(AppListSortTest, BasicUI) {
-  // Verify sort buttons in the peeking state.
-  ShowAppListNow(AppListViewState::kPeeking);
-  ASSERT_EQ(AppListViewState::kPeeking, GetAppListView()->app_list_state());
-  EXPECT_TRUE(GetLeftSortButton()->GetVisible());
-  EXPECT_TRUE(GetRightSortButton()->GetVisible());
-  DismissAppListNow();
-
-  // Verify sort buttons in the full screen state.
-  ShowAppListNow(AppListViewState::kFullscreenAllApps);
-  ASSERT_EQ(AppListViewState::kFullscreenAllApps,
-            GetAppListView()->app_list_state());
-  EXPECT_TRUE(GetLeftSortButton()->GetVisible());
-  EXPECT_TRUE(GetRightSortButton()->GetVisible());
-}
-
-TEST_F(AppListSortTest, CreatePage) {
-  ShowAppListNow(AppListViewState::kFullscreenAllApps);
-  PagedAppsGridView* apps_grid_view = GetAppsGridView();
-  test::AppsGridViewTestApi test_api(apps_grid_view);
-  PopulateItem(test_api.TilesPerPage(0));
-  EXPECT_EQ(1, apps_grid_view->pagination_model()->total_pages());
-
-  // Add an extra item and verify that the page count is 2 now.
-  PopulateItem(1);
-  EXPECT_EQ(2, apps_grid_view->pagination_model()->total_pages());
-
-  // Verify that there is no page break items.
-  EXPECT_EQ(0, CountPageBreakItems());
 }
 
 }  // namespace ash

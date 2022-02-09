@@ -9,13 +9,13 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/scoped_observation.h"
 #include "components/signin/internal/identity_manager/primary_account_manager.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service_observer.h"
-#include "components/signin/public/identity_manager/consent_level.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/scope_set.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/oauth2_access_token_manager.h"
@@ -248,10 +248,10 @@ class AccessTokenFetcher : public ProfileOAuth2TokenServiceObserver,
   const CoreAccountId account_id_;
   const std::string client_id_;
   const std::string client_secret_;
-  ProfileOAuth2TokenService* token_service_;
+  raw_ptr<ProfileOAuth2TokenService> token_service_;
   // Suppress unused typedef warnings in some compiler builds when DCHECK is
   // disabled.
-  PrimaryAccountManager* primary_account_manager_ ALLOW_UNUSED_TYPE;
+  raw_ptr<PrimaryAccountManager> primary_account_manager_ ALLOW_UNUSED_TYPE;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   const ScopeSet scopes_;
   const Mode mode_;

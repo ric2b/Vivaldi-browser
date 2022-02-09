@@ -16,6 +16,8 @@ function addPrivacyChildRoutes(r: SettingsRoutes) {
   r.CLEAR_BROWSER_DATA = r.PRIVACY.createChild('/clearBrowserData');
   r.CLEAR_BROWSER_DATA.isNavigableDialog = true;
 
+  r.SAFETY_CHECK = r.PRIVACY.createSection('/safetyCheck', 'safetyCheck');
+
   if (loadTimeData.getBoolean('privacyReviewEnabled')) {
     r.PRIVACY_REVIEW = r.PRIVACY.createChild('review');
   }
@@ -23,9 +25,7 @@ function addPrivacyChildRoutes(r: SettingsRoutes) {
   r.COOKIES = r.PRIVACY.createChild('/cookies');
   r.SECURITY = r.PRIVACY.createChild('/security');
 
-  // TODO(crbug.com/1147032): The certificates settings page is temporarily
-  // disabled for Lacros-Chrome until a better solution is found.
-  // <if expr="use_nss_certs and not lacros">
+  // <if expr="use_nss_certs">
   r.CERTIFICATES = r.SECURITY.createChild('/certificates');
   // </if>
 
@@ -89,7 +89,6 @@ function addPrivacyChildRoutes(r: SettingsRoutes) {
       r.SITE_SETTINGS.createChild('windowPlacement');
   r.SITE_SETTINGS_FILE_SYSTEM_WRITE = r.SITE_SETTINGS.createChild('filesystem');
   r.SITE_SETTINGS_FONT_ACCESS = r.SITE_SETTINGS.createChild('fontAccess');
-  r.SITE_SETTINGS_FILE_HANDLING = r.SITE_SETTINGS.createChild('fileHandlers');
 }
 
 /**
@@ -143,12 +142,6 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
   if (visibility.privacy !== false) {
     r.PRIVACY = r.BASIC.createSection('/privacy', 'privacy');
     addPrivacyChildRoutes(r);
-
-    if (loadTimeData.getBoolean('enableLandingPageRedesign')) {
-      r.SAFETY_CHECK = r.PRIVACY.createSection('/safetyCheck', 'safetyCheck');
-    } else {
-      r.SAFETY_CHECK = r.BASIC.createSection('/safetyCheck', 'safetyCheck');
-    }
   }
 
   // <if expr="not chromeos and not lacros">

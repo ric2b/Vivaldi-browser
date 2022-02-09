@@ -6,7 +6,6 @@
 
 #include <iterator>
 
-#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "gn/filesystem_utils.h"
 #include "gn/general_tool.h"
@@ -270,8 +269,8 @@ void NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogStep(
     args_escape_options.mode = ESCAPE_NINJA_COMMAND;
     for (const auto& flag : flags) {
       out_ << " ";
-      SubstitutionWriter::WriteWithNinjaVariables(
-          flag, args_escape_options, out_);
+      SubstitutionWriter::WriteWithNinjaVariables(flag, args_escape_options,
+                                                  out_);
     }
     out_ << std::endl;
   }

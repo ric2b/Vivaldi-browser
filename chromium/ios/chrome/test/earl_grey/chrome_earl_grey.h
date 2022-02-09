@@ -17,6 +17,7 @@
 #include "third_party/metrics_proto/user_demographics.pb.h"
 #include "url/gurl.h"
 
+@class FakeChromeIdentity;
 @class ElementSelector;
 @protocol GREYMatcher;
 
@@ -176,13 +177,8 @@ UIWindow* GetAnyKeyWindow();
 // Clears fake sync server data if the server is running.
 - (void)clearSyncServerData;
 
-// Revokes the sync consent for the primary account. The user will continue
-// to be signed-in to Chrome.
-- (void)revokeSyncConsent;
-
-// Clears the first sync setup preference. The user will be effectively in
-// the signed-in state with no syncing consent.
-- (void)clearSyncFirstSetupComplete;
+// Signs in with |identity| without sync consent.
+- (void)signInWithoutSyncWithIdentity:(FakeChromeIdentity*)identity;
 
 // Starts the sync server. The server should not be running when calling this.
 - (void)startSync;
@@ -627,6 +623,9 @@ UIWindow* GetAnyKeyWindow();
 
 // Returns YES if UKM feature is enabled.
 - (BOOL)isUKMEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if kSynthesizedRestoreSessionEnabled feature is enabled.
+- (BOOL)isSynthesizedRestoreSessionEnabled WARN_UNUSED_RESULT;
 
 // Returns YES if kTestFeature is enabled.
 - (BOOL)isTestFeatureEnabled;

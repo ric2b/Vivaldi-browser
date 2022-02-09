@@ -12,7 +12,7 @@
 class MyApp: public wxApp
 {
 public:
-    bool OnInit();
+    bool OnInit() wxOVERRIDE;
 
     // Joystick max values
     int     m_minX;
@@ -25,7 +25,7 @@ public:
 #endif // wxUSE_SOUND
 };
 
-DECLARE_APP(MyApp)
+wxDECLARE_APP(MyApp);
 
 class MyCanvas: public wxScrolledWindow
 {
@@ -44,11 +44,11 @@ public:
     MyCanvas *canvas;
     MyFrame(wxFrame *parent, const wxString& title,
         const wxPoint& pos, const wxSize& size, const long style);
-    ~MyFrame(){};
+    ~MyFrame(){}
     void OnActivate(wxActivateEvent& event);
     void OnQuit(wxCommandEvent& event);
 
-DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 #define JOYTEST_QUIT        1

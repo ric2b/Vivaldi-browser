@@ -22,7 +22,6 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.lens.LensController;
-import org.chromium.chrome.browser.lens.LensFeature;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.locale.LocaleManager;
@@ -213,9 +212,7 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
         mMicButton = mLocationBarLayout.findViewById(R.id.mic_button);
         mMicButton.setOnClickListener(mLocationBarMediator::micButtonClicked);
 
-        mLensButton = LensFeature.SEARCH_BOX_START_VARIANT_LENS_CAMERA_ASSISTED_SEARCH.getValue()
-                ? mLocationBarLayout.findViewById(R.id.lens_camera_button_start)
-                : mLocationBarLayout.findViewById(R.id.lens_camera_button_end);
+        mLensButton = mLocationBarLayout.findViewById(R.id.lens_camera_button);
         mLensButton.setOnClickListener(mLocationBarMediator::lensButtonClicked);
 
         mUrlBar.setOnKeyListener(mLocationBarMediator);
@@ -428,11 +425,6 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
     @Override
     public boolean isUrlBarFocused() {
         return mLocationBarMediator.isUrlBarFocused();
-    }
-
-    @Override
-    public boolean didFocusUrlFromQueryTiles() {
-        return mLocationBarMediator.didFocusUrlFromQueryTiles();
     }
 
     @Override

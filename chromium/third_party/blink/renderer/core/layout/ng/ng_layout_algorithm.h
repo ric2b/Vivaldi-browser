@@ -32,7 +32,7 @@ class NGLayoutAlgorithmOperations {
   // The result will not take any min-width, max-width or width properties into
   // account.
   virtual MinMaxSizesResult ComputeMinMaxSizes(
-      const MinMaxSizesFloatInput&) const = 0;
+      const MinMaxSizesFloatInput&) = 0;
 };
 
 // Parameters to pass when creating a layout algorithm for a block node.
@@ -93,8 +93,8 @@ class CORE_EXPORT NGLayoutAlgorithm : public NGLayoutAlgorithmOperations {
         params.space.IsNewFormattingContext());
     container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
     if (UNLIKELY(params.space.HasBlockFragmentation() || params.break_token)) {
-      SetupFragmentBuilderForFragmentation(params.space, params.break_token,
-                                           &container_builder_);
+      SetupFragmentBuilderForFragmentation(
+          params.space, params.node, params.break_token, &container_builder_);
     }
   }
 

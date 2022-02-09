@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -19,7 +18,7 @@ namespace net {
 class NetworkChangeNotifierPosix;
 }
 
-namespace chromeos {
+namespace ash {
 
 // This class listens to Shill for network change events and notifies both
 // the local NetworkChangeNotifierPosix, and the network service via
@@ -96,6 +95,6 @@ class NetworkChangeManagerClient
   mojo::Remote<network::mojom::NetworkChangeManager> network_change_manager_;
 };
 
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_NETWORK_CHANGE_MANAGER_CLIENT_H_

@@ -66,7 +66,7 @@ ImageData* ImageData::ValidateAndCreate(
     const ImageDataSettings* settings,
     ValidateAndCreateParams params,
     ExceptionState& exception_state) {
-  IntSize size;
+  gfx::Size size;
   if (params.require_canvas_color_management &&
       !RuntimeEnabledFeatures::CanvasColorManagementEnabled()) {
     exception_state.ThrowTypeError("Overload resolution failed.");
@@ -88,7 +88,15 @@ ImageData* ImageData::ValidateAndCreate(
         "The source width is zero or not a number.");
     return nullptr;
   }
-  size.SetWidth(width);
+  if (width > static_cast<unsigned>(std::numeric_limits<int>::max())) {
+    // TODO(crbug.com/1273969): Should throw RangeError instead.
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kIndexSizeError,
+        "The requested image size exceeds the supported range.");
+    return nullptr;
+  }
+  size.set_width(width);
+
   if (height) {
     if (!*height) {
       exception_state.ThrowDOMException(
@@ -96,7 +104,14 @@ ImageData* ImageData::ValidateAndCreate(
           "The source height is zero or not a number.");
       return nullptr;
     }
-    size.SetHeight(*height);
+    if (height > static_cast<unsigned>(std::numeric_limits<int>::max())) {
+      // TODO(crbug.com/1273969): Should throw RangeError instead.
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kIndexSizeError,
+          "The requested image size exceeds the supported range.");
+      return nullptr;
+    }
+    size.set_height(*height);
   }
 
   // Ensure the size does not overflow.
@@ -105,10 +120,11 @@ ImageData* ImageData::ValidateAndCreate(
     // Please note that the number "4" in the means number of channels required
     // to describe a pixel, namely, red, green, blue and alpha.
     base::CheckedNumeric<unsigned> size_in_elements_checked = 4;
-    size_in_elements_checked *= size.Width();
-    size_in_elements_checked *= size.Height();
+    size_in_elements_checked *= size.width();
+    size_in_elements_checked *= size.height();
     if (!params.context_2d_error_mode) {
       if (!size_in_elements_checked.IsValid()) {
+        // TODO(crbug.com/1273969): Should throw RangeError instead.
         exception_state.ThrowDOMException(
             DOMExceptionCode::kIndexSizeError,
             "The requested image size exceeds the supported range.");
@@ -198,7 +214,7 @@ ImageData* ImageData::ValidateAndCreate(
         return nullptr;
       }
     } else {
-      size.SetHeight(expected_height);
+      size.set_height(expected_height);
     }
   }
 
@@ -258,11 +274,11 @@ NotShared<DOMArrayBufferView> ImageData::AllocateAndValidateDataArray(
 
 // This function accepts size (0, 0) and always returns the ImageData in
 // "srgb" color space and "uint8" storage format.
-ImageData* ImageData::CreateForTest(const IntSize& size) {
+ImageData* ImageData::CreateForTest(const gfx::Size& size) {
   base::CheckedNumeric<unsigned> data_size =
       StorageFormatBytesPerPixel(kUint8ClampedArrayStorageFormat);
-  data_size *= size.Width();
-  data_size *= size.Height();
+  data_size *= size.width();
+  data_size *= size.height();
   if (!data_size.IsValid() ||
       data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
     return nullptr;
@@ -279,7 +295,7 @@ ImageData* ImageData::CreateForTest(const IntSize& size) {
 
 // This function is called from unit tests, and all the parameters are supposed
 // to be validated on the call site.
-ImageData* ImageData::CreateForTest(const IntSize& size,
+ImageData* ImageData::CreateForTest(const gfx::Size& size,
                                     NotShared<DOMArrayBufferView> buffer_view,
                                     CanvasColorSpace color_space,
                                     ImageDataStorageFormat storage_format) {
@@ -288,7 +304,7 @@ ImageData* ImageData::CreateForTest(const IntSize& size,
 }
 
 ScriptPromise ImageData::CreateImageBitmap(ScriptState* script_state,
-                                           absl::optional<IntRect> crop_rect,
+                                           absl::optional<gfx::Rect> crop_rect,
                                            const ImageBitmapOptions* options,
                                            ExceptionState& exception_state) {
   if (IsBufferBaseDetached()) {
@@ -457,7 +473,7 @@ v8::Local<v8::Object> ImageData::AssociateWithWrapper(
   return wrapper;
 }
 
-ImageData::ImageData(const IntSize& size,
+ImageData::ImageData(const gfx::Size& size,
                      NotShared<DOMArrayBufferView> data,
                      CanvasColorSpace color_space,
                      ImageDataStorageFormat storage_format)
@@ -465,8 +481,8 @@ ImageData::ImageData(const IntSize& size,
       settings_(ImageDataSettings::Create()),
       color_space_(color_space),
       storage_format_(storage_format) {
-  DCHECK_GE(size.Width(), 0);
-  DCHECK_GE(size.Height(), 0);
+  DCHECK_GE(size.width(), 0);
+  DCHECK_GE(size.height(), 0);
   DCHECK(data);
 
   data_u8_.Clear();
@@ -485,7 +501,7 @@ ImageData::ImageData(const IntSize& size,
       data_u8_ = data;
       DCHECK(data_u8_);
       SECURITY_CHECK(
-          (base::CheckedNumeric<size_t>(size.Width()) * size.Height() * 4)
+          (base::CheckedNumeric<size_t>(size.width()) * size.height() * 4)
               .ValueOrDie() <= data_u8_->length());
       data_ = MakeGarbageCollected<V8ImageDataArray>(data_u8_);
       break;
@@ -495,7 +511,7 @@ ImageData::ImageData(const IntSize& size,
       data_u16_ = data;
       DCHECK(data_u16_);
       SECURITY_CHECK(
-          (base::CheckedNumeric<size_t>(size.Width()) * size.Height() * 4)
+          (base::CheckedNumeric<size_t>(size.width()) * size.height() * 4)
               .ValueOrDie() <= data_u16_->length());
       data_ = MakeGarbageCollected<V8ImageDataArray>(data_u16_);
       break;
@@ -505,7 +521,7 @@ ImageData::ImageData(const IntSize& size,
       data_f32_ = data;
       DCHECK(data_f32_);
       SECURITY_CHECK(
-          (base::CheckedNumeric<size_t>(size.Width()) * size.Height() * 4)
+          (base::CheckedNumeric<size_t>(size.width()) * size.height() * 4)
               .ValueOrDie() <= data_f32_->length());
       data_ = MakeGarbageCollected<V8ImageDataArray>(data_f32_);
       break;

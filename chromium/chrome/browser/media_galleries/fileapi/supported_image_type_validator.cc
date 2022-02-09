@@ -12,7 +12,6 @@
 #include "base/check_op.h"
 #include "base/files/file.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -55,20 +54,13 @@ std::unique_ptr<std::string> ReadOnFileThread(const base::FilePath& path) {
 
 class ImageDecoderDelegateAdapter : public ImageDecoder::ImageRequest {
  public:
-  ImageDecoderDelegateAdapter(
-      std::unique_ptr<std::string> data,
+  explicit ImageDecoderDelegateAdapter(
       storage::CopyOrMoveFileValidator::ResultCallback callback)
-      : data_(std::move(data)), callback_(std::move(callback)) {
-    DCHECK(data_);
-  }
+      : callback_(std::move(callback)) {}
 
   ImageDecoderDelegateAdapter(const ImageDecoderDelegateAdapter&) = delete;
   ImageDecoderDelegateAdapter& operator=(const ImageDecoderDelegateAdapter&) =
       delete;
-
-  const std::string& data() {
-    return *data_;
-  }
 
   // ImageDecoder::ImageRequest methods.
   void OnImageDecoded(const SkBitmap& /*decoded_image*/) override {
@@ -82,7 +74,6 @@ class ImageDecoderDelegateAdapter : public ImageDecoder::ImageRequest {
   }
 
  private:
-  std::unique_ptr<std::string> data_;
   storage::CopyOrMoveFileValidator::ResultCallback callback_;
 };
 
@@ -132,6 +123,6 @@ void SupportedImageTypeValidator::OnFileOpen(
 
   // |adapter| will delete itself after a completion message is received.
   ImageDecoderDelegateAdapter* adapter =
-      new ImageDecoderDelegateAdapter(std::move(data), std::move(callback_));
-  ImageDecoder::Start(adapter, adapter->data());
+      new ImageDecoderDelegateAdapter(std::move(callback_));
+  ImageDecoder::Start(adapter, std::move(*data));
 }

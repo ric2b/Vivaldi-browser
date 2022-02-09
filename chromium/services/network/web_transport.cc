@@ -6,6 +6,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -28,7 +29,7 @@ net::WebTransportParameters CreateParameters(
     const std::vector<mojom::WebTransportCertificateFingerprintPtr>&
         fingerprints) {
   net::WebTransportParameters params;
-  params.enable_quic_transport = true;
+  params.enable_quic_transport = false;
   params.enable_web_transport_http3 = true;
 
   for (const auto& fingerprint : fingerprints) {
@@ -173,7 +174,7 @@ class WebTransport::Stream final {
   }
 
   ~Stream() {
-    auto* stream = incoming_ ? incoming_ : outgoing_;
+    auto* stream = incoming_ ? incoming_.get() : outgoing_.get();
     if (!stream) {
       return;
     }
@@ -352,14 +353,14 @@ class WebTransport::Stream final {
         base::BindOnce(&Stream::Dispose, weak_factory_.GetWeakPtr()));
   }
 
-  WebTransport* const transport_;  // outlives |this|.
+  const raw_ptr<WebTransport> transport_;  // outlives |this|.
   const uint32_t id_;
   // |outgoing_| and |incoming_| point to the same stream when this is a
   // bidirectional stream. They are owned by |transport_| (via
   // quic::QuicSession), and the properties will be null-set when the streams
   // are gone (via StreamVisitor).
-  quic::WebTransportStream* outgoing_ = nullptr;
-  quic::WebTransportStream* incoming_ = nullptr;
+  raw_ptr<quic::WebTransportStream> outgoing_ = nullptr;
+  raw_ptr<quic::WebTransportStream> incoming_ = nullptr;
   mojo::ScopedDataPipeConsumerHandle readable_;  // for |outgoing|
   mojo::ScopedDataPipeProducerHandle writable_;  // for |incoming|
 

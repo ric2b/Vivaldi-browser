@@ -13,9 +13,9 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "media/audio/audio_debug_recording_manager.h"
@@ -211,7 +211,7 @@ class MEDIA_EXPORT AudioManagerBase : public AudioManager {
   AudioOutputDispatchers output_dispatchers_;
 
   // Proxy for creating AudioLog objects.
-  AudioLogFactory* const audio_log_factory_;
+  const raw_ptr<AudioLogFactory> audio_log_factory_;
 
   // Debug recording manager.
   std::unique_ptr<AudioDebugRecordingManager> debug_recording_manager_;

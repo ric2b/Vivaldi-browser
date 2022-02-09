@@ -127,10 +127,10 @@ TEST(Tokenizer, Locations) {
   std::vector<Token> results = Tokenizer::Tokenize(&input, &err);
 
   ASSERT_EQ(4u, results.size());
-  ASSERT_TRUE(results[0].location() == Location(&input, 1, 1, 1));
-  ASSERT_TRUE(results[1].location() == Location(&input, 1, 3, 3));
-  ASSERT_TRUE(results[2].location() == Location(&input, 1, 5, 5));
-  ASSERT_TRUE(results[3].location() == Location(&input, 2, 3, 8));
+  ASSERT_TRUE(results[0].location() == Location(&input, 1, 1));
+  ASSERT_TRUE(results[1].location() == Location(&input, 1, 3));
+  ASSERT_TRUE(results[2].location() == Location(&input, 1, 5));
+  ASSERT_TRUE(results[3].location() == Location(&input, 2, 3));
 }
 
 TEST(Tokenizer, ByteOffsetOfNthLine) {

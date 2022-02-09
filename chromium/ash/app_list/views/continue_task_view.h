@@ -38,12 +38,15 @@ class ASH_EXPORT ContinueTaskView : public views::Button,
  public:
   METADATA_HEADER(ContinueTaskView);
 
-  explicit ContinueTaskView(AppListViewDelegate* view_delegate);
+  ContinueTaskView(AppListViewDelegate* view_delegate, bool tablet_mode);
   ContinueTaskView(const ContinueTaskView&) = delete;
   ContinueTaskView& operator=(const ContinueTaskView&) = delete;
   ~ContinueTaskView() override;
 
   // views::View:
+  gfx::Size CalculatePreferredSize() const override;
+  gfx::Size GetMinimumSize() const override;
+  gfx::Size GetMaximumSize() const override;
   void OnThemeChanged() override;
 
   // SearchResultObserver:
@@ -76,6 +79,9 @@ class ASH_EXPORT ContinueTaskView : public views::Button,
 
   // Opens the search result related to the view.
   void OpenResult(int event_flags);
+
+  // Removes the search result related to the view.
+  void RemoveResult();
 
   // Builds and returns a raw pointer to `context_menu_model_`.
   ui::SimpleMenuModel* BuildMenuModel();

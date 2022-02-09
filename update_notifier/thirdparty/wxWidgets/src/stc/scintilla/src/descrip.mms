@@ -2,7 +2,7 @@
 #                                                                            *
 # Make file for VMS                                                          *
 # Author : J.Jansen (joukj@hrem.nano.tudelft.nl)                             *
-# Date : 24 August 2012                                                      *
+# Date : 4 March 2020                                                        *
 #                                                                            *
 #*****************************************************************************
 
@@ -12,31 +12,31 @@
 .suffixes : .cpp
 
 .ifdef __WXMOTIF__
-CXX_DEFINE = /define=(__WX__=1,__WXMOTIF__=1,__USE_STD_IOSTREAM=1)/name=(as_is,short)\
-	   /assume=(nostdnew,noglobal_array_new)\
-	   /include=([],[-.src],[-.include],[-.lexlib])
-CC_DEFINE = /define=(__WX__=1,__WXMOTIF__=1)/name=(as_is,short)\
+CXX_DEFINE = /name=(as_is,short)/assume=(nostdnew,noglobal_array_new)\
+	/define=(__WX__=1,__WXMOTIF__=1,__USE_STD_IOSTREAM=1,NO_CXX11_REGEX=1,WXBUILDING=1)\
+	/include=([],[-.src],[-.include],[-.lexlib])
+CC_DEFINE = /define=(__WX__=1,__WXMOTIF__=1,NO_CXX11_REGEX=1,WXBUILDING=1)/name=(as_is,short)\
 	/include=([],[-.src],[-.include],[-.lexlib])
 .else
 .ifdef __WXGTK__
-CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,__USE_STD_IOSTREAM=1)/float=ieee/name=(as_is,short)/ieee=denorm\
+CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,__USE_STD_IOSTREAM=1,NO_CXX11_REGEX=1,WXBUILDING=1)/float=ieee/name=(as_is,short)/ieee=denorm\
 	   /assume=(nostdnew,noglobal_array_new)\
 	   /include=([],[-.src],[-.include],[-.lexlib])
-CC_DEFINE = /define=(__WX__=1,__WXGTK__=1)/float=ieee/name=(as_is,short)/ieee=denorm\
+CC_DEFINE = /define=(__WX__=1,__WXGTK__=1,NO_CXX11_REGEX=1,WXBUILDING=1)/float=ieee/name=(as_is,short)/ieee=denorm\
 	/include=([],[-.src],[-.include],[-.lexlib])
 .else
 .ifdef __WXGTK2__
-CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1,__USE_STD_IOSTREAM=1)/float=ieee/name=(as_is,short)/ieee=denorm\
+CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1,__USE_STD_IOSTREAM=1,NO_CXX11_REGEX=1,WXBUILDING=1)/float=ieee/name=(as_is,short)/ieee=denorm\
 	   /assume=(nostdnew,noglobal_array_new)\
 	   /include=([],[-.src],[-.include],[-.lexlib])
-CC_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1)/float=ieee/name=(as_is,short)\
+CC_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1,NO_CXX11_REGEX=1,WXBUILDING=1)/float=ieee/name=(as_is,short)\
 	/ieee=denorm/include=([],[-.src],[-.include],[-.lexlib])
 .else
 .ifdef __WXX11__
-CXX_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__==1,__USE_STD_IOSTREAM=1)/float=ieee\
+CXX_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__=1,__USE_STD_IOSTREAM=1,NO_CXX11_REGEX=1,WXBUILDING=1)/float=ieee\
 	/name=(as_is,short)/assume=(nostdnew,noglobal_array_new)\
 	/include=([],[-.src],[-.include],[-.lexlib])
-CC_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__==1)/float=ieee\
+CC_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__=1,NO_CXX11_REGEX=1,WXBUILDING=1)/float=ieee\
 	/name=(as_is,short)/include=([],[-.src],[-.include],[-.lexlib])
 .else
 CXX_DEFINE =
@@ -53,19 +53,19 @@ CC_DEFINE =
 .c.obj :
 	cc $(CFLAGS)$(CC_DEFINE) $(MMS$TARGET_NAME).c
 
-OBJECTS=AutoComplete.obj,CallTip.obj,Catalogue.obj,CellBuffer.obj,\
-	CharClassify.obj,ContractionState.obj,Decoration.obj,Document.obj,\
-	Editor.obj,ExternalLexer.obj,Indicator.obj,KeyMap.obj,LineMarker.obj,\
-	PerLine.obj,PositionCache.obj,RESearch.obj,RunStyles.obj,\
-	ScintillaBase.obj,Selection.obj,Style.obj,UniConversion.obj,\
-	ViewStyle.obj,XPM.obj
+OBJECTS=AutoComplete.obj,CallTip.obj,CaseConvert.obj,CaseFolder.obj,\
+	Catalogue.obj,CellBuffer.obj,CharClassify.obj,ContractionState.obj,\
+	Decoration.obj,Document.obj,Editor.obj,ExternalLexer.obj,Indicator.obj,\
+	KeyMap.obj,LineMarker.obj,PerLine.obj,PositionCache.obj,RESearch.obj,\
+	RunStyles.obj,ScintillaBase.obj,Selection.obj,Style.obj,UniConversion.obj,\
+	ViewStyle.obj,XPM.obj,EditModel.obj,EditView.obj,MarginView.obj
 
-SOURCES=AutoComplete.cxx,CallTip.cxx,Catalogue.cxx,CellBuffer.cxx,\
-	CharClassify.cxx,ContractionState.cxx,Decoration.cxx,Document.cxx,\
-	Editor.cxx,ExternalLexer.cxx,Indicator.cxx,KeyMap.cxx,LineMarker.cxx,\
-	PerLine.cxx,PositionCache.cxx,RESearch.cxx,RunStyles.cxx,\
-	ScintillaBase.cxx,Selection.cxx,Style.cxx,UniConversion.cxx,\
-	ViewStyle.cxx,XPM.cxx
+SOURCES=AutoComplete.cxx,CallTip.cxx,CaseConvert.cxx,CaseFolder.cxx,\
+	Catalogue.cxx,CellBuffer.cxx,CharClassify.cxx,ContractionState.cxx,\
+	Decoration.cxx,Document.cxx,Editor.cxx,ExternalLexer.cxx,Indicator.cxx,\
+	KeyMap.cxx,LineMarker.cxx,PerLine.cxx,PositionCache.cxx,RESearch.cxx,\
+	RunStyles.cxx,ScintillaBase.cxx,Selection.cxx,Style.cxx,UniConversion.cxx,\
+	ViewStyle.cxx,XPM.cxx,EditModel.cxx,EditView.cxx,MarginView.cxx
 
 all : $(SOURCES)
 	$(MMS)$(MMSQUALIFIERS) $(OBJECTS)
@@ -93,6 +93,8 @@ $(OBJECTS) : [----.include.wx]setup.h
 
 AutoComplete.obj : AutoComplete.cxx
 CallTip.obj : CallTip.cxx
+CaseConvert.obj : CaseConvert.cxx
+CaseFolder.obj : CaseFolder.cxx
 Catalogue.obj : Catalogue.cxx
 CellBuffer.obj : CellBuffer.cxx
 CharClassify.obj : CharClassify.cxx
@@ -102,6 +104,8 @@ Document.obj : Document.cxx
 Editor.obj : Editor.cxx
 	cxx $(CXXFLAGS)$(CXX_DEFINE)/nowarn Editor.cxx
 ExternalLexer.obj : ExternalLexer.cxx
+	cxx $(CXXFLAGS)$(CXX_DEFINE)/warn=disable=(CONPTRLOSBIT)\
+	ExternalLexer.cxx
 Indicator.obj : Indicator.cxx
 KeyMap.obj : KeyMap.cxx
 LineMarker.obj : LineMarker.cxx
@@ -110,8 +114,13 @@ PositionCache.obj : PositionCache.cxx
 RESearch.obj : RESearch.cxx
 RunStyles.obj : RunStyles.cxx
 ScintillaBase.obj : ScintillaBase.cxx
+	cxx $(CXXFLAGS)$(CXX_DEFINE)/warn=disable=(CONPTRLOSBIT)\
+	ScintillaBase.cxx
 Selection.obj : Selection.cxx
 Style.obj : Style.cxx
 UniConversion.obj : UniConversion.cxx
 ViewStyle.obj : ViewStyle.cxx
 XPM.obj : XPM.cxx
+EditModel.obj : EditModel.cxx
+EditView.obj : EditView.cxx
+MarginView.obj : MarginView.cxx

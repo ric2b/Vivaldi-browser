@@ -35,3 +35,23 @@ base::FilePath GetMailDirectory() {
 
   return base::FilePath();
 }
+
+base::FilePath GetThunderbirdMailDirectory() {
+  base::FilePath mail_directory;
+  base::FilePath home = base::GetHomeDir();
+  if (!home.empty()) {
+    mail_directory = home.Append(".thunderbird");
+  }
+
+  if (base::PathExists(mail_directory)) {
+    return mail_directory;
+  }
+
+  // For thunderbird installed with snap
+  mail_directory = home.Append("snap/thunderbird/common/.thunderbird");
+  if (base::PathExists(mail_directory)) {
+     return mail_directory;
+  }
+
+  return base::FilePath();
+}

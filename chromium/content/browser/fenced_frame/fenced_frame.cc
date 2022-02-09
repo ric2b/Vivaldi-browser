@@ -5,6 +5,7 @@
 #include "content/browser/fenced_frame/fenced_frame.h"
 
 #include "base/notreached.h"
+#include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -18,17 +19,17 @@ FencedFrame::FencedFrame(
     : web_contents_(static_cast<WebContentsImpl*>(
           WebContents::FromRenderFrameHost(&*owner_render_frame_host))),
       owner_render_frame_host_(owner_render_frame_host),
-      frame_tree_(std::make_unique<FrameTree>(
-          web_contents_->GetBrowserContext(),
-          /*delegate=*/this,
-          /*navigation_controller_delegate=*/web_contents_,
-          /*navigator_delegate=*/web_contents_,
-          /*render_frame_delegate=*/web_contents_,
-          /*render_view_delegate=*/web_contents_,
-          /*render_widget_delegate=*/web_contents_,
-          /*manager_delegate=*/web_contents_,
-          /*page_delegate=*/web_contents_,
-          FrameTree::Type::kFencedFrame)) {
+      frame_tree_(
+          std::make_unique<FrameTree>(web_contents_->GetBrowserContext(),
+                                      /*delegate=*/this,
+                                      /*navigation_controller_delegate=*/this,
+                                      /*navigator_delegate=*/web_contents_,
+                                      /*render_frame_delegate=*/web_contents_,
+                                      /*render_view_delegate=*/web_contents_,
+                                      /*render_widget_delegate=*/web_contents_,
+                                      /*manager_delegate=*/web_contents_,
+                                      /*page_delegate=*/web_contents_,
+                                      FrameTree::Type::kFencedFrame)) {
   scoped_refptr<SiteInstance> site_instance =
       SiteInstance::Create(web_contents_->GetBrowserContext());
   // Note that even though this is happening in response to an event in the
@@ -41,7 +42,7 @@ FencedFrame::FencedFrame(
   // apply for fenced frames, portals, and prerendered nested FrameTrees, hence
   // the decision to mark it as false.
   frame_tree_->Init(site_instance.get(), /*renderer_initiated_creation=*/false,
-                    /*main_frame_name=*/"");
+                    /*main_frame_name=*/"", /*opener=*/nullptr);
 
   // TODO(crbug.com/1199679): This should be moved to FrameTree::Init.
   web_contents_->NotifySwappedFromRenderManager(
@@ -49,6 +50,8 @@ FencedFrame::FencedFrame(
       frame_tree_->root()->render_manager()->current_frame_host());
 
   CreateProxyAndAttachToOuterFrameTree();
+
+  devtools_instrumentation::FencedFrameCreated(owner_render_frame_host_, this);
 }
 
 FencedFrame::~FencedFrame() {
@@ -77,8 +80,8 @@ void FencedFrame::Navigate(const GURL& url) {
       owner_render_frame_host_->GetProcess()->GetID(),
       owner_render_frame_host_->GetLastCommittedOrigin(),
       owner_render_frame_host_->GetSiteInstance(), content::Referrer(),
-      ui::PAGE_TRANSITION_LINK,
-      /*should_replace_current_entry=*/false, download_policy, "GET",
+      ui::PAGE_TRANSITION_AUTO_SUBFRAME,
+      /*should_replace_current_entry=*/true, download_policy, "GET",
       /*post_body=*/nullptr, /*extra_headers=*/"",
       /*blob_url_loader_factory=*/nullptr,
       network::mojom::SourceLocation::New(), /*has_user_gesture=*/false,
@@ -97,6 +100,10 @@ bool FencedFrame::IsHidden() {
 int FencedFrame::GetOuterDelegateFrameTreeNodeId() {
   DCHECK(outer_delegate_frame_tree_node_);
   return outer_delegate_frame_tree_node_->frame_tree_node_id();
+}
+
+bool FencedFrame::IsPortal() {
+  return false;
 }
 
 RenderFrameProxyHost* FencedFrame::GetProxyToInnerMainFrame() {
@@ -148,6 +155,12 @@ void FencedFrame::CreateProxyAndAttachToOuterFrameTree() {
 
   inner_root->current_frame_host()->PropagateEmbeddingTokenToParentFrame();
 
+  // We need to set the `proxy_to_inner_main_frame_` as created because the
+  // renderer side of this object is live. It is live because the creation of
+  // the FencedFrame object occurs in a sync request from the renderer where the
+  // other end of `proxy_to_inner_main_frame_` lives.
+  proxy_to_inner_main_frame_->SetRenderFrameProxyCreated(true);
+
   RenderFrameHostManager* inner_render_manager = inner_root->render_manager();
 
   // For the newly minted FrameTree (in the constructor) we will have a new
@@ -184,5 +197,38 @@ void FencedFrame::WaitForDidStopLoadingForTesting() {
   on_did_finish_loading_callback_for_testing_ = run_loop.QuitClosure();
   run_loop.Run();
 }
+
+void FencedFrame::NotifyNavigationStateChanged(InvalidateTypes changed_flags) {}
+
+void FencedFrame::NotifyBeforeFormRepostWarningShow() {
+  // TODO(https://crbug.com/1263557): Should we call
+  // web_contents_->NotifyBeforeFormRepostWarningShow()?
+}
+
+void FencedFrame::NotifyNavigationEntryCommitted(
+    const LoadCommittedDetails& load_details) {}
+
+void FencedFrame::NotifyNavigationEntryChanged(
+    const EntryChangedDetails& change_details) {}
+
+void FencedFrame::NotifyNavigationListPruned(
+    const PrunedDetails& pruned_details) {}
+
+void FencedFrame::NotifyNavigationEntriesDeleted() {}
+
+void FencedFrame::ActivateAndShowRepostFormWarningDialog() {
+  // TODO(https://crbug.com/1263557): The continuation callback would goto the
+  // wrong NavigationController so perhaps we need to pass a callback in?
+}
+
+bool FencedFrame::ShouldPreserveAbortedURLs() {
+  return false;
+}
+
+WebContents* FencedFrame::DeprecatedGetWebContents() {
+  return web_contents_;
+}
+
+void FencedFrame::UpdateOverridingUserAgent() {}
 
 }  // namespace content

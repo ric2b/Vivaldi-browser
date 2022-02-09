@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -110,7 +111,7 @@ class WidgetBoundsChangeWaiter final : public views::WidgetObserver {
             std::abs(rect.height() - initial_bounds_.height()) >= resize_by_);
   }
 
-  views::Widget* const widget_;
+  const raw_ptr<views::Widget> widget_;
   const int move_by_, resize_by_;
   const gfx::Rect initial_bounds_;
   base::RunLoop run_loop_;
@@ -279,7 +280,11 @@ IN_PROC_BROWSER_TEST_P(PopupBrowserTest, MAYBE_AboutBlankCrossScreenPlacement) {
         permissions::PermissionRequestManager::ACCEPT_ALL);
     constexpr char kGetScreensLength[] = R"(
       (async () => {
-        try { return (await getScreens()).screens.length; } catch { return 0; }
+        try {
+          return (await getScreenDetails()).screens.length;
+        } catch {
+          return 0;
+        }
       })();
     )";
     EXPECT_EQ(2, EvalJs(opener, kGetScreensLength));

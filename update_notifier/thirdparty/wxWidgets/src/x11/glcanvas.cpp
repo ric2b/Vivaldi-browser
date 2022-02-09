@@ -22,9 +22,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#if defined(__BORLANDC__)
-    #pragma hdrstop
-#endif
 
 #if wxUSE_GLCANVAS
 
@@ -39,7 +36,19 @@
 // implementation
 // ============================================================================
 
-IMPLEMENT_CLASS(wxGLCanvas, wxWindow)
+wxIMPLEMENT_CLASS(wxGLCanvas, wxWindow);
+
+wxGLCanvas::wxGLCanvas(wxWindow *parent,
+                       const wxGLAttributes& dispAttrs,
+                       wxWindowID id,
+                       const wxPoint& pos,
+                       const wxSize& size,
+                       long style,
+                       const wxString& name,
+                       const wxPalette& palette)
+{
+    Create(parent, dispAttrs, id, pos, size, style, name, palette);
+}
 
 wxGLCanvas::wxGLCanvas(wxWindow *parent,
                        wxWindowID id,
@@ -60,20 +69,38 @@ bool wxGLCanvas::Create(wxWindow *parent,
                         long style,
                         const wxString& name,
                         const int *attribList,
+                        const wxPalette& palette)
+{
+    // Separate 'GLXFBConfig/XVisual' attributes.
+    // Also store context attributes for wxGLContext ctor
+    wxGLAttributes dispAttrs;
+    if ( ! ParseAttribList(attribList, dispAttrs, &m_GLCTXAttrs) )
+        return false;
+
+    return Create(parent, dispAttrs, id, pos, size, style, name, palette);
+}
+
+bool wxGLCanvas::Create(wxWindow *parent,
+                        const wxGLAttributes& dispAttrs,
+                        wxWindowID id,
+                        const wxPoint& pos,
+                        const wxSize& size,
+                        long style,
+                        const wxString& name,
                         const wxPalette& WXUNUSED(palette))
 {
     if ( !wxWindow::Create(parent, id, pos, size, style, name) )
         return false;
 
-    if ( !InitVisual(attribList) )
+    if ( !InitVisual(dispAttrs) )
         return false;
 
     return true;
 }
 
-Window wxGLCanvas::GetXWindow() const
+unsigned long wxGLCanvas::GetXWindow() const
 {
-    return (Window)
+    return (unsigned long)
 #ifdef __WXMOTIF__
         GetClientXWindow();
 #else

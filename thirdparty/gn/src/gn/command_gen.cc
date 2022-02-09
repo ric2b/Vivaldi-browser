@@ -43,6 +43,7 @@ const char kSwitchIdeValueVs2013[] = "vs2013";
 const char kSwitchIdeValueVs2015[] = "vs2015";
 const char kSwitchIdeValueVs2017[] = "vs2017";
 const char kSwitchIdeValueVs2019[] = "vs2019";
+const char kSwitchIdeValueVs2022[] = "vs2022";
 const char kSwitchIdeValueWinSdk[] = "winsdk";
 const char kSwitchIdeValueXcode[] = "xcode";
 const char kSwitchIdeValueJson[] = "json";
@@ -210,7 +211,7 @@ bool RunIdeWriter(const std::string& ide,
     return res;
   } else if (ide == kSwitchIdeValueVs || ide == kSwitchIdeValueVs2013 ||
              ide == kSwitchIdeValueVs2015 || ide == kSwitchIdeValueVs2017 ||
-             ide == kSwitchIdeValueVs2019) {
+             ide == kSwitchIdeValueVs2019 || ide == kSwitchIdeValueVs2022) {
     VisualStudioWriter::Version version = VisualStudioWriter::Version::Vs2019;
     if (ide == kSwitchIdeValueVs2013)
       version = VisualStudioWriter::Version::Vs2013;
@@ -218,6 +219,8 @@ bool RunIdeWriter(const std::string& ide,
       version = VisualStudioWriter::Version::Vs2015;
     else if (ide == kSwitchIdeValueVs2017)
       version = VisualStudioWriter::Version::Vs2017;
+    else if (ide == kSwitchIdeValueVs2022)
+      version = VisualStudioWriter::Version::Vs2022;
 
     std::string sln_name;
     if (command_line->HasSwitch(kSwitchSln))
@@ -229,13 +232,19 @@ bool RunIdeWriter(const std::string& ide,
     if (command_line->HasSwitch(kSwitchIdeValueWinSdk))
       win_kit = command_line->GetSwitchValueASCII(kSwitchIdeValueWinSdk);
     std::string ninja_extra_args;
-    if (command_line->HasSwitch(kSwitchNinjaExtraArgs))
+    if (command_line->HasSwitch(kSwitchNinjaExtraArgs)) {
       ninja_extra_args =
           command_line->GetSwitchValueASCII(kSwitchNinjaExtraArgs);
+    }
+    std::string ninja_executable;
+    if (command_line->HasSwitch(kSwitchNinjaExecutable)) {
+      ninja_executable =
+          command_line->GetSwitchValueASCII(kSwitchNinjaExecutable);
+    }
     bool no_deps = command_line->HasSwitch(kSwitchNoDeps);
     bool res = VisualStudioWriter::RunAndWriteFiles(
         build_settings, builder, version, sln_name, filters, win_kit,
-        ninja_extra_args, no_deps, err);
+        ninja_extra_args, ninja_executable, no_deps, err);
     if (res && !quiet) {
       OutputString("Generating Visual Studio projects took " +
                    base::Int64ToString(timer.Elapsed().InMilliseconds()) +
@@ -462,6 +471,7 @@ IDE options
       "vs2015" - Visual Studio 2015 project/solution files.
       "vs2017" - Visual Studio 2017 project/solution files.
       "vs2019" - Visual Studio 2019 project/solution files.
+      "vs2022" - Visual Studio 2022 project/solution files.
       "xcode" - Xcode workspace/solution files.
       "qtcreator" - QtCreator project files.
       "json" - JSON file containing target information
@@ -486,6 +496,9 @@ Visual Studio Flags
       Use the specified Windows 10 SDK version to generate project files.
       As an example, "10.0.15063.0" can be specified to use Creators Update SDK
       instead of the default one.
+
+  --ninja-executable=<string>
+      Can be used to specify the ninja executable to use when building.
 
   --ninja-extra-args=<string>
       This string is passed without any quoting to the ninja invocation

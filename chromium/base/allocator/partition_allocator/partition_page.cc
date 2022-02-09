@@ -4,6 +4,8 @@
 
 #include "base/allocator/partition_allocator/partition_page.h"
 
+#include <algorithm>
+
 #include "base/allocator/buildflags.h"
 #include "base/allocator/partition_allocator/address_pool_manager.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
@@ -11,21 +13,20 @@
 #include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_root.h"
 #include "base/allocator/partition_allocator/reservation_offset_table.h"
 #include "base/bits.h"
 #include "base/dcheck_is_on.h"
-#include "base/feature_list.h"
+#include "base/memory/tagging.h"
 
 namespace base {
 namespace internal {
 
 namespace {
 
-void UnmapNow(void* reservation_start,
+void UnmapNow(uintptr_t reservation_start,
               size_t reservation_size,
               pool_handle pool);
 
@@ -56,7 +57,7 @@ ALWAYS_INLINE void PartitionDirectUnmap(
   PA_DCHECK(root->total_size_of_direct_mapped_pages >= reservation_size);
   root->total_size_of_direct_mapped_pages -= reservation_size;
 
-  char* reservation_start = reinterpret_cast<char*>(
+  uintptr_t reservation_start = reinterpret_cast<uintptr_t>(
       SlotSpanMetadata<thread_safe>::ToSlotSpanStartPtr(slot_span));
   // The mapping may start at an unspecified location within a super page, but
   // we always reserve memory aligned to super page size.
@@ -118,6 +119,20 @@ ALWAYS_INLINE void PartitionRegisterEmptySlotSpan(
   if (current_index == kMaxFreeableSpans)
     current_index = 0;
   root->global_empty_slot_span_ring_index = current_index;
+
+  // Avoid wasting too much memory on empty slot spans. Note that we only divide
+  // by powers of two, since division can be very slow, and this path is taken
+  // for every single-slot slot span deallocation.
+  //
+  // Empty slot spans are also all decommitted with MemoryReclaimer, but it may
+  // never run, be delayed arbitrarily, and/or miss large memory spikes.
+  size_t max_empty_dirty_bytes =
+      root->total_size_of_committed_pages.load(std::memory_order_relaxed) >>
+      root->max_empty_slot_spans_dirty_bytes_shift;
+  if (root->empty_slot_spans_dirty_bytes > max_empty_dirty_bytes) {
+    root->ShrinkEmptySlotSpansRing(std::min(
+        root->empty_slot_spans_dirty_bytes / 2, max_empty_dirty_bytes));
+  }
 }
 
 }  // namespace
@@ -140,7 +155,7 @@ SlotSpanMetadata<thread_safe>::SlotSpanMetadata(
     : bucket(bucket), can_store_raw_size(bucket->CanStoreRawSize()) {}
 
 template <bool thread_safe>
-void SlotSpanMetadata<thread_safe>::FreeSlowPath() {
+void SlotSpanMetadata<thread_safe>::FreeSlowPath(size_t number_of_freed) {
 #if DCHECK_IS_ON()
   auto* root = PartitionRoot<thread_safe>::FromSlotSpan(this);
   root->lock_.AssertAcquired();
@@ -170,11 +185,13 @@ void SlotSpanMetadata<thread_safe>::FreeSlowPath() {
     // Ensure that the slot span is full. That's the only valid case if we
     // arrive here.
     PA_DCHECK(num_allocated_slots < 0);
-    // A transition of num_allocated_slots from 0 to -1 is not legal, and
-    // likely indicates a double-free.
-    PA_CHECK(num_allocated_slots != -1);
-    num_allocated_slots = -num_allocated_slots - 2;
-    PA_DCHECK(num_allocated_slots == bucket->get_slots_per_span() - 1);
+    // A transition of num_allocated_slots from 0 to a negative value is not
+    // legal, and likely indicates a double-free.
+    PA_CHECK(static_cast<intptr_t>(num_allocated_slots) <
+             -static_cast<intptr_t>(number_of_freed));
+    num_allocated_slots = -num_allocated_slots - 2 * number_of_freed;
+    PA_DCHECK(static_cast<size_t>(num_allocated_slots) ==
+              bucket->get_slots_per_span() - number_of_freed);
     // Fully used slot span became partially used. It must be put back on the
     // non-full list. Also make it the current slot span to increase the
     // chances of it being filled up again. The old current slot span will be
@@ -187,7 +204,7 @@ void SlotSpanMetadata<thread_safe>::FreeSlowPath() {
     // Special case: for a partition slot span with just a single slot, it may
     // now be empty and we want to run it through the empty logic.
     if (UNLIKELY(num_allocated_slots == 0))
-      FreeSlowPath();
+      FreeSlowPath(number_of_freed /*ignored*/);
   }
 }
 
@@ -196,7 +213,8 @@ void SlotSpanMetadata<thread_safe>::Decommit(PartitionRoot<thread_safe>* root) {
   root->lock_.AssertAcquired();
   PA_DCHECK(is_empty());
   PA_DCHECK(!bucket->is_direct_mapped());
-  void* slot_span_start = SlotSpanMetadata::ToSlotSpanStartPtr(this);
+  uintptr_t slot_span_start =
+      reinterpret_cast<uintptr_t>(SlotSpanMetadata::ToSlotSpanStartPtr(this));
   // If lazy commit is enabled, only provisioned slots are committed.
   size_t dirty_size = bits::AlignUp(GetProvisionedSize(), SystemPageSize());
   size_t size_to_decommit =
@@ -233,8 +251,49 @@ void SlotSpanMetadata<thread_safe>::DecommitIfPossible(
     Decommit(root);
 }
 
+template <bool thread_safe>
+void SlotSpanMetadata<thread_safe>::SortFreelist() {
+  std::bitset<kMaxSlotsPerSlotSpan> free_slots;
+  char* slot_span_base = reinterpret_cast<char*>(ToSlotSpanStartPtr(this));
+
+  size_t num_provisioned_slots =
+      bucket->get_slots_per_span() - num_unprovisioned_slots;
+  PA_CHECK(num_unprovisioned_slots <= kMaxSlotsPerSlotSpan);
+
+  size_t slot_size = bucket->slot_size;
+  for (PartitionFreelistEntry* head = freelist_head; head;
+       head = head->GetNext(slot_size)) {
+    size_t offset_in_slot_span =
+        reinterpret_cast<char*>(memory::UnmaskPtr(head)) - slot_span_base;
+    size_t slot_number = bucket->GetSlotNumber(offset_in_slot_span);
+    PA_DCHECK(slot_number < num_provisioned_slots);
+    free_slots[slot_number] = true;
+  }
+
+  PartitionFreelistEntry* back = nullptr;
+  PartitionFreelistEntry* head = nullptr;
+
+  for (size_t slot_number = 0; slot_number < num_provisioned_slots;
+       slot_number++) {
+    if (free_slots[slot_number]) {
+      char* slot_address =
+          memory::RemaskPtr(slot_span_base + (slot_size * slot_number));
+      auto* entry = new (slot_address) PartitionFreelistEntry();
+
+      if (!head)
+        head = entry;
+      else
+        back->SetNext(entry);
+
+      back = entry;
+    }
+  }
+  SetFreelistHead(head);
+  freelist_is_sorted = true;
+}
+
 namespace {
-void UnmapNow(void* reservation_start,
+void UnmapNow(uintptr_t reservation_start,
               size_t reservation_size,
               pool_handle pool) {
   PA_DCHECK(reservation_start && reservation_size > 0);
@@ -243,12 +302,12 @@ void UnmapNow(void* reservation_start,
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
   if (pool == GetBRPPool()) {
     // In 32-bit mode, the beginning of a reservation may be excluded from the
-    // BRP pool, so shift the pointer. Non-BRP pool doesn't have logic.
+    // BRP pool, so shift the pointer. Other pools don't have this logic.
     PA_DCHECK(IsManagedByPartitionAllocBRPPool(
 #if defined(PA_HAS_64_BITS_POINTERS)
         reservation_start
 #else
-        reinterpret_cast<char*>(reservation_start) +
+        reservation_start +
         AddressPoolManagerBitmap::kBytesPer1BitOfBRPPoolBitmap *
             AddressPoolManagerBitmap::kGuardOffsetOfBRPPoolBitmap
 #endif
@@ -256,29 +315,28 @@ void UnmapNow(void* reservation_start,
   } else
 #endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
   {
-    PA_DCHECK(pool == GetNonBRPPool() ||
+    PA_DCHECK(pool == GetRegularPool() ||
               (IsConfigurablePoolAvailable() && pool == GetConfigurablePool()));
     // Non-BRP pools don't need adjustment that BRP needs in 32-bit mode.
-    PA_DCHECK(IsManagedByPartitionAllocNonBRPPool(reservation_start) ||
+    PA_DCHECK(IsManagedByPartitionAllocRegularPool(reservation_start) ||
               IsManagedByPartitionAllocConfigurablePool(reservation_start));
   }
 #endif  // DCHECK_IS_ON()
 
-  uintptr_t ptr_as_uintptr = reinterpret_cast<uintptr_t>(reservation_start);
-  PA_DCHECK((ptr_as_uintptr & kSuperPageOffsetMask) == 0);
-  uintptr_t ptr_end = ptr_as_uintptr + reservation_size;
-  auto* offset_ptr = ReservationOffsetPointer(ptr_as_uintptr);
+  PA_DCHECK((reservation_start & kSuperPageOffsetMask) == 0);
+  uintptr_t reservation_end = reservation_start + reservation_size;
+  auto* offset_ptr = ReservationOffsetPointer(reservation_start);
   // Reset the offset table entries for the given memory before unreserving
   // it. Since the memory is not unreserved and not available for other
   // threads, the table entries for the memory are not modified by other
   // threads either. So we can update the table entries without race
   // condition.
   uint16_t i = 0;
-  while (ptr_as_uintptr < ptr_end) {
-    PA_DCHECK(offset_ptr < GetReservationOffsetTableEnd(ptr_as_uintptr));
+  for (uintptr_t address = reservation_start; address < reservation_end;
+       address += kSuperPageSize) {
+    PA_DCHECK(offset_ptr < GetReservationOffsetTableEnd(address));
     PA_DCHECK(*offset_ptr == i++);
     *offset_ptr++ = kOffsetTagNotAllocated;
-    ptr_as_uintptr += kSuperPageSize;
   }
 
 #if !defined(PA_HAS_64_BITS_POINTERS)
@@ -288,7 +346,7 @@ void UnmapNow(void* reservation_start,
 
   // After resetting the table entries, unreserve and decommit the memory.
   AddressPoolManager::GetInstance()->UnreserveAndDecommit(
-      pool, reservation_start, reservation_size);
+      pool, reinterpret_cast<void*>(reservation_start), reservation_size);
 }
 }  // namespace
 

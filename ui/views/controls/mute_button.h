@@ -4,7 +4,6 @@
 #define UI_VIEWS_CONTROLS_MUTE_BUTTON_H_
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/view.h"
 

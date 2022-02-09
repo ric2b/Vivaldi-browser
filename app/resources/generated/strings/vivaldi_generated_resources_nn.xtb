@@ -328,7 +328,6 @@
 <translation id="6892812721183419409">Opna lenkja som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunnsapp: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Attendekall filtilgangen</translation>
-<translation id="6916590542764765824">Utvidingsstyring</translation>
 <translation id="6945221475159498467">Vel</translation>
 <translation id="6955446738988643816">Inspeksjonsmeny</translation>
 <translation id="6970856801391541997">Skriv ut bestemte sider</translation>
@@ -394,7 +393,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8032244173881942855">Klarer ikkje å senda fana.</translation>
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
-<translation id="8137559199583651773">Utvidingsstyring</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Nedlasting er i gang} other {Nedlastingar er i gang}}</translation>
 <translation id="8230134520748321204">Lagra passordet for <ph name="ORIGIN" />?</translation>

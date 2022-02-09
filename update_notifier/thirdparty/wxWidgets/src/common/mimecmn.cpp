@@ -20,9 +20,6 @@
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_MIMETYPE
 
@@ -49,11 +46,6 @@
     #include "wx/msw/mimetype.h"
 #elif ( defined(__DARWIN__) )
     #include "wx/osx/mimetype.h"
-#elif defined(__WXPM__) || defined (__EMX__)
-    #include "wx/os2/mimetype.h"
-    #undef __UNIX__
-#elif defined(__DOS__)
-    #include "wx/msdos/mimetype.h"
 #else // Unix
     #include "wx/unix/mimetype.h"
 #endif
@@ -161,12 +153,11 @@ void wxFileTypeInfo::VarArgInit(const wxString *mimeType,
 
 
 wxFileTypeInfo::wxFileTypeInfo(const wxArrayString& sArray)
+    : m_mimeType(sArray[0u])
+    , m_openCmd( sArray[1u])
+    , m_printCmd(sArray[2u])
+    , m_desc(    sArray[3u])
 {
-    m_mimeType = sArray [0u];
-    m_openCmd  = sArray [1u];
-    m_printCmd = sArray [2u];
-    m_desc     = sArray [3u];
-
     size_t count = sArray.GetCount();
     for ( size_t i = 4; i < count; i++ )
     {
@@ -296,8 +287,7 @@ wxFileType::wxFileType()
 
 wxFileType::~wxFileType()
 {
-    if ( m_impl )
-        delete m_impl;
+    delete m_impl;
 }
 
 bool wxFileType::GetExtensions(wxArrayString& extensions)
@@ -431,6 +421,13 @@ wxFileType::GetPrintCommand(wxString *printCmd,
     }
 
     return m_impl->GetPrintCommand(printCmd, params);
+}
+
+wxString
+wxFileType::GetExpandedCommand(const wxString& verb,
+                               const wxFileType::MessageParameters& params) const
+{
+    return m_impl->GetExpandedCommand(verb, params);
 }
 
 
@@ -588,8 +585,7 @@ wxMimeTypesManager::wxMimeTypesManager()
 
 wxMimeTypesManager::~wxMimeTypesManager()
 {
-    if ( m_impl )
-        delete m_impl;
+    delete m_impl;
 }
 
 bool wxMimeTypesManager::Unassociate(wxFileType *ft)
@@ -741,8 +737,8 @@ class wxMimeTypeCmnModule: public wxModule
 public:
     wxMimeTypeCmnModule() : wxModule() { }
 
-    virtual bool OnInit() { return true; }
-    virtual void OnExit()
+    virtual bool OnInit() wxOVERRIDE { return true; }
+    virtual void OnExit() wxOVERRIDE
     {
         wxMimeTypesManagerFactory::Set(NULL);
 
@@ -753,9 +749,9 @@ public:
         }
     }
 
-    DECLARE_DYNAMIC_CLASS(wxMimeTypeCmnModule)
+    wxDECLARE_DYNAMIC_CLASS(wxMimeTypeCmnModule);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxMimeTypeCmnModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxMimeTypeCmnModule, wxModule);
 
 #endif // wxUSE_MIMETYPE

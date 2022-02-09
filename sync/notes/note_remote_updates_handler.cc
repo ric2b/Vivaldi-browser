@@ -21,7 +21,6 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/model/conflict_resolution.h"
 #include "components/sync/protocol/unique_position.pb.h"
-#include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
@@ -30,7 +29,7 @@ namespace sync_notes {
 
 namespace {
 
-// Recursive method to traverse a forest created by ReorderUpdates() to
+// Recursive method to traverse a forest created by ReorderValidUpdates() to
 // emit updates in top-down order. |ordered_updates| must not be null because
 // traversed updates are appended to |*ordered_updates|.
 void TraverseAndAppendChildren(
@@ -91,6 +90,37 @@ size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
   return iter - parent->children().begin();
 }
 
+bool IsPermanentNodeUpdate(const syncer::EntityData& update_entity) {
+  return update_entity.parent_id == "0" ||
+         !update_entity.server_defined_unique_tag.empty();
+}
+
+// Checks that the |update_entity| is valid and returns false otherwise. It is
+// used to verify non-deletion updates. |update| must not be a deletion and a
+// permanent node (they are processed in a different way).
+bool IsValidUpdate(const syncer::EntityData& update_entity) {
+  DCHECK(!update_entity.is_deleted());
+  DCHECK(!IsPermanentNodeUpdate(update_entity));
+
+  if (!IsValidNotesSpecifics(update_entity.specifics.notes())) {
+    // Ignore updates with invalid specifics.
+    DLOG(ERROR) << "Couldn't process an update note with an invalid specifics.";
+    return false;
+  }
+
+  if (!HasExpectedNoteGuid(update_entity.specifics.notes(),
+                           update_entity.client_tag_hash,
+                           update_entity.originator_cache_guid,
+                           update_entity.originator_client_item_id)) {
+    // Ignore updates with an unexpected GUID.
+    DLOG(ERROR) << "Couldn't process an update note with unexpected GUID: "
+                << update_entity.specifics.notes().guid();
+    return false;
+  }
+
+  return true;
+}
+
 void ApplyRemoteUpdate(
     const syncer::UpdateResponseData& update,
     const SyncedNoteTracker::Entity* tracked_entity,
@@ -110,6 +140,11 @@ void ApplyRemoteUpdate(
   const vivaldi::NoteNode* node = tracked_entity->note_node();
   const vivaldi::NoteNode* old_parent = node->parent();
   const vivaldi::NoteNode* new_parent = new_parent_tracked_entity->note_node();
+
+  DCHECK(old_parent);
+  DCHECK(new_parent);
+  DCHECK(old_parent->is_folder());
+  DCHECK(new_parent->is_folder());
 
   if (update_entity.specifics.notes().special_node_type() !=
       GetProtoTypeFromNoteNode(node)) {
@@ -169,37 +204,12 @@ void NoteRemoteUpdatesHandler::Process(
   // re-encryption phase at the end.
   std::unordered_set<std::string> entities_with_up_to_date_encryption;
 
-  for (const syncer::UpdateResponseData* update : ReorderUpdates(&updates)) {
+  for (const syncer::UpdateResponseData* update :
+       ReorderValidUpdates(&updates)) {
     const syncer::EntityData& update_entity = update->entity;
 
-    // Ignore changes to the permanent nodes (e.g. main folder). We only
-    // care about their children.
-    if (!update_entity.server_defined_unique_tag.empty()) {
-      if (note_tracker_->GetEntityForSyncId(update_entity.id) == nullptr) {
-        DLOG(ERROR)
-            << "Permanent nodes should have been merged during intial sync.";
-      }
-      continue;
-    }
-
-    // Only non-deletions should have valid specifics and unique positions.
-    if (!update_entity.is_deleted()) {
-      if (!IsValidNotesSpecifics(update_entity.specifics.notes())) {
-        // Ignore updates with invalid specifics.
-        DLOG(ERROR)
-            << "Couldn't process an update note with an invalid specifics.";
-        continue;
-      }
-      if (!HasExpectedNoteGuid(update_entity.specifics.notes(),
-                               update_entity.client_tag_hash,
-                               update_entity.originator_cache_guid,
-                               update_entity.originator_client_item_id)) {
-        // Ignore updates with an unexpected GUID.
-        DLOG(ERROR) << "Couldn't process an update note with unexpected GUID: "
-                    << update_entity.specifics.notes().guid();
-        continue;
-      }
-    }
+    DCHECK(!IsPermanentNodeUpdate(update_entity));
+    DCHECK(update_entity.is_deleted() || IsValidUpdate(update_entity));
 
     bool should_ignore_update = false;
     const SyncedNoteTracker::Entity* tracked_entity =
@@ -248,9 +258,7 @@ void NoteRemoteUpdatesHandler::Process(
     }
 
     if (tracked_entity && tracked_entity->IsUnsynced()) {
-      ProcessConflict(*update, tracked_entity);
-      // |tracked_entity| might be deleted during processing conflict.
-      tracked_entity = note_tracker_->GetEntityForSyncId(update_entity.id);
+      tracked_entity = ProcessConflict(*update, tracked_entity);
       if (!tracked_entity) {
         // During conflict resolution, the entity could be dropped in case of
         // a conflict between local and remote deletions. We shouldn't worry
@@ -321,9 +329,9 @@ void NoteRemoteUpdatesHandler::Process(
 
 // static
 std::vector<const syncer::UpdateResponseData*>
-NoteRemoteUpdatesHandler::ReorderUpdatesForTest(
+NoteRemoteUpdatesHandler::ReorderValidUpdatesForTest(
     const syncer::UpdateResponseDataList* updates) {
-  return ReorderUpdates(updates);
+  return ReorderValidUpdates(updates);
 }
 
 // static
@@ -336,7 +344,7 @@ size_t NoteRemoteUpdatesHandler::ComputeChildNodeIndexForTest(
 
 // static
 std::vector<const syncer::UpdateResponseData*>
-NoteRemoteUpdatesHandler::ReorderUpdates(
+NoteRemoteUpdatesHandler::ReorderValidUpdates(
     const syncer::UpdateResponseDataList* updates) {
   // This method sorts the remote updates according to the following rules:
   // 1. Creations and updates come before deletions.
@@ -364,14 +372,21 @@ NoteRemoteUpdatesHandler::ReorderUpdates(
                      base::StringPieceHash>
       parent_to_children;
 
-  // Add only non-deletions to |id_to_updates|.
+  // Add only valid, non-deletions to |id_to_updates|.
+  int invalid_updates_count = 0;
+  int root_node_updates_count = 0;
   for (const syncer::UpdateResponseData& update : *updates) {
     const syncer::EntityData& update_entity = update.entity;
     // Ignore updates to root nodes.
-    if (update_entity.parent_id == "0") {
+    if (IsPermanentNodeUpdate(update_entity)) {
+      ++root_node_updates_count;
       continue;
     }
     if (update_entity.is_deleted()) {
+      continue;
+    }
+    if (!IsValidUpdate(update_entity)) {
+      ++invalid_updates_count;
       continue;
     }
     id_to_updates[update_entity.id] = &update;
@@ -395,14 +410,11 @@ NoteRemoteUpdatesHandler::ReorderUpdates(
     TraverseAndAppendChildren(root, id_to_updates, parent_to_children,
                               &ordered_updates);
   }
-
-  int root_node_updates_count = 0;
   // Add deletions.
   for (const syncer::UpdateResponseData& update : *updates) {
     const syncer::EntityData& update_entity = update.entity;
     // Ignore updates to root nodes.
-    if (update_entity.parent_id == "0") {
-      root_node_updates_count++;
+    if (IsPermanentNodeUpdate(update_entity)) {
       continue;
     }
     if (update_entity.is_deleted()) {
@@ -410,7 +422,8 @@ NoteRemoteUpdatesHandler::ReorderUpdates(
     }
   }
   // All non root updates should have been included in |ordered_updates|.
-  DCHECK_EQ(updates->size(), ordered_updates.size() + root_node_updates_count);
+  DCHECK_EQ(updates->size(), ordered_updates.size() + root_node_updates_count +
+                                 invalid_updates_count);
   return ordered_updates;
 }
 
@@ -478,7 +491,7 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
     const syncer::UpdateResponseData& update) {
   const syncer::EntityData& update_entity = update.entity;
   DCHECK(!update_entity.is_deleted());
-  DCHECK(update_entity.server_defined_unique_tag.empty());
+  DCHECK(!IsPermanentNodeUpdate(update_entity));
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
 
   const vivaldi::NoteNode* parent_node = GetParentNode(update_entity);
@@ -488,6 +501,8 @@ const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessCreate(
                 << " Node title: "
                 << update_entity.specifics.notes().legacy_canonicalized_title()
                 << ", parent id = " << update_entity.parent_id;
+    note_tracker_->RecordIgnoredServerUpdateDueToMissingParent(
+        update.response_version);
     return nullptr;
   }
   if (!parent_node->is_folder()) {
@@ -522,12 +537,14 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
             note_tracker_->GetEntityForSyncId(update_entity.id));
   // Must not be a deletion.
   DCHECK(!update_entity.is_deleted());
-  DCHECK(update_entity.server_defined_unique_tag.empty());
+  DCHECK(!IsPermanentNodeUpdate(update_entity));
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
   DCHECK(!tracked_entity->IsUnsynced());
 
   const vivaldi::NoteNode* node = tracked_entity->note_node();
   const vivaldi::NoteNode* old_parent = node->parent();
+  DCHECK(old_parent);
+  DCHECK(old_parent->is_folder());
 
   const SyncedNoteTracker::Entity* new_parent_entity =
       note_tracker_->GetEntityForSyncId(update_entity.parent_id);
@@ -590,7 +607,7 @@ void NoteRemoteUpdatesHandler::ProcessDelete(
   notes_model_->Remove(node);
 }
 
-void NoteRemoteUpdatesHandler::ProcessConflict(
+const SyncedNoteTracker::Entity* NoteRemoteUpdatesHandler::ProcessConflict(
     const syncer::UpdateResponseData& update,
     const SyncedNoteTracker::Entity* tracked_entity) {
   const syncer::EntityData& update_entity = update.entity;
@@ -603,13 +620,13 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
             note_tracker_->GetEntityForSyncId(update_entity.id));
   DCHECK(!tracked_entity->note_node() ||
          !tracked_entity->note_node()->is_permanent_node());
-  DCHECK(update_entity.server_defined_unique_tag.empty());
+  DCHECK(!IsPermanentNodeUpdate(update_entity));
 
   if (tracked_entity->metadata()->is_deleted() && update_entity.is_deleted()) {
     // Both have been deleted, delete the corresponding entity from the tracker.
     note_tracker_->Remove(tracked_entity);
     DLOG(WARNING) << "Conflict: CHANGES_MATCH";
-    return;
+    return nullptr;
   }
 
   if (update_entity.is_deleted()) {
@@ -617,21 +634,24 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
     // update from the server but leave the pending commit intact.
     note_tracker_->UpdateServerVersion(tracked_entity, update.response_version);
     DLOG(WARNING) << "Conflict: USE_LOCAL";
-    return;
+    return tracked_entity;
   }
+
+  DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
 
   if (tracked_entity->metadata()->is_deleted()) {
     // Only local node has been deleted. It should be restored from the server
     // data as a remote creation.
     note_tracker_->Remove(tracked_entity);
-    ProcessCreate(update);
     DLOG(WARNING) << "Conflict: USE_REMOTE";
-    return;
+    return ProcessCreate(update);
   }
 
   // No deletions, there are potentially conflicting updates.
   const vivaldi::NoteNode* node = tracked_entity->note_node();
   const vivaldi::NoteNode* old_parent = node->parent();
+  DCHECK(old_parent);
+  DCHECK(old_parent->is_folder());
 
   const SyncedNoteTracker::Entity* new_parent_entity =
       note_tracker_->GetEntityForSyncId(update_entity.parent_id);
@@ -643,7 +663,7 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
   if (!new_parent_entity) {
     DLOG(ERROR) << "Could not update node. Parent node doesn't exist: "
                 << update_entity.parent_id;
-    return;
+    return tracked_entity;
   }
   const vivaldi::NoteNode* new_parent = new_parent_entity->note_node();
   // |new_parent| would be null if the parent has been deleted locally and not
@@ -653,7 +673,7 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
   if (!new_parent) {
     DLOG(ERROR)
         << "Could not update node. Parent node has been deleted already.";
-    return;
+    return tracked_entity;
   }
   // Either local and remote data match or server wins, and in both cases we
   // should squash any pending commits.
@@ -671,7 +691,6 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
 
     // The changes are identical so there isn't a real conflict.
     DLOG(WARNING) << "Conflict: CHANGES_MATCH";
-    return;
   } else {
     // Conflict where data don't match and no remote deletion, and hence server
     // wins. Update the model from server data.
@@ -680,6 +699,7 @@ void NoteRemoteUpdatesHandler::ProcessConflict(
                       note_tracker_);
   }
   ReuploadEntityIfNeeded(update_entity, tracked_entity);
+  return tracked_entity;
 }
 
 void NoteRemoteUpdatesHandler::RemoveEntityAndChildrenFromTracker(

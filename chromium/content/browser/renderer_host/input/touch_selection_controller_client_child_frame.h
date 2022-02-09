@@ -7,9 +7,8 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "components/viz/common/quads/selection.h"
-#include "content/common/content_export.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 #include "ui/touch_selection/touch_selection_menu_runner.h"
 
@@ -24,7 +23,7 @@ class TouchSelectionControllerClientManager;
 // TouchSelectionControllerClient is intended to bind these views to the
 // TouchSelectionController, we need a different implementation for
 // cross-process subframes.
-class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
+class TouchSelectionControllerClientChildFrame
     : public ui::TouchSelectionControllerClient,
       public ui::TouchSelectionMenuClient {
  public:
@@ -71,14 +70,15 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
   gfx::Point ConvertFromRoot(const gfx::PointF& point) const;
 
   // Not owned, non-null for the lifetime of this object.
-  RenderWidgetHostViewChildFrame* rwhv_;
+  raw_ptr<RenderWidgetHostViewChildFrame> rwhv_;
 
   // NOTE(igor@vivaldi.com): See comments in
   // DetachFromTouchSelectionClientManagerIfNecessary from
   // RenderWidgetHostViewChildFrame. The field was made const to ensure that we
   // have the manager pointer for the lifetime of the object.
+  // The pointer is const to trigger compile error if that ever changes
   friend class RenderWidgetHostViewChildFrame;
-  TouchSelectionControllerClientManager* const manager_;
+  const raw_ptr<TouchSelectionControllerClientManager> manager_;
 
   // The last selection bounds reported by the view, in view coordinates.
   gfx::SelectionBound selection_start_;

@@ -11,7 +11,6 @@
 #include <set>
 
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "media/learning/common/learning_task.h"
 #include "media/learning/impl/random_number_generator.h"
 #include "media/learning/impl/training_algorithm.h"
@@ -104,7 +103,12 @@ class COMPONENT_EXPORT(LEARNING_IMPL) RandomTreeTrainer
   struct Split {
     Split();
     explicit Split(int index);
+
+    Split(const Split&) = delete;
+    Split& operator=(const Split&) = delete;
+
     Split(Split&& rhs);
+
     ~Split();
 
     Split& operator=(Split&& rhs);
@@ -144,8 +148,6 @@ class COMPONENT_EXPORT(LEARNING_IMPL) RandomTreeTrainer
     // [feature value at this split] = info about which examples take this
     // branch of the split.
     std::map<FeatureValue, BranchInfo> branch_infos;
-
-    DISALLOW_COPY_AND_ASSIGN(Split);
   };
 
   // Build this node from |training_data|.  |used_set| is the set of features

@@ -16,7 +16,7 @@
 #include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 
 namespace flags_ui {
@@ -240,9 +240,9 @@ class FlagsState {
   // When |enabled_entries| is empty |name_to_switch_map| won't be filled.
   void GenerateFlagsToSwitchesMapping(
       FlagsStorage* flags_storage,
+      const base::CommandLine& command_line,
       std::set<std::string>* enabled_entries,
       std::map<std::string, SwitchEntry>* name_to_switch_map) const;
-
 
   // Returns whether there is a FeatureEntry named by |name| in
   // |feature_entries_| that:
@@ -264,7 +264,7 @@ class FlagsState {
 
   // Delegate used for embedders to control display and application of flags.
   // May be null.
-  Delegate* delegate_;
+  raw_ptr<Delegate> delegate_;
 };
 
 }  // namespace flags_ui

@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
 #include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/public/browser/service_worker_client_info.h"
@@ -39,7 +38,6 @@ class SharedURLLoaderFactory;
 
 namespace content {
 
-class AppCacheHost;
 class BrowserContext;
 class NavigationLoaderInterceptor;
 class ServiceWorkerMainResourceHandle;
@@ -76,7 +74,6 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
       const net::IsolationInfo& isolation_info,
       mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       base::WeakPtr<ServiceWorkerMainResourceHandle> service_worker_handle,
-      base::WeakPtr<AppCacheHost> appcache_host,
       const BrowserContextGetter& browser_context_getter,
       scoped_refptr<network::SharedURLLoaderFactory> default_loader_factory,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -115,8 +112,7 @@ class WorkerScriptLoader : public network::mojom::URLLoader,
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
   // Returns a URLLoader client endpoint if an interceptor wants to handle the
-  // response, i.e. return a different response. For e.g. AppCache may have
-  // fallback content.
+  // response, i.e. return a different response.  For example, service workers.
   bool MaybeCreateLoaderForResponse(
       network::mojom::URLResponseHeadPtr* response_head,
       mojo::ScopedDataPipeConsumerHandle* response_body,

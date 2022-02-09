@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_BINARY_TARGET_GENERATOR_H_
 #define TOOLS_GN_BINARY_TARGET_GENERATOR_H_
 
-#include "base/macros.h"
 #include "gn/target.h"
 #include "gn/target_generator.h"
 
@@ -35,7 +34,8 @@ class BinaryTargetGenerator : public TargetGenerator {
 
   Target::OutputType output_type_;
 
-  DISALLOW_COPY_AND_ASSIGN(BinaryTargetGenerator);
+  BinaryTargetGenerator(const BinaryTargetGenerator&) = delete;
+  BinaryTargetGenerator& operator=(const BinaryTargetGenerator&) = delete;
 };
 
 #endif  // TOOLS_GN_BINARY_TARGET_GENERATOR_H_

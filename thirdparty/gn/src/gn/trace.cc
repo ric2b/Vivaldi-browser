@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "gn/filesystem_utils.h"
 #include "gn/label.h"
@@ -44,7 +43,8 @@ class TraceLog {
 
   std::vector<TraceItem*> events_;
 
-  DISALLOW_COPY_AND_ASSIGN(TraceLog);
+  TraceLog(const TraceLog&) = delete;
+  TraceLog& operator=(const TraceLog&) = delete;
 };
 
 TraceLog* trace_log = nullptr;

@@ -81,19 +81,15 @@ public class AutocompleteController {
      * @param cursorPosition The position of the cursor within the text.  Set to -1 if the cursor is
      *                       not focused on the text.
      * @param preventInlineAutocomplete Whether autocomplete suggestions should be prevented.
-     * @param queryTileId The ID of the query tile selected by the user, if any.
-     * @param isQueryStartedFromTiles Whether the search query is started from query tiles.
      */
     void start(@NonNull String url, int pageClassification, @NonNull String text,
-            int cursorPosition, boolean preventInlineAutocomplete, @Nullable String queryTileId,
-            boolean isQueryStartedFromTiles) {
+            int cursorPosition, boolean preventInlineAutocomplete) {
         if (mNativeController == 0) return;
         assert !TextUtils.isEmpty(url);
         if (TextUtils.isEmpty(url)) return;
 
         AutocompleteControllerJni.get().start(mNativeController, text, cursorPosition, null, url,
-                pageClassification, preventInlineAutocomplete, false, false, true, queryTileId,
-                isQueryStartedFromTiles);
+                pageClassification, preventInlineAutocomplete, false, false, true);
     }
 
     /**
@@ -283,15 +279,18 @@ public class AutocompleteController {
     }
 
     /**
-     * To find out if there is an open tab with the given |url|. Return the matching tab.
+     * Retrieves matching tab for suggestion at specific index.
+     * TODO(crbug.com/1266558): move this to AutocompleteMatch object when Tab is no longer part
+     * of the //chrome/browser directory.
      *
-     * @param url The URL which the tab opened with.
-     * @return The tab opens |url|.
+     * @param index Index of the suggestion to retrieve Tab info for.
+     * @return Tab that hosts matching URL.
      */
     @Nullable
-    Tab findMatchingTabWithUrl(@NonNull GURL url) {
+    Tab getMatchingTabForSuggestion(int index) {
         if (mNativeController == 0) return null;
-        return AutocompleteControllerJni.get().findMatchingTabWithUrl(mNativeController, url);
+        return AutocompleteControllerJni.get().getMatchingTabForSuggestion(
+                mNativeController, index);
     }
 
     /**
@@ -313,8 +312,7 @@ public class AutocompleteController {
         void start(long nativeAutocompleteControllerAndroid, String text, int cursorPosition,
                 String desiredTld, String currentUrl, int pageClassification,
                 boolean preventInlineAutocomplete, boolean preferKeyword,
-                boolean allowExactKeywordMatch, boolean wantAsynchronousMatches, String queryTileId,
-                boolean isQueryStartedFromTiles);
+                boolean allowExactKeywordMatch, boolean wantAsynchronousMatches);
         AutocompleteMatch classify(
                 long nativeAutocompleteControllerAndroid, String text, boolean focusedFromFakebox);
         void stop(long nativeAutocompleteControllerAndroid, boolean clearResults);
@@ -328,7 +326,7 @@ public class AutocompleteController {
         GURL updateMatchDestinationURLWithAdditionalAssistedQueryStats(
                 long nativeAutocompleteControllerAndroid, int selectedIndex,
                 long elapsedTimeSinceInputChange, String newQueryText, String[] newQueryParams);
-        Tab findMatchingTabWithUrl(long nativeAutocompleteControllerAndroid, GURL url);
+        Tab getMatchingTabForSuggestion(long nativeAutocompleteControllerAndroid, int index);
         void setVoiceMatches(long nativeAutocompleteControllerAndroid, String[] matches,
                 float[] confidenceScores);
 

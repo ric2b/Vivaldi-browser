@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/platform/geometry/float_box.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
-#include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/json/json_values.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
@@ -43,6 +42,7 @@
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "ui/gfx/geometry/quaternion.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/transform.h"
 
 #if defined(ARCH_CPU_X86_64)
@@ -242,9 +242,10 @@ static bool Inverse(const TransformationMatrix::Matrix4& matrix,
                     TransformationMatrix::Matrix4& result) {
   // Calculate the 4x4 determinant
   // If 1/determinant is not finite, then the inverse matrix is not unique.
-  const double inv_det = 1 / Determinant4x4(matrix);
-  if (!std::isfinite(inv_det))
+  const double det = Determinant4x4(matrix);
+  if (!std::isnormal(det))
     return false;
+  const double inv_det = 1 / det;
 
 #if defined(ARCH_CPU_ARM64)
   const double* mat = &(matrix[0][0]);
@@ -604,7 +605,7 @@ static bool Decompose(const TransformationMatrix::Matrix4& mat,
     perspective_matrix[i][3] = 0;
   perspective_matrix[3][3] = 1;
 
-  if (Determinant4x4(perspective_matrix) == 0)
+  if (!std::isnormal(Determinant4x4(perspective_matrix)))
     return false;
 
   // First, isolate perspective.  This is the messiest.
@@ -818,8 +819,8 @@ TransformationMatrix& TransformationMatrix::Scale(double s) {
   return ScaleNonUniform(s, s);
 }
 
-FloatPoint TransformationMatrix::ProjectPoint(const FloatPoint& p,
-                                              bool* clamped) const {
+gfx::PointF TransformationMatrix::ProjectPoint(const gfx::PointF& p,
+                                               bool* clamped) const {
   // This is basically raytracing. We have a point in the destination
   // plane with z=0, and we cast a ray parallel to the z-axis from that
   // point to find the z-position at which it intersects the z=0 plane
@@ -838,11 +839,11 @@ FloatPoint TransformationMatrix::ProjectPoint(const FloatPoint& p,
   if (M33() == 0) {
     // In this case, the projection plane is parallel to the ray we are trying
     // to trace, and there is no well-defined value for the projection.
-    return FloatPoint();
+    return gfx::PointF();
   }
 
-  double x = p.X();
-  double y = p.Y();
+  double x = p.x();
+  double y = p.y();
   double z = -(M13() * x + M23() * y + M43()) / M33();
 
   double out_x = x * M11() + y * M21() + z * M31() + M41();
@@ -863,7 +864,7 @@ FloatPoint TransformationMatrix::ProjectPoint(const FloatPoint& p,
     out_y /= w;
   }
 
-  return FloatPoint(static_cast<float>(out_x), static_cast<float>(out_y));
+  return gfx::PointF(static_cast<float>(out_x), static_cast<float>(out_y));
 }
 
 FloatQuad TransformationMatrix::ProjectQuad(const FloatQuad& q) const {
@@ -874,10 +875,10 @@ FloatQuad TransformationMatrix::ProjectQuad(const FloatQuad& q) const {
   bool clamped3 = false;
   bool clamped4 = false;
 
-  projected_quad.SetP1(ProjectPoint(q.P1(), &clamped1));
-  projected_quad.SetP2(ProjectPoint(q.P2(), &clamped2));
-  projected_quad.SetP3(ProjectPoint(q.P3(), &clamped3));
-  projected_quad.SetP4(ProjectPoint(q.P4(), &clamped4));
+  projected_quad.set_p1(ProjectPoint(q.p1(), &clamped1));
+  projected_quad.set_p2(ProjectPoint(q.p2(), &clamped2));
+  projected_quad.set_p3(ProjectPoint(q.p3(), &clamped3));
+  projected_quad.set_p4(ProjectPoint(q.p4(), &clamped4));
 
   // If all points on the quad had w < 0, then the entire quad would not be
   // visible to the projected surface.
@@ -898,22 +899,22 @@ LayoutRect TransformationMatrix::ClampedBoundsOfProjectedQuad(
     const FloatQuad& q) const {
   FloatRect mapped_quad_bounds = ProjectQuad(q).BoundingBox();
 
-  float left = ClampEdgeValue(floorf(mapped_quad_bounds.X()));
-  float top = ClampEdgeValue(floorf(mapped_quad_bounds.Y()));
+  float left = ClampEdgeValue(floorf(mapped_quad_bounds.x()));
+  float top = ClampEdgeValue(floorf(mapped_quad_bounds.y()));
 
   float right;
-  if (std::isinf(mapped_quad_bounds.X()) &&
-      std::isinf(mapped_quad_bounds.Width()))
+  if (std::isinf(mapped_quad_bounds.x()) &&
+      std::isinf(mapped_quad_bounds.width()))
     right = (LayoutUnit::Max() / 2).ToFloat();
   else
-    right = ClampEdgeValue(ceilf(mapped_quad_bounds.MaxX()));
+    right = ClampEdgeValue(ceilf(mapped_quad_bounds.right()));
 
   float bottom;
-  if (std::isinf(mapped_quad_bounds.Y()) &&
-      std::isinf(mapped_quad_bounds.Height()))
+  if (std::isinf(mapped_quad_bounds.y()) &&
+      std::isinf(mapped_quad_bounds.height()))
     bottom = (LayoutUnit::Max() / 2).ToFloat();
   else
-    bottom = ClampEdgeValue(ceilf(mapped_quad_bounds.MaxY()));
+    bottom = ClampEdgeValue(ceilf(mapped_quad_bounds.bottom()));
 
   return LayoutRect(LayoutUnit::Clamp(left), LayoutUnit::Clamp(top),
                     LayoutUnit::Clamp(right - left),
@@ -926,12 +927,12 @@ void TransformationMatrix::TransformBox(FloatBox& box) const {
   for (size_t i = 0; i < 2; ++i) {
     for (size_t j = 0; j < 2; ++j) {
       for (size_t k = 0; k < 2; ++k) {
-        FloatPoint3D point(box.X(), box.Y(), box.Z());
+        FloatPoint3D point(box.x(), box.y(), box.z());
         point +=
-            FloatPoint3D(i * box.Width(), j * box.Height(), k * box.Depth());
+            FloatPoint3D(i * box.width(), j * box.height(), k * box.depth());
         point = MapPoint(point);
         if (first_point) {
-          bounds.SetOrigin(point);
+          bounds.set_origin(point);
           first_point = false;
         } else {
           bounds.ExpandTo(point);
@@ -942,25 +943,25 @@ void TransformationMatrix::TransformBox(FloatBox& box) const {
   box = bounds;
 }
 
-FloatPoint TransformationMatrix::MapPoint(const FloatPoint& p) const {
-  if (IsIdentityOrTranslation())
-    return FloatPoint(p.X() + static_cast<float>(matrix_[3][0]),
-                      p.Y() + static_cast<float>(matrix_[3][1]));
-
+gfx::PointF TransformationMatrix::MapPoint(const gfx::PointF& p) const {
+  if (IsIdentityOrTranslation()) {
+    return gfx::PointF(p.x() + static_cast<float>(matrix_[3][0]),
+                       p.y() + static_cast<float>(matrix_[3][1]));
+  }
   return InternalMapPoint(p);
 }
 
 FloatPoint3D TransformationMatrix::MapPoint(const FloatPoint3D& p) const {
-  if (IsIdentityOrTranslation())
-    return FloatPoint3D(p.X() + static_cast<float>(matrix_[3][0]),
-                        p.Y() + static_cast<float>(matrix_[3][1]),
-                        p.Z() + static_cast<float>(matrix_[3][2]));
-
+  if (IsIdentityOrTranslation()) {
+    return FloatPoint3D(p.x() + static_cast<float>(matrix_[3][0]),
+                        p.y() + static_cast<float>(matrix_[3][1]),
+                        p.z() + static_cast<float>(matrix_[3][2]));
+  }
   return InternalMapPoint(p);
 }
 
-IntRect TransformationMatrix::MapRect(const IntRect& rect) const {
-  return EnclosingIntRect(MapRect(FloatRect(rect)));
+gfx::Rect TransformationMatrix::MapRect(const gfx::Rect& rect) const {
+  return ToEnclosingRect(MapRect(FloatRect(rect)));
 }
 
 LayoutRect TransformationMatrix::MapRect(const LayoutRect& r) const {
@@ -970,19 +971,19 @@ LayoutRect TransformationMatrix::MapRect(const LayoutRect& r) const {
 FloatRect TransformationMatrix::MapRect(const FloatRect& r) const {
   if (IsIdentityOrTranslation()) {
     FloatRect mapped_rect(r);
-    mapped_rect.Move(static_cast<float>(matrix_[3][0]),
-                     static_cast<float>(matrix_[3][1]));
+    mapped_rect.Offset(static_cast<float>(matrix_[3][0]),
+                       static_cast<float>(matrix_[3][1]));
     return mapped_rect;
   }
 
   FloatQuad result;
 
-  float max_x = r.MaxX();
-  float max_y = r.MaxY();
-  result.SetP1(InternalMapPoint(FloatPoint(r.X(), r.Y())));
-  result.SetP2(InternalMapPoint(FloatPoint(max_x, r.Y())));
-  result.SetP3(InternalMapPoint(FloatPoint(max_x, max_y)));
-  result.SetP4(InternalMapPoint(FloatPoint(r.X(), max_y)));
+  float max_x = r.right();
+  float max_y = r.bottom();
+  result.set_p1(InternalMapPoint(gfx::PointF(r.x(), r.y())));
+  result.set_p2(InternalMapPoint(gfx::PointF(max_x, r.y())));
+  result.set_p3(InternalMapPoint(gfx::PointF(max_x, max_y)));
+  result.set_p4(InternalMapPoint(gfx::PointF(r.x(), max_y)));
 
   return result.BoundingBox();
 }
@@ -996,10 +997,10 @@ FloatQuad TransformationMatrix::MapQuad(const FloatQuad& q) const {
   }
 
   FloatQuad result;
-  result.SetP1(InternalMapPoint(q.P1()));
-  result.SetP2(InternalMapPoint(q.P2()));
-  result.SetP3(InternalMapPoint(q.P3()));
-  result.SetP4(InternalMapPoint(q.P4()));
+  result.set_p1(InternalMapPoint(q.p1()));
+  result.set_p2(InternalMapPoint(q.p2()));
+  result.set_p3(InternalMapPoint(q.p3()));
+  result.set_p4(InternalMapPoint(q.p4()));
   return result;
 }
 
@@ -1030,7 +1031,7 @@ TransformationMatrix& TransformationMatrix::Scale3d(double sx,
 }
 
 TransformationMatrix& TransformationMatrix::Rotate3d(const Rotation& rotation) {
-  return Rotate3d(rotation.axis.X(), rotation.axis.Y(), rotation.axis.Z(),
+  return Rotate3d(rotation.axis.x(), rotation.axis.y(), rotation.axis.z(),
                   rotation.angle);
 }
 
@@ -1637,10 +1638,10 @@ TransformationMatrix& TransformationMatrix::Multiply(
   return *this;
 }
 
-FloatPoint TransformationMatrix::InternalMapPoint(
-    const FloatPoint& source_point) const {
-  double x = source_point.X();
-  double y = source_point.Y();
+gfx::PointF TransformationMatrix::InternalMapPoint(
+    const gfx::PointF& source_point) const {
+  double x = source_point.x();
+  double y = source_point.y();
   double result_x = matrix_[3][0] + x * matrix_[0][0] + y * matrix_[1][0];
   double result_y = matrix_[3][1] + x * matrix_[0][1] + y * matrix_[1][1];
   double w = matrix_[3][3] + x * matrix_[0][3] + y * matrix_[1][3];
@@ -1648,14 +1649,14 @@ FloatPoint TransformationMatrix::InternalMapPoint(
     result_x /= w;
     result_y /= w;
   }
-  return FloatPoint(ClampToFloat(result_x), ClampToFloat(result_y));
+  return gfx::PointF(ClampToFloat(result_x), ClampToFloat(result_y));
 }
 
 FloatPoint3D TransformationMatrix::InternalMapPoint(
     const FloatPoint3D& source_point) const {
-  double x = source_point.X();
-  double y = source_point.Y();
-  double z = source_point.Z();
+  double x = source_point.x();
+  double y = source_point.y();
+  double z = source_point.z();
   double result_x =
       matrix_[3][0] + x * matrix_[0][0] + y * matrix_[1][0] + z * matrix_[2][0];
   double result_y =
@@ -1675,7 +1676,7 @@ FloatPoint3D TransformationMatrix::InternalMapPoint(
 
 bool TransformationMatrix::IsInvertible() const {
   return IsIdentityOrTranslation() ||
-         std::isfinite(1 / blink::Determinant4x4(matrix_));
+         std::isnormal(blink::Determinant4x4(matrix_));
 }
 
 TransformationMatrix TransformationMatrix::Inverse() const {

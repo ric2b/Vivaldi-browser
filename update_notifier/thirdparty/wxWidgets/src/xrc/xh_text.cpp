@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_TEXTCTRL
 
@@ -22,7 +19,7 @@
     #include "wx/textctrl.h"
 #endif
 
-IMPLEMENT_DYNAMIC_CLASS(wxTextCtrlXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxTextCtrlXmlHandler, wxXmlResourceHandler);
 
 wxTextCtrlXmlHandler::wxTextCtrlXmlHandler() : wxXmlResourceHandler()
 {
@@ -41,9 +38,6 @@ wxTextCtrlXmlHandler::wxTextCtrlXmlHandler() : wxXmlResourceHandler()
     XRC_ADD_STYLE(wxTE_CENTRE);
     XRC_ADD_STYLE(wxTE_RIGHT);
     XRC_ADD_STYLE(wxTE_DONTWRAP);
-#if WXWIN_COMPATIBILITY_2_6
-    XRC_ADD_STYLE(wxTE_LINEWRAP);
-#endif // WXWIN_COMPATIBILITY_2_6
     XRC_ADD_STYLE(wxTE_CHARWRAP);
     XRC_ADD_STYLE(wxTE_WORDWRAP);
 
@@ -71,9 +65,12 @@ wxObject *wxTextCtrlXmlHandler::DoCreateResource()
 
     if (HasParam(wxT("maxlength")))
         text->SetMaxLength(GetLong(wxT("maxlength")));
+    if (GetBool(wxS("forceupper")))
+        text->ForceUpper();
 
-    if (HasParam(wxT("hint")))
-        text->SetHint(GetText(wxS("hint")));
+    const wxString hint = GetText(wxS("hint"));
+    if (!hint.empty())
+        text->SetHint(hint);
 
     return text;
 }

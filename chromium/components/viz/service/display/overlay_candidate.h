@@ -23,6 +23,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/hdr_metadata.h"
 #include "ui/gfx/overlay_priority_hint.h"
 #include "ui/gfx/overlay_transform.h"
 
@@ -40,16 +41,36 @@ class VideoHoleDrawQuad;
 
 class VIZ_SERVICE_EXPORT OverlayCandidate {
  public:
+  // When adding or changing these return status' check how the callee uses
+  // these failure codes. Currently, these feed into the logging via the enum
+  // |OverlayProcessorDelegated::DelegationStatus|.
+  enum class CandidateStatus {
+    kSuccess,
+    kFailNotOverlay,
+    kFailNotAxisAligned,
+    kFailColorMatrix,
+    kFailOpacity,
+    kFailBlending,
+    kFailQuadNotSupported,
+    kFailVisible,
+    kFailBufferFormat,
+    kFailNearFilter,
+    kFailPriority,
+  };
+  using TrackingId = uint32_t;
+  static constexpr TrackingId kDefaultTrackingId{0};
+
   // Returns true and fills in |candidate| if |draw_quad| is of a known quad
   // type and contains an overlayable resource. |primary_rect| can be empty in
   // the case of a null primary plane.
-  static bool FromDrawQuad(DisplayResourceProvider* resource_provider,
-                           SurfaceDamageRectList* surface_damage_rect_list,
-                           const skia::Matrix44& output_color_matrix,
-                           const DrawQuad* quad,
-                           const gfx::RectF& primary_rect,
-                           OverlayCandidate* candidate,
-                           bool is_delegated_context = false);
+  static CandidateStatus FromDrawQuad(
+      DisplayResourceProvider* resource_provider,
+      SurfaceDamageRectList* surface_damage_rect_list,
+      const skia::Matrix44& output_color_matrix,
+      const DrawQuad* quad,
+      const gfx::RectF& primary_rect,
+      OverlayCandidate* candidate,
+      bool is_delegated_context = false);
   // Returns true if |quad| will not block quads underneath from becoming
   // an overlay.
   static bool IsInvisibleQuad(const DrawQuad* quad);
@@ -95,6 +116,8 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   gfx::BufferFormat format = gfx::BufferFormat::RGBA_8888;
   // ColorSpace of the buffer for scanout.
   gfx::ColorSpace color_space;
+  // Optional HDR Metadata for the buffer.
+  absl::optional<gfx::HDRMetadata> hdr_metadata;
   // Size of the resource, in pixels.
   gfx::Size resource_size_in_pixels;
   // Rect on the display to position the overlay to. Implementer must convert
@@ -152,10 +175,6 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   // Is true if an HW overlay is required for the quad content.
   bool requires_overlay = false;
 
-  // Identifier passed through by the video decoder that allows us to validate
-  // if a protected surface can still be displayed. Non-zero when valid.
-  uint32_t hw_protected_validation_id = 0;
-
   // for solid color quads only
   absl::optional<SkColor> solid_color;
 
@@ -179,49 +198,63 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   // Hints for overlay prioritization when delegated composition is used.
   gfx::OverlayPriorityHint priority_hint = gfx::OverlayPriorityHint::kNone;
 
+  // Specifies the rounded corners of overlay candidate.
+  gfx::RRectF rounded_corners;
+
+  // A (ideally) unique key used to temporally identify a specific overlay
+  // candidate. This key can have collisions more that would be expected by the
+  // birthday paradox of 32 bits. If two or more candidates come from the same
+  // surface and have the same |DrawQuad::rect| they will have the same
+  // |tracking_id|.
+  TrackingId tracking_id = kDefaultTrackingId;
+
  private:
-  static bool FromDrawQuadResource(
+  static CandidateStatus FromDrawQuadResource(
       DisplayResourceProvider* resource_provider,
       SurfaceDamageRectList* surface_damage_rect_list,
       const DrawQuad* quad,
       ResourceId resource_id,
       bool y_flipped,
       OverlayCandidate* candidate);
-  static bool FromTextureQuad(DisplayResourceProvider* resource_provider,
-                              SurfaceDamageRectList* surface_damage_rect_list,
-                              const TextureDrawQuad* quad,
-                              const gfx::RectF& primary_rect,
-                              OverlayCandidate* candidate,
-                              bool is_delegated_context);
+  static CandidateStatus FromTextureQuad(
+      DisplayResourceProvider* resource_provider,
+      SurfaceDamageRectList* surface_damage_rect_list,
+      const TextureDrawQuad* quad,
+      const gfx::RectF& primary_rect,
+      OverlayCandidate* candidate,
+      bool is_delegated_context);
 
-  static bool FromTileQuad(DisplayResourceProvider* resource_provider,
-                           SurfaceDamageRectList* surface_damage_rect_list,
-                           const TileDrawQuad* quad,
-                           const gfx::RectF& primary_rect,
-                           OverlayCandidate* candidate);
+  static CandidateStatus FromTileQuad(
+      DisplayResourceProvider* resource_provider,
+      SurfaceDamageRectList* surface_damage_rect_list,
+      const TileDrawQuad* quad,
+      const gfx::RectF& primary_rect,
+      OverlayCandidate* candidate);
 
-  static bool FromAggregateQuad(DisplayResourceProvider* resource_provider,
-                                SurfaceDamageRectList* surface_damage_rect_list,
-                                const AggregatedRenderPassDrawQuad* quad,
-                                const gfx::RectF& primary_rect,
-                                OverlayCandidate* candidate);
+  static CandidateStatus FromAggregateQuad(
+      DisplayResourceProvider* resource_provider,
+      SurfaceDamageRectList* surface_damage_rect_list,
+      const AggregatedRenderPassDrawQuad* quad,
+      const gfx::RectF& primary_rect,
+      OverlayCandidate* candidate);
 
-  static bool FromSolidColorQuad(
+  static CandidateStatus FromSolidColorQuad(
       DisplayResourceProvider* resource_provider,
       SurfaceDamageRectList* surface_damage_rect_list,
       const SolidColorDrawQuad* quad,
       const gfx::RectF& primary_rect,
       OverlayCandidate* candidate);
 
-  static bool FromStreamVideoQuad(
+  static CandidateStatus FromStreamVideoQuad(
       DisplayResourceProvider* resource_provider,
       SurfaceDamageRectList* surface_damage_rect_list,
       const StreamVideoDrawQuad* quad,
       OverlayCandidate* candidate);
-  static bool FromVideoHoleQuad(DisplayResourceProvider* resource_provider,
-                                SurfaceDamageRectList* surface_damage_rect_list,
-                                const VideoHoleDrawQuad* quad,
-                                OverlayCandidate* candidate);
+  static CandidateStatus FromVideoHoleQuad(
+      DisplayResourceProvider* resource_provider,
+      SurfaceDamageRectList* surface_damage_rect_list,
+      const VideoHoleDrawQuad* quad,
+      OverlayCandidate* candidate);
   static void HandleClipAndSubsampling(OverlayCandidate* candidate,
                                        const gfx::RectF& primary_rect);
   static void AssignDamage(const DrawQuad* quad,

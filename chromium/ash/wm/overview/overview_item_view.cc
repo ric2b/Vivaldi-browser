@@ -10,6 +10,7 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/style_util.h"
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
@@ -119,11 +120,8 @@ class OverviewCloseButton : public views::ImageButton {
         AshColorProvider::ContentLayerType::kButtonIconColor);
     SetImage(views::Button::STATE_NORMAL,
              gfx::CreateVectorIcon(kOverviewWindowCloseIcon, color));
-
-    const auto ripple_attributes = color_provider->GetRippleAttributes(color);
-    views::InkDrop::Get(this)->SetBaseColor(ripple_attributes.base_color);
-    views::InkDrop::Get(this)->SetVisibleOpacity(
-        ripple_attributes.inkdrop_opacity);
+    StyleUtil::ConfigureInkDropAttributes(
+        this, StyleUtil::kBaseColor | StyleUtil::kInkDropOpacity, color);
   }
 };
 
@@ -173,21 +171,29 @@ void OverviewItemView::SetHeaderVisibility(HeaderVisibility visibility) {
   const bool all_invisible = visibility == HeaderVisibility::kInvisible;
   AnimateLayerOpacity(header_view()->layer(), !all_invisible);
 
-  // If |header_view()| is fading out, we are done. Depending on if the close
-  // button was visible, it will fade out with |header_view()| or stay hidden.
-  if (all_invisible || !close_button_)
+  // If there is not a `close_button_`, then we are done.
+  if (!close_button_)
     return;
 
+  // If the whole header is fading out and there is a `close_button_`, then
+  // we need to disable the close button without also fading the close button.
+  if (all_invisible) {
+    close_button_->SetEnabled(false);
+    return;
+  }
+
   const bool close_button_visible = visibility == HeaderVisibility::kVisible;
-  // If |header_view()| was hidden and is fading in, set the opacity of
-  // |close_button_| depending on whether the close button should fade in with
-  // |header_view()| or stay hidden.
+  // If `header_view()` was hidden and is fading in, set the opacity and enabled
+  // state of `close_button_` depending on whether the close button should fade
+  // in with `header_view()` or stay hidden.
   if (previous_visibility == HeaderVisibility::kInvisible) {
     close_button_->layer()->SetOpacity(close_button_visible ? 1.f : 0.f);
+    close_button_->SetEnabled(close_button_visible);
     return;
   }
 
   AnimateLayerOpacity(close_button_->layer(), close_button_visible);
+  close_button_->SetEnabled(close_button_visible);
 }
 
 void OverviewItemView::HideCloseInstantlyAndThenShowItSlowly() {
@@ -204,6 +210,7 @@ void OverviewItemView::HideCloseInstantlyAndThenShowItSlowly() {
   layer->GetAnimator()->SchedulePauseForProperties(
       kCloseButtonSlowFadeInDelay, ui::LayerAnimationElement::OPACITY);
   layer->SetOpacity(1.f);
+  close_button_->SetEnabled(true);
 }
 
 void OverviewItemView::OnOverviewItemWindowRestoring() {

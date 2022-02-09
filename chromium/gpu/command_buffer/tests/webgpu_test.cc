@@ -19,6 +19,11 @@
 #include "gpu/ipc/webgpu_in_process_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_MAC)
+#include "gpu/command_buffer/tests/gl_manager.h"
+#include "ui/gl/gl_context.h"
+#endif
+
 namespace gpu {
 
 namespace {
@@ -108,7 +113,7 @@ void WebGPUTest::Initialize(const Options& options) {
 
   bool done = false;
   webgpu()->RequestAdapterAsync(
-      webgpu::PowerPreference::kDefault,
+      webgpu::PowerPreference::kDefault, false,
       base::BindOnce(
           [](WebGPUTest* test, bool* done, int32_t adapter_id,
              const WGPUDeviceProperties& properties, const char*) {
@@ -258,7 +263,7 @@ TEST_F(WebGPUTest, RequestAdapterAfterContextLost) {
 
   bool called = false;
   webgpu()->RequestAdapterAsync(
-      webgpu::PowerPreference::kDefault,
+      webgpu::PowerPreference::kDefault, false,
       base::BindOnce(
           [](bool* called, int32_t adapter_id, const WGPUDeviceProperties&,
              const char*) {
@@ -293,18 +298,32 @@ TEST_F(WebGPUTest, RequestDeviceAfterContextLost) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(WebGPUTest, RequestDeviceWitUnsupportedExtension) {
+TEST_F(WebGPUTest, RequestDeviceWitUnsupportedFeature) {
   if (!WebGPUSupported()) {
     LOG(ERROR) << "Test skipped because WebGPU isn't supported";
     return;
   }
 
+#if defined(OS_MAC)
+  // Crashing on Mac M1. Currently missing stack trace. crbug.com/1271926
+  // This must be checked before WebGPUTest::Initialize otherwise context
+  // switched is locked and we cannot temporarily have this GLContext.
+  GLManager gl_manager;
+  gl_manager.Initialize(GLManager::Options());
+  std::string renderer(gl_manager.context()->GetGLRenderer());
+  if (renderer.find("Apple M1") != std::string::npos) {
+    gl_manager.Destroy();
+    return;
+  }
+  gl_manager.Destroy();
+#endif
+
   Initialize(WebGPUTest::Options());
 
-  // Create device with unsupported extensions, expect to fail to create and
+  // Create device with unsupported features, expect to fail to create and
   // return nullptr
   WGPUDeviceProperties unsupported_device_properties = {};
-  unsupported_device_properties.invalidExtension = true;
+  unsupported_device_properties.invalidFeature = true;
   WGPUDevice device = nullptr;
   bool done = false;
 
@@ -323,7 +342,7 @@ TEST_F(WebGPUTest, RequestDeviceWitUnsupportedExtension) {
   }
   EXPECT_EQ(device, nullptr);
 
-  // Create device again with supported extensions, expect success and not
+  // Create device again with supported features, expect success and not
   // blocked by the last failure
   GetNewDevice();
 }

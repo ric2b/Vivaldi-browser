@@ -14,6 +14,7 @@
 #include "base/bits.h"
 #include "base/compiler_specific.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
@@ -25,6 +26,8 @@
 #include "cc/paint/paint_op_buffer.h"
 #include "cc/paint/paint_shader.h"
 #include "cc/paint/shader_transfer_cache_entry.h"
+#include "cc/paint/skottie_transfer_cache_entry.h"
+#include "cc/paint/skottie_wrapper.h"
 #include "cc/paint/transfer_cache_deserialize_helper.h"
 #include "components/crash/core/common/crash_key.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -32,11 +35,6 @@
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/src/core/SkRemoteGlyphCache.h"
-
-#if !defined(OS_ANDROID)
-#include "cc/paint/skottie_transfer_cache_entry.h"
-#include "cc/paint/skottie_wrapper.h"
-#endif
 
 namespace cc {
 namespace {
@@ -54,7 +52,7 @@ bool IsValidPaintShaderScalingBehavior(PaintShader::ScalingBehavior behavior) {
 struct TypefaceCtx {
   explicit TypefaceCtx(SkStrikeClient* client) : client(client) {}
   bool invalid_typeface = false;
-  SkStrikeClient* client = nullptr;
+  raw_ptr<SkStrikeClient> client = nullptr;
 };
 
 sk_sp<SkTypeface> DeserializeTypeface(const void* data,
@@ -728,9 +726,6 @@ void PaintOpReader::Read(gpu::Mailbox* mailbox) {
   ReadData(sizeof(gpu::Mailbox::Name), (*mailbox).name);
 }
 
-// Android does not use skottie. Remove below section to keep binary size to a
-// minimum.
-#if !defined(OS_ANDROID)
 void PaintOpReader::Read(scoped_refptr<SkottieWrapper>* skottie) {
   if (!options_.is_privileged) {
     valid_ = false;
@@ -761,7 +756,6 @@ void PaintOpReader::Read(scoped_refptr<SkottieWrapper>* skottie) {
   memory_ += bytes_to_skip;
   remaining_bytes_ -= bytes_to_skip;
 }
-#endif  // !defined(OS_ANDROID)
 
 void PaintOpReader::AlignMemory(size_t alignment) {
   size_t padding = base::bits::AlignUp(memory_, alignment) - memory_;
@@ -1161,6 +1155,14 @@ void PaintOpReader::ReadRecordPaintFilter(
   ReadSimple(&scaling_behavior);
   if (!IsValidPaintShaderScalingBehavior(scaling_behavior)) {
     SetInvalid(DeserializationError::kInvalidPaintShaderScalingBehavior);
+    return;
+  }
+
+  // RecordPaintFilter also requires kRasterAtScale to have {1.f, 1.f} as the
+  // raster_scale, since that is intended for kFixedScale
+  if (scaling_behavior == PaintShader::ScalingBehavior::kRasterAtScale &&
+      (raster_scale.width() != 1.f || raster_scale.height() != 1.f)) {
+    SetInvalid(DeserializationError::kInvalidRasterScale);
     return;
   }
 

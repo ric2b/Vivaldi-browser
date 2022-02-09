@@ -77,7 +77,7 @@ public:
         For the values of @a helpStyle, please see the documentation for
         wxHtmlHelpController.
     */
-    wxHtmlHelpWindow(wxWindow* parent, int wxWindowID,
+    wxHtmlHelpWindow(wxWindow* parent, wxWindowID id,
                      const wxPoint& pos = wxDefaultPosition,
                      const wxSize& size = wxDefaultSize,
                      int style = wxTAB_TRAVERSAL|wxBORDER_NONE,
@@ -110,7 +110,7 @@ public:
         This form takes numeric ID as the parameter (uses an extension to MS format,
         param name="ID" value=id).
     */
-    bool Display(const int id);
+    bool Display(int id);
 
     /**
         Displays contents panel.

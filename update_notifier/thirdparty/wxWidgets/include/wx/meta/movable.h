@@ -15,12 +15,12 @@
 
 // Helper to decide if an object of type T is "movable", i.e. if it can be
 // copied to another memory location using memmove() or realloc() C functions.
-// C++ only gurantees that POD types (including primitive types) are
+// C++ only guarantees that POD types (including primitive types) are
 // movable.
 template<typename T>
 struct wxIsMovable
 {
-    wxDEFINE_TEMPLATE_BOOL_VALUE(wxIsPod<T>::value);
+    static const bool value = wxIsPod<T>::value;
 };
 
 // Macro to add wxIsMovable<T> specialization for given type that marks it
@@ -28,7 +28,7 @@ struct wxIsMovable
 #define WX_DECLARE_TYPE_MOVABLE(type)                       \
     template<> struct wxIsMovable<type>                     \
     {                                                       \
-        wxDEFINE_TEMPLATE_BOOL_VALUE(true);                 \
+        static const bool value = true;                     \
     };
 
 // Our implementation of wxString is written in such way that it's safe to move

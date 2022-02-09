@@ -12,7 +12,6 @@
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/enterprise/reporting/extension_request/extension_request_report_throttler.h"
 #include "chrome/browser/enterprise/reporting/prefs.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,6 +20,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/enterprise/common/proto/extensions_workflow_events.pb.h"
+#include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "extensions/common/extension_urls.h"
@@ -63,6 +63,7 @@ std::unique_ptr<ExtensionsWorkflowEvent> GenerateReport(
   report->set_client_type(ExtensionsWorkflowEvent::CHROME_OS_USER);
 #else
   report->set_client_type(ExtensionsWorkflowEvent::BROWSER_DEVICE);
+  report->set_device_name(policy::GetMachineName());
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return report;
 }
@@ -85,28 +86,10 @@ ExtensionRequestReportGenerator::ExtensionRequestReportGenerator() = default;
 ExtensionRequestReportGenerator::~ExtensionRequestReportGenerator() = default;
 
 std::vector<std::unique_ptr<ExtensionsWorkflowEvent>>
-ExtensionRequestReportGenerator::Generate() {
-  auto* throttler = ExtensionRequestReportThrottler::Get();
-
-  // Returns empty list if real time extension request uploading is not enabled.
-  if (!throttler->IsEnabled()) {
-    return std::vector<std::unique_ptr<ExtensionsWorkflowEvent>>();
-  }
-
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  std::vector<std::unique_ptr<ExtensionsWorkflowEvent>> reports;
-  for (auto& profile_path : throttler->GetProfiles()) {
-    Profile* profile = profile_manager->GetProfileByPath(profile_path);
-    if (!profile)
-      continue;
-    std::vector<std::unique_ptr<ExtensionsWorkflowEvent>> profile_reports =
-        GenerateForProfile(profile);
-    reports.insert(reports.end(),
-                   std::make_move_iterator(profile_reports.begin()),
-                   std::make_move_iterator(profile_reports.end()));
-  }
-  throttler->ResetProfiles();
-  return reports;
+ExtensionRequestReportGenerator::Generate(
+    const RealTimeReportGenerator::Data& data) {
+  return GenerateForProfile(
+      static_cast<const ExtensionRequestData&>(data).profile);
 }
 
 std::vector<std::unique_ptr<ExtensionsWorkflowEvent>>

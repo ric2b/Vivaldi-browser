@@ -5,6 +5,7 @@
 #ifndef SYNC_NOTES_NOTE_LOCAL_CHANGES_BUILDER_H_
 #define SYNC_NOTES_NOTE_LOCAL_CHANGES_BUILDER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
 namespace vivaldi {
@@ -29,8 +30,8 @@ class NoteLocalChangesBuilder {
   syncer::CommitRequestDataList BuildCommitRequests(size_t max_entries) const;
 
  private:
-  SyncedNoteTracker* const note_tracker_;
-  vivaldi::NotesModel* const notes_model_;
+  const raw_ptr<SyncedNoteTracker> note_tracker_;
+  const raw_ptr<vivaldi::NotesModel> notes_model_;
 };
 
 }  // namespace sync_notes

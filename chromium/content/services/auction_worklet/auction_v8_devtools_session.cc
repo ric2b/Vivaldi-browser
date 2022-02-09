@@ -5,42 +5,81 @@
 #include "content/services/auction_worklet/auction_v8_devtools_session.h"
 
 #include <stdint.h>
+
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
-#include "base/strings/utf_string_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
+#include "content/services/auction_worklet/auction_v8_inspector_util.h"
 #include "content/services/auction_worklet/debug_command_queue.h"
+#include "content/services/auction_worklet/protocol/event_breakpoints.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "third_party/inspector_protocol/crdtp/cbor.h"
 #include "third_party/inspector_protocol/crdtp/dispatch.h"
 #include "third_party/inspector_protocol/crdtp/frontend_channel.h"
 #include "third_party/inspector_protocol/crdtp/json.h"
+#include "third_party/inspector_protocol/crdtp/protocol_core.h"
 #include "third_party/inspector_protocol/crdtp/span.h"
 
 namespace auction_worklet {
 
-namespace {
-
-std::vector<uint8_t> Get8BitStringFrom(v8_inspector::StringBuffer* msg) {
-  const v8_inspector::StringView& s = msg->string();
-  if (s.is8Bit()) {
-    return std::vector<uint8_t>(s.characters8(), s.characters8() + s.length());
-  } else {
-    std::string converted = base::UTF16ToUTF8(base::StringPiece16(
-        reinterpret_cast<const char16_t*>(s.characters16()), s.length()));
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(converted.data());
-    return std::vector<uint8_t>(data, data + converted.size());
+// BreakpointHandler implements the
+// EventBreakpoints.setInstrumentationBreakpoint and
+// EventBreakpoints.removeInstrumentationBreakpoint messages.
+class AuctionV8DevToolsSession::BreakpointHandler
+    : public auction_worklet::protocol::EventBreakpoints::Backend {
+ public:
+  // `v8_session` is expected to outlast invocation of any methods other than
+  // the destructor on `this`.
+  explicit BreakpointHandler(v8_inspector::V8InspectorSession* v8_session)
+      : v8_session_(v8_session) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
   }
-}
 
-}  // namespace
+  ~BreakpointHandler() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  }
+
+  void MaybeTriggerInstrumentationBreakpoint(const std::string& name) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+    if (instrumentation_breakpoints_.find(name) !=
+        instrumentation_breakpoints_.end()) {
+      std::string category("EventListener");
+      std::string aux_json = base::StringPrintf(
+          R"({"eventName":"instrumentation:%s"})", name.c_str());
+      v8_session_->schedulePauseOnNextStatement(ToStringView(category),
+                                                ToStringView(aux_json));
+    }
+  }
+
+ private:
+  crdtp::DispatchResponse SetInstrumentationBreakpoint(
+      const std::string& event_name) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+    instrumentation_breakpoints_.insert(event_name);
+    return crdtp::DispatchResponse::Success();
+  }
+
+  crdtp::DispatchResponse RemoveInstrumentationBreakpoint(
+      const std::string& event_name) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+    instrumentation_breakpoints_.erase(event_name);
+    return crdtp::DispatchResponse::Success();
+  }
+
+  const raw_ptr<v8_inspector::V8InspectorSession> v8_session_;
+  std::set<std::string> instrumentation_breakpoints_;
+  SEQUENCE_CHECKER(v8_sequence_checker_);
+};
 
 // IOSession, which handles the pipe passed to the `io_session` parameter of
 // DevToolsAgent::AttachDevToolsSession(), runs on a non-V8 sequence (except
@@ -65,10 +104,10 @@ class AuctionV8DevToolsSession::IOSession
   static void Create(
       mojo::PendingReceiver<blink::mojom::DevToolsSession> io_session_receiver,
       scoped_refptr<base::SequencedTaskRunner> io_session_receiver_sequence,
-      scoped_refptr<DebugCommandQueue> debug_command_queue,
+      DebugCommandQueue* debug_command_queue,
       RunDispatch v8_thread_dispatch) {
-    auto instance = base::WrapUnique(new IOSession(
-        std::move(debug_command_queue), std::move(v8_thread_dispatch)));
+    auto instance = base::WrapUnique(
+        new IOSession(debug_command_queue, std::move(v8_thread_dispatch)));
     io_session_receiver_sequence->PostTask(
         FROM_HERE,
         base::BindOnce(&IOSession::ConnectReceiver, std::move(instance),
@@ -89,7 +128,7 @@ class AuctionV8DevToolsSession::IOSession
   }
 
  private:
-  IOSession(scoped_refptr<DebugCommandQueue> debug_command_queue,
+  IOSession(DebugCommandQueue* debug_command_queue,
             RunDispatch v8_thread_dispatch)
       : debug_command_queue_(debug_command_queue),
         v8_thread_dispatch_(v8_thread_dispatch) {
@@ -106,7 +145,7 @@ class AuctionV8DevToolsSession::IOSession
                                 std::move(io_session_receiver));
   }
 
-  scoped_refptr<DebugCommandQueue> debug_command_queue_;
+  const raw_ptr<DebugCommandQueue> debug_command_queue_;
   RunDispatch v8_thread_dispatch_;
 
   SEQUENCE_CHECKER(io_session_receiver_sequence_checker_);
@@ -114,7 +153,7 @@ class AuctionV8DevToolsSession::IOSession
 
 AuctionV8DevToolsSession::AuctionV8DevToolsSession(
     AuctionV8Helper* v8_helper,
-    scoped_refptr<DebugCommandQueue> debug_command_queue,
+    DebugCommandQueue* debug_command_queue,
     int context_group_id,
     const std::string& session_id,
     bool client_expects_binary_responses,
@@ -123,7 +162,7 @@ AuctionV8DevToolsSession::AuctionV8DevToolsSession(
     mojo::PendingReceiver<blink::mojom::DevToolsSession> io_session_receiver,
     SessionDestroyedCallback on_delete_callback)
     : v8_helper_(v8_helper),
-      debug_command_queue_(std::move(debug_command_queue)),
+      debug_command_queue_(debug_command_queue),
       context_group_id_(context_group_id),
       session_id_(session_id),
       client_expects_binary_responses_(client_expects_binary_responses),
@@ -139,6 +178,10 @@ AuctionV8DevToolsSession::AuctionV8DevToolsSession(
       base::BindRepeating(
           &AuctionV8DevToolsSession::DispatchProtocolCommandFromIO,
           weak_ptr_factory_.GetWeakPtr()));
+
+  breakpoint_handler_ = std::make_unique<BreakpointHandler>(v8_session_.get());
+  auction_worklet::protocol::EventBreakpoints::Dispatcher::wire(
+      &fallback_dispatcher_, breakpoint_handler_.get());
 }
 
 AuctionV8DevToolsSession::~AuctionV8DevToolsSession() {
@@ -146,6 +189,21 @@ AuctionV8DevToolsSession::~AuctionV8DevToolsSession() {
   std::move(on_delete_callback_).Run(this);
   v8::Locker locker(v8_helper_->isolate());
   v8_session_.reset();
+}
+
+base::OnceClosure AuctionV8DevToolsSession::MakeAbortPauseCallback() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  // Note that this can be cancelled by the weak pointer only if the session
+  // got unpaused by other means, since if it's paused it's not returning
+  // control to the event loop, so Mojo won't get a chance to delete `this`.
+  return base::BindOnce(&AuctionV8DevToolsSession::AbortDebuggerPause,
+                        weak_ptr_factory_.GetWeakPtr());
+}
+
+void AuctionV8DevToolsSession::MaybeTriggerInstrumentationBreakpoint(
+    const std::string& name) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  breakpoint_handler_->MaybeTriggerInstrumentationBreakpoint(name);
 }
 
 void AuctionV8DevToolsSession::DispatchProtocolCommandFromIO(
@@ -187,7 +245,6 @@ void AuctionV8DevToolsSession::DispatchProtocolCommand(
   } else {
     crdtp::Dispatchable dispatchable(crdtp::span<uint8_t>(
         cbor_message.characters8(), cbor_message.length()));
-    // For now, this should just produce the proper error.
     fallback_dispatcher_.Dispatch(dispatchable).Run();
   }
 }
@@ -196,13 +253,13 @@ void AuctionV8DevToolsSession::sendResponse(
     int call_id,
     std::unique_ptr<v8_inspector::StringBuffer> message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
-  SendProtocolResponseImpl(call_id, Get8BitStringFrom(message.get()));
+  SendProtocolResponseImpl(call_id, GetStringBytes(message.get()));
 }
 
 void AuctionV8DevToolsSession::sendNotification(
     std::unique_ptr<v8_inspector::StringBuffer> message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
-  SendNotificationImpl(Get8BitStringFrom(message.get()));
+  SendNotificationImpl(GetStringBytes(message.get()));
 }
 
 void AuctionV8DevToolsSession::flushProtocolNotifications() {
@@ -233,6 +290,13 @@ void AuctionV8DevToolsSession::FallThrough(int call_id,
 void AuctionV8DevToolsSession::FlushProtocolNotifications() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
   NOTIMPLEMENTED();
+}
+
+void AuctionV8DevToolsSession::AbortDebuggerPause() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+  // Note that if the session got resumed by other means before execution got
+  // here V8 will simply ignore this call.
+  v8_session_->resume(/*setTerminateOnResume=*/true);
 }
 
 void AuctionV8DevToolsSession::SendProtocolResponseImpl(

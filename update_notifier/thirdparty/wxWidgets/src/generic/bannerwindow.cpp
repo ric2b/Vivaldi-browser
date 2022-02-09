@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Name:        wx/bannerwindow.h
+// Name:        src/generic/bannerwindow.cpp
 // Purpose:     wxBannerWindow class implementation
 // Author:      Vadim Zeitlin
 // Created:     2011-08-16
@@ -9,9 +9,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_BANNERWINDOW
 
@@ -36,10 +33,10 @@ const int MARGIN_Y = 5;
 
 const char wxBannerWindowNameStr[] = "bannerwindow";
 
-BEGIN_EVENT_TABLE(wxBannerWindow, wxWindow)
+wxBEGIN_EVENT_TABLE(wxBannerWindow, wxWindow)
     EVT_SIZE(wxBannerWindow::OnSize)
     EVT_PAINT(wxBannerWindow::OnPaint)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 void wxBannerWindow::Init()
 {

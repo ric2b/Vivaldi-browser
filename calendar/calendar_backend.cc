@@ -26,11 +26,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/sequenced_task_runner.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -528,14 +528,6 @@ void CalendarBackend::UpdateEvent(EventID event_id,
       event_row.is_recurring = event.is_recurring;
     }
 
-    if (event.updateFields & calendar::STARTRECURRING) {
-      event_row.start_recurring = event.start_recurring;
-    }
-
-    if (event.updateFields & calendar::ENDRECURRING) {
-      event_row.end_recurring = event.end_recurring;
-    }
-
     if (event.updateFields & calendar::LOCATION) {
       event_row.location = event.location;
     }
@@ -622,6 +614,14 @@ void CalendarBackend::UpdateEvent(EventID event_id,
 
     if (event.updateFields & calendar::COMPLETED) {
       event_row.completed = event.completed;
+    }
+
+    if (event.updateFields & calendar::SYNC_PENDING) {
+      event_row.sync_pending = event.sync_pending;
+    }
+
+    if (event.updateFields & calendar::DELETE_PENDING) {
+      event_row.delete_pending = event.delete_pending;
     }
 
     result->success = db_->UpdateEventRow(event_row);

@@ -16,6 +16,7 @@ altimin@chromium.org
 arthursonzogni@chromium.org
 creis@chromium.org
 nasko@chromium.org
+rakina@chromium.org
 
 # Aura platform code.
 per-file *aura*=sadrul@chromium.org
@@ -47,3 +48,6 @@ per-file agent_scheduling_group*=talp@chromium.org
 per-file agent_scheduling_group*=dom@chromium.org
 per-file agent_scheduling_group*=kouhei@chromium.org
 per-file agent_scheduling_group*=haraken@chromium.org
+
+per-file *_sandboxed*.*=set noparent
+per-file *_sandboxed*.*=file://ipc/SECURITY_OWNERS

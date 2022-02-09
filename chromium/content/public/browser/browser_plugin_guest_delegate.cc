@@ -4,6 +4,9 @@
 
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 
+#include "content/browser/browser_plugin/browser_plugin_guest.h"  // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h"       // nogncheck
+
 namespace content {
 
 WebContents* BrowserPluginGuestDelegate::CreateNewGuestWindow(
@@ -14,6 +17,16 @@ WebContents* BrowserPluginGuestDelegate::CreateNewGuestWindow(
 
 WebContents* BrowserPluginGuestDelegate::GetOwnerWebContents() {
   return nullptr;
+}
+
+void BrowserPluginGuestDelegate::CreatePluginGuest(
+    WebContents* contents) {
+  content::WebContentsImpl* contentsimpl =
+      static_cast<content::WebContentsImpl*>(contents);
+
+  content::BrowserPluginGuest::CreateInWebContents(contentsimpl, this);
+  contentsimpl->GetBrowserPluginGuest()->Init();
+  contentsimpl->GetBrowserPluginGuest()->set_allow_blocked_by_client();
 }
 
 }  // namespace content

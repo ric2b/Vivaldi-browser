@@ -18,10 +18,10 @@
 
     @beginEventTable{wxHyperlinkEvent}
     @event{EVT_HYPERLINK(id, func)}
-        User clicked on an hyperlink.
+        User clicked on a hyperlink.
     @endEventTable
 
-    @library{wxadv}
+    @library{wxcore}
     @category{events}
 */
 class wxHyperlinkEvent : public wxCommandEvent
@@ -66,10 +66,10 @@ wxEventType wxEVT_HYPERLINK;
            Align the text to the left.
     @style{wxHL_ALIGN_RIGHT}
            Align the text to the right. This style is not supported under
-           Windows XP but is supported under all the other Windows versions.
+           Windows.
     @style{wxHL_ALIGN_CENTRE}
-           Center the text (horizontally). This style is not supported by the
-           native MSW implementation used under Windows XP and later.
+           Center the text (horizontally). This style is not supported
+           under Windows.
     @style{wxHL_CONTEXTMENU}
            Pop up a context menu when the hyperlink is right-clicked. The
            context menu contains a "Copy URL" menu item which is automatically
@@ -88,10 +88,9 @@ wxEventType wxEVT_HYPERLINK;
     @endEventTable
 
     Currently this class is implemented using native support in wxGTK and wxMSW
-    (under Windows XP and later only) and a generic version is used by the
-    other ports.
+    and a generic version is used by the other ports.
 
-    @library{wxadv}
+    @library{wxcore}
     @category{ctrl}
     @appearance{hyperlinkctrl}
 
@@ -101,7 +100,7 @@ class wxHyperlinkCtrl : public wxControl
 {
 public:
     wxHyperlinkCtrl();
-    
+
     /**
         Constructor. See Create() for more info.
     */

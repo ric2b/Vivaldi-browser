@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_NOTEBOOK
 
@@ -80,14 +77,13 @@ wxFLAGS_MEMBER(wxBK_LEFT)
 wxFLAGS_MEMBER(wxBK_RIGHT)
 wxFLAGS_MEMBER(wxBK_BOTTOM)
 wxFLAGS_MEMBER(wxNB_NOPAGETHEME)
-wxFLAGS_MEMBER(wxNB_FLAT)
 wxEND_FLAGS( wxNotebookStyle )
 
 #if wxUSE_EXTENDED_RTTI
 
 WX_DEFINE_LIST( wxNotebookPageInfoList )
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxNotebookPageInfo, wxObject, "wx/notebook.h" )
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxNotebookPageInfo, wxObject, "wx/notebook.h");
 
 wxCOLLECTION_TYPE_INFO( wxNotebookPageInfo *, wxNotebookPageInfoList );
 
@@ -137,7 +133,7 @@ const wxNotebookPageInfoList& wxNotebookBase::GetPageInfos() const
 
 #endif
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxNotebook, wxBookCtrlBase, "wx/notebook.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxNotebook, wxBookCtrlBase, "wx/notebook.h");
 wxBEGIN_PROPERTIES_TABLE(wxNotebook)
 wxEVENT_PROPERTY( PageChanging, wxEVT_NOTEBOOK_PAGE_CHANGING, wxNotebookEvent )
 wxEVENT_PROPERTY( PageChanged, wxEVT_NOTEBOOK_PAGE_CHANGED, wxNotebookEvent )

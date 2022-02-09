@@ -6,11 +6,13 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/abseil_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/port_util.h"
 #include "net/base/url_util.h"
+#include "net/log/net_log_values.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_resolution_request.h"
 #include "net/quic/address_utils.h"
@@ -68,6 +70,27 @@ std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
   return verifier;
 }
 
+void RecordNetLogQuicSessionClientStateChanged(
+    NetLogWithSource& net_log,
+    WebTransportState last_state,
+    WebTransportState next_state,
+    const absl::optional<WebTransportError>& error) {
+  net_log.AddEvent(
+      NetLogEventType::QUIC_SESSION_WEBTRANSPORT_CLIENT_STATE_CHANGED, [&] {
+        base::Value dict(base::Value::Type::DICTIONARY);
+        dict.SetStringKey("last_state", WebTransportStateString(last_state));
+        dict.SetStringKey("next_state", WebTransportStateString(next_state));
+        if (error.has_value()) {
+          base::Value error_dict(base::Value::Type::DICTIONARY);
+          error_dict.SetIntKey("net_error", error->net_error);
+          error_dict.SetIntKey("quic_error", error->quic_error);
+          error_dict.SetStringKey("details", error->details);
+          dict.SetKey("error", std::move(error_dict));
+        }
+        return dict;
+      });
+}
+
 // The stream associated with an extended CONNECT request for the WebTransport
 // session.
 class ConnectStream : public quic::QuicSpdyClientStream {
@@ -107,7 +130,7 @@ class ConnectStream : public quic::QuicSpdyClientStream {
   }
 
  private:
-  DedicatedWebTransportHttp3Client* client_;
+  raw_ptr<DedicatedWebTransportHttp3Client> client_;
 };
 
 class DedicatedWebTransportHttp3ClientSession
@@ -169,7 +192,7 @@ class DedicatedWebTransportHttp3ClientSession
   }
 
  private:
-  DedicatedWebTransportHttp3Client* client_;
+  raw_ptr<DedicatedWebTransportHttp3Client> client_;
 };
 
 class WebTransportVisitorProxy : public quic::WebTransportVisitor {
@@ -201,7 +224,7 @@ class WebTransportVisitorProxy : public quic::WebTransportVisitor {
   }
 
  private:
-  quic::WebTransportVisitor* visitor_;
+  raw_ptr<quic::WebTransportVisitor> visitor_;
 };
 
 bool IsTerminalState(WebTransportState state) {
@@ -237,9 +260,22 @@ DedicatedWebTransportHttp3Client::DedicatedWebTransportHttp3Client(
       // handshake error" even when more detailed message is available).  This
       // requires implementing ProofHandler::OnProofVerifyDetailsAvailable.
       crypto_config_(CreateProofVerifier(isolation_key_, context, parameters),
-                     /* session_cache */ nullptr) {}
+                     /* session_cache */ nullptr) {
+  net_log_.BeginEvent(NetLogEventType::QUIC_SESSION_WEBTRANSPORT_CLIENT_ALIVE,
+                      [&] {
+                        base::Value dict(base::Value::Type::DICTIONARY);
+                        dict.SetStringKey("url", url.possibly_invalid_spec());
+                        dict.SetStringKey("network_isolation_key",
+                                          isolation_key.ToDebugString());
+                        return dict;
+                      });
+}
 
-DedicatedWebTransportHttp3Client::~DedicatedWebTransportHttp3Client() = default;
+DedicatedWebTransportHttp3Client::~DedicatedWebTransportHttp3Client() {
+  net_log_.EndEventWithNetErrorCode(
+      NetLogEventType::QUIC_SESSION_WEBTRANSPORT_CLIENT_ALIVE,
+      error_ ? error_->net_error : OK);
+}
 
 void DedicatedWebTransportHttp3Client::Connect() {
   if (state_ != WebTransportState::NEW ||
@@ -464,6 +500,10 @@ void DedicatedWebTransportHttp3Client::CreateConnection() {
       connection.release(),
       quic::QuicServerId(url_.host(), url_.EffectiveIntPort()), &crypto_config_,
       &push_promise_index_, this);
+  if (!original_supported_versions_.empty()) {
+    session_->set_client_original_supported_versions(
+        original_supported_versions_);
+  }
 
   packet_reader_ = std::make_unique<QuicChromiumPacketReader>(
       socket_.get(), quic_context_->clock(), this, kQuicYieldAfterPacketsRead,
@@ -581,6 +621,8 @@ void DedicatedWebTransportHttp3Client::TransitionToState(
   DCHECK_NE(state_, next_state);
   const WebTransportState last_state = state_;
   state_ = next_state;
+  RecordNetLogQuicSessionClientStateChanged(net_log_, last_state, next_state,
+                                            error_);
   switch (next_state) {
     case WebTransportState::CONNECTING:
       DCHECK_EQ(last_state, WebTransportState::NEW);
@@ -639,6 +681,9 @@ void DedicatedWebTransportHttp3Client::OnSessionReady(
   session_ready_ = true;
   http_response_info_ = std::make_unique<HttpResponseInfo>();
   SpdyHeadersToHttpResponse(spdy_headers, http_response_info_.get());
+  // TODO(vasilvv): add support for this header in downstream tests and remove
+  // this.
+  http_response_info_->headers->RemoveHeader("sec-webtransport-http3-draft");
   DCHECK(http_response_info_->headers);
 }
 
@@ -724,6 +769,8 @@ void DedicatedWebTransportHttp3Client::OnConnectionClosed(
   if (!retried_with_new_version_ &&
       session_->error() == quic::QUIC_INVALID_VERSION) {
     retried_with_new_version_ = true;
+    DCHECK(original_supported_versions_.empty());
+    original_supported_versions_ = supported_versions_;
     base::EraseIf(
         supported_versions_, [this](const quic::ParsedQuicVersion& version) {
           return !base::Contains(

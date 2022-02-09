@@ -373,7 +373,7 @@ void PaymentAppDatabase::DidGetPaymentAppInfoToUpdatePaymentAppInfo(
         serialized_payment_app}},
       base::BindOnce(&PaymentAppDatabase::DidUpdatePaymentApp,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                     app_info->name.empty() | app_info->icon.empty()));
+                     app_info->name.empty() || app_info->icon.empty()));
 }
 
 void PaymentAppDatabase::DidUpdatePaymentApp(
@@ -731,7 +731,7 @@ void PaymentAppDatabase::DidReadAllPaymentInstruments(
     blink::ServiceWorkerStatusCode status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (status != blink::ServiceWorkerStatusCode::kOk) {
-    std::move(callback).Run(std::move(apps));
+    std::move(callback).Run(PaymentApps());
     return;
   }
 

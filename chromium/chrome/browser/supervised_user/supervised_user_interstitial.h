@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/supervised_user/supervised_user_error_page/supervised_user_error_page.h"
 #include "url/gurl.h"
 
@@ -46,7 +46,8 @@ class SupervisedUserInterstitial {
       bool is_main_frame);
 
   void GoBack();
-  void RequestPermission(base::OnceCallback<void(bool)> callback);
+  void RequestUrlAccessRemote(base::OnceCallback<void(bool)> callback);
+  void RequestUrlAccessLocal(base::OnceCallback<void(bool)> callback);
   void ShowFeedback();
 
   // Getter methods.
@@ -71,9 +72,9 @@ class SupervisedUserInterstitial {
   void OnInterstitialDone();
 
   // Owns SupervisedUserNavigationObserver which owns us.
-  content::WebContents* web_contents_;
+  raw_ptr<content::WebContents> web_contents_;
 
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
 
   // The last committed url for this frame.
   GURL url_;

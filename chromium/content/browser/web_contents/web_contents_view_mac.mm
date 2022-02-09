@@ -111,7 +111,7 @@ gfx::NativeView WebContentsViewMac::GetNativeView() const {
 gfx::NativeView WebContentsViewMac::GetContentNativeView() const {
   RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
   if (!rwhv)
-    return NULL;
+    return nullptr;
   return rwhv->GetNativeView();
 }
 
@@ -133,6 +133,8 @@ gfx::Rect WebContentsViewMac::GetContainerBounds() const {
 
   return gfx::ScreenRectFromNSRect(bounds);
 }
+
+void WebContentsViewMac::OnCapturerCountChanged() {}
 
 void WebContentsViewMac::StartDragging(
     const DropData& drop_data,
@@ -248,9 +250,8 @@ void WebContentsViewMac::TakeFocus(bool reverse) {
     remote_ns_view_->TakeFocus(reverse);
 }
 
-void WebContentsViewMac::ShowContextMenu(
-    RenderFrameHost* render_frame_host,
-    const ContextMenuParams& params) {
+void WebContentsViewMac::ShowContextMenu(RenderFrameHost& render_frame_host,
+                                         const ContextMenuParams& params) {
   if (delegate())
     delegate()->ShowContextMenu(render_frame_host, params);
   else

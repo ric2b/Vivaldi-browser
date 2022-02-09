@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/download/public/background_service/download_params.h"
@@ -107,8 +108,9 @@ class PredictionModelDownloadManager {
 
   // Processes the contents in |unzipped_dir_path|.
   //
-  // Must be called on the background thread, as it performs file I/O.
-  absl::optional<proto::PredictionModel> ProcessUnzippedContents(
+  // Must be called on the background thread, as it performs file I/O. This is a
+  // stateless func to avoid needing weird lifetime stuff.
+  static absl::optional<proto::PredictionModel> ProcessUnzippedContents(
       const base::FilePath& unzipped_dir_path);
 
   // Notifies |observers_| that a model is ready.
@@ -122,10 +124,7 @@ class PredictionModelDownloadManager {
   // The Download Service to schedule model downloads with.
   //
   // Guaranteed to outlive |this|.
-  download::BackgroundDownloadService* download_service_;
-
-  // The directory to store verified models in.
-  absl::optional<base::FilePath> models_dir_;
+  raw_ptr<download::BackgroundDownloadService> download_service_;
 
   // Whether the download service is available.
   bool is_available_for_downloads_;

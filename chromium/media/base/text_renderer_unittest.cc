@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "media/base/audio_decoder_config.h"
@@ -51,6 +50,9 @@ class FakeTextTrack : public TextTrack {
 class TextRendererTest : public testing::Test {
  public:
   TextRendererTest() = default;
+
+  TextRendererTest(const TextRendererTest&) = delete;
+  TextRendererTest& operator=(const TextRendererTest&) = delete;
 
   void CreateTextRenderer() {
     DCHECK(!text_renderer_);
@@ -201,9 +203,6 @@ class TextRendererTest : public testing::Test {
   TextTracks text_tracks_;
 
   std::unique_ptr<TextRenderer> text_renderer_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TextRendererTest);
 };
 
 TEST_F(TextRendererTest, CreateTextRendererNoInit) {

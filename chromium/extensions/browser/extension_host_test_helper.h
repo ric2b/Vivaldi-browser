@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "extensions/browser/extension_host_registry.h"
 #include "extensions/common/extension_id.h"
@@ -67,6 +68,9 @@ class ExtensionHostTestHelper : public ExtensionHostRegistry::Observer {
   // NOTE: No return because the ExtensionHost is *always* (obviously)
   // destroyed by the time this returns.
   void WaitForHostDestroyed() { WaitFor(HostEvent::kDestroyed); }
+  // Technically, the host can outlive the render process, but it's unlikely to
+  // be for long. Similar to above, avoid returning the host object.
+  void WaitForRenderProcessGone() { WaitFor(HostEvent::kRenderProcessGone); }
 
  private:
   // The different types of events this class can wait for.
@@ -75,6 +79,7 @@ class ExtensionHostTestHelper : public ExtensionHostRegistry::Observer {
     kDocumentElementAvailable,
     kCompletedFirstLoad,
     kDestroyed,
+    kRenderProcessGone,
   };
 
   // ExtensionHostRegistry::Observer:
@@ -89,6 +94,9 @@ class ExtensionHostTestHelper : public ExtensionHostRegistry::Observer {
       ExtensionHost* host) override;
   void OnExtensionHostDestroyed(content::BrowserContext* browser_context,
                                 ExtensionHost* host) override;
+  void OnExtensionHostRenderProcessGone(
+      content::BrowserContext* browser_context,
+      ExtensionHost* host) override;
 
   // Waits for the given `event` to happen. This may return immediately if the
   // event was already observed. Returns the ExtensionHost corresponding to the
@@ -107,7 +115,7 @@ class ExtensionHostTestHelper : public ExtensionHostRegistry::Observer {
   base::OnceClosure quit_loop_;
 
   // The associated browser context.
-  content::BrowserContext* const browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // The ID of the extension whose hosts this helper is watching, if it is
   // restricted to a given ID.
@@ -119,7 +127,7 @@ class ExtensionHostTestHelper : public ExtensionHostRegistry::Observer {
 
   // The specific host this helper is waiting on, if any (null implies
   // waiting on any host).
-  const ExtensionHost* restrict_to_host_ = nullptr;
+  raw_ptr<const ExtensionHost> restrict_to_host_ = nullptr;
 
   // The set of all events this helper has seen and their corresponding
   // ExtensionHosts. ExtensionHosts are nulled out when they are destroyed, but

@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">&amp;Kieliasetukset</translation>
 <translation id="150411034776756821">Poista <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Tämä laajennus on vaihtanut Etusivu-painikkeella avattavan sivun.</translation>
+<translation id="1552752544932680961">Hallitse laajennusta</translation>
 <translation id="15662109988763471">Valittu tulostin ei ole käytettävissä tai sitä ei ole asennettu oikein. Tarkista tulostin tai valitse toinen.</translation>
 <translation id="1588438908519853928">Normaali</translation>
 <translation id="1588870296199743671">Avaa linkki sovellukseen…</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">Skriptivälimuisti</translation>
 <translation id="6169666352732958425">Työpöydän suoratoisto ei onnistu.</translation>
 <translation id="6196854373336333322">Välityspalvelimesi asetuksia hallinnoi tällä hetkellä tämä laajennus <ph name="EXTENSION_NAME" />, joka voi muokata, haitata tai salakuunnella kaikkia verkkotoimiasi. Jos et tiedä, miksi tämä muutos tehtiin, et luultavasti halua käyttää sitä.</translation>
+<translation id="6200151268994853226">Hallitse laajennusta</translation>
 <translation id="6206311232642889873">K&amp;opioi kuva</translation>
 <translation id="6239558157302047471">Lataa kehys &amp;uudelleen</translation>
 <translation id="6247802389331535091">Järjestelmä: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -333,7 +335,6 @@
 <translation id="6892812721183419409">Avaa linkki käyttäjänä <ph name="USER" /></translation>
 <translation id="6900284862687837908">Taustasovellus: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Peruuta pääsy tiedostoon</translation>
-<translation id="6916590542764765824">Laajennusten hallinta</translation>
 <translation id="6945221475159498467">Valitse</translation>
 <translation id="6955446738988643816">Tutki ponnahdusikkunaa</translation>
 <translation id="6970856801391541997">Tulosta määräsivut</translation>
@@ -401,7 +402,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusve
 <translation id="8032244173881942855">Välilehden suoratoisto ei onnistu.</translation>
 <translation id="8071432093239591881">Tulosta kuvana</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kt</translation>
-<translation id="8137559199583651773">Laajennusten hallinta</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Lataus on meneillään} other {Latauksia on meneillään}}</translation>
 <translation id="8230134520748321204">Tallennetaanko salasanat: <ph name="ORIGIN" />?</translation>

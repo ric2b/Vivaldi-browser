@@ -12,10 +12,11 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
@@ -389,8 +390,8 @@ class HistoryURLProvider::VisitClassifier {
   const history::URLRow& url_row() const { return url_row_; }
 
  private:
-  HistoryURLProvider* provider_;
-  history::URLDatabase* db_;
+  raw_ptr<HistoryURLProvider> provider_;
+  raw_ptr<history::URLDatabase> db_;
   Type type_;
   history::URLRow url_row_;
 };

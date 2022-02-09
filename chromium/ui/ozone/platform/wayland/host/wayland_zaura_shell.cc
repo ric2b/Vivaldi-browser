@@ -11,6 +11,7 @@
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_screen.h"
@@ -18,7 +19,8 @@
 namespace ui {
 
 namespace {
-constexpr uint32_t kMaxAuraShellVersion = 24;
+constexpr uint32_t kMinVersion = 1;
+constexpr uint32_t kMaxVersion = 28;
 }
 
 // static
@@ -32,11 +34,13 @@ void WaylandZAuraShell::Instantiate(WaylandConnection* connection,
                                     uint32_t version) {
   DCHECK_EQ(interface, kInterfaceName);
 
-  if (connection->zaura_shell_)
+  if (connection->zaura_shell_ ||
+      !wl::CanBind(interface, version, kMinVersion, kMaxVersion)) {
     return;
+  }
 
   auto zaura_shell = wl::Bind<struct zaura_shell>(
-      registry, name, std::min(version, kMaxAuraShellVersion));
+      registry, name, std::min(version, kMaxVersion));
   if (!zaura_shell) {
     LOG(ERROR) << "Failed to bind zaura_shell";
     return;
@@ -45,11 +49,6 @@ void WaylandZAuraShell::Instantiate(WaylandConnection* connection,
       std::make_unique<WaylandZAuraShell>(zaura_shell.release(), connection);
   ReportShellUMA(UMALinuxWaylandShell::kZauraShell);
 }
-
-void OnActivated(void* data,
-                 struct zaura_shell* zaura_shell,
-                 wl_surface* x,
-                 wl_surface* y) {}
 
 WaylandZAuraShell::WaylandZAuraShell(zaura_shell* aura_shell,
                                      WaylandConnection* connection)
@@ -62,6 +61,11 @@ WaylandZAuraShell::WaylandZAuraShell(zaura_shell* aura_shell,
       &OnActivated,
   };
   zaura_shell_add_listener(obj_.get(), &zaura_shell_listener, this);
+  if (IsWaylandSurfaceSubmissionInPixelCoordinatesEnabled() &&
+      zaura_shell_get_version(wl_object()) >=
+          ZAURA_TOPLEVEL_SURFACE_SUBMISSION_IN_PIXEL_COORDINATES_SINCE_VERSION) {
+    connection->set_surface_submission_in_pixel_coordinates(true);
+  }
 }
 
 WaylandZAuraShell::~WaylandZAuraShell() = default;
@@ -89,7 +93,8 @@ void WaylandZAuraShell::OnLayoutMode(void* data,
                                      struct zaura_shell* zaura_shell,
                                      uint32_t layout_mode) {
   auto* self = static_cast<WaylandZAuraShell*>(data);
-  auto* screen = self->connection_->wayland_output_manager()->wayland_screen();
+  auto* connection = self->connection_;
+  auto* screen = connection->wayland_output_manager()->wayland_screen();
   // |screen| is null in some unit test suites.
   if (!screen)
     return;
@@ -97,9 +102,12 @@ void WaylandZAuraShell::OnLayoutMode(void* data,
   switch (layout_mode) {
     case ZAURA_SHELL_LAYOUT_MODE_WINDOWED:
       screen->OnTabletStateChanged(display::TabletState::kInClamshellMode);
+      connection->set_tablet_layout_state(
+          display::TabletState::kInClamshellMode);
       return;
     case ZAURA_SHELL_LAYOUT_MODE_TABLET:
       screen->OnTabletStateChanged(display::TabletState::kInTabletMode);
+      connection->set_tablet_layout_state(display::TabletState::kInTabletMode);
       return;
   }
 }
@@ -134,4 +142,9 @@ void WaylandZAuraShell::OnDeskActivationChanged(void* data,
   self->active_desk_index_ = active_desk_index;
 }
 
+// static
+void WaylandZAuraShell::OnActivated(void* data,
+                                    struct zaura_shell* zaura_shell,
+                                    wl_surface* gained_active,
+                                    wl_surface* lost_active) {}
 }  // namespace ui

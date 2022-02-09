@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2004, Andrey Kiselev  <dron@ak4719.spb.edu>
  *
@@ -276,7 +275,7 @@ write_scanlines(TIFF *tif, const tdata_t array, const tsize_t size)
 	}
 
 	for (offset = 0, row = 0; row < length; offset+=scanlinesize, row++) {
-		if (TIFFWriteScanline(tif, (char *)array + offset, row, 0) < 0) {
+		if (TIFFWriteScanline(tif, (char *)array + offset, row, 0) == -1) {
 			fprintf (stderr,
 				 "Can't write image data at row %lu.\n", (long) row);
 			return -1;

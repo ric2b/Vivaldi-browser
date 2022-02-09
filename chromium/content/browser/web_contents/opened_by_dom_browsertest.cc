@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/test/browser_test.h"
@@ -24,7 +23,10 @@ namespace {
 // requested it.
 class CloseTrackingDelegate : public WebContentsDelegate {
  public:
-  CloseTrackingDelegate() : close_contents_called_(false) {}
+  CloseTrackingDelegate() = default;
+
+  CloseTrackingDelegate(const CloseTrackingDelegate&) = delete;
+  CloseTrackingDelegate& operator=(const CloseTrackingDelegate&) = delete;
 
   bool close_contents_called() const { return close_contents_called_; }
 
@@ -33,9 +35,7 @@ class CloseTrackingDelegate : public WebContentsDelegate {
   }
 
  private:
-  bool close_contents_called_;
-
-  DISALLOW_COPY_AND_ASSIGN(CloseTrackingDelegate);
+  bool close_contents_called_ = false;
 };
 
 }  // namespace

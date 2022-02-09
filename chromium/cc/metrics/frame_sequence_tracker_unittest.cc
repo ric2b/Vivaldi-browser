@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "cc/metrics/compositor_frame_reporting_controller.h"
@@ -51,12 +51,12 @@ class FrameSequenceTrackerTest : public testing::Test {
                     compositor_frame_reporting_controller_.get()) {
     tracker_ = collection_.StartScrollSequence(
         FrameSequenceTrackerType::kTouchScroll,
-        FrameSequenceMetrics::ThreadType::kCompositor);
+        FrameInfo::SmoothEffectDrivingThread::kCompositor);
   }
   ~FrameSequenceTrackerTest() override = default;
 
-  void CreateNewTracker(FrameSequenceMetrics::ThreadType thread_type =
-                            FrameSequenceMetrics::ThreadType::kCompositor) {
+  void CreateNewTracker(FrameInfo::SmoothEffectDrivingThread thread_type =
+                            FrameInfo::SmoothEffectDrivingThread::kCompositor) {
     tracker_ = collection_.StartScrollSequence(
         FrameSequenceTrackerType::kTouchScroll, thread_type);
   }
@@ -84,7 +84,7 @@ class FrameSequenceTrackerTest : public testing::Test {
 
     if (damage_type & kImplDamage) {
       if (!(damage_type & kMainDamage)) {
-        collection_.NotifyMainFrameCausedNoDamage(args);
+        collection_.NotifyMainFrameCausedNoDamage(args, false);
       } else {
         collection_.NotifyMainFrameProcessed(args);
       }
@@ -96,7 +96,7 @@ class FrameSequenceTrackerTest : public testing::Test {
     } else {
       collection_.NotifyImplFrameCausedNoDamage(
           viz::BeginFrameAck(args, false));
-      collection_.NotifyMainFrameCausedNoDamage(args);
+      collection_.NotifyMainFrameCausedNoDamage(args, true);
       collection_.NotifyFrameEnd(args, args);
     }
     return 0;
@@ -109,13 +109,15 @@ class FrameSequenceTrackerTest : public testing::Test {
 
   // Check whether a type of tracker exists in |frame_trackers_| or not.
   bool TrackerExists(FrameSequenceTrackerType type) const {
-    auto key = std::make_pair(type, FrameSequenceMetrics::ThreadType::kUnknown);
+    auto key =
+        std::make_pair(type, FrameInfo::SmoothEffectDrivingThread::kUnknown);
     if (type == FrameSequenceTrackerType::kTouchScroll ||
         type == FrameSequenceTrackerType::kWheelScroll ||
         type == FrameSequenceTrackerType::kScrollbarScroll) {
-      key = std::make_pair(type, FrameSequenceMetrics::ThreadType::kCompositor);
+      key = std::make_pair(type,
+                           FrameInfo::SmoothEffectDrivingThread::kCompositor);
       if (!collection_.frame_trackers_.contains(key))
-        key = std::make_pair(type, FrameSequenceMetrics::ThreadType::kMain);
+        key = std::make_pair(type, FrameInfo::SmoothEffectDrivingThread::kMain);
     }
     return collection_.frame_trackers_.contains(key);
   }
@@ -234,7 +236,7 @@ class FrameSequenceTrackerTest : public testing::Test {
 
         case 'N':
           collection_.NotifyMainFrameCausedNoDamage(
-              CreateBeginFrameArgs(source_id, sequence));
+              CreateBeginFrameArgs(source_id, sequence), true);
           break;
 
         default:
@@ -305,7 +307,7 @@ class FrameSequenceTrackerTest : public testing::Test {
   std::unique_ptr<CompositorFrameReportingController>
       compositor_frame_reporting_controller_;
   FrameSequenceTrackerCollection collection_;
-  FrameSequenceTracker* tracker_;
+  raw_ptr<FrameSequenceTracker> tracker_;
 };
 
 // Tests that the tracker works correctly when the source-id for the
@@ -331,7 +333,7 @@ TEST_F(FrameSequenceTrackerTest, SourceIdChangeDuringSequence) {
   auto args_2 = CreateBeginFrameArgs(source_2, ++sequence_2);
   collection_.NotifyBeginImplFrame(args_2);
   collection_.NotifyBeginMainFrame(args_2);
-  collection_.NotifyMainFrameCausedNoDamage(args_2);
+  collection_.NotifyMainFrameCausedNoDamage(args_2, true);
   // Since the main-frame did not have any new damage from the latest
   // BeginFrameArgs, the submit-frame will carry the previous BeginFrameArgs
   // (from source_1);
@@ -725,7 +727,7 @@ TEST_F(FrameSequenceTrackerTest, ScrollingThreadMetricCompositorThread) {
 }
 
 TEST_F(FrameSequenceTrackerTest, ScrollingThreadMetricMainThread) {
-  CreateNewTracker(FrameSequenceMetrics::ThreadType::kMain);
+  CreateNewTracker(FrameInfo::SmoothEffectDrivingThread::kMain);
 
   // Start with a bunch of frames so that the metric does get reported at the
   // end of the test.
@@ -801,6 +803,18 @@ TEST_F(FrameSequenceTrackerTest, DelayedMainFrameNoDamageFromOlderFrame) {
   // Start a sequence, and receive a 'no damage' from an earlier frame.
   const char second_sequence[] = "b(2)B(0,2)N(2,1)n(2)N(2,2)e(2,0)";
   GenerateSequence(second_sequence);
+  EXPECT_EQ(ImplThroughput().frames_expected, 0u);
+  EXPECT_EQ(MainThroughput().frames_expected, 0u);
+  EXPECT_EQ(ImplThroughput().frames_produced, 0u);
+  EXPECT_EQ(MainThroughput().frames_produced, 0u);
+}
+
+// This tests when a BeginMainFrame leads to No Damage, after the next Main
+// Frame has started. This should not crash.
+TEST_F(FrameSequenceTrackerTest, DelayedMainFrameNoDamageAfterNextMainFrame) {
+  const char sequence[] =
+      "b(1)B(0,1)n(1)e(1,0)E(1)b(2)B(0,2)N(0,1)n(2)N(0,2)e(2,0)";
+  GenerateSequence(sequence);
   EXPECT_EQ(ImplThroughput().frames_expected, 0u);
   EXPECT_EQ(MainThroughput().frames_expected, 0u);
   EXPECT_EQ(ImplThroughput().frames_produced, 0u);
@@ -1717,7 +1731,7 @@ TEST_F(FrameSequenceTrackerTest, MergeTrackersScrollOnSameThread) {
   GenerateSequence(first_sequence);
   collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
 
-  CreateNewTracker(FrameSequenceMetrics::ThreadType::kCompositor);
+  CreateNewTracker(FrameInfo::SmoothEffectDrivingThread::kCompositor);
   const char second_sequence[] = "b(81)s(3)e(81,0)P(3)b(101)s(4)e(101,0)P(4)";
   GenerateSequence(second_sequence);
   collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
@@ -1738,7 +1752,7 @@ TEST_F(FrameSequenceTrackerTest, MergeTrackersScrollOnDifferentThreads) {
   GenerateSequence(compscroll_sequence);
   collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
 
-  CreateNewTracker(FrameSequenceMetrics::ThreadType::kMain);
+  CreateNewTracker(FrameInfo::SmoothEffectDrivingThread::kMain);
   const char mainscroll_sequence[] =
       "b(81)s(3)e(81,0)P(3)b(101)s(4)e(101,0)P(4)";
   GenerateSequence(mainscroll_sequence);

@@ -56,6 +56,9 @@ AX_BASE_EXPORT bool IsCellOrTableHeader(const ax::mojom::Role role);
 // so that users will know that they could activate them if they so choose.
 AX_BASE_EXPORT bool IsClickable(const ax::mojom::Role role);
 
+// Returns true if the provided role is any of the checkbox-related roles.
+AX_BASE_EXPORT bool IsCheckBox(ax::mojom::Role role);
+
 // Returns true if the provided role is any of the combobox-related roles.
 AX_BASE_EXPORT bool IsComboBox(ax::mojom::Role role);
 
@@ -70,6 +73,9 @@ AX_BASE_EXPORT bool IsControl(const ax::mojom::Role role);
 // Returns true if the provided role is a control on the Android platform.
 AX_BASE_EXPORT bool IsControlOnAndroid(const ax::mojom::Role role,
                                        bool isFocusable);
+
+// Returns true for an <input> used for a date or time.
+AX_BASE_EXPORT bool IsDateOrTimeInput(const ax::mojom::Role role);
 
 // Returns true if the provided role represents a dialog.
 AX_BASE_EXPORT bool IsDialog(const ax::mojom::Role role);
@@ -204,6 +210,10 @@ AX_BASE_EXPORT bool IsText(ax::mojom::Role role);
 // <input> or <textarea>.
 AX_BASE_EXPORT bool IsTextField(ax::mojom::Role role);
 
+// Returns true if the provided role fits the description of a UIA embedded
+// objects. See the method definition for more details.
+AX_BASE_EXPORT bool IsUIAEmbeddedObject(ax::mojom::Role role);
+
 // Returns true if the node should be read only by default
 AX_BASE_EXPORT bool ShouldHaveReadonlyStateByDefault(
     const ax::mojom::Role role);
@@ -216,6 +226,10 @@ AX_BASE_EXPORT bool SupportsHierarchicalLevel(const ax::mojom::Role role);
 
 // Returns true if the provided role can have an orientation.
 AX_BASE_EXPORT bool SupportsOrientation(const ax::mojom::Role role);
+
+// Returns true if the provided role can have the required attribute,
+// e.g. <div contenteditable aria-required></div> or <input required>
+AX_BASE_EXPORT bool SupportsRequired(const ax::mojom::Role role);
 
 // Returns true if the provided role supports toggle.
 AX_BASE_EXPORT bool SupportsToggle(const ax::mojom::Role role);

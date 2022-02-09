@@ -8,11 +8,17 @@
 #include <utility>
 
 #include "ash/components/account_manager/account_manager_factory.h"
+#include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
+#include "ash/components/arc/enterprise/snapshot_hours_policy_service.h"
+#include "ash/components/geolocation/simple_geolocation_provider.h"
+#include "ash/components/timezone/timezone_resolver.h"
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/memory/singleton.h"
+#include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
+#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/login/saml/in_session_password_change_manager.h"
 #include "chrome/browser/ash/login/session/chrome_session_manager.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
@@ -31,7 +37,6 @@
 #include "chrome/browser/ash/system/timezone_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/metadata_table_chromeos.h"
-#include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -46,11 +51,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/geolocation/simple_geolocation_provider.h"
-#include "chromeos/timezone/timezone_resolver.h"
 #include "components/app_restore/features.h"
-#include "components/arc/enterprise/arc_data_snapshotd_manager.h"
-#include "components/arc/enterprise/snapshot_hours_policy_service.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
@@ -160,7 +162,7 @@ void BrowserProcessPlatformPart::BrowserRestoreObserver::RestoreUrls(
   for (const auto& url : pref.urls)
     urls.push_back(url);
 
-  ProtocolHandlerRegistry* registry =
+  custom_handlers::ProtocolHandlerRegistry* registry =
       ProtocolHandlerRegistryFactory::GetForBrowserContext(browser->profile());
   for (const GURL& url : urls) {
     // We skip URLs that we'd have to launch an external protocol handler for.
@@ -195,6 +197,7 @@ void BrowserProcessPlatformPart::InitializeAutomaticRebootManager() {
 
   automatic_reboot_manager_ =
       std::make_unique<ash::system::AutomaticRebootManager>(
+          base::DefaultClock::GetInstance(),
           base::DefaultTickClock::GetInstance());
 }
 
@@ -264,7 +267,7 @@ void BrowserProcessPlatformPart::ShutdownCrosComponentManager() {
 void BrowserProcessPlatformPart::InitializeSchedulerConfigurationManager() {
   DCHECK(!scheduler_configuration_manager_);
   scheduler_configuration_manager_ =
-      std::make_unique<chromeos::SchedulerConfigurationManager>(
+      std::make_unique<ash::SchedulerConfigurationManager>(
           chromeos::DBusThreadManager::Get()->GetDebugDaemonClient(),
           g_browser_process->local_state());
 }
@@ -275,7 +278,7 @@ void BrowserProcessPlatformPart::ShutdownSchedulerConfigurationManager() {
 
 void BrowserProcessPlatformPart::InitializeKernelFeatureManager() {
   DCHECK(!kernel_feature_manager_);
-  kernel_feature_manager_ = std::make_unique<chromeos::KernelFeatureManager>(
+  kernel_feature_manager_ = std::make_unique<ash::KernelFeatureManager>(
       chromeos::DBusThreadManager::Get()->GetDebugDaemonClient());
 }
 
@@ -353,12 +356,12 @@ BrowserProcessPlatformPart::GetTimezoneResolverManager() {
   return timezone_resolver_manager_.get();
 }
 
-chromeos::TimeZoneResolver* BrowserProcessPlatformPart::GetTimezoneResolver() {
+ash::TimeZoneResolver* BrowserProcessPlatformPart::GetTimezoneResolver() {
   if (!timezone_resolver_.get()) {
-    timezone_resolver_ = std::make_unique<chromeos::TimeZoneResolver>(
+    timezone_resolver_ = std::make_unique<ash::TimeZoneResolver>(
         GetTimezoneResolverManager(),
         g_browser_process->shared_url_loader_factory(),
-        chromeos::SimpleGeolocationProvider::DefaultGeolocationProviderURL(),
+        ash::SimpleGeolocationProvider::DefaultGeolocationProviderURL(),
         base::BindRepeating(&ash::system::ApplyTimeZone),
         base::BindRepeating(
             &chromeos::DelayNetworkCall,
@@ -373,6 +376,16 @@ void BrowserProcessPlatformPart::StartTearDown() {
   // destroyed.  So we need to destroy |timezone_resolver_| here.
   timezone_resolver_.reset();
   profile_helper_.reset();
+}
+
+void BrowserProcessPlatformPart::AttemptExit(bool try_to_quit_application) {
+  // Request Lacros terminate early during shutdown to give it the opportunity
+  // to shutdown gracefully. Check to make sure `browser_manager` is available
+  // as it may be null in tests.
+  if (auto* browser_manager = crosapi::BrowserManager::Get())
+    browser_manager->Shutdown();
+
+  BrowserProcessPlatformPartBase::AttemptExit(try_to_quit_application);
 }
 
 chromeos::system::SystemClock* BrowserProcessPlatformPart::GetSystemClock() {

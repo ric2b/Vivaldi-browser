@@ -78,8 +78,8 @@ base::TimeDelta ParseAccessControlMaxAge(
   return base::Seconds(seconds);
 }
 
-// Parses |string| as a Access-Control-Allow-* header value, storing the result
-// in |set|. This function returns false when |string| does not satisfy the
+// Parses `string` as a Access-Control-Allow-* header value, storing the result
+// in `set`. This function returns false when `string` does not satisfy the
 // syntax here: https://fetch.spec.whatwg.org/#http-new-header-syntax.
 bool ParseAccessControlAllowList(const absl::optional<std::string>& string,
                                  base::flat_set<std::string>* set,
@@ -177,11 +177,11 @@ absl::optional<CorsErrorStatus>
 PreflightResult::EnsureAllowedCrossOriginHeaders(
     const net::HttpRequestHeaders& headers,
     bool is_revalidating,
-    WithNonWildcardRequestHeadersSupport
-        with_non_wildcard_request_headers_support) const {
+    NonWildcardRequestHeadersSupport non_wildcard_request_headers_support)
+    const {
   const bool has_wildcard = !credentials_ && headers_.contains("*");
   if (has_wildcard) {
-    if (with_non_wildcard_request_headers_support) {
+    if (non_wildcard_request_headers_support) {
       // "authorization" is the only member of
       // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name.
       if (headers.HasHeader(kAuthorization) &&
@@ -221,8 +221,8 @@ bool PreflightResult::EnsureAllowedRequest(
     const std::string& method,
     const net::HttpRequestHeaders& headers,
     bool is_revalidating,
-    WithNonWildcardRequestHeadersSupport
-        with_non_wildcard_request_headers_support) const {
+    NonWildcardRequestHeadersSupport non_wildcard_request_headers_support)
+    const {
   if (!credentials_ && credentials_mode == mojom::CredentialsMode::kInclude) {
     return false;
   }
@@ -231,9 +231,8 @@ bool PreflightResult::EnsureAllowedRequest(
     return false;
   }
 
-  if (EnsureAllowedCrossOriginHeaders(
-          headers, is_revalidating,
-          with_non_wildcard_request_headers_support)) {
+  if (EnsureAllowedCrossOriginHeaders(headers, is_revalidating,
+                                      non_wildcard_request_headers_support)) {
     return false;
   }
 

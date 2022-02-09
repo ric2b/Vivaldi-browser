@@ -10,7 +10,7 @@
 #include <set>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -87,7 +87,7 @@ class MetricsWebContentsObserver
     const PageLoadMetricsObserverDelegate* GetDelegateForCommittedLoad();
 
    private:
-    page_load_metrics::MetricsWebContentsObserver* observer_;
+    raw_ptr<page_load_metrics::MetricsWebContentsObserver> observer_;
   };
 
   // Record a set of WebFeatures directly from the browser process. This
@@ -129,7 +129,8 @@ class MetricsWebContentsObserver
   void NavigationStopped() override;
   void OnInputEvent(const blink::WebInputEvent& event) override;
   void OnVisibilityChanged(content::Visibility visibility) override;
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
   void FrameDeleted(int frame_tree_node_id) override;
@@ -189,7 +190,7 @@ class MetricsWebContentsObserver
       mojom::CpuTimingPtr cpu_timing,
       mojom::DeferredResourceCountsPtr new_deferred_resource_data,
       mojom::InputTimingPtr input_timing_delta,
-      const blink::MobileFriendliness& mobile_friendliness);
+      const absl::optional<blink::MobileFriendliness>& mobile_friendliness);
 
   // Informs the observers of the currently committed primary page load that
   // it's likely that prefetch will occur in this WebContents. This should
@@ -223,16 +224,16 @@ class MetricsWebContentsObserver
       content::NavigationHandle* navigation_handle);
 
   // page_load_metrics::mojom::PageLoadMetrics implementation.
-  void UpdateTiming(
-      mojom::PageLoadTimingPtr timing,
-      mojom::FrameMetadataPtr metadata,
-      const std::vector<blink::UseCounterFeature>& new_features,
-      std::vector<mojom::ResourceDataUpdatePtr> resources,
-      mojom::FrameRenderDataUpdatePtr render_data,
-      mojom::CpuTimingPtr cpu_timing,
-      mojom::DeferredResourceCountsPtr new_deferred_resource_data,
-      mojom::InputTimingPtr input_timing,
-      const blink::MobileFriendliness& mobile_friendliness) override;
+  void UpdateTiming(mojom::PageLoadTimingPtr timing,
+                    mojom::FrameMetadataPtr metadata,
+                    const std::vector<blink::UseCounterFeature>& new_features,
+                    std::vector<mojom::ResourceDataUpdatePtr> resources,
+                    mojom::FrameRenderDataUpdatePtr render_data,
+                    mojom::CpuTimingPtr cpu_timing,
+                    mojom::DeferredResourceCountsPtr new_deferred_resource_data,
+                    mojom::InputTimingPtr input_timing,
+                    const absl::optional<blink::MobileFriendliness>&
+                        mobile_friendliness) override;
 
   void SetUpSharedMemoryForSmoothness(
       base::ReadOnlySharedMemoryRegion shared_memory) override;

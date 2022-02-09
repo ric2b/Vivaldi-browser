@@ -53,7 +53,7 @@
 #include "third_party/blink/renderer/modules/webdatabase/sqlite/sqlite_transaction.h"
 #include "third_party/blink/renderer/modules/webdatabase/storage_log.h"
 #include "third_party/blink/renderer/modules/webdatabase/web_database_host.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
@@ -248,6 +248,7 @@ Database::Database(DatabaseContext* database_context,
       database_authorizer_(kInfoTableName),
       transaction_in_progress_(false),
       is_transaction_queue_enabled_(true),
+      did_try_to_count_transaction_(false),
       did_try_to_count_third_party_transaction_(false),
       feature_handle_for_scheduler_(
           database_context->GetExecutionContext()
@@ -837,6 +838,10 @@ void Database::RunTransaction(
 
   DCHECK(GetExecutionContext()->IsContextThread());
 
+  if (!did_try_to_count_transaction_) {
+    GetExecutionContext()->CountUse(WebFeature::kReadOrWriteWebDatabase);
+    did_try_to_count_transaction_ = true;
+  }
   if (!did_try_to_count_third_party_transaction_) {
     GetExecutionContext()->CountUseOnlyInCrossSiteIframe(
         WebFeature::kReadOrWriteWebDatabaseThirdPartyContext);

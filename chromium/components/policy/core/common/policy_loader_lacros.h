@@ -11,7 +11,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/policy/core/common/async_policy_loader.h"
 #include "components/policy/core/common/policy_proto_decoders.h"
@@ -56,6 +56,9 @@ class POLICY_EXPORT PolicyLoaderLacros
   // TODO(crbug/1245077): Remove once Lacros handles all profiles the same way.
   static bool IsMainUserManaged();
 
+  // Return if the main user is affiliated or not.
+  static bool IsMainUserAffiliated();
+
   // Returns the policy data corresponding to the main user to be used by
   // Enterprise Connector policies.
   // TODO(crbug/1245077): Remove once Lacros handles all profiles the same way.
@@ -64,9 +67,6 @@ class POLICY_EXPORT PolicyLoaderLacros
       const enterprise_management::PolicyData& policy_data);
 
  private:
-  // Task runner for running background jobs.
-  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
-
   // The filter for policy data to install.
   const PolicyPerProfileFilter per_profile_;
 

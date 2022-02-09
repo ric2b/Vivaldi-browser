@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -28,7 +29,9 @@
 #include "ui/base/resource/mock_resource_bundle_delegate.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
 
 #if defined(OS_WIN)
 #include "ui/display/win/dpi.h"
@@ -55,6 +58,23 @@ const unsigned char kPngScaleChunk[12] = { 0x00, 0x00, 0x00, 0x00,
                                            'c', 's', 'C', 'l',
                                            0xc1, 0x30, 0x60, 0x4d };
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+// A string with the "LOTTIE" prefix that GRIT adds to Lottie assets.
+constexpr char kLottieData[] = "LOTTIEtest";
+
+// Mock of |lottie::ParseLottieAsStillImage|. Checks that |kLottieData| is
+// properly stripped of the "LOTTIE" prefix.
+gfx::ImageSkiaRep ParseLottieAsStillImageForTesting(
+    const base::RefCountedString& bytes_string) {
+  auto expected_bytes_string = base::MakeRefCounted<base::RefCountedString>();
+  expected_bytes_string->data() = "test";
+  CHECK(bytes_string.Equals(expected_bytes_string));
+
+  const int kDimension = 16;
+  return gfx::ImageSkiaRep(gfx::Size(kDimension, kDimension), 0.f);
+}
+#endif
+
 // Returns |bitmap_data| with |custom_chunk| inserted after the IHDR chunk.
 void AddCustomChunk(const base::StringPiece& custom_chunk,
                     std::vector<unsigned char>* bitmap_data) {
@@ -63,12 +83,11 @@ void AddCustomChunk(const base::StringPiece& custom_chunk,
                          bitmap_data->begin() + base::size(kPngMagic),
                          kPngMagic));
   auto ihdr_start = bitmap_data->begin() + base::size(kPngMagic);
-  char ihdr_length_data[sizeof(uint32_t)];
+  uint8_t ihdr_length_data[sizeof(uint32_t)];
   for (size_t i = 0; i < sizeof(uint32_t); ++i)
     ihdr_length_data[i] = *(ihdr_start + i);
   uint32_t ihdr_chunk_length = 0;
-  base::ReadBigEndian(reinterpret_cast<char*>(ihdr_length_data),
-                      &ihdr_chunk_length);
+  base::ReadBigEndian(ihdr_length_data, &ihdr_chunk_length);
   EXPECT_TRUE(
       std::equal(ihdr_start + sizeof(uint32_t),
                  ihdr_start + sizeof(uint32_t) + sizeof(kPngIHDRChunkType),
@@ -130,7 +149,7 @@ class ResourceBundleTest : public testing::Test {
 
  protected:
   base::ScopedTempDir temp_dir_;
-  ResourceBundle* resource_bundle_;
+  raw_ptr<ResourceBundle> resource_bundle_;
 };
 
 TEST_F(ResourceBundleTest, DelegateGetPathForResourcePack) {
@@ -667,5 +686,34 @@ TEST_F(ResourceBundleImageTest, FallbackToNone) {
   EXPECT_EQ(ui::k100Percent, GetSupportedResourceScaleFactor(
                                  image_skia->image_reps()[0].scale()));
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+TEST_F(ResourceBundleImageTest, Lottie) {
+  ui::ResourceBundle::SetParseLottieAsStillImage(
+      &ParseLottieAsStillImageForTesting);
+  test::ScopedSetSupportedResourceScaleFactors scoped_supported(
+      {k100Percent, k200Percent});
+  base::FilePath data_unscaled_path = dir_path().AppendASCII("sample.pak");
+
+  // Create the pak files.
+  const std::map<uint16_t, base::StringPiece> resources = {
+      std::make_pair(3u, kLottieData)};
+  DataPack::WritePack(data_unscaled_path, resources, ui::DataPack::BINARY);
+
+  // Load the unscaled pack file.
+  ResourceBundle* resource_bundle = CreateResourceBundleWithEmptyLocalePak();
+  resource_bundle->AddDataPackFromPath(data_unscaled_path, kScaleFactorNone);
+
+  gfx::ImageSkia* image_skia = resource_bundle->GetImageSkiaNamed(3);
+
+  // Unscaled image should always return scale=1.
+  EXPECT_EQ(1.f, image_skia->GetRepresentation(2.f).scale());
+  EXPECT_EQ(1.f, image_skia->GetRepresentation(1.f).scale());
+  EXPECT_EQ(1.f, image_skia->GetRepresentation(1.4f).scale());
+
+  // Lottie resource should be 'unscaled'.
+  EXPECT_TRUE(image_skia->image_reps()[0].unscaled());
+}
+#endif
 
 }  // namespace ui

@@ -231,7 +231,6 @@ class ListIdentifier {
 std::ostream& operator<<(std::ostream& os, const ListIdentifier& id);
 
 PlatformType GetCurrentPlatformType();
-ListIdentifier GetCertCsdDownloadAllowlistId();
 ListIdentifier GetChromeExtMalwareId();
 ListIdentifier GetChromeUrlApiId();
 ListIdentifier GetChromeUrlClientIncidentId();
@@ -361,16 +360,6 @@ class V4ProtocolManagerUtil {
   // where n is the number of consecutive errors.
   static base::TimeDelta GetNextBackOffInterval(size_t* error_count,
                                                 size_t* multiplier);
-
-  // Record HTTP response code when there's no error in fetching an HTTP
-  // request, and the error code, when there is.
-  // |metric_name| is the name of the UMA metric to record the response code or
-  // error code against, |net_error| represents the net error code of the HTTP
-  // request, and |response code| represents the HTTP response code received
-  // from the server.
-  static void RecordHttpResponseOrErrorCode(const char* metric_name,
-                                            int net_error,
-                                            int response_code);
 
   // Generate the set of FullHashes to check for |url|.
   static void UrlToFullHashes(const GURL& url,

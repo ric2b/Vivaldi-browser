@@ -7,7 +7,6 @@
 
 #include <set>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/task_environment.h"
 #include "extensions/renderer/module_system.h"
@@ -15,6 +14,7 @@
 #include "extensions/renderer/script_context_set.h"
 #include "extensions/renderer/test_extensions_renderer_client.h"
 #include "gin/public/context_holder.h"
+#include "gin/public/isolate_holder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "v8/include/v8-forward.h"
 
@@ -129,6 +129,7 @@ class ModuleSystemTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
+  gin::IsolateHolder isolate_holder_;
 
   v8::Isolate* isolate_;
 

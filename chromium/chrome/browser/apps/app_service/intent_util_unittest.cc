@@ -2,42 +2,53 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <initializer_list>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "ash/components/arc/mojom/intent_common.mojom.h"
+#include "ash/components/arc/mojom/intent_helper.mojom.h"
+#include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
+#include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "components/arc/intent_helper/intent_constants.h"
 #include "components/arc/intent_helper/intent_filter.h"
-#include "components/arc/mojom/intent_helper.mojom.h"
+#include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/value_builder.h"
+#include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/features.h"
+#include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/strings/strcat.h"
-#include "chrome/browser/apps/app_service/file_utils.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/crosapi/mojom/app_service_types.mojom.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/common/extension.h"
-#include "net/base/filename_util.h"
 #include "storage/browser/file_system/external_mount_points.h"
-#include "storage/browser/file_system/file_system_url.h"
+#include "storage/common/file_system/file_system_mount_option.h"
+#include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
-#include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "url/origin.h"
+#include "url/url_constants.h"
+
+class TestingProfile;
 #endif
 
 using apps::mojom::Condition;
@@ -290,7 +301,6 @@ TEST_F(IntentUtilsTest, CreateWebAppIntentFilters_FileHandlers) {
 }
 
 TEST_F(IntentUtilsTest, CreateWebAppIntentFilters_NoteTakingApp) {
-  base::test::ScopedFeatureList features{blink::features::kWebAppNoteTaking};
   auto web_app = web_app::test::CreateWebApp();
   DCHECK(web_app->start_url().is_valid());
   GURL scope = web_app->start_url().GetWithoutFilename();
@@ -436,6 +446,88 @@ TEST_F(IntentUtilsTest, CreateChromeAppIntentFilters_FileHandlers) {
   EXPECT_EQ(file_cond2.condition_values[1]->value, "txt");
 }
 
+TEST_F(IntentUtilsTest, CreateExtensionIntentFilters_FileHandlers) {
+  // Foo extension provides file_browser_handlers for html and anything.
+  extensions::ExtensionBuilder foo_ext;
+  foo_ext.SetManifest(
+      extensions::DictionaryBuilder()
+          .Set("name", "Foo")
+          .Set("version", "1.0.0")
+          .Set("manifest_version", 2)
+          .Set(
+              "background",
+              extensions::DictionaryBuilder()
+                  .Set(
+                      "scripts",
+                      extensions::ListBuilder().Append("background.js").Build())
+                  .Set("persistent", false)
+                  .Build())
+          .Set(
+              "file_browser_handlers",
+              extensions::ListBuilder()
+                  .Append(
+                      extensions::DictionaryBuilder()
+                          .Set("id", "open")
+                          .Set("default_title", "Open me!")
+                          .Set("file_filters", extensions::ListBuilder()
+                                                   .Append("filesystem:*.html")
+                                                   .Build())
+                          .Build())
+                  .Append(extensions::DictionaryBuilder()
+                              .Set("id", "open_all")
+                              .Set("default_title", "Open anything!")
+                              .Set("file_filters", extensions::ListBuilder()
+                                                       .Append("filesystem:*.*")
+                                                       .Build())
+                              .Build())
+                  .Build())
+          .Set("permissions",
+               extensions::ListBuilder().Append("fileBrowserHandler").Build())
+          .Build());
+
+  foo_ext.SetID("abcdzxcv");
+  scoped_refptr<const extensions::Extension> foo = foo_ext.Build();
+
+  std::vector<IntentFilterPtr> filters =
+      apps_util::CreateExtensionIntentFilters(foo.get());
+
+  ASSERT_EQ(filters.size(), 2);
+
+  // "html" filter - View action
+  const IntentFilterPtr& mime_filter = filters[0];
+  ASSERT_EQ(mime_filter->conditions.size(), 2);
+  const Condition& view_cond = *mime_filter->conditions[0];
+  EXPECT_EQ(view_cond.condition_type, ConditionType::kAction);
+  ASSERT_EQ(view_cond.condition_values.size(), 1);
+  EXPECT_EQ(view_cond.condition_values[0]->value, apps_util::kIntentActionView);
+
+  // "html" filter - glob match
+  const Condition& file_cond = *mime_filter->conditions[1];
+  EXPECT_EQ(file_cond.condition_type, ConditionType::kFile);
+  ASSERT_EQ(file_cond.condition_values.size(), 1);
+  EXPECT_EQ(file_cond.condition_values[0]->match_type, PatternMatchType::kGlob);
+  EXPECT_EQ(file_cond.condition_values[0]->value,
+            R"(filesystem:chrome-extension://.*/.*\.html)");
+
+  // "any" filter - View action
+  const IntentFilterPtr& mime_filter2 = filters[1];
+  ASSERT_EQ(mime_filter2->conditions.size(), 2);
+  const Condition& view_cond2 = *mime_filter2->conditions[0];
+  EXPECT_EQ(view_cond2.condition_type, ConditionType::kAction);
+  ASSERT_EQ(view_cond2.condition_values.size(), 1);
+  EXPECT_EQ(view_cond2.condition_values[0]->value,
+            apps_util::kIntentActionView);
+
+  // "any" filter - glob match
+  const Condition& file_cond2 = *mime_filter2->conditions[1];
+  EXPECT_EQ(file_cond2.condition_type, ConditionType::kFile);
+  ASSERT_EQ(file_cond2.condition_values.size(), 1);
+  EXPECT_EQ(file_cond2.condition_values[0]->match_type,
+            PatternMatchType::kGlob);
+  EXPECT_EQ(file_cond2.condition_values[0]->value,
+            R"(filesystem:chrome-extension://.*/.*\..*)");
+}
+
 // Converting an Arc Intent filter for a URL view intent filter should add a
 // condition covering every possible path.
 TEST_F(IntentUtilsTest, ConvertArcIntentFilter_AddsMissingPath) {
@@ -510,21 +602,53 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_ConvertsSimpleGlobToPrefix) {
   }
 }
 
+TEST_F(IntentUtilsTest, ConvertArcIntentFilter_DeduplicatesHosts) {
+  const char* kPackageName = "com.foo.bar";
+  const char* kPath = "/";
+  const char* kScheme = "https";
+  const char* kHost1 = "www.a.com";
+  const char* kHost2 = "www.b.com";
+
+  std::vector<arc::IntentFilter::AuthorityEntry> authorities;
+  authorities.emplace_back(kHost1, 0);
+  authorities.emplace_back(kHost2, 0);
+  authorities.emplace_back(kHost2, 0);
+  authorities.emplace_back(kHost1, 0);
+
+  std::vector<arc::IntentFilter::PatternMatcher> patterns;
+  patterns.emplace_back(kPath, arc::mojom::PatternType::PATTERN_PREFIX);
+
+  arc::IntentFilter arc_filter(kPackageName, {arc::kIntentActionView},
+                               std::move(authorities), std::move(patterns),
+                               {kScheme}, {});
+
+  IntentFilterPtr app_service_filter =
+      apps_util::ConvertArcToAppServiceIntentFilter(arc_filter);
+
+  for (auto& condition : app_service_filter->conditions) {
+    if (condition->condition_type == apps::mojom::ConditionType::kHost) {
+      ASSERT_EQ(2u, condition->condition_values.size());
+      ASSERT_EQ(kHost1, condition->condition_values[0]->value);
+      ASSERT_EQ(kHost2, condition->condition_values[1]->value);
+    }
+  }
+}
+
 #if defined(OS_CHROMEOS)
 TEST_F(IntentUtilsTest, CrosapiIntentConversion) {
   apps::mojom::IntentPtr original_intent =
       apps_util::CreateIntentFromUrl(GURL("www.google.com"));
-  auto crosapi_intent = apps_util::ConvertAppServiceToCrosapiIntent(
-      original_intent, absl::nullopt);
-  auto converted_intent = apps_util::ConvertCrosapiToAppServiceIntent(
-      crosapi_intent, absl::nullopt);
+  auto crosapi_intent =
+      apps_util::ConvertAppServiceToCrosapiIntent(original_intent, nullptr);
+  auto converted_intent =
+      apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent, nullptr);
   EXPECT_EQ(original_intent, converted_intent);
 
   original_intent = apps_util::CreateShareIntentFromText("text", "title");
-  crosapi_intent = apps_util::ConvertAppServiceToCrosapiIntent(original_intent,
-                                                               absl::nullopt);
-  converted_intent = apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent,
-                                                                 absl::nullopt);
+  crosapi_intent =
+      apps_util::ConvertAppServiceToCrosapiIntent(original_intent, nullptr);
+  converted_intent =
+      apps_util::ConvertCrosapiToAppServiceIntent(crosapi_intent, nullptr);
   EXPECT_EQ(original_intent, converted_intent);
 }
 #endif
@@ -557,8 +681,7 @@ class IntentUtilsFileTest : public ::testing::Test {
 
   // FileUtils explicitly relies on ChromeOS Files.app for files manipulation.
   const url::Origin GetFileManagerOrigin() {
-    return url::Origin::Create(extensions::Extension::GetBaseURLFromExtensionId(
-        file_manager::kFileManagerAppId));
+    return url::Origin::Create(file_manager::util::GetFileManagerURL());
   }
 
   // For a given |root| converts the given virtual |path| to a GURL.

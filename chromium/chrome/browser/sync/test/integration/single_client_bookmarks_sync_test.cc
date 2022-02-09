@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "base/guid.h"
-#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -1214,7 +1213,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
 
   // Create bookmark in server with a valid GUID.
   std::unique_ptr<syncer::LoopbackServerEntity> bookmark =
-      bookmark_builder.BuildBookmark(url);
+      bookmark_builder
+          .SetGeneration(BookmarkGeneration::kHierarchyFieldsInSpecifics)
+          .BuildBookmark(url);
   const base::GUID guid = base::GUID::ParseCaseInsensitive(
       bookmark.get()->GetSpecifics().bookmark().guid());
   ASSERT_TRUE(guid.is_valid());
@@ -1497,9 +1498,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
       GetFakeServer()->GetSyncEntitiesByModelType(syncer::BOOKMARKS);
   ASSERT_EQ(1u, server_bookmarks.size());
 
-  // Once loaded, the favicon must be uploaded to the server. This expectation
-  // passes only if kSyncDoNotCommitBookmarksWithoutFavicon is enabled and
-  // prevents specifics from committing without loaded favicon.
+  // Once loaded, the favicon must be uploaded to the server.
   EXPECT_TRUE(server_bookmarks.front().specifics().bookmark().has_favicon());
 }
 

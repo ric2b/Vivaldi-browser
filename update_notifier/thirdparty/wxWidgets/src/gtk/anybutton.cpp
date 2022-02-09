@@ -18,8 +18,8 @@
 
 #include "wx/stockitem.h"
 
-#include <gtk/gtk.h>
-#include "wx/gtk/private/gtk2-compat.h"
+#include "wx/gtk/private/wrapgtk.h"
+#include "wx/gtk/private/image.h"
 
 // ----------------------------------------------------------------------------
 // GTK callbacks
@@ -70,10 +70,13 @@ wxgtk_button_released_callback(GtkWidget *WXUNUSED(widget), wxAnyButton *button)
 // wxAnyButton
 //-----------------------------------------------------------------------------
 
-bool wxAnyButton::Enable( bool enable )
+void wxAnyButton::DoEnable(bool enable)
 {
-    if (!base_type::Enable(enable))
-        return false;
+    // See wxWindow::DoEnable()
+    if ( !m_widget )
+        return;
+
+    base_type::DoEnable(enable);
 
     gtk_widget_set_sensitive(gtk_bin_get_child(GTK_BIN(m_widget)), enable);
 
@@ -81,8 +84,6 @@ bool wxAnyButton::Enable( bool enable )
         GTKFixSensitivity();
 
     GTKUpdateBitmap();
-
-    return true;
 }
 
 GdkWindow *wxAnyButton::GTKGetWindow(wxArrayGdkWindows& WXUNUSED(windows)) const
@@ -136,20 +137,35 @@ void wxAnyButton::GTKOnFocus(wxFocusEvent& event)
     GTKUpdateBitmap();
 }
 
-wxAnyButton::State wxAnyButton::GTKGetCurrentState() const
+wxAnyButton::State wxAnyButton::GTKGetCurrentBitmapState() const
 {
     if ( !IsThisEnabled() )
-        return m_bitmaps[State_Disabled].IsOk() ? State_Disabled : State_Normal;
+    {
+        if ( m_bitmaps[State_Disabled].IsOk() )
+            return State_Disabled;
+    }
+    else
+    {
+        if ( m_isPressed && m_bitmaps[State_Pressed].IsOk() )
+            return State_Pressed;
 
-    if ( m_isPressed && m_bitmaps[State_Pressed].IsOk() )
-        return State_Pressed;
+        if ( m_isCurrent && m_bitmaps[State_Current].IsOk() )
+            return State_Current;
 
-    if ( m_isCurrent && m_bitmaps[State_Current].IsOk() )
-        return State_Current;
+        if ( HasFocus() && m_bitmaps[State_Focused].IsOk() )
+            return State_Focused;
+    }
 
-    if ( HasFocus() && m_bitmaps[State_Focused].IsOk() )
-        return State_Focused;
+    // Fall back on the normal state: which still might be different from
+    // State_Normal for the toggle buttons, so the check for bitmap validity is
+    // still needed.
+    const State normalState = GetNormalState();
+    if ( m_bitmaps[normalState].IsOk() )
+        return normalState;
 
+    // And if nothing else can (or should) be used, finally fall back to the
+    // normal state which is the only one guaranteed to have a bitmap (if we're
+    // using bitmaps at all and we're only called in this case).
     return State_Normal;
 }
 
@@ -160,7 +176,7 @@ void wxAnyButton::GTKUpdateBitmap()
     {
         // if we do show them, this will return a state for which we do have a
         // valid bitmap
-        State state = GTKGetCurrentState();
+        State state = GTKGetCurrentBitmapState();
 
         GTKDoShowBitmap(m_bitmaps[state]);
     }
@@ -168,21 +184,15 @@ void wxAnyButton::GTKUpdateBitmap()
 
 void wxAnyButton::GTKDoShowBitmap(const wxBitmap& bitmap)
 {
-    wxASSERT_MSG( bitmap.IsOk(), "invalid bitmap" );
+    wxCHECK_RET(bitmap.IsOk(), "invalid bitmap");
 
-    GtkWidget *image;
-    if ( DontShowLabel() )
-    {
+    GtkWidget* image = gtk_button_get_image(GTK_BUTTON(m_widget));
+    if (image == NULL)
         image = gtk_bin_get_child(GTK_BIN(m_widget));
-    }
-    else // have both label and bitmap
-    {
-        image = gtk_button_get_image(GTK_BUTTON(m_widget));
-    }
 
-    wxCHECK_RET( image && GTK_IS_IMAGE(image), "must have image widget" );
+    wxCHECK_RET(GTK_IS_IMAGE(image), "must have image widget");
 
-    gtk_image_set_from_pixbuf(GTK_IMAGE(image), bitmap.GetPixbuf());
+    WX_GTK_IMAGE(image)->Set(bitmap);
 }
 
 wxBitmap wxAnyButton::DoGetBitmap(State which) const
@@ -213,8 +223,13 @@ void wxAnyButton::DoSetBitmap(const wxBitmap& bitmap, State which)
                 }
                 else if ( !image && bitmap.IsOk() )
                 {
-                    image = gtk_image_new();
+                    image = wxGtkImage::New(this);
                     gtk_button_set_image(GTK_BUTTON(m_widget), image);
+
+                    // Setting the image recreates the label, so we need to
+                    // reapply the styles to it to preserve the existing text
+                    // font and colour if they're different from defaults.
+                    GTKApplyWidgetStyle();
                 }
                 else // image presence or absence didn't change
                 {
@@ -336,17 +351,13 @@ void wxAnyButton::DoSetBitmap(const wxBitmap& bitmap, State which)
         case State_Focused:
             if ( bitmap.IsOk() )
             {
-                Connect(wxEVT_SET_FOCUS,
-                        wxFocusEventHandler(wxAnyButton::GTKOnFocus));
-                Connect(wxEVT_KILL_FOCUS,
-                        wxFocusEventHandler(wxAnyButton::GTKOnFocus));
+                Bind(wxEVT_SET_FOCUS, &wxAnyButton::GTKOnFocus, this);
+                Bind(wxEVT_KILL_FOCUS, &wxAnyButton::GTKOnFocus, this);
             }
             else // no valid focused bitmap
             {
-                Disconnect(wxEVT_SET_FOCUS,
-                           wxFocusEventHandler(wxAnyButton::GTKOnFocus));
-                Disconnect(wxEVT_KILL_FOCUS,
-                           wxFocusEventHandler(wxAnyButton::GTKOnFocus));
+                Unbind(wxEVT_SET_FOCUS, &wxAnyButton::GTKOnFocus, this);
+                Unbind(wxEVT_KILL_FOCUS, &wxAnyButton::GTKOnFocus, this);
             }
             break;
 
@@ -357,10 +368,16 @@ void wxAnyButton::DoSetBitmap(const wxBitmap& bitmap, State which)
 
     m_bitmaps[which] = bitmap;
 
+#if GTK_CHECK_VERSION(3,6,0) && !defined(__WXGTK4__)
+    // Allow explicitly set bitmaps to be shown regardless of theme setting
+    if (gtk_check_version(3,6,0) == NULL && bitmap.IsOk())
+        gtk_button_set_always_show_image(GTK_BUTTON(m_widget), true);
+#endif
+
     // update the bitmap immediately if necessary, otherwise it will be done
     // when the bitmap for the corresponding state is needed the next time by
     // GTKUpdateBitmap()
-    if ( bitmap.IsOk() && which == GTKGetCurrentState() )
+    if ( bitmap.IsOk() && which == GTKGetCurrentBitmapState() )
     {
         GTKDoShowBitmap(bitmap);
     }
@@ -369,14 +386,14 @@ void wxAnyButton::DoSetBitmap(const wxBitmap& bitmap, State which)
 void wxAnyButton::DoSetBitmapPosition(wxDirection dir)
 {
 #ifdef __WXGTK210__
-    if ( !gtk_check_version(2,10,0) )
+    if ( wx_is_at_least_gtk2(10) )
     {
         GtkPositionType gtkpos;
         switch ( dir )
         {
             default:
                 wxFAIL_MSG( "invalid position" );
-                // fall through
+                wxFALLTHROUGH;
 
             case wxLEFT:
                 gtkpos = GTK_POS_LEFT;
@@ -396,6 +413,11 @@ void wxAnyButton::DoSetBitmapPosition(wxDirection dir)
         }
 
         gtk_button_set_image_position(GTK_BUTTON(m_widget), gtkpos);
+
+        // As in DoSetBitmap() above, the above call can invalidate the label
+        // style, so reapply it to preserve its font and colour.
+        GTKApplyWidgetStyle();
+
         InvalidateBestSize();
     }
 #endif // GTK+ 2.10+

@@ -24,6 +24,7 @@
 #include "fuchsia/engine/web_engine_integration_test_base.h"
 #include "media/base/media_switches.h"
 #include "media/fuchsia/audio/fake_audio_consumer.h"
+#include "media/fuchsia/audio/fake_audio_device_enumerator.h"
 #include "media/fuchsia/camera/fake_fuchsia_camera.h"
 #include "net/http/http_request_headers.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -67,7 +68,10 @@ class WebEngineIntegrationMediaTest : public WebEngineIntegrationTest {
   WebEngineIntegrationMediaTest()
       : fake_audio_consumer_service_(filtered_service_directory()
                                          .outgoing_directory()
-                                         ->GetOrCreateDirectory("svc")) {}
+                                         ->GetOrCreateDirectory("svc")),
+        fake_audio_device_enumerator_(filtered_service_directory()
+                                          .outgoing_directory()
+                                          ->GetOrCreateDirectory("svc")) {}
 
   // Returns a CreateContextParams that has AUDIO feature, and the "testdata"
   // content directory provider configured.
@@ -79,6 +83,7 @@ class WebEngineIntegrationMediaTest : public WebEngineIntegrationTest {
   }
 
   media::FakeAudioConsumerService fake_audio_consumer_service_;
+  media::FakeAudioDeviceEnumerator fake_audio_device_enumerator_;
 };
 
 class WebEngineIntegrationUserAgentTest : public WebEngineIntegrationTest {
@@ -342,7 +347,7 @@ TEST_F(WebEngineIntegrationTest, ContentDirectoryProvider) {
 TEST_F(WebEngineIntegrationMediaTest, PlayAudio) {
   CreateContextAndFrame(ContextParamsWithAudioAndTestData());
 
-  static uint16_t kTestMediaSessionId = 43;
+  static const uint16_t kTestMediaSessionId = 43;
   frame_->SetMediaSessionId(kTestMediaSessionId);
 
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
@@ -383,6 +388,9 @@ TEST_F(WebEngineIntegrationMediaTest, PlayAudio_NoFlag) {
           [&is_requested](auto request) { is_requested = true; }));
   ZX_CHECK(status == ZX_OK, status) << "AddPublicService";
 
+  static const uint16_t kTestMediaSessionId = 1;
+  frame_->SetMediaSessionId(kTestMediaSessionId);
+
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
       "fuchsia-dir://testdata/play_audio.html",
       cr_fuchsia::CreateLoadUrlParamsWithUserActivation()));
@@ -393,6 +401,9 @@ TEST_F(WebEngineIntegrationMediaTest, PlayAudio_NoFlag) {
 
 TEST_F(WebEngineIntegrationMediaTest, PlayVideo) {
   CreateContextAndFrame(ContextParamsWithAudioAndTestData());
+
+  static const uint16_t kTestMediaSessionId = 1;
+  frame_->SetMediaSessionId(kTestMediaSessionId);
 
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
       kAutoplayVp9OpusToEndUrl,
@@ -426,8 +437,9 @@ TEST_F(WebEngineIntegrationTest, PermissionGranted) {
 TEST_F(WebEngineIntegrationMediaTest, MicrophoneAccess_WithPermission) {
   CreateContextAndFrame(ContextParamsWithAudioAndTestData());
 
-  GrantPermission(fuchsia::web::PermissionType::MICROPHONE,
-                  embedded_test_server_.GetURL("/").GetOrigin().spec());
+  GrantPermission(
+      fuchsia::web::PermissionType::MICROPHONE,
+      embedded_test_server_.GetURL("/").DeprecatedGetOriginAsURL().spec());
 
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
       embedded_test_server_.GetURL("/mic.html").spec()));
@@ -550,8 +562,9 @@ void WebEngineIntegrationCameraTest::RunCameraTest(bool grant_permission) {
   CreateContextAndFrame(std::move(create_params));
 
   if (grant_permission) {
-    GrantPermission(fuchsia::web::PermissionType::CAMERA,
-                    embedded_test_server_.GetURL("/").GetOrigin().spec());
+    GrantPermission(
+        fuchsia::web::PermissionType::CAMERA,
+        embedded_test_server_.GetURL("/").DeprecatedGetOriginAsURL().spec());
   }
 
   const char* url =
@@ -602,6 +615,9 @@ TEST_F(MAYBE_VulkanWebEngineIntegrationTest,
       fuchsia::web::ContextFeatureFlags::AUDIO);
   CreateContextAndFrame(std::move(create_params));
 
+  static const uint16_t kTestMediaSessionId = 1;
+  frame_->SetMediaSessionId(kTestMediaSessionId);
+
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
       kAutoplayVp9OpusToEndUrl,
       cr_fuchsia::CreateLoadUrlParamsWithUserActivation()));
@@ -622,6 +638,9 @@ TEST_F(WebEngineIntegrationMediaTest, HardwareVideoDecoderFlag_NotProvided) {
   fuchsia::web::CreateContextParams create_params =
       ContextParamsWithAudioAndTestData();
   CreateContextAndFrame(std::move(create_params));
+
+  static const uint16_t kTestMediaSessionId = 1;
+  frame_->SetMediaSessionId(kTestMediaSessionId);
 
   ASSERT_NO_FATAL_FAILURE(LoadUrlAndExpectResponse(
       kAutoplayVp9OpusToEndUrl,

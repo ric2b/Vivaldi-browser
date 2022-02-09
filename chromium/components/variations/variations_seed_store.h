@@ -12,7 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/component_export.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/variations/metrics.h"
@@ -110,6 +110,7 @@ class COMPONENT_EXPORT(VARIATIONS) VariationsSeedStore {
   // Virtual for testing.
   virtual bool StoreSafeSeed(const std::string& seed_data,
                              const std::string& base64_seed_signature,
+                             int seed_milestone,
                              const ClientFilterableState& client_state,
                              base::Time seed_fetch_time);
 
@@ -232,7 +233,8 @@ class COMPONENT_EXPORT(VARIATIONS) VariationsSeedStore {
 
   // Updates the safe seed with validated data.
   StoreSeedResult StoreValidatedSafeSeed(
-      const ValidatedSeed& validated,
+      const ValidatedSeed& seed,
+      int seed_milestone,
       const ClientFilterableState& client_state,
       base::Time seed_fetch_time) WARN_UNUSED_RESULT;
 
@@ -243,7 +245,7 @@ class COMPONENT_EXPORT(VARIATIONS) VariationsSeedStore {
                               std::string* output) WARN_UNUSED_RESULT;
 
   // The pref service used to persist the variations seed.
-  PrefService* local_state_;
+  raw_ptr<PrefService> local_state_;
 
   // Cached serial number from the most recently fetched variations seed.
   std::string latest_serial_number_;

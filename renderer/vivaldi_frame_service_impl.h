@@ -3,7 +3,6 @@
 #ifndef RENDERER_VIVALDI_FRAME_SERVICE_IMPL_H_
 #define RENDERER_VIVALDI_FRAME_SERVICE_IMPL_H_
 
-#include "base/macros.h"
 #include "base/supports_user_data.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"

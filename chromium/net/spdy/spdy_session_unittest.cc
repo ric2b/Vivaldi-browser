@@ -12,6 +12,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/cxx17_backports.h"
+#include "base/ignore_result.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -35,6 +37,7 @@
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_request_info.h"
 #include "net/http/transport_security_state_test_util.h"
+#include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/test_net_log.h"
@@ -194,7 +197,7 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
   void SetUp() override {
     g_time_delta = base::TimeDelta();
     g_time_now = base::TimeTicks::Now();
-    session_deps_.net_log = log_.bound().net_log();
+    session_deps_.net_log = NetLog::Get();
     session_deps_.enable_server_push_cancellation = true;
   }
 
@@ -218,8 +221,8 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
 
   void CreateSpdySession() {
     DCHECK(!session_);
-    session_ =
-        ::net::CreateSpdySession(http_session_.get(), key_, log_.bound());
+    session_ = ::net::CreateSpdySession(http_session_.get(), key_,
+                                        net_log_with_source_);
   }
 
   void StallSessionSend() {
@@ -371,7 +374,9 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
     return session_->buffered_spdy_framer_->header_encoder_table_size();
   }
 
-  RecordingBoundTestNetLog log_;
+  RecordingNetLogObserver net_log_observer_;
+  NetLogWithSource net_log_with_source_{
+      NetLogWithSource::Make(NetLogSourceType::NONE)};
 
   // Original socket limits.  Some tests set these.  Safest to always restore
   // them once each test has been run.
@@ -382,8 +387,8 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
   SpdySessionDependencies session_deps_;
   std::unique_ptr<HttpNetworkSession> http_session_;
   base::WeakPtr<SpdySession> session_;
-  TestServerPushDelegate* test_push_delegate_;
-  SpdySessionPool* spdy_session_pool_;
+  raw_ptr<TestServerPushDelegate> test_push_delegate_;
+  raw_ptr<SpdySessionPool> spdy_session_pool_;
   const GURL test_url_;
   const url::SchemeHostPort test_server_;
   SpdySessionKey key_;
@@ -2194,7 +2199,7 @@ TEST_F(SpdySessionTest, Initialize) {
   // Flush the read completion task.
   base::RunLoop().RunUntilIdle();
 
-  auto entries = log_.GetEntries();
+  auto entries = net_log_observer_.GetEntries();
   EXPECT_LT(0u, entries.size());
 
   // Check that we logged HTTP2_SESSION_INITIALIZED correctly.
@@ -2207,7 +2212,7 @@ TEST_F(SpdySessionTest, Initialize) {
   EXPECT_TRUE(
       NetLogSourceFromEventParameters(&entries[pos].params, &socket_source));
   EXPECT_TRUE(socket_source.IsValid());
-  EXPECT_NE(log_.bound().source().id, socket_source.id);
+  EXPECT_NE(net_log_with_source_.source().id, socket_source.id);
 }
 
 TEST_F(SpdySessionTest, NetLogOnSessionGoaway) {
@@ -2233,7 +2238,7 @@ TEST_F(SpdySessionTest, NetLogOnSessionGoaway) {
   EXPECT_FALSE(session_);
 
   // Check that the NetLog was filled reasonably.
-  auto entries = log_.GetEntries();
+  auto entries = net_log_observer_.GetEntries();
   EXPECT_LT(0u, entries.size());
 
   int pos = ExpectLogContainsSomewhere(
@@ -2274,7 +2279,7 @@ TEST_F(SpdySessionTest, NetLogOnSessionEOF) {
   EXPECT_FALSE(session_);
 
   // Check that the NetLog was filled reasonably.
-  auto entries = log_.GetEntries();
+  auto entries = net_log_observer_.GetEntries();
   EXPECT_LT(0u, entries.size());
 
   // Check that we logged SPDY_SESSION_CLOSE correctly.
@@ -6708,9 +6713,9 @@ TEST(MapFramerErrorToProtocolError, MapsValues) {
   CHECK_EQ(SPDY_ERROR_INVALID_DATA_FRAME_FLAGS,
            MapFramerErrorToProtocolError(
                http2::Http2DecoderAdapter::SPDY_INVALID_DATA_FRAME_FLAGS));
-  CHECK_EQ(SPDY_ERROR_GOAWAY_FRAME_CORRUPT,
+  CHECK_EQ(SPDY_ERROR_HPACK_NAME_HUFFMAN_ERROR,
            MapFramerErrorToProtocolError(
-               http2::Http2DecoderAdapter::SPDY_GOAWAY_FRAME_CORRUPT));
+               http2::Http2DecoderAdapter::SPDY_HPACK_NAME_HUFFMAN_ERROR));
   CHECK_EQ(SPDY_ERROR_UNEXPECTED_FRAME,
            MapFramerErrorToProtocolError(
                http2::Http2DecoderAdapter::SPDY_UNEXPECTED_FRAME));
@@ -6720,9 +6725,6 @@ TEST(MapFramerErrorToNetError, MapsValue) {
   CHECK_EQ(ERR_HTTP2_PROTOCOL_ERROR,
            MapFramerErrorToNetError(
                http2::Http2DecoderAdapter::SPDY_INVALID_CONTROL_FRAME));
-  CHECK_EQ(ERR_HTTP2_COMPRESSION_ERROR,
-           MapFramerErrorToNetError(
-               http2::Http2DecoderAdapter::SPDY_COMPRESS_FAILURE));
   CHECK_EQ(ERR_HTTP2_COMPRESSION_ERROR,
            MapFramerErrorToNetError(
                http2::Http2DecoderAdapter::SPDY_DECOMPRESS_FAILURE));
@@ -7315,8 +7317,8 @@ TEST_F(SpdySessionTest, AlpsEmpty) {
                                       kNoEntries, 1);
 
   histogram_tester.ExpectTotalCount("Net.SpdySession.AcceptChForOrigin", 0);
-  EXPECT_EQ("", session_->GetAcceptChViaAlpsForOrigin(
-                    url::Origin::Create(GURL("https://www.example.org"))));
+  EXPECT_EQ("", session_->GetAcceptChViaAlps(
+                    url::SchemeHostPort(GURL("https://www.example.org"))));
   histogram_tester.ExpectUniqueSample("Net.SpdySession.AcceptChForOrigin",
                                       false, 1);
 }
@@ -7377,13 +7379,13 @@ TEST_F(SpdySessionTest, AlpsAcceptCh) {
 
   histogram_tester.ExpectTotalCount("Net.SpdySession.AcceptChForOrigin", 0);
 
-  EXPECT_EQ("foo", session_->GetAcceptChViaAlpsForOrigin(
-                       url::Origin::Create(GURL("https://www.example.com"))));
+  EXPECT_EQ("foo", session_->GetAcceptChViaAlps(
+                       url::SchemeHostPort(GURL("https://www.example.com"))));
   histogram_tester.ExpectUniqueSample("Net.SpdySession.AcceptChForOrigin", true,
                                       1);
 
-  EXPECT_EQ("", session_->GetAcceptChViaAlpsForOrigin(
-                    url::Origin::Create(GURL("https://www.example.org"))));
+  EXPECT_EQ("", session_->GetAcceptChViaAlps(
+                    url::SchemeHostPort(GURL("https://www.example.org"))));
   histogram_tester.ExpectTotalCount("Net.SpdySession.AcceptChForOrigin", 2);
   histogram_tester.ExpectBucketCount("Net.SpdySession.AcceptChForOrigin", true,
                                      1);

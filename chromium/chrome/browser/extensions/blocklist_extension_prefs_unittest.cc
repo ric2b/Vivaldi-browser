@@ -4,6 +4,7 @@
 
 #include "extensions/browser/blocklist_extension_prefs.h"
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "extensions/browser/blocklist_state.h"
@@ -29,7 +30,7 @@ class BlocklistExtensionPrefsUnitTest : public ExtensionServiceTestBase {
   ExtensionPrefs* extension_prefs() { return extension_prefs_; }
 
  private:
-  ExtensionPrefs* extension_prefs_;
+  raw_ptr<ExtensionPrefs> extension_prefs_;
 };
 
 TEST_F(BlocklistExtensionPrefsUnitTest, OmahaBlocklistState) {
@@ -218,10 +219,6 @@ TEST_F(BlocklistExtensionPrefsUnitTest, GetExtensionBlocklistState) {
 }
 
 TEST_F(BlocklistExtensionPrefsUnitTest, SafeBrowsingExtensionBlocklistState) {
-  extension_prefs()->AcknowledgeBlocklistedExtension(kExtensionId);
-  EXPECT_TRUE(
-      extension_prefs()->IsBlocklistedExtensionAcknowledged(kExtensionId));
-
   blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
       kExtensionId, BitMapBlocklistState::BLOCKLISTED_MALWARE,
       extension_prefs());
@@ -229,9 +226,6 @@ TEST_F(BlocklistExtensionPrefsUnitTest, SafeBrowsingExtensionBlocklistState) {
   EXPECT_EQ(BitMapBlocklistState::BLOCKLISTED_MALWARE,
             blocklist_prefs::GetSafeBrowsingExtensionBlocklistState(
                 kExtensionId, extension_prefs()));
-  // Make sure that the acknowledged bit is also cleared.
-  EXPECT_FALSE(
-      extension_prefs()->IsBlocklistedExtensionAcknowledged(kExtensionId));
 
   blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
       kExtensionId, BitMapBlocklistState::NOT_BLOCKLISTED, extension_prefs());
@@ -242,21 +236,11 @@ TEST_F(BlocklistExtensionPrefsUnitTest, SafeBrowsingExtensionBlocklistState) {
 }
 
 TEST_F(BlocklistExtensionPrefsUnitTest, IsExtensionBlocklisted) {
-  EXPECT_FALSE(
-      blocklist_prefs::IsExtensionBlocklisted(kExtensionId, extension_prefs()));
-  extension_prefs()->AcknowledgeBlocklistedExtension(kExtensionId);
-  EXPECT_TRUE(
-      extension_prefs()->IsBlocklistedExtensionAcknowledged(kExtensionId));
-
   blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
       kExtensionId, BitMapBlocklistState::BLOCKLISTED_MALWARE,
       extension_prefs());
   EXPECT_TRUE(
       blocklist_prefs::IsExtensionBlocklisted(kExtensionId, extension_prefs()));
-  // The acknowledged bit should be cleared because the malware state has
-  // changed.
-  EXPECT_FALSE(
-      extension_prefs()->IsBlocklistedExtensionAcknowledged(kExtensionId));
 
   blocklist_prefs::SetSafeBrowsingExtensionBlocklistState(
       kExtensionId, BitMapBlocklistState::BLOCKLISTED_POTENTIALLY_UNWANTED,

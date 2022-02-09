@@ -8,7 +8,6 @@
 #include <string>
 #include <tuple>
 
-#include "base/macros.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/network/mock_network_device_handler.h"
@@ -23,7 +22,7 @@ class DeviceDockMacAddressHandlerBaseTest : public testing::Test {
   DeviceDockMacAddressHandlerBaseTest() {
     scoped_cros_settings_test_helper_.ReplaceDeviceSettingsProviderWithStub();
     scoped_cros_settings_test_helper_.SetTrustedStatus(
-        chromeos::CrosSettingsProvider::TEMPORARILY_UNTRUSTED);
+        ash::CrosSettingsProvider::TEMPORARILY_UNTRUSTED);
 
     device_dock_mac_address_handler_ =
         std::make_unique<DeviceDockMacAddressHandler>(
@@ -38,7 +37,7 @@ class DeviceDockMacAddressHandlerBaseTest : public testing::Test {
  protected:
   void MakeCrosSettingsTrusted() {
     scoped_cros_settings_test_helper_.SetTrustedStatus(
-        chromeos::CrosSettingsProvider::TRUSTED);
+        ash::CrosSettingsProvider::TRUSTED);
   }
 
   ash::ScopedCrosSettingsTestHelper scoped_cros_settings_test_helper_;
@@ -49,12 +48,14 @@ class DeviceDockMacAddressHandlerBaseTest : public testing::Test {
   std::unique_ptr<DeviceDockMacAddressHandler> device_dock_mac_address_handler_;
 };
 
-// Tests that DockMacAddressHandler does not change device handler property if
-// received policy is invalid.
+// Tests that DockMacAddressHandler changes device handler property to
+// "usb_adapter_mac" if received policy is invalid.
 TEST_F(DeviceDockMacAddressHandlerBaseTest, InvalidPolicyValue) {
   MakeCrosSettingsTrusted();
-  scoped_cros_settings_test_helper_.SetInteger(
-      chromeos::kDeviceDockMacAddressSource, 4);
+  EXPECT_CALL(network_device_handler_mock_,
+              SetUsbEthernetMacAddressSource("usb_adapter_mac"));
+  scoped_cros_settings_test_helper_.SetInteger(ash::kDeviceDockMacAddressSource,
+                                               4);
 }
 
 class DeviceDockMacAddressHandlerTest
@@ -72,8 +73,8 @@ class DeviceDockMacAddressHandlerTest
 // Tests that DockMacAddressHandler does not change device handler property if
 // CrosSettings are untrusted.
 TEST_P(DeviceDockMacAddressHandlerTest, OnPolicyChangeUntrusted) {
-  scoped_cros_settings_test_helper_.SetInteger(
-      chromeos::kDeviceDockMacAddressSource, std::get<0>(GetParam()));
+  scoped_cros_settings_test_helper_.SetInteger(ash::kDeviceDockMacAddressSource,
+                                               std::get<0>(GetParam()));
 }
 
 // Tests that DockMacAddressHandler changes device handler property if
@@ -82,8 +83,8 @@ TEST_P(DeviceDockMacAddressHandlerTest, OnPolicyChange) {
   MakeCrosSettingsTrusted();
   EXPECT_CALL(network_device_handler_mock_,
               SetUsbEthernetMacAddressSource(std::get<1>(GetParam())));
-  scoped_cros_settings_test_helper_.SetInteger(
-      chromeos::kDeviceDockMacAddressSource, std::get<0>(GetParam()));
+  scoped_cros_settings_test_helper_.SetInteger(ash::kDeviceDockMacAddressSource,
+                                               std::get<0>(GetParam()));
 }
 
 INSTANTIATE_TEST_SUITE_P(

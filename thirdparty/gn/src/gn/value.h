@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/err.h"
 
 class ParseNode;

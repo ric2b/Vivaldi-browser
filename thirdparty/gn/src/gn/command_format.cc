@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "gn/commands.h"
@@ -260,7 +259,8 @@ class Printer {
   // Gives the precedence for operators in a BinaryOpNode.
   std::map<std::string_view, Precedence> precedence_;
 
-  DISALLOW_COPY_AND_ASSIGN(Printer);
+  Printer(const Printer&) = delete;
+  Printer& operator=(const Printer&) = delete;
 };
 
 Printer::Printer() : penalty_depth_(0) {

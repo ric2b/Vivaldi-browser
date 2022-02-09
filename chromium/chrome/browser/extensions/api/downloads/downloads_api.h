@@ -10,7 +10,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/download_danger_prompt.h"
@@ -413,7 +413,7 @@ class ExtensionDownloadsEventRouter
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
 
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
   download::AllDownloadItemNotifier notifier_;
   std::set<const extensions::Extension*> shelf_disabling_extensions_;
 
@@ -427,15 +427,18 @@ class ExtensionDownloadsEventRouter
 
 class DownloadsAcceptMixedFunction : public ExtensionFunction {
  public:
-
   DECLARE_EXTENSION_FUNCTION("downloads.acceptMixed", DOWNLOADS_ACCEPTMIXED)
+
   DownloadsAcceptMixedFunction();
+
+  DownloadsAcceptMixedFunction(const DownloadsAcceptMixedFunction&) = delete;
+  DownloadsAcceptMixedFunction& operator=(const DownloadsAcceptMixedFunction&) =
+      delete;
+
   ResponseAction Run() override;
 
  protected:
   ~DownloadsAcceptMixedFunction() override;
-
-  DISALLOW_COPY_AND_ASSIGN(DownloadsAcceptMixedFunction);
 };
 
 }  // namespace extensions

@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_C_BINARY_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_C_BINARY_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/config_values.h"
 #include "gn/ninja_binary_target_writer.h"
 #include "gn/toolchain.h"
@@ -106,7 +105,8 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
 
   const CTool* tool_;
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaCBinaryTargetWriter);
+  NinjaCBinaryTargetWriter(const NinjaCBinaryTargetWriter&) = delete;
+  NinjaCBinaryTargetWriter& operator=(const NinjaCBinaryTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_C_BINARY_TARGET_WRITER_H_

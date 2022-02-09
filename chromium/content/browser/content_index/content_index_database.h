@@ -7,6 +7,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -44,6 +45,7 @@ class CONTENT_EXPORT ContentIndexDatabase {
 
   void AddEntry(int64_t service_worker_registration_id,
                 const url::Origin& origin,
+                bool is_top_level_context,
                 blink::mojom::ContentDescriptionPtr description,
                 const std::vector<SkBitmap>& icons,
                 const GURL& launch_url,
@@ -96,6 +98,7 @@ class CONTENT_EXPORT ContentIndexDatabase {
   void DidSerializeIcons(
       int64_t service_worker_registration_id,
       const url::Origin& origin,
+      bool is_top_level_context,
       blink::mojom::ContentDescriptionPtr description,
       const GURL& launch_url,
       std::unique_ptr<proto::SerializedIcons> serialized_icons,
@@ -170,7 +173,7 @@ class CONTENT_EXPORT ContentIndexDatabase {
   void BlockOrigin(const url::Origin& origin);
   void UnblockOrigin(const url::Origin& origin);
 
-  ContentIndexProvider* provider_;
+  raw_ptr<ContentIndexProvider> provider_;
 
   // A map from origins to how many times it's been blocked.
   base::flat_map<url::Origin, int> blocked_origins_;

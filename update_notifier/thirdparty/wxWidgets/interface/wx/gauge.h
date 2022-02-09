@@ -13,8 +13,13 @@
 #define wxGA_HORIZONTAL      wxHORIZONTAL
 #define wxGA_VERTICAL        wxVERTICAL
 
+// Available since Windows 7 only. With this style, the value of gauge will
+// reflect on the taskbar button.
+#define wxGA_PROGRESS        0x0010
 // Win32 only, is default (and only) on some other platforms
 #define wxGA_SMOOTH          0x0020
+// QT only, display current completed percentage (text default format "%p%")
+#define wxGA_TEXT            0x0040
 
 /**
     @class wxGauge
@@ -43,6 +48,17 @@
     @style{wxGA_SMOOTH}
            Creates smooth progress bar with one pixel wide update step (not
            supported by all platforms).
+    @style{wxGA_TEXT}
+           Display the current value in percents in the gauge itself. This
+           style is only supported in wxQt and ignored under the other
+           platforms.
+           This flag is only available in wxWidgets 3.1.0 and later.
+    @style{wxGA_PROGRESS}
+           Reflect the value of gauge in the application taskbar button under
+           Windows 7 and later and the dock icon under macOS, ignored under
+           the other platforms.
+           This flag is only available in wxWidgets 3.1.0 and later.
+
     @endStyleTable
 
     @library{wxcore}
@@ -106,29 +122,11 @@ public:
                 const wxString& name = wxGaugeNameStr);
 
     /**
-        Returns the width of the 3D bezel face.
-
-        @remarks This method is not implemented (returns 0) for most platforms.
-
-        @see SetBezelFace()
-    */
-    int GetBezelFace() const;
-
-    /**
         Returns the maximum position of the gauge.
 
         @see SetRange()
     */
     int GetRange() const;
-
-    /**
-        Returns the 3D shadow margin width.
-
-        @remarks This method is not implemented (returns 0) for most platforms.
-
-        @see SetShadowWidth()
-    */
-    int GetShadowWidth() const;
 
     /**
         Returns the current position of the gauge.
@@ -154,16 +152,6 @@ public:
     virtual void Pulse();
 
     /**
-        Sets the 3D bezel face width.
-
-        @remarks This method is not implemented (doesn't do anything) for most
-                 platforms.
-
-        @see GetBezelFace()
-    */
-    void SetBezelFace(int width);
-
-    /**
         Sets the range (maximum value) of the gauge. This function makes the
         gauge switch to determinate mode, if it's not already.
 
@@ -174,14 +162,6 @@ public:
         @see GetRange()
     */
     void SetRange(int range);
-
-    /**
-        Sets the 3D shadow width.
-
-        @remarks This method is not implemented (doesn't do anything) for most
-                 platforms.
-    */
-    void SetShadowWidth(int width);
 
     /**
         Sets the position of the gauge. The @a pos must be between 0 and the

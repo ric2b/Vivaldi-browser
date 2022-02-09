@@ -11,7 +11,6 @@
 #include "ash/display/persistent_window_info.h"
 #include "ash/wm/drag_details.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -417,9 +416,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
   // Returns the window's current show state.
   ui::WindowShowState GetShowState() const;
-
-  // Return the window's current pin type.
-  chromeos::WindowPinType GetPinType() const;
 
   // Sets the window's bounds in screen coordinates.
   void SetBoundsInScreen(const gfx::Rect& bounds_in_screen);

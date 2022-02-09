@@ -113,7 +113,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     private final String mDefaultTitle;
     private final Supplier<TitleCache> mTitleCacheSupplier;
-    private final Supplier<LayerTitleCache> mLayerTitleCacheSupplier;
+    private Supplier<LayerTitleCache> mLayerTitleCacheSupplier; // Vivaldi
 
     // Vivaldi
     private final ChromeTabbedActivity mActivity;
@@ -305,6 +305,9 @@ public class StripLayoutHelperManager implements SceneOverlay {
         if (!VivaldiUtils.isTopToolbarOn() && !mShouldHideOverlay) {
             mViewportHeightOffset = viewport.height() * dpToPx;
             yOffset += mViewportHeightOffset - mHeight;
+            // Pass the yOffset of the main strip here as it is used to calculate the visibility of
+            // the tab strip container.
+            mTabStripTreeProvider.setMainYOffset(yOffset);
             // Place the stack strip above the main strip.
             if (mIsStackStrip) yOffset = -getHeight();
         } else {
@@ -316,6 +319,9 @@ public class StripLayoutHelperManager implements SceneOverlay {
                 if (panel != null) yOffset += panel.getBasePageY();
             }
             yOffset += mActivity.getBrowserControlsManager().getTopControlsMinHeight() * dpToPx;
+            // Pass the yOffset of the main strip here as it is used to calculate the visibility of
+            // the tab strip container.
+            mTabStripTreeProvider.setMainYOffset(yOffset);
             // Place the stack strip under the main strip.
             if (mIsStackStrip) yOffset = getHeight();
         }
@@ -323,14 +329,6 @@ public class StripLayoutHelperManager implements SceneOverlay {
         Tab selectedTab = mTabModelSelector.getCurrentModel().getTabAt(
                 mTabModelSelector.getCurrentModel().index());
         int selectedTabId = selectedTab == null ? TabModel.INVALID_TAB_INDEX : selectedTab.getId();
-        // Note(david@vivaldi.com): Make sure we update the title/fav icon and push all information
-        // the appropriate TabStripSceneLayer.
-        if (ChromeApplicationImpl.isVivaldi() && selectedTab != null) {
-            mLayerTitleCache.getUpdatedTitle(selectedTab, selectedTab.getTitle());
-            mTabStripTreeProvider.pushAndUpdateStrip(this, mLayerTitleCache, resourceManager,
-                    getActiveStripLayoutHelper().getStripLayoutTabsToRender(), yOffset,
-                    selectedTabId);
-        } else
         mTabStripTreeProvider.pushAndUpdateStrip(this, mLayerTitleCacheSupplier.get(),
                 resourceManager, getActiveStripLayoutHelper().getStripLayoutTabsToRender(), yOffset,
                 selectedTabId);
@@ -442,6 +440,25 @@ public class StripLayoutHelperManager implements SceneOverlay {
         return getActiveStripLayoutHelper().getBrightness();
     }
 
+    /** Update the title cache for the available tabs in the model. */
+    private void updateTitleCacheForInit() {
+        TitleCache titleCache = mTitleCacheSupplier.get();
+        if (mTabModelSelector == null || titleCache == null) return;
+
+        // Make sure any tabs already restored get loaded into the title cache.
+        List<TabModel> models = mTabModelSelector.getModels();
+        for (int i = 0; i < models.size(); i++) {
+            TabModel model = models.get(i);
+            for (int j = 0; j < model.getCount(); j++) {
+                Tab tab = model.getTabAt(j);
+                if (tab != null) {
+                    titleCache.getUpdatedTitle(
+                            tab, tab.getContext().getString(R.string.tab_loading_default_title));
+                }
+            }
+        }
+    }
+
     /**
      * Sets the {@link TabModelSelector} that this {@link StripLayoutHelperManager} will visually
      * represent, and various objects associated with it.
@@ -462,6 +479,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
         modelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
 
         mTabModelSelector = modelSelector;
+
+        updateTitleCacheForInit();
 
         if (mTabModelSelector.isTabStateInitialized()) {
             updateModelSwitcherButton();
@@ -511,6 +530,11 @@ public class StripLayoutHelperManager implements SceneOverlay {
             public void tabClosureUndone(Tab tab) {
                 getStripLayoutHelper(tab.isIncognito()).tabClosureCancelled(time(), tab.getId());
                 updateModelSwitcherButton();
+            }
+
+            @Override
+            public void tabClosureCommitted(Tab tab) {
+                if (mTitleCacheSupplier.hasValue()) mTitleCacheSupplier.get().remove(tab.getId());
             }
 
             @Override
@@ -610,6 +634,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mLayerTitleCache =
                 new LayerTitleCache(mContext, mActivity.getLayoutManager().getResourceManager());
         mLayerTitleCache.setTabModelSelector(mTabModelSelector);
+        mLayerTitleCacheSupplier = () -> mLayerTitleCache;
         mNormalHelper.setTabModelSelector(mTabModelSelector);
         mIncognitoHelper.setTabModelSelector(mTabModelSelector);
     }
@@ -618,6 +643,10 @@ public class StripLayoutHelperManager implements SceneOverlay {
         if (mTitleCacheSupplier.get() == null) return;
 
         String title = mTitleCacheSupplier.get().getUpdatedTitle(tab, mDefaultTitle);
+
+        // Note(david@vivaldi.com): Update the layer title cache as well.
+        mLayerTitleCacheSupplier.get().getUpdatedTitle(tab, tab.getTitle());
+
         getStripLayoutHelper(tab.isIncognito()).tabTitleChanged(tab.getId(), title);
         mUpdateHost.requestUpdate();
     }

@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/guid.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
@@ -117,7 +117,12 @@ class NoteModelMerger {
   // tag. All invalid updates are filtered out, including invalid note
   // specifics as well as tombstones, in the unlikely event that the server
   // sends tombstones as part of the initial download.
-  static RemoteForest BuildRemoteForest(syncer::UpdateResponseDataList updates);
+  // |tracker_for_recording_ignored_updates| must not be null and is exclusively
+  // used to record which updates where ignored because their parent couldn't be
+  // determined.
+  static RemoteForest BuildRemoteForest(
+      syncer::UpdateResponseDataList updates,
+      SyncedNoteTracker* tracker_for_recording_ignored_updates);
 
   // Computes note pairs that should be matched by GUID. Local note
   // GUIDs may be regenerated for the case where they collide with a remote GUID
@@ -192,8 +197,8 @@ class NoteModelMerger {
       size_t index,
       const std::string& suffix) const;
 
-  vivaldi::NotesModel* const notes_model_;
-  SyncedNoteTracker* const note_tracker_;
+  const raw_ptr<vivaldi::NotesModel> notes_model_;
+  const raw_ptr<SyncedNoteTracker> note_tracker_;
   // Preprocessed remote nodes in the form a forest where each tree's root is a
   // permanent node. Computed upon construction via BuildRemoteForest().
   const RemoteForest remote_forest_;

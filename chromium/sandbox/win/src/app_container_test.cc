@@ -17,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/process/process_info.h"
 #include "base/rand_util.h"
 #include "base/scoped_native_library.h"
@@ -27,13 +28,14 @@
 #include "base/task/thread_pool.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
+#include "base/win/access_token.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/scoped_localalloc.h"
 #include "base/win/scoped_process_information.h"
+#include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "sandbox/win/src/app_container_base.h"
 #include "sandbox/win/src/sandbox_factory.h"
-#include "sandbox/win/src/sync_policy_test.h"
-#include "sandbox/win/src/win_utils.h"
 #include "sandbox/win/tests/common/controller.h"
 #include "sandbox/win/tests/common/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,14 +49,18 @@ const wchar_t kAppContainerSid[] =
     L"924012148-2839372144";
 
 // Some tests depend on a timeout happening (e.g. to detect if firewall blocks a
-// TCP/UDP connection from App Container). However, if process startup time is
-// too slow (which can happen on slower bots with a high degree of test
-// concurrency) then tiny_timeout is not long enough, so a slightly longer
-// timeout is used here to avoid having to retry flaky tests.
-DWORD test_timeout() {
-  const static DWORD kMillisTimeout =
-      TestTimeouts::tiny_timeout().InMilliseconds() * 2;
-  return kMillisTimeout;
+// TCP/UDP connection from App Container). This does timeout intentionally for
+// some tests, so can't be too long or test execution takes too long, but needs
+// to be long enough to verify that the connection really did fail.
+DWORD network_timeout() {
+  return base::Seconds(1).InMilliseconds();
+}
+
+// Timeout on waiting for a process to start. Since this should always succeed,
+// this can be longer than the network timeout above without unnecessarily
+// slowing down the test execution time.
+DWORD process_start_timeout() {
+  return base::Seconds(10).InMilliseconds();
 }
 
 std::wstring GenerateRandomPackageName() {
@@ -62,78 +68,55 @@ std::wstring GenerateRandomPackageName() {
                             base::RandUint64());
 }
 
-const char* TokenTypeToName(TOKEN_TYPE token_type) {
-  return token_type == ::TokenPrimary ? "Primary Token" : "Impersonation Token";
+const char* TokenTypeToName(bool impersonation) {
+  return impersonation ? "Impersonation Token" : "Primary Token";
 }
 
-void CheckToken(HANDLE token,
-                TOKEN_TYPE token_type,
+void CheckToken(const absl::optional<base::win::AccessToken>& token,
+                bool impersonation,
                 PSECURITY_CAPABILITIES security_capabilities,
-                BOOL restricted) {
-  ASSERT_EQ(restricted, ::IsTokenRestricted(token))
-      << TokenTypeToName(token_type);
-
-  DWORD appcontainer;
-  DWORD return_length;
-  ASSERT_TRUE(::GetTokenInformation(token, ::TokenIsAppContainer, &appcontainer,
-                                    sizeof(appcontainer), &return_length))
-      << TokenTypeToName(token_type);
-  ASSERT_TRUE(appcontainer) << TokenTypeToName(token_type);
-  TOKEN_TYPE token_type_real;
-  ASSERT_TRUE(::GetTokenInformation(token, ::TokenType, &token_type_real,
-                                    sizeof(token_type_real), &return_length))
-      << TokenTypeToName(token_type);
-  ASSERT_EQ(token_type_real, token_type) << TokenTypeToName(token_type);
-  if (token_type == ::TokenImpersonation) {
-    SECURITY_IMPERSONATION_LEVEL imp_level;
-    ASSERT_TRUE(::GetTokenInformation(token, ::TokenImpersonationLevel,
-                                      &imp_level, sizeof(imp_level),
-                                      &return_length))
-        << TokenTypeToName(token_type);
-    ASSERT_EQ(imp_level, ::SecurityImpersonation)
-        << TokenTypeToName(token_type);
+                bool restricted) {
+  ASSERT_TRUE(token);
+  EXPECT_EQ(restricted, token->IsRestricted())
+      << TokenTypeToName(impersonation);
+  EXPECT_TRUE(token->IsAppContainer()) << TokenTypeToName(impersonation);
+  EXPECT_EQ(token->IsImpersonation(), impersonation)
+      << TokenTypeToName(impersonation);
+  if (impersonation) {
+    EXPECT_FALSE(token->IsIdentification()) << TokenTypeToName(impersonation);
   }
 
-  std::unique_ptr<Sid> package_sid;
-  ASSERT_TRUE(GetTokenAppContainerSid(token, &package_sid))
-      << TokenTypeToName(token_type);
-  EXPECT_TRUE(::EqualSid(security_capabilities->AppContainerSid,
-                         package_sid->GetPSID()))
-      << TokenTypeToName(token_type);
+  absl::optional<base::win::Sid> package_sid = token->AppContainerSid();
+  ASSERT_TRUE(package_sid) << TokenTypeToName(impersonation);
+  EXPECT_TRUE(package_sid->Equal(security_capabilities->AppContainerSid))
+      << TokenTypeToName(impersonation);
 
-  std::vector<SidAndAttributes> capabilities;
-  ASSERT_TRUE(GetTokenGroups(token, ::TokenCapabilities, &capabilities))
-      << TokenTypeToName(token_type);
-
+  std::vector<base::win::AccessToken::Group> capabilities =
+      token->Capabilities();
   ASSERT_EQ(capabilities.size(), security_capabilities->CapabilityCount)
-      << TokenTypeToName(token_type);
+      << TokenTypeToName(impersonation);
   for (size_t index = 0; index < capabilities.size(); ++index) {
     EXPECT_EQ(capabilities[index].GetAttributes(),
               security_capabilities->Capabilities[index].Attributes)
-        << TokenTypeToName(token_type);
-    EXPECT_TRUE(::EqualSid(capabilities[index].GetPSID(),
-                           security_capabilities->Capabilities[index].Sid))
-        << TokenTypeToName(token_type);
+        << TokenTypeToName(impersonation);
+    EXPECT_TRUE(capabilities[index].GetSid().Equal(
+        security_capabilities->Capabilities[index].Sid))
+        << TokenTypeToName(impersonation);
   }
 }
 
 void CheckProcessToken(HANDLE process,
                        PSECURITY_CAPABILITIES security_capabilities,
                        bool restricted) {
-  HANDLE token_handle;
-  ASSERT_TRUE(::OpenProcessToken(process, TOKEN_ALL_ACCESS, &token_handle));
-  base::win::ScopedHandle token(token_handle);
-  CheckToken(token_handle, ::TokenPrimary, security_capabilities, restricted);
+  CheckToken(base::win::AccessToken::FromProcess(process), false,
+             security_capabilities, restricted);
 }
 
 void CheckThreadToken(HANDLE thread,
                       PSECURITY_CAPABILITIES security_capabilities,
                       bool restricted) {
-  HANDLE token_handle;
-  ASSERT_TRUE(::OpenThreadToken(thread, TOKEN_ALL_ACCESS, TRUE, &token_handle));
-  base::win::ScopedHandle token(token_handle);
-  CheckToken(token_handle, ::TokenImpersonation, security_capabilities,
-             restricted);
+  CheckToken(base::win::AccessToken::FromThread(thread), true,
+             security_capabilities, restricted);
 }
 
 // Check for LPAC using an access check. We could query for a security attribute
@@ -151,13 +134,14 @@ void CheckLpacToken(HANDLE process) {
   ASSERT_TRUE(::ConvertStringSecurityDescriptorToSecurityDescriptor(
       L"O:SYG:SYD:(A;;0x3;;;WD)(A;;0x1;;;AC)(A;;0x2;;;S-1-15-2-2)",
       SDDL_REVISION_1, &security_desc_ptr, nullptr));
-  std::unique_ptr<void, LocalFreeDeleter> security_desc(security_desc_ptr);
+  base::win::ScopedLocalAlloc security_desc =
+      base::win::TakeLocalAlloc(security_desc_ptr);
   GENERIC_MAPPING generic_mapping = {};
   PRIVILEGE_SET priv_set = {};
   DWORD priv_set_length = sizeof(PRIVILEGE_SET);
   DWORD granted_access;
   BOOL access_status;
-  ASSERT_TRUE(::AccessCheck(security_desc_ptr, token.Get(), MAXIMUM_ALLOWED,
+  ASSERT_TRUE(::AccessCheck(security_desc.get(), token.Get(), MAXIMUM_ALLOWED,
                             &generic_mapping, &priv_set, &priv_set_length,
                             &granted_access, &access_status));
   ASSERT_TRUE(access_status);
@@ -169,8 +153,13 @@ void CheckLpacToken(HANDLE process) {
 // isn't a security concern.
 std::wstring GetAppContainerProfileName() {
   std::string sandbox_base_name = std::string("cr.sb.net");
-  std::string appcontainer_id = base::WideToUTF8(
-      base::CommandLine::ForCurrentProcess()->GetProgram().value());
+  // Create a unique app container ID for the test case. This ensures that if
+  // multiple tests are running concurrently they don't mess with each other's
+  // app containers.
+  std::string appcontainer_id(
+      testing::UnitTest::GetInstance()->current_test_info()->test_case_name());
+  appcontainer_id +=
+      testing::UnitTest::GetInstance()->current_test_info()->name();
   auto sha1 = base::SHA1HashString(appcontainer_id);
   std::string profile_name = base::StrCat(
       {sandbox_base_name, base::HexEncode(sha1.data(), sha1.size())});
@@ -196,10 +185,10 @@ ResultCode AddNetworkAppContainerPolicy(TargetPolicy* policy) {
   constexpr const wchar_t* kBaseCapsSt[] = {
       L"lpacChromeInstallFiles", L"registryRead", L"lpacIdentityServices",
       L"lpacCryptoServices"};
-  constexpr const WellKnownCapabilities kBaseCapsWK[] = {
-      WellKnownCapabilities::kPrivateNetworkClientServer,
-      WellKnownCapabilities::kInternetClient,
-      WellKnownCapabilities::kEnterpriseAuthentication};
+  constexpr const base::win::WellKnownCapability kBaseCapsWK[] = {
+      base::win::WellKnownCapability::kPrivateNetworkClientServer,
+      base::win::WellKnownCapability::kInternetClient,
+      base::win::WellKnownCapability::kEnterpriseAuthentication};
 
   for (const auto* cap : kBaseCapsSt) {
     if (!app_container->AddCapability(cap)) {
@@ -220,10 +209,10 @@ ResultCode AddNetworkAppContainerPolicy(TargetPolicy* policy) {
   return SBOX_ALL_OK;
 }
 
-void InitWinsock() {
+int InitWinsock() {
   WORD winsock_ver = MAKEWORD(2, 2);
   WSAData wsa_data;
-  WSAStartup(winsock_ver, &wsa_data);
+  return WSAStartup(winsock_ver, &wsa_data);
 }
 
 class WSAEventHandleTraits {
@@ -324,7 +313,7 @@ class AppContainerTest : public ::testing::Test {
   }
 
   std::wstring package_name_;
-  BrokerServices* broker_services_;
+  raw_ptr<BrokerServices> broker_services_;
   scoped_refptr<AppContainerBase> container_;
   scoped_refptr<TargetPolicy> policy_;
   base::win::ScopedProcessInformation scoped_process_info_;
@@ -342,12 +331,17 @@ class UDPEchoServer {
   bool Start();
   // Get the listening port. Must be called after Start().
   int GetPort();
+  // Gets the event that the child process should signal before trying to
+  // connect to the server. This handle is only valid for the lifetime of the
+  // UDPEchoServer. Must be called after Start().
+  HANDLE GetProcessSignalEvent();
 
  private:
   void RecvTask();
   ScopedSocketHandle socket_;
   int port_;
   base::test::TaskEnvironment environment_;
+  base::win::ScopedHandle trigger_event_;
 };
 
 UDPEchoServer::~UDPEchoServer() {
@@ -380,6 +374,8 @@ bool UDPEchoServer::Start() {
   if (ret == SOCKET_ERROR)
     return false;
   port_ = ntohs(bound_server.sin_port);
+  trigger_event_.Set(::CreateEvent(nullptr, /*bManualReset=*/TRUE,
+                                   /*bInitialState=*/FALSE, nullptr));
   return base::ThreadPool::PostTask(
       FROM_HERE,
       base::BindOnce(&UDPEchoServer::RecvTask, base::Unretained(this)));
@@ -409,8 +405,12 @@ void UDPEchoServer::RecvTask() {
   // Operation should be pending.
   ASSERT_EQ(WSA_IO_PENDING, ::WSAGetLastError());
 
-  // Wait to receive data from the child process. Only wait 1 second.
-  DWORD wait = WaitForSingleObject(recv_event.Get(), test_timeout());
+  // Wait for the target process to have certainly started.
+  DWORD wait =
+      WaitForSingleObject(trigger_event_.Get(), process_start_timeout());
+
+  // Wait to receive data from the child process.
+  wait = WaitForSingleObject(recv_event.Get(), network_timeout());
 
   if (wait != WAIT_OBJECT_0)
     return;  // No connections. Expected for certain types of tests.
@@ -438,8 +438,8 @@ void UDPEchoServer::RecvTask() {
     return;
   // If not, the operation should be pending.
   ASSERT_EQ(WSA_IO_PENDING, ::WSAGetLastError());
-  // Wait for send. Only wait 1 second.
-  wait = WaitForSingleObject(send_event.Get(), test_timeout());
+  // Wait for send.
+  wait = WaitForSingleObject(send_event.Get(), network_timeout());
   // Send should always succeed in a timely manner.
   EXPECT_EQ(wait, WAIT_OBJECT_0);
 }
@@ -448,7 +448,30 @@ int UDPEchoServer::GetPort() {
   return port_;
 }
 
+HANDLE UDPEchoServer::GetProcessSignalEvent() {
+  return trigger_event_.Get();
+}
+
 }  // namespace
+
+SBOX_TESTS_COMMAND int AppContainerEvent_Open(int argc, wchar_t** argv) {
+  if (argc != 1)
+    return SBOX_TEST_FAILED_TO_EXECUTE_COMMAND;
+
+  base::win::ScopedHandle event_open(
+      ::OpenEvent(EVENT_ALL_ACCESS, false, argv[0]));
+  DWORD error_open = ::GetLastError();
+
+  if (event_open.IsValid())
+    return SBOX_TEST_SUCCEEDED;
+
+  if (ERROR_ACCESS_DENIED == error_open || ERROR_BAD_PATHNAME == error_open ||
+      ERROR_FILE_NOT_FOUND == error_open) {
+    return SBOX_TEST_DENIED;
+  }
+
+  return SBOX_TEST_FAILED;
+}
 
 TEST_F(AppContainerTest, DenyOpenEventForLowBox) {
   if (base::win::GetVersion() < base::win::Version::WIN8)
@@ -459,7 +482,7 @@ TEST_F(AppContainerTest, DenyOpenEventForLowBox) {
   EXPECT_EQ(SBOX_ALL_OK, runner.GetPolicy()->SetLowBox(kAppContainerSid));
   // Run test once, this ensures the app container directory exists, we
   // ignore the result.
-  runner.RunTest(L"Event_Open f test");
+  runner.RunTest(L"AppContainerEvent_Open test");
   std::wstring event_name = L"AppContainerNamedObjects\\";
   event_name += kAppContainerSid;
   event_name += L"\\test";
@@ -468,7 +491,7 @@ TEST_F(AppContainerTest, DenyOpenEventForLowBox) {
       ::CreateEvent(nullptr, false, false, event_name.c_str()));
   ASSERT_TRUE(event.IsValid());
 
-  EXPECT_EQ(SBOX_TEST_DENIED, runner.RunTest(L"Event_Open f test"));
+  EXPECT_EQ(SBOX_TEST_DENIED, runner.RunTest(L"AppContainerEvent_Open test"));
 }
 
 TEST_F(AppContainerTest, CheckIncompatibleOptions) {
@@ -530,8 +553,9 @@ TEST_F(AppContainerTest, WithCapabilities) {
   if (!container_)
     return;
 
-  container_->AddCapability(kInternetClient);
-  container_->AddCapability(kInternetClientServer);
+  container_->AddCapability(base::win::WellKnownCapability::kInternetClient);
+  container_->AddCapability(
+      base::win::WellKnownCapability::kInternetClientServer);
   policy_->SetTokenLevel(USER_UNPROTECTED, USER_UNPROTECTED);
   policy_->SetJobLevel(JOB_NONE, 0);
 
@@ -548,8 +572,9 @@ TEST_F(AppContainerTest, WithCapabilitiesRestricted) {
   if (!container_)
     return;
 
-  container_->AddCapability(kInternetClient);
-  container_->AddCapability(kInternetClientServer);
+  container_->AddCapability(base::win::WellKnownCapability::kInternetClient);
+  container_->AddCapability(
+      base::win::WellKnownCapability::kInternetClientServer);
   policy_->SetTokenLevel(USER_LOCKDOWN, USER_RESTRICTED_SAME_ACCESS);
   policy_->SetJobLevel(JOB_NONE, 0);
 
@@ -566,10 +591,13 @@ TEST_F(AppContainerTest, WithImpersonationCapabilities) {
   if (!container_)
     return;
 
-  container_->AddCapability(kInternetClient);
-  container_->AddCapability(kInternetClientServer);
-  container_->AddImpersonationCapability(kPrivateNetworkClientServer);
-  container_->AddImpersonationCapability(kPicturesLibrary);
+  container_->AddCapability(base::win::WellKnownCapability::kInternetClient);
+  container_->AddCapability(
+      base::win::WellKnownCapability::kInternetClientServer);
+  container_->AddImpersonationCapability(
+      base::win::WellKnownCapability::kPrivateNetworkClientServer);
+  container_->AddImpersonationCapability(
+      base::win::WellKnownCapability::kPicturesLibrary);
   policy_->SetTokenLevel(USER_UNPROTECTED, USER_UNPROTECTED);
   policy_->SetJobLevel(JOB_NONE, 0);
 
@@ -625,7 +653,7 @@ SBOX_TESTS_COMMAND int CheckIsAppContainer(int argc, wchar_t** argv) {
 // port to connect to. Third parameter indicates whether the socket should be
 // brokered (1) or created in-process (0).
 //
-// SBOX_TEST_FAILED_TO_RUN_TEST - Test failed to run e.g. invalid parameters.
+// SBOX_TEST_INVALID_PARAMETER - Invalid number of parameters.
 //
 // SBOX_TEST_FIRST_ERROR - Could not create socket from call to WSASocket or
 // socket broker operation.
@@ -633,20 +661,32 @@ SBOX_TESTS_COMMAND int CheckIsAppContainer(int argc, wchar_t** argv) {
 // SBOX_TEST_SECOND_ERROR - Could not call successfully perform a non-blocking
 // TCP connect().
 //
+// SBOX_TEST_FIFTH_ERROR - Could not acquire target services.
+//
+// SBOX_TEST_SIXTH_ERROR - Could not create necessary event for overlapped
+// Connect operation.
+//
+// SBOX_TEST_SEVENTH_ERROR - Could not call WSAEventSelect on connect event.
+//
 // SBOX_TEST_TIMED_OUT - The connect timed out. This might be the correct result
 // for certain types of tests e.g. when App Container is blocking either a TCP
 // connect.
+//
+// This function can also return a WSAError if Winsock fails to initialize
+// correctly.
 SBOX_TESTS_COMMAND int Socket_CreateTCP(int argc, wchar_t** argv) {
-  InitWinsock();
+  int init_status = InitWinsock();
+  if (init_status != ERROR_SUCCESS)
+    return init_status;
   SOCKET socket_handle = INVALID_SOCKET;
 
   if (argc < 3)
-    return SBOX_TEST_FAILED_TO_RUN_TEST;
+    return SBOX_TEST_INVALID_PARAMETER;
 
   if (::_wtoi(argv[2]) == 1) {
     TargetServices* target_services = SandboxFactory::GetTargetServices();
     if (!target_services)
-      return SBOX_TEST_FAILED_TO_RUN_TEST;
+      return SBOX_TEST_FIFTH_ERROR;
     socket_handle = target_services->CreateBrokeredSocket(AF_INET, SOCK_STREAM,
                                                           IPPROTO_TCP);
   } else {
@@ -667,14 +707,16 @@ SBOX_TESTS_COMMAND int Socket_CreateTCP(int argc, wchar_t** argv) {
 
   HANDLE connect_event_handle = WSACreateEvent();
   if (connect_event_handle == WSA_INVALID_EVENT)
-    return SBOX_TEST_FAILED_TO_RUN_TEST;
+    return SBOX_TEST_SIXTH_ERROR;
+
   ScopedWSAEventHandle connect_event(connect_event_handle);
   // For TCP sockets, wait on the connect.
   int event_select =
       WSAEventSelect(socket.Get(), connect_event.Get(), FD_CONNECT);
 
   if (event_select)
-    return SBOX_TEST_FAILED_TO_RUN_TEST;
+    return SBOX_TEST_SEVENTH_ERROR;
+
   int ret = ::connect(socket.Get(), reinterpret_cast<sockaddr*>(&local_service),
                       sizeof(local_service));
   if (ret != SOCKET_ERROR || WSAGetLastError() != WSAEWOULDBLOCK) {
@@ -683,7 +725,7 @@ SBOX_TESTS_COMMAND int Socket_CreateTCP(int argc, wchar_t** argv) {
   // Non-blocking socket, always returns SOCKET_ERROR and sets WSAlastError to
   // WSAEWOULDBLOCK.
   // Wait for the connect to succeed.
-  DWORD wait = WaitForSingleObject(connect_event.Get(), test_timeout());
+  DWORD wait = WaitForSingleObject(connect_event.Get(), network_timeout());
 
   if (wait != WAIT_OBJECT_0)
     return SBOX_TEST_TIMED_OUT;
@@ -695,12 +737,14 @@ SBOX_TESTS_COMMAND int Socket_CreateTCP(int argc, wchar_t** argv) {
 // port, and transmit/receive data.
 //
 // First parameter should contain the host. Second parameter should contain the
-// port to connect to. Third parameter indicates whether the socket should be
-// brokered (1) or created in-process (0).
+// port to connect to. Third parameter contains an event that should be
+// signalled when the process is about to make the connection. Fourth parameter
+// indicates whether the socket should be brokered (1) or created in-process
+// (0).
 //
 // Returns:
 //
-// SBOX_TEST_FAILED_TO_RUN_TEST - Test failed to run e.g. invalid parameters.
+// SBOX_TEST_INVALID_PARAMETER - Invalid number of parameters.
 //
 // SBOX_TEST_FIRST_ERROR - Could not create socket from call to WSASocket or
 // socket broker operation.
@@ -711,20 +755,36 @@ SBOX_TESTS_COMMAND int Socket_CreateTCP(int argc, wchar_t** argv) {
 // SBOX_TEST_FOURTH_ERROR - Could not successfully perform a non-blocking UDP
 // recv().
 //
+// SBOX_TEST_FIFTH_ERROR - Could not acquire target services.
+//
+// SBOX_TEST_SIXTH_ERROR - Could not create necessary event for overlapped
+// SendTo operation.
+//
+// SBOX_TEST_SEVENTH_ERROR - Could not create necessary event for overlapped
+// Recv operation.
+//
 // SBOX_TEST_TIMED_OUT - One of the above operations (connect, sendto, recv)
 // timed out. This might be the correct result for certain types of tests e.g.
 // when App Container is blocking either a TCP connect or UDP recv.
+//
+// This function can also return a WSAError if Winsock fails to initialize
+// correctly.
 SBOX_TESTS_COMMAND int Socket_CreateUDP(int argc, wchar_t** argv) {
-  InitWinsock();
+  int init_status = InitWinsock();
+  if (init_status != ERROR_SUCCESS)
+    return init_status;
   SOCKET socket_handle = INVALID_SOCKET;
 
-  if (argc < 3)
-    return SBOX_TEST_FAILED_TO_RUN_TEST;
+  if (argc < 4)
+    return SBOX_TEST_INVALID_PARAMETER;
 
-  if (::_wtoi(argv[2]) == 1) {
+  // Set the event that the UDP server is waiting for.
+  ::SetEvent(base::win::Uint32ToHandle(::_wtoi(argv[2])));
+
+  if (::_wtoi(argv[3]) == 1) {
     TargetServices* target_services = SandboxFactory::GetTargetServices();
     if (!target_services)
-      return SBOX_TEST_FAILED_TO_RUN_TEST;
+      return SBOX_TEST_FIFTH_ERROR;
     socket_handle =
         target_services->CreateBrokeredSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   } else {
@@ -749,7 +809,7 @@ SBOX_TESTS_COMMAND int Socket_CreateUDP(int argc, wchar_t** argv) {
   write_buffer.len = sizeof(data);
   HANDLE send_event_handle = WSACreateEvent();
   if (send_event_handle == WSA_INVALID_EVENT)
-    return SBOX_TEST_FAILED_TO_RUN_TEST;
+    return SBOX_TEST_SIXTH_ERROR;
   ScopedWSAEventHandle send_event(send_event_handle);
   OVERLAPPED write_overlapped = {};
   write_overlapped.hEvent = send_event.Get();
@@ -762,7 +822,7 @@ SBOX_TESTS_COMMAND int Socket_CreateUDP(int argc, wchar_t** argv) {
     // Winsock should return WSA_IO_PENDING and we wait on the event.
     if (WSAGetLastError() != WSA_IO_PENDING)
       return SBOX_TEST_THIRD_ERROR;
-    DWORD wait = WaitForSingleObject(send_event.Get(), test_timeout());
+    DWORD wait = WaitForSingleObject(send_event.Get(), network_timeout());
 
     if (wait != WAIT_OBJECT_0)
       return SBOX_TEST_TIMED_OUT;
@@ -775,7 +835,7 @@ SBOX_TESTS_COMMAND int Socket_CreateUDP(int argc, wchar_t** argv) {
   read_buffer.len = sizeof(recv_buf);
   HANDLE read_event_handle = WSACreateEvent();
   if (read_event_handle == WSA_INVALID_EVENT)
-    return SBOX_TEST_FAILED_TO_RUN_TEST;
+    return SBOX_TEST_SEVENTH_ERROR;
   ScopedWSAEventHandle read_event(read_event_handle);
   OVERLAPPED read_overlapped = {};
   read_overlapped.hEvent = read_event.Get();
@@ -789,7 +849,7 @@ SBOX_TESTS_COMMAND int Socket_CreateUDP(int argc, wchar_t** argv) {
     if (WSAGetLastError() != WSA_IO_PENDING) {
       return SBOX_TEST_FOURTH_ERROR;
     }
-    DWORD wait = WaitForSingleObject(read_event.Get(), test_timeout());
+    DWORD wait = WaitForSingleObject(read_event.Get(), network_timeout());
 
     if (wait != WAIT_OBJECT_0)
       return SBOX_TEST_TIMED_OUT;
@@ -835,7 +895,7 @@ class SocketBrokerTest
                            /* add brokering rule */ bool>> {
  public:
   void SetUp() override {
-    InitWinsock();
+    ASSERT_EQ(ERROR_SUCCESS, InitWinsock());
     SetUpSandboxPolicy();
   }
 
@@ -929,10 +989,12 @@ TEST_P(SocketBrokerTest, SocketBrokerTestUDP) {
 
   std::wstring hostname = GetTestHostName();
   ASSERT_TRUE(!hostname.empty());
+  runner_.GetPolicy()->AddHandleToShare(server.GetProcessSignalEvent());
   EXPECT_EQ(
       GetExpectedTestResult(),
-      runner_.RunTest(base::StringPrintf(L"Socket_CreateUDP %ls %d %d",
+      runner_.RunTest(base::StringPrintf(L"Socket_CreateUDP %ls %d %d %d",
                                          hostname.c_str(), server.GetPort(),
+                                         server.GetProcessSignalEvent(),
                                          IsTestUsingBrokeredSockets() ? 1 : 0)
                           .c_str()));
 }

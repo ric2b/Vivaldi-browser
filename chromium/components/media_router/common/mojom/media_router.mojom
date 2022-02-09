@@ -8,6 +8,7 @@ import "components/media_router/common/mojom/logger.mojom";
 import "components/media_router/common/mojom/media_controller.mojom";
 import "components/media_router/common/mojom/media_route_provider_id.mojom";
 import "components/media_router/common/mojom/media_status.mojom";
+import "components/media_router/common/mojom/route_request_result_code.mojom";
 import "components/mirroring/mojom/mirroring_service_host.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/ip_address.mojom";
@@ -197,27 +198,6 @@ struct RouteMessage {
   array<uint8>? data;
 };
 
-// Keep in sync with:
-// - RouteRequestResult::ResultCode in route_request_result.h
-// - MediaRouteProviderResult enum in tools/metrics/histograms.xml.
-// - mr.RouteRequestResultCode in route_request_error.js
-// - media_router_mojom_traits.h
-enum RouteRequestResultCode {
-  UNKNOWN_ERROR,
-  OK,
-  TIMED_OUT,
-  ROUTE_NOT_FOUND,
-  SINK_NOT_FOUND,
-  INVALID_ORIGIN,
-  OFF_THE_RECORD_MISMATCH,
-  NO_SUPPORTED_PROVIDER,
-  CANCELLED,
-  ROUTE_ALREADY_EXISTS,
-  DESKTOP_PICKER_FAILED,
-  ROUTE_ALREADY_TERMINATED
-// New values must be added here.
-};
-
 // Used to pass a pair of PresentationConnection pipes as part of a route
 // result.  An MRP may return this as part of any route creation callback to
 // allow direct communication with the controlling page.
@@ -335,44 +315,6 @@ interface MediaRouteProvider {
                  string? error_text,
                  RouteRequestResultCode result_code);
 
-  // Creates a new route for |media_source| that connects to the established
-  // route given by |route_id|.
-  //
-  // The presentation ID of the new route will be |presentation_id|, but it may
-  // be overridden by a provider implementation.  The presentation ID will be
-  // used by the presentation API to refer to the created route.
-  //
-  // |origin| and |tab_id| are used for validating same-origin/tab scopes; see
-  // CreateRoute for additional documentation.
-  //
-  // If |timeout| is positive, it will be used in place of the default timeout
-  // defined by Media Route Provider Manager; see CreateRoute for additional
-  // documentation.
-  //
-  // If the route request was created by an OffTheRecord profile,
-  // |off_the_record| must be true.
-  //
-  // If the operation was successful, |route| will be defined and
-  // |error_text| will be null.  If the operation failed, |route| will be null
-  // and |error_text| will be set.  If |connection| is set, it should be
-  // returned to the presentation controller for communication with the
-  // MRP/receiver.
-  //
-  // |result_code| will be set to OK if successful, or an error code if an error
-  // occurred.
-  ConnectRouteByRouteId(
-      string media_source,
-      string route_id,
-      string presentation_id,
-      url.mojom.Origin origin,
-      int32 tab_id,
-      mojo_base.mojom.TimeDelta timeout,
-      bool off_the_record) =>
-          (MediaRoute? route,
-           RoutePresentationConnection? connection,
-           string? error_text,
-           RouteRequestResultCode result_code);
-
   // Terminates the route specified by |route_id|.  If the route was terminated
   // successfully, |result_code| is set to OK and |error_text| is null.
   // Otherwise, |result_code| is an error code and |error_text| describes the
@@ -478,18 +420,6 @@ interface MediaRouteProvider {
 // across media sources, sinks, and issues. The MediaRouter lives in the browser
 // process.
 interface MediaRouter {
-
-  // Represents overall media sink availability states.
-  // UNAVAILABLE - No sinks are available.
-  // PER_SOURCE - Sinks are available, but are only compatible with specific
-  //              media sources.
-  // AVAILABLE - A sink is available regardless of source.
-  enum SinkAvailability {
-    UNAVAILABLE,
-    PER_SOURCE,
-    AVAILABLE
-  };
-
   // Registers a MediaRouteProvider with the MediaRouter.
   RegisterMediaRouteProvider(MediaRouteProviderId provider_id,
       pending_remote<MediaRouteProvider> media_router_provider);
@@ -512,11 +442,6 @@ interface MediaRouter {
                   array<MediaRoute> routes,
                   string media_source,
                   array<string> joinable_route_ids);
-
-  // Called when the availability of media sinks for a MediaRouteProvider has
-  // been updated.
-  OnSinkAvailabilityUpdated(MediaRouteProviderId provider_id,
-                            SinkAvailability availability);
 
   // Called when the state of presentation connected to route |route_id| has
   // changed to |state|.

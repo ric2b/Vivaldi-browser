@@ -14,7 +14,6 @@
 #include "base/component_export.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
@@ -305,6 +304,8 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) MultiplexRouter
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // Owned by |dispatcher_| below.
+  // `header_validator_` is not a raw_ptr<...> for performance reasons (based on
+  // analysis of sampling profiler data).
   MessageHeaderValidator* header_validator_ = nullptr;
 
   MessageDispatcher dispatcher_;

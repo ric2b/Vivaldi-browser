@@ -20,8 +20,8 @@
 #include "third_party/blink/renderer/modules/xr/xr_viewport.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/geometry/double_size.h"
-#include "third_party/blink/renderer/platform/geometry/float_point.h"
-#include "third_party/blink/renderer/platform/geometry/int_size.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/size.h"
 
 #include <algorithm>
 
@@ -121,8 +121,8 @@ XRWebGLLayer* XRWebGLLayer::Create(XRSession* session,
 
   DoubleSize framebuffers_size = session->DefaultFramebufferSize();
 
-  IntSize desired_size(framebuffers_size.Width() * framebuffer_scale,
-                       framebuffers_size.Height() * framebuffer_scale);
+  gfx::Size desired_size(framebuffers_size.Width() * framebuffer_scale,
+                         framebuffers_size.Height() * framebuffer_scale);
 
   // Create an opaque WebGL Framebuffer
   WebGLFramebuffer* framebuffer =
@@ -176,14 +176,14 @@ XRWebGLLayer::~XRWebGLLayer() {
 
 uint32_t XRWebGLLayer::framebufferWidth() const {
   if (drawing_buffer_) {
-    return drawing_buffer_->size().Width();
+    return drawing_buffer_->size().width();
   }
   return webgl_context_->drawingBufferWidth();
 }
 
 uint32_t XRWebGLLayer::framebufferHeight() const {
   if (drawing_buffer_) {
-    return drawing_buffer_->size().Height();
+    return drawing_buffer_->size().height();
   }
   return webgl_context_->drawingBufferHeight();
 }
@@ -430,8 +430,8 @@ void XRWebGLLayer::OnResize() {
     // drawing buffer size to match the canvas.
     DoubleSize framebuffers_size = session()->DefaultFramebufferSize();
 
-    IntSize desired_size(framebuffers_size.Width() * framebuffer_scale_,
-                         framebuffers_size.Height() * framebuffer_scale_);
+    gfx::Size desired_size(framebuffers_size.Width() * framebuffer_scale_,
+                           framebuffers_size.Height() * framebuffer_scale_);
     drawing_buffer_->Resize(desired_size);
   }
 

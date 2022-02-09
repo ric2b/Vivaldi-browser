@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_BINARY_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_BINARY_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/c_tool.h"
 #include "gn/config_values.h"
 #include "gn/ninja_target_writer.h"
@@ -69,6 +68,8 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
   void WriteLinkerFlags(std::ostream& out,
                         const Tool* tool,
                         const SourceFile* optional_def_file);
+  void WriteCustomLinkerFlags(std::ostream& out, const Tool* tool);
+  void WriteLibrarySearchPath(std::ostream& out, const Tool* tool);
   void WriteLibs(std::ostream& out, const Tool* tool);
   void WriteFrameworks(std::ostream& out, const Tool* tool);
   void WriteSwiftModules(std::ostream& out,
@@ -82,7 +83,8 @@ class NinjaBinaryTargetWriter : public NinjaTargetWriter {
   std::string rule_prefix_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(NinjaBinaryTargetWriter);
+  NinjaBinaryTargetWriter(const NinjaBinaryTargetWriter&) = delete;
+  NinjaBinaryTargetWriter& operator=(const NinjaBinaryTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_BINARY_TARGET_WRITER_H_

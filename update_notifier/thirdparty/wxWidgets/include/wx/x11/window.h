@@ -30,7 +30,7 @@ public:
         const wxPoint& pos = wxDefaultPosition,
         const wxSize& size = wxDefaultSize,
         long style = 0,
-        const wxString& name = wxPanelNameStr)
+        const wxString& name = wxASCII_STR(wxPanelNameStr))
     {
         Init();
         Create(parent, id, pos, size, style, name);
@@ -43,13 +43,14 @@ public:
         const wxPoint& pos = wxDefaultPosition,
         const wxSize& size = wxDefaultSize,
         long style = 0,
-        const wxString& name = wxPanelNameStr);
+        const wxString& name = wxASCII_STR(wxPanelNameStr));
 
     virtual void Raise();
     virtual void Lower();
 
-    virtual void SetLabel(const wxString& label);
-    virtual wxString GetLabel() const;
+    // SetLabel(), which does nothing in wxWindow
+    virtual void SetLabel(const wxString& label) wxOVERRIDE { m_Label = label; }
+    virtual wxString GetLabel() const wxOVERRIDE            { return m_Label; }
 
     virtual bool Show( bool show = true );
     virtual bool Enable( bool enable = true );
@@ -177,6 +178,7 @@ protected:
         int incW, int incH);
     virtual void DoCaptureMouse();
     virtual void DoReleaseMouse();
+    virtual void KillFocus();
 
 #if wxUSE_TOOLTIPS
     virtual void DoSetToolTip( wxToolTip *tip );
@@ -186,9 +188,11 @@ private:
     // common part of all ctors
     void Init();
 
-    DECLARE_DYNAMIC_CLASS(wxWindowX11)
+    wxString m_Label;
+
+    wxDECLARE_DYNAMIC_CLASS(wxWindowX11);
     wxDECLARE_NO_COPY_CLASS(wxWindowX11);
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 // ----------------------------------------------------------------------------
@@ -199,7 +203,7 @@ private:
 // undesired effects.
 //
 // Usage: create an instance of this class on the stack to disable the size
-// optimisation, it will be reenabled as soon as the object goes out from scope.
+// optimisation, it will be re-enabled as soon as the object goes out from scope.
 // ----------------------------------------------------------------------------
 
 class WXDLLIMPEXP_CORE wxNoOptimize

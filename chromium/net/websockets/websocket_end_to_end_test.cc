@@ -19,15 +19,15 @@
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -65,6 +65,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_constants.h"
 
 namespace net {
 
@@ -321,7 +322,7 @@ class WebSocketEndToEndTest : public TestWithTaskEnvironment {
                               origin, SiteForCookies::FromOrigin(origin));
     event_interface_ = new ConnectTestingEventInterface();
     channel_ = std::make_unique<WebSocketChannel>(
-        base::WrapUnique(event_interface_), &context_);
+        base::WrapUnique(event_interface_.get()), &context_);
     channel_->SendAddChannelRequest(
         GURL(socket_url), sub_protocols_, origin, site_for_cookies,
         isolation_info, HttpRequestHeaders(), TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -329,7 +330,7 @@ class WebSocketEndToEndTest : public TestWithTaskEnvironment {
     return !event_interface_->failed();
   }
 
-  ConnectTestingEventInterface* event_interface_;  // owned by channel_
+  raw_ptr<ConnectTestingEventInterface> event_interface_;  // owned by channel_
   std::unique_ptr<TestProxyDelegateWithProxyInfo> proxy_delegate_;
   TestURLRequestContext context_;
   std::unique_ptr<WebSocketChannel> channel_;
@@ -648,12 +649,16 @@ TEST_F(WebSocketEndToEndTest, DnsSchemeUpgradeSupported) {
   replacements.SetSchemeStr(url::kWsScheme);
   GURL ws_url = wss_url.ReplaceComponents(replacements);
 
-  // Build a mocked resolver that returns ERR_DNS_NAME_HTTPS_ONLY for the
-  // first lookup, regardless of the request scheme. Real resolvers should
-  // only return this error when the scheme is "http" or "ws".
+  // Note that due to socket pool behavior, HostResolver will see the ws/wss
+  // requests as http/https.
   MockHostResolver host_resolver;
-  host_resolver.rules()->AddSimulatedHTTPSServiceFormRecord("a.test");
-  host_resolver.rules()->AddRule("*", "127.0.0.1");
+  MockHostResolverBase::RuleResolver::RuleKey unencrypted_resolve_key;
+  unencrypted_resolve_key.scheme = url::kHttpScheme;
+  host_resolver.rules()->AddRule(std::move(unencrypted_resolve_key),
+                                 ERR_DNS_NAME_HTTPS_ONLY);
+  MockHostResolverBase::RuleResolver::RuleKey encrypted_resolve_key;
+  encrypted_resolve_key.scheme = url::kHttpsScheme;
+  host_resolver.rules()->AddRule(std::move(encrypted_resolve_key), "127.0.0.1");
   context_.set_host_resolver(&host_resolver);
 
   EXPECT_TRUE(ConnectAndWait(ws_url));

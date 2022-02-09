@@ -41,7 +41,7 @@
     wxWizardPage::GetBitmap() can also be overridden, but this should be very
     rarely needed.
 
-    @library{wxadv}
+    @library{wxcore}
     @category{miscwnd}
 
     @see wxWizard, @ref page_samples_wizard
@@ -53,7 +53,7 @@ public:
        Default constructor.
     */
     wxWizardPage();
-    
+
     /**
         Constructor accepts an optional bitmap which will be used for this page
         instead of the default one for this wizard (note that all bitmaps used should
@@ -142,7 +142,7 @@ public:
         The wizard finished button was pressed.
     @endEventTable
 
-    @library{wxadv}
+    @library{wxcore}
     @category{events}
 
     @see wxWizard, @ref page_samples_wizard
@@ -194,7 +194,7 @@ wxEventType wxEVT_WIZARD_BEFORE_PAGE_CHANGED;
     the pages order is known statically - on the other hand, if this is not the
     case you must derive your own class from wxWizardPage instead.
 
-    @library{wxadv}
+    @library{wxcore}
     @category{miscwnd}
 
     @see wxWizard, @ref page_samples_wizard
@@ -206,7 +206,7 @@ public:
        Default constructor.
     */
     wxWizardPageSimple();
-    
+
     /**
         Constructor takes the previous and next pages.
         They may be modified later by SetPrev() or SetNext().
@@ -220,7 +220,7 @@ public:
        Creates the wizard page.
        Must be called if the default constructor had been used to create the object.
     */
-    bool Create(wxWizard *parent = NULL, 
+    bool Create(wxWizard *parent = NULL,
                 wxWizardPage *prev = NULL,
                 wxWizardPage *next = NULL,
                 const wxBitmap& bitmap = wxNullBitmap);
@@ -339,7 +339,7 @@ public:
 
     See also wxDialog for other extended styles.
 
-    @library{wxadv}
+    @library{wxcore}
     @category{cmndlg}
 
     @see wxWizardEvent, wxWizardPage, @ref page_samples_wizard
@@ -504,7 +504,7 @@ public:
     virtual bool HasNextPage(wxWizardPage* page);
 
     /**
-        Returns @true if this page is not the last one in the wizard.
+        Returns @true if this page is not the first one in the wizard.
         The base class version implements this by calling
         @ref wxWizardPage::GetPrev "page->GetPrev" but this could be
         undesirable if, for example, the pages are created on demand only.
@@ -546,7 +546,7 @@ public:
         - @b wxWIZARD_HALIGN_LEFT: Left-aligns the bitmap.
         - @b wxWIZARD_HALIGN_CENTRE: Centres the bitmap horizontally.
         - @b wxWIZARD_HALIGN_RIGHT: Right-aligns the bitmap.
-        - @b wxWIZARD_TILE: @todo describe this
+        - @b wxWIZARD_TILE: The bitmap will be tiled to fit available space.
 
         See also SetMinimumBitmapWidth().
     */
@@ -585,4 +585,3 @@ public:
     */
     virtual void SetPageSize(const wxSize& sizePage);
 };
-

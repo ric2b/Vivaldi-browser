@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_handler_callbacks.h"
 #include "components/onc/onc_constants.h"
@@ -58,6 +57,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
  public:
   using GuidToPolicyMap =
       std::map<std::string, std::unique_ptr<base::DictionaryValue>>;
+
+  ManagedNetworkConfigurationHandler& operator=(
+      const ManagedNetworkConfigurationHandler&) = delete;
 
   virtual ~ManagedNetworkConfigurationHandler();
 
@@ -210,9 +212,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
       NetworkDeviceHandler* network_device_handler,
       NetworkConfigurationHandler* network_configuration_handler,
       UIProxyConfigService* ui_proxy_config_service);
-
- private:
-  DISALLOW_ASSIGN(ManagedNetworkConfigurationHandler);
 };
 
 }  // namespace chromeos

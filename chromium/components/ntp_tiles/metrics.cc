@@ -20,7 +20,8 @@ namespace {
 
 const int kLastTitleSource = static_cast<int>(TileTitleSource::LAST);
 
-// Identifiers for the various tile sources.
+// Identifiers for the various tile sources. Should sync with
+// NewTabPageProviders in histogram_suffixes_list.xml.
 const char kHistogramClientName[] = "client";
 const char kHistogramPopularName[] = "popular_fetched";
 const char kHistogramBakedInName[] = "popular_baked_in";
@@ -175,6 +176,12 @@ void RecordTileClick(const NTPTileImpression& impression) {
                            GetSourceHistogramName(impression.source).c_str()),
         impression.visual_type, LAST_RECORDED_TILE_TYPE + 1);
   }
+}
+
+void RecordsMigratedDefaultAppDeleted(
+    const DeletedTileType& most_visited_app_type) {
+  base::UmaHistogramEnumeration("NewTabPage.MostVisitedMigratedDefaultAppType",
+                                most_visited_app_type);
 }
 
 }  // namespace metrics

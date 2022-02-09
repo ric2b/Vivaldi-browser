@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
 #include "base/threading/thread_restrictions.h"
@@ -24,6 +24,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-forward.h"
@@ -69,7 +70,7 @@ struct Referrer;
 // helpers will suffice:
 //
 // - Classes that have a 1:1 relationship with one RenderFrameHost can often
-//   use `RenderDocumentHostUserData` instead.
+//   use `DocumentUserData` instead.
 // - Mojo interface implementations that have a 1 RenderFrameHost to many
 //   instances relationship can often use `DocumentService` instead.
 //
@@ -95,6 +96,9 @@ struct Referrer;
 // from the WebContentsObserver API. http://crbug.com/173325
 class CONTENT_EXPORT WebContentsObserver {
  public:
+  WebContentsObserver(const WebContentsObserver&) = delete;
+  WebContentsObserver& operator=(const WebContentsObserver&) = delete;
+
   // Frames and Views ----------------------------------------------------------
 
   // Called when a RenderFrame for |render_frame_host| is created in the
@@ -225,7 +229,8 @@ class CONTENT_EXPORT WebContentsObserver {
   // RenderProcessHostObserver::RenderProcessExited(); for code that doesn't
   // otherwise need to be a WebContentsObserver, that API is probably a better
   // choice.
-  virtual void RenderProcessGone(base::TerminationStatus status) {}
+  virtual void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) {}
 
   // This method is invoked when a WebContents swaps its visible RenderViewHost
   // with another one, possibly changing processes. The RenderViewHost that has
@@ -321,10 +326,10 @@ class CONTENT_EXPORT WebContentsObserver {
   // HasCommitted.
   //
   // The per-document / per-page data should be stored in
-  // RenderDocumentHostUserData / PageUserData instead of resetting it in
+  // DocumentUserData / PageUserData instead of resetting it in
   // DidFinishNavigation. (In particular, the page might be stored in the
   // back-forward cache instead of being deleted. See comments in PageUserData /
-  // RenderDocumentHostUserData for more details).
+  // DocumentUserData for more details).
   virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
 
   // Called after the contents replaces the |predecessor_contents| in its
@@ -341,7 +346,6 @@ class CONTENT_EXPORT WebContentsObserver {
   // loading for the first time (initiates outgoing requests), when incoming
   // data subsequently starts arriving, and when it finishes loading.
   virtual void DidStartLoading() {}
-  virtual void DidReceiveResponse() {}
   virtual void DidStopLoading() {}
 
   // The page has made some progress loading. |progress| is a value between 0.0
@@ -421,6 +425,9 @@ class CONTENT_EXPORT WebContentsObserver {
   // This corresponds to one NavigationController entry being created
   // (in the case of new navigations) or renavigated to (for back/forward
   // navigations).
+  //
+  // Note that this function is only dispatched for NavigationEntries of primary
+  // pages (e.g. not for prerendered pages or fenced frames).
   virtual void NavigationEntryCommitted(
       const LoadCommittedDetails& load_details) {}
 
@@ -487,12 +494,18 @@ class CONTENT_EXPORT WebContentsObserver {
   // Invoked every time the WebContents changes visibility.
   virtual void OnVisibilityChanged(Visibility visibility) {}
 
-  // Invoked when the main frame changes size.
-  virtual void MainFrameWasResized(bool width_changed) {}
+  // Invoked when the primary main frame changes size.
+  virtual void PrimaryMainFrameWasResized(bool width_changed) {}
 
   // Invoked when the given frame changes its window.name property.
   virtual void FrameNameChanged(RenderFrameHost* render_frame_host,
                                 const std::string& name) {}
+
+  // Invoked when the color scheme of the primary main document of the
+  // WebContents is updated (either because the primary main document's color
+  // has been inferred or the primary main document has changed).
+  virtual void InferredColorSchemeUpdated(
+      absl::optional<blink::mojom::PreferredColorScheme> color_scheme) {}
 
   // Called when a frame receives user activation. This may be called multiple
   // times for the same frame. This should not be used to determine a
@@ -514,9 +527,6 @@ class CONTENT_EXPORT WebContentsObserver {
   // |entry| may be null if the web page whose title changed has not yet had a
   // NavigationEntry assigned to it.
   virtual void TitleWasSet(NavigationEntry* entry) {}
-
-  virtual void AppCacheAccessed(const GURL& manifest_url,
-                                bool blocked_by_policy) {}
 
   // These methods are invoked when a Pepper plugin instance is created/deleted
   // in the DOM.
@@ -581,7 +591,7 @@ class CONTENT_EXPORT WebContentsObserver {
   // the renderer process. If the instance is created after the page is loaded,
   // it is recommended to call WebContents::GetFaviconURLs() to get the current
   // list as this callback will not be executed unless there is an update.
-  // |render_frame_host| is the main render frame host.
+  // `render_frame_host` is the main render frame host for the primary page.
   virtual void DidUpdateFaviconURL(
       RenderFrameHost* render_frame_host,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates) {}
@@ -652,6 +662,10 @@ class CONTENT_EXPORT WebContentsObserver {
   // Invoked when background color is changed.
   virtual void OnBackgroundColorChanged() {}
 
+  // Invoked when the ColorProvider instance associated with this WebContents
+  // has changed.
+  virtual void OnColorProviderChanged() {}
+
   // Called when a message is added to the console of the WebContents. This is
   // invoked before forwarding the message to the WebContents' delegate.
   // |source_id| is a URL. |untrusted_stack_trace| is not present for most
@@ -700,8 +714,6 @@ class CONTENT_EXPORT WebContentsObserver {
   virtual void MediaEffectivelyFullscreenChanged(bool is_fullscreen) {}
   virtual void MediaPictureInPictureChanged(bool is_picture_in_picture) {}
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
-  virtual void MediaBufferUnderflow(const MediaPlayerId& id) {}
-  virtual void MediaPlayerSeek(const MediaPlayerId& id) {}
   virtual void MediaDestroyed(const MediaPlayerId& id) {}
 
   // Invoked when the renderer process changes the page scale factor.
@@ -770,17 +782,6 @@ class CONTENT_EXPORT WebContentsObserver {
   // Called when a page ends capturing.
   virtual void CaptureFinished() {}
 
-  // VB-6063:
-  // Notifies the delegate that the page has made some progress loading.
-  // |progress| is a value between 0.0 (nothing loaded) to 1.0 (page fully
-  // loaded), |loaded_bytes| is the number of bytes currently downloaded,
-  // |loaded_elements| is the loaded elements, |total_elements| is
-  // the currently discovered total number of elements.
-  virtual void ExtendedLoadProgressChanged(double progress,
-                                           double loaded_bytes,
-                                           int loaded_elements,
-                                           int total_elements) {}
-
  protected:
   // Use this constructor when the object is tied to a single WebContents for
   // its entire lifetime.
@@ -801,9 +802,7 @@ class CONTENT_EXPORT WebContentsObserver {
 
   void ResetWebContents();
 
-  WebContents* web_contents_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsObserver);
+  raw_ptr<WebContents> web_contents_ = nullptr;
 };
 
 }  // namespace content

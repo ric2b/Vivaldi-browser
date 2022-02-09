@@ -7,6 +7,7 @@
 
 #include <queue>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -41,7 +42,7 @@ struct CONTENT_EXPORT RenderWidgetTargetResult {
                            bool latched_target);
   ~RenderWidgetTargetResult();
 
-  RenderWidgetHostViewBase* view = nullptr;
+  raw_ptr<RenderWidgetHostViewBase> view = nullptr;
   bool should_query_view = false;
   absl::optional<gfx::PointF> target_location = absl::nullopt;
   // When |latched_target| is false, we explicitly hit-tested events instead of
@@ -265,7 +266,7 @@ class RenderWidgetTargeter {
 
   RenderWidgetHostViewBase* vivaldi_active_down_target_ = nullptr;
 
-  Delegate* const delegate_;
+  const raw_ptr<Delegate> delegate_;
   base::WeakPtrFactory<RenderWidgetTargeter> weak_ptr_factory_{this};
 };
 

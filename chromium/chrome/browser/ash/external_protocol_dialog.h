@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "base/time/time.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -20,6 +19,8 @@ class WebContents;
 namespace views {
 class MessageBoxView;
 }
+
+namespace ash {
 
 // The external protocol dialog for Chrome OS shown when there are no handlers.
 class ExternalProtocolNoHandlersDialog : public views::DialogDelegate {
@@ -50,5 +51,7 @@ class ExternalProtocolNoHandlersDialog : public views::DialogDelegate {
   // The scheme of the url.
   std::string scheme_;
 };
+
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_EXTERNAL_PROTOCOL_DIALOG_H_

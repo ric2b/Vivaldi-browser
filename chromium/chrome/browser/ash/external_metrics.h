@@ -7,9 +7,7 @@
 
 #include <string>
 
-#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 
@@ -17,7 +15,7 @@ namespace metrics {
 class MetricSample;
 }  // namespace metrics
 
-namespace chromeos {
+namespace ash {
 
 // ExternalMetrics is a service that Chrome offers to Chrome OS to upload
 // metrics to the UMA server on its behalf.  Chrome periodically reads the
@@ -101,6 +99,6 @@ class ExternalMetrics : public base::RefCountedThreadSafe<ExternalMetrics> {
   base::TimeDelta collection_interval_;
 };
 
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_EXTERNAL_METRICS_H_

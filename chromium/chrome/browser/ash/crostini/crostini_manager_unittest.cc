@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/components/disks/mock_disk_mount_manager.h"
 #include "base/barrier_closure.h"
 #include "base/base64.h"
 #include "base/bind.h"
@@ -46,7 +47,6 @@
 #include "chromeos/dbus/seneschal/seneschal_client.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/dbus/userdataauth/fake_cryptohome_misc_client.h"
-#include "chromeos/disks/mock_disk_mount_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -250,6 +250,13 @@ class CrostiniManagerTest : public testing::Test {
     policy::PowerwashRequirementsChecker::InitializeSynchronouslyForTesting();
     TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
         std::make_unique<SystemNotificationHelper>());
+
+    vm_tools::cicerone::OsRelease os_release;
+    base::HistogramTester histogram_tester{};
+    os_release.set_pretty_name("Debian GNU/Linux 10 (bullseye)");
+    os_release.set_version_id("11");
+    os_release.set_id("debian");
+    fake_cicerone_client_->set_lxd_container_os_release(os_release);
   }
 
   void TearDown() override {
@@ -390,7 +397,7 @@ TEST_F(CrostiniManagerTest, StartTerminaVmPowerwashRequestError) {
       /* create_settings_service=*/false};
   settings_helper.ReplaceDeviceSettingsProviderWithStub();
   settings_helper.SetInteger(
-      chromeos::kDeviceRebootOnUserSignout,
+      ash::kDeviceRebootOnUserSignout,
       enterprise_management::DeviceRebootOnUserSignoutProto::ALWAYS);
 
   // Set cryptohome requiring powerwash.
@@ -425,7 +432,7 @@ TEST_F(CrostiniManagerTest,
       /* create_settings_service=*/false};
   settings_helper.ReplaceDeviceSettingsProviderWithStub();
   settings_helper.SetInteger(
-      chromeos::kDeviceRebootOnUserSignout,
+      ash::kDeviceRebootOnUserSignout,
       enterprise_management::DeviceRebootOnUserSignoutProto::ALWAYS);
 
   // Reset cryptohome state to undefined and make cryptohome unavailable.
@@ -796,7 +803,7 @@ class CrostiniManagerRestartTest : public CrostiniManagerTest,
   int restart_crostini_callback_count_ = 0;
   CrostiniResult last_crostini_callback_result_ = CrostiniResult::SUCCESS;
   int remove_crostini_callback_count_ = 0;
-  chromeos::disks::MockDiskMountManager* disk_mount_manager_mock_;
+  ash::disks::MockDiskMountManager* disk_mount_manager_mock_;
   base::HistogramTester histogram_tester_{};
 
   base::RepeatingCallback<void(mojom::InstallerState)> on_stage_started_ =
@@ -1236,6 +1243,36 @@ TEST_F(CrostiniManagerRestartTest, TimeoutWaitingForContainerStarted) {
       this);
   task_environment_.FastForwardBy(kLongTime);
   task_environment_.RunUntilIdle();
+  EXPECT_GE(fake_concierge_client_->create_disk_image_call_count(), 1);
+  EXPECT_GE(fake_concierge_client_->start_termina_vm_call_count(), 1);
+  ExpectCrostiniRestartResult(CrostiniResult::START_CONTAINER_TIMED_OUT);
+  ExpectRestarterUmaCount(1);
+}
+
+TEST_F(CrostiniManagerRestartTest,
+       HeartbeatKeepsContainerStartedFromTimingOut) {
+  fake_cicerone_client_->set_send_container_started_signal_delay(
+      base::TimeDelta::Max());
+  vm_tools::cicerone::LxdContainerStartingSignal signal;
+  signal.set_container_name(ContainerId::GetDefault().container_name);
+  signal.set_vm_name(ContainerId::GetDefault().vm_name);
+  signal.set_owner_id(CryptohomeIdForProfile(profile()));
+  signal.set_status(vm_tools::cicerone::LxdContainerStartingSignal::STARTING);
+
+  restart_id_ = crostini_manager()->RestartCrostini(
+      ContainerId::GetDefault(),
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), run_loop()->QuitClosure()),
+      this);
+
+  task_environment_.FastForwardBy(base::Days(4));
+  crostini_manager_->OnLxdContainerStarting(signal);
+  task_environment_.FastForwardBy(base::Days(4));
+  ASSERT_EQ(0, restart_crostini_callback_count_);
+
+  task_environment_.FastForwardBy(base::Days(4));
+  ASSERT_EQ(1, restart_crostini_callback_count_);
+
   EXPECT_GE(fake_concierge_client_->create_disk_image_call_count(), 1);
   EXPECT_GE(fake_concierge_client_->start_termina_vm_call_count(), 1);
   ExpectCrostiniRestartResult(CrostiniResult::START_CONTAINER_TIMED_OUT);
@@ -1743,7 +1780,7 @@ class CrostiniManagerEnterpriseReportingTest
   }
 
   void TearDown() override {
-    chromeos::disks::DiskMountManager::Shutdown();
+    ash::disks::DiskMountManager::Shutdown();
     CrostiniManagerRestartTest::TearDown();
   }
 };

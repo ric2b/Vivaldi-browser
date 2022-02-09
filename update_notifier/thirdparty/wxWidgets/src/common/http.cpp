@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_PROTOCOL_HTTP
 
@@ -37,7 +34,7 @@
 // wxHTTP
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxHTTP, wxProtocol)
+wxIMPLEMENT_DYNAMIC_CLASS(wxHTTP, wxProtocol);
 IMPLEMENT_PROTOCOL(wxHTTP, wxT("http"), wxT("80"), true)
 
 wxHTTP::wxHTTP()
@@ -360,7 +357,7 @@ bool wxHTTP::BuildRequest(const wxString& path, const wxString& method)
 
     // If there is no User-Agent defined, define it.
     if ( GetHeader(wxT("User-Agent")).empty() )
-        SetHeader(wxT("User-Agent"), wxT("wxWidgets 2.x"));
+        SetHeader(wxT("User-Agent"), wxVERSION_STRING);
 
     // Send authentication information
     if (!m_username.empty() || !m_password.empty()) {
@@ -430,7 +427,7 @@ bool wxHTTP::BuildRequest(const wxString& path, const wxString& method)
     return ret_value;
 }
 
-bool wxHTTP::Abort(void)
+bool wxHTTP::Abort()
 {
     return wxSocketClient::Close();
 }
@@ -453,11 +450,11 @@ public:
         m_read_bytes = 0;
     }
 
-    size_t GetSize() const { return m_httpsize; }
-    virtual ~wxHTTPStream(void) { m_http->Abort(); }
+    size_t GetSize() const wxOVERRIDE { return m_httpsize; }
+    virtual ~wxHTTPStream() { m_http->Abort(); }
 
 protected:
-    size_t OnSysRead(void *buffer, size_t bufsize);
+    size_t OnSysRead(void *buffer, size_t bufsize) wxOVERRIDE;
 
     wxDECLARE_NO_COPY_CLASS(wxHTTPStream);
 };

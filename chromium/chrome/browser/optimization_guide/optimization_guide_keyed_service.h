@@ -8,12 +8,17 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
+#include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/content/browser/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_guide_model_provider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/models.pb.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/bookmarks/bookmark_bridge.h"
+#endif
 
 namespace content {
 class BrowserContext;
@@ -30,6 +35,7 @@ class OptimizationGuideStore;
 class PredictionManager;
 class PredictionManagerBrowserTestBase;
 class PredictionModelDownloadClient;
+class PushNotificationManager;
 class ModelInfo;
 class TabUrlProvider;
 class TopHostProvider;
@@ -37,6 +43,7 @@ class TopHostProvider;
 
 class GURL;
 class OptimizationGuideNavigationData;
+class Profile;
 
 // Keyed service that can be used to get information received from the remote
 // Optimization Guide Service. For regular profiles, this will do the work to
@@ -97,7 +104,18 @@ class OptimizationGuideKeyedService
       optimization_guide::proto::OptimizationTarget optimization_target,
       std::unique_ptr<optimization_guide::ModelInfo> model_info);
 
+  // Creates the platform specific push notification manager. May returns
+  // nullptr for desktop or when the push notification feature is disabled.
+  static std::unique_ptr<optimization_guide::PushNotificationManager>
+  MaybeCreatePushNotificationManager(Profile* profile);
+
  private:
+  // BookmarkBridge is a friend class since it is a consumer of the
+  // CanApplyOptimizationOnDemand API.
+#if defined(OS_ANDROID)
+  friend class BookmarkBridge;
+#endif
+
   friend class ChromeBrowsingDataRemoverDelegate;
   friend class HintsFetcherBrowserTest;
   friend class OptimizationGuideKeyedServiceBrowserTest;
@@ -138,7 +156,16 @@ class OptimizationGuideKeyedService
   // KeyedService implementation:
   void Shutdown() override;
 
-  content::BrowserContext* browser_context_;
+  // optimization_guide::OptimizationGuideDecider implementation:
+  void CanApplyOptimizationOnDemand(
+      const std::vector<GURL>& urls,
+      const base::flat_set<optimization_guide::proto::OptimizationType>&
+          optimization_types,
+      optimization_guide::proto::RequestContext request_context,
+      optimization_guide::OnDemandOptimizationGuideDecisionRepeatingCallback
+          callback) override;
+
+  raw_ptr<content::BrowserContext> browser_context_;
 
   // The store of hints.
   std::unique_ptr<optimization_guide::OptimizationGuideStore> hint_store_;

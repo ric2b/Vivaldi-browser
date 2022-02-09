@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -61,6 +62,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <variant name=".Feed" summary="Showing cache patterns only for Feed."/>
   <variant name=".Internal"
       summary="Showing cache patterns only for Internal."/>
+  <variant name=".LightweightReactions"
+      summary="Thumbnails and GIFs fetched for the Lightweight Reactions
+               feature."/>
   <variant name=".NewTabPageAnimatedLogo"
       summary="Showing cache patterns only for NewTabPageAnimatedLogo."/>
   <variant name=".OfflinePages"
@@ -86,7 +90,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.CacheHit"
-    enum="BooleanCacheHit" expires_after="2020-03-31">
+    enum="BooleanCacheHit" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -98,7 +103,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="ImageAnnotationService.AccessibilityV1.ClientResult"
     enum="ImageAnnotationServiceClientResult" expires_after="2022-04-24">
-  <owner>dmazzoni@chromium.org</owner>
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -108,7 +113,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.DescType"
-    enum="ImageAnnotationServiceDescType" expires_after="2020-03-31">
+    enum="ImageAnnotationServiceDescType" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -118,7 +124,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.EncodedJpegSizeKB"
-    units="KB" expires_after="2020-03-31">
+    units="KB" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -128,7 +135,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.EngineKnown"
-    enum="BooleanKnown" expires_after="2020-03-31">
+    enum="BooleanKnown" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -139,7 +147,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="ImageAnnotationService.AccessibilityV1.ImageRequestIncludesDesc"
-    enum="BooleanIncluded" expires_after="2020-03-31">
+    enum="BooleanIncluded" expires_after="M105">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -152,9 +161,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="ImageAnnotationService.AccessibilityV1.ImageRequestIncludesIcon"
+    enum="BooleanIncluded" expires_after="M105">
+  <owner>dtseng@chromium.org</owner>
+  <owner>amoylan@chromium.org</owner>
+  <owner>martis@chromium.org</owner>
+  <summary>
+    For each image request sent to the image annotation server, records whether
+    or not the icon backend is included among the requested backends.
+
+    The icon backend will not be included when the image is known to violate the
+    icon model policy (i.e. be too large or have too-high an aspect ratio).
+  </summary>
+</histogram>
+
 <histogram name="ImageAnnotationService.AccessibilityV1.JsonParseSuccess"
-    enum="BooleanSuccess" expires_after="2020-10-31">
-  <owner>dmazzoni@chromium.org</owner>
+    enum="BooleanSuccess" expires_after="2022-10-31">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -164,7 +188,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.PixelFetchSuccess"
-    enum="BooleanSuccess" expires_after="2020-03-31">
+    enum="BooleanSuccess" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -175,7 +200,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.ServerHttpResponseCode"
-    enum="HttpResponseCode" expires_after="2020-03-31">
+    enum="HttpResponseCode" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -185,7 +211,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.ServerLatencyMs"
-    units="ms" expires_after="2020-03-31">
+    units="ms" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -195,7 +222,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.ServerNetError"
-    enum="NetErrorCodes" expires_after="2020-03-31">
+    enum="NetErrorCodes" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -205,7 +233,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.ServerRequestSizeKB"
-    units="KB" expires_after="2020-03-31">
+    units="KB" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -217,7 +246,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="ImageAnnotationService.AccessibilityV1.ServerResponseSizeBytes"
-    units="bytes" expires_after="2020-03-31">
+    units="bytes" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -227,7 +257,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ImageAnnotationService.AccessibilityV1.SourcePixelCount"
-    units="pixels" expires_after="2020-03-31">
+    units="pixels" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -239,7 +270,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="ImageAnnotationService.{ImageAnnotationServiceAnnotationType}AccessibilityV1.Confidence"
-    units="%" expires_after="2020-03-31">
+    units="%" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -259,7 +291,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="ImageAnnotationService.{ImageAnnotationServiceAnnotationType}AccessibilityV1.Empty"
-    enum="BooleanEmpty" expires_after="2020-03-31">
+    enum="BooleanEmpty" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -280,7 +313,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="ImageAnnotationService.{ImageAnnotationServiceAnnotationType}AccessibilityV1.Status"
-    enum="GoogleRpcCode" expires_after="2020-03-31">
+    enum="GoogleRpcCode" expires_after="2022-04-24">
+  <owner>dtseng@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
   <owner>martis@chromium.org</owner>
   <summary>
@@ -451,7 +485,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="ImageLoader.Client.Cache.HitMiss" enum="BooleanCacheHit"
     expires_after="2019-01-01">
   <owner>tapted@chromium.org</owner>
-  <owner>chromeos-files-app@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
     For each image load request that requested caching, records whether or not
     it was found in the client-side cache. A hit means the request was not
@@ -462,7 +496,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="ImageLoader.Client.Cache.Usage" units="%"
     expires_after="2019-01-01">
   <owner>tapted@chromium.org</owner>
-  <owner>chromeos-files-app@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
     Returns the percentage of the client-side cache that is used for loading
     images, before they are sent to the ImageLoader extension. Expressed as a
@@ -473,7 +507,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="ImageLoader.Client.Cached" enum="BooleanRequested"
     expires_after="2019-01-01">
   <owner>tapted@chromium.org</owner>
-  <owner>chromeos-files-app@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
     For each image load request records whether or not it requested caching.
   </summary>

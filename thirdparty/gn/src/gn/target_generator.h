@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "gn/label_ptr.h"
 #include "gn/unique_vector.h"
 
@@ -80,7 +79,8 @@ class TargetGenerator {
                           UniqueVector<LabelConfigPair>* dest);
   bool FillGenericDeps(const char* var_name, LabelTargetVector* dest);
 
-  DISALLOW_COPY_AND_ASSIGN(TargetGenerator);
+  TargetGenerator(const TargetGenerator&) = delete;
+  TargetGenerator& operator=(const TargetGenerator&) = delete;
 };
 
 #endif  // TOOLS_GN_TARGET_GENERATOR_H_

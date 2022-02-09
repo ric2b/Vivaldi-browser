@@ -7,6 +7,7 @@
 #include "content/browser/speech/tts_controller_impl.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -72,6 +73,10 @@ class MockTtsPlatformImpl : public TtsPlatform {
   void ClearError() override { error_.clear(); }
   void Shutdown() override {}
   bool PreferEngineDelegateVoices() override { return false; }
+  void GetVoicesForBrowserContext(
+      content::BrowserContext* browser_context,
+      const GURL& source_url,
+      std::vector<content::VoiceData>* out_voices) override {}
 
   void SetPlatformImplSupported(bool state) { platform_supported_ = state; }
   void SetPlatformImplInitialized(bool state) { platform_initialized_ = state; }
@@ -99,7 +104,7 @@ class MockTtsPlatformImpl : public TtsPlatform {
   }
 
  private:
-  TtsController* const controller_;
+  const raw_ptr<TtsController> controller_;
   bool platform_supported_ = true;
   bool platform_initialized_ = true;
   std::vector<VoiceData> voices_;
@@ -252,7 +257,6 @@ class TtsControllerTest : public testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   MockTtsControllerDelegate* delegate() { return &delegate_; }
 #endif
-
   void ReleaseTtsController() { controller_.reset(); }
   void ReleaseBrowserContext() {
     // BrowserContext::~BrowserContext(...) is calling OnBrowserContextDestroyed
@@ -1005,6 +1009,7 @@ TEST_F(TtsControllerTest, PlatformNotSupported) {
   EXPECT_EQ(0, platform_impl()->stop_speaking_called());
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 TEST_F(TtsControllerTest, SpeakWhenLoadingPlatformImpl) {
   platform_impl()->SetPlatformImplInitialized(false);
 
@@ -1058,9 +1063,14 @@ TEST_F(TtsControllerTest, GetVoicesOnlineOffline) {
   EXPECT_EQ(1U, controller_voices.size());
   EXPECT_EQ("offline", controller_voices[0].name);
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if !defined(OS_ANDROID)
 TEST_F(TtsControllerTest, SpeakWhenLoadingBuiltInEngine) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  platform_impl()->SetPlatformImplSupported(false);
+#endif
+
   engine_delegate()->set_is_built_in_tts_engine_initialized(false);
 
   std::vector<VoiceData> voices;

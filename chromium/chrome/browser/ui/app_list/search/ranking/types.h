@@ -5,28 +5,26 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_SEARCH_RANKING_TYPES_H_
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_RANKING_TYPES_H_
 
+#include "ash/public/cpp/app_list/app_list_types.h"
 #include "base/files/file_path.h"
-#include "chrome/browser/ui/app_list/search/search_controller.h"
 
 namespace app_list {
 
-// The different categories of search result to display in launcher search.
-// Every search result type maps to one category. These values are not stable,
-// and should not be used for metrics.
-enum class Category {
-  kApp = 1,
-  kWeb = 2,
-  kFiles = 3,
-  kAssistant = 4,
-  kSettings = 5,
-  kHelp = 6,
-  kPlayStore = 7,
-  kMaxValue = kPlayStore,
-};
+// The type of a particular result.
+using ResultType = ash::AppListSearchResultType;
+// The type of a search provider as a whole. This is currently just the 'main'
+// ResultType returned by the provider.
+using ProviderType = ash::AppListSearchResultType;
+
+// Note: Results and ResultsMap should be defined here, but are defined in
+// SearchController to avoid an include loop.
 
 // All score information for a single result. This is stored with a result, and
 // incrementally updated by rankers as needed. Generally, each ranker should
 // control one score.
+//
+// TODO(crbug.com/1199206): Category scores need to be removed from this and
+// added to a separate struct.
 struct Scoring {
   bool filter = false;
   bool top_match = false;
@@ -44,6 +42,19 @@ struct Scoring {
 };
 
 ::std::ostream& operator<<(::std::ostream& os, const Scoring& result);
+
+// All possible categories.
+using Category = ash::AppListSearchResultCategory;
+
+// A wrapper struct around a category to hold scoring information.
+struct CategoryMetadata {
+  Category category = Category::kUnknown;
+  double score = 0.0;
+};
+
+using CategoriesList = std::vector<CategoryMetadata>;
+
+CategoriesList CreateAllCategories();
 
 }  // namespace app_list
 

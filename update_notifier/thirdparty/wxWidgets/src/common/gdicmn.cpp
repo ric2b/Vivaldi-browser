@@ -11,11 +11,10 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/gdicmn.h"
+
+#include "wx/display.h"
 #include "wx/gdiobj.h"
 
 #ifndef WX_PRECOMP
@@ -34,7 +33,7 @@
 #endif
 
 
-IMPLEMENT_ABSTRACT_CLASS(wxGDIObject, wxObject)
+wxIMPLEMENT_ABSTRACT_CLASS(wxGDIObject, wxObject);
 
 
 WXDLLIMPEXP_DATA_CORE(wxBrushList*) wxTheBrushList;
@@ -278,10 +277,6 @@ wxColourDatabase::~wxColourDatabase ()
 
         delete m_map;
     }
-
-#ifdef __WXPM__
-    delete [] m_palTable;
-#endif
 }
 
 // Colour database stuff
@@ -382,16 +377,6 @@ void wxColourDatabase::Initialize()
         const wxColourDesc& cc = wxColourTable[n];
         (*m_map)[cc.name] = new wxColour(cc.r, cc.g, cc.b);
     }
-
-#ifdef __WXPM__
-    m_palTable = new long[n];
-    for ( n = 0; n < WXSIZEOF(wxColourTable); n++ )
-    {
-        const wxColourDesc& cc = wxColourTable[n];
-        m_palTable[n] = OS2RGB(cc.r,cc.g,cc.b);
-    }
-    m_nSize = n;
-#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -469,41 +454,6 @@ wxString wxColourDatabase::FindName(const wxColour& colour) const
 
     return wxEmptyString;
 }
-
-// ----------------------------------------------------------------------------
-// deprecated wxColourDatabase methods
-// ----------------------------------------------------------------------------
-
-#if WXWIN_COMPATIBILITY_2_6
-wxColour *wxColourDatabase::FindColour(const wxString& name)
-{
-    // This function is deprecated, use Find() instead.
-    // Formerly this function sometimes would return a deletable pointer and
-    // sometimes a non-deletable one (when returning a colour from the database).
-    // Trying to delete the latter anyway results in problems, so probably
-    // nobody ever freed the pointers. Currently it always returns a new
-    // instance, which means there will be memory leaks.
-    wxLogDebug(wxT("wxColourDataBase::FindColour():")
-        wxT(" Please use wxColourDataBase::Find() instead"));
-
-    // using a static variable here is not the most elegant solution but unless
-    // we want to make wxStringToColourHashMap public (i.e. move it to the
-    // header) so that we could have a member function returning
-    // wxStringToColourHashMap::iterator, there is really no good way to do it
-    // otherwise
-    //
-    // and knowing that this function is going to disappear in the next release
-    // anyhow I don't want to waste time on this
-
-    static wxColour s_col;
-
-    s_col = Find(name);
-    if ( !s_col.IsOk() )
-        return NULL;
-
-    return new wxColour(s_col);
-}
-#endif // WXWIN_COMPATIBILITY_2_6
 
 // ============================================================================
 // stock objects
@@ -591,7 +541,7 @@ const wxColour* wxStockGDI::GetColour(Item item)
             colour = new wxColour(0, 0, 255);
             break;
         case COLOUR_CYAN:
-            colour = new wxColour(wxT("CYAN"));
+            colour = new wxColour(0, 255, 255);
             break;
         case COLOUR_GREEN:
             colour = new wxColour(0, 255, 0);
@@ -600,7 +550,7 @@ const wxColour* wxStockGDI::GetColour(Item item)
             colour = new wxColour(255, 255, 0);
             break;
         case COLOUR_LIGHTGREY:
-            colour = new wxColour(wxT("LIGHT GREY"));
+            colour = new wxColour(192, 192, 192);
             break;
         case COLOUR_RED:
             colour = new wxColour(255, 0, 0);
@@ -648,7 +598,8 @@ const wxFont* wxStockGDI::GetFont(Item item)
         switch (item)
         {
         case FONT_ITALIC:
-            font = new wxFont(GetFont(FONT_NORMAL)->GetPointSize(), wxROMAN, wxITALIC, wxNORMAL);
+            font = new wxFont(GetFont(FONT_NORMAL)->GetPointSize(),
+                              wxFONTFAMILY_ROMAN, wxFONTSTYLE_ITALIC, wxFONTWEIGHT_NORMAL);
             break;
         case FONT_NORMAL:
             font = new wxFont(wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
@@ -666,10 +617,11 @@ const wxFont* wxStockGDI::GetFont(Item item)
 #else
                     - 2,
 #endif
-                    wxSWISS, wxNORMAL, wxNORMAL);
+                    wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
             break;
         case FONT_SWISS:
-            font = new wxFont(GetFont(FONT_NORMAL)->GetPointSize(), wxSWISS, wxNORMAL, wxNORMAL);
+            font = new wxFont(GetFont(FONT_NORMAL)->GetPointSize(),
+                              wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
             break;
         default:
             wxFAIL;
@@ -829,6 +781,18 @@ wxFont *wxFontList::FindOrCreateFont(int pointSize,
         family = wxFONTFAMILY_SWISS;
 #endif // !__WXOSX__
 
+    // In wxMSW, creating a font with wxFONTSTYLE_SLANT creates the same font
+    // as wxFONTSTYLE_ITALIC and its GetStyle() returns the latter, so we must
+    // account for it here. Notice that wxOSX also uses the same native font
+    // for these styles, but wxFont::GetStyle() in it still returns different
+    // values depending on how the font was created, so there is inconsistency
+    // between ports here which it would be nice to fix in one way or another
+    // (wxGTK supports both as separate styles, so it doesn't suffer from it).
+ #ifdef __WXMSW__
+    if ( style == wxFONTSTYLE_SLANT )
+        style = wxFONTSTYLE_ITALIC;
+ #endif // __WXMSW__
+
     wxFont *font;
     wxList::compatibility_iterator node;
     for (node = list.GetFirst(); node; node = node->GetNext())
@@ -840,20 +804,18 @@ wxFont *wxFontList::FindOrCreateFont(int pointSize,
              font->GetWeight () == weight &&
              font->GetUnderlined () == underline )
         {
-            bool same = font->GetFamily() == family;
-
             // empty facename matches anything at all: this is bad because
             // depending on which fonts are already created, we might get back
             // a different font if we create it with empty facename, but it is
             // still better than never matching anything in the cache at all
             // in this case
-            if ( same && !facename.empty() )
-            {
-                const wxString& fontFace = font->GetFaceName();
+            bool same;
+            const wxString fontFaceName(font->GetFaceName());
 
-                // empty facename matches everything
-                same = !fontFace || fontFace == facename;
-            }
+            if (facename.empty() || fontFaceName.empty())
+                same = font->GetFamily() == family;
+            else
+                same = fontFaceName == facename;
 
             if ( same && (encoding != wxFONTENCODING_DEFAULT) )
             {
@@ -880,43 +842,73 @@ wxFont *wxFontList::FindOrCreateFont(int pointSize,
     return font;
 }
 
-#if WXWIN_COMPATIBILITY_2_6
-void wxBrushList::AddBrush(wxBrush*) { }
-void wxBrushList::RemoveBrush(wxBrush*) { }
-void wxFontList::AddFont(wxFont*) { }
-void wxFontList::RemoveFont(wxFont*) { }
-void wxPenList::AddPen(wxPen*) { }
-void wxPenList::RemovePen(wxPen*) { }
-#endif
+int wxDisplayDepth()
+{
+    return wxDisplay().GetDepth();
+}
+
+bool wxColourDisplay()
+{
+    // If GetDepth() returns 0, meaning unknown, we assume it's a colour
+    // display, hence the use of "!=" rather than ">" here.
+    return wxDisplay().GetDepth() != 1;
+}
+
+void wxDisplaySize(int *width, int *height)
+{
+    const wxSize size = wxGetDisplaySize();
+    if ( width )
+        *width = size.x;
+    if ( height )
+        *height = size.y;
+}
 
 wxSize wxGetDisplaySize()
 {
-    int x, y;
-    wxDisplaySize(& x, & y);
-    return wxSize(x, y);
+    return wxDisplay().GetGeometry().GetSize();
+}
+
+void wxClientDisplayRect(int *x, int *y, int *width, int *height)
+{
+    const wxRect rect = wxGetClientDisplayRect();
+    if ( x )
+        *x = rect.x;
+    if ( y )
+        *y = rect.y;
+    if ( width )
+        *width = rect.width;
+    if ( height )
+        *height = rect.height;
 }
 
 wxRect wxGetClientDisplayRect()
 {
-    int x, y, width, height;
-    wxClientDisplayRect(&x, &y, &width, &height);  // call plat-specific version
-    return wxRect(x, y, width, height);
+    return wxDisplay().GetClientArea();
+}
+
+void wxDisplaySizeMM(int *width, int *height)
+{
+    const wxSize size = wxGetDisplaySizeMM();
+    if ( width )
+        *width = size.x;
+    if ( height )
+        *height = size.y;
 }
 
 wxSize wxGetDisplaySizeMM()
 {
-    int x, y;
-    wxDisplaySizeMM(& x, & y);
-    return wxSize(x, y);
+    const wxSize ppi = wxGetDisplayPPI();
+    if ( !ppi.x || !ppi.y )
+        return wxSize(0, 0);
+
+    const wxSize pixels = wxGetDisplaySize();
+    return wxSize(wxRound(pixels.x * inches2mm / ppi.x),
+                  wxRound(pixels.y * inches2mm / ppi.y));
 }
 
 wxSize wxGetDisplayPPI()
 {
-    const wxSize pixels = wxGetDisplaySize();
-    const wxSize mm = wxGetDisplaySizeMM();
-
-    return wxSize((int)((pixels.x * inches2mm) / mm.x),
-                  (int)((pixels.y * inches2mm) / mm.y));
+    return wxDisplay().GetPPI();
 }
 
 wxResourceCache::~wxResourceCache ()

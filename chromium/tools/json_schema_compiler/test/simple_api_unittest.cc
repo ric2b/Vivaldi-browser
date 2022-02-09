@@ -205,10 +205,16 @@ TEST(JsonSchemaCompilerSimpleTest, OnTestTypeFiredCreate) {
     simple_api::TestType some_test_type;
     std::unique_ptr<base::DictionaryValue> expected =
         CreateTestTypeDictionary();
-    ASSERT_TRUE(expected->GetDouble("number", &some_test_type.number));
+
+    absl::optional<double> number_value = expected->FindDoubleKey("number");
+    ASSERT_TRUE(*number_value);
+    some_test_type.number = *number_value;
+
     ASSERT_TRUE(expected->GetString("string", &some_test_type.string));
     ASSERT_TRUE(expected->GetInteger("integer", &some_test_type.integer));
-    ASSERT_TRUE(expected->GetBoolean("boolean", &some_test_type.boolean));
+    absl::optional<bool> boolean_value = expected->FindBoolKey("boolean");
+    ASSERT_TRUE(boolean_value);
+    some_test_type.boolean = *boolean_value;
 
     base::Value results(simple_api::OnTestTypeFired::Create(some_test_type));
     ASSERT_TRUE(results.is_list());

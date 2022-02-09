@@ -10,8 +10,8 @@
 
 #include "base/callback_forward.h"
 #include "base/threading/sequence_bound.h"
-#include "content/browser/aggregation_service/aggregatable_report_manager.h"
 #include "content/browser/aggregation_service/aggregation_service_key_storage.h"
+#include "content/browser/aggregation_service/aggregation_service_storage_context.h"
 #include "content/public/test/test_aggregation_service.h"
 
 namespace base {
@@ -25,31 +25,35 @@ class Origin;
 namespace content {
 
 class AggregatableReportSender;
+class AggregatableReportAssembler;
 
 struct PublicKey;
 
 // Implementation class of a test aggregation service.
-class TestAggregationServiceImpl : public AggregatableReportManager,
+class TestAggregationServiceImpl : public AggregationServiceStorageContext,
                                    public TestAggregationService {
  public:
-  // `clock` must be a non-null pointer to TestAggregationServiceImpl that is
-  // valid as long as this object.
-  explicit TestAggregationServiceImpl(const base::Clock* clock);
+  // `clock` must be a non-null pointer that is valid as long as this object.
+  TestAggregationServiceImpl(
+      const base::Clock* clock,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   TestAggregationServiceImpl(const TestAggregationServiceImpl& other) = delete;
   TestAggregationServiceImpl& operator=(
       const TestAggregationServiceImpl& other) = delete;
   ~TestAggregationServiceImpl() override;
 
-  // AggregatableReportManager:
+  // AggregationServiceStorageContext:
   const base::SequenceBound<AggregationServiceKeyStorage>& GetKeyStorage()
       override;
 
   // TestAggregationService:
+  void SetDisablePayloadEncryption(bool should_disable) override;
   void SetPublicKeys(const url::Origin& origin,
                      const std::string& json_string,
                      base::OnceCallback<void(bool)> callback) override;
-  void SetURLLoaderFactory(scoped_refptr<network::SharedURLLoaderFactory>
-                               url_loader_factory) override;
+  void AssembleReport(
+      AssembleRequest request,
+      base::OnceCallback<void(base::Value::DictStorage)> callback) override;
   void SendReport(const GURL& url,
                   const base::Value& contents,
                   base::OnceCallback<void(bool)> callback) override;
@@ -63,8 +67,9 @@ class TestAggregationServiceImpl : public AggregatableReportManager,
 
   base::SequenceBound<AggregationServiceKeyStorage> storage_;
   std::unique_ptr<AggregatableReportSender> sender_;
+  std::unique_ptr<AggregatableReportAssembler> assembler_;
 };
 
 }  // namespace content
 
-#endif  // CONTENT_TEST_TEST_AGGREGATION_SERVICE_IMPL_H_
+#endif  // CONTENT_TEST_TEST_AGGREGATION_SERVICE_MANAGER_H_

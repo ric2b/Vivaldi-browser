@@ -259,9 +259,7 @@ std::unique_ptr<FormField> CreditCardField::Parse(
   if (credit_card_field->cardholder_) {
     // If we got the cardholder name with a dangerous check, require at least a
     // card number and one of expiration or verification fields.
-    if (!base::FeatureList::IsEnabled(
-            features::kAutofillStrictContextualCardNameConditions) ||
-        !cardholder_name_match_has_low_confidence ||
+    if (!cardholder_name_match_has_low_confidence ||
         (!credit_card_field->numbers_.empty() &&
          (credit_card_field->verification_ ||
           credit_card_field->HasExpiration()))) {
@@ -418,8 +416,11 @@ bool CreditCardField::IsGiftCardField(AutofillScanner* scanner,
   if (scanner->IsEnd())
     return false;
 
-  const int kMatchFieldTypes =
-      MATCH_DEFAULT | MATCH_NUMBER | MATCH_TELEPHONE | MATCH_SEARCH;
+  // kMatchFieldTypes should subsume kMatchNumTelAndPwd used for
+  // CREDIT_CARD_NUMBER matching. Otherwise, a gift card field may not match the
+  // GIFT_CARD pattern but erroneously do match the CREDIT_CARD_NUMBER pattern.
+  const int kMatchFieldTypes = MATCH_DEFAULT | MATCH_NUMBER | MATCH_TELEPHONE |
+                               MATCH_SEARCH | MATCH_PASSWORD;
   size_t saved_cursor = scanner->SaveCursor();
 
   const std::vector<MatchingPattern>& debit_cards_patterns =

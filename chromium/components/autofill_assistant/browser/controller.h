@@ -5,13 +5,12 @@
 #ifndef COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_CONTROLLER_H_
 #define COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_CONTROLLER_H_
 
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback_helpers.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "components/autofill_assistant/browser/autofill_assistant_tts_controller.h"
 #include "components/autofill_assistant/browser/basic_interactions.h"
 #include "components/autofill_assistant/browser/bottom_sheet_state.h"
@@ -20,7 +19,7 @@
 #include "components/autofill_assistant/browser/element_area.h"
 #include "components/autofill_assistant/browser/event_handler.h"
 #include "components/autofill_assistant/browser/metrics.h"
-#include "components/autofill_assistant/browser/public/runtime_manager_impl.h"
+#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/script_executor_delegate.h"
 #include "components/autofill_assistant/browser/script_tracker.h"
@@ -30,12 +29,13 @@
 #include "components/autofill_assistant/browser/suppress_keyboard_raii.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/ui_delegate.h"
-#include "components/autofill_assistant/browser/user_action.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
+#include "components/autofill_assistant/content/browser/annotate_dom_model_service.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
@@ -66,9 +66,11 @@ class Controller : public ScriptExecutorDelegate,
   Controller(content::WebContents* web_contents,
              Client* client,
              const base::TickClock* tick_clock,
-             base::WeakPtr<RuntimeManagerImpl> runtime_manager,
+             base::WeakPtr<RuntimeManager> runtime_manager,
              std::unique_ptr<Service> service,
-             std::unique_ptr<AutofillAssistantTtsController> tts_controller);
+             std::unique_ptr<AutofillAssistantTtsController> tts_controller,
+             ukm::UkmRecorder* ukm_recorder,
+             AnnotateDomModelService* annotate_dom_model_service);
 
   Controller(const Controller&) = delete;
   Controller& operator=(const Controller&) = delete;
@@ -111,6 +113,9 @@ class Controller : public ScriptExecutorDelegate,
   // is enabled or disabled.
   void OnSpokenFeedbackAccessibilityServiceChanged(bool enabled);
 
+  const std::vector<ScriptHandle>& GetDirectActionScripts() const;
+  bool PerformDirectAction(int index, std::unique_ptr<TriggerContext> context);
+
   // Overrides ScriptExecutorDelegate:
   const ClientSettings& GetSettings() override;
   const GURL& GetCurrentURL() override;
@@ -123,6 +128,7 @@ class Controller : public ScriptExecutorDelegate,
   WebsiteLoginManager* GetWebsiteLoginManager() override;
   content::WebContents* GetWebContents() override;
   std::string GetEmailAddressForAccessTokenAccount() override;
+  ukm::UkmRecorder* GetUkmRecorder() override;
 
   void SetTouchableElementArea(const ElementAreaProto& area) override;
   void SetStatusMessage(const std::string& message) override;
@@ -137,7 +143,6 @@ class Controller : public ScriptExecutorDelegate,
                      base::TimeDelta delay) override;
   void SetInfoBox(const InfoBox& info_box) override;
   void ClearInfoBox() override;
-  void SetProgress(int progress) override;
   bool SetProgressActiveStepIdentifier(
       const std::string& active_step_identifier) override;
   void SetProgressActiveStep(int active_step) override;
@@ -174,6 +179,7 @@ class Controller : public ScriptExecutorDelegate,
   void SetBrowseModeInvisible(bool invisible) override;
   bool ShouldShowWarning() override;
   void SetShowFeedbackChip(bool show_feedback_chip) override;
+  ProcessedActionStatusDetailsProto& GetLogInfo() override;
 
   // Show the UI if it's not already shown. This is only meaningful while in
   // states where showing the UI is optional, such as RUNNING, in tracking mode.
@@ -191,6 +197,7 @@ class Controller : public ScriptExecutorDelegate,
   void SetBrowseDomainsAllowlist(std::vector<std::string> domains) override;
 
   bool EnterState(AutofillAssistantState state) override;
+  AutofillAssistantState GetState() override;
   void SetOverlayBehavior(
       ConfigureUiStateProto::OverlayBehavior overlay_behavior) override;
   void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
@@ -209,31 +216,30 @@ class Controller : public ScriptExecutorDelegate,
   AutofillAssistantState GetState() const override;
   std::vector<Details> GetDetails() const override;
   const InfoBox* GetInfoBox() const override;
-  int GetProgress() const override;
-  absl::optional<int> GetProgressActiveStep() const override;
+  int GetProgressActiveStep() const override;
   bool GetProgressVisible() const override;
   bool GetTtsButtonVisible() const override;
   TtsButtonState GetTtsButtonState() const override;
   bool GetProgressBarErrorState() const override;
-  absl::optional<ShowProgressBarProto::StepProgressBarConfiguration>
+  ShowProgressBarProto::StepProgressBarConfiguration
   GetStepProgressBarConfiguration() const override;
   const std::vector<UserAction>& GetUserActions() const override;
-  bool PerformUserActionWithContext(
-      int index,
-      std::unique_ptr<TriggerContext> context) override;
+  bool PerformUserAction(int index) override;
   std::string GetDebugContext() override;
   const CollectUserDataOptions* GetCollectUserDataOptions() const override;
   const UserData* GetUserData() const override;
-  void SetShippingAddress(
-      std::unique_ptr<autofill::AutofillProfile> address) override;
-  void SetContactInfo(
-      std::unique_ptr<autofill::AutofillProfile> profile) override;
-  void SetCreditCard(
-      std::unique_ptr<autofill::CreditCard> card,
-      std::unique_ptr<autofill::AutofillProfile> billing_profile) override;
+  void SetShippingAddress(std::unique_ptr<autofill::AutofillProfile> address,
+                          UserDataEventType event_type) override;
+  void SetContactInfo(std::unique_ptr<autofill::AutofillProfile> profile,
+                      UserDataEventType event_type) override;
+  void SetCreditCard(std::unique_ptr<autofill::CreditCard> card,
+                     std::unique_ptr<autofill::AutofillProfile> billing_profile,
+                     UserDataEventType event_type) override;
+  void ReloadUserData(UserDataEventField event_field,
+                      UserDataEventType event_type) override;
   void SetTermsAndConditions(
       TermsAndConditionsState terms_and_conditions) override;
-  void SetLoginOption(std::string identifier) override;
+  void SetLoginOption(const std::string& identifier) override;
   void OnTextLinkClicked(int link) override;
   void OnFormActionLinkClicked(int link) override;
   void OnTtsButtonClicked() override;
@@ -357,8 +363,10 @@ class Controller : public ScriptExecutorDelegate,
   void OnPeriodicScriptCheck();
 
   // Runs autostart scripts from |runnable_scripts|, if the conditions are
-  // right. Returns true if a script was auto-started.
-  bool MaybeAutostartScript(const std::vector<ScriptHandle>& runnable_scripts);
+  // right. Nothing happens if an empty vector is passed.
+  // If none of the scripts is autostartable or too many are, it stops the
+  // execution with an error.
+  void MaybeAutostartScript(const std::vector<ScriptHandle>& runnable_scripts);
 
   void DisableAutostart();
 
@@ -386,7 +394,8 @@ class Controller : public ScriptExecutorDelegate,
       content::NavigationHandle* navigation_handle) override;
   void DocumentAvailableInMainFrame(
       content::RenderFrameHost* render_frame_host) override;
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
   void OnWebContentsFocused(
       content::RenderWidgetHost* render_widget_host) override;
   void WebContentsDestroyed() override;
@@ -438,10 +447,16 @@ class Controller : public ScriptExecutorDelegate,
   std::string GetDisplayStringsLocale();
   void SetTtsButtonState(TtsButtonState state);
 
+  // Resets the controller to the initial state.
+  void ResetState();
+
+  void SetDirectActionScripts(
+      const std::vector<ScriptHandle>& direct_action_scripts);
+
   ClientSettings settings_;
-  Client* const client_;
-  const base::TickClock* const tick_clock_;
-  base::WeakPtr<RuntimeManagerImpl> runtime_manager_;
+  const raw_ptr<Client> client_;
+  const raw_ptr<const base::TickClock> tick_clock_;
+  base::WeakPtr<RuntimeManager> runtime_manager_;
 
   // Lazily instantiate in GetWebController().
   std::unique_ptr<WebController> web_controller_;
@@ -503,18 +518,18 @@ class Controller : public ScriptExecutorDelegate,
   // Current info box, may be null.
   std::unique_ptr<InfoBox> info_box_;
 
-  // Current progress.
-  int progress_ = 0;
-  absl::optional<int> progress_active_step_;
-
-  // Current visibility of the progress bar. It is initially visible.
+  // Current state of the progress bar.
   bool progress_visible_ = true;
   bool progress_bar_error_state_ = false;
-  absl::optional<ShowProgressBarProto::StepProgressBarConfiguration>
+  ShowProgressBarProto::StepProgressBarConfiguration
       step_progress_bar_configuration_;
+  int progress_active_step_ = 0;
 
   // Current set of user actions. May be null, but never empty.
   std::unique_ptr<std::vector<UserAction>> user_actions_;
+
+  // Current set of direct actions.
+  std::vector<ScriptHandle> direct_action_scripts_;
 
   // Current viewport mode.
   ViewportMode viewport_mode_ = ViewportMode::NO_RESIZE;
@@ -535,7 +550,7 @@ class Controller : public ScriptExecutorDelegate,
   // A copy of the most recently set user data options. Can be used to determine
   // which information was requested.
   std::unique_ptr<CollectUserDataOptions> last_collect_user_data_options_;
-  CollectUserDataOptions* collect_user_data_options_ = nullptr;
+  raw_ptr<CollectUserDataOptions> collect_user_data_options_ = nullptr;
   UserData user_data_;
 
   std::unique_ptr<FormProto> form_;
@@ -607,7 +622,7 @@ class Controller : public ScriptExecutorDelegate,
 
   EventHandler event_handler_;
   UserModel user_model_;
-  BasicInteractions basic_interactions_{this};
+  BasicInteractions basic_interactions_{this, &settings_};
 
   bool expand_sheet_for_prompt_action_ = true;
   std::vector<std::string> browse_domains_allowlist_;
@@ -625,6 +640,16 @@ class Controller : public ScriptExecutorDelegate,
   std::unique_ptr<GenericUserInterfaceProto> generic_user_interface_;
 
   std::unique_ptr<GenericUserInterfaceProto> persistent_generic_user_interface_;
+
+  // Log information about action execution. Gets reset at the start of every
+  // action and attached to the action result on completion.
+  ProcessedActionStatusDetailsProto log_info_;
+
+  raw_ptr<ukm::UkmRecorder> ukm_recorder_;
+
+  // If instantiated, will start delivering the required model for annotating
+  // DOM nodes. May be nullptr.
+  const raw_ptr<AnnotateDomModelService> annotate_dom_model_service_;
 
   base::WeakPtrFactory<Controller> weak_ptr_factory_{this};
 };

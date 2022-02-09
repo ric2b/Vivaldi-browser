@@ -20,7 +20,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/services/storage/service_worker/service_worker_storage_control_impl.h"
@@ -35,7 +35,6 @@
 #include "content/browser/service_worker/service_worker_quota_client.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/storage_partition_impl.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -56,7 +55,6 @@
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
-#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
@@ -260,6 +258,7 @@ void ServiceWorkerContextWrapper::InitInternal(
 void ServiceWorkerContextWrapper::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  ClearRunningServiceWorkers();
   storage_partition_ = nullptr;
   process_manager_->Shutdown();
   storage_control_.reset();
@@ -311,16 +310,16 @@ void ServiceWorkerContextWrapper::OnRegistrationStored(
     const blink::StorageKey& key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  registered_origins_.insert(url::Origin::Create(scope));
+  registered_storage_keys_.insert(key);
 
   for (auto& observer : observer_list_)
     observer.OnRegistrationStored(registration_id, scope);
 }
 
-void ServiceWorkerContextWrapper::OnAllRegistrationsDeletedForOrigin(
-    const url::Origin& origin) {
+void ServiceWorkerContextWrapper::OnAllRegistrationsDeletedForStorageKey(
+    const blink::StorageKey& key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  registered_origins_.erase(origin);
+  registered_storage_keys_.erase(key);
 }
 
 void ServiceWorkerContextWrapper::OnErrorReported(
@@ -394,6 +393,9 @@ void ServiceWorkerContextWrapper::OnStarted(
     const blink::StorageKey& key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  if (is_deleting_and_starting_over_)
+    return;
+
   // TODO(crbug.com/1199077): Update this when ServiceWorkerContextCoreObserver
   // implements StorageKey.
   auto insertion_result = running_service_workers_.insert(std::make_pair(
@@ -418,14 +420,8 @@ void ServiceWorkerContextWrapper::OnStopped(int64_t version_id) {
 }
 
 void ServiceWorkerContextWrapper::OnDeleteAndStartOver() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  for (const auto& kv : running_service_workers_) {
-    int64_t version_id = kv.first;
-    for (auto& observer : observer_list_)
-      observer.OnVersionStoppedRunning(version_id);
-  }
-  running_service_workers_.clear();
+  is_deleting_and_starting_over_ = true;
+  ClearRunningServiceWorkers();
 }
 
 void ServiceWorkerContextWrapper::OnVersionStateChanged(
@@ -550,13 +546,13 @@ size_t ServiceWorkerContextWrapper::CountExternalRequestsForTest(
   return 0u;
 }
 
-bool ServiceWorkerContextWrapper::MaybeHasRegistrationForOrigin(
-    const url::Origin& origin) {
+bool ServiceWorkerContextWrapper::MaybeHasRegistrationForStorageKey(
+    const blink::StorageKey& key) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!registrations_initialized_) {
     return true;
   }
-  if (registered_origins_.find(origin) != registered_origins_.end()) {
+  if (registered_storage_keys_.find(key) != registered_storage_keys_.end()) {
     return true;
   }
   return false;
@@ -1277,6 +1273,8 @@ void ServiceWorkerContextWrapper::OnStatusChangedForFindReadyRegistration(
 void ServiceWorkerContextWrapper::DidDeleteAndStartOver(
     blink::ServiceWorkerStatusCode status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(running_service_workers_.empty());
+  is_deleting_and_starting_over_ = false;
   storage_control_.reset();
   if (status != blink::ServiceWorkerStatusCode::kOk) {
     context_core_.reset();
@@ -1297,7 +1295,7 @@ void ServiceWorkerContextWrapper::DidGetAllRegistrationsForGetAllOrigins(
 
   std::map<GURL, StorageUsageInfo> origins;
   for (const auto& registration_info : registrations) {
-    GURL origin = registration_info.scope.GetOrigin();
+    GURL origin = registration_info.scope.DeprecatedGetOriginAsURL();
 
     auto it = origins.find(origin);
     if (it == origins.end()) {
@@ -1568,10 +1566,21 @@ void ServiceWorkerContextWrapper::DidGetRegisteredStorageKeys(
     const std::vector<blink::StorageKey>& storage_keys) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (const blink::StorageKey& storage_key : storage_keys)
-    registered_origins_.insert(storage_key.origin());
+    registered_storage_keys_.insert(storage_key);
   registrations_initialized_ = true;
   if (on_registrations_initialized_)
     std::move(on_registrations_initialized_).Run();
+}
+
+void ServiceWorkerContextWrapper::ClearRunningServiceWorkers() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  for (const auto& kv : running_service_workers_) {
+    int64_t version_id = kv.first;
+    for (auto& observer : observer_list_)
+      observer.OnVersionStoppedRunning(version_id);
+  }
+  running_service_workers_.clear();
 }
 
 }  // namespace content

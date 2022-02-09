@@ -12,7 +12,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -111,12 +111,12 @@ namespace {
 // The initial value of the amount of data that we require AVPlayer to have in
 // order to consider it unlikely to stall right after starting to play.
 constexpr base::TimeDelta kInitialRequiredLoadedTimeRange =
-    base::TimeDelta::FromMilliseconds(300);
+    base::Milliseconds(300);
 
 // Each time AVPlayer runs out of data we increase the required loaded time
 // range size up to this value.
 constexpr base::TimeDelta kMaxRequiredLoadedTimeRange =
-    base::TimeDelta::FromSeconds(4);
+    base::Seconds(4);
 
 class BackgroundThread {
  public:

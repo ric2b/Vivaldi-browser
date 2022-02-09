@@ -5,10 +5,11 @@
 #include "chrome/browser/ui/views/lens/lens_side_panel_controller.h"
 
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
-#include "chrome/browser/ui/views/side_panel.h"
+#include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "components/lens/lens_features.h"
 #include "components/reading_list/features/reading_list_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,6 +34,8 @@ class LensSidePanelControllerTest : public TestWithBrowserView {
          reading_list::switches::kReadLater},
         {});
     TestWithBrowserView::SetUp();
+    // Create the lens side panel controller in BrowserView.
+    browser_view()->CreateLensSidePanelController();
 
     // Create an active web contents.
     AddTab(browser_view()->browser(), GURL("about:blank"));
@@ -40,7 +43,7 @@ class LensSidePanelControllerTest : public TestWithBrowserView {
   }
 
  protected:
-  LensSidePanelController* controller_;
+  raw_ptr<LensSidePanelController> controller_;
 };
 
 TEST_F(LensSidePanelControllerTest, OpenWithURLShowsLensSidePanel) {
@@ -98,6 +101,7 @@ TEST_F(LensSidePanelControllerTest, CloseAfterOpenHidesLensSidePanel) {
                              ui::PAGE_TRANSITION_LINK, false));
   controller_->Close();
 
+  EXPECT_FALSE(browser_view()->lens_side_panel_controller());
   EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
   EXPECT_EQ(1, user_action_tester.GetActionCount(kHideAction));
   EXPECT_EQ(0, user_action_tester.GetActionCount(kCloseButtonClickAction));
@@ -111,6 +115,10 @@ TEST_F(LensSidePanelControllerTest, ReOpensAndCloses) {
                              WindowOpenDisposition::NEW_FOREGROUND_TAB,
                              ui::PAGE_TRANSITION_LINK, false));
   controller_->Close();
+  // Verify pointer was reset.
+  EXPECT_FALSE(browser_view()->lens_side_panel_controller());
+  // Lens side panel controller needs to be recreated before reopen.
+  browser_view()->CreateLensSidePanelController();
   controller_->OpenWithURL(
       content::OpenURLParams(GURL("http://bar.com"), content::Referrer(),
                              WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -118,6 +126,7 @@ TEST_F(LensSidePanelControllerTest, ReOpensAndCloses) {
   EXPECT_TRUE(browser_view()->lens_side_panel()->GetVisible());
   controller_->Close();
 
+  EXPECT_FALSE(browser_view()->lens_side_panel_controller());
   EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
   EXPECT_EQ(2, user_action_tester.GetActionCount(kShowAction));
   EXPECT_EQ(2, user_action_tester.GetActionCount(kHideAction));
@@ -139,6 +148,41 @@ TEST_F(LensSidePanelControllerTest,
 
   EXPECT_TRUE(browser_view()->lens_side_panel()->GetVisible());
   EXPECT_EQ(0, user_action_tester.GetActionCount(kHideAction));
+}
+
+TEST_F(LensSidePanelControllerTest,
+       OpenAndCloseLensSidePanelDeletesController) {
+  base::UserActionTester user_action_tester;
+
+  controller_->OpenWithURL(
+      content::OpenURLParams(GURL("http://foo.com"), content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
+  EXPECT_TRUE(browser_view()->lens_side_panel_controller());
+  EXPECT_TRUE(browser_view()->lens_side_panel()->GetVisible());
+
+  // Closing the controller should hide side panel and delete controller
+  // pointer.
+  controller_->Close();
+  EXPECT_FALSE(browser_view()->lens_side_panel_controller());
+  EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
+
+  // Creating a new controller in browser view should fix pointer, but side
+  // panel is still not visible.
+  browser_view()->CreateLensSidePanelController();
+  EXPECT_TRUE(browser_view()->lens_side_panel_controller());
+  EXPECT_FALSE(browser_view()->lens_side_panel()->GetVisible());
+
+  // Reopening the side panel with URL should now make the side panel visible
+  // again.
+  controller_->OpenWithURL(
+      content::OpenURLParams(GURL("http://foo.com"), content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
+  EXPECT_TRUE(browser_view()->lens_side_panel_controller());
+  EXPECT_TRUE(browser_view()->lens_side_panel()->GetVisible());
+  EXPECT_EQ(2, user_action_tester.GetActionCount(kShowAction));
+  EXPECT_EQ(1, user_action_tester.GetActionCount(kHideAction));
 }
 
 }  // namespace

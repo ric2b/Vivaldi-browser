@@ -11,11 +11,11 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_install_error_menu_item_id_provider.h"
@@ -101,7 +101,7 @@ class ExternalInstallMenuAlert : public GlobalError {
   GlobalErrorBubbleViewBase* GetBubbleView() override;
 
   // The owning ExternalInstallError.
-  ExternalInstallError* error_;
+  raw_ptr<ExternalInstallError> error_;
 
   // Provides menu item id for GlobalError.
   ExtensionInstallErrorMenuItemIdProvider id_provider_;
@@ -138,12 +138,12 @@ class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
   void BubbleViewCancelButtonPressed(Browser* browser) override;
 
   // The owning ExternalInstallError.
-  ExternalInstallError* error_;
+  raw_ptr<ExternalInstallError> error_;
   ExtensionInstallErrorMenuItemIdProvider id_provider_;
 
   // The Prompt with all information, which we then use to populate the bubble.
   // Owned by |error|.
-  ExtensionInstallPrompt::Prompt* prompt_;
+  raw_ptr<ExtensionInstallPrompt::Prompt> prompt_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -430,10 +430,9 @@ void ExternalInstallError::OnWebstoreResponseParseSuccess(
   std::string localized_user_count;
   absl::optional<double> average_rating =
       webstore_data->FindDoubleKey(kAverageRatingKey);
-  int rating_count = 0;
+  absl::optional<int> rating_count = webstore_data->FindIntKey(kRatingCountKey);
   if (!webstore_data->GetString(kUsersKey, &localized_user_count) ||
-      !average_rating ||
-      !webstore_data->GetInteger(kRatingCountKey, &rating_count)) {
+      !average_rating || !rating_count) {
     // If we don't get a valid webstore response, short circuit, and continue
     // to show a prompt without webstore data.
     OnFetchComplete();
@@ -442,11 +441,11 @@ void ExternalInstallError::OnWebstoreResponseParseSuccess(
 
   default_dialog_button_setting_ = GetDefaultDialogButton(*webstore_data.get());
 
-  bool show_user_count = true;
-  webstore_data->GetBoolean(kShowUserCountKey, &show_user_count);
+  absl::optional<bool> show_user_count =
+      webstore_data->FindBoolKey(kShowUserCountKey);
 
-  prompt_->SetWebstoreData(localized_user_count, show_user_count,
-                           *average_rating, rating_count);
+  prompt_->SetWebstoreData(localized_user_count, show_user_count.value_or(true),
+                           *average_rating, *rating_count);
   OnFetchComplete();
 }
 

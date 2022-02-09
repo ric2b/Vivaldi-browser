@@ -111,6 +111,9 @@ Polymer({
     /** @private {?chromeos.networkConfig.mojom.ManagedProperties|undefined} */
     managedProperties_: Object,
 
+    /** @type {!chromeos.networkConfig.mojom.GlobalPolicy|undefined} */
+    globalPolicy: Object,
+
     /**
      * Title containing the item's name and subtitle.
      * @private {string}
@@ -186,6 +189,26 @@ Polymer({
       reflectToAttribute: true,
       value: false,
       computed: 'computeIsESimInstallingProfile_(item, item.customItemType)',
+    },
+
+    /** @private {boolean} */
+    isESimPolicyEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.valueExists('esimPolicyEnabled') &&
+            loadTimeData.getBoolean('esimPolicyEnabled');
+      }
+    },
+
+    /**
+     * Indicates the network item is a blocked cellular network by policy.
+     * @private
+     */
+    isBlockedNetwork_: {
+      type: Boolean,
+      reflectToAttribute: true,
+      value: false,
+      computed: 'computeIsBlockedNetwork_(item, globalPolicy)',
     },
 
     /**@private {boolean} */
@@ -412,6 +435,12 @@ Polymer({
                 index, total, this.getItemName_(), status,
                 this.item.typeState.cellular.signalStrength);
           }
+          if (this.isBlockedNetwork_) {
+            return this.i18n(
+                'networkListItemCellularBlockedWithConnectionStatusA11yLabel',
+                index, total, this.getItemName_(), status,
+                this.item.typeState.cellular.signalStrength);
+          }
           if (this.subtitle_) {
             return this.i18n(
                 'networkListItemLabelCellularWithConnectionStatusAndProviderName',
@@ -427,6 +456,12 @@ Polymer({
         if (this.isPSimPendingActivationNetwork_) {
           return this.i18n(
               'networkListItemLabelCellularUnactivated', index, total,
+              this.getItemName_(), this.item.typeState.cellular.signalStrength);
+        }
+
+        if (this.isBlockedNetwork_) {
+          return this.i18n(
+              'networkListItemCellularBlockedA11yLabel', index, total,
               this.getItemName_(), this.item.typeState.cellular.signalStrength);
         }
 
@@ -676,6 +711,8 @@ Polymer({
         this.showButtons &&
         (this.isPSimUnavailableNetwork_ || this.isPSimActivatingNetwork_)) {
       this.fireShowDetails_(event);
+    } else if (this.isBlockedNetwork_) {
+      this.fireShowDetails_(event);
     } else {
       this.fire('selected', this.item);
       this.focusRequested_ = true;
@@ -864,6 +901,28 @@ Polymer({
     }
     return this.networkState.typeState.cellular.activationState ===
         chromeos.networkConfig.mojom.ActivationStateType.kActivating;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeIsBlockedNetwork_() {
+    // The blocked cellular network item will be gray out in the network list.
+    // TODO(crbug.com/1254917). WiFi list behavior should be consistent with
+    // Cellular.
+    if (!this.globalPolicy || !this.item ||
+        this.isPolicySource(this.item.source)) {
+      return false;
+    }
+
+    if (this.isESimPolicyEnabled_ &&
+        this.item.type === chromeos.networkConfig.mojom.NetworkType.kCellular &&
+        !!this.globalPolicy.allowOnlyPolicyCellularNetworks) {
+      return true;
+    }
+
+    return false;
   },
 
   /**

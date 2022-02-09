@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/ash/system/fake_input_device_settings.h"
@@ -305,17 +304,19 @@ void DeviceEmulatorMessageHandler::HandleRequestAudioNodes(
 void DeviceEmulatorMessageHandler::HandleInsertAudioNode(
     const base::ListValue* args) {
   AudioNode audio_node;
-  const base::DictionaryValue* device_dict = nullptr;
 
-  CHECK(args->GetDictionary(0, &device_dict));
-  CHECK(device_dict->GetBoolean("isInput", &audio_node.is_input));
-  CHECK(device_dict->GetString("deviceName", &audio_node.device_name));
-  CHECK(device_dict->GetString("type", &audio_node.type));
-  CHECK(device_dict->GetString("name", &audio_node.name));
-  CHECK(device_dict->GetBoolean("active", &audio_node.active));
+  const base::Value& device_value = args->GetList()[0];
+  CHECK(device_value.is_dict());
+  const base::DictionaryValue& device_dict =
+      base::Value::AsDictionaryValue(device_value);
+  audio_node.is_input = device_dict.FindBoolKey("isInput").value();
+  CHECK(device_dict.GetString("deviceName", &audio_node.device_name));
+  CHECK(device_dict.GetString("type", &audio_node.type));
+  CHECK(device_dict.GetString("name", &audio_node.name));
+  audio_node.active = device_dict.FindBoolKey("active").value();
 
   std::string tmp_id;
-  CHECK(device_dict->GetString("id", &tmp_id));
+  CHECK(device_dict.GetString("id", &tmp_id));
   CHECK(base::StringToUint64(tmp_id, &audio_node.id));
 
   chromeos::FakeCrasAudioClient::Get()->InsertAudioNodeToList(audio_node);
@@ -333,8 +334,9 @@ void DeviceEmulatorMessageHandler::HandleRemoveAudioNode(
 
 void DeviceEmulatorMessageHandler::HandleSetHasTouchpad(
     const base::ListValue* args) {
-  bool has_touchpad;
-  CHECK(args->GetBoolean(0, &has_touchpad));
+  const auto& list = args->GetList();
+  CHECK(!list.empty());
+  const bool has_touchpad = list[0].GetBool();
 
   system::InputDeviceSettings::Get()->GetFakeInterface()->set_touchpad_exists(
       has_touchpad);
@@ -342,8 +344,9 @@ void DeviceEmulatorMessageHandler::HandleSetHasTouchpad(
 
 void DeviceEmulatorMessageHandler::HandleSetHasMouse(
     const base::ListValue* args) {
-  bool has_mouse;
-  CHECK(args->GetBoolean(0, &has_mouse));
+  const auto& list = args->GetList();
+  CHECK(!list.empty());
+  const bool has_mouse = list[0].GetBool();
 
   system::InputDeviceSettings::Get()->GetFakeInterface()->set_mouse_exists(
       has_mouse);
@@ -562,20 +565,26 @@ void DeviceEmulatorMessageHandler::OnJavascriptDisallowed() {
 
 std::string DeviceEmulatorMessageHandler::CreateBluetoothDeviceFromListValue(
     const base::ListValue* args) {
-  const base::DictionaryValue* device_dict = nullptr;
   bluez::FakeBluetoothDeviceClient::IncomingDeviceProperties props;
 
-  CHECK(args->GetDictionary(0, &device_dict));
-  CHECK(device_dict->GetString("path", &props.device_path));
-  CHECK(device_dict->GetString("name", &props.device_name));
-  CHECK(device_dict->GetString("alias", &props.device_alias));
-  CHECK(device_dict->GetString("address", &props.device_address));
-  CHECK(device_dict->GetString("pairingMethod", &props.pairing_method));
-  CHECK(device_dict->GetString("pairingAuthToken", &props.pairing_auth_token));
-  CHECK(device_dict->GetString("pairingAction", &props.pairing_action));
-  CHECK(device_dict->GetInteger("classValue", &props.device_class));
-  CHECK(device_dict->GetBoolean("isTrusted", &props.is_trusted));
-  CHECK(device_dict->GetBoolean("incoming", &props.incoming));
+  const base::Value& device_value = args->GetList()[0];
+  CHECK(device_value.is_dict());
+  const base::DictionaryValue& device_dict =
+      base::Value::AsDictionaryValue(device_value);
+  CHECK(device_dict.GetString("path", &props.device_path));
+  CHECK(device_dict.GetString("name", &props.device_name));
+  CHECK(device_dict.GetString("alias", &props.device_alias));
+  CHECK(device_dict.GetString("address", &props.device_address));
+  CHECK(device_dict.GetString("pairingMethod", &props.pairing_method));
+  CHECK(device_dict.GetString("pairingAuthToken", &props.pairing_auth_token));
+  CHECK(device_dict.GetString("pairingAction", &props.pairing_action));
+
+  absl::optional<int> class_value = device_dict.FindIntKey("classValue");
+  CHECK(class_value);
+  props.device_class = *class_value;
+
+  props.is_trusted = device_dict.FindBoolKey("isTrusted").value();
+  props.incoming = device_dict.FindBoolKey("incoming").value();
 
   // Create the device and store it in the FakeBluetoothDeviceClient's observed
   // list of devices.
@@ -645,6 +654,8 @@ void DeviceEmulatorMessageHandler::TouchpadExists(bool exists) {
     return;
   FireWebUIListener("touchpad-exists-changed", base::Value(exists));
 }
+
+void DeviceEmulatorMessageHandler::HapticTouchpadExists(bool exists) {}
 
 void DeviceEmulatorMessageHandler::MouseExists(bool exists) {
   if (!IsJavascriptAllowed())

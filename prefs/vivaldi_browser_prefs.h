@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/strings/string_piece_forward.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"

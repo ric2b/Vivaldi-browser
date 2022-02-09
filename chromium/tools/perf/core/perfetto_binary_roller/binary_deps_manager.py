@@ -7,6 +7,7 @@ import os
 import posixpath
 import stat
 import subprocess
+import six
 
 import py_utils
 from py_utils import cloud_storage
@@ -26,6 +27,9 @@ CONFIG_PATH = os.path.abspath(
 
 def _GetHostArch():
   uname_arch = subprocess.check_output(['uname', '-m']).strip()
+  # TODO(b/206008069): Remove the check when fixed.
+  if hasattr(six, 'ensure_str'):
+    uname_arch = six.ensure_str(uname_arch)
   if uname_arch == 'armv7l':
     return 'arm'
   elif uname_arch == 'aarch64':
@@ -35,6 +39,9 @@ def _GetHostArch():
 
 def _GetBinaryArch(binary_name):
   file_output = subprocess.check_output(['file', binary_name])
+  # TODO(b/206008069): Remove the check when fixed.
+  if hasattr(six, 'ensure_str'):
+    file_output = six.ensure_str(file_output)
   file_arch = file_output.split(',')[1].strip()
   if file_arch == 'x86-64':
     return 'x86_64'
@@ -77,7 +84,7 @@ def _CalculateHash(remote_path):
 
 
 def _SetLatestPathForBinary(binary_name, platform, latest_path):
-  with tempfile_ext.NamedTemporaryFile() as latest_file:
+  with tempfile_ext.NamedTemporaryFile(mode='w') as latest_file:
     latest_file.write(latest_path)
     latest_file.close()
     remote_latest_file = posixpath.join(BINARY_CS_FOLDER, binary_name, platform,

@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
@@ -32,6 +31,10 @@ class PushMessagingRouter {
  public:
   using PushEventCallback =
       base::OnceCallback<void(blink::mojom::PushEventStatus)>;
+
+  PushMessagingRouter() = delete;
+  PushMessagingRouter(const PushMessagingRouter&) = delete;
+  PushMessagingRouter& operator=(const PushMessagingRouter&) = delete;
 
   // Delivers a push message with |payload| to the Service Worker identified by
   // |origin| and |service_worker_registration_id|.
@@ -89,8 +92,6 @@ class PushMessagingRouter {
       scoped_refptr<ServiceWorkerVersion> service_worker,
       PushEventCallback subscription_change_callback,
       blink::ServiceWorkerStatusCode service_worker_status);
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(PushMessagingRouter);
 };
 
 }  // namespace content

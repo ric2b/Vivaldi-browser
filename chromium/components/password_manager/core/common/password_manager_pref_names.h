@@ -24,6 +24,16 @@ extern const char kCredentialsEnableAutosignin[];
 // passwords.
 extern const char kCredentialsEnableService[];
 
+#if defined(OS_ANDROID)
+// Integer value which indicates the version used to migrate passwords from
+// built in storage to Google Mobile Services.
+extern const char kCurrentMigrationVersionToGoogleMobileServices[];
+
+// Timestamps of when credentials from the GMS Core to the built in storage were
+// last time migrated, in microseconds since Windows epoch.
+extern const char kTimeOfLastMigrationAttempt[];
+#endif
+
 #if defined(OS_WIN)
 // Whether the password was blank, only valid if OS password was last changed
 // on or before the value contained in kOsPasswordLastChanged.

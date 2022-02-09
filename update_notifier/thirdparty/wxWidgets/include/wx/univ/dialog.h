@@ -26,7 +26,7 @@ public:
              const wxPoint& pos = wxDefaultPosition,
              const wxSize& size = wxDefaultSize,
              long style = wxDEFAULT_DIALOG_STYLE,
-             const wxString& name = wxDialogNameStr)
+             const wxString& name = wxASCII_STR(wxDialogNameStr))
     {
         Init();
         Create(parent, id, title, pos, size, style, name);
@@ -37,23 +37,23 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_DIALOG_STYLE,
-                const wxString& name = wxDialogNameStr);
+                const wxString& name = wxASCII_STR(wxDialogNameStr));
 
     virtual ~wxDialog();
 
     // is the dialog in modal state right now?
-    virtual bool IsModal() const;
+    virtual bool IsModal() const wxOVERRIDE;
 
     // For now, same as Show(true) but returns return code
-    virtual int ShowModal();
+    virtual int ShowModal() wxOVERRIDE;
 
     // may be called to terminate the dialog with the given return code
-    virtual void EndModal(int retCode);
+    virtual void EndModal(int retCode) wxOVERRIDE;
 
     // returns true if we're in a modal loop
     bool IsModalShowing() const;
 
-    virtual bool Show(bool show = true);
+    virtual bool Show(bool show = true) wxOVERRIDE;
 
     // implementation only from now on
     // -------------------------------
@@ -79,8 +79,8 @@ private:
     // is modal right now?
     bool m_isShowingModal;
 
-    DECLARE_DYNAMIC_CLASS(wxDialog)
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_DYNAMIC_CLASS(wxDialog);
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif

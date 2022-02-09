@@ -33,6 +33,9 @@ class SkBitmap;
 // A map of icon urls to the bitmaps provided by that url.
 using IconsMap = std::map<GURL, std::vector<SkBitmap>>;
 
+// A map of icon urls to http status results. `http_status_code` is never 0.
+using DownloadedIconsHttpResults = std::map<GURL, int /*http_status_code*/>;
+
 using SquareSizePx = int;
 // Iterates in ascending order (checked in SortedSizesPxIsAscending test).
 using SortedSizesPx = base::flat_set<SquareSizePx, std::less<>>;
@@ -109,7 +112,7 @@ using ShortcutsMenuIconBitmaps = std::vector<IconBitmaps>;
 
 // Structure used when creating app icon shortcuts menu and for downloading
 // associated shortcut icons when supported by OS platform (eg. Windows).
-struct WebApplicationShortcutsMenuItemInfo {
+struct WebAppShortcutsMenuItemInfo {
   struct Icon {
     Icon();
     Icon(const Icon&);
@@ -123,16 +126,13 @@ struct WebApplicationShortcutsMenuItemInfo {
     SquareSizePx square_size_px = 0;
   };
 
-  WebApplicationShortcutsMenuItemInfo();
-  WebApplicationShortcutsMenuItemInfo(
-      const WebApplicationShortcutsMenuItemInfo&);
-  WebApplicationShortcutsMenuItemInfo(
-      WebApplicationShortcutsMenuItemInfo&&) noexcept;
-  ~WebApplicationShortcutsMenuItemInfo();
-  WebApplicationShortcutsMenuItemInfo& operator=(
-      const WebApplicationShortcutsMenuItemInfo&);
-  WebApplicationShortcutsMenuItemInfo& operator=(
-      WebApplicationShortcutsMenuItemInfo&&) noexcept;
+  WebAppShortcutsMenuItemInfo();
+  WebAppShortcutsMenuItemInfo(const WebAppShortcutsMenuItemInfo&);
+  WebAppShortcutsMenuItemInfo(WebAppShortcutsMenuItemInfo&&) noexcept;
+  ~WebAppShortcutsMenuItemInfo();
+  WebAppShortcutsMenuItemInfo& operator=(const WebAppShortcutsMenuItemInfo&);
+  WebAppShortcutsMenuItemInfo& operator=(
+      WebAppShortcutsMenuItemInfo&&) noexcept;
 
   const std::vector<Icon>& GetShortcutIconInfosForPurpose(
       IconPurpose purpose) const;
@@ -237,6 +237,10 @@ struct WebApplicationInfo {
   // https://www.w3.org/TR/appmanifest/#background_color-member
   absl::optional<SkColor> background_color;
 
+  // The color to use for the background when
+  // launched in dark mode. This doesn't yet have manifest support.
+  absl::optional<SkColor> dark_mode_background_color;
+
   // App preference regarding whether the app should be opened in a tab,
   // in a window (with or without minimal-ui buttons), or full screen. Defaults
   // to browser display mode as specified in
@@ -263,7 +267,7 @@ struct WebApplicationInfo {
 
   // Set of shortcuts menu item infos populated using shortcuts specified in the
   // manifest.
-  std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos;
+  std::vector<WebAppShortcutsMenuItemInfo> shortcuts_menu_item_infos;
 
   // Vector of shortcut icon bitmaps keyed by their square size. The index of a
   // given |IconBitmaps| matches that of the shortcut in
@@ -295,14 +299,17 @@ struct WebApplicationInfo {
 
   // The window selection behaviour of app launches.
   absl::optional<blink::Manifest::LaunchHandler> launch_handler;
+
+  // A mapping from locales to translated fields.
+  base::flat_map<std::u16string, blink::Manifest::TranslationItem> translations;
 };
 
 bool operator==(const IconSizes& icon_sizes1, const IconSizes& icon_sizes2);
 
-bool operator==(const WebApplicationShortcutsMenuItemInfo::Icon& icon1,
-                const WebApplicationShortcutsMenuItemInfo::Icon& icon2);
+bool operator==(const WebAppShortcutsMenuItemInfo::Icon& icon1,
+                const WebAppShortcutsMenuItemInfo::Icon& icon2);
 
-bool operator==(const WebApplicationShortcutsMenuItemInfo& shortcut_info1,
-                const WebApplicationShortcutsMenuItemInfo& shortcut_info2);
+bool operator==(const WebAppShortcutsMenuItemInfo& shortcut_info1,
+                const WebAppShortcutsMenuItemInfo& shortcut_info2);
 
 #endif  // CHROME_BROWSER_WEB_APPLICATIONS_WEB_APPLICATION_INFO_H_

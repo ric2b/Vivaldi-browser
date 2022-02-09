@@ -1,4 +1,3 @@
-
 /*
  * tiff-grayscale.c -- create a Class G (grayscale) TIFF file
  *      with a gray response curve in linear optical density

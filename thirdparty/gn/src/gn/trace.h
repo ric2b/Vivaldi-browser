@@ -8,7 +8,6 @@
 #include <string>
 #include <thread>
 
-#include "base/macros.h"
 #include "util/ticks.h"
 
 class Label;

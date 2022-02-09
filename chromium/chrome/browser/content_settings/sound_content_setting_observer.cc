@@ -30,12 +30,13 @@
 
 SoundContentSettingObserver::SoundContentSettingObserver(
     content::WebContents* contents)
-    : content::WebContentsObserver(contents), logged_site_muted_ukm_(false) {
+    : content::WebContentsObserver(contents),
+      content::WebContentsUserData<SoundContentSettingObserver>(*contents) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   host_content_settings_map_ =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  observation_.Observe(host_content_settings_map_);
+  observation_.Observe(host_content_settings_map_.get());
 
 #if !defined(OS_ANDROID)
   // Listen to changes of the block autoplay pref.
@@ -104,8 +105,8 @@ void SoundContentSettingObserver::OnAudioStateChanged(bool audible) {
 void SoundContentSettingObserver::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type) {
-  if (content_type != ContentSettingsType::SOUND)
+    ContentSettingsTypeSet content_type_set) {
+  if (!content_type_set.Contains(ContentSettingsType::SOUND))
     return;
 
 #if !defined(OS_ANDROID)

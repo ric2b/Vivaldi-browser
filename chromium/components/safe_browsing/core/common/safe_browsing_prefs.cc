@@ -107,6 +107,13 @@ const char kAdvancedProtectionAllowed[] =
 const char kSafeBrowsingMetricsLastLogTime[] =
     "safebrowsing.metrics_last_log_time";
 const char kSafeBrowsingEventTimestamps[] = "safebrowsing.event_timestamps";
+const char kAccountTailoredSecurityUpdateTimestamp[] =
+    "safebrowsing.aesb_update_time_windows_epoch_micros";
+const char kAccountTailoredSecurityShownNotification[] =
+    "safebrowsing.aesb_shown_notification";
+const char kEnhancedProtectionEnabledViaTailoredSecurity[] =
+    "safebrowsing.esb_enabled_via_tailored_security";
+
 }  // namespace prefs
 
 namespace safe_browsing {
@@ -121,10 +128,14 @@ SafeBrowsingState GetSafeBrowsingState(const PrefService& prefs) {
   }
 }
 
-void SetSafeBrowsingState(PrefService* prefs, SafeBrowsingState state) {
+void SetSafeBrowsingState(PrefService* prefs,
+                          SafeBrowsingState state,
+                          bool is_esb_enabled_in_sync) {
   if (state == SafeBrowsingState::ENHANCED_PROTECTION) {
     SetEnhancedProtectionPref(prefs, true);
     SetStandardProtectionPref(prefs, true);
+    prefs->SetBoolean(prefs::kEnhancedProtectionEnabledViaTailoredSecurity,
+                      is_esb_enabled_in_sync);
   } else if (state == SafeBrowsingState::STANDARD_PROTECTION) {
     SetEnhancedProtectionPref(prefs, false);
     SetStandardProtectionPref(prefs, true);
@@ -182,11 +193,6 @@ void RecordExtendedReportingMetrics(const PrefService& prefs) {
   // happening for this user.
   UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Extended",
                         IsExtendedReportingEnabled(prefs));
-
-  // Track whether this user has ever seen a security interstitial.
-  UMA_HISTOGRAM_BOOLEAN(
-      "SafeBrowsing.Pref.SawInterstitial",
-      prefs.GetBoolean(prefs::kSafeBrowsingSawInterstitialScoutReporting));
 }
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
@@ -223,6 +229,13 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope, 0);
   registry->RegisterInt64Pref(prefs::kSafeBrowsingMetricsLastLogTime, 0);
   registry->RegisterDictionaryPref(prefs::kSafeBrowsingEventTimestamps);
+  registry->RegisterTimePref(
+      prefs::kAccountTailoredSecurityUpdateTimestamp, base::Time(),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kAccountTailoredSecurityShownNotification, false);
+  registry->RegisterBooleanPref(
+      prefs::kEnhancedProtectionEnabledViaTailoredSecurity, false);
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {

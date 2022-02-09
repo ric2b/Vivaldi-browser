@@ -10,7 +10,6 @@
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
@@ -384,8 +383,8 @@ IN_PROC_BROWSER_TEST_P(FirstRunMasterPrefsVariationsSeedTest, Test) {
                                  variations::prefs::kVariationsSeedSignature));
 
   // Verify variations loaded in VariationsService by metrics.
-  histogram_tester_.ExpectUniqueSample("Variations.SeedLoadResult",
-                                       variations::StoreSeedResult::SUCCESS, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "Variations.SeedLoadResult", variations::StoreSeedResult::kSuccess, 1);
   histogram_tester_.ExpectUniqueSample(
       "Variations.LoadSeedSignature",
       variations::VerifySignatureResult::VALID_SIGNATURE, 1);

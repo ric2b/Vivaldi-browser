@@ -148,9 +148,7 @@ public:
     virtual bool AddView(wxView *view);
     virtual bool RemoveView(wxView *view);
 
-#ifndef __VISUALC6__
     wxViewVector GetViewsVector() const;
-#endif // !__VISUALC6__
 
     wxList& GetViews() { return m_documentViews; }
     const wxList& GetViews() const { return m_documentViews; }
@@ -220,7 +218,7 @@ private:
     typedef wxDList<wxDocument> DocsList;
     DocsList m_childDocuments;
 
-    DECLARE_ABSTRACT_CLASS(wxDocument)
+    wxDECLARE_ABSTRACT_CLASS(wxDocument);
     wxDECLARE_NO_COPY_CLASS(wxDocument);
 };
 
@@ -284,7 +282,7 @@ public:
 
 protected:
     // hook the document into event handlers chain here
-    virtual bool TryBefore(wxEvent& event);
+    virtual bool TryBefore(wxEvent& event) wxOVERRIDE;
 
     wxDocument*       m_viewDocument;
     wxString          m_viewTypeName;
@@ -293,7 +291,7 @@ protected:
     wxDocChildFrameAnyBase *m_docChildFrame;
 
 private:
-    DECLARE_ABSTRACT_CLASS(wxView)
+    wxDECLARE_ABSTRACT_CLASS(wxView);
     wxDECLARE_NO_COPY_CLASS(wxView);
 };
 
@@ -378,7 +376,7 @@ protected:
     virtual wxView *DoCreateView();
 
 private:
-    DECLARE_CLASS(wxDocTemplate)
+    wxDECLARE_CLASS(wxDocTemplate);
     wxDECLARE_NO_COPY_CLASS(wxDocTemplate);
 };
 
@@ -480,10 +478,8 @@ public:
     wxView *GetAnyUsableView() const;
 
 
-#ifndef __VISUALC6__
     wxDocVector GetDocumentsVector() const;
     wxDocTemplateVector GetTemplatesVector() const;
-#endif // !__VISUALC6__
 
     wxList& GetDocuments() { return m_docs; }
     wxList& GetTemplates() { return m_templates; }
@@ -533,12 +529,6 @@ public:
     );
 #endif
 
-#if WXWIN_COMPATIBILITY_2_6
-    // deprecated, use GetHistoryFilesCount() instead
-    wxDEPRECATED( size_t GetNoHistoryFiles() const );
-#endif // WXWIN_COMPATIBILITY_2_6
-
-
 protected:
     // Called when a file selected from the MRU list doesn't exist any more.
     // The default behaviour is to remove the file from the MRU and notify the
@@ -554,7 +544,7 @@ protected:
 #endif // wxUSE_PRINTING_ARCHITECTURE
 
     // hook the currently active view into event handlers chain here
-    virtual bool TryBefore(wxEvent& event);
+    virtual bool TryBefore(wxEvent& event) wxOVERRIDE;
 
     // return the command processor for the current document, if any
     wxCommandProcessor *GetCurrentCommandProcessor() const;
@@ -572,17 +562,10 @@ protected:
     wxPageSetupDialogData m_pageSetupDialogData;
 #endif // wxUSE_PRINTING_ARCHITECTURE
 
-    DECLARE_EVENT_TABLE()
-    DECLARE_DYNAMIC_CLASS(wxDocManager)
+    wxDECLARE_EVENT_TABLE();
+    wxDECLARE_DYNAMIC_CLASS(wxDocManager);
     wxDECLARE_NO_COPY_CLASS(wxDocManager);
 };
-
-#if WXWIN_COMPATIBILITY_2_6
-inline size_t wxDocManager::GetNoHistoryFiles() const
-{
-    return GetHistoryFilesCount();
-}
-#endif // WXWIN_COMPATIBILITY_2_6
 
 // ----------------------------------------------------------------------------
 // Base class for child frames -- this is what wxView renders itself into
@@ -686,9 +669,12 @@ private:
 // wxMDIParentFrame.
 // ----------------------------------------------------------------------------
 
+// Note that we intentionally do not use WXDLLIMPEXP_CORE for this class as it
+// has only inline methods.
+
 template <class ChildFrame, class ParentFrame>
-class WXDLLIMPEXP_CORE wxDocChildFrameAny : public ChildFrame,
-                                            public wxDocChildFrameAnyBase
+class wxDocChildFrameAny : public ChildFrame,
+                           public wxDocChildFrameAnyBase
 {
 public:
     typedef ChildFrame BaseClass;
@@ -705,7 +691,7 @@ public:
                        const wxPoint& pos = wxDefaultPosition,
                        const wxSize& size = wxDefaultSize,
                        long style = wxDEFAULT_FRAME_STYLE,
-                       const wxString& name = wxFrameNameStr)
+                       const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         Create(doc, view, parent, id, title, pos, size, style, name);
     }
@@ -718,7 +704,7 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE,
-                const wxString& name = wxFrameNameStr)
+                const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         if ( !wxDocChildFrameAnyBase::Create(doc, view, this) )
             return false;
@@ -726,25 +712,15 @@ public:
         if ( !BaseClass::Create(parent, id, title, pos, size, style, name) )
             return false;
 
-        this->Connect(wxEVT_ACTIVATE,
-                      wxActivateEventHandler(wxDocChildFrameAny::OnActivate));
-        this->Connect(wxEVT_CLOSE_WINDOW,
-                      wxCloseEventHandler(wxDocChildFrameAny::OnCloseWindow));
+        this->Bind(wxEVT_ACTIVATE, &wxDocChildFrameAny::OnActivate, this);
+        this->Bind(wxEVT_CLOSE_WINDOW, &wxDocChildFrameAny::OnCloseWindow, this);
 
         return true;
     }
 
-    virtual bool Destroy()
-    {
-        // FIXME: why exactly do we do this? to avoid activation events during
-        //        destructions maybe?
-        m_childView = NULL;
-        return BaseClass::Destroy();
-    }
-
 protected:
     // hook the child view into event handlers chain here
-    virtual bool TryBefore(wxEvent& event)
+    virtual bool TryBefore(wxEvent& event) wxOVERRIDE
     {
         return TryProcessEvent(event) || BaseClass::TryBefore(event);
     }
@@ -761,7 +737,7 @@ private:
     void OnCloseWindow(wxCloseEvent& event)
     {
         if ( CloseView(event) )
-            Destroy();
+            this->Destroy();
         //else: vetoed
     }
 
@@ -773,15 +749,6 @@ private:
 // A default child frame: we need to define it as a class just for wxRTTI,
 // otherwise we could simply typedef it
 // ----------------------------------------------------------------------------
-
-#ifdef __VISUALC6__
-    // "non dll-interface class 'wxDocChildFrameAny<>' used as base interface
-    // for dll-interface class 'wxDocChildFrame'" -- this is bogus as the
-    // template will be DLL-exported but only once it is used as base class
-    // here!
-    #pragma warning (push)
-    #pragma warning (disable:4275)
-#endif
 
 typedef wxDocChildFrameAny<wxFrame, wxFrame> wxDocChildFrameBase;
 
@@ -800,7 +767,7 @@ public:
                     const wxPoint& pos = wxDefaultPosition,
                     const wxSize& size = wxDefaultSize,
                     long style = wxDEFAULT_FRAME_STYLE,
-                    const wxString& name = wxFrameNameStr)
+                    const wxString& name = wxASCII_STR(wxFrameNameStr))
         : wxDocChildFrameBase(doc, view,
                               parent, id, title, pos, size, style, name)
     {
@@ -814,7 +781,7 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE,
-                const wxString& name = wxFrameNameStr)
+                const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         return wxDocChildFrameBase::Create
                (
@@ -824,7 +791,7 @@ public:
     }
 
 private:
-    DECLARE_CLASS(wxDocChildFrame)
+    wxDECLARE_CLASS(wxDocChildFrame);
     wxDECLARE_NO_COPY_CLASS(wxDocChildFrame);
 };
 
@@ -866,8 +833,8 @@ protected:
 // This is similar to wxDocChildFrameAny and is used to provide common
 // implementation for both wxDocParentFrame and wxDocMDIParentFrame
 template <class BaseFrame>
-class WXDLLIMPEXP_CORE wxDocParentFrameAny : public BaseFrame,
-                                             public wxDocParentFrameAnyBase
+class wxDocParentFrameAny : public BaseFrame,
+                            public wxDocParentFrameAnyBase
 {
 public:
     wxDocParentFrameAny() : wxDocParentFrameAnyBase(this) { }
@@ -878,7 +845,7 @@ public:
                         const wxPoint& pos = wxDefaultPosition,
                         const wxSize& size = wxDefaultSize,
                         long style = wxDEFAULT_FRAME_STYLE,
-                        const wxString& name = wxFrameNameStr)
+                        const wxString& name = wxASCII_STR(wxFrameNameStr))
         : wxDocParentFrameAnyBase(this)
     {
         Create(manager, frame, id, title, pos, size, style, name);
@@ -891,24 +858,22 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE,
-                const wxString& name = wxFrameNameStr)
+                const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         m_docManager = manager;
 
         if ( !BaseFrame::Create(frame, id, title, pos, size, style, name) )
             return false;
 
-        this->Connect(wxID_EXIT, wxEVT_MENU,
-                      wxCommandEventHandler(wxDocParentFrameAny::OnExit));
-        this->Connect(wxEVT_CLOSE_WINDOW,
-                      wxCloseEventHandler(wxDocParentFrameAny::OnCloseWindow));
+        this->Bind(wxEVT_MENU, &wxDocParentFrameAny::OnExit, this, wxID_EXIT);
+        this->Bind(wxEVT_CLOSE_WINDOW, &wxDocParentFrameAny::OnCloseWindow, this);
 
         return true;
     }
 
 protected:
     // hook the document manager into event handling chain here
-    virtual bool TryBefore(wxEvent& event)
+    virtual bool TryBefore(wxEvent& event) wxOVERRIDE
     {
         // It is important to send the event to the base class first as
         // wxMDIParentFrame overrides its TryBefore() to send the menu events
@@ -955,7 +920,7 @@ public:
                      const wxPoint& pos = wxDefaultPosition,
                      const wxSize& size = wxDefaultSize,
                      long style = wxDEFAULT_FRAME_STYLE,
-                     const wxString& name = wxFrameNameStr)
+                     const wxString& name = wxASCII_STR(wxFrameNameStr))
         : wxDocParentFrameBase(manager,
                                parent, id, title, pos, size, style, name)
     {
@@ -968,7 +933,7 @@ public:
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = wxDEFAULT_FRAME_STYLE,
-                const wxString& name = wxFrameNameStr)
+                const wxString& name = wxASCII_STR(wxFrameNameStr))
     {
         return wxDocParentFrameBase::Create(manager,
                                             parent, id, title,
@@ -976,14 +941,9 @@ public:
     }
 
 private:
-    DECLARE_CLASS(wxDocParentFrame)
+    wxDECLARE_CLASS(wxDocParentFrame);
     wxDECLARE_NO_COPY_CLASS(wxDocParentFrame);
 };
-
-#ifdef __VISUALC6__
-    // reenable warning 4275
-    #pragma warning (pop)
-#endif
 
 // ----------------------------------------------------------------------------
 // Provide simple default printing facilities
@@ -996,11 +956,11 @@ public:
     wxDocPrintout(wxView *view = NULL, const wxString& title = wxString());
 
     // implement wxPrintout methods
-    virtual bool OnPrintPage(int page);
-    virtual bool HasPage(int page);
-    virtual bool OnBeginDocument(int startPage, int endPage);
+    virtual bool OnPrintPage(int page) wxOVERRIDE;
+    virtual bool HasPage(int page) wxOVERRIDE;
+    virtual bool OnBeginDocument(int startPage, int endPage) wxOVERRIDE;
     virtual void GetPageInfo(int *minPage, int *maxPage,
-                             int *selPageFrom, int *selPageTo);
+                             int *selPageFrom, int *selPageTo) wxOVERRIDE;
 
     virtual wxView *GetView() { return m_printoutView; }
 
@@ -1008,7 +968,7 @@ protected:
     wxView*       m_printoutView;
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxDocPrintout)
+    wxDECLARE_DYNAMIC_CLASS(wxDocPrintout);
     wxDECLARE_NO_COPY_CLASS(wxDocPrintout);
 };
 #endif // wxUSE_PRINTING_ARCHITECTURE
@@ -1039,7 +999,6 @@ enum
 };
 #endif // WXWIN_COMPATIBILITY_2_8
 
-#ifndef __VISUALC6__
 inline wxViewVector wxDocument::GetViewsVector() const
 {
     return m_documentViews.AsVector<wxView*>();
@@ -1054,7 +1013,6 @@ inline wxDocTemplateVector wxDocManager::GetTemplatesVector() const
 {
     return m_templates.AsVector<wxDocTemplate*>();
 }
-#endif // !__VISUALC6__
 
 #endif // wxUSE_DOC_VIEW_ARCHITECTURE
 

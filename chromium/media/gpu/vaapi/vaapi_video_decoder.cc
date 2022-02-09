@@ -4,6 +4,8 @@
 
 #include "media/gpu/vaapi/vaapi_video_decoder.h"
 
+#include <vulkan/vulkan.h>
+
 #include <limits>
 #include <vector>
 
@@ -15,7 +17,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/format_utils.h"
 #include "media/base/media_log.h"
@@ -42,7 +46,11 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/components/cdm_factory_daemon/chromeos_cdm_factory.h"
+// gn check does not account for BUILDFLAG(), so including these headers will
+// make gn check fail for builds other than ash-chrome. See gn help nogncheck
+// for more information.
+#include "chromeos/components/cdm_factory_daemon/chromeos_cdm_context.h"  // nogncheck
+#include "chromeos/components/cdm_factory_daemon/chromeos_cdm_factory.h"  // nogncheck
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace media {
@@ -184,7 +192,7 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
       state_ == State::kExpectingReset) {
     LOG(ERROR)
         << "Don't call Initialize() while there are pending decode tasks";
-    std::move(init_cb).Run(StatusCode::kVaapiReinitializedDuringDecode);
+    std::move(init_cb).Run(StatusCode::kDecoderInitializationFailed);
     return;
   }
 
@@ -307,7 +315,8 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
   auto accel_status = CreateAcceleratedVideoDecoder();
   if (!accel_status.is_ok()) {
     SetErrorState("failed to create decoder delegate");
-    std::move(init_cb).Run(std::move(accel_status));
+    std::move(init_cb).Run(Status(Status::Codes::kDecoderInitializationFailed)
+                               .AddCause(std::move(accel_status)));
     return;
   }
 
@@ -576,16 +585,10 @@ void VaapiVideoDecoder::SurfaceReady(scoped_refptr<VASurface> va_surface,
     video_frame = std::move(wrapped_frame);
   }
 
-  if (cdm_context_ref_ && !transcryption_) {
-    // For protected content we also need to set the ID for validating protected
-    // surfaces in the VideoFrame metadata so we can check if the surface is
-    // still valid once we get to the compositor stage.
-    uint32_t protected_instance_id = vaapi_wrapper_->GetProtectedInstanceID();
-    video_frame->metadata().hw_protected_validation_id = protected_instance_id;
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    // Additionally, we store the VA-API protected session ID so that it can be
-    // re-used for scaling the decoded video frame later in the pipeline.
+  if (cdm_context_ref_ && !transcryption_) {
+    // Store the VA-API protected session ID so that it can be re-used for
+    // scaling the decoded video frame later in the pipeline.
     VAProtectedSessionID va_protected_session_id =
         vaapi_wrapper_->GetProtectedSessionID();
 
@@ -598,8 +601,8 @@ void VaapiVideoDecoder::SurfaceReady(scoped_refptr<VASurface> va_surface,
         "does not match the type exposed by VaapiWrapper");
     video_frame->metadata().hw_va_protected_session_id =
         va_protected_session_id;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   const auto gfx_color_space = color_space.ToGfxColorSpace();
   if (gfx_color_space.IsValid())
@@ -767,17 +770,58 @@ void VaapiVideoDecoder::ApplyResolutionChangeWithScreenSizes(
 
   const gfx::Size decoder_natural_size =
       aspect_ratio_.GetNaturalSize(decoder_visible_rect);
+
+#if defined(OS_LINUX)
+  absl::optional<DmabufVideoFramePool::CreateFrameCB> allocator =
+      base::BindRepeating(&AllocateCustomFrameProxy, weak_this_);
+  std::vector<ImageProcessor::PixelLayoutCandidate> candidates = {
+      {.fourcc = *format_fourcc,
+       .size = decoder_pic_size,
+       .modifier = gfx::NativePixmapHandle::kNoModifier}};
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  absl::optional<DmabufVideoFramePool::CreateFrameCB> allocator = absl::nullopt;
+
+  std::vector<ImageProcessor::PixelLayoutCandidate> candidates = {
+      {.fourcc = *format_fourcc,
+       .size = decoder_pic_size,
+       .modifier = gfx::NativePixmapHandle::kNoModifier}};
+#else
+  absl::optional<DmabufVideoFramePool::CreateFrameCB> allocator = absl::nullopt;
+
+  // TODO(b/203240043): We assume that the |dummy_frame|'s modifier matches the
+  // buffer returned by the video frame pool. We should create a test to make
+  // sure this assumption is never violated.
+  // TODO(b/203240043): Create a GMB directly instead of allocating a
+  // VideoFrame.
+  scoped_refptr<VideoFrame> dummy_frame = CreateGpuMemoryBufferVideoFrame(
+      /*gpu_memory_buffer_factory=*/nullptr, *format, decoder_pic_size,
+      decoder_visible_rect, decoder_natural_size,
+      /*timestamp=*/base::TimeDelta(),
+      cdm_context_ref_ ? gfx::BufferUsage::PROTECTED_SCANOUT_VDA_WRITE
+                       : gfx::BufferUsage::SCANOUT_VDA_WRITE);
+  if (!dummy_frame) {
+    SetErrorState("failed to allocate a dummy buffer");
+    return;
+  }
+
+  std::vector<ImageProcessor::PixelLayoutCandidate> candidates = {
+      {.fourcc = *format_fourcc,
+       .size = decoder_pic_size,
+       .modifier = dummy_frame->layout().modifier()}};
+#endif  // defined(OS_LINUX)
+
   auto status_or_layout = client_->PickDecoderOutputFormat(
-      /*candidates=*/{{*format_fourcc, decoder_pic_size}}, decoder_visible_rect,
-      decoder_natural_size, output_visible_rect.size(),
-      decoder_->GetRequiredNumOfPictures(),
+      candidates, decoder_visible_rect, decoder_natural_size,
+      output_visible_rect.size(), decoder_->GetRequiredNumOfPictures(),
       /*use_protected=*/!!cdm_context_ref_,
-      /*need_aux_frame_pool=*/true);
+      /*need_aux_frame_pool=*/true, std::move(allocator));
+
   if (status_or_layout.has_error()) {
-    if (std::move(status_or_layout).error().code() == StatusCode::kAborted) {
-      DVLOGF(2) << "The frame pool initialization is aborted.";
+    if (status_or_layout == CroStatus::Codes::kResetRequired) {
+      DVLOGF(2) << "The frame pool initialization is aborted";
       SetState(State::kExpectingReset);
     } else {
+      // TODO(crbug/1103510): don't drop the error on the floor here.
       SetErrorState("failed Initialize()ing the frame pool");
     }
     return;
@@ -789,6 +833,93 @@ void VaapiVideoDecoder::ApplyResolutionChangeWithScreenSizes(
   decoder_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VaapiVideoDecoder::HandleDecodeTask, weak_this_));
+}
+
+// Static
+CroStatus::Or<scoped_refptr<VideoFrame>>
+VaapiVideoDecoder::AllocateCustomFrameProxy(
+    base::WeakPtr<VaapiVideoDecoder> decoder,
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    bool use_protected,
+    base::TimeDelta timestamp) {
+  if (!decoder)
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+  return decoder->AllocateCustomFrame(gpu_memory_buffer_factory, format,
+                                      coded_size, visible_rect, natural_size,
+                                      use_protected, timestamp);
+}
+
+CroStatus::Or<scoped_refptr<VideoFrame>> VaapiVideoDecoder::AllocateCustomFrame(
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    bool use_protected,
+    base::TimeDelta timestamp) {
+  DVLOGF(2);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(state_ == State::kChangingResolution || state_ == State::kDecoding);
+  if (format != PIXEL_FORMAT_NV12)
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+
+  auto surface = vaapi_wrapper_->CreateVASurfaceWithUsageHints(
+      VA_RT_FORMAT_YUV420, coded_size,
+      {VaapiWrapper::SurfaceUsageHint::kVideoDecoder});
+  if (!surface)
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+  auto pixmap_and_info =
+      vaapi_wrapper_->ExportVASurfaceAsNativePixmapDmaBuf(*surface);
+  if (!pixmap_and_info)
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+
+  // Increase this one every time this method is called.
+  static int gmb_id = 0;
+  CHECK_LT(gmb_id, std::numeric_limits<int>::max());
+  gfx::GpuMemoryBufferHandle gmb_handle;
+  auto handle_id = gfx::GpuMemoryBufferId(gmb_id++);
+  gmb_handle.id = handle_id;
+  gmb_handle.type = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
+  gmb_handle.native_pixmap_handle = pixmap_and_info->pixmap->ExportHandle();
+
+  if (gmb_handle.native_pixmap_handle.planes.empty())
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+
+  gpu::GpuMemoryBufferSupport gmb_support;
+  auto gmb = gmb_support.CreateGpuMemoryBufferImplFromHandle(
+      std::move(gmb_handle), pixmap_and_info->pixmap->GetBufferSize(),
+      pixmap_and_info->pixmap->GetBufferFormat(),
+      gfx::BufferUsage::SCANOUT_VDA_WRITE, base::NullCallback());
+  if (!gmb)
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+  const gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes] = {};
+  auto frame = VideoFrame::WrapExternalGpuMemoryBuffer(
+      visible_rect, natural_size, std::move(gmb), mailbox_holders,
+      base::NullCallback(), timestamp);
+
+  if (!frame)
+    return CroStatus::Codes::kFailedToCreateVideoFrame;
+
+  frame->set_ycbcr_info(gpu::VulkanYCbCrInfo(
+      /*image_format=*/VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+      /*external_format=*/0,
+      /*suggested_ycbcr_model=*/VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+      /*suggested_ycbcr_range=*/VK_SAMPLER_YCBCR_RANGE_ITU_NARROW,
+      /*suggested_xchroma_offset=*/VK_CHROMA_LOCATION_COSITED_EVEN,
+      /*suggested_ychroma_offset=*/VK_CHROMA_LOCATION_COSITED_EVEN,
+      /*format_features=*/VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+          VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+          VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT |
+          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+          VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT));
+  allocated_va_surfaces_[handle_id] = surface;
+
+  return frame;
 }
 
 bool VaapiVideoDecoder::NeedsBitstreamConversion() const {
@@ -940,7 +1071,7 @@ void VaapiVideoDecoder::Reset(base::OnceClosure reset_cb) {
                                 std::move(reset_cb)));
 }
 
-Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
+VaapiStatus VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
   DVLOGF(2);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(state_ == State::kUninitialized ||
@@ -957,14 +1088,15 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
         encryption_scheme_);
     decoder_delegate_ = accelerator.get();
 
-    decoder_.reset(
-        new H264Decoder(std::move(accelerator), profile_, color_space_));
+    decoder_ = std::make_unique<H264Decoder>(std::move(accelerator), profile_,
+                                             color_space_);
   } else if (profile_ >= VP8PROFILE_MIN && profile_ <= VP8PROFILE_MAX) {
     auto accelerator =
         std::make_unique<VP8VaapiVideoDecoderDelegate>(this, vaapi_wrapper_);
     decoder_delegate_ = accelerator.get();
 
-    decoder_.reset(new VP8Decoder(std::move(accelerator)));
+    decoder_ =
+        std::make_unique<VP8Decoder>(std::move(accelerator), color_space_);
   } else if (profile_ >= VP9PROFILE_MIN && profile_ <= VP9PROFILE_MAX) {
     auto accelerator = std::make_unique<VP9VaapiVideoDecoderDelegate>(
         this, vaapi_wrapper_, std::move(protected_update_cb),
@@ -972,8 +1104,8 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
         encryption_scheme_);
     decoder_delegate_ = accelerator.get();
 
-    decoder_.reset(
-        new VP9Decoder(std::move(accelerator), profile_, color_space_));
+    decoder_ = std::make_unique<VP9Decoder>(std::move(accelerator), profile_,
+                                            color_space_);
   }
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC_DECODING)
   else if (profile_ >= HEVCPROFILE_MIN && profile_ <= HEVCPROFILE_MAX) {
@@ -983,8 +1115,8 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
         encryption_scheme_);
     decoder_delegate_ = accelerator.get();
 
-    decoder_.reset(
-        new H265Decoder(std::move(accelerator), profile_, color_space_));
+    decoder_ = std::make_unique<H265Decoder>(std::move(accelerator), profile_,
+                                             color_space_);
   }
 #endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC_DECODING)
   else if (profile_ >= AV1PROFILE_MIN && profile_ <= AV1PROFILE_MAX) {
@@ -994,12 +1126,13 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
         encryption_scheme_);
     decoder_delegate_ = accelerator.get();
 
-    decoder_.reset(new AV1Decoder(std::move(accelerator), profile_));
+    decoder_ = std::make_unique<AV1Decoder>(std::move(accelerator), profile_,
+                                            color_space_);
   } else {
-    return Status(StatusCode::kDecoderUnsupportedProfile)
+    return VaapiStatus(VaapiStatus::Codes::kUnsupportedProfile)
         .WithData("profile", profile_);
   }
-  return OkStatus();
+  return VaapiStatus::Codes::kOk;
 }
 
 void VaapiVideoDecoder::ResetDone(base::OnceClosure reset_cb) {

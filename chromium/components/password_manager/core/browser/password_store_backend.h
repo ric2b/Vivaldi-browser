@@ -16,6 +16,8 @@ namespace syncer {
 class ProxyModelTypeControllerDelegate;
 }  // namespace syncer
 
+class PrefService;
+
 namespace password_manager {
 
 class LoginDatabase;
@@ -25,10 +27,24 @@ struct PasswordForm;
 class FieldInfoStore;
 class SmartBubbleStatsStore;
 
+enum class PasswordStoreBackendError {
+  // Error which isn't specified properly, should be treated as kUnrecoverable.
+  kUnspecified,
+  // Recoverable which can be possible fixed by retrying request.
+  kRecoverable,
+  // Unrecoverable errors which can't be fixed easily. It may require some input
+  // from a user (to enter a passphrase) or indicate broken database.
+  kUnrecoverable,
+};
+
 using LoginsResult = std::vector<std::unique_ptr<PasswordForm>>;
 using LoginsReply = base::OnceCallback<void(LoginsResult)>;
 using PasswordStoreChangeListReply =
-    base::OnceCallback<void(const PasswordStoreChangeList&)>;
+    base::OnceCallback<void(PasswordStoreChangeList)>;
+
+using LoginsResultOrError =
+    absl::variant<LoginsResult, PasswordStoreBackendError>;
+using LoginsOrErrorReply = base::OnceCallback<void(LoginsResultOrError)>;
 
 // The backend is used by the `PasswordStore` to interact with the storage in a
 // platform-dependent way (e.g. on Desktop, it calls a local database while on
@@ -37,10 +53,8 @@ using PasswordStoreChangeListReply =
 // IO operation from possibly blocking the main thread.
 class PasswordStoreBackend {
  public:
-  using OptionalLoginsReply =
-      base::OnceCallback<void(absl::optional<LoginsResult>)>;
   using RemoteChangesReceived =
-      base::RepeatingCallback<void(const PasswordStoreChangeList&)>;
+      base::RepeatingCallback<void(PasswordStoreChangeList)>;
 
   PasswordStoreBackend() = default;
   PasswordStoreBackend(const PasswordStoreBackend&) = delete;
@@ -48,6 +62,8 @@ class PasswordStoreBackend {
   PasswordStoreBackend& operator=(const PasswordStoreBackend&) = delete;
   PasswordStoreBackend& operator=(PasswordStoreBackend&&) = delete;
   virtual ~PasswordStoreBackend() = default;
+
+  virtual base::WeakPtr<PasswordStoreBackend> GetWeakPtr() = 0;
 
   // TODO(crbug.bom/1226042): Rename this to Init after PasswordStoreImpl no
   // longer inherits PasswordStore.
@@ -60,13 +76,12 @@ class PasswordStoreBackend {
   virtual void Shutdown(base::OnceClosure shutdown_completed) = 0;
 
   // Returns the complete list of PasswordForms (regardless of their blocklist
-  // status) and notify `consumer` on completion. Callback is called on the main
-  // sequence.
-  virtual void GetAllLoginsAsync(LoginsReply callback) = 0;
+  // status). Callback is called on the main sequence.
+  virtual void GetAllLoginsAsync(LoginsOrErrorReply callback) = 0;
 
   // Returns the complete list of non-blocklist PasswordForms. Callback is
   // called on the main sequence.
-  virtual void GetAutofillableLoginsAsync(LoginsReply callback) = 0;
+  virtual void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) = 0;
 
   // Returns all PasswordForms with the same signon_realm as a form in |forms|.
   // If |include_psl|==true, the PSL-matched forms are also included.
@@ -111,12 +126,14 @@ class PasswordStoreBackend {
   // For sync codebase only: instantiates a proxy controller delegate to
   // react to sync events.
   virtual std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
-  CreateSyncControllerDelegateFactory() = 0;
+  CreateSyncControllerDelegate() = 0;
 
   // Factory function for creating the backend. The Local backend requires the
   // provided `login_db` for storage and Android backend for migration purposes.
   static std::unique_ptr<PasswordStoreBackend> Create(
-      std::unique_ptr<LoginDatabase> login_db);
+      std::unique_ptr<LoginDatabase> login_db,
+      PrefService* prefs,
+      base::RepeatingCallback<bool()> is_syncing_passwords_callback);
 };
 
 }  // namespace password_manager

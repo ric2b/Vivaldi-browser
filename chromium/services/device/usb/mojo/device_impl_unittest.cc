@@ -20,7 +20,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
 #include "base/containers/span.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -56,6 +55,9 @@ class ConfigBuilder {
   explicit ConfigBuilder(uint8_t value)
       : config_(BuildUsbConfigurationInfoPtr(value, false, false, 0)) {}
 
+  ConfigBuilder(const ConfigBuilder&) = delete;
+  ConfigBuilder& operator=(const ConfigBuilder&) = delete;
+
   ConfigBuilder& AddInterface(uint8_t interface_number,
                               uint8_t alternate_setting,
                               uint8_t class_code,
@@ -71,8 +73,6 @@ class ConfigBuilder {
 
  private:
   mojom::UsbConfigurationInfoPtr config_;
-
-  DISALLOW_COPY_AND_ASSIGN(ConfigBuilder);
 };
 
 void ExpectOpenAndThen(mojom::UsbOpenDeviceError expected,

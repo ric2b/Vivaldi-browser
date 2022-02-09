@@ -12,7 +12,6 @@
 #include <set>
 
 #include "base/containers/unique_ptr_adapters.h"
-#include "base/macros.h"
 #include "fuchsia/engine/browser/cookie_manager_impl.h"
 #include "fuchsia/engine/web_engine_export.h"
 
@@ -56,7 +55,7 @@ class WEB_ENGINE_EXPORT ContextImpl final : public fuchsia::web::Context {
   // Creates a Frame with |params| for the |web_contents| and binds it to
   // |frame_request|. The Frame will self-delete when |frame_request|
   // disconnects.
-  void CreateFrameForWebContents(
+  FrameImpl* CreateFrameForWebContents(
       std::unique_ptr<content::WebContents> web_contents,
       fuchsia::web::CreateFrameParams params,
       fidl::InterfaceRequest<fuchsia::web::Frame> frame_request);

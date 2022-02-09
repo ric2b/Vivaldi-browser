@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "base/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
@@ -41,7 +42,7 @@ class Observer : public base::CheckedObserver {
   virtual void OnPermissionChanged(
       const ContentSettingsPattern& primary_pattern,
       const ContentSettingsPattern& secondary_pattern,
-      ContentSettingsType content_type) = 0;
+      ContentSettingsTypeSet content_type_set) = 0;
 };
 
 using BrowserPermissionCallback = base::OnceCallback<void(ContentSetting)>;
@@ -181,9 +182,10 @@ class PermissionContextBase : public KeyedService,
                                           ContentSetting content_setting);
 
   // content_settings::Observer:
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override;
 
   // Implementors can override this method to use a different PermissionRequest
   // implementation.
@@ -226,7 +228,7 @@ class PermissionContextBase : public KeyedService,
   // Vivaldi
   int RemoveBridgeID(int bridge_id);
 
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
   const ContentSettingsType content_settings_type_;
   const blink::mojom::PermissionsPolicyFeature permissions_policy_feature_;
   std::unordered_map<std::string, std::unique_ptr<PermissionRequest>>

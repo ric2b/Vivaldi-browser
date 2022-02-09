@@ -123,7 +123,7 @@ class GTestResult(object):
       self._crashed = True
 
     # At most one test can crash the entire app in a given parsing.
-    for test, log_lines in self._failed_tests.iteritems():
+    for test, log_lines in self._failed_tests.items():
       # A test with no output would have crashed. No output is replaced
       # by the GTestLogParser by a sentence indicating non-completion.
       if 'Did not complete.' in log_lines:
@@ -131,7 +131,7 @@ class GTestResult(object):
         self._crashed_test = test
 
     # A test marked as flaky may also have crashed the app.
-    for test, log_lines in self._flaked_tests.iteritems():
+    for test, log_lines in self._flaked_tests.items():
       if 'Did not complete.' in log_lines:
         self._crashed = True
         self._crashed_test = test
@@ -577,7 +577,7 @@ class GTestLogParser(object):
             test_name = single_test.get('test_name')
             if test_case_name and test_name and test_name.startswith(
                 'DISABLED_'):
-              full_test_name = '%s/%s' % (test_case_name, test_name)
+              full_test_name = str('%s/%s' % (test_case_name, test_name))
               disabled_tests_from_json.append(full_test_name)
               self._result_collection.add_test_result(
                   TestResult(

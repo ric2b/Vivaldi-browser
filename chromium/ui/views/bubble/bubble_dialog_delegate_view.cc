@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -72,17 +73,6 @@ std::vector<BubbleDialogDelegate*>& GetAnchorVector(View* view) {
 
   return *(view->GetProperty(kAnchorVector));
 }
-
-// A BubbleFrameView will apply a masking path to its ClientView to ensure
-// contents are appropriately clipped to the frame's rounded corners. If the
-// bubble uses layers in its views hierarchy, these will not be clipped to
-// the client mask unless the ClientView is backed by a textured ui::Layer.
-// This flag tracks whether or not to to create a layer backed ClientView.
-//
-// TODO(tluk): Fix all cases where bubble transparency is used and have bubble
-// ClientViews always paint to a layer.
-// TODO(tluk): Flip this to true for all bubbles.
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kPaintClientToLayer, false)
 
 // Override base functionality of Widget to give bubble dialogs access to the
 // theme provider of the window they're anchored to.
@@ -259,8 +249,8 @@ class BubbleDialogDelegate::AnchorViewObserver : public ViewObserver {
       vector.back()->NotifyAnchoredBubbleIsPrimary();
   }
 
-  BubbleDialogDelegate* const parent_;
-  View* const anchor_view_;
+  const raw_ptr<BubbleDialogDelegate> parent_;
+  const raw_ptr<View> anchor_view_;
 };
 
 // This class is responsible for observing events on a BubbleDialogDelegate's
@@ -319,7 +309,7 @@ class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver,
 #endif
 
  private:
-  BubbleDialogDelegate* owner_;
+  raw_ptr<BubbleDialogDelegate> owner_;
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
 #if !defined(OS_MAC)
@@ -368,7 +358,7 @@ class BubbleDialogDelegate::BubbleWidgetObserver : public WidgetObserver {
   }
 
  private:
-  BubbleDialogDelegate* const owner_;
+  const raw_ptr<BubbleDialogDelegate> owner_;
   base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
       this};
 };
@@ -384,7 +374,7 @@ class BubbleDialogDelegate::ThemeObserver : public ViewObserver {
   }
 
  private:
-  BubbleDialogDelegate* const delegate_;
+  const raw_ptr<BubbleDialogDelegate> delegate_;
   base::ScopedObservation<View, ViewObserver> observation_{this};
 };
 
@@ -515,7 +505,7 @@ ClientView* BubbleDialogDelegate::CreateClientView(Widget* widget) {
   // rounded corner clip we must paint the client view to a layer. This is
   // necessary because layers do not respect the clip of a non-layer backed
   // parent.
-  if (GetProperty(kPaintClientToLayer)) {
+  if (paint_client_to_layer_) {
     client_view_->SetPaintToLayer();
     client_view_->layer()->SetRoundedCornerRadius(
         gfx::RoundedCornersF(GetCornerRadius()));
@@ -652,7 +642,7 @@ ui::LayerType BubbleDialogDelegate::GetLayerType() const {
 
 void BubbleDialogDelegate::SetPaintClientToLayer(bool paint_client_to_layer) {
   DCHECK(!client_view_);
-  SetProperty(kPaintClientToLayer, paint_client_to_layer);
+  paint_client_to_layer_ = paint_client_to_layer;
 }
 
 void BubbleDialogDelegate::UseCompactMargins() {

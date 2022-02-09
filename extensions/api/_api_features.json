@@ -127,6 +127,11 @@
     "dependencies": [ "permission:prefs" ],
     "contexts": [ "blessed_extension" ]
   },
+  "readingListPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:readingListPrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "runtimePrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:runtimePrivate" ],

@@ -9,6 +9,8 @@ GEN('#include "chrome/browser/ui/ui_features.h"');
 GEN('#include "components/reading_list/features/reading_list_switches.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
+/* eslint-disable no-var */
+
 class SidePanelBrowserTest extends PolymerTest {
   /** @override */
   get browsePreload() {
@@ -26,11 +28,10 @@ class SidePanelBrowserTest extends PolymerTest {
   }
 }
 
-// eslint-disable-next-line no-var
 var SidePanelAppTest = class extends SidePanelBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/side_panel_app_test.js';
+    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/side_panel_app_test.js&host=webui-test';
   }
 };
 
@@ -38,11 +39,10 @@ TEST_F('SidePanelAppTest', 'All', function() {
   mocha.run();
 });
 
-// eslint-disable-next-line no-var
 var SidePanelBookmarksListTest = class extends SidePanelBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/bookmarks_list_test.js';
+    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/bookmarks_list_test.js&host=webui-test';
   }
 };
 
@@ -51,11 +51,10 @@ TEST_F('SidePanelBookmarksListTest', 'All', function() {
 });
 
 
-// eslint-disable-next-line no-var
 var SidePanelBookmarkFolderTest = class extends SidePanelBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/bookmark_folder_test.js';
+    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/bookmark_folder_test.js&host=webui-test';
   }
 };
 
@@ -64,11 +63,10 @@ TEST_F('SidePanelBookmarkFolderTest', 'All', function() {
 });
 
 
-// eslint-disable-next-line no-var
 var SidePanelBookmarksDragManagerTest = class extends SidePanelBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/bookmarks_drag_manager_test.js';
+    return 'chrome://read-later.top-chrome/test_loader.html?module=read_later/side_panel/bookmarks_drag_manager_test.js&host=webui-test';
   }
 };
 

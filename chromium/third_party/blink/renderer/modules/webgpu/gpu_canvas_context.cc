@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_adapter.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_texture.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 
 namespace blink {
 
@@ -75,26 +76,7 @@ scoped_refptr<StaticBitmapImage> GPUCanvasContext::GetImage() {
   if (!swapchain_)
     return nullptr;
 
-  // We need to have an active copy of the current texture when we call get
-  // image.
-  static constexpr gfx::Size kEmpty;
-  if (swapchain_->Size() == kEmpty && !swapchain_->getCurrentTexture())
-    return nullptr;
-
-  CanvasResourceParams resource_params;
-  resource_params.SetSkColorType(viz::ResourceFormatToClosestSkColorType(
-      /*gpu_compositing=*/true, swapchain_->Format()));
-
-  auto resource_provider = CanvasResourceProvider::CreateWebGPUImageProvider(
-      IntSize(swapchain_->Size()), resource_params,
-      /*is_origin_top_left=*/true);
-  if (!resource_provider)
-    return nullptr;
-
-  if (!swapchain_->CopyToResourceProvider(resource_provider.get()))
-    return nullptr;
-
-  return resource_provider->Snapshot();
+  return swapchain_->Snapshot();
 }
 
 bool GPUCanvasContext::PaintRenderingResultsToCanvas(
@@ -104,7 +86,7 @@ bool GPUCanvasContext::PaintRenderingResultsToCanvas(
     return false;
 
   if (Host()->ResourceProvider() &&
-      Host()->ResourceProvider()->Size() != IntSize(swapchain_->Size())) {
+      Host()->ResourceProvider()->Size() != swapchain_->Size()) {
     Host()->DiscardResourceProvider();
   }
 
@@ -140,8 +122,8 @@ bool GPUCanvasContext::PushFrame() {
   auto canvas_resource = swapchain_->ExportCanvasResource();
   if (!canvas_resource)
     return false;
-  const int width = canvas_resource->Size().Width();
-  const int height = canvas_resource->Size().Height();
+  const int width = canvas_resource->Size().width();
+  const int height = canvas_resource->Size().height();
   return Host()->PushFrame(std::move(canvas_resource),
                            SkIRect::MakeWH(width, height));
 }
@@ -204,10 +186,10 @@ void GPUCanvasContext::configure(const GPUCanvasConfiguration* descriptor,
   }
 
   // Set the default size.
-  IntSize size;
+  gfx::Size size;
   if (descriptor->hasSize()) {
     WGPUExtent3D dawn_extent = AsDawnType(descriptor->size());
-    size = IntSize(dawn_extent.width, dawn_extent.height);
+    size = gfx::Size(dawn_extent.width, dawn_extent.height);
 
     if (dawn_extent.depthOrArrayLayers != 1) {
       configured_device_->InjectError(

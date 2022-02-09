@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "content/public/common/content_features.h"
@@ -290,6 +289,11 @@ class ServiceWorkerProviderContextTest : public testing::Test {
  public:
   ServiceWorkerProviderContextTest() = default;
 
+  ServiceWorkerProviderContextTest(const ServiceWorkerProviderContextTest&) =
+      delete;
+  ServiceWorkerProviderContextTest& operator=(
+      const ServiceWorkerProviderContextTest&) = delete;
+
   void EnableNetworkService() {
     mojo::PendingRemote<network::mojom::URLLoaderFactory> fake_loader_factory;
     fake_loader_factory_.AddReceiver(
@@ -327,8 +331,6 @@ class ServiceWorkerProviderContextTest : public testing::Test {
   int NextRequestId() { return request_id_++; }
 
   int request_id_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerProviderContextTest);
 };
 
 TEST_F(ServiceWorkerProviderContextTest, SetController) {

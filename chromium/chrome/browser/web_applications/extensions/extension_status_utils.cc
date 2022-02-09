@@ -10,13 +10,13 @@
 #include "chrome/browser/extensions/preinstalled_apps.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/extensions/extension_constants.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extension.h"
 
 namespace {
 
@@ -67,6 +67,17 @@ bool IsExtensionForceInstalled(content::BrowserContext* context,
   return extension &&
          extension_system->management_policy()->MustRemainInstalled(extension,
                                                                     reason);
+}
+
+bool IsExtensionDefaultInstalled(content::BrowserContext* context,
+                                 const std::string& extension_id) {
+  auto* registry = ExtensionRegistry::Get(context);
+  // May be nullptr in unit tests.
+  if (!registry)
+    return false;
+  const Extension* extension = registry->GetInstalledExtension(extension_id);
+  return extension &&
+         (extension->creation_flags() & Extension::WAS_INSTALLED_BY_DEFAULT);
 }
 
 bool IsExternalExtensionUninstalled(content::BrowserContext* context,
@@ -124,8 +135,8 @@ bool IsPreinstalledAppId(const std::string& app_id) {
 
   // Also update the duplicated function in extensions/common/constants.cc when
   // changing the logic here.
-  return app_id == extension_misc::kGMailAppId ||
-         app_id == extension_misc::kGoogleDocAppId ||
+  return app_id == extension_misc::kGmailAppId ||
+         app_id == extension_misc::kGoogleDocsAppId ||
          app_id == extension_misc::kGoogleDriveAppId ||
          app_id == extension_misc::kGoogleSheetsAppId ||
          app_id == extension_misc::kGoogleSlidesAppId ||

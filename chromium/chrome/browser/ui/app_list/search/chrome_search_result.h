@@ -11,7 +11,6 @@
 
 #include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
-#include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/ranking/types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -28,9 +27,13 @@ class ImageModel;
 // ChromeSearchResult consists of an icon, title text and details text. Title
 // and details text can have tagged ranges that are displayed differently from
 // default style.
+//
+// TODO(crbug/1256949): This class now contains many fields we don't use
+// anymore, and some outdated terminology and comments. We should update it.
 class ChromeSearchResult {
  public:
   using ResultType = ash::AppListSearchResultType;
+  using Category = ash::AppListSearchResultCategory;
   using DisplayType = ash::SearchResultDisplayType;
   using MetricsType = ash::SearchResultType;
   using Tag = ash::SearchResultTag;
@@ -61,6 +64,8 @@ class ChromeSearchResult {
     return metadata_->formatted_price;
   }
   const std::string& id() const { return metadata_->id; }
+  Category category() const { return metadata_->category; }
+  bool best_match() const { return metadata_->best_match; }
   DisplayType display_type() const { return metadata_->display_type; }
   ash::AppListSearchResultType result_type() const {
     return metadata_->result_type;
@@ -94,6 +99,8 @@ class ChromeSearchResult {
   void SetAccessibleName(const std::u16string& name);
   void SetRating(float rating);
   void SetFormattedPrice(const std::u16string& formatted_price);
+  void SetCategory(Category category);
+  void SetBestMatch(bool best_match);
   void SetDisplayType(DisplayType display_type);
   void SetResultType(ResultType result_type);
   void SetMetricsType(MetricsType metrics_type);
@@ -147,7 +154,7 @@ class ChromeSearchResult {
   }
 
   // Invokes a custom action on the result. It does nothing by default.
-  virtual void InvokeAction(int action_index);
+  virtual void InvokeAction(ash::SearchResultActionType action);
 
   // Opens the result. Clients should use AppListViewDelegate::OpenSearchResult.
   virtual void Open(int event_flags) = 0;

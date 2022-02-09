@@ -62,6 +62,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 }  // namespace
 
+@interface BidirectionalCollectionViewTransitionLayout
+    : UICollectionViewTransitionLayout
+@end
+
+@implementation BidirectionalCollectionViewTransitionLayout
+- (BOOL)flipsHorizontallyInOppositeLayoutDirection {
+  return UseRTLLayout() ? YES : NO;
+}
+@end
+
 @interface GridViewController () <GridCellDelegate,
                                   UICollectionViewDataSource,
                                   UICollectionViewDelegate,
@@ -110,10 +120,18 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // horizontal to grid layout.
 @property(nonatomic, strong)
     UICollectionViewTransitionLayout* gridHorizontalTransitionLayout;
+// YES while |self.gridHorizontalTransitionLayout| is finishing (or cancelling)
+// the transition. Is used to avoid cancelling again during enabling/disabling
+// of the thumbstrip.
+@property(nonatomic, assign) BOOL transitionLayoutIsFinishing;
 
-// Gesture recognizer to dismiss the thumb strip.
+// Tap gesture recognizer to dismiss the thumb strip.
 @property(nonatomic, strong)
     UITapGestureRecognizer* thumbStripDismissRecognizer;
+
+// Swipe up gesture recognizer to dismiss the thumb strip.
+@property(nonatomic, strong)
+    UISwipeGestureRecognizer* thumbStripSwipeUpDismissRecognizer;
 
 // YES while batch updates and the batch update completion are being performed.
 @property(nonatomic) BOOL updating;
@@ -130,6 +148,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     _selectedEditingItemIDs = [[NSMutableSet<NSString*> alloc] init];
     _selectedSharableEditingItemIDs = [[NSMutableSet<NSString*> alloc] init];
     _showsSelectionUpdates = YES;
+    _notSelectedTabCellOpacity = 1.0;
     _mode = TabGridModeNormal;
   }
   return self;
@@ -149,6 +168,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       forCellWithReuseIdentifier:kCellIdentifier];
   [collectionView registerClass:[PlusSignCell class]
       forCellWithReuseIdentifier:kPlusSignCellIdentifier];
+  // During deletion (in horizontal layout) the backgroundView can resize,
+  // revealing temporarily the collectionView background. This makes sure
+  // both are the same color.
+  collectionView.backgroundColor = [UIColor colorNamed:kGridBackgroundColor];
   // If this stays as the default |YES|, then cells aren't highlighted
   // immediately on touch, but after a short delay.
   collectionView.delaysContentTouches = NO;
@@ -456,9 +479,23 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   if (_mode == TabGridModeSelection) {
     return nil;
   }
+  // No context menu on plus sign cell.
+  if ([self isIndexPathForPlusSignCell:indexPath]) {
+    return nil;
+  }
+
   GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
       [self.collectionView cellForItemAtIndexPath:indexPath]);
   return [self.menuProvider contextMenuConfigurationForGridCell:cell];
+}
+
+- (UICollectionViewTransitionLayout*)
+                  collectionView:(UICollectionView*)collectionView
+    transitionLayoutForOldLayout:(UICollectionViewLayout*)fromLayout
+                       newLayout:(UICollectionViewLayout*)toLayout {
+  return [[BidirectionalCollectionViewTransitionLayout alloc]
+      initWithCurrentLayout:fromLayout
+                 nextLayout:toLayout];
 }
 
 #pragma mark - UIPointerInteractionDelegate
@@ -712,7 +749,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self.selectedSharableEditingItemIDs removeAllObjects];
   [self.collectionView reloadData];
   [self.collectionView selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                                    animated:YES
+                                    animated:NO
                               scrollPosition:UICollectionViewScrollPositionTop];
   if (self.items.count > 0) {
     [self removeEmptyStateAnimated:YES];
@@ -735,6 +772,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     self.selectedItemID = selectedItemID;
     self.lastInsertedItemID = item.identifier;
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
+    [self updateVisibleCellsOpacity];
   };
   auto collectionViewUpdates = ^{
     [self removeEmptyStateAnimated:YES];
@@ -745,14 +783,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     [self.collectionView
         deselectItemAtIndexPath:CreateIndexPath([self
                                     indexOfItemWithID:previouslySelectedItemID])
-                       animated:YES];
+                       animated:NO];
     UICollectionViewScrollPosition scrollPosition =
         (self.currentLayout == self.horizontalLayout)
             ? UICollectionViewScrollPositionCenteredHorizontally
             : UICollectionViewScrollPositionNone;
     [self.collectionView
         selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                     animated:YES
+                     animated:NO
                scrollPosition:scrollPosition];
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
     [self updateFractionVisibleOfLastItem];
@@ -776,6 +814,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     self.selectedItemID = selectedItemID;
     [self deselectItemWithIDForEditing:removedItemID];
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
+    [self updateVisibleCellsOpacity];
   };
   auto collectionViewUpdates = ^{
     [self.collectionView deleteItemsAtIndexPaths:@[ CreateIndexPath(index) ]];
@@ -787,7 +826,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     if (self.items.count > 0) {
       [self.collectionView
           selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                       animated:YES
+                       animated:NO
                  scrollPosition:UICollectionViewScrollPositionNone];
     }
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
@@ -808,12 +847,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   [self.collectionView
       deselectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                     animated:YES];
+                     animated:NO];
   self.selectedItemID = selectedItemID;
   [self.collectionView
       selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                   animated:YES
+                   animated:NO
              scrollPosition:UICollectionViewScrollPositionNone];
+  [self updateVisibleCellsOpacity];
 }
 
 - (void)replaceItemID:(NSString*)itemID withItem:(TabSwitcherItem*)item {
@@ -846,10 +886,26 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                  toIndexPath:CreateIndexPath(toIndex)];
   };
   auto completion = ^(BOOL finished) {
-    [self.collectionView
-        selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                     animated:YES
-               scrollPosition:UICollectionViewScrollPositionNone];
+    // Bring back selected halo only for the moved cell, which lost it during
+    // the move (drag & drop).
+    if (self.selectedIndex != toIndex) {
+      return;
+    }
+    // Force reload of the selected cell now to avoid extra delay for the
+    // blue halo to appear. Bring the halo in 100ms.
+    [UIView
+        animateWithDuration:0.1
+                 animations:^{
+                   [self.collectionView reloadItemsAtIndexPaths:@[
+                     CreateIndexPath(self.selectedIndex)
+                   ]];
+                   [self.collectionView
+                       selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                                    animated:NO
+                              scrollPosition:
+                                  UICollectionViewScrollPositionNone];
+                 }
+                 completion:nil];
   };
   [self performModelUpdates:modelUpdates
                 collectionViewUpdates:collectionViewUpdates
@@ -865,6 +921,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 #pragma mark - LayoutSwitcher
+
+- (LayoutSwitcherState)currentLayoutSwitcherState {
+  return self.currentLayout == self.horizontalLayout
+             ? LayoutSwitcherState::Horizontal
+             : LayoutSwitcherState::Grid;
+}
 
 - (void)willTransitionToLayout:(LayoutSwitcherState)nextState
                     completion:
@@ -884,15 +946,23 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   // If the dismiss recognizer needs to be disabled, do it now so the user won't
   // trigger it during the transformation.
-  if (!thumbStripDismissEnabled)
+  if (!thumbStripDismissEnabled) {
     self.thumbStripDismissRecognizer.enabled = NO;
+    self.thumbStripSwipeUpDismissRecognizer.enabled = NO;
+  }
 
   __weak __typeof(self) weakSelf = self;
   auto completionBlock = ^(BOOL completed, BOOL finished) {
     weakSelf.collectionView.scrollEnabled = YES;
-    weakSelf.currentLayout = nextLayout;
-    if (thumbStripDismissEnabled)
-      self.thumbStripDismissRecognizer.enabled = YES;
+    if (finished) {
+      weakSelf.currentLayout = nextLayout;
+    }
+    if (thumbStripDismissEnabled) {
+      weakSelf.thumbStripDismissRecognizer.enabled = YES;
+      weakSelf.thumbStripSwipeUpDismissRecognizer.enabled = YES;
+    }
+    weakSelf.transitionLayoutIsFinishing = NO;
+    weakSelf.gridHorizontalTransitionLayout = nil;
     if (completion) {
       completion(completed, finished);
     }
@@ -911,6 +981,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)didTransitionToLayoutSuccessfully:(BOOL)success {
+  self.transitionLayoutIsFinishing = YES;
   if (success) {
     [self.collectionView finishInteractiveTransition];
   } else {
@@ -926,23 +997,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (CGFloat)offsetPastEndOfScrollView {
   CGFloat offset;
-  if (self.currentLayout == self.horizontalLayout) {
-    if (UseRTLLayout()) {
-      offset = -self.collectionView.contentOffset.x;
-    } else {
-      // Use collectionViewLayout.collectionViwContentSize because it has the
-      // correct size during a batch update.
-      offset = self.collectionView.contentOffset.x +
-               self.collectionView.frame.size.width -
-               self.collectionView.collectionViewLayout
-                   .collectionViewContentSize.width;
-    }
+  if (UseRTLLayout()) {
+    offset = -self.collectionView.contentOffset.x;
   } else {
-    DCHECK_EQ(self.gridLayout, self.currentLayout);
     // Use collectionViewLayout.collectionViwContentSize because it has the
     // correct size during a batch update.
-    offset = self.collectionView.contentOffset.y +
-             self.collectionView.frame.size.height -
+    offset = self.collectionView.contentOffset.x +
+             self.collectionView.frame.size.width -
              self.collectionView.collectionViewLayout.collectionViewContentSize
                  .width;
   }
@@ -954,13 +1015,9 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     return;
   _fractionVisibleOfLastItem = fractionVisibleOfLastItem;
 
-  if (self.currentLayout == self.horizontalLayout) {
-    [self.delegate didChangeLastItemVisibilityInGridViewController:self];
-  } else {
-    DCHECK_EQ(self.gridLayout, self.currentLayout);
-    // No-op because behaviour of the tab grid's bottom toolbar when the plus
-    // sign cell is visible hasn't been decided yet. TODO(crbug.com/1146130)
-  }
+  // TODO(crbug.com/1146130): Behaviour of the tab grid's bottom toolbar when
+  // the plus sign cell is visible hasn't been decided yet.
+  [self.delegate didChangeLastItemVisibilityInGridViewController:self];
 }
 
 - (void)setCurrentLayout:(FlowLayout*)currentLayout {
@@ -1065,8 +1122,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                    completion:^(UIImage* snapshot) {
                                      // Only update the icon if the cell is not
                                      // already reused for another item.
-                                     if (cell.itemIdentifier == itemIdentifier)
-                                       cell.snapshot = snapshot;
+                                     if (cell.itemIdentifier ==
+                                         itemIdentifier) {
+                                       if (self.thumbStripEnabled) {
+                                         [cell fadeInSnapshot:snapshot];
+                                       } else {
+                                         cell.snapshot = snapshot;
+                                       }
+                                     }
                                    }];
   if (IsPriceAlertsEnabled()) {
     [self.priceCardDataSource
@@ -1077,6 +1140,16 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                         [cell setPriceDrop:priceCardItem.price
                              previousPrice:priceCardItem.previousPrice];
                     }];
+  }
+  if (self.thumbStripEnabled && item.identifier != self.selectedItemID) {
+    cell.opacity = self.notSelectedTabCellOpacity;
+  } else {
+    cell.opacity = 1.0f;
+  }
+  if (item.showsActivity) {
+    [cell showActivityIndicator];
+  } else {
+    [cell hideActivityIndicator];
   }
 }
 
@@ -1195,6 +1268,33 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   }
 }
 
+// Setter for the not selected tab opacity. This can be used inside an
+// animation block.
+- (void)setNotSelectedTabCellOpacity:(CGFloat)opacity {
+  _notSelectedTabCellOpacity = opacity;
+  [self updateVisibleCellsOpacity];
+}
+
+// Update visible cells opacity. When thumbstrip is not enabled, all are 1.0.
+// Otherwise not selected tab are |self.notSelectedTabCellOpacity|.
+- (void)updateVisibleCellsOpacity {
+  if (!self.thumbStripEnabled) {
+    return;
+  }
+  for (NSIndexPath* indexPath in self.collectionView
+           .indexPathsForVisibleItems) {
+    if ([self isIndexPathForPlusSignCell:indexPath])
+      continue;
+    GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
+        [self.collectionView cellForItemAtIndexPath:indexPath]);
+    if (cell.itemIdentifier != self.selectedItemID) {
+      cell.opacity = self.notSelectedTabCellOpacity;
+    } else {
+      cell.opacity = 1.0f;
+    }
+  }
+}
+
 #pragma mark - Public Editing Mode Selection
 - (void)selectAllItemsForEditing {
   if (_mode != TabGridModeSelection) {
@@ -1253,13 +1353,21 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (void)thumbStripEnabledWithPanHandler:
     (ViewRevealingVerticalPanHandler*)panHandler {
+  // Make sure the collection view isn't in the middle of a transition.
+  if (self.gridHorizontalTransitionLayout) {
+    if (!self.transitionLayoutIsFinishing) {
+      [self didTransitionToLayoutSuccessfully:NO];
+    }
+    __weak GridViewController* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf thumbStripEnabledWithPanHandler:panHandler];
+    });
+    return;
+  }
+
   DCHECK(!self.thumbStripEnabled);
 
   UICollectionView* collectionView = self.collectionView;
-
-  // Make sure the collection view isn't in the middle of a transition.
-  DCHECK(![collectionView.collectionViewLayout
-      isKindOfClass:[UICollectionViewTransitionLayout class]]);
 
   // Install tap gesture recognizer in collection to handle user taps on the
   // thumb strip background, assuming it hasn't already been installed.
@@ -1272,13 +1380,25 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     [collectionView.backgroundView
         addGestureRecognizer:self.thumbStripDismissRecognizer];
   }
+  if (!self.thumbStripSwipeUpDismissRecognizer) {
+    self.thumbStripSwipeUpDismissRecognizer = [[UISwipeGestureRecognizer alloc]
+        initWithTarget:self
+                action:@selector(handleThumbStripBackgroundSwipeUpGesture:)];
+    self.thumbStripSwipeUpDismissRecognizer.direction =
+        UISwipeGestureRecognizerDirectionUp;
+    [collectionView.backgroundView
+        addGestureRecognizer:self.thumbStripSwipeUpDismissRecognizer];
+  }
 
-  if (panHandler.currentState == ViewRevealState::Revealed) {
+  if (panHandler.currentState == ViewRevealState::Revealed ||
+      panHandler.currentState == ViewRevealState::Fullscreen) {
     self.thumbStripDismissRecognizer.enabled = NO;
+    self.thumbStripSwipeUpDismissRecognizer.enabled = NO;
     collectionView.collectionViewLayout = self.gridLayout;
     self.currentLayout = self.gridLayout;
   } else {
     self.thumbStripDismissRecognizer.enabled = YES;
+    self.thumbStripSwipeUpDismissRecognizer.enabled = YES;
     collectionView.collectionViewLayout = self.horizontalLayout;
     self.currentLayout = self.horizontalLayout;
   }
@@ -1289,18 +1409,29 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)thumbStripDisabled {
+  // Make sure the collection view isn't in the middle of a transition.
+  if (self.gridHorizontalTransitionLayout) {
+    if (!self.transitionLayoutIsFinishing) {
+      [self didTransitionToLayoutSuccessfully:NO];
+    }
+    __weak GridViewController* weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf thumbStripDisabled];
+    });
+    return;
+  }
+
   DCHECK(self.thumbStripEnabled);
 
   UICollectionView* collectionView = self.collectionView;
   FlowLayout* gridLayout = self.gridLayout;
 
-  // Make sure the collection view isn't in the middle of a transition.
-  DCHECK(![collectionView.collectionViewLayout
-      isKindOfClass:[UICollectionViewTransitionLayout class]]);
-
   [collectionView.backgroundView
       removeGestureRecognizer:self.thumbStripDismissRecognizer];
+  [collectionView.backgroundView
+      removeGestureRecognizer:self.thumbStripSwipeUpDismissRecognizer];
   self.thumbStripDismissRecognizer = nil;
+  self.thumbStripSwipeUpDismissRecognizer = nil;
 
   collectionView.collectionViewLayout = gridLayout;
   self.currentLayout = gridLayout;
@@ -1335,6 +1466,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   }
 
   // Handle the tap.
+  [self.thumbStripHandler closeThumbStrip];
+}
+
+- (void)handleThumbStripBackgroundSwipeUpGesture:
+    (UIGestureRecognizer*)recognizer {
   [self.thumbStripHandler closeThumbStrip];
 }
 

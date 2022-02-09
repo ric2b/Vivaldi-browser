@@ -15,10 +15,9 @@
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -26,6 +25,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
@@ -57,7 +57,6 @@
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ssl/ssl_browsertest_util.h"
 #include "chrome/browser/ssl/ssl_error_controller_client.h"
-#include "chrome/browser/ssl/tls_deprecation_test_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -76,7 +75,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/autofill/core/common/autofill_features.h"
 #include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/common/content_settings_agent.mojom.h"
@@ -111,7 +109,6 @@
 #include "components/security_interstitials/content/ssl_error_handler.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/security_interstitials/core/controller_client.h"
-#include "components/security_interstitials/core/features.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_interstitials/core/pref_names.h"
 #include "components/security_state/core/features.h"
@@ -203,7 +200,8 @@
 
 #if defined(USE_NSS_CERTS)
 #include "chrome/browser/certificate_manager_model.h"
-#include "chrome/browser/net/nss_context.h"
+#include "chrome/browser/net/nss_service.h"
+#include "chrome/browser/net/nss_service_factory.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "crypto/scoped_test_nss_db.h"
@@ -277,7 +275,7 @@ class SSLInterstitialTimerObserver {
   }
 
   bool timer_started_ = false;
-  const WebContents* web_contents_;
+  raw_ptr<const WebContents> web_contents_;
   SSLErrorHandler::TimerStartedCallback callback_;
 
   std::unique_ptr<base::RunLoop> message_loop_runner_;
@@ -314,29 +312,6 @@ class ChromeContentBrowserClientForMixedContentTest
   bool allow_running_insecure_content_ = false;
   bool strict_mixed_content_checking_ = false;
   bool strictly_block_blockable_mixed_content_ = false;
-};
-
-// Wrapper around content::SetBrowserClientForTesting() that ensures the
-// previous content browser client is restored upon destruction.
-class ScopedContentBrowserClientSetting final {
- public:
-  // `client` must outlive this instance.
-  explicit ScopedContentBrowserClientSetting(
-      content::ContentBrowserClient& client)
-      : old_client_(content::SetBrowserClientForTesting(&client)) {}
-
-  // Instances of this class are neither copyable nor movable.
-  ScopedContentBrowserClientSetting(const ScopedContentBrowserClientSetting&) =
-      delete;
-  ScopedContentBrowserClientSetting& operator=(
-      const ScopedContentBrowserClientSetting&) = delete;
-
-  ~ScopedContentBrowserClientSetting() {
-    content::SetBrowserClientForTesting(old_client_);
-  }
-
- private:
-  content::ContentBrowserClient* const old_client_;
 };
 
 std::string EncodeQuery(const std::string& query) {
@@ -1079,15 +1054,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestMixedContentWithSamePageNavigation) {
                                    "document.body.appendChild(f)"));
   observer.WaitForDidChangeVisibleSecurityState();
 
-  // If mixed form warnings are enabled, we display the lock icon on otherwise
-  // secure sites with an insecure form.
-  security_state::SecurityLevel expected_level =
-      base::FeatureList::IsEnabled(
-          security_interstitials::kInsecureFormSubmissionInterstitial) &&
-              base::FeatureList::IsEnabled(
-                  autofill::features::kAutofillPreventMixedFormsFilling)
-          ? security_state::SECURE
-          : security_state::NONE;
+  // Since mixed forms trigger their own warning, we display the lock icon on
+  // otherwise secure sites with an insecure form.
+  security_state::SecurityLevel expected_level = security_state::SECURE;
 
   ssl_test_util::CheckSecurityState(
       tab, CertError::NONE, expected_level,
@@ -1987,9 +1956,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, MarkDataAsNonSecure) {
 }
 
 // TODO(crbug.com/1148302): This class directly calls
-// `GetNSSCertDatabaseForProfile()` that causes crash at the moment and is never
-// called from Lacros-Chrome. This should be revisited when there is a solution
-// for the client certificates settings page on Lacros-Chrome.
+// `UnsafelyGetNSSCertDatabaseForTesting()` that causes crash at the moment
+// and is never called from Lacros-Chrome. This should be revisited when there
+// is a solution for the client certificates settings page on Lacros-Chrome.
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
 #if defined(USE_NSS_CERTS)
 class SSLUITestWithClientCert : public SSLUITestBase {
@@ -2000,10 +1969,10 @@ class SSLUITestWithClientCert : public SSLUITestBase {
     SSLUITestBase::SetUpOnMainThread();
 
     base::RunLoop loop;
-    GetNSSCertDatabaseForProfile(
-        browser()->profile(),
-        base::BindOnce(&SSLUITestWithClientCert::DidGetCertDatabase,
-                       base::Unretained(this), &loop));
+    NssServiceFactory::GetForContext(browser()->profile())
+        ->UnsafelyGetNSSCertDatabaseForTesting(
+            base::BindOnce(&SSLUITestWithClientCert::DidGetCertDatabase,
+                           base::Unretained(this), &loop));
     loop.Run();
   }
 
@@ -2412,15 +2381,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestDisplaysInsecureForm) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_.GetURL(replacement_path)));
 
-  // If mixed form warnings are enabled, we display the lock icon on otherwise
-  // secure sites with an insecure form.
-  security_state::SecurityLevel expected_level =
-      base::FeatureList::IsEnabled(
-          security_interstitials::kInsecureFormSubmissionInterstitial) &&
-              base::FeatureList::IsEnabled(
-                  autofill::features::kAutofillPreventMixedFormsFilling)
-          ? security_state::SECURE
-          : security_state::NONE;
+  // Since mixed forms trigger their own warning, we display the lock icon on
+  // otherwise secure sites with an insecure form.
+  security_state::SecurityLevel expected_level = security_state::SECURE;
 
   ssl_test_util::CheckSecurityState(
       browser()->tab_strip_model()->GetActiveWebContents(), CertError::NONE,
@@ -3171,7 +3134,7 @@ class SSLUITestWaitForDOMNotification : public SSLUITestIgnoreCertErrors,
  private:
   content::NotificationRegistrar registrar_;
   std::string expected_notification_;
-  base::RunLoop* run_loop_;
+  raw_ptr<base::RunLoop> run_loop_;
 };
 
 // Tests that a mixed resource which includes HTTP in the redirect chain
@@ -3764,7 +3727,7 @@ IN_PROC_BROWSER_TEST_P(
     SSLUIWorkerFetchTest,
     DISABLED_MixedContentSettings_AllowRunningInsecureContent) {
   ChromeContentBrowserClientForMixedContentTest browser_client;
-  ScopedContentBrowserClientSetting setting(browser_client);
+  content::ScopedContentBrowserClientSetting setting(&browser_client);
 
   https_server_.ServeFilesFromDirectory(tmp_dir_.GetPath());
   embedded_test_server()->ServeFilesFromDirectory(tmp_dir_.GetPath());
@@ -3807,7 +3770,7 @@ IN_PROC_BROWSER_TEST_P(
     SSLUIWorkerFetchTest,
     DISABLED_MixedContentSettings_DisallowRunningInsecureContent) {
   ChromeContentBrowserClientForMixedContentTest browser_client;
-  ScopedContentBrowserClientSetting setting(browser_client);
+  content::ScopedContentBrowserClientSetting setting(&browser_client);
 
   https_server_.ServeFilesFromDirectory(tmp_dir_.GetPath());
   embedded_test_server()->ServeFilesFromDirectory(tmp_dir_.GetPath());
@@ -3859,7 +3822,7 @@ IN_PROC_BROWSER_TEST_P(
     SSLUIWorkerFetchTest,
     MixedContentSettingsWithBlockingCSP_AllowRunningInsecureContent) {
   ChromeContentBrowserClientForMixedContentTest browser_client;
-  ScopedContentBrowserClientSetting setting(browser_client);
+  content::ScopedContentBrowserClientSetting setting(&browser_client);
 
   https_server_.ServeFilesFromDirectory(tmp_dir_.GetPath());
   embedded_test_server()->ServeFilesFromDirectory(tmp_dir_.GetPath());
@@ -3867,9 +3830,9 @@ IN_PROC_BROWSER_TEST_P(
   ASSERT_TRUE(embedded_test_server()->Start());
 
   WriteTestFiles(*embedded_test_server(), "example.com");
-  WriteFile(FILE_PATH_LITERAL("worker_test.html.mock-http-headers"),
+  WriteFile(FILE_PATH_LITERAL("worker.js.mock-http-headers"),
             "HTTP/1.1 200 OK\n"
-            "Content-Type: text/html\n"
+            "Content-Type: application/javascript\n"
             "Content-Security-Policy: block-all-mixed-content;");
   for (bool strict_mixed_content_checking : {true, false}) {
     for (bool strictly_block_blockable_mixed_content : {true, false}) {
@@ -3892,7 +3855,7 @@ IN_PROC_BROWSER_TEST_P(
     SSLUIWorkerFetchTest,
     MixedContentSettingsWithBlockingCSP_DisallowRunningInsecureContent) {
   ChromeContentBrowserClientForMixedContentTest browser_client;
-  ScopedContentBrowserClientSetting setting(browser_client);
+  content::ScopedContentBrowserClientSetting setting(&browser_client);
 
   https_server_.ServeFilesFromDirectory(tmp_dir_.GetPath());
   embedded_test_server()->ServeFilesFromDirectory(tmp_dir_.GetPath());
@@ -3900,9 +3863,9 @@ IN_PROC_BROWSER_TEST_P(
   ASSERT_TRUE(embedded_test_server()->Start());
 
   WriteTestFiles(*embedded_test_server(), "example.com");
-  WriteFile(FILE_PATH_LITERAL("worker_test.html.mock-http-headers"),
+  WriteFile(FILE_PATH_LITERAL("worker.js.mock-http-headers"),
             "HTTP/1.1 200 OK\n"
-            "Content-Type: text/html\n"
+            "Content-Type: application/javascript\n"
             "Content-Security-Policy: block-all-mixed-content;");
   for (bool strict_mixed_content_checking : {true, false}) {
     for (bool strictly_block_blockable_mixed_content : {true, false}) {
@@ -3926,7 +3889,7 @@ IN_PROC_BROWSER_TEST_P(
 // committed interstitials.
 IN_PROC_BROWSER_TEST_P(SSLUIWorkerFetchTest, DISABLED_MixedContentSubFrame) {
   ChromeContentBrowserClientForMixedContentTest browser_client;
-  ScopedContentBrowserClientSetting setting(browser_client);
+  content::ScopedContentBrowserClientSetting setting(&browser_client);
 
   https_server_.ServeFilesFromDirectory(tmp_dir_.GetPath());
   embedded_test_server()->ServeFilesFromDirectory(tmp_dir_.GetPath());
@@ -5923,19 +5886,19 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
     // Get cert databases for both profiles.
     {
       base::RunLoop loop;
-      GetNSSCertDatabaseForProfile(
-          profile_1_,
-          base::BindOnce(&SSLUITestCustomCACerts::DidGetCertDatabase,
-                         base::Unretained(this), &loop, &profile_1_cert_db_));
+      NssServiceFactory::GetForContext(profile_1_)
+          ->UnsafelyGetNSSCertDatabaseForTesting(base::BindOnce(
+              &SSLUITestCustomCACerts::DidGetCertDatabase,
+              base::Unretained(this), &loop, &profile_1_cert_db_));
       loop.Run();
     }
 
     {
       base::RunLoop loop;
-      GetNSSCertDatabaseForProfile(
-          profile_2_,
-          base::BindOnce(&SSLUITestCustomCACerts::DidGetCertDatabase,
-                         base::Unretained(this), &loop, &profile_2_cert_db_));
+      NssServiceFactory::GetForContext(profile_2_)
+          ->UnsafelyGetNSSCertDatabaseForTesting(base::BindOnce(
+              &SSLUITestCustomCACerts::DidGetCertDatabase,
+              base::Unretained(this), &loop, &profile_2_cert_db_));
       loop.Run();
     }
 
@@ -6248,104 +6211,21 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, ErrorPage) {
   EXPECT_EQ(content::PAGE_TYPE_ERROR, entry->GetPageType());
 }
 
-class SSLUITestWithInsecureFormsWarningEnabled : public SSLUITest {
- public:
-  SSLUITestWithInsecureFormsWarningEnabled() {
-    feature_list_.InitAndEnableFeatureWithParameters(
-        security_interstitials::kInsecureFormSubmissionInterstitial,
-        {{"mode", "no-redirects"}});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
 using security_interstitials::InsecureFormNavigationThrottle;
-
-// Visits a page that displays an insecure form, submits the form, and checks an
-// interstitial is shown.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
-                       TestDisplaysInsecureFormSubmissionWarning) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_insecure_form.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
-
-  // Check this was logged correctly as a non-redirect interstitial.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(interstitial_histogram,
-                               InsecureFormNavigationThrottle::
-                                   InterstitialTriggeredState::kMixedFormDirect,
-                               1);
-}
-
-// Check warning is not displayed for redirects if redirects mode is not
-// enabled, but metrics are logged.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
-                       TestDisplaysInsecureFormSubmissionWarningRedirect) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_form_redirects_insecure.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  // There should have been no interstitial triggered.
-  EXPECT_FALSE(helper);
-
-  // Check this was logged correctly as a redirect mixed form.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(
-      interstitial_histogram,
-      InsecureFormNavigationThrottle::InterstitialTriggeredState::
-          kMixedFormRedirectWithFormData,
-      1);
-}
 
 // Visits a page that displays an insecure form inside an iframe, attempts to
 // submit the form, and checks an interstitial is not shown (submissions of
 // mixed forms inside iframes are separately blocked, and that behavior is
 // tested in mixed_content_navigation_throttle_unittest.cc).
 IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabled,
+    SSLUITest,
     TestDoesNotDisplayInsecureFormSubmissionWarningInIframe) {
   ChromeContentBrowserClientForMixedContentTest browser_client;
   browser_client.SetMixedContentSettings(
       false, /* allow_running_insecure_content */
       false, /* strict_mixed_content_checking */
       false /*strictly_block_blockable_mixed_content */);
-  ScopedContentBrowserClientSetting setting(browser_client);
+  content::ScopedContentBrowserClientSetting setting(&browser_client);
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   tab->OnWebPreferencesChanged();
@@ -6379,7 +6259,7 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // Checks insecure form warning works for forms that submit on a new tab.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestDisplaysInsecureFormSubmissionWarningTargetBlank) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
@@ -6406,7 +6286,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
 }
 
 // Checks reloading the interstitial is not treated as proceeding.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestReloadInsecureFormSubmissionWarningIsNotProceed) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
@@ -6444,8 +6324,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
 }
 
 // Check proceed works correctly on insecure form warning.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
-                       ProceedThroughInsecureFormWarning) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, ProceedThroughInsecureFormWarning) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
 
@@ -6475,8 +6354,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
 }
 
 // Check don't proceed works correctly on insecure form warning.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
-                       GoBackFromInsecureFormWarning) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, GoBackFromInsecureFormWarning) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
 
@@ -6504,23 +6382,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabled,
   EXPECT_EQ(tab->GetVisibleURL(), form_site_url);
 }
 
-class SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects
-    : public SSLUITest {
- public:
-  SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects() {
-    feature_list_.InitAndEnableFeatureWithParameters(
-        security_interstitials::kInsecureFormSubmissionInterstitial,
-        {{"mode", "include-redirects"}});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Checks mixed form warnings work correctly for non-redirects when redirect
-// enforcement is enabled.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
-                       TestDisplaysInsecureFormSubmissionWarning) {
+// Checks mixed form warnings work correctly for non-redirects.
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestDisplaysInsecureFormSubmissionWarning) {
   base::HistogramTester histograms;
   const std::string interstitial_histogram =
       "Security.MixedForm.InterstitialTriggerState";
@@ -6555,7 +6418,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
 
 // Checks interstitial is shown for mixed forms caused by a 307 POST http
 // redirect, and that metrics are logged.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestDisplaysInsecureFormSubmissionWarningRedirect) {
   base::HistogramTester histograms;
   const std::string interstitial_histogram =
@@ -6593,7 +6456,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
 
 // Checks interstitial is shown for mixed forms caused by a 308 POST http
 // redirect, and that metrics are logged.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestDisplaysInsecureFormSubmissionWarningRedirect308) {
   base::HistogramTester histograms;
   const std::string interstitial_histogram =
@@ -6629,9 +6492,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
       1);
 }
 
-// Checks interstitial is shown for mixed forms caused for a POST form with a
+// Checks no interstitial is shown for mixed forms caused for a POST form with a
 // 301 redirect, and that metrics are logged correctly.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestDisplaysInsecureFormSubmissionWarningRedirect301) {
   base::HistogramTester histograms;
   const std::string interstitial_histogram =
@@ -6652,10 +6515,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
   security_interstitials::SecurityInterstitialTabHelper* helper =
       security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
           tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
+  // There should have been no interstitial triggered.
+  EXPECT_FALSE(helper);
 
   // Check this was logged correctly as a redirect mixed form that would not
   // expose form data.
@@ -6667,9 +6528,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
       1);
 }
 
-// Checks interstitial is shown for mixed forms caused for a POST form with a
+// Checks no interstitial is shown for mixed forms caused for a POST form with a
 // 302 redirect, and that metrics are logged correctly.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestDisplaysInsecureFormSubmissionWarningRedirect302) {
   base::HistogramTester histograms;
   const std::string interstitial_histogram =
@@ -6690,10 +6551,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
   security_interstitials::SecurityInterstitialTabHelper* helper =
       security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
           tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
+  // There should have been no interstitial triggered.
+  EXPECT_FALSE(helper);
 
   // Check this was logged correctly as a redirect mixed form that would not
   // expose form data.
@@ -6731,9 +6590,9 @@ std::unique_ptr<net::test_server::HttpResponse> FormActionHTTPRedirectHandler(
 }
 }  // namespace
 
-// Checks interstitial is shown for mixed forms caused for a GET form with a
-// 307 redirect to http, and that metrics are logged correctly.
-IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
+// Checks no interstitial is shown for mixed forms caused for a GET form with
+// a 307 redirect to http, and that metrics are logged correctly.
+IN_PROC_BROWSER_TEST_F(SSLUITest,
                        TestDisplaysInsecureFormSubmissionWarningRedirectGet) {
   base::HistogramTester histograms;
   const std::string interstitial_histogram =
@@ -6756,172 +6615,6 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithInsecureFormsWarningEnabledWithAllRedirects,
   security_interstitials::SecurityInterstitialTabHelper* helper =
       security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
           tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
-
-  // Check this was logged correctly as a redirect mixed form that would not
-  // expose form data.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(
-      interstitial_histogram,
-      InsecureFormNavigationThrottle::InterstitialTriggeredState::
-          kMixedFormRedirectNoFormData,
-      1);
-}
-
-class SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData
-    : public SSLUITest {
- public:
-  SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData() {
-    feature_list_.InitAndEnableFeature(
-        security_interstitials::kInsecureFormSubmissionInterstitial);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// Checks mixed form warnings work correctly for non-redirects when redirect
-// enforcement is enabled.
-IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData,
-    TestDisplaysInsecureFormSubmissionWarning) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_insecure_form.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
-
-  // Check this was logged correctly as a non-redirect interstitial.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(interstitial_histogram,
-                               InsecureFormNavigationThrottle::
-                                   InterstitialTriggeredState::kMixedFormDirect,
-                               1);
-}
-
-// Checks interstitial is shown for mixed forms caused by a 307 POST http
-// redirect, and that metrics are logged.
-IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData,
-    TestDisplaysInsecureFormSubmissionWarningRedirect) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_form_redirects_insecure.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
-
-  // Check this was logged correctly as a redirect mixed form that may expose
-  // form data.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(
-      interstitial_histogram,
-      InsecureFormNavigationThrottle::InterstitialTriggeredState::
-          kMixedFormRedirectWithFormData,
-      1);
-}
-
-// Checks interstitial is shown for mixed forms caused by a 308 POST http
-// redirect, and that metrics are logged.
-IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData,
-    TestDisplaysInsecureFormSubmissionWarningRedirect308) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_form_redirects_308_insecure.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  EXPECT_TRUE(helper->IsDisplayingInterstitial());
-  EXPECT_EQ(helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting()
-                ->GetTypeForTesting(),
-            security_interstitials::InsecureFormBlockingPage::kTypeForTesting);
-
-  // Check this was logged correctly as a redirect mixed form that may expose
-  // form data.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(
-      interstitial_histogram,
-      InsecureFormNavigationThrottle::InterstitialTriggeredState::
-          kMixedFormRedirectWithFormData,
-      1);
-}
-
-// Checks no interstitial is shown for mixed forms caused for a POST form with a
-// 301 redirect, and that metrics are logged correctly.
-IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData,
-    TestDisplaysInsecureFormSubmissionWarningRedirect301) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_form_redirects_301_insecure.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
   // There should have been no interstitial triggered.
   EXPECT_FALSE(helper);
 
@@ -6935,92 +6628,7 @@ IN_PROC_BROWSER_TEST_F(
       1);
 }
 
-// Checks no interstitial is shown for mixed forms caused for a POST form with a
-// 302 redirect, and that metrics are logged correctly.
-IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData,
-    TestDisplaysInsecureFormSubmissionWarningRedirect302) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_form_redirects_302_insecure.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  // There should have been no interstitial triggered.
-  EXPECT_FALSE(helper);
-
-  // Check this was logged correctly as a redirect mixed form that would not
-  // expose form data.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(
-      interstitial_histogram,
-      InsecureFormNavigationThrottle::InterstitialTriggeredState::
-          kMixedFormRedirectNoFormData,
-      1);
-}
-
-// Checks no interstitial is shown for mixed forms caused for a GET form with
-// a 307 redirect to http, and that metrics are logged correctly.
-IN_PROC_BROWSER_TEST_F(
-    SSLUITestWithInsecureFormsWarningEnabledForRedirectsWithFormData,
-    TestDisplaysInsecureFormSubmissionWarningRedirectGet) {
-  base::HistogramTester histograms;
-  const std::string interstitial_histogram =
-      "Security.MixedForm.InterstitialTriggerState";
-  ASSERT_TRUE(embedded_test_server()->Start());
-  https_server_.RegisterRequestHandler(
-      base::BindRepeating(&FormActionHTTPRedirectHandler, &https_server_));
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path = GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_form_redirects_insecure_get.html",
-      embedded_test_server()->host_port_pair());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL(replacement_path)));
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  content::TestNavigationObserver nav_observer(tab, 1);
-  ASSERT_TRUE(content::ExecuteScript(tab, "submitForm();"));
-  nav_observer.Wait();
-  security_interstitials::SecurityInterstitialTabHelper* helper =
-      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-          tab);
-  // There should have been no interstitial triggered.
-  EXPECT_FALSE(helper);
-
-  // Check this was logged correctly as a redirect mixed form that would not
-  // expose form data.
-  histograms.ExpectTotalCount(interstitial_histogram, 1);
-  histograms.ExpectBucketCount(
-      interstitial_histogram,
-      InsecureFormNavigationThrottle::InterstitialTriggeredState::
-          kMixedFormRedirectNoFormData,
-      1);
-}
-
-class MixedFormsPolicyTest : public policy::PolicyTest {
- public:
-  MixedFormsPolicyTest() {
-    feature_list_.InitAndEnableFeature(
-        security_interstitials::kInsecureFormSubmissionInterstitial);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
+class MixedFormsPolicyTest : public policy::PolicyTest {};
 
 // Check no warning is shown if disabled by policy.
 IN_PROC_BROWSER_TEST_F(MixedFormsPolicyTest, NoWarningOptOutPolicy) {
@@ -7778,345 +7386,6 @@ IN_PROC_BROWSER_TEST_F(SSLUIMITMSoftwareEnabledTest,
   TestNoMITMSoftwareInterstitial();
 }
 
-class TLSLegacyVersionSSLUITest : public SSLUITest {
- public:
-  TLSLegacyVersionSSLUITest() = default;
-
-  TLSLegacyVersionSSLUITest(const TLSLegacyVersionSSLUITest&) = delete;
-  TLSLegacyVersionSSLUITest& operator=(const TLSLegacyVersionSSLUITest&) =
-      delete;
-
-  ~TLSLegacyVersionSSLUITest() override = default;
-
-  void SetUpOnMainThread() override {
-    SSLUITest::SetUpOnMainThread();
-    mock_cert_verifier()->set_default_result(net::OK);
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    mock_cert_verifier_.SetUpCommandLine(command_line);
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    mock_cert_verifier_.SetUpInProcessBrowserTestFixture();
-  }
-
-  void TearDownInProcessBrowserTestFixture() override {
-    mock_cert_verifier_.TearDownInProcessBrowserTestFixture();
-  }
-
-  content::ContentMockCertVerifier::CertVerifier* mock_cert_verifier() {
-    return mock_cert_verifier_.mock_cert_verifier();
-  }
-
- protected:
-  net::EmbeddedTestServer* https_server() { return &https_server_; }
-
-  void SetTLSVersion(uint16_t version) {
-    net::SSLServerConfig config;
-    config.version_max = version;
-    config.version_min = version;
-    https_server()->SetSSLConfig(net::EmbeddedTestServer::CERT_OK, config);
-  }
-
- private:
-  content::ContentMockCertVerifier mock_cert_verifier_;
-};
-
-// TLS 1.2 should not trigger a warning.
-IN_PROC_BROWSER_TEST_F(TLSLegacyVersionSSLUITest, NoWarningTLS12) {
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1_2);
-  ASSERT_TRUE(https_server()->Start());
-
-  GURL url(https_server()->GetURL("/ssl/google.html"));
-  content::WebContentsConsoleObserver console_observer(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  console_observer.SetPattern(base::StringPrintf(
-      "*The connection used to load resources from https://%s:%s*",
-      url.host().c_str(), url.port().c_str()));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  EXPECT_EQ(0u, console_observer.messages().size());
-}
-
-// TLS 1.1 should trigger a warning.
-IN_PROC_BROWSER_TEST_F(TLSLegacyVersionSSLUITest, WarningTLS11) {
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1_1);
-  ASSERT_TRUE(https_server()->Start());
-
-  GURL url(https_server()->GetURL("/ssl/google.html"));
-  content::WebContentsConsoleObserver console_observer(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  console_observer.SetPattern(base::StringPrintf(
-      "*The connection used to load resources from https://%s:%s*",
-      url.host().c_str(), url.port().c_str()));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-
-  // Click through the interstitial (the console warning is only shown on the
-  // affected page, not the interstitial).
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab);
-  ProceedThroughInterstitial(tab);
-
-  console_observer.Wait();
-  EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
-                                 "*will be disabled in the future*"));
-  EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
-                                 "*should enable TLS 1.2 or later*"));
-}
-
-// TLS 1.0 should trigger a warning.
-IN_PROC_BROWSER_TEST_F(TLSLegacyVersionSSLUITest, WarningTLS1) {
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1);
-  ASSERT_TRUE(https_server()->Start());
-
-  GURL url(https_server()->GetURL("/ssl/google.html"));
-  content::WebContentsConsoleObserver console_observer(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  console_observer.SetPattern(base::StringPrintf(
-      "*The connection used to load resources from https://%s:%s*",
-      url.host().c_str(), url.port().c_str()));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-
-  // Click through the interstitial (the console warning is only shown on the
-  // affected page, not the interstitial).
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab);
-  ProceedThroughInterstitial(tab);
-
-  console_observer.Wait();
-  EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
-                                 "*will be disabled in the future*"));
-  EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
-                                 "*should enable TLS 1.2 or later*"));
-}
-
-class LegacyTLSInterstitialTest : public TLSLegacyVersionSSLUITest {
- public:
-  LegacyTLSInterstitialTest() {
-    feature_list_.InitAndEnableFeature(net::features::kLegacyTLSEnforced);
-  }
-
-  LegacyTLSInterstitialTest(const LegacyTLSInterstitialTest&) = delete;
-  LegacyTLSInterstitialTest& operator=(const LegacyTLSInterstitialTest&) =
-      delete;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// When kLegacyTLSEnforcement is enabled, visiting a legacy TLS page should
-// show the legacy TLS specific interstitial.
-IN_PROC_BROWSER_TEST_F(LegacyTLSInterstitialTest, ShowsInterstitial) {
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1);
-  ASSERT_TRUE(https_server()->Start());
-  base::HistogramTester histograms;
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("/ssl/google.html")));
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab);
-  ASSERT_TRUE(
-      chrome_browser_interstitials::IsShowingLegacyTLSInterstitial(tab));
-
-  // Check that the histogram for the legacy TLS interstitial was recorded.
-  histograms.ExpectTotalCount(SSLErrorHandler::GetHistogramNameForTesting(), 2);
-  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
-                               SSLErrorHandler::HANDLE_ALL, 1);
-  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
-                               SSLErrorHandler::SHOW_LEGACY_TLS_INTERSTITIAL,
-                               1);
-
-  // Click through the interstitial.
-  ProceedThroughInterstitial(tab);
-
-  // Navigating to the same page now shouldn't cause an interstitial.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("/ssl/google.html")));
-  tab = browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_FALSE(
-      chrome_browser_interstitials::IsShowingLegacyTLSInterstitial(tab));
-
-  // Check that no new interstitial metrics were recorded from this navigation.
-  histograms.ExpectTotalCount(SSLErrorHandler::GetHistogramNameForTesting(), 2);
-  histograms.ExpectBucketCount("interstitial.legacy_tls.decision",
-                               security_interstitials::MetricsHelper::PROCEED,
-                               1);
-}
-
-// Test that attempting to set the SSLVersionMin enterprise policy to "tls1"
-// (which is no longer supported) does not prevent the legacy TLS interstitial
-// from being shown.
-IN_PROC_BROWSER_TEST_F(LegacyTLSInterstitialTest,
-                       PolicyDoesNotOverrideInterstitial) {
-  // Attempt to set the SSLVersionMin policy.
-  base::Value policy_value("tls1");  // TLS 1.0
-  SetPolicy(policy::key::kSSLVersionMin, std::move(policy_value));
-
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1);
-  ASSERT_TRUE(https_server()->Start());
-
-  base::HistogramTester histograms;
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("/ssl/google.html")));
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_TRUE(
-      chrome_browser_interstitials::IsShowingLegacyTLSInterstitial(tab));
-}
-
-// Check that if we have bypassed the legacy TLS error previously and then the
-// server responded with TLS 1.2, we drop the error exception.
-IN_PROC_BROWSER_TEST_F(LegacyTLSInterstitialTest, FixedServerDropsBypass) {
-  GURL kSiteWithLegacyTLS("https://example.test/legacy-tls");
-  GURL kSiteWithModernTLS("https://example.test/modern-tls");
-
-  // EmbeddedTestServer can be flakey if forcing a specific port (as the port
-  // may no longer be available on the system). URLLoaderInterceptor can mock
-  // out the responses as needed instead, reusing the same port across variants.
-  auto url_loader_interceptor = std::make_unique<content::URLLoaderInterceptor>(
-      base::BindLambdaForTesting(
-          [=](content::URLLoaderInterceptor::RequestParams* params) {
-            network::URLLoaderCompletionStatus status;
-            status.ssl_info = net::SSLInfo();
-            status.ssl_info->cert = net::ImportCertFromFile(
-                net::GetTestCertsDirectory(), "ok_cert.pem");
-            status.ssl_info->unverified_cert = status.ssl_info->cert;
-
-            if (params->url_request.url == GURL(kSiteWithLegacyTLS)) {
-              status.error_code = net::ERR_SSL_OBSOLETE_VERSION;
-              status.ssl_info->cert_status = net::CERT_STATUS_LEGACY_TLS;
-              params->client->OnComplete(status);
-              return true;
-            }
-
-            status.error_code = net::OK;
-            std::string headers =
-                "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n";
-            std::string body = "<html><title>Success</title>Hello world</html>";
-            content::URLLoaderInterceptor::WriteResponse(headers, body,
-                                                         params->client.get());
-            return true;
-          }));
-
-  // Connect over TLS 1.0 and proceed through the interstitial to set an error
-  // bypass.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kSiteWithLegacyTLS));
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab);
-  ProceedThroughInterstitial(tab);
-
-  // Connect over a "fixed" TLS 1.2 connection.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kSiteWithModernTLS));
-  EXPECT_FALSE(
-      chrome_browser_interstitials::IsShowingLegacyTLSInterstitial(tab));
-
-  // Go back to connecting over TLS 1.0. Visiting should once again show the
-  // legacy TLS interstitial
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kSiteWithLegacyTLS));
-  WaitForInterstitial(tab);
-  EXPECT_TRUE(
-      chrome_browser_interstitials::IsShowingLegacyTLSInterstitial(tab));
-}
-
-// Check that cliking the "back to safety" button works for the legacy TLS
-// interstitial.
-IN_PROC_BROWSER_TEST_F(LegacyTLSInterstitialTest, BackToSafety) {
-  base::HistogramTester histograms;
-
-  // Connect over TLS 1.0 and don't proceed through the interstitial.
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1);
-  ASSERT_TRUE(https_server()->Start());
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("/ssl/google.html")));
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab);
-  DontProceedThroughInterstitial(tab);
-  EXPECT_NE(tab->GetVisibleURL(), https_server()->GetURL("/ssl/google.html"));
-
-  // Check that the histogram for the legacy TLS interstitial was recorded.
-  histograms.ExpectBucketCount(
-      "interstitial.legacy_tls.decision",
-      security_interstitials::MetricsHelper::DONT_PROCEED, 1);
-}
-
-// A WebContentsObserver that allows the user to wait for a navigation, and
-// check whether the resource for the navigation was loaded from cache or not.
-class CacheNavigationObserver : public content::WebContentsObserver {
- public:
-  explicit CacheNavigationObserver(WebContents* web_contents,
-                                   bool expect_cached)
-      : WebContentsObserver(web_contents), expect_cached_(expect_cached) {}
-  ~CacheNavigationObserver() override = default;
-
-  void WaitForNavigation() { run_loop_.Run(); }
-
-  // WebContentsObserver:
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override {
-    ASSERT_EQ(expect_cached_, navigation_handle->WasResponseCached());
-    run_loop_.Quit();
-  }
-
- private:
-  bool expect_cached_;
-  base::RunLoop run_loop_;
-};
-
-// Tests that resources loaded over legacy TLS should not be cached.
-IN_PROC_BROWSER_TEST_F(LegacyTLSInterstitialTest, LegacyTLSPagesNotCached) {
-  // Connect over TLS 1.0 and proceed through the interstitial to set an error
-  // bypass.
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1);
-  ASSERT_TRUE(https_server()->Start());
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("/cachetime")));
-  auto* tab1 = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab1);
-  ProceedThroughInterstitial(tab1);
-
-  // Open a new tab and navigate so that resources are fetched via the disk
-  // cache. Navigating to the same URL in the same tab triggers a refresh which
-  // will not check the disk cache.
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GURL("about:blank"), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB |
-          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-  auto* tab2 = browser()->tab_strip_model()->GetActiveWebContents();
-
-  CacheNavigationObserver observer(tab2, false);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server()->GetURL("/cachetime")));
-  observer.WaitForNavigation();  // Will fail if resource is loaded from cache.
-}
-
-// Tests that a page with legacy TLS and HSTS shows a bypassable interstitial
-// rather than a hard non-bypassable HSTS warning.
-IN_PROC_BROWSER_TEST_F(LegacyTLSInterstitialTest, LegacyTLSNotFatal) {
-  // Set HSTS for the test page.
-  ssl_test_util::SetHSTSForHostName(browser()->profile(), kHstsTestHostName);
-
-  // Connect over TLS 1.0 and proceed through the interstitial.
-  SetTLSVersion(net::SSL_PROTOCOL_VERSION_TLS1);
-  ASSERT_TRUE(https_server()->Start());
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(),
-      https_server()->GetURL(kHstsTestHostName, "/ssl/google.html")));
-  auto* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  WaitForInterstitial(tab);
-
-  // Verify that there is a proceed link in the interstitial.
-  int result = security_interstitials::CMD_ERROR;
-  const std::string javascript = base::StringPrintf(
-      "domAutomationController.send("
-      "(document.querySelector(\"#proceed-link\") === null) "
-      "? (%d) : (%d))",
-      security_interstitials::CMD_TEXT_NOT_FOUND,
-      security_interstitials::CMD_TEXT_FOUND);
-  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(tab->GetMainFrame(),
-                                                  javascript, &result));
-  EXPECT_EQ(security_interstitials::CMD_TEXT_FOUND, result);
-}
-
 // Checks that SimpleURLLoader, which uses services/network/url_loader.cc, goes
 // through the new NetworkServiceClient interface to deliver cert error
 // notifications to the browser which then overrides the certificate error.
@@ -8767,11 +8036,6 @@ class RecurrentInterstitialBrowserTest : public CertVerifierBrowserTest {
 // multiple times.
 IN_PROC_BROWSER_TEST_F(RecurrentInterstitialBrowserTest,
                        RecurrentInterstitial) {
-  const char kRecurrentInterstitialHistogram[] =
-      "interstitial.ssl_overridable.is_recurrent_error";
-  const char kRecurrentInterstitialActionHistogram[] =
-      "interstitial.ssl_recurrent_error.action";
-
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   ASSERT_TRUE(https_server.Start());
   mock_cert_verifier()->set_default_result(
@@ -8782,7 +8046,6 @@ IN_PROC_BROWSER_TEST_F(RecurrentInterstitialBrowserTest,
           browser()->profile()->GetSSLHostStateDelegate());
   state->ResetRecurrentErrorCountForTesting();
 
-  base::HistogramTester histograms;
   state->SetRecurrentInterstitialThresholdForTesting(2);
 
   // Use different hostnames for the two test cases to avoid the clickthrough
@@ -8793,16 +8056,11 @@ IN_PROC_BROWSER_TEST_F(RecurrentInterstitialBrowserTest,
   WaitForInterstitial(tab);
   ExpectInterstitialElementHidden(tab, "recurrent-error-message",
                                   true /* expect_hidden */);
-  histograms.ExpectUniqueSample(kRecurrentInterstitialHistogram, false, 1);
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   WaitForInterstitial(tab);
   ExpectInterstitialElementHidden(tab, "recurrent-error-message",
                                   false /* expect_hidden */);
-  histograms.ExpectBucketCount(kRecurrentInterstitialHistogram, true, 1);
-  histograms.ExpectUniqueSample(
-      kRecurrentInterstitialActionHistogram,
-      SSLErrorControllerClient::RecurrentErrorAction::kShow, 1);
 
   // Proceed through the interstitial and observe that the histogram is
   // recorded correctly.
@@ -8810,9 +8068,6 @@ IN_PROC_BROWSER_TEST_F(RecurrentInterstitialBrowserTest,
   ASSERT_TRUE(content::ExecuteScript(
       tab, "window.certificateErrorPageController.proceed();"));
   nav_observer.Wait();
-  histograms.ExpectBucketCount(
-      kRecurrentInterstitialActionHistogram,
-      SSLErrorControllerClient::RecurrentErrorAction::kProceed, 1);
 }
 
 // Tests that mixed content is tracked by origin, not by URL. This is tested by

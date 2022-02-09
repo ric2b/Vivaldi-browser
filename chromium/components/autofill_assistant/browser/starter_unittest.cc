@@ -4,11 +4,12 @@
 
 #include "components/autofill_assistant/browser/starter.h"
 
-#include <map>
 #include <memory>
 #include <string>
 #include "base/base64url.h"
-#include "base/containers/mru_cache.h"
+#include "base/containers/flat_map.h"
+#include "base/containers/lru_cache.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -115,12 +116,12 @@ class StarterTest : public testing::Test {
     return &task_environment_;
   }
 
-  base::HashingMRUCache<std::string, base::TimeTicks>*
+  base::HashingLRUCache<std::string, base::TimeTicks>*
   GetFailedTriggerFetchesCacheForTest() {
     return starter_->cached_failed_trigger_script_fetches_;
   }
 
-  base::HashingMRUCache<std::string, base::TimeTicks>*
+  base::HashingLRUCache<std::string, base::TimeTicks>*
   GetUserDenylistedCacheForTest() const {
     return &starter_->user_denylisted_domains_;
   }
@@ -231,13 +232,13 @@ class StarterTest : public testing::Test {
   content::RenderViewHostTestEnabler rvh_test_enabler_;
   content::TestBrowserContext browser_context_;
   std::unique_ptr<content::WebContents> web_contents_;
-  NiceMock<MockTriggerScriptUiDelegate>* mock_trigger_script_ui_delegate_ =
-      nullptr;
-  NiceMock<MockServiceRequestSender>*
+  raw_ptr<NiceMock<MockTriggerScriptUiDelegate>>
+      mock_trigger_script_ui_delegate_ = nullptr;
+  raw_ptr<NiceMock<MockServiceRequestSender>>
       mock_trigger_script_service_request_sender_ = nullptr;
   NiceMock<MockWebsiteLoginManager> mock_website_login_manager_;
   // Only set while a trigger script is running.
-  TriggerScriptCoordinator* trigger_script_coordinator_ = nullptr;
+  raw_ptr<TriggerScriptCoordinator> trigger_script_coordinator_ = nullptr;
   FakeStarterPlatformDelegate fake_platform_delegate_;
   ukm::TestAutoSetUkmRecorder ukm_recorder_;
   MockRuntimeManager mock_runtime_manager_;
@@ -253,8 +254,8 @@ class StarterTest : public testing::Test {
 };
 
 TEST_F(StarterTest, RegularScriptFailsWithoutInitialUrl) {
-  std::map<std::string, std::string> params = {{"ENABLED", "true"},
-                                               {"START_IMMEDIATELY", "true"}};
+  base::flat_map<std::string, std::string> params = {
+      {"ENABLED", "true"}, {"START_IMMEDIATELY", "true"}};
   TriggerContext::Options options;
   EXPECT_CALL(mock_start_regular_script_callback_, Run).Times(0);
 
@@ -266,12 +267,19 @@ TEST_F(StarterTest, RegularScriptFailsWithoutInitialUrl) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(GetUkmStartRequest(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0],
+                    {Metrics::AutofillAssistantStarted::FAILED_NO_INITIAL_URL,
+                     Metrics::AutofillAssistantIntent::UNDEFINED_INTENT,
+                     Metrics::AutofillAssistantCaller::UNKNOWN_CALLER,
+                     Metrics::AutofillAssistantSource::UNKNOWN_SOURCE,
+                     Metrics::AutofillAssistantExperiment::NO_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, TriggerScriptFailsWithoutInitialUrl) {
-  std::map<std::string, std::string> params = {
+  base::flat_map<std::string, std::string> params = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", "abc"}};
@@ -289,13 +297,20 @@ TEST_F(StarterTest, TriggerScriptFailsWithoutInitialUrl) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(GetUkmStartRequest(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0],
+                    {Metrics::AutofillAssistantStarted::FAILED_NO_INITIAL_URL,
+                     Metrics::AutofillAssistantIntent::UNDEFINED_INTENT,
+                     Metrics::AutofillAssistantCaller::UNKNOWN_CALLER,
+                     Metrics::AutofillAssistantSource::UNKNOWN_SOURCE,
+                     Metrics::AutofillAssistantExperiment::NO_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, FailWithoutMandatoryScriptParameter) {
   // ENABLED is missing from |params|.
-  std::map<std::string, std::string> params = {
+  base::flat_map<std::string, std::string> params = {
       {"START_IMMEDIATELY", "false"}, {"TRIGGER_SCRIPTS_BASE64", "abc"}};
   TriggerContext::Options options;
   options.initial_url = kExampleDeeplink;
@@ -313,15 +328,27 @@ TEST_F(StarterTest, FailWithoutMandatoryScriptParameter) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(GetUkmStartRequest(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0],
+                    {Metrics::AutofillAssistantStarted::
+                         FAILED_MANDATORY_PARAMETER_MISSING,
+                     Metrics::AutofillAssistantIntent::UNDEFINED_INTENT,
+                     Metrics::AutofillAssistantCaller::UNKNOWN_CALLER,
+                     Metrics::AutofillAssistantSource::UNKNOWN_SOURCE,
+                     Metrics::AutofillAssistantExperiment::NO_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, FailWhenFeatureDisabled) {
-  std::map<std::string, std::string> params = {
+  base::flat_map<std::string, std::string> params = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
-      {"TRIGGER_SCRIPTS_BASE64", "abc"}};
+      {"TRIGGER_SCRIPTS_BASE64", "abc"},
+      {"INTENT", "SHOPPING"},
+      {"EXPERIMENT_IDS", "fake_experiment"},
+      {"CALLER", "7"},
+      {"SOURCE", "1"}};
   TriggerContext::Options options;
   options.initial_url = kExampleDeeplink;
   auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
@@ -340,13 +367,21 @@ TEST_F(StarterTest, FailWhenFeatureDisabled) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(
+      GetUkmStartRequest(ukm_recorder_),
+      ElementsAreArray(ToHumanReadableMetrics(
+          {{navigation_ids_[0],
+            {Metrics::AutofillAssistantStarted::FAILED_FEATURE_DISABLED,
+             Metrics::AutofillAssistantIntent::SHOPPING,
+             Metrics::AutofillAssistantCaller::IN_CHROME,
+             Metrics::AutofillAssistantSource::ORGANIC,
+             Metrics::AutofillAssistantExperiment::UNKNOWN_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, RegularStartupForReturningUsersSucceeds) {
   SetupPlatformDelegateForReturningUser();
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -371,15 +406,23 @@ TEST_F(StarterTest, RegularStartupForReturningUsersSucceeds) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_ACCEPTED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_NOT_SHOWN, 1u);
+  EXPECT_THAT(
+      GetUkmRegularScriptOnboarding(ukm_recorder_),
+      ElementsAreArray(ToHumanReadableMetrics(
+          {{navigation_ids_[0], {Metrics::Onboarding::OB_NOT_SHOWN}}})));
+  EXPECT_THAT(GetUkmStartRequest(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0],
+                    {Metrics::AutofillAssistantStarted::OK_IMMEDIATE_START,
+                     Metrics::AutofillAssistantIntent::UNDEFINED_INTENT,
+                     Metrics::AutofillAssistantCaller::UNKNOWN_CALLER,
+                     Metrics::AutofillAssistantSource::UNKNOWN_SOURCE,
+                     Metrics::AutofillAssistantExperiment::NO_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, RegularStartupForFirstTimeUsersSucceeds) {
   SetupPlatformDelegateForFirstTimeUser();
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -405,10 +448,10 @@ TEST_F(StarterTest, RegularStartupForFirstTimeUsersSucceeds) {
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_FOREGROUND_INSTALLATION_SUCCEEDED,
       1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_ACCEPTED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_SHOWN, 1u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0], {Metrics::Onboarding::OB_ACCEPTED}},
+                   {navigation_ids_[0], {Metrics::Onboarding::OB_SHOWN}}})));
 }
 
 TEST_F(StarterTest, ForceOnboardingFlagForReturningUsersSucceeds) {
@@ -421,7 +464,7 @@ TEST_F(StarterTest, ForceOnboardingFlagForReturningUsersSucceeds) {
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kAutofillAssistantForceOnboarding, "true");
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", "https://www.example.com"}};
@@ -460,7 +503,7 @@ TEST_F(StarterTest, ForceFirstTimeUserExperienceForReturningUser) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kAutofillAssistantForceFirstTimeUser, "true");
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", base64_get_trigger_scripts_response},
@@ -477,7 +520,7 @@ TEST_F(StarterTest, RegularStartupFailsIfDfmInstallationFails) {
   SetupPlatformDelegateForFirstTimeUser();
   fake_platform_delegate_.feature_module_installation_result_ =
       Metrics::FeatureModuleInstallation::DFM_FOREGROUND_INSTALLATION_FAILED;
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -499,15 +542,14 @@ TEST_F(StarterTest, RegularStartupFailsIfDfmInstallationFails) {
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_FOREGROUND_INSTALLATION_FAILED,
       1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, RegularStartupFailsIfOnboardingRejected) {
   SetupPlatformDelegateForFirstTimeUser();
   fake_platform_delegate_.feature_module_installed_ = true;
   fake_platform_delegate_.show_onboarding_result_ = OnboardingResult::REJECTED;
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink},
@@ -526,16 +568,16 @@ TEST_F(StarterTest, RegularStartupFailsIfOnboardingRejected) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_CANCELLED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_SHOWN, 1u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0], {Metrics::Onboarding::OB_CANCELLED}},
+                   {navigation_ids_[0], {Metrics::Onboarding::OB_SHOWN}}})));
 }
 
 TEST_F(StarterTest, RpcTriggerScriptFailsIfMsbbIsDisabled) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.msbb_enabled_ = false;
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"},
@@ -558,14 +600,13 @@ TEST_F(StarterTest, RpcTriggerScriptFailsIfMsbbIsDisabled) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, RpcTriggerScriptFailsIfProactiveHelpIsDisabled) {
   SetupPlatformDelegateForReturningUser();
   fake_platform_delegate_.proactive_help_enabled_ = false;
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"},
@@ -588,14 +629,21 @@ TEST_F(StarterTest, RpcTriggerScriptFailsIfProactiveHelpIsDisabled) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(GetUkmStartRequest(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0],
+                    {Metrics::AutofillAssistantStarted::FAILED_SETTING_DISABLED,
+                     Metrics::AutofillAssistantIntent::UNDEFINED_INTENT,
+                     Metrics::AutofillAssistantCaller::UNKNOWN_CALLER,
+                     Metrics::AutofillAssistantSource::UNKNOWN_SOURCE,
+                     Metrics::AutofillAssistantExperiment::NO_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, RpcTriggerScriptSucceeds) {
   SetupPlatformDelegateForFirstTimeUser();
   fake_platform_delegate_.feature_module_installed_ = true;
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"},
@@ -662,8 +710,15 @@ TEST_F(StarterTest, RpcTriggerScriptSucceeds) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(GetUkmStartRequest(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0],
+                    {Metrics::AutofillAssistantStarted::OK_DELAYED_START,
+                     Metrics::AutofillAssistantIntent::UNDEFINED_INTENT,
+                     Metrics::AutofillAssistantCaller::UNKNOWN_CALLER,
+                     Metrics::AutofillAssistantSource::UNKNOWN_SOURCE,
+                     Metrics::AutofillAssistantExperiment::NO_EXPERIMENT}}})));
 }
 
 TEST_F(StarterTest, Base64TriggerScriptFailsForInvalidBase64) {
@@ -671,7 +726,7 @@ TEST_F(StarterTest, Base64TriggerScriptFailsForInvalidBase64) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", "#invalid_hashtag"},
@@ -696,8 +751,7 @@ TEST_F(StarterTest, Base64TriggerScriptFailsForInvalidBase64) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, Base64TriggerScriptFailsIfProactiveHelpIsDisabled) {
@@ -706,7 +760,7 @@ TEST_F(StarterTest, Base64TriggerScriptFailsIfProactiveHelpIsDisabled) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -727,8 +781,7 @@ TEST_F(StarterTest, Base64TriggerScriptFailsIfProactiveHelpIsDisabled) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, Base64TriggerScriptSucceeds) {
@@ -741,7 +794,7 @@ TEST_F(StarterTest, Base64TriggerScriptSucceeds) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64",
@@ -784,8 +837,7 @@ TEST_F(StarterTest, Base64TriggerScriptSucceeds) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, CancelPendingTriggerScriptWhenTransitioningFromCctToTab) {
@@ -794,7 +846,7 @@ TEST_F(StarterTest, CancelPendingTriggerScriptWhenTransitioningFromCctToTab) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -827,7 +879,7 @@ TEST_F(StarterTest, CancelPendingTriggerScriptWhenHandlingNewStartupRequest) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -859,7 +911,7 @@ TEST_F(StarterTest, RegularStartupFailsIfNavigationDuringOnboarding) {
   fake_platform_delegate_.on_show_onboarding_callback_ = base::DoNothing();
 
   EXPECT_CALL(mock_start_regular_script_callback_, Run).Times(0);
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -874,10 +926,10 @@ TEST_F(StarterTest, RegularStartupFailsIfNavigationDuringOnboarding) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_NO_ANSWER, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_SHOWN, 1u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[0], {Metrics::Onboarding::OB_NO_ANSWER}},
+                   {navigation_ids_[0], {Metrics::Onboarding::OB_SHOWN}}})));
 }
 
 TEST_F(StarterTest, TriggerScriptStartupFailsIfNavigationDuringOnboarding) {
@@ -888,7 +940,7 @@ TEST_F(StarterTest, TriggerScriptStartupFailsIfNavigationDuringOnboarding) {
   // Empty callback to keep the onboarding open indefinitely.
   fake_platform_delegate_.on_show_onboarding_callback_ = base::DoNothing();
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64",
@@ -927,8 +979,7 @@ TEST_F(StarterTest, TriggerScriptStartupFailsIfNavigationDuringOnboarding) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, RegularStartupAllowsCertainNavigationsDuringOnboarding) {
@@ -937,7 +988,7 @@ TEST_F(StarterTest, RegularStartupAllowsCertainNavigationsDuringOnboarding) {
   // Empty callback to keep the onboarding open indefinitely.
   fake_platform_delegate_.on_show_onboarding_callback_ = base::DoNothing();
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -950,8 +1001,7 @@ TEST_F(StarterTest, RegularStartupAllowsCertainNavigationsDuringOnboarding) {
   // subdomain of the ORIGINAL_DEEPLINK, nor by redirects along the way.
   SimulateRedirectToUrl(
       {GURL("http://redirect.com/example"), GURL("https://login.example.com")});
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 
   // Navigating to a different domain will cancel the onboarding.
   SimulateNavigateToUrl(GURL("https://www.different.com"));
@@ -962,10 +1012,10 @@ TEST_F(StarterTest, RegularStartupAllowsCertainNavigationsDuringOnboarding) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_NO_ANSWER, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_SHOWN, 1u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_),
+              ElementsAreArray(ToHumanReadableMetrics(
+                  {{navigation_ids_[1], {Metrics::Onboarding::OB_NO_ANSWER}},
+                   {navigation_ids_[1], {Metrics::Onboarding::OB_SHOWN}}})));
 }
 
 TEST_F(StarterTest, TriggerScriptAllowsHttpToHttpsRedirect) {
@@ -975,7 +1025,7 @@ TEST_F(StarterTest, TriggerScriptAllowsHttpToHttpsRedirect) {
   mock_trigger_script_service_request_sender_ = nullptr;
 
   SimulateNavigateToUrl(GURL("http://www.example.com"));
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -1001,7 +1051,7 @@ TEST_F(StarterTest, RegularStartupIgnoresLastCommittedUrl) {
   // the time of startup. All that matters is that it has received the startup
   // intent, and that there is a valid ORIGINAL_DEEPLINK to expect.
   SimulateNavigateToUrl(GURL("https://www.ignored.com"));
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -1016,8 +1066,7 @@ TEST_F(StarterTest, RegularStartupIgnoresLastCommittedUrl) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, ImplicitStartupOnSupportedDomain) {
@@ -1089,8 +1138,7 @@ TEST_F(StarterTest, ImplicitStartupOnSupportedDomain) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, DoNotStartImplicitlyIfSettingDisabled) {
@@ -1162,8 +1210,7 @@ TEST_F(StarterTest, ImplicitStartupOnCurrentUrlAfterSettingEnabled) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, StartTriggerScriptBeforeRedirectRecordsUkmForTargetUrl) {
@@ -1172,7 +1219,7 @@ TEST_F(StarterTest, StartTriggerScriptBeforeRedirectRecordsUkmForTargetUrl) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -1204,8 +1251,7 @@ TEST_F(StarterTest, StartTriggerScriptBeforeRedirectRecordsUkmForTargetUrl) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, RedirectFailsDuringPendingTriggerScriptStart) {
@@ -1214,7 +1260,7 @@ TEST_F(StarterTest, RedirectFailsDuringPendingTriggerScriptStart) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -1253,8 +1299,7 @@ TEST_F(StarterTest, RedirectFailsDuringPendingTriggerScriptStart) {
   EXPECT_THAT(GetUkmTriggerScriptOnboarding(ukm_recorder_), IsEmpty());
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, StartTriggerScriptDuringRedirectRecordsUkmForTargetUrl) {
@@ -1263,7 +1308,7 @@ TEST_F(StarterTest, StartTriggerScriptDuringRedirectRecordsUkmForTargetUrl) {
   fake_platform_delegate_.trigger_script_request_sender_for_test_ = nullptr;
   mock_trigger_script_service_request_sender_ = nullptr;
 
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"TRIGGER_SCRIPTS_BASE64", CreateBase64TriggerScriptResponseForTest()},
@@ -1300,14 +1345,13 @@ TEST_F(StarterTest, StartTriggerScriptDuringRedirectRecordsUkmForTargetUrl) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, RegularStartupDoesNotWaitForNavigationToFinish) {
   SetupPlatformDelegateForReturningUser();
   auto scoped_feature_list = std::make_unique<base::test::ScopedFeatureList>();
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -1337,10 +1381,10 @@ TEST_F(StarterTest, RegularStartupDoesNotWaitForNavigationToFinish) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_ACCEPTED, 1u);
-  histogram_tester_.ExpectBucketCount("Android.AutofillAssistant.OnBoarding",
-                                      Metrics::OnBoarding::OB_NOT_SHOWN, 1u);
+  EXPECT_THAT(
+      GetUkmRegularScriptOnboarding(ukm_recorder_),
+      ElementsAreArray(ToHumanReadableMetrics(
+          {{navigation_ids_[1], {Metrics::Onboarding::OB_NOT_SHOWN}}})));
 }
 
 TEST_F(StarterTest, DoNotStartImplicitlyIfAlreadyRunning) {
@@ -1350,7 +1394,7 @@ TEST_F(StarterTest, DoNotStartImplicitlyIfAlreadyRunning) {
   scoped_feature_list->InitAndEnableFeature(
       features::kAutofillAssistantInCCTTriggering);
   starter_->CheckSettings();
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "true"},
       {"ORIGINAL_DEEPLINK", kExampleDeeplink}};
@@ -1367,10 +1411,8 @@ TEST_F(StarterTest, DoNotStartImplicitlyIfAlreadyRunning) {
 
   histogram_tester_.ExpectTotalCount(
       "Android.AutofillAssistant.FeatureModuleInstallation", 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 TEST_F(StarterTest, FailedTriggerScriptFetchesForImplicitStartupAreCached) {
@@ -1528,7 +1570,7 @@ TEST_F(StarterTest, EmptyTriggerScriptFetchesForImplicitStartupAreCached) {
   // However, explicit requests still communicate with the backend.
   EXPECT_CALL(*mock_trigger_script_service_request_sender_, OnSendRequest)
       .Times(1);
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"},
@@ -1553,7 +1595,7 @@ TEST_F(StarterTest, EmptyTriggerScriptFetchesForImplicitStartupAreCached) {
 }
 
 TEST_F(StarterTest, FailedExplicitTriggerFetchesAreCached) {
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"}};
@@ -1715,7 +1757,7 @@ TEST_F(StarterTest, RemoveEntryFromCacheOnSuccessForExplicitRequest) {
         trigger_script_coordinator_->PerformTriggerScriptAction(
             TriggerScriptProto::ACCEPT);
       });
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"},
@@ -1778,6 +1820,42 @@ TEST_F(StarterTest, ImplicitInTabTriggeringDoesNotTriggerInCct) {
       .Times(0);
   SimulateNavigateToUrl(GURL("https://www.example.com/cart"));
   task_environment()->RunUntilIdle();
+}
+
+TEST_F(StarterTest, RecordsDependenciesInvalidatedOutsideFlow) {
+  starter_->OnDependenciesInvalidated();
+
+  histogram_tester_.ExpectUniqueSample(
+      "Android.AutofillAssistant.DependenciesInvalidated",
+      Metrics::DependenciesInvalidated::OUTSIDE_FLOW, 1);
+}
+
+TEST_F(StarterTest, RecordsDependenciesInvalidatedDuringStartup) {
+  SetupPlatformDelegateForFirstTimeUser();
+  base::flat_map<std::string, std::string> script_parameters = {
+      {"ENABLED", "true"}, {"START_IMMEDIATELY", "true"}};
+  TriggerContext::Options options;
+  options.initial_url = "https://redirect.com/to/www/example/com";
+  // Empty callback to keep the onboarding open indefinitely.
+  fake_platform_delegate_.on_show_onboarding_callback_ = base::DoNothing();
+  starter_->Start(std::make_unique<TriggerContext>(
+      std::make_unique<ScriptParameters>(script_parameters), options));
+
+  starter_->OnDependenciesInvalidated();
+
+  histogram_tester_.ExpectUniqueSample(
+      "Android.AutofillAssistant.DependenciesInvalidated",
+      Metrics::DependenciesInvalidated::DURING_STARTUP, 1);
+}
+
+TEST_F(StarterTest, RecordsDependenciesInvalidatedDuringFlow) {
+  fake_platform_delegate_.is_regular_script_running_ = true;
+
+  starter_->OnDependenciesInvalidated();
+
+  histogram_tester_.ExpectUniqueSample(
+      "Android.AutofillAssistant.DependenciesInvalidated",
+      Metrics::DependenciesInvalidated::DURING_FLOW, 1);
 }
 
 TEST(MultipleStarterTest, HeuristicUsedByMultipleInstances) {
@@ -2060,7 +2138,7 @@ TEST_F(StarterPrerenderTest, DoNotAffectRecordUkmDuringPrendering) {
 
   TriggerContext::Options options;
   options.initial_url = kExampleDeeplink;
-  std::map<std::string, std::string> script_parameters = {
+  base::flat_map<std::string, std::string> script_parameters = {
       {"ENABLED", "true"},
       {"START_IMMEDIATELY", "false"},
       {"REQUEST_TRIGGER_SCRIPT", "true"},
@@ -2086,8 +2164,7 @@ TEST_F(StarterPrerenderTest, DoNotAffectRecordUkmDuringPrendering) {
   histogram_tester_.ExpectUniqueSample(
       "Android.AutofillAssistant.FeatureModuleInstallation",
       Metrics::FeatureModuleInstallation::DFM_ALREADY_INSTALLED, 0u);
-  histogram_tester_.ExpectTotalCount("Android.AutofillAssistant.OnBoarding",
-                                     0u);
+  EXPECT_THAT(GetUkmRegularScriptOnboarding(ukm_recorder_), IsEmpty());
 }
 
 }  // namespace autofill_assistant

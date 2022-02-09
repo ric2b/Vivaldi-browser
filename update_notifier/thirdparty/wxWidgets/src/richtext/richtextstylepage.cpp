@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////
 // Name:        src/richtext/richtextstylepage.cpp
-// Purpose:
+// Purpose:     Implements the rich text formatting dialog style name tab.
 // Author:      Julian Smart
 // Modified by:
 // Created:     10/5/2006 11:34:55 AM
@@ -16,20 +16,20 @@
  * wxRichTextStylePage type definition
  */
 
-IMPLEMENT_DYNAMIC_CLASS( wxRichTextStylePage, wxRichTextDialogPage )
+wxIMPLEMENT_DYNAMIC_CLASS(wxRichTextStylePage, wxRichTextDialogPage);
 
 /*!
  * wxRichTextStylePage event table definition
  */
 
-BEGIN_EVENT_TABLE( wxRichTextStylePage, wxRichTextDialogPage )
+wxBEGIN_EVENT_TABLE(wxRichTextStylePage, wxRichTextDialogPage)
 
 ////@begin wxRichTextStylePage event table entries
     EVT_UPDATE_UI( ID_RICHTEXTSTYLEPAGE_NEXT_STYLE, wxRichTextStylePage::OnNextStyleUpdate )
 
 ////@end wxRichTextStylePage event table entries
 
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 IMPLEMENT_HELP_PROVISION(wxRichTextStylePage)
 
@@ -54,6 +54,8 @@ wxRichTextStylePage::wxRichTextStylePage( wxWindow* parent, wxWindowID id, const
 
 void wxRichTextStylePage::Init()
 {
+    m_nameIsEditable = false;
+    
 ////@begin wxRichTextStylePage member initialisation
     m_styleName = NULL;
     m_basedOn = NULL;
@@ -156,6 +158,8 @@ bool wxRichTextStylePage::TransferDataFromWindow()
 
 bool wxRichTextStylePage::TransferDataToWindow()
 {
+    m_styleName->SetEditable(GetNameIsEditable());
+
     wxPanel::TransferDataToWindow();
 
     wxRichTextStyleDefinition* def = wxRichTextFormattingDialog::GetDialogStyleDefinition(this);

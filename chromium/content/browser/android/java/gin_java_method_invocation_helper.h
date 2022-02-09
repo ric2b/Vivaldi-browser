@@ -11,7 +11,6 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "content/browser/android/java/gin_java_bound_object.h"
@@ -60,6 +59,11 @@ class CONTENT_EXPORT GinJavaMethodInvocationHelper
   GinJavaMethodInvocationHelper(std::unique_ptr<ObjectDelegate> object,
                                 const std::string& method_name,
                                 const base::ListValue& arguments);
+
+  GinJavaMethodInvocationHelper(const GinJavaMethodInvocationHelper&) = delete;
+  GinJavaMethodInvocationHelper& operator=(
+      const GinJavaMethodInvocationHelper&) = delete;
+
   void Init(DispatcherDelegate* dispatcher);
 
   void Invoke();
@@ -105,8 +109,6 @@ class CONTENT_EXPORT GinJavaMethodInvocationHelper
   GinJavaBridgeError invocation_error_;
   base::android::ScopedJavaGlobalRef<jobject> object_result_;
   base::android::ScopedJavaGlobalRef<jclass> safe_annotation_clazz_;
-
-  DISALLOW_COPY_AND_ASSIGN(GinJavaMethodInvocationHelper);
 };
 
 }  // namespace content

@@ -60,7 +60,6 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/services/quarantine/quarantine.h"
@@ -87,6 +86,9 @@ class CONTENT_EXPORT SaveFileManager
   static SaveFileManager* Get();
 
   SaveFileManager();
+
+  SaveFileManager(const SaveFileManager&) = delete;
+  SaveFileManager& operator=(const SaveFileManager&) = delete;
 
   // Lifetime management.
   void Shutdown();
@@ -239,8 +241,6 @@ class CONTENT_EXPORT SaveFileManager
                      std::unique_ptr<SimpleURLLoaderHelper>,
                      SaveItemId::Hasher>
       url_loader_helpers_;
-
-  DISALLOW_COPY_AND_ASSIGN(SaveFileManager);
 };
 
 }  // namespace content

@@ -9,8 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/time/time.h"
 #include "chrome/chrome_cleaner/http/http_agent.h"
 #include "chrome/chrome_cleaner/http/http_agent_factory.h"

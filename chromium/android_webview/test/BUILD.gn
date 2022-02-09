@@ -40,7 +40,6 @@ if (android_64bit_target_cpu) {
 script_test("system_webview_crx_smoke_tests") {
   script =
       "//android_webview/test/components/run_webview_component_smoketest.py"
-  run_under_python2 = true
   args = [ "--webview-package-name=$system_webview_package_name" ]
   data = [ "//android_webview/test/components/crx_smoke_tests.py" ]
   data_deps = [
@@ -164,7 +163,8 @@ android_assets("webview_instrumentation_apk_assets") {
 
   if (use_v8_context_snapshot) {
     deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
-  } else {
+  }
+  if (!use_v8_context_snapshot || include_both_v8_snapshots) {
     deps += [ "//v8:v8_external_startup_data_assets" ]
   }
 }
@@ -272,6 +272,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//third_party/androidx:androidx_test_core_java",
     "//third_party/androidx:androidx_test_rules_java",
     "//third_party/androidx:androidx_test_runner_java",
+    "//third_party/blink/public/common:common_java",
     "//third_party/blink/public/mojom:web_feature_mojo_bindings_java",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
@@ -310,6 +311,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/AwContentsRenderTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsStaticsTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsTest.java",
+    "../javatests/src/org/chromium/android_webview/test/AwDarkModeTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwDisplayCutoutTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwFormDatabaseTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwImeTest.java",
@@ -531,6 +533,7 @@ test("android_webview_unittests") {
     "//components/component_updater",
     "//components/component_updater/android:embedded_component_loader",
     "//components/embedder_support/android:util",
+    "//components/embedder_support/android/metrics:metrics",
     "//components/flags_ui:flags_ui",
     "//components/metrics",
     "//components/metrics:component_metrics",
@@ -588,7 +591,12 @@ test("android_webview_unittests") {
     "../nonembedded/component_updater/installer_policies/aw_package_names_allowlist_component_installer_policy_unittest.cc",
   ]
 
-  deps += [ "//v8:v8_external_startup_data_assets" ]
+  if (use_v8_context_snapshot) {
+    deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+  }
+  if (!use_v8_context_snapshot || include_both_v8_snapshots) {
+    deps += [ "//v8:v8_external_startup_data_assets" ]
+  }
 }
 
 android_assets("android_webview_unittests_assets") {

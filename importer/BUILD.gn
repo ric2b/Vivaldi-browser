@@ -55,6 +55,7 @@ static_library("browser") {
       "imported_speeddial_entry.cpp",
       "imported_speeddial_entry.h",
       "viv_detect_opera.cc",
+      "viv_detect_thunderbird.cc",
       "viv_importer.h",
     ]
     if (is_win) {

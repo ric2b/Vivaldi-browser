@@ -10,12 +10,12 @@
 
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
+#include "remoting/host/base/host_exit_codes.h"
 #include "remoting/host/chromoting_messages.h"
-#include "remoting/host/host_exit_codes.h"
 #include "remoting/host/worker_process_ipc_delegate.h"
 
 using base::win::ScopedHandle;
@@ -103,6 +103,12 @@ void WorkerProcessLauncher::Send(IPC::Message* message) {
   } else {
     delete message;
   }
+}
+
+void WorkerProcessLauncher::GetRemoteAssociatedInterface(
+    mojo::GenericPendingAssociatedReceiver receiver) {
+  DCHECK(ipc_enabled_);
+  launcher_delegate_->GetRemoteAssociatedInterface(std::move(receiver));
 }
 
 void WorkerProcessLauncher::OnProcessLaunched(

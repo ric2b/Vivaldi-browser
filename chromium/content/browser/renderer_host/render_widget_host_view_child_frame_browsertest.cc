@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -41,6 +40,11 @@ namespace content {
 class RenderWidgetHostViewChildFrameBrowserTest : public ContentBrowserTest {
  public:
   RenderWidgetHostViewChildFrameBrowserTest() = default;
+
+  RenderWidgetHostViewChildFrameBrowserTest(
+      const RenderWidgetHostViewChildFrameBrowserTest&) = delete;
+  RenderWidgetHostViewChildFrameBrowserTest& operator=(
+      const RenderWidgetHostViewChildFrameBrowserTest&) = delete;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     IsolateAllSitesForTesting(command_line);
@@ -127,8 +131,6 @@ class RenderWidgetHostViewChildFrameBrowserTest : public ContentBrowserTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   viz::FrameSinkId expected_frame_sink_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrameBrowserTest);
 };
 
 // Tests that the screen is properly reflected for RWHVChildFrame.
@@ -137,8 +139,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest, Screen) {
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetFrameTree()
-                            ->root();
+                            ->GetPrimaryFrameTree()
+                            .root();
 
   // Load cross-site page into iframe.
   GURL cross_site_url(
@@ -189,7 +191,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   auto* web_contents = static_cast<WebContentsImpl*>(shell()->web_contents());
-  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  FrameTreeNode* root = web_contents->GetPrimaryFrameTree().root();
   RenderWidgetHostView* root_view =
       root->current_frame_host()->GetRenderWidgetHost()->GetView();
 
@@ -198,7 +200,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   Portal* portal =
       CreatePortalToUrl(web_contents, main_url, number_of_navigations);
   WebContentsImpl* nested_contents = portal->GetPortalContents();
-  FrameTreeNode* nested_root = nested_contents->GetFrameTree()->root();
+  FrameTreeNode* nested_root = nested_contents->GetPrimaryFrameTree().root();
   RenderWidgetHostView* nested_root_view =
       nested_root->current_frame_host()->GetRenderWidgetHost()->GetView();
 
@@ -376,15 +378,21 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
 }
 
 // Validate that OOPIFs receive presentation feedbacks.
+// TODO(crbug.com/1270981): Flaky.
+#if defined(OS_LINUX) || defined(OS_MAC)
+#define MAYBE_PresentationFeedback DISABLED_PresentationFeedback
+#else
+#define MAYBE_PresentationFeedback PresentationFeedback
+#endif
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
-                       PresentationFeedback) {
+                       MAYBE_PresentationFeedback) {
   base::HistogramTester histogram_tester;
   GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                            ->GetFrameTree()
-                            ->root();
+                            ->GetPrimaryFrameTree()
+                            .root();
   // Load cross-site page into iframe.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
@@ -407,7 +415,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   do {
     FetchHistogramsFromChildProcesses();
     GiveItSomeTime();
-  } while (histogram_tester.GetAllSamples("MPArch.RWH_TabSwitchPaintDuration")
+  } while (histogram_tester
+               .GetTotalCountsForPrefix("Browser.Tabs.TotalSwitchDuration")
                .size() != 1);
 }
 
@@ -442,7 +451,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   shell()->web_contents()->SetDelegate(&display_mode_delegate);
 
   // Main frame.
-  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  FrameTreeNode* root = web_contents->GetPrimaryFrameTree().root();
   RenderWidgetHostImpl* root_widget =
       root->current_frame_host()->GetRenderWidgetHost();
   // Out-of-process frame.
@@ -531,7 +540,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   auto* web_contents = static_cast<WebContentsImpl*>(shell()->web_contents());
 
   // Main frame/root view.
-  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  FrameTreeNode* root = web_contents->GetPrimaryFrameTree().root();
   RenderWidgetHostImpl* root_widget =
       root->current_frame_host()->GetRenderWidgetHost();
   RenderWidgetHostViewBase* root_view = root_widget->GetView();
@@ -641,7 +650,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   auto* web_contents = static_cast<WebContentsImpl*>(shell()->web_contents());
 
   // Main frame.
-  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  FrameTreeNode* root = web_contents->GetPrimaryFrameTree().root();
   RenderWidgetHostImpl* root_widget =
       root->current_frame_host()->GetRenderWidgetHost();
   ASSERT_TRUE(ExecJs(root->current_frame_host(),

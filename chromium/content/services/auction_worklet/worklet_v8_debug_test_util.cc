@@ -14,13 +14,13 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/sequenced_task_runner.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/values.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
+#include "content/services/auction_worklet/auction_v8_inspector_util.h"
 #include "v8/include/v8-inspector.h"
 #include "v8/include/v8-locker.h"
 
@@ -28,19 +28,10 @@ namespace auction_worklet {
 
 namespace {
 
-v8_inspector::StringView ToStringView(const std::string& str) {
-  return v8_inspector::StringView(reinterpret_cast<const uint8_t*>(str.data()),
-                                  str.size());
-}
-
 std::string ToString(v8_inspector::StringView sv) {
-  if (sv.is8Bit()) {
-    return std::string(reinterpret_cast<const char*>(sv.characters8()),
-                       sv.length());
-  } else {
-    return base::UTF16ToUTF8(base::StringPiece16(
-        reinterpret_cast<const char16_t*>(sv.characters16()), sv.length()));
-  }
+  std::vector<uint8_t> string_bytes = GetStringBytes(sv);
+  return std::string(reinterpret_cast<const char*>(string_bytes.data()),
+                     string_bytes.size());
 }
 
 }  // namespace
@@ -171,38 +162,6 @@ void TestChannel::RunCommandOnV8Thread(int call_id,
 
   // Send over the JSON message; we don't deal with CBOR in this fixture.
   v8_inspector_session_->dispatchProtocolMessage(ToStringView(payload));
-}
-
-int AllocContextGroupIdAndWait(scoped_refptr<AuctionV8Helper> v8_helper) {
-  int result = AuctionV8Helper::kNoDebugContextGroupId;
-  base::RunLoop run_loop;
-  v8_helper->v8_runner()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](scoped_refptr<AuctionV8Helper> v8_helper,
-                        int& out_result, base::OnceClosure done_closure) {
-                       out_result =
-                           v8_helper->AllocContextGroupIdAndSetResumeCallback(
-                               base::OnceClosure());
-                       std::move(done_closure).Run();
-                     },
-                     v8_helper, std::ref(result), run_loop.QuitClosure()));
-  run_loop.Run();
-  CHECK_NE(AuctionV8Helper::kNoDebugContextGroupId, result);
-  return result;
-}
-
-void FreeContextGroupIdAndWait(scoped_refptr<AuctionV8Helper> v8_helper,
-                               int context_group_id) {
-  base::RunLoop run_loop;
-  v8_helper->v8_runner()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](scoped_refptr<AuctionV8Helper> v8_helper,
-                        int context_group_id, base::OnceClosure done_closure) {
-                       v8_helper->FreeContextGroupId(context_group_id);
-                       std::move(done_closure).Run();
-                     },
-                     v8_helper, context_group_id, run_loop.QuitClosure()));
-  run_loop.Run();
 }
 
 ScopedInspectorSupport::ScopedInspectorSupport(AuctionV8Helper* v8_helper)

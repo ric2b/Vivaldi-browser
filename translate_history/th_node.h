@@ -3,7 +3,6 @@
 #ifndef TRANSLATE_HISTORY_TH_NODE_H_
 #define TRANSLATE_HISTORY_TH_NODE_H_
 
-#include "base/macros.h"
 #include "base/time/time.h"
 
 #include <string>

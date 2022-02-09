@@ -8,13 +8,12 @@
 #include <memory>
 #include <string>
 
+#include "ash/components/geolocation/simple_geolocation_provider.h"
+#include "ash/components/settings/timezone_settings.h"
 #include "ash/public/cpp/night_light_controller.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chromeos/geolocation/simple_geolocation_provider.h"
-#include "chromeos/settings/timezone_settings.h"
 
 namespace base {
 class Clock;
@@ -27,7 +26,7 @@ class SharedURLLoaderFactory;
 // Periodically requests the IP-based geolocation and provides it to the
 // NightLightController running in ash.
 class NightLightClient : public ash::NightLightController::Observer,
-                         public chromeos::system::TimezoneSettings::Observer {
+                         public ash::system::TimezoneSettings::Observer {
  public:
   explicit NightLightClient(
       scoped_refptr<network::SharedURLLoaderFactory> factory);
@@ -46,7 +45,7 @@ class NightLightClient : public ash::NightLightController::Observer,
   void OnScheduleTypeChanged(
       ash::NightLightController::ScheduleType new_type) override;
 
-  // chromeos::system::TimezoneSettings::Observer:
+  // ash::system::TimezoneSettings::Observer:
   void TimezoneChanged(const icu::TimeZone& timezone) override;
 
   const base::OneShotTimer& timer() const { return *timer_; }
@@ -70,7 +69,7 @@ class NightLightClient : public ash::NightLightController::Observer,
   void SetCurrentTimezoneIdForTesting(const std::u16string& timezone_id);
 
  protected:
-  void OnGeoposition(const chromeos::Geoposition& position,
+  void OnGeoposition(const ash::Geoposition& position,
                      bool server_error,
                      const base::TimeDelta elapsed);
 
@@ -87,7 +86,7 @@ class NightLightClient : public ash::NightLightController::Observer,
   virtual void RequestGeoposition();
 
   // The IP-based geolocation provider.
-  chromeos::SimpleGeolocationProvider provider_;
+  ash::SimpleGeolocationProvider provider_;
 
   ash::NightLightController* night_light_controller_ = nullptr;
 

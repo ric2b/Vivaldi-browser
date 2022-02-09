@@ -13,6 +13,7 @@
 #include "gn/item.h"
 #include "gn/label.h"
 #include "gn/source_file.h"
+#include "gn/target.h"
 
 // An Analyzer can answer questions about a build graph. It is used
 // to answer queries for the `refs` and `analyze` commands, where we
@@ -44,7 +45,7 @@ class Analyzer {
 
   // Returns the set of all targets that have a label in the given set.
   // Invalid (or missing) labels will be ignored.
-  std::set<const Target*> TargetsFor(const std::set<Label>& labels) const;
+  TargetSet TargetsFor(const std::set<Label>& labels) const;
 
   // Returns a filtered set of the given targets, meaning that for each of the
   // given targets,
@@ -66,13 +67,11 @@ class Analyzer {
   // ones).
   //
   // This filtering behavior is also known as "pruning" the list of targets.
-  std::set<const Target*> Filter(const std::set<const Target*>& targets) const;
+  TargetSet Filter(const TargetSet& targets) const;
 
   // Filter an individual target and adds the results to filtered
   // (see Filter(), above).
-  void FilterTarget(const Target*,
-                    std::set<const Target*>* seen,
-                    std::set<const Target*>* filtered) const;
+  void FilterTarget(const Target*, TargetSet* seen, TargetSet* filtered) const;
 
   bool ItemRefersToFile(const Item* item, const SourceFile* file) const;
 

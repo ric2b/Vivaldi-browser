@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_RUST_VALUES_GENERATOR_H_
 #define TOOLS_GN_RUST_VALUES_GENERATOR_H_
 
-#include "base/macros.h"
 #include "gn/target.h"
 
 class FunctionCallNode;
@@ -33,7 +32,8 @@ class RustValuesGenerator {
   const FunctionCallNode* function_call_;
   Err* err_;
 
-  DISALLOW_COPY_AND_ASSIGN(RustValuesGenerator);
+  RustValuesGenerator(const RustValuesGenerator&) = delete;
+  RustValuesGenerator& operator=(const RustValuesGenerator&) = delete;
 };
 
 #endif  // TOOLS_GN_RUST_VALUES_GENERATOR_H_

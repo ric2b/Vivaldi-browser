@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node_blame_context.h"
@@ -127,6 +127,14 @@ class CONTENT_EXPORT FrameTreeNode {
 
   RenderFrameHostImpl* parent() const { return parent_; }
 
+  // See `RenderFrameHost::GetParentOrOuterDocument()` for
+  // documentation.
+  RenderFrameHostImpl* GetParentOrOuterDocument();
+
+  // See `RenderFrameHostImpl::GetParentOrOuterDocumentOrEmbedder()` for
+  // documentation.
+  RenderFrameHostImpl* GetParentOrOuterDocumentOrEmbedder();
+
   FrameTreeNode* opener() const { return opener_; }
 
   FrameTreeNode* original_opener() const { return original_opener_; }
@@ -166,30 +174,25 @@ class CONTENT_EXPORT FrameTreeNode {
     return current_frame_host()->GetLastCommittedURL();
   }
 
-  // Sets the last committed URL for this frame and updates
-  // has_committed_real_load accordingly.
+  // Sets the last committed URL for this frame.
   void SetCurrentURL(const GURL& url);
 
-  // Returns true if SetCurrentURL has been called with a non-blank URL.
-  // TODO(https://crbug.com/1215096): Migrate most usage of
-  // has_committed_real_load() to call
-  // is_on_initial_empty_document_or_subsequent_empty_documents() instead.
-  bool has_committed_real_load() const { return has_committed_real_load_; }
+  // Sets `is_on_initial_empty_document_` to false.
+  void SetNotOnInitialEmptyDocument() { is_on_initial_empty_document_ = false; }
 
-  // Returns true if SetCurrentURL has been called with a non-blank URL or
-  // if the current document's input stream has been opened with
-  // document.open(). For more details, see the definition of
-  // `is_on_initial_empty_document_or_subsequent_empty_documents_`.
-  bool is_on_initial_empty_document_or_subsequent_empty_documents() const {
-    return is_on_initial_empty_document_or_subsequent_empty_documents_;
+  // Returns false if the frame has committed a document that is not the initial
+  // empty document, or if the current document's input stream has been opened
+  // with document.open(), causing the document to lose its "initial empty
+  // document" status. For more details, see the definition of
+  // `is_on_initial_empty_document_`.
+  bool is_on_initial_empty_document() const {
+    return is_on_initial_empty_document_;
   }
 
-  // Sets `is_on_initial_empty_document_or_subsequent_empty_documents_` to
+  // Sets `is_on_initial_empty_document_` to
   // false. Must only be called after the current document's input stream has
   // been opened with document.open().
-  void DidOpenDocumentInputStream() {
-    is_on_initial_empty_document_or_subsequent_empty_documents_ = false;
-  }
+  void DidOpenDocumentInputStream() { is_on_initial_empty_document_ = false; }
 
   // Returns whether the frame's owner element in the parent document is
   // collapsed, that is, removed from the layout as if it did not exist, as per
@@ -304,14 +307,6 @@ class CONTENT_EXPORT FrameTreeNode {
     return render_manager_.current_frame_host();
   }
 
-  // Return the node immediately preceding this node in its parent's children,
-  // or nullptr if there is no such node.
-  FrameTreeNode* PreviousSibling() const;
-
-  // Return the node immediately following this node in its parent's children,
-  // or nullptr if there is no such node.
-  FrameTreeNode* NextSibling() const;
-
   // Returns true if this node is in a loading state.
   bool IsLoading() const;
 
@@ -339,13 +334,15 @@ class CONTENT_EXPORT FrameTreeNode {
   void ResetNavigationRequest(bool keep_state);
 
   // A RenderFrameHost in this node started loading.
-  // |to_different_document| will be true unless the load is a fragment
-  // navigation, or triggered by history.pushState/replaceState.
+  // |should_show_loading_ui| indicates whether this navigation should be
+  // visible in the UI. True for cross-document navigations and navigations
+  // intercepted by appHistory's transitionWhile().
   // |was_previously_loading| is false if the FrameTree was not loading before.
   // The caller is required to provide this boolean as the delegate should only
   // be notified if the FrameTree went from non-loading to loading state.
   // However, when it is called, the FrameTree should be in a loading state.
-  void DidStartLoading(bool to_different_document, bool was_previously_loading);
+  void DidStartLoading(bool should_show_loading_ui,
+                       bool was_previously_loading);
 
   // A RenderFrameHost in this node stopped loading.
   void DidStopLoading();
@@ -519,6 +516,10 @@ class CONTENT_EXPORT FrameTreeNode {
   // by FrameTree::Init() or FrameTree::AddFrame().
   void SetFencedFrameNonceIfNeeded();
 
+  // Helper for GetParentOrOuterDocument/GetParentOrOuterDocumentOrEmbedder.
+  // Do not use directly.
+  RenderFrameHostImpl* GetParentOrOuterDocumentHelper(bool escape_guest_view);
+
   // Sets the unique_name and name fields on replication_state_. To be used in
   // prerender activation to make sure the FrameTreeNode replication state is
   // correct after the RenderFrameHost is moved between FrameTreeNodes. The
@@ -532,6 +533,9 @@ class CONTENT_EXPORT FrameTreeNode {
     replication_state_->name = name;
   }
 
+  // Returns true if error page isolation is enabled.
+  bool IsErrorPageIsolationEnabled() const;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessPermissionsPolicyBrowserTest,
                            ContainerPolicyDynamic);
@@ -539,8 +543,6 @@ class CONTENT_EXPORT FrameTreeNode {
                            ContainerPolicySandboxDynamic);
 
   class OpenerDestroyedObserver;
-
-  FrameTreeNode* GetSibling(int relative_offset) const;
 
   // The |notification_type| parameter is used for histograms only.
   bool NotifyUserActivation(
@@ -561,7 +563,7 @@ class CONTENT_EXPORT FrameTreeNode {
   static int next_frame_tree_node_id_;
 
   // The FrameTree that owns us.
-  FrameTree* frame_tree_;  // not owned.
+  raw_ptr<FrameTree> frame_tree_;  // not owned.
 
   // A browser-global identifier for the frame in the page, which stays stable
   // even if the frame does a cross-process navigation.
@@ -569,12 +571,12 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // The RenderFrameHost owning this FrameTreeNode, which cannot change for the
   // life of this FrameTreeNode. |nullptr| if this node is the root.
-  RenderFrameHostImpl* const parent_;
+  const raw_ptr<RenderFrameHostImpl> parent_;
 
   // The frame that opened this frame, if any.  Will be set to null if the
   // opener is closed, or if this frame disowns its opener by setting its
   // window.opener to null.
-  FrameTreeNode* opener_ = nullptr;
+  raw_ptr<FrameTreeNode> opener_ = nullptr;
 
   // An observer that clears this node's |opener_| if the opener is destroyed.
   // This observer is added to the |opener_|'s observer list when the |opener_|
@@ -585,7 +587,7 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // The frame that opened this frame, if any. Contrary to opener_, this
   // cannot be changed unless the original opener is destroyed.
-  FrameTreeNode* original_opener_ = nullptr;
+  raw_ptr<FrameTreeNode> original_opener_ = nullptr;
 
   // The devtools frame token of the frame which opened this frame. This is
   // not cleared even if the opener is destroyed or disowns the frame.
@@ -603,27 +605,24 @@ class CONTENT_EXPORT FrameTreeNode {
   // Please refer to {Get,Set}PopupCreatorOrigin() documentation.
   url::Origin popup_creator_origin_;
 
-  // Returns true iff SetCurrentURL has been called with a non-blank URL.
-  // TODO(https://crbug.com/1215096): Migrate all current usage of this to
-  // use `is_on_initial_empty_document_or_subsequent_empty_documents_` instead.
-  bool has_committed_real_load_ = false;
-
-  // Whether this frame is still on the initial about:blank document or any
-  // subsequent about:blank documents committed after the initial about:blank
-  // document. This will be false if either of these has happened:
-  // - SetCurrentUrl() has been called with a non about:blank URL.
-  // - The document's input stream has been opened with document.open().
-  // See:
-  // https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#opening-the-input-stream:is-initial-about:blank
-  // TODO(https://crbug.com/1215096): Make this false after non-initial
-  // about:blank commits as well, making this only track whether the current
-  // document is the initial empty document or not. Currently we are still
-  // preserving most of the old behavior of `has_committed_real_load_` (except
-  // for the document.open() bit here) due to our current handling of initial
-  // empty document for session history and navigation (where we treat the
-  // the initial about:blank document and subsequent about:blank documents the
-  // same way).
-  bool is_on_initial_empty_document_or_subsequent_empty_documents_ = true;
+  // Whether this frame is still on the initial about:blank document or the
+  // synchronously committed about:blank document committed at frame creation,
+  // and its "initial empty document"-ness is still true.
+  // This will be false if either of these has happened:
+  // - SetCurrentUrl() was called after committing a document that is not the
+  //   initial about:blank document or the synchronously committed about:blank
+  //   document, per
+  //   https://html.spec.whatwg.org/multipage/browsers.html#creating-browsing-contexts:is-initial-about:blank
+  // - The document's input stream has been opened with document.open(), per
+  //   https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#opening-the-input-stream:is-initial-about:blank
+  // NOTE: we treat both the "initial about:blank document" and the
+  // "synchronously committed about:blank document" as the initial empty
+  // document. In the future, we plan to remove the synchronous about:blank
+  // commit so that this state will only be true if the frame is on the
+  // "initial about:blank document". See also:
+  // - https://github.com/whatwg/html/issues/6863
+  // - https://crbug.com/1215096
+  bool is_on_initial_empty_document_ = true;
 
   // Whether the frame's owner element in the parent document is collapsed.
   bool is_collapsed_ = false;

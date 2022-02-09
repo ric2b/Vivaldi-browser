@@ -15,10 +15,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-#pragma hdrstop
-#endif
-
 #ifndef WX_PRECOMP
 #include "wx/wx.h"
 #endif
@@ -57,9 +53,9 @@ enum
 // --------------------------------------------------------------------------
 
 // Event tables
-BEGIN_EVENT_TABLE(LifeSamplesDialog, wxDialog)
+wxBEGIN_EVENT_TABLE(LifeSamplesDialog, wxDialog)
     EVT_LISTBOX (ID_LISTBOX, LifeSamplesDialog::OnListBox)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 
 // ==========================================================================
@@ -136,11 +132,9 @@ LifeSamplesDialog::LifeSamplesDialog(wxWindow *parent)
 
     // activate
     SetSizer(sizer3);
-#if !defined(__SMARTPHONE__) && !defined(__POCKETPC__)
     sizer3->SetSizeHints(this);
     sizer3->Fit(this);
     Centre(wxBOTH | wxCENTRE_ON_SCREEN);
-#endif
 }
 
 LifeSamplesDialog::~LifeSamplesDialog()
@@ -204,9 +198,7 @@ XLife is (c) 1989 by Jon Bennett et al.")),
 
     // activate
     SetSizer(sizer);
-#if !defined(__SMARTPHONE__) && !defined(__POCKETPC__)
     sizer->SetSizeHints(this);
     sizer->Fit(this);
     Centre(wxBOTH | wxCENTRE_ON_SCREEN);
-#endif
 }

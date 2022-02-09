@@ -13,7 +13,6 @@
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/cast_web_service.h"
-#include "chromecast/browser/cast_web_view_factory.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -45,11 +44,9 @@ void CastBrowserTest::PreRunTestOnMainThread() {
   base::RunLoop().RunUntilIdle();
 
   metrics::CastMetricsHelper::GetInstance()->SetDummySessionIdForTesting();
-  web_view_factory_ = std::make_unique<CastWebViewFactory>(
-      CastBrowserProcess::GetInstance()->browser_context());
   web_service_ = std::make_unique<CastWebService>(
       CastBrowserProcess::GetInstance()->browser_context(),
-      web_view_factory_.get(), nullptr /* window_manager */);
+      nullptr /* window_manager */);
 }
 
 void CastBrowserTest::PostRunTestOnMainThread() {
@@ -57,17 +54,12 @@ void CastBrowserTest::PostRunTestOnMainThread() {
 }
 
 content::WebContents* CastBrowserTest::CreateWebView() {
-  CastWebView::CreateParams create_params;
-  create_params.delegate = weak_factory_.GetWeakPtr();
-  create_params.window_delegate = weak_factory_.GetWeakPtr();
-
   ::chromecast::mojom::CastWebViewParamsPtr params =
       ::chromecast::mojom::CastWebViewParams::New();
   // MOJO_RENDERER is CMA renderer on Chromecast
   params->renderer_type = ::chromecast::mojom::RendererType::MOJO_RENDERER;
   params->enabled_for_dev = true;
-  cast_web_view_ =
-      web_service_->CreateWebViewInternal(create_params, std::move(params));
+  cast_web_view_ = web_service_->CreateWebViewInternal(std::move(params));
 
   return cast_web_view_->web_contents();
 }
@@ -84,19 +76,6 @@ content::WebContents* CastBrowserTest::NavigateToURL(const GURL& url) {
   same_tab_observer.Wait();
 
   return web_contents;
-}
-
-void CastBrowserTest::OnWindowDestroyed() {}
-
-void CastBrowserTest::OnVisibilityChange(VisibilityType visibility_type) {}
-
-bool CastBrowserTest::CanHandleGesture(GestureType gesture_type) {
-  return false;
-}
-
-void CastBrowserTest::ConsumeGesture(GestureType gesture_type,
-                                     GestureHandledCallback handled_callback) {
-  std::move(handled_callback).Run(false);
 }
 
 }  // namespace shell

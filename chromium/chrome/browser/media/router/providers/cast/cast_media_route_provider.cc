@@ -93,12 +93,6 @@ void CastMediaRouteProvider::Init(
   activity_manager_ = std::make_unique<CastActivityManager>(
       media_sink_service_, session_tracker, message_handler_,
       media_router_.get(), logger_.get(), hash_token);
-
-  // TODO(crbug.com/816702): This needs to be set properly according to sinks
-  // discovered.
-  media_router_->OnSinkAvailabilityUpdated(
-      mojom::MediaRouteProviderId::CAST,
-      mojom::MediaRouter::SinkAvailability::PER_SOURCE);
 }
 
 CastMediaRouteProvider::~CastMediaRouteProvider() {
@@ -185,23 +179,6 @@ void CastMediaRouteProvider::JoinRoute(const std::string& media_source,
 
   activity_manager_->JoinSession(*cast_source, presentation_id, origin, tab_id,
                                  incognito, std::move(callback));
-}
-
-void CastMediaRouteProvider::ConnectRouteByRouteId(
-    const std::string& media_source,
-    const std::string& route_id,
-    const std::string& presentation_id,
-    const url::Origin& origin,
-    int32_t tab_id,
-    base::TimeDelta timeout,
-    bool incognito,
-    ConnectRouteByRouteIdCallback callback) {
-  // TODO(crbug.com/951061): We'll need to implement this to allow joining from
-  // the dialog.
-  NOTIMPLEMENTED();
-  std::move(callback).Run(
-      absl::nullopt, nullptr, std::string("Not implemented"),
-      RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER);
 }
 
 void CastMediaRouteProvider::TerminateRoute(const std::string& route_id,

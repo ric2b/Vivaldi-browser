@@ -2,6 +2,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://oobe/custom_elements.html">
 
+<link rel="import" href="/components/html_echo.html">
 <link rel="import" href="/components/oobe_icons.html">
 <link rel="import" href="/components/behaviors/login_screen_behavior.html">
 <link rel="import" href="/components/behaviors/multi_step_behavior.html">
@@ -19,10 +20,10 @@
     </style>
 
     <oobe-adaptive-dialog id="osTrialDialog" role="dialog"
-        aria-label$="[[i18nDynamic(locale, 'osTrialTitle', osName_)]]">
+        aria-label$="[[i18nDynamic(locale, 'osTrialTitle')]]">
       <iron-icon slot="icon" icon="oobe-32:googleg"></iron-icon>
-      <h1 slot="title">[[i18nDynamic(locale, 'osTrialTitle', osName_)]]</h1>
-      <html-echo slot="subtitle" content="[[getSubtitleHtml_(locale, osName_)]]">
+      <h1 slot="title">[[i18nDynamic(locale, 'osTrialTitle')]]</h1>
+      <html-echo slot="subtitle" content="[[getSubtitleHtml_(locale)]]">
       </html-echo>
 
       <div slot="content" class="layout vertical landscape-vertical-centered">
@@ -35,10 +36,10 @@
               </hd-iron-icon>
               <div class="card-content">
                 <div class="card-label">
-                  [[i18nDynamic(locale, 'osTrialInstallTitle', osName_)]]
+                  [[i18nDynamic(locale, 'osTrialInstallTitle')]]
                 </div>
                 <div class="card-text">
-                  [[i18nDynamic(locale, 'osTrialInstallSubtitle', osName_)]]
+                  [[i18nDynamic(locale, 'osTrialInstallSubtitle')]]
                 </div>
               </div>
             </div>
@@ -53,7 +54,7 @@
                   [[i18nDynamic(locale, 'osTrialTryTitle')]]
                 </div>
                 <div class="card-text">
-                  [[i18nDynamic(locale, 'osTrialTrySubtitle', osName_)]]
+                  [[i18nDynamic(locale, 'osTrialTrySubtitle')]]
                 </div>
               </div>
             </div>

@@ -10,7 +10,8 @@
 #include <string>
 #include <utility>
 
-#include "base/macros.h"
+#include "ash/components/arc/session/arc_session_runner.h"
+#include "ash/components/arc/session/arc_stop_reason.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
@@ -21,8 +22,6 @@
 #include "chrome/browser/ash/policy/arc/android_management_client.h"
 #include "chromeos/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
-#include "components/arc/session/arc_session_runner.h"
-#include "components/arc/session/arc_stop_reason.h"
 #include "components/policy/core/common/policy_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -39,6 +38,7 @@ constexpr const char kGeneratedPropertyFilesPathVm[] =
 
 class ArcAndroidManagementChecker;
 class ArcDataRemover;
+class ArcDlcInstaller;
 class ArcFastAppReinstallStarter;
 class ArcPaiStarter;
 class ArcProvisioningResult;
@@ -485,6 +485,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // Timer to wait for policiesin case we are suspecting the user might be
   // transitioning to the managed state.
   base::OneShotTimer wait_for_policy_timer_;
+
+  std::unique_ptr<ArcDlcInstaller> arc_dlc_installer_;
 
   // Must be the last member.
   base::WeakPtrFactory<ArcSessionManager> weak_ptr_factory_{this};

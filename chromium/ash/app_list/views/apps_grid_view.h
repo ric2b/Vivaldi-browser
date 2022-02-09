@@ -51,9 +51,9 @@ class AppListItemList;
 class AppListItemView;
 class AppListModel;
 class AppListViewDelegate;
+class AppsGridContextMenu;
 class AppsGridViewFocusDelegate;
 class AppsGridViewFolderDelegate;
-class ContentsView;
 class PulsingBlockView;
 class GhostImageView;
 
@@ -94,10 +94,7 @@ class ASH_EXPORT AppsGridView : public views::View,
     TOUCH,
   };
 
-  // TODO(crbug.com/1211608): Remove `contents_view`. ScrollableAppsGridView
-  // doesn't have one.
-  AppsGridView(ContentsView* contents_view,
-               AppListA11yAnnouncer* a11y_announcer,
+  AppsGridView(AppListA11yAnnouncer* a11y_announcer,
                AppListViewDelegate* app_list_view_delegate,
                AppsGridViewFolderDelegate* folder_delegate,
                AppListFolderController* folder_controller,
@@ -124,8 +121,10 @@ class ASH_EXPORT AppsGridView : public views::View,
   void SetFixedTilePadding(int horizontal_tile_padding,
                            int vertical_tile_padding);
 
-  // Returns the size of a tile view including its padding.
-  gfx::Size GetTotalTileSize() const;
+  // Returns the size of a tile view including its padding. For paged apps grid,
+  // padding can be different between tiles on the first page and tiles on other
+  // pages.
+  gfx::Size GetTotalTileSize(int page) const;
 
   // Returns the minimum size of the entire tile grid.
   gfx::Size GetMinimumTileGridSize(int cols, int rows_per_page) const;
@@ -211,10 +210,13 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Called to initiate drag for reparenting a folder item in root level grid
   // view.
-  // |drag_pint| is in the coordinates of root level grid view.
+  // `drag_point` is in the coordinates of root level grid view.
+  // `cancellation_callback` - the callback that can be invoked from the root
+  // level grid to cancel drag operation in the originating folder grid.
   void InitiateDragFromReparentItemInRootLevelGridView(
       AppListItemView* original_drag_view,
-      const gfx::Point& drag_point);
+      const gfx::Point& drag_point,
+      base::OnceClosure cancellation_callback);
 
   // Updates drag in the root level grid view when receiving the drag event
   // dispatched from the hidden grid view for reparenting a folder item.
@@ -261,16 +263,14 @@ class ASH_EXPORT AppsGridView : public views::View,
   // AshTestBase.
   bool IsTabletMode() const;
 
-  // Returns the expected bounds rect in grid coordinates for the item with the
-  // provided id, if the item is in the first page.
-  // If the item is not in the current page (or cannot be found), this will
-  // return 1x1 rectangle in the apps grid center.
-  gfx::Rect GetExpectedItemBoundsInFirstPage(const std::string& id) const;
+  // Whether the provided view is hidden to facilitate drag operation (for
+  // example, the drag view for which a drag icon proxy has been created).
+  bool IsViewHiddenForDrag(const views::View* view) const;
 
-  // Passes scroll information from AppListView, so that subclasses may scroll
+  // Passes scroll information from a parent view, so that subclasses may scroll
   // or switch pages.
-  virtual void HandleScrollFromAppListView(const gfx::Vector2d& offset,
-                                           ui::EventType type) = 0;
+  virtual void HandleScrollFromParentView(const gfx::Vector2d& offset,
+                                          ui::EventType type) = 0;
 
   // Return the view model.
   views::ViewModelT<AppListItemView>* view_model() { return &view_model_; }
@@ -312,6 +312,8 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   base::OneShotTimer* reorder_timer_for_test() { return &reorder_timer_; }
 
+  AppsGridContextMenu* context_menu_for_test() { return context_menu_.get(); }
+
  protected:
   // The cardified apps grid should be scaled down by this factor.
   static constexpr float kCardifiedScale = 0.84f;
@@ -323,7 +325,7 @@ class ASH_EXPORT AppsGridView : public views::View,
   virtual gfx::Size GetTileViewSize() const = 0;
 
   // Returns the padding around a tile view.
-  virtual gfx::Insets GetTilePadding() const = 0;
+  virtual gfx::Insets GetTilePadding(int page) const = 0;
 
   // Returns the size of the entire tile grid.
   virtual gfx::Size GetTileGridSize() const = 0;
@@ -394,10 +396,6 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Calculates the item views' bounds for both folder and non-folder.
   void CalculateIdealBounds();
-
-  // Whether the provided view is hidden to facilitate drag operation (for
-  // example, the drag view for which a drag icon proxy has been created).
-  bool IsViewHiddenForDrag(const views::View* view) const;
 
   // Gets the bounds of the tile located at |index|, where |index| contains the
   // page/slot info.
@@ -500,6 +498,9 @@ class ASH_EXPORT AppsGridView : public views::View,
   // of last page with intention to put it in a new page. This is only used for
   // non-folder.
   bool extra_page_opened_ = false;
+
+  GhostImageView* current_ghost_view_ = nullptr;
+  GhostImageView* last_ghost_view_ = nullptr;
 
  private:
   friend class test::AppsGridViewTestApi;
@@ -616,12 +617,6 @@ class ASH_EXPORT AppsGridView : public views::View,
   bool ReparentItemToAnotherFolder(AppListItem* item_view,
                                    const GridIndex& target);
 
-  // If there is only 1 item left in the source folder after reparenting an item
-  // from it, updates data model to remove last item from the source folder and
-  // remove the source folder.
-  void RemoveLastItemFromReparentItemFolderIfNecessary(
-      const std::string& source_folder_id);
-
   // Removes the AppListItemView at |index| in |view_model_|, removes it from
   // view structure as well and deletes it.
   void DeleteItemViewAtIndex(int index);
@@ -629,6 +624,10 @@ class ASH_EXPORT AppsGridView : public views::View,
   // Returns true if |point| lies within the bounds of this grid view plus a
   // buffer area surrounding it that can trigger drop target change.
   bool IsPointWithinDragBuffer(const gfx::Point& point) const;
+
+  // Schedules a Layout() call. If `previous_grid_size` is different from the
+  // current grid size, calls PreferredSizeChanged().
+  void ScheduleLayout(const gfx::Size& previous_grid_size);
 
   // Overridden from AppListItemListObserver:
   void OnListItemAdded(size_t index, AppListItem* item) override;
@@ -781,10 +780,6 @@ class ASH_EXPORT AppsGridView : public views::View,
   // not support nested folder items).
   AppListFolderController* const folder_controller_;
 
-  // Created by AppListMainView, owned by views hierarchy.
-  // TODO(crbug.com/1211608): Remove this member.
-  ContentsView* contents_view_ = nullptr;
-
   AppListA11yAnnouncer* const a11y_announcer_;
   AppListViewDelegate* const app_list_view_delegate_;
 
@@ -883,6 +878,12 @@ class ASH_EXPORT AppsGridView : public views::View,
   // True if the drag_view_ item is a folder item being dragged for reparenting.
   bool dragging_for_reparent_item_ = false;
 
+  // When dragging for reparent in the root view, a callback registered by the
+  // originating, hidden grid that when called will cancel drag operation in the
+  // hidden view. Used in cases the root grid detects that the drag should end,
+  // for example due to app list model changes.
+  base::OnceClosure reparent_drag_cancellation_;
+
   // The drop location of the most recent reorder related accessibility event.
   GridIndex last_reorder_a11y_event_location_;
 
@@ -892,8 +893,7 @@ class ASH_EXPORT AppsGridView : public views::View,
   // The location when |current_ghost_view_| was shown.
   GridIndex current_ghost_location_;
 
-  GhostImageView* current_ghost_view_ = nullptr;
-  GhostImageView* last_ghost_view_ = nullptr;
+  std::unique_ptr<AppsGridContextMenu> context_menu_;
 };
 
 }  // namespace ash

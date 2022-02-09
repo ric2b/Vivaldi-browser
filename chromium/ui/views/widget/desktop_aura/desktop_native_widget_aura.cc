@@ -10,7 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -33,6 +33,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
@@ -202,8 +203,8 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver {
 
   ~DesktopNativeWidgetTopLevelHandler() override = default;
 
-  Widget* top_level_widget_ = nullptr;
-  aura::Window* child_window_ = nullptr;
+  raw_ptr<Widget> top_level_widget_ = nullptr;
+  raw_ptr<aura::Window> child_window_ = nullptr;
 };
 
 class DesktopNativeWidgetAuraWindowParentingClient
@@ -250,7 +251,7 @@ class DesktopNativeWidgetAuraWindowParentingClient
   }
 
  private:
-  aura::Window* root_window_;
+  raw_ptr<aura::Window> root_window_;
 };
 
 }  // namespace
@@ -274,7 +275,7 @@ class RootWindowDestructionObserver : public aura::WindowObserver {
     delete this;
   }
 
-  DesktopNativeWidgetAura* parent_;
+  raw_ptr<DesktopNativeWidgetAura> parent_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -415,8 +416,10 @@ void DesktopNativeWidgetAura::NotifyAccessibilityEvent(
 }
 
 void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
-  if (!native_widget_delegate_->OnNativeWidgetActivationChanged(active))
+  if (!native_widget_delegate_->ShouldHandleNativeWidgetActivationChanged(
+          active)) {
     return;
+  }
   wm::ActivationClient* activation_client =
       wm::GetActivationClient(host_->window());
   if (!activation_client)
@@ -483,6 +486,10 @@ void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
       GetInputMethod()->OnBlur();
     }
   }
+
+  // At this point the FocusController's state should have been appropriately
+  // updated, propagate the NativeWidget activation notification.
+  native_widget_delegate_->OnNativeWidgetActivationChanged(active);
 }
 
 void DesktopNativeWidgetAura::OnHostWillClose() {
@@ -608,7 +615,6 @@ void DesktopNativeWidgetAura::InitNativeWidget(Widget::InitParams params) {
     aura::client::SetDragDropClient(host_->window(), drag_drop_client_.get());
 
   wm::SetActivationDelegate(content_window_, this);
-  aura::client::GetFocusClient(content_window_)->FocusWindow(content_window_);
 
   OnHostResized(host());
 

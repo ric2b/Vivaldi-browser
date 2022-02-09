@@ -85,9 +85,9 @@
         </div>
         <div class="start padded">
           <div id="updateStatusMessage" hidden="[[!showUpdateStatus_]]">
-            <div
+            <div id="updateStatusMessageInner" tabindex="-1"
                 inner-h-t-m-l="[[getUpdateStatusMessage_(
-                    currentUpdateStatusEvent_, targetChannel_)]]"></div>
+                currentUpdateStatusEvent_, targetChannel_)]]"></div>
             <a hidden$="[[!shouldShowLearnMoreLink_(
                 currentUpdateStatusEvent_)]]" target="_blank"
                 href="https://support.google.com/chrome?p=update_error">
@@ -160,6 +160,12 @@
           hidden$="[[!showDiagnosticsApp_]]"
           label="$i18n{aboutDiagnostics}" external
           deep-link-focus-id$="[[Setting.kDiagnostics]]">
+      </cr-link-row>
+      <cr-link-row class="hr" id="firmwareUpdates"
+          on-click="onFirmwareUpdatesClick_"
+          hidden$="[[!showFirmwareUpdatesApp_]]"
+          label="$i18n{aboutFirmwareUpdates}" external
+          deep-link-focus-id$="[[Setting.kFirmwareUpdates]]">
       </cr-link-row>
       <cr-link-row class="hr" id="detailed-build-info-trigger"
           on-click="onDetailedBuildInfoClick_"

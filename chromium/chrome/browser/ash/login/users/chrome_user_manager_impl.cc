@@ -11,6 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "ash/components/arc/arc_util.h"
+#include "ash/components/settings/cros_settings_names.h"
+#include "ash/components/timezone/timezone_resolver.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/session/session_controller.h"
@@ -22,16 +25,17 @@
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
+#include "base/ignore_result.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -90,10 +94,7 @@
 #include "chromeos/login/login_state/login_state.h"
 #include "chromeos/network/onc/certificate_scope.h"
 #include "chromeos/network/proxy/proxy_config_service_impl.h"
-#include "chromeos/settings/cros_settings_names.h"
-#include "chromeos/timezone/timezone_resolver.h"
 #include "components/account_id/account_id.h"
-#include "components/arc/arc_util.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/policy/core/common/policy_details.h"
 #include "components/policy/policy_constants.h"
@@ -584,8 +585,7 @@ void ChromeUserManagerImpl::CacheRemovedUser(
     user_manager::UserRemovalReason reason) {
   // There is only a need to cache removed users if they should be reported.
   bool reporting_enabled = false;
-  chromeos::CrosSettings::Get()->GetBoolean(chromeos::kReportDeviceLoginLogout,
-                                            &reporting_enabled);
+  CrosSettings::Get()->GetBoolean(kReportDeviceLoginLogout, &reporting_enabled);
   if (!reporting_enabled) {
     return;
   }

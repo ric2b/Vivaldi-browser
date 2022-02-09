@@ -10,7 +10,6 @@
 
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
@@ -49,9 +48,14 @@ class MultiDeviceSetupClient {
       base::OnceCallback<void(const multidevice::RemoteDeviceRefList&)>;
 
   static HostStatusWithDevice GenerateDefaultHostStatusWithDevice();
-  static FeatureStatesMap GenerateDefaultFeatureStatesMap();
+  static FeatureStatesMap GenerateDefaultFeatureStatesMap(
+      mojom::FeatureState default_value);
 
   MultiDeviceSetupClient();
+
+  MultiDeviceSetupClient(const MultiDeviceSetupClient&) = delete;
+  MultiDeviceSetupClient& operator=(const MultiDeviceSetupClient&) = delete;
+
   virtual ~MultiDeviceSetupClient();
 
   void AddObserver(Observer* observer);
@@ -87,8 +91,6 @@ class MultiDeviceSetupClient {
   friend class MultiDeviceSetupClientImplTest;
 
   base::ObserverList<Observer>::Unchecked observer_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(MultiDeviceSetupClient);
 };
 
 std::string FeatureStatesMapToString(

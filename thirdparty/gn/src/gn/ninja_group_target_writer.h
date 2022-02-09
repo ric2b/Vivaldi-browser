@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_NINJA_GROUP_TARGET_WRITER_H_
 #define TOOLS_GN_NINJA_GROUP_TARGET_WRITER_H_
 
-#include "base/macros.h"
 #include "gn/ninja_target_writer.h"
 
 // Writes a .ninja file for a group target type.
@@ -17,7 +16,8 @@ class NinjaGroupTargetWriter : public NinjaTargetWriter {
   void Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(NinjaGroupTargetWriter);
+  NinjaGroupTargetWriter(const NinjaGroupTargetWriter&) = delete;
+  NinjaGroupTargetWriter& operator=(const NinjaGroupTargetWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_GROUP_TARGET_WRITER_H_

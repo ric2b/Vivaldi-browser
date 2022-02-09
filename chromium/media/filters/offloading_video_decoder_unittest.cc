@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
@@ -70,6 +71,10 @@ class OffloadingVideoDecoderTest : public testing::Test {
       : task_env_(
             base::test::TaskEnvironment::MainThreadType::DEFAULT,
             base::test::TaskEnvironment::ThreadPoolExecutionMode::QUEUED) {}
+
+  OffloadingVideoDecoderTest(const OffloadingVideoDecoderTest&) = delete;
+  OffloadingVideoDecoderTest& operator=(const OffloadingVideoDecoderTest&) =
+      delete;
 
   void CreateWrapper(int offload_width, VideoCodec codec) {
     decoder_ = new testing::StrictMock<MockOffloadableVideoDecoder>();
@@ -196,11 +201,8 @@ class OffloadingVideoDecoderTest : public testing::Test {
 
   base::test::TaskEnvironment task_env_;
   std::unique_ptr<OffloadingVideoDecoder> offloading_decoder_;
-  testing::StrictMock<MockOffloadableVideoDecoder>* decoder_ =
+  raw_ptr<testing::StrictMock<MockOffloadableVideoDecoder>> decoder_ =
       nullptr;  // Owned by |offloading_decoder_|.
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(OffloadingVideoDecoderTest);
 };
 
 TEST_F(OffloadingVideoDecoderTest, NoOffloadingTooSmall) {

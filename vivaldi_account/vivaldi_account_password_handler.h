@@ -5,7 +5,6 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 
@@ -68,6 +67,8 @@ class VivaldiAccountPasswordHandler
 
   void PasswordReceived(const std::string& password);
   void UpdatePassword();
+
+  base::WeakPtrFactory<VivaldiAccountPasswordHandler> weak_ptr_factory_{this};
 };
 
 }  // namespace vivaldi

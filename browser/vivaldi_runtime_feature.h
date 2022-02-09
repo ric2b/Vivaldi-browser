@@ -24,11 +24,14 @@ struct Feature {
   std::string friendly_name;
   std::string description;
 
-  // True if the feature is not applicable to current OS.
-  bool inactive = false;
+  bool default_value = false;
 
-  // true if set by cmd line or forced for internal builds
-  absl::optional<bool> forced;
+  // True when the value cannot be altered by the user and the value from
+  // preference is ignored.
+  bool locked = false;
+
+  // True if the feature is not applicable to the current OS.
+  bool inactive = false;
 };
 
 using FeatureMap = base::flat_map<std::string, Feature>;

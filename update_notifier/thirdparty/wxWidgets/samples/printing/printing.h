@@ -14,8 +14,8 @@ class MyApp: public wxApp
 public:
     MyApp() {}
 
-    virtual bool OnInit();
-    virtual int OnExit();
+    virtual bool OnInit() wxOVERRIDE;
+    virtual int OnExit() wxOVERRIDE;
 
     void Draw(wxDC& dc);
 
@@ -33,7 +33,7 @@ private:
     wxFont    m_testFont;
 };
 
-DECLARE_APP(MyApp)
+wxDECLARE_APP(MyApp);
 class MyCanvas;
 
 // Define a new canvas and frame
@@ -76,7 +76,7 @@ public:
     MyCanvas(wxFrame *frame, const wxPoint& pos, const wxSize& size, long style = wxRETAINED);
 
     //void OnPaint(wxPaintEvent& evt);
-    virtual void OnDraw(wxDC& dc);
+    virtual void OnDraw(wxDC& dc) wxOVERRIDE;
 
 private:
     wxDECLARE_EVENT_TABLE();
@@ -86,19 +86,19 @@ private:
 class MyPrintout: public wxPrintout
 {
 public:
-    MyPrintout(MyFrame* frame, const wxString &title = wxT("My printout"))
+    MyPrintout(MyFrame* frame, const wxString &title = "My printout")
         : wxPrintout(title) { m_frame=frame; }
 
-    virtual bool OnPrintPage(int page);
-    virtual bool HasPage(int page);
-    virtual bool OnBeginDocument(int startPage, int endPage);
-    virtual void GetPageInfo(int *minPage, int *maxPage, int *selPageFrom, int *selPageTo);
+    virtual bool OnPrintPage(int page) wxOVERRIDE;
+    virtual bool HasPage(int page) wxOVERRIDE;
+    virtual bool OnBeginDocument(int startPage, int endPage) wxOVERRIDE;
+    virtual void GetPageInfo(int *minPage, int *maxPage, int *selPageFrom, int *selPageTo) wxOVERRIDE;
 
     void DrawPageOne();
     void DrawPageTwo();
 
     // Writes a header on a page. Margin units are in millimetres.
-    bool WritePageHeader(wxPrintout *printout, wxDC *dc, const wxString& text, float mmToLogical);
+    bool WritePageHeader(wxPrintout *printout, wxDC *dc, const wxString& text, double mmToLogical);
 
 private:
     MyFrame *m_frame;

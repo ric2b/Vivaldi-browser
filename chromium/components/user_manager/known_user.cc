@@ -59,7 +59,7 @@ const char kGAPSCookie[] = "gaps_cookie";
 const char kReauthReasonKey[] = "reauth_reason";
 
 // Key for the GaiaId migration status.
-const char kGaiaIdMigration[] = "gaia_id_migration";
+const char kGaiaIdMigrationObsolete[] = "gaia_id_migration";
 
 // Key of the boolean flag telling if a minimal user home migration has been
 // attempted. This flag is not used since M88 and is only kept here to be able
@@ -77,7 +77,7 @@ const char kIsEphemeral[] = "is_ephemeral";
 const char kChallengeResponseKeys[] = "challenge_response_keys";
 
 const char kLastOnlineSignin[] = "last_online_singin";
-const char kOfflineSigninLimitDeprecated[] = "offline_signin_limit";
+const char kOfflineSigninLimitObsolete[] = "offline_signin_limit";
 const char kOfflineSigninLimit[] = "offline_signin_limit2";
 
 // Key of the boolean flag telling if user is enterprise managed.
@@ -116,7 +116,6 @@ const char* kReservedKeys[] = {kCanonicalEmail,
                                kDeviceId,
                                kGAPSCookie,
                                kReauthReasonKey,
-                               kGaiaIdMigration,
                                kProfileRequiresPolicy,
                                kIsEphemeral,
                                kChallengeResponseKeys,
@@ -135,6 +134,8 @@ const char* kReservedKeys[] = {kCanonicalEmail,
 // are now obsolete.
 const char* kObsoleteKeys[] = {
     kMinimalMigrationAttemptedObsolete,
+    kGaiaIdMigrationObsolete,
+    kOfflineSigninLimitObsolete,
 };
 
 PrefService* GetLocalStateLegacy() {
@@ -223,11 +224,14 @@ bool KnownUser::FindPrefs(const AccountId& account_id,
     return false;
 
   const base::ListValue* known_users = local_state_->GetList(kKnownUsers);
-  for (size_t i = 0; i < known_users->GetList().size(); ++i) {
-    const base::DictionaryValue* element = nullptr;
-    if (known_users->GetDictionary(i, &element)) {
-      if (UserMatches(account_id, *element)) {
-        known_users->GetDictionary(i, out_value);
+  for (const base::Value& element_value : known_users->GetList()) {
+    if (element_value.is_dict()) {
+      const base::DictionaryValue& element =
+          base::Value::AsDictionaryValue(element_value);
+      if (UserMatches(account_id, element)) {
+        if (out_value)
+          *out_value = &element;
+
         return true;
       }
     }
@@ -249,12 +253,13 @@ void KnownUser::UpdatePrefs(const AccountId& account_id,
     return;
 
   ListPrefUpdate update(local_state_, kKnownUsers);
-  for (size_t i = 0; i < update->GetList().size(); ++i) {
-    base::DictionaryValue* element = nullptr;
-    if (update->GetDictionary(i, &element)) {
+  for (base::Value& element_value : update->GetList()) {
+    if (element_value.is_dict()) {
+      base::DictionaryValue* element =
+          static_cast<base::DictionaryValue*>(&element_value);
       if (UserMatches(account_id, *element)) {
         if (clear)
-          element->Clear();
+          element->DictClear();
         element->MergeDictionary(&values);
         UpdateIdentity(account_id, *element);
         return;
@@ -292,7 +297,12 @@ bool KnownUser::GetBooleanPref(const AccountId& account_id,
   if (!FindPrefs(account_id, &user_pref_dict))
     return false;
 
-  return user_pref_dict->GetBoolean(path, out_value);
+  absl::optional<bool> ret_value = user_pref_dict->FindBoolPath(path);
+  if (!ret_value.has_value())
+    return false;
+
+  *out_value = ret_value.value();
+  return true;
 }
 
 void KnownUser::SetBooleanPref(const AccountId& account_id,
@@ -425,18 +435,19 @@ std::vector<AccountId> KnownUser::GetKnownAccountIds() {
   std::vector<AccountId> result;
 
   const base::ListValue* known_users = local_state_->GetList(kKnownUsers);
-  for (size_t i = 0; i < known_users->GetList().size(); ++i) {
-    const base::DictionaryValue* element = nullptr;
-    if (known_users->GetDictionary(i, &element)) {
+  for (const base::Value& element_value : known_users->GetList()) {
+    if (element_value.is_dict()) {
+      const base::DictionaryValue& element =
+          base::Value::AsDictionaryValue(element_value);
       std::string email;
       std::string gaia_id;
       std::string obj_guid;
-      const bool has_email = element->GetString(kCanonicalEmail, &email);
-      const bool has_gaia_id = element->GetString(kGAIAIdKey, &gaia_id);
-      const bool has_obj_guid = element->GetString(kObjGuidKey, &obj_guid);
+      const bool has_email = element.GetString(kCanonicalEmail, &email);
+      const bool has_gaia_id = element.GetString(kGAIAIdKey, &gaia_id);
+      const bool has_obj_guid = element.GetString(kObjGuidKey, &obj_guid);
       AccountType account_type = AccountType::GOOGLE;
       std::string account_type_string;
-      if (element->GetString(kAccountTypeKey, &account_type_string)) {
+      if (element.GetString(kAccountTypeKey, &account_type_string)) {
         account_type = AccountId::StringToAccountType(account_type_string);
       }
       switch (account_type) {
@@ -457,25 +468,6 @@ std::vector<AccountId> KnownUser::GetKnownAccountIds() {
     }
   }
   return result;
-}
-
-bool KnownUser::GetGaiaIdMigrationStatus(const AccountId& account_id,
-                                         const std::string& subsystem) {
-  bool migrated = false;
-
-  if (GetBooleanPref(account_id,
-                     std::string(kGaiaIdMigration) + "." + subsystem,
-                     &migrated)) {
-    return migrated;
-  }
-
-  return false;
-}
-
-void KnownUser::SetGaiaIdMigrationStatusDone(const AccountId& account_id,
-                                             const std::string& subsystem) {
-  SetBooleanPref(account_id, std::string(kGaiaIdMigration) + "." + subsystem,
-                 true);
 }
 
 void KnownUser::SaveKnownUser(const AccountId& account_id) {
@@ -675,14 +667,15 @@ bool KnownUser::GetAccountManager(const AccountId& account_id,
   return GetStringPref(account_id, kAccountManager, manager);
 }
 
-void KnownUser::SetUserLastLoginInputMethod(const AccountId& account_id,
-                                            const std::string& input_method) {
-  SetStringPref(account_id, kLastInputMethod, input_method);
+void KnownUser::SetUserLastLoginInputMethodId(
+    const AccountId& account_id,
+    const std::string& input_method_id) {
+  SetStringPref(account_id, kLastInputMethod, input_method_id);
 }
 
-bool KnownUser::GetUserLastInputMethod(const AccountId& account_id,
-                                       std::string* input_method) {
-  return GetStringPref(account_id, kLastInputMethod, input_method);
+bool KnownUser::GetUserLastInputMethodId(const AccountId& account_id,
+                                         std::string* input_method_id) {
+  return GetStringPref(account_id, kLastInputMethod, input_method_id);
 }
 
 void KnownUser::SetUserPinLength(const AccountId& account_id, int pin_length) {
@@ -821,35 +814,6 @@ void KnownUser::CleanObsoletePrefs() {
       continue;
     for (const std::string& key : kObsoleteKeys)
       user_entry.RemoveKey(key);
-
-    // Migrate Offline signin limit to the new logic. Old logic stored 0 when
-    // the limit was not set. New logic does not store anything when the limit
-    // is not set because 0 is a legit value.
-    const base::Value* value =
-        user_entry.FindKey(kOfflineSigninLimitDeprecated);
-    absl::optional<base::TimeDelta> new_value = base::ValueToTimeDelta(value);
-    user_entry.RemoveKey(kOfflineSigninLimitDeprecated);
-    if (new_value.has_value() && !new_value->is_zero()) {
-      user_entry.SetKey(kOfflineSigninLimit,
-                        base::TimeDeltaToValue(*new_value));
-    }
-
-    if (new_value.has_value() && new_value->is_zero()) {
-      // The old logic wrongfully treated 0 as a legit value and forced the user
-      // to sign-in online in the case that the value is set to 0. This would be
-      // cached in the "UserForceOnlineSignin" pref. Reset it once during the
-      // one-time migration to the new logic, if the value was 0.
-      // TODO(https://crbug.com/1224318) Remove this around M95.
-      const std::string* email = user_entry.FindStringKey(kCanonicalEmail);
-      if (email) {
-        // This is the same kUserForceOnlineSignin from user_manager_base.cc and
-        // it's duplicated here as a temporary workaround.
-        const char kUserForceOnlineSignin[] = "UserForceOnlineSignin";
-        DictionaryPrefUpdate force_online_update(local_state_,
-                                                 kUserForceOnlineSignin);
-        force_online_update->SetKey(*email, base::Value(false));
-      }
-    }
   }
 }
 
@@ -1018,25 +982,6 @@ std::vector<AccountId> GetKnownAccountIds() {
   if (!local_state)
     return {};
   return KnownUser(local_state).GetKnownAccountIds();
-}
-
-bool GetGaiaIdMigrationStatus(const AccountId& account_id,
-                              const std::string& subsystem) {
-  PrefService* local_state = GetLocalStateLegacy();
-  // Local State may not be initialized in tests.
-  if (!local_state)
-    return false;
-  return KnownUser(local_state).GetGaiaIdMigrationStatus(account_id, subsystem);
-}
-
-void SetGaiaIdMigrationStatusDone(const AccountId& account_id,
-                                  const std::string& subsystem) {
-  PrefService* local_state = GetLocalStateLegacy();
-  // Local State may not be initialized in tests.
-  if (!local_state)
-    return;
-  return KnownUser(local_state)
-      .SetGaiaIdMigrationStatusDone(account_id, subsystem);
 }
 
 void SaveKnownUser(const AccountId& account_id) {
@@ -1259,24 +1204,24 @@ bool GetAccountManager(const AccountId& account_id, std::string* manager) {
   return KnownUser(local_state).GetAccountManager(account_id, manager);
 }
 
-void SetUserLastLoginInputMethod(const AccountId& account_id,
-                                 const std::string& input_method) {
+void SetUserLastLoginInputMethodId(const AccountId& account_id,
+                                   const std::string& input_method_id) {
   PrefService* local_state = GetLocalStateLegacy();
   // Local State may not be initialized in tests.
   if (!local_state)
     return;
   return KnownUser(local_state)
-      .SetUserLastLoginInputMethod(account_id, input_method);
+      .SetUserLastLoginInputMethodId(account_id, input_method_id);
 }
 
-bool GetUserLastInputMethod(const AccountId& account_id,
-                            std::string* input_method) {
+bool GetUserLastInputMethodId(const AccountId& account_id,
+                              std::string* input_method_id) {
   PrefService* local_state = GetLocalStateLegacy();
   // Local State may not be initialized in tests.
   if (!local_state)
     return false;
   return KnownUser(local_state)
-      .GetUserLastInputMethod(account_id, input_method);
+      .GetUserLastInputMethodId(account_id, input_method_id);
 }
 
 void SetUserPinLength(const AccountId& account_id, int pin_length) {

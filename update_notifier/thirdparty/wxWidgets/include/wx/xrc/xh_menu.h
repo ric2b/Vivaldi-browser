@@ -16,12 +16,12 @@
 
 class WXDLLIMPEXP_XRC wxMenuXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxMenuXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxMenuXmlHandler);
 
 public:
     wxMenuXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
 private:
     bool m_insideMenu;
@@ -29,12 +29,12 @@ private:
 
 class WXDLLIMPEXP_XRC wxMenuBarXmlHandler : public wxXmlResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxMenuBarXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxMenuBarXmlHandler);
 
 public:
     wxMenuBarXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 };
 
 #endif // wxUSE_XRC && wxUSE_MENUS

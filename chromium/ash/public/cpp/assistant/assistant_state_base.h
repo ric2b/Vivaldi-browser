@@ -9,7 +9,6 @@
 #include <string>
 
 #include "ash/public/cpp/ash_public_export.h"
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "chromeos/services/assistant/public/cpp/assistant_enums.h"
@@ -122,6 +121,8 @@ class ASH_PUBLIC_EXPORT AssistantStateBase {
   void RegisterPrefChanges(PrefService* pref_service);
 
   bool IsScreenContextAllowed() const;
+
+  bool HasAudioInputDevice() const;
 
  protected:
   void InitializeObserver(AssistantStateObserver* observer);

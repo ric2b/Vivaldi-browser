@@ -18,7 +18,9 @@
 class WXDLLIMPEXP_ADV wxDataViewCustomRenderer: public wxDataViewRenderer
 {
 public:
-    wxDataViewCustomRenderer( const wxString &varianttype = wxT("string"),
+    static wxString GetDefaultType() { return wxS("string"); }
+
+    wxDataViewCustomRenderer( const wxString &varianttype = GetDefaultType(),
                               wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                               int align = wxDVR_DEFAULT_ALIGNMENT );
 
@@ -29,13 +31,17 @@ public:
                                 wxDataViewModel *model,
                                 const wxDataViewItem& item,
                                 unsigned int col,
-                                const wxMouseEvent *mouseEvent)
+                                const wxMouseEvent *mouseEvent) wxOVERRIDE
     {
         return ActivateCell(cell, model, item, col, mouseEvent);
     }
 
+#if wxUSE_ACCESSIBILITY
+    virtual wxString GetAccessibleDescription() const wxOVERRIDE;
+#endif // wxUSE_ACCESSIBILITY
+
 private:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewCustomRenderer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewCustomRenderer);
 };
 
 
@@ -46,27 +52,41 @@ private:
 class WXDLLIMPEXP_ADV wxDataViewTextRenderer: public wxDataViewRenderer
 {
 public:
-    wxDataViewTextRenderer( const wxString &varianttype = wxT("string"),
+    static wxString GetDefaultType() { return wxS("string"); }
+
+    wxDataViewTextRenderer( const wxString &varianttype = GetDefaultType(),
                             wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                             int align = wxDVR_DEFAULT_ALIGNMENT );
+    virtual ~wxDataViewTextRenderer();
 
-    bool SetValue( const wxVariant &value );
-    bool GetValue( wxVariant &value ) const;
+#if wxUSE_MARKUP
+    void EnableMarkup(bool enable = true);
+#endif // wxUSE_MARKUP
 
-    virtual bool Render(wxRect cell, wxDC *dc, int state);
-    virtual wxSize GetSize() const;
+    virtual bool SetValue( const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValue( wxVariant &value ) const wxOVERRIDE;
+#if wxUSE_ACCESSIBILITY
+    virtual wxString GetAccessibleDescription() const wxOVERRIDE;
+#endif // wxUSE_ACCESSIBILITY
+
+    virtual bool Render(wxRect cell, wxDC *dc, int state) wxOVERRIDE;
+    virtual wxSize GetSize() const wxOVERRIDE;
 
     // in-place editing
-    virtual bool HasEditorCtrl() const;
+    virtual bool HasEditorCtrl() const wxOVERRIDE;
     virtual wxWindow* CreateEditorCtrl( wxWindow *parent, wxRect labelRect,
-                                        const wxVariant &value );
-    virtual bool GetValueFromEditorCtrl( wxWindow* editor, wxVariant &value );
+                                        const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValueFromEditorCtrl( wxWindow* editor, wxVariant &value ) wxOVERRIDE;
 
 protected:
     wxString   m_text;
 
-protected:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewTextRenderer)
+private:
+#if wxUSE_MARKUP
+    class wxItemMarkupText *m_markupText;
+#endif // wxUSE_MARKUP
+
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewTextRenderer);
 };
 
 // ---------------------------------------------------------
@@ -76,22 +96,27 @@ protected:
 class WXDLLIMPEXP_ADV wxDataViewBitmapRenderer: public wxDataViewRenderer
 {
 public:
-    wxDataViewBitmapRenderer( const wxString &varianttype = wxT("wxBitmap"),
+    static wxString GetDefaultType() { return wxS("wxBitmap"); }
+
+    wxDataViewBitmapRenderer( const wxString &varianttype = GetDefaultType(),
                               wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                               int align = wxDVR_DEFAULT_ALIGNMENT );
 
-    bool SetValue( const wxVariant &value );
-    bool GetValue( wxVariant &value ) const;
+    virtual bool SetValue( const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValue( wxVariant &value ) const wxOVERRIDE;
+#if wxUSE_ACCESSIBILITY
+    virtual wxString GetAccessibleDescription() const wxOVERRIDE;
+#endif // wxUSE_ACCESSIBILITY
 
-    bool Render( wxRect cell, wxDC *dc, int state );
-    wxSize GetSize() const;
+    virtual bool Render( wxRect cell, wxDC *dc, int state ) wxOVERRIDE;
+    virtual wxSize GetSize() const wxOVERRIDE;
 
 private:
     wxIcon m_icon;
     wxBitmap m_bitmap;
 
 protected:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewBitmapRenderer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewBitmapRenderer);
 };
 
 // ---------------------------------------------------------
@@ -101,27 +126,35 @@ protected:
 class WXDLLIMPEXP_ADV wxDataViewToggleRenderer: public wxDataViewRenderer
 {
 public:
-    wxDataViewToggleRenderer( const wxString &varianttype = wxT("bool"),
+    static wxString GetDefaultType() { return wxS("bool"); }
+
+    wxDataViewToggleRenderer( const wxString &varianttype = GetDefaultType(),
                               wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                               int align = wxDVR_DEFAULT_ALIGNMENT );
 
-    bool SetValue( const wxVariant &value );
-    bool GetValue( wxVariant &value ) const;
+    void ShowAsRadio() { m_radio = true; }
 
-    bool Render( wxRect cell, wxDC *dc, int state );
-    wxSize GetSize() const;
+    virtual bool SetValue( const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValue( wxVariant &value ) const wxOVERRIDE;
+#if wxUSE_ACCESSIBILITY
+    virtual wxString GetAccessibleDescription() const wxOVERRIDE;
+#endif // wxUSE_ACCESSIBILITY
+
+    virtual bool Render( wxRect cell, wxDC *dc, int state ) wxOVERRIDE;
+    virtual wxSize GetSize() const wxOVERRIDE;
 
     // Implementation only, don't use nor override
     virtual bool WXActivateCell(const wxRect& cell,
                                 wxDataViewModel *model,
                                 const wxDataViewItem& item,
                                 unsigned int col,
-                                const wxMouseEvent *mouseEvent);
+                                const wxMouseEvent *mouseEvent) wxOVERRIDE;
 private:
     bool    m_toggle;
+    bool    m_radio;
 
 protected:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewToggleRenderer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewToggleRenderer);
 };
 
 // ---------------------------------------------------------
@@ -131,23 +164,28 @@ protected:
 class WXDLLIMPEXP_ADV wxDataViewProgressRenderer: public wxDataViewRenderer
 {
 public:
+    static wxString GetDefaultType() { return wxS("long"); }
+
     wxDataViewProgressRenderer( const wxString &label = wxEmptyString,
-                                const wxString &varianttype = wxT("long"),
+                                const wxString &varianttype = GetDefaultType(),
                                 wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                                 int align = wxDVR_DEFAULT_ALIGNMENT );
 
-    bool SetValue( const wxVariant &value );
-    bool GetValue( wxVariant& value ) const;
+    virtual bool SetValue( const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValue( wxVariant& value ) const wxOVERRIDE;
+#if wxUSE_ACCESSIBILITY
+    virtual wxString GetAccessibleDescription() const wxOVERRIDE;
+#endif // wxUSE_ACCESSIBILITY
 
-    virtual bool Render(wxRect cell, wxDC *dc, int state);
-    virtual wxSize GetSize() const;
+    virtual bool Render(wxRect cell, wxDC *dc, int state) wxOVERRIDE;
+    virtual wxSize GetSize() const wxOVERRIDE;
 
 private:
     wxString    m_label;
     int         m_value;
 
 protected:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewProgressRenderer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewProgressRenderer);
 };
 
 // ---------------------------------------------------------
@@ -157,26 +195,31 @@ protected:
 class WXDLLIMPEXP_ADV wxDataViewIconTextRenderer: public wxDataViewRenderer
 {
 public:
-    wxDataViewIconTextRenderer( const wxString &varianttype = wxT("wxDataViewIconText"),
+    static wxString GetDefaultType() { return wxS("wxDataViewIconText"); }
+
+    wxDataViewIconTextRenderer( const wxString &varianttype = GetDefaultType(),
                                 wxDataViewCellMode mode = wxDATAVIEW_CELL_INERT,
                                 int align = wxDVR_DEFAULT_ALIGNMENT );
 
-    bool SetValue( const wxVariant &value );
-    bool GetValue( wxVariant &value ) const;
+    virtual bool SetValue( const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValue( wxVariant &value ) const wxOVERRIDE;
+#if wxUSE_ACCESSIBILITY
+    virtual wxString GetAccessibleDescription() const wxOVERRIDE;
+#endif // wxUSE_ACCESSIBILITY
 
-    virtual bool Render(wxRect cell, wxDC *dc, int state);
-    virtual wxSize GetSize() const;
+    virtual bool Render(wxRect cell, wxDC *dc, int state) wxOVERRIDE;
+    virtual wxSize GetSize() const wxOVERRIDE;
 
-    virtual bool HasEditorCtrl() const { return true; }
+    virtual bool HasEditorCtrl() const wxOVERRIDE { return true; }
     virtual wxWindow* CreateEditorCtrl( wxWindow *parent, wxRect labelRect,
-                                        const wxVariant &value );
-    virtual bool GetValueFromEditorCtrl( wxWindow* editor, wxVariant &value );
+                                        const wxVariant &value ) wxOVERRIDE;
+    virtual bool GetValueFromEditorCtrl( wxWindow* editor, wxVariant &value ) wxOVERRIDE;
 
 private:
     wxDataViewIconText   m_value;
 
 protected:
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewIconTextRenderer)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxDataViewIconTextRenderer);
 };
 
 #endif // _WX_GENERIC_DVRENDERERS_H_

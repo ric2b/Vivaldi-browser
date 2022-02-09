@@ -62,7 +62,7 @@
 #include "third_party/blink/renderer/core/loader/subresource_filter.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_info.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -126,7 +126,7 @@ class FrameFetchContextTest : public testing::Test {
       const KURL& url = KURL(),
       const String& permissions_policy_header = String()) {
     dummy_page_holder = nullptr;
-    dummy_page_holder = std::make_unique<DummyPageHolder>(IntSize(500, 500));
+    dummy_page_holder = std::make_unique<DummyPageHolder>(gfx::Size(500, 500));
     dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(1.0);
     if (url.IsValid()) {
       auto params = WebNavigationParams::CreateWithHTMLBufferForTesting(
@@ -252,7 +252,7 @@ class FrameFetchContextMockedLocalFrameClientTest
     client = MakeGarbageCollected<
         testing::NiceMock<FrameFetchContextMockLocalFrameClient>>();
     dummy_page_holder =
-        std::make_unique<DummyPageHolder>(IntSize(500, 500), nullptr, client);
+        std::make_unique<DummyPageHolder>(gfx::Size(500, 500), nullptr, client);
     dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(1.0);
     Page::InsertOrdinaryPageForTesting(&dummy_page_holder->GetPage());
     document = &dummy_page_holder->GetDocument();
@@ -545,11 +545,7 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{blink::features::kUserAgentClientHint,
                               blink::features::
-                                  kPrefersColorSchemeClientHintHeader,
-                              blink::features::kClientHintsDeviceMemory,
-                              blink::features::kClientHintsResourceWidth,
-                              blink::features::kClientHintsDPR,
-                              blink::features::kClientHintsViewportWidth},
+                                  kPrefersColorSchemeClientHintHeader},
         /*disabled_features=*/{});
   }
 
@@ -626,14 +622,12 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemorySecureTransport) {
 #if defined(OS_ANDROID)
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory", true,
                "4");
-  ExpectHeader("https://www.someother-example.com/1.gif",
-               "Sec-CH-Device-Memory", true, "4");
 #else
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory",
                false, "");
+#endif
   ExpectHeader("https://www.someother-example.com/1.gif",
                "Sec-CH-Device-Memory", false, "");
-#endif
 }
 
 // Verify that client hints are not attached when the resources do not belong to
@@ -782,7 +776,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorViewportWidthHints) {
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Viewport-Width", true,
                "500");
   dummy_page_holder->GetFrameView().SetLayoutSizeFixedToFrameSize(false);
-  dummy_page_holder->GetFrameView().SetLayoutSize(IntSize(800, 800));
+  dummy_page_holder->GetFrameView().SetLayoutSize(gfx::Size(800, 800));
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", true, "800");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Viewport-Width", true,
                "800");
@@ -1093,14 +1087,12 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsPermissionsPolicy) {
 #if defined(OS_ANDROID)
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory", true,
                "4");
-  ExpectHeader("https://www.someother-example.com/1.gif",
-               "Sec-CH-Device-Memory", true, "4");
 #else
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory",
                false, "");
+#endif
   ExpectHeader("https://www.someother-example.com/1.gif",
                "Sec-CH-Device-Memory", false, "");
-#endif
   // `Sec-CH-UA` is special.
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA", true, "");
 
@@ -1111,11 +1103,10 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsPermissionsPolicy) {
   // Policy delegation.
 #if defined(OS_ANDROID)
   ExpectHeader("https://www.example.net/1.gif", "DPR", true, "1");
-  ExpectHeader("https://www.example.net/1.gif", "Sec-CH-DPR", true, "1");
 #else
   ExpectHeader("https://www.example.net/1.gif", "DPR", false, "");
-  ExpectHeader("https://www.example.net/1.gif", "Sec-CH-DPR", false, "");
 #endif
+  ExpectHeader("https://www.example.net/1.gif", "Sec-CH-DPR", false, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA-Arch", false, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA-Platform-Version",
                false, "");

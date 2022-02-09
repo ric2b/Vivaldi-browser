@@ -99,10 +99,10 @@ public:
     For example:
     @code
         wxRichTextRange range;
-        if (m_richTextCtrl-HasSelection())
-            range = m_richTextCtrl-GetSelectionRange();
+        if (m_richTextCtrl->HasSelection())
+            range = m_richTextCtrl->GetSelectionRange();
         else
-            range = wxRichTextRange(0, m_richTextCtrl-GetLastPosition()+1);
+            range = wxRichTextRange(0, m_richTextCtrl->GetLastPosition()+1);
 
         int pages = wxRICHTEXT_FORMAT_FONT|wxRICHTEXT_FORMAT_INDENTS_SPACING| \
                     wxRICHTEXT_FORMAT_TABS|wxRICHTEXT_FORMAT_BULLETS;
@@ -275,5 +275,35 @@ public:
         Updates the display.
     */
     virtual bool UpdateDisplay();
+
+    /**
+        Returns @true if the dialog will restore the last-selected page.
+    */
+    static bool GetRestoreLastPage();
+
+    /**
+        Pass @true if the dialog should restore the last-selected page.
+    */
+    static void SetRestoreLastPage(bool b);
+
+    /**
+        Returns the page identifier of the last page selected (not the control id).
+    */
+    static int GetLastPage();
+
+    /**
+        Sets the page identifier of the last page selected (not the control id).
+    */
+    static void SetLastPage(int lastPage);
+
+    /**
+        Sets the custom colour data for use by the colour dialog.
+    */
+    static void SetColourData(const wxColourData& colourData);
+
+    /**
+        Returns the custom colour data for use by the colour dialog.
+    */
+    static wxColourData GetColourData();
 };
 

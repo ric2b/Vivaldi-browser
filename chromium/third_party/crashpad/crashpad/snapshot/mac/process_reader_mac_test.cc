@@ -504,8 +504,7 @@ class ProcessReaderThreadedChild final : public MachMultiprocess {
     // Write an entry for everything in the thread pool.
     for (size_t thread_index = 0; thread_index < thread_count_;
          ++thread_index) {
-      uint64_t thread_id =
-          thread_pool.GetThreadInfo(thread_index, &expectation);
+      thread_id = thread_pool.GetThreadInfo(thread_index, &expectation);
 
       CheckedWriteFile(write_handle, &thread_id, sizeof(thread_id));
       CheckedWriteFile(write_handle,
@@ -737,7 +736,9 @@ bool ExpectCLKernels() {
          MacOSVersionNumber() >= 10'07'00;
 }
 
-TEST(ProcessReaderMac, SelfModules) {
+// Disabled to investigate crbug.com/1268776.
+// TODO(crbug.com/1268776): Re-enable or remove if no longer relevant.
+TEST(ProcessReaderMac, DISABLED_SelfModules) {
   ScopedOpenCLNoOpKernel ensure_cl_kernels;
   ASSERT_NO_FATAL_FAILURE(ensure_cl_kernels.SetUp());
 
@@ -936,7 +937,9 @@ class ProcessReaderModulesChild final : public MachMultiprocess {
   bool ensure_cl_kernels_success_;
 };
 
-TEST(ProcessReaderMac, ChildModules) {
+// Disabled to investigate crbug.com/1268776.
+// TODO(crbug.com/1268776): Re-enable or remove if no longer relevant.
+TEST(ProcessReaderMac, DISABLED_ChildModules) {
   ScopedOpenCLNoOpKernel ensure_cl_kernels;
   ASSERT_NO_FATAL_FAILURE(ensure_cl_kernels.SetUp());
 

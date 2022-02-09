@@ -10,10 +10,10 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/cronet/stale_host_resolver.h"
@@ -160,7 +160,14 @@ const char kGoAwayOnPathDegrading[] = "go_away_on_path_degrading";
 
 const char kAllowPortMigration[] = "allow_port_migration";
 
-// "goaway_sessions_on_ip_change" is default on for iOS unless overrided via
+const char kDisableTlsZeroRtt[] = "disable_tls_zero_rtt";
+
+// Whether SPDY sessions should be closed or marked as going away upon relevant
+// network changes. When not specified, /net behavior varies depending on the
+// underlying OS.
+const char kSpdyGoAwayOnIpChange[] = "spdy_go_away_on_ip_change";
+
+// "goaway_sessions_on_ip_change" is default on for iOS unless overridden via
 // experimental options explicitly.
 #if defined(OS_IOS)
 const bool kDefaultQuicGoAwaySessionsOnIpChange = true;
@@ -271,30 +278,34 @@ URLRequestContextConfig::URLRequestContextConfig(
 
 URLRequestContextConfig::~URLRequestContextConfig() {}
 
-void URLRequestContextConfig::ParseAndSetExperimentalOptions(
+bool URLRequestContextConfig::ParseAndSetExperimentalOptions(
     net::URLRequestContextBuilder* context_builder,
     net::HttpNetworkSessionParams* session_params,
     net::QuicParams* quic_params) {
   if (experimental_options.empty())
-    return;
+    return true;
 
   DVLOG(1) << "Experimental Options:" << experimental_options;
-  std::unique_ptr<base::Value> options =
-      base::JSONReader::ReadDeprecated(experimental_options);
+  base::JSONReader::ValueWithError parsed_json =
+      base::JSONReader::ReadAndReturnValueWithError(experimental_options);
 
-  if (!options) {
-    DCHECK(false) << "Parsing experimental options failed: "
-                  << experimental_options;
-    return;
+  if (!parsed_json.value) {
+    LOG(ERROR) << "Parsing experimental options failed: '"
+               << experimental_options << "', error "
+               << parsed_json.error_message;
+    return false;
   }
 
+  std::unique_ptr<base::Value> root =
+      base::Value::ToUniquePtrValue(std::move(*parsed_json.value));
+
   std::unique_ptr<base::DictionaryValue> dict =
-      base::DictionaryValue::From(std::move(options));
+      base::DictionaryValue::From(std::move(root));
 
   if (!dict) {
-    DCHECK(false) << "Experimental options string is not a dictionary: "
-                  << experimental_options;
-    return;
+    LOG(ERROR) << "Experimental options string is not a dictionary: "
+               << experimental_options;
+    return false;
   }
 
   bool async_dns_enable = false;
@@ -431,7 +442,6 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
           quic_args->FindBoolKey(kQuicEnableSocketRecvOptimization)
               .value_or(quic_params->enable_socket_recv_optimization);
 
-      bool quic_migrate_sessions_on_network_change_v2 = false;
       int quic_max_time_on_non_default_network_seconds = 0;
       int quic_max_migrations_to_non_default_network_on_write_error = 0;
       int quic_max_migrations_to_non_default_network_on_path_degrading = 0;
@@ -439,8 +449,6 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
       absl::optional<bool> quic_migrate_sessions_on_network_change_v2_in =
           quic_args->FindBoolKey(kQuicMigrateSessionsOnNetworkChangeV2);
       if (quic_migrate_sessions_on_network_change_v2_in.has_value()) {
-        quic_migrate_sessions_on_network_change_v2 =
-            quic_migrate_sessions_on_network_change_v2_in.value();
         quic_params->migrate_sessions_on_network_change_v2 =
             quic_migrate_sessions_on_network_change_v2_in.value();
         if (quic_args->GetInteger(
@@ -463,13 +471,11 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
         }
       }
 
-      bool quic_migrate_idle_sessions = false;
       int quic_idle_session_migration_period_seconds = 0;
 
       absl::optional<bool> quic_migrate_idle_sessions_in =
           quic_args->FindBoolKey(kQuicMigrateIdleSessions);
       if (quic_migrate_idle_sessions_in.has_value()) {
-        quic_migrate_idle_sessions = quic_migrate_idle_sessions_in.value();
         quic_params->migrate_idle_sessions =
             quic_migrate_idle_sessions_in.value();
         if (quic_args->GetInteger(
@@ -480,12 +486,9 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
         }
       }
 
-      bool quic_migrate_sessions_early_v2 = false;
       absl::optional<bool> quic_migrate_sessions_early_v2_in =
           quic_args->FindBoolKey(kQuicMigrateSessionsEarlyV2);
       if (quic_migrate_sessions_early_v2_in.has_value()) {
-        quic_migrate_sessions_early_v2 =
-            quic_migrate_sessions_early_v2_in.value();
         quic_params->migrate_sessions_early_v2 =
             quic_migrate_sessions_early_v2_in.value();
       }
@@ -510,6 +513,10 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
       quic_params->allow_port_migration =
           quic_args->FindBoolKey(kAllowPortMigration)
               .value_or(quic_params->allow_port_migration);
+
+      quic_params->disable_tls_zero_rtt =
+          quic_args->FindBoolKey(kDisableTlsZeroRtt)
+              .value_or(quic_params->disable_tls_zero_rtt);
 
       quic_params->disable_bidirectional_streams =
           quic_args->FindBoolKey(kQuicDisableBidirectionalStreams)
@@ -668,7 +675,14 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
                      << "\" is not a valid effective connection type value";
         }
       }
-
+    } else if (it.key() == kSpdyGoAwayOnIpChange) {
+      if (!it.value().is_bool()) {
+        LOG(ERROR) << "\"" << it.key() << "\" config params \"" << it.value()
+                   << "\" is not a bool";
+        effective_experimental_options->RemoveKey(it.key());
+        continue;
+      }
+      session_params->spdy_go_away_on_ip_change = it.value().GetBool();
     } else {
       LOG(WARNING) << "Unrecognized Cronet experimental option \"" << it.key()
                    << "\" with params \"" << it.value();
@@ -720,6 +734,7 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
     context_builder->set_network_error_logging_enabled(true);
   }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
+  return true;
 }
 
 void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
@@ -754,8 +769,13 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
         kDefaultQuicGoAwaySessionsOnIpChange;
   }
 
-  ParseAndSetExperimentalOptions(context_builder, &session_params,
-                                 quic_context->params());
+  // Somewhat hacky DCHECK use here. We don't want to crash third party
+  // applications on invalid experimental options in prod, yet, detecting
+  // an issue early is useful during development.
+  bool experimental_options_success = ParseAndSetExperimentalOptions(
+      context_builder, &session_params, quic_context->params());
+  DCHECK(experimental_options_success);
+
   context_builder->set_http_network_session_params(session_params);
   context_builder->set_quic_context(std::move(quic_context));
 

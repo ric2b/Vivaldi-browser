@@ -170,26 +170,35 @@ void IPCMediaPipeline::Initialize(
   std::move(callback).Run(platform_media::mojom::PipelineInitResult::New());
 }
 
+/* static */
 void IPCMediaPipeline::Initialized(
+    base::WeakPtr<IPCMediaPipeline> pipeline,
     StartNewPipelineCallback callback,
     platform_media::mojom::PipelineInitResultPtr result) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(state_, BUSY);
-
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " success=" << result->success
           << " duration=" << result->time_info.duration
           << " bitrate=" << result->bitrate
           << " audio=" << result->audio_config.is_valid()
-          << " video=" << result->video_config.is_valid();
+          << " video=" << result->video_config.is_valid()
+          << " pipeline=" << pipeline.get();
+  if (!pipeline) {
+    // Reset the result to tell the factory caller that the connection to the
+    // pipelne instace was closed during initialization.
+    result = platform_media::mojom::PipelineInitResult::New();
+  } else {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(pipeline->sequence_checker_);
+    DCHECK_EQ(pipeline->state_, BUSY);
 
-  GetElem(has_media_type_, PlatformStreamType::kAudio) =
-      result->audio_config.is_valid();
-  GetElem(has_media_type_, PlatformStreamType::kVideo) =
-      result->video_config.is_valid();
+    GetElem(pipeline->has_media_type_, PlatformStreamType::kAudio) =
+        result->audio_config.is_valid();
+    GetElem(pipeline->has_media_type_, PlatformStreamType::kVideo) =
+        result->video_config.is_valid();
 
-  state_ = result->success ? DECODING : STOPPED;
+    pipeline->state_ = result->success ? DECODING : STOPPED;
+  }
 
+  // Always call the callback even when !pipeline.
   std::move(callback).Run(std::move(result));
 }
 

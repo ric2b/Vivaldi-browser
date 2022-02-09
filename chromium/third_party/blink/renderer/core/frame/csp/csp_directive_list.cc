@@ -23,7 +23,7 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 #include "third_party/blink/renderer/platform/crypto.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/known_ports.h"
@@ -250,6 +250,35 @@ void ReportEvalViolation(
                           RedirectStatus::kNoRedirect, nullptr, content);
 }
 
+void ReportWasmEvalViolation(
+    const network::mojom::blink::ContentSecurityPolicy& csp,
+    ContentSecurityPolicy* policy,
+    const String& directive_text,
+    CSPDirectiveName effective_type,
+    const String& message,
+    const KURL& blocked_url,
+    const ContentSecurityPolicy::ExceptionStatus exception_status,
+    const String& content) {
+  String report_message =
+      CSPDirectiveListIsReportOnly(csp) ? "[Report Only] " + message : message;
+  // Print a console message if it won't be redundant with a JavaScript
+  // exception that the caller will throw. Exceptions will never get thrown in
+  // report-only mode because the caller won't see a violation.
+  if (CSPDirectiveListIsReportOnly(csp) ||
+      exception_status == ContentSecurityPolicy::kWillNotThrowException) {
+    auto* console_message = MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError, report_message);
+    policy->LogToConsole(console_message);
+  }
+  policy->ReportViolation(
+      directive_text, effective_type, message, blocked_url,
+      csp.report_endpoints, csp.use_reporting_api, csp.header->header_value,
+      csp.header->type, ContentSecurityPolicyViolationType::kWasmEvalViolation,
+      std::unique_ptr<SourceLocation>(), nullptr, RedirectStatus::kNoRedirect,
+      nullptr, content);
+}
+
 bool CheckEval(const network::mojom::blink::CSPSourceList* directive) {
   return !directive || directive->allow_eval;
 }
@@ -400,7 +429,7 @@ bool CheckWasmEvalAndReportViolation(
 
   String raw_directive =
       GetRawDirectiveForMessage(csp.raw_directives, directive.type);
-  ReportEvalViolation(
+  ReportWasmEvalViolation(
       csp, policy, raw_directive, CSPDirectiveName::ScriptSrc,
       console_message + "\"" + raw_directive + "\"." + suffix + "\n", KURL(),
       exception_status,
@@ -543,6 +572,19 @@ bool CheckSourceAndReportViolation(
     suffix = suffix + " Note that '" + effective_directive_name +
              "' was not explicitly set, so '" + directive_name +
              "' is used as a fallback.";
+  }
+
+  // Wildcards match network schemes ('http', 'https', 'ws', 'wss'), and the
+  // scheme of the protected resource:
+  // https://w3c.github.io/webappsec-csp/#match-url-to-source-expression. Other
+  // schemes, including custom schemes, must be explicitly listed in a source
+  // list.
+  if (directive.source_list->allow_star) {
+    suffix = suffix +
+             " Note that '*' matches only URLs with network schemes ('http', "
+             "'https', 'ws', 'wss'), or URLs whose scheme matches `self`'s "
+             "scheme. " +
+             url.Protocol() + ":' must be added explicitely.";
   }
 
   String raw_directive =

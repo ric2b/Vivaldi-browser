@@ -8,7 +8,7 @@
 #include <map>
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/browser/layout_shift_normalization.h"
@@ -170,7 +170,7 @@ class PageLoadMetricsUpdateDispatcher {
       mojom::CpuTimingPtr new_cpu_timing,
       mojom::DeferredResourceCountsPtr new_deferred_resource_data,
       mojom::InputTimingPtr input_timing_delta,
-      const blink::MobileFriendliness& mobile_friendliness);
+      const absl::optional<blink::MobileFriendliness>& mobile_friendliness);
 
   void SetUpSharedMemoryForSmoothness(
       content::RenderFrameHost* render_frame_host,
@@ -219,7 +219,7 @@ class PageLoadMetricsUpdateDispatcher {
   const mojom::InputTiming& page_input_timing() const {
     return *page_input_timing_;
   }
-  const blink::MobileFriendliness& mobile_friendliness() const {
+  const absl::optional<blink::MobileFriendliness>& mobile_friendliness() const {
     return mobile_friendliness_;
   }
   void UpdateResponsivenessMetricsNormalizationForBfcache() {
@@ -272,10 +272,10 @@ class PageLoadMetricsUpdateDispatcher {
   void UpdateHasSeenInputOrScroll(const mojom::PageLoadTiming& new_timing);
 
   // The client is guaranteed to outlive this object.
-  Client* const client_;
+  const raw_ptr<Client> client_;
 
   // Interface to chrome features. Must outlive the class.
-  PageLoadMetricsEmbedderInterface* const embedder_interface_;
+  const raw_ptr<PageLoadMetricsEmbedderInterface> embedder_interface_;
 
   std::unique_ptr<base::OneShotTimer> timer_;
 
@@ -303,7 +303,7 @@ class PageLoadMetricsUpdateDispatcher {
   mojom::InputTimingPtr page_input_timing_;
 
   // MobileFrienddliness data for current view.
-  blink::MobileFriendliness mobile_friendliness_;
+  absl::optional<blink::MobileFriendliness> mobile_friendliness_;
 
   // True if this page load started in prerender.
   const bool is_prerendered_page_load_;

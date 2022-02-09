@@ -12,10 +12,9 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/download/internal/background_service/driver_entry.h"
 #include "components/download/internal/background_service/model.h"
 #include "components/download/internal/background_service/stats.h"

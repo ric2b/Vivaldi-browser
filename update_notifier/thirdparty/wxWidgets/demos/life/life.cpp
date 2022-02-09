@@ -15,9 +15,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
@@ -27,6 +24,7 @@
 #include "wx/wfstream.h"
 #include "wx/filedlg.h"
 #include "wx/stockitem.h"
+#include "wx/dcbuffer.h"
 
 #include "life.h"
 #include "game.h"
@@ -37,7 +35,7 @@
 // resources
 // --------------------------------------------------------------------------
 
-#ifndef wxHAS_IMAGES_IN_RESOURCES
+#if defined(__WXGTK__) || defined(__WXMOTIF__) || defined(__WXMAC__) || defined(__WXMGL__) || defined(__WXX11__) || defined(__WXQT__)
     // application icon
     #include "mondrian.xpm"
 
@@ -96,7 +94,7 @@ enum
 // --------------------------------------------------------------------------
 
 // Event tables
-BEGIN_EVENT_TABLE(LifeFrame, wxFrame)
+wxBEGIN_EVENT_TABLE(LifeFrame, wxFrame)
     EVT_MENU            (wxID_NEW,     LifeFrame::OnMenu)
 #if wxUSE_FILEDLG
     EVT_MENU            (wxID_OPEN,    LifeFrame::OnOpen)
@@ -121,13 +119,13 @@ BEGIN_EVENT_TABLE(LifeFrame, wxFrame)
     EVT_COMMAND_SCROLL  (ID_SLIDER,    LifeFrame::OnSlider)
     EVT_TIMER           (ID_TIMER,     LifeFrame::OnTimer)
     EVT_CLOSE           (              LifeFrame::OnClose)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
-BEGIN_EVENT_TABLE(LifeNavigator, wxMiniFrame)
+wxBEGIN_EVENT_TABLE(LifeNavigator, wxMiniFrame)
     EVT_CLOSE           (             LifeNavigator::OnClose)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
-BEGIN_EVENT_TABLE(LifeCanvas, wxWindow)
+wxBEGIN_EVENT_TABLE(LifeCanvas, wxWindow)
     EVT_PAINT           (             LifeCanvas::OnPaint)
     EVT_SCROLLWIN       (             LifeCanvas::OnScroll)
     EVT_SIZE            (             LifeCanvas::OnSize)
@@ -136,11 +134,11 @@ BEGIN_EVENT_TABLE(LifeCanvas, wxWindow)
     EVT_LEFT_UP         (             LifeCanvas::OnMouse)
     EVT_LEFT_DCLICK     (             LifeCanvas::OnMouse)
     EVT_ERASE_BACKGROUND(             LifeCanvas::OnEraseBackground)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 
 // Create a new application object
-IMPLEMENT_APP(LifeApp)
+wxIMPLEMENT_APP(LifeApp);
 
 
 // ==========================================================================
@@ -197,14 +195,12 @@ LifeFrame::LifeFrame() :
     menuFile->Append(wxID_OPEN, wxEmptyString, _("Open an existing Life pattern"));
 #endif
     menuFile->Append(ID_SAMPLES, _("&Sample game..."), _("Select a sample configuration"));
-#if ! (defined(__SMARTPHONE__) || defined(__POCKETPC__))
     menuFile->AppendSeparator();
     menuFile->Append(wxID_EXIT);
 
     menuView->Append(ID_SHOWNAV, _("Navigation &toolbox"), _("Show or hide toolbox"), wxITEM_CHECK);
     menuView->Check(ID_SHOWNAV, true);
     menuView->AppendSeparator();
-#endif
 
     menuView->Append(ID_ORIGIN, _("&Absolute origin"), _("Go to (0, 0)"));
     menuView->Append(ID_CENTER, _("&Center of mass"), _("Find center of mass"));
@@ -249,7 +245,6 @@ LifeFrame::LifeFrame() :
     toolBar->SetToolBitmapSize(wxSize(16, 16));
 
     ADD_TOOL(wxID_NEW, tbBitmaps[0], wxGetStockLabel(wxID_NEW, wxSTOCK_NOFLAGS), _("Start a new game"));
-#ifndef __POCKETPC__
 #if wxUSE_FILEDLG
     ADD_TOOL(wxID_OPEN, tbBitmaps[1], wxGetStockLabel(wxID_OPEN, wxSTOCK_NOFLAGS), _("Open an existing Life pattern"));
 #endif // wxUSE_FILEDLG
@@ -259,7 +254,6 @@ LifeFrame::LifeFrame() :
     ADD_TOOL(wxID_ZOOM_OUT, tbBitmaps[3], wxGetStockLabel(wxID_ZOOM_OUT, wxSTOCK_NOFLAGS), _("Zoom out"));
     ADD_TOOL(ID_INFO, tbBitmaps[4], _("Description"), _("Show description"));
     toolBar->AddSeparator();
-#endif // __POCKETPC__
     ADD_TOOL(ID_START, tbBitmaps[5], _("Start"), _("Start"));
     ADD_TOOL(wxID_STOP, tbBitmaps[6], _("Stop"), _("Stop"));
 
@@ -331,7 +325,6 @@ LifeFrame::LifeFrame() :
     sizer3->Add( panel2, 0, wxGROW );
     SetSizer( sizer3 );
 
-#ifndef __WXWINCE__
     sizer3->Fit( this );
 
     // set minimum frame size
@@ -339,7 +332,6 @@ LifeFrame::LifeFrame() :
 
     // navigator frame - not appropriate for small devices
     m_navigator = new LifeNavigator(this);
-#endif
 
 }
 
@@ -436,11 +428,20 @@ void LifeFrame::OnMenu(wxCommandEvent& event)
             m_running = true;
             m_topspeed = true;
             UpdateUI();
+
+            const long YIELD_INTERVAL = 1000 / 30;
+            wxMilliClock_t lastyield = 0, now;
+
             while (m_running && m_topspeed)
             {
                 OnStep();
-                wxYield();
+                if ( (now=wxGetLocalTimeMillis()) - lastyield > YIELD_INTERVAL)
+                {
+                    wxYield();
+                    lastyield = now;
+                }
             }
+
             break;
         }
     }
@@ -530,7 +531,7 @@ void LifeFrame::OnNavigate(wxCommandEvent& event)
         case ID_CENTER: c = m_life->FindCenter(); break;
         default :
             wxFAIL;
-            // Fall through!
+            wxFALLTHROUGH;
         case ID_ORIGIN: c.i = c.j = 0; break;
     }
 
@@ -589,12 +590,13 @@ void LifeFrame::OnStop()
 void LifeFrame::OnStep()
 {
     if (m_life->NextTic())
+    {
         m_tics++;
+        m_canvas->Refresh();
+        UpdateInfoText();
+    }
     else
         OnStop();
-
-    m_canvas->DrawChanged();
-    UpdateInfoText();
 }
 
 
@@ -692,11 +694,7 @@ void LifeNavigator::OnClose(wxCloseEvent& event)
 LifeCanvas::LifeCanvas(wxWindow *parent, Life *life, bool interactive)
           : wxWindow(parent, wxID_ANY, wxDefaultPosition, wxSize(100, 100),
             wxFULL_REPAINT_ON_RESIZE | wxHSCROLL | wxVSCROLL
-#if !defined(__SMARTPHONE__) && !defined(__POCKETPC__)
             |wxSUNKEN_BORDER
-#else
-            |wxSIMPLE_BORDER
-#endif
             )
 {
     m_life        = life;
@@ -713,6 +711,7 @@ LifeCanvas::LifeCanvas(wxWindow *parent, Life *life, bool interactive)
 
     // reduce flicker if wxEVT_ERASE_BACKGROUND is not available
     SetBackgroundColour(*wxWHITE);
+    SetBackgroundStyle(wxBG_STYLE_PAINT);
 }
 
 LifeCanvas::~LifeCanvas()
@@ -791,7 +790,7 @@ void LifeCanvas::DrawCell(wxInt32 i, wxInt32 j, wxDC &dc)
     }
 }
 
-// draw all changed cells
+// draw all changed cells, currently not in use
 void LifeCanvas::DrawChanged()
 {
     wxClientDC dc(this);
@@ -808,14 +807,14 @@ void LifeCanvas::DrawChanged()
 
     if (m_cellsize == 1)
     {
-        dc.SetPen(*wxBLACK_PEN);
+        dc.SetPen(*wxWHITE_PEN);
     }
     else
     {
         dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.SetBrush(*wxBLACK_BRUSH);
+        dc.SetBrush(*wxWHITE_BRUSH);
     }
-    dc.SetLogicalFunction(wxINVERT);
+    dc.SetLogicalFunction(wxXOR);
 
     while (!done)
     {
@@ -829,7 +828,7 @@ void LifeCanvas::DrawChanged()
 // event handlers
 void LifeCanvas::OnPaint(wxPaintEvent& WXUNUSED(event))
 {
-    wxPaintDC dc(this);
+    wxAutoBufferedPaintDC dc(this);
     wxRect  rect = GetUpdateRegion().GetBox();
     wxCoord x, y, w, h;
     wxInt32 i0, j0, i1, j1;

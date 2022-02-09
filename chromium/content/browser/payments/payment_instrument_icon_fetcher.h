@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "content/public/browser/global_routing_id.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 
@@ -21,15 +20,17 @@ class PaymentInstrumentIconFetcher {
   using PaymentInstrumentIconFetcherCallback =
       base::OnceCallback<void(const std::string&)>;
 
+  PaymentInstrumentIconFetcher() = delete;
+  PaymentInstrumentIconFetcher(const PaymentInstrumentIconFetcher&) = delete;
+  PaymentInstrumentIconFetcher& operator=(const PaymentInstrumentIconFetcher&) =
+      delete;
+
   // Should be called on the UI thread.
   static void Start(
       const GURL& scope,
       std::unique_ptr<std::vector<GlobalRenderFrameHostId>> frame_routing_ids,
       const std::vector<blink::Manifest::ImageResource>& icons,
       PaymentInstrumentIconFetcherCallback callback);
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(PaymentInstrumentIconFetcher);
 };
 
 }  // namespace content

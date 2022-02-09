@@ -9,16 +9,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_STREAMS && wxUSE_ARCHIVE_STREAMS
 
 #include "wx/archive.h"
 
-IMPLEMENT_ABSTRACT_CLASS(wxArchiveEntry, wxObject)
-IMPLEMENT_ABSTRACT_CLASS(wxArchiveClassFactory, wxFilterClassFactoryBase)
+wxIMPLEMENT_ABSTRACT_CLASS(wxArchiveEntry, wxObject);
+wxIMPLEMENT_ABSTRACT_CLASS(wxArchiveClassFactory, wxFilterClassFactoryBase);
 
 
 /////////////////////////////////////////////////////////////////////////////

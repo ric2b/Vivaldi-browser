@@ -204,11 +204,22 @@ class ThreadLocalCache {
   KeySet local_set_;
 };
 
+#if !defined(OS_ZOS)
 thread_local ThreadLocalCache s_local_cache;
+#else
+// TODO(gabylb) - zos: thread_local not yet supported, use zoslib's impl'n:
+static ThreadLocalCache s_tlc;
+__tlssim<ThreadLocalCache*> __g_s_local_cache_impl(&s_tlc);
+#define s_local_cache (*__g_s_local_cache_impl.access())
+#endif
 
 }  // namespace
 
 StringAtom::StringAtom() : value_(kEmptyString) {}
 
 StringAtom::StringAtom(std::string_view str) noexcept
+#ifndef OS_ZOS
     : value_(*s_local_cache.find(str)) {}
+#else
+    : value_(*s_local_cache->find(str)) {}
+#endif

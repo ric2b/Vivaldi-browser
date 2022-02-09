@@ -10,16 +10,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_FILECTRL
 
 #include "wx/xrc/xh_filectrl.h"
 #include "wx/filectrl.h"
 
-IMPLEMENT_DYNAMIC_CLASS(wxFileCtrlXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxFileCtrlXmlHandler, wxXmlResourceHandler);
 
 wxFileCtrlXmlHandler::wxFileCtrlXmlHandler() : wxXmlResourceHandler()
 {

@@ -14,7 +14,6 @@
 
 #include "calendar/calendar_typedefs.h"
 
-#include "base/macros.h"
 #include "base/time/time.h"
 
 namespace calendar {

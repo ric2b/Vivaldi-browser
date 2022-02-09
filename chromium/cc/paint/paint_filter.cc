@@ -9,11 +9,15 @@
 #include <vector>
 
 #include "base/no_destructor.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
+#include "cc/paint/draw_image.h"
 #include "cc/paint/filter_operations.h"
+#include "cc/paint/image_provider.h"
 #include "cc/paint/paint_image_builder.h"
 #include "cc/paint/paint_op_writer.h"
 #include "cc/paint/paint_record.h"
+#include "cc/paint/scoped_raster_flags.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkMath.h"
 #include "third_party/skia/include/core/SkString.h"
@@ -341,6 +345,10 @@ std::string PaintFilter::TypeToString(Type type) {
   return "Unknown";
 }
 
+const PaintFilter::CropRect* PaintFilter::GetCropRect() const {
+  return base::OptionalOrNullptr(crop_rect_);
+}
+
 size_t PaintFilter::GetFilterSize(const PaintFilter* filter) {
   // A null type is used to indicate no filter.
   if (!filter)
@@ -481,7 +489,7 @@ size_t ColorFilterPaintFilter::SerializedSize() const {
 sk_sp<PaintFilter> ColorFilterPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<ColorFilterPaintFilter>(
-      color_filter_, Snapshot(input_, image_provider), crop_rect());
+      color_filter_, Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool ColorFilterPaintFilter::operator==(
@@ -519,7 +527,7 @@ sk_sp<PaintFilter> BlurPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<BlurPaintFilter>(sigma_x_, sigma_y_, tile_mode_,
                                      Snapshot(input_, image_provider),
-                                     crop_rect());
+                                     GetCropRect());
 }
 
 bool BlurPaintFilter::operator==(const BlurPaintFilter& other) const {
@@ -570,7 +578,7 @@ sk_sp<PaintFilter> DropShadowPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<DropShadowPaintFilter>(
       dx_, dy_, sigma_x_, sigma_y_, color_, shadow_mode_,
-      Snapshot(input_, image_provider), crop_rect());
+      Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool DropShadowPaintFilter::operator==(
@@ -607,7 +615,7 @@ size_t MagnifierPaintFilter::SerializedSize() const {
 sk_sp<PaintFilter> MagnifierPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<MagnifierPaintFilter>(
-      src_rect_, inset_, Snapshot(input_, image_provider), crop_rect());
+      src_rect_, inset_, Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool MagnifierPaintFilter::operator==(const MagnifierPaintFilter& other) const {
@@ -676,7 +684,7 @@ sk_sp<PaintFilter> AlphaThresholdPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<AlphaThresholdPaintFilter>(region_, inner_min_, outer_max_,
                                                Snapshot(input_, image_provider),
-                                               crop_rect());
+                                               GetCropRect());
 }
 
 bool AlphaThresholdPaintFilter::operator==(
@@ -717,7 +725,7 @@ sk_sp<PaintFilter> XfermodePaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<XfermodePaintFilter>(
       blend_mode_, Snapshot(background_, image_provider),
-      Snapshot(foreground_, image_provider), crop_rect());
+      Snapshot(foreground_, image_provider), GetCropRect());
 }
 
 bool XfermodePaintFilter::operator==(const XfermodePaintFilter& other) const {
@@ -766,7 +774,7 @@ sk_sp<PaintFilter> ArithmeticPaintFilter::SnapshotWithImagesInternal(
   return sk_make_sp<ArithmeticPaintFilter>(
       k1_, k2_, k3_, k4_, enforce_pm_color_,
       Snapshot(background_, image_provider),
-      Snapshot(foreground_, image_provider), crop_rect());
+      Snapshot(foreground_, image_provider), GetCropRect());
 }
 
 bool ArithmeticPaintFilter::operator==(
@@ -824,7 +832,7 @@ sk_sp<PaintFilter> MatrixConvolutionPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<MatrixConvolutionPaintFilter>(
       kernel_size_, &kernel_[0], gain_, bias_, kernel_offset_, tile_mode_,
-      convolve_alpha_, Snapshot(input_, image_provider), crop_rect());
+      convolve_alpha_, Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool MatrixConvolutionPaintFilter::operator==(
@@ -876,7 +884,7 @@ sk_sp<PaintFilter> DisplacementMapEffectPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<DisplacementMapEffectPaintFilter>(
       channel_x_, channel_y_, scale_, Snapshot(displacement_, image_provider),
-      Snapshot(color_, image_provider), crop_rect());
+      Snapshot(color_, image_provider), GetCropRect());
 }
 
 bool DisplacementMapEffectPaintFilter::operator==(
@@ -1087,7 +1095,7 @@ size_t MergePaintFilter::SerializedSize() const {
 sk_sp<PaintFilter> MergePaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_sp<MergePaintFilter>(new MergePaintFilter(
-      &inputs_[0], inputs_->size(), crop_rect(), image_provider));
+      &inputs_[0], inputs_->size(), GetCropRect(), image_provider));
 }
 
 bool MergePaintFilter::operator==(const MergePaintFilter& other) const {
@@ -1136,7 +1144,7 @@ sk_sp<PaintFilter> MorphologyPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<MorphologyPaintFilter>(morph_type_, radius_x_, radius_y_,
                                            Snapshot(input_, image_provider),
-                                           crop_rect());
+                                           GetCropRect());
 }
 
 bool MorphologyPaintFilter::operator==(
@@ -1170,7 +1178,7 @@ size_t OffsetPaintFilter::SerializedSize() const {
 sk_sp<PaintFilter> OffsetPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<OffsetPaintFilter>(
-      dx_, dy_, Snapshot(input_, image_provider), crop_rect());
+      dx_, dy_, Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool OffsetPaintFilter::operator==(const OffsetPaintFilter& other) const {
@@ -1254,7 +1262,7 @@ sk_sp<PaintFilter> TurbulencePaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<TurbulencePaintFilter>(turbulence_type_, base_frequency_x_,
                                            base_frequency_y_, num_octaves_,
-                                           seed_, &tile_size_, crop_rect());
+                                           seed_, &tile_size_, GetCropRect());
 }
 
 bool TurbulencePaintFilter::operator==(
@@ -1320,11 +1328,11 @@ sk_sp<PaintFilter> ShaderPaintFilter::SnapshotWithImagesInternal(
     return sk_make_sp<ShaderPaintFilter>(
         sk_ref_sp(snapshot->getShader()), snapshot->getAlpha(),
         snapshot->getFilterQuality(),
-        snapshot->isDither() ? Dither::kYes : Dither::kNo, crop_rect());
+        snapshot->isDither() ? Dither::kYes : Dither::kNo, GetCropRect());
   } else {
     // If decode failed, then just fallback to the solid color
     return sk_make_sp<ShaderPaintFilter>(nullptr, alpha_, filter_quality_,
-                                         dither_, crop_rect());
+                                         dither_, GetCropRect());
   }
 }
 
@@ -1413,7 +1421,7 @@ sk_sp<PaintFilter> LightingDistantPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<LightingDistantPaintFilter>(
       lighting_type_, direction_, light_color_, surface_scale_, kconstant_,
-      shininess_, Snapshot(input_, image_provider), crop_rect());
+      shininess_, Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool LightingDistantPaintFilter::operator==(
@@ -1472,7 +1480,7 @@ sk_sp<PaintFilter> LightingPointPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<LightingPointPaintFilter>(
       lighting_type_, location_, light_color_, surface_scale_, kconstant_,
-      shininess_, Snapshot(input_, image_provider), crop_rect());
+      shininess_, Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool LightingPointPaintFilter::operator==(
@@ -1540,7 +1548,7 @@ sk_sp<PaintFilter> LightingSpotPaintFilter::SnapshotWithImagesInternal(
   return sk_make_sp<LightingSpotPaintFilter>(
       lighting_type_, location_, target_, specular_exponent_, cutoff_angle_,
       light_color_, surface_scale_, kconstant_, shininess_,
-      Snapshot(input_, image_provider), crop_rect());
+      Snapshot(input_, image_provider), GetCropRect());
 }
 
 bool LightingSpotPaintFilter::operator==(
@@ -1621,7 +1629,7 @@ sk_sp<PaintFilter> StretchPaintFilter::SnapshotWithImagesInternal(
     ImageProvider* image_provider) const {
   return sk_make_sp<StretchPaintFilter>(stretch_x_, stretch_y_, width_, height_,
                                         Snapshot(input_, image_provider),
-                                        crop_rect());
+                                        GetCropRect());
 }
 
 bool StretchPaintFilter::operator==(const StretchPaintFilter& other) const {

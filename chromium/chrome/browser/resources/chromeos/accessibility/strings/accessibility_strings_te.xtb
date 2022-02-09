@@ -30,6 +30,7 @@
 <translation id="1189258430971676908">సాధన ప్రాంతం: డ్రాప్-డౌన్ లిస్ట్‌లు</translation>
 <translation id="1195238899008218998">చివరిమాట</translation>
 <translation id="1197088940767939838">నారింజ రంగు</translation>
+<translation id="1198865190323699001">తాకే సంజ్ఞలు</translation>
 <translation id="1201402288615127009">తరువాత</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1207086294218137981">తర్వాత స్థాయి 4 శీర్షిక లేదు</translation>
@@ -69,6 +70,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="1354356357730355833">కాపీ చేయి</translation>
 <translation id="135978014023467274">మీరు ChromeVox 63కు అప్‌డేట్ అయ్యారు!</translation>
 <translation id="1360699455582016846">రూటింగ్ కీ <ph name="ROUTING_KEY_NUMBER" /> కింద ఉన్న అంశాన్ని క్లిక్ చేయండి</translation>
+<translation id="1376703628032300005">తర్వాతి అక్షరానికి వెళ్లండి</translation>
 <translation id="1377925789329510816">ఇది చివరి ముఖ్యశీర్షిక. మొదటి ముఖ్యశీర్షికకు సర్దుబాటు చేసేందుకు, శోధన+H నొక్కండి లేదా ఈ పేజీలోని రెండవ ముఖ్యశీర్షికకు వెళ్లేందుకు, శోధన+Shift+Hను నొక్కండి.</translation>
 <translation id="138218114945450791">లేత నీలి రంగు</translation>
 <translation id="1383876407941801731">సెర్చ్</translation>
@@ -214,6 +216,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="2450814015951372393">చెక్‌ బాక్స్</translation>
 <translation id="2461822463642141190">ప్రస్తుత</translation>
 <translation id="2462626033734746142">రేడియో బటన్ సమూహం</translation>
+<translation id="2467741090055146971">ఎంపిక చేసిన దానిని రద్దు చేయండి</translation>
 <translation id="2471138580042810658">శీర్షిక 6</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{నక్షత్రం గుర్తు}other{# నక్షత్రం గుర్తులు}}</translation>
 <translation id="2490721194269245365">గులాబీ గోధుమ రంగు</translation>
@@ -388,7 +391,9 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="3492609944033322585">{COUNT,plural, =1{కుడి కుండలీకరణ గుర్తు}other{# కుడి కుండలీకరణ గుర్తులు}}</translation>
 <translation id="3494946239022273294">mnuitm</translation>
 <translation id="3497063866483065785">{COUNT,plural, =1{ప్రశ్నార్థక గుర్తు}other{# ప్రశ్నార్థక గుర్తులు}}</translation>
+<translation id="3505359110822747654">ChromeVox మెనూలను కుదించండి</translation>
 <translation id="3514822174137761109">{COUNT,plural, =1{హంసపాదు గుర్తు}other{# హంసపాదు గుర్తులు}}</translation>
+<translation id="3518600448524470129">{COUNT,plural, =1{తెలుపు రంగు బుల్లెట్}other{# తెలుపు రంగు బుల్లెట్‌లు}}</translation>
 <translation id="352577523970648069">సవరించగల వచన ఫీల్డ్</translation>
 <translation id="3538907380453898475">dscrplst</translation>
 <translation id="3549141990712742152"><ph name="TEXT" />ని కత్తిరించండి.</translation>
@@ -566,6 +571,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="4854380505292502090">మునుపటి మీడియా విడ్జెట్ లేదు</translation>
 <translation id="4855927945655956315">ఆవశ్యకమైన కీలు: కంట్రోల్</translation>
 <translation id="4862744964787595316">బోల్డ్ కాదు</translation>
+<translation id="4865995900839719272">మునుపటి లైన్‌కు వెళ్లండి</translation>
 <translation id="4866956062845190338">rdmnuitm</translation>
 <translation id="4867316986324544967">TTSను లాగ్ చేయ‌డం ప్రారంభించండి</translation>
 <translation id="4886524826165775965"><ph name="INDEX" />/<ph name="TOTAL" /></translation>
@@ -608,7 +614,6 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="5138912041966667164">మధ్యస్థ మేఘవర్ణ నీలం రంగు</translation>
 <translation id="5140016802771803559">రెబెక్కా ఊదా రంగు</translation>
 <translation id="5142101052131610456">అన్ని పాఠాలు</translation>
-<translation id="5152605892605507188">కుడి వైపుగా జరుపు</translation>
 <translation id="5158275234811857234">ముఖచిత్రం</translation>
 <translation id="516076699907426116">కొనసాగడానికి, తాకడం ద్వారా పరిశీలించి తర్వాతి పాఠం బటన్‌ను కనుగొనండి. ఆ తర్వాత, కొనసాగడానికి రెండు సార్లు నొక్కండి.</translation>
 <translation id="5170206230005240598">బ్రెయిలీ శీర్షికలు ఎనేబుల్ చేయబడ్డాయి</translation>
@@ -625,6 +630,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="5304943142864553931"><ph name="TITLE" />, ట్యాబ్</translation>
 <translation id="5308380583665731573">కనెక్ట్ చేయండి</translation>
 <translation id="5310788376443009632">తీసివేయబడినది:</translation>
+<translation id="5316825363044614340">తర్వాతి లైన్‌కు వెళ్లండి</translation>
 <translation id="5320727453979144100">స్టిక్కీ మోడ్ ప్రారంభించబడింది</translation>
 <translation id="5321085947096604457">{COUNT,plural, =1{కామా గుర్తు}other{# కామా గుర్తులు}}</translation>
 <translation id="532485153932049746">వచనం ఫార్మాటింగ్
@@ -671,6 +677,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="5597170376237141345">తదుపరి చెక్‌బాక్స్</translation>
 <translation id="5598905979683743333"><ph name="NAME" />, రేడియో బటన్ ఎంపిక తీసివేయబడింది</translation>
 <translation id="5601172225407283979">డిఫాల్ట్ చర్యను అమలు చేయండి</translation>
+<translation id="5604302400025591178">{COUNT,plural, =1{చతురస్ర బుల్లెట్}other{# చతురస్ర బుల్లెట్‌లు}}</translation>
 <translation id="5608798115546226984">స్వీయపూర్తి ఇన్‌లైన్</translation>
 <translation id="5616029807486814372">తర్వాతి పాఠం</translation>
 <translation id="561939826962581046">time</translation>
@@ -732,7 +739,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="597121107011153418">{COUNT,plural, =1{# అంశంతో}other{# అంశాలతో}}</translation>
 <translation id="5981446804259161541">లేత నీలి ఆకుపచ్చ రంగు</translation>
 <translation id="5983179082906765664">నావిగేషన్ గ్రాన్యులారిటీని పెంచండి</translation>
-<translation id="5992285135956208197">గ్రాఫిక్స్ పత్రం</translation>
+<translation id="5992285135956208197">గ్రాఫిక్స్ డాక్యుమెంట్‌</translation>
 <translation id="5999630716831179808">వాయిస్‌లు</translation>
 <translation id="6006050241733874051">ఫారమ్</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{బ్యాక్‌స్లాష్ గుర్తు}other{# బ్యాక్‌స్లాష్ గుర్తులు}}</translation>
@@ -742,6 +749,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="6034000775414344507">లేత బూడిద రంగు</translation>
 <translation id="6036135911048686884">'అన్వేషించండి'ని తాకండి</translation>
 <translation id="6037602951055904232">ముందుకు ప్యాన్ చేయండి</translation>
+<translation id="604240746417122825">గ్రామర్ ఎర్రర్</translation>
 <translation id="6082768461603900813">ప్రాథమిక నావిగేషన్</translation>
 <translation id="609281021724813947">మునుపటి స్లయిడర్ లేదు</translation>
 <translation id="6100239002225743044">ఒక పంక్తి పైకి జరుపు</translation>
@@ -752,7 +760,6 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="6142308968191113180">శీర్షిక 4</translation>
 <translation id="6150023170003443621">పసుపు ఆకుపచ్చ</translation>
 <translation id="6158882249329863701"><ph name="TABLECELLROWINDEX" />వ అడ్డు వరుస <ph name="TABLECELLCOLUMNINDEX" />వ నిలువు వరుస</translation>
-<translation id="6159796324830296161">ఎడమ వైపుగా జరుపు</translation>
 <translation id="6164829606128959761">మీటర్</translation>
 <translation id="6165508094623778733">మరింత తెలుసుకోండి</translation>
 <translation id="6166362019018438352">బ్రెయిలీ శీర్షికలు డిజేబుల్‌ చేయబడ్డాయి</translation>
@@ -799,6 +806,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="6544923685317771506">సముద్ర శంఖం రంగు</translation>
 <translation id="6551185905438378412">లేత గోధుమ రంగు</translation>
 <translation id="6561818612645211875">ప్రస్తుత అడ్డు వరుస ప్రారంభానికి వెళ్లండి</translation>
+<translation id="6563126228219321999">చెల్లని ఐటెమ్ ఏది లేదు</translation>
 <translation id="6579990219486187401">లేత గులాబీ రంగు</translation>
 <translation id="6583174818554398774">వివరాల స్థాయి వద్ద తర్వాతి దానికి తరలించండి</translation>
 <translation id="6584162722998608255">తర్వాత, స్క్రీన్ అంతటా తిరగడం ఎలాగో మీరు తెలుసుకుంటారు. తర్వాతి ఐటెమ్‌కు వెళ్లడానికి మీరు ఒక వేలుతో ఎడమ నుండి కుడి వైపునకు స్వైప్ చేయవచ్చు. తర్వాతి దశకు వెళ్లడానికి ఇప్పుడే దాన్ని ట్రై చేయండి.</translation>
@@ -807,7 +815,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="6637586476836377253">log</translation>
 <translation id="6657128831881431364">ప్రోగ్రెస్ పట్టీ</translation>
 <translation id="6660819301598582123">దేశ భాషలందు తెలుగు లెస్స</translation>
-<translation id="667999046851023355">పత్రం</translation>
+<translation id="667999046851023355">డాక్యుమెంట్‌</translation>
 <translation id="6688209025607531203">నమూనా యేతర హెచ్చరిక</translation>
 <translation id="6689672606256159458">ముదురు గులాబీ నారింజ రంగు</translation>
 <translation id="669617842401078250"><ph name="FILE_NAME" /> డౌన్‌లోడ్ పాజ్ చేయబడింది</translation>
@@ -829,6 +837,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="6815255864998354418">లేత నిమ్మపండు రంగు</translation>
 <translation id="6816066673340002913">లేత బంగారు కడ్డీ రంగు</translation>
 <translation id="6826226459053491773">రెండు వేళ్లతో కిందికి స్వైప్ చేయండి</translation>
+<translation id="6826669432862053130">తర్వాతి చెల్లని ఐటెమ్</translation>
 <translation id="6833103209700200188">ఫుటర్</translation>
 <translation id="6837853484260746864">వాయిస్‌ని ఎంచుకోండి:</translation>
 <translation id="6858047746862060282">ప్రారంభం</translation>
@@ -843,7 +852,6 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="6910969481785184048">ఆన్ చేయడం, ఆఫ్ చేయడం మరియు ఆపివేయడం</translation>
 <translation id="6919104639734799681">పట్టికల లిస్ట్‌ను చూపండి</translation>
 <translation id="692135145298539227">తొలగించు</translation>
-<translation id="6935674530832500465">కిందికి జరపండి</translation>
 <translation id="6945221475159498467">ఎంచుకోండి</translation>
 <translation id="6949846980769640811">మధ్యస్థ నీలి ఆకుపచ్చ రంగు</translation>
 <translation id="6951482098621102657">తర్వాత స్థాయి 5 శీర్షిక లేదు</translation>
@@ -903,6 +911,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="7292195267473691167"><ph name="LOCALE" /> (<ph name="VARIANT" />)</translation>
 <translation id="7308519659008003150">మునుపటి ఫారమ్ ఫీల్డ్ లేదు</translation>
 <translation id="731121099745151312">tritm</translation>
+<translation id="7313717760367325059">సహాయం</translation>
 <translation id="7317017974771324508">పాక్షికంగా ఎంచుకున్నారు</translation>
 <translation id="7322442671176251901">తాకడం ద్వారా పరిశీలించడం</translation>
 <translation id="7344012264516629579">దాటవేసేందుకు వాడే కమాండ్‌లలో లింక్, బటన్ లేదా చెక్-బాక్స్ ద్వారా దాటవేత మొదలైన ఇతర అదనపు దాటవేత కమాండ్‌లు కూడా ఉంటాయి. సెర్చ్ + పీరియడ్‌ను నొక్కడం ద్వారా తెరుచుకునే ChromeVox మెనూలలో దాటవేసే కమాండ్‌ల పూర్తి లిస్ట్‌ను కనుగొనవచ్చు.</translation>
@@ -1019,6 +1028,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="8126386426083591964">మునుపటి స్థాయి 5 శీర్షిక లేదు</translation>
 <translation id="812886159861361726"><ph name="FILE_NAME" /> డౌన్‌లోడ్ ఆపివేయబడింది</translation>
 <translation id="8129445297241948503">పైన సెల్ లేదు</translation>
+<translation id="8132248161074464367">మునుపటి చెల్లని ఐటెమ్</translation>
 <translation id="8138880386467279117">స్పర్శ</translation>
 <translation id="8146613869421949343">తర్వాత, మీరు సెర్చ్ కీ గురించి తెలుసుకుంటారు. ChromeVox కమాండ్‌ల కోసం సెర్చ్ కీ ఇతర కీలతో కలిపి ఉపయోగించబడుతుంది. సెర్చ్ కీ సరిగ్గా ఎడమ షిఫ్ట్ కీ పైనే ఉంటుంది. కొనసాగించడానికి, సెర్చ్ కీని నొక్కండి.</translation>
 <translation id="8158033275290782295">అన్నింటినీ ఎంచుకోండి</translation>
@@ -1028,7 +1038,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="817529114347680055">స్క్రీన్‌ను ఆన్ చేయండి</translation>
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">అడ్డు</translation>
-<translation id="8186185314313222077">పూర్తి స్క్రీన్‌ను టోగుల్ చేస్తుంది</translation>
+<translation id="8186185314313222077">ఫుల్-స్క్రీన్‌ను టోగుల్ చేస్తుంది</translation>
 <translation id="8199231515320852133">ప్రస్తుత సెల్ యొక్క ముఖ్య శీర్షికలను తెలియజేయండి</translation>
 <translation id="8202174735952881587">ఆకాశ నీలం</translation>
 <translation id="820469951249669083">తర్వాతి అడ్డు వరుసకు వెళ్లండి</translation>
@@ -1040,14 +1050,12 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="826825447994856889">పరిచయం</translation>
 <translation id="827266600368092403">ఎంపికను ప్రారంభించండి లేదా ముగించండి</translation>
 <translation id="827422111966801947">నీలిమందు రంగు</translation>
-<translation id="827496561804786391">పైకి జరపండి</translation>
 <translation id="8276439074553447000">మునుపటి ఫోకస్ చేయగల అంశానికి వెళ్లండి</translation>
 <translation id="8279039817939141096">దాని పనితీరును తెలుసుకోవడానికి qwerty కీ, రిఫ్రెష్ చేయదగిన బ్రెయిలీ కీ. లేదా టచ్ సంజ్ఞను నొక్కండి. నిష్క్రమించడానికి wతో కంట్రోల్ కీ, Zతో స్పేస్ కీని నొక్కండి, అలానే రెండు వేళ్ళతో ఎడమకు స్వైప్ చేయండి లేదా ఎస్కేప్‌ను నొక్కండి.</translation>
 <translation id="8283603667300770666">తర్వాతి ఫారమ్ ఫీల్డ్</translation>
 <translation id="8310185481635255431">తర్వాత లింక్ లేదు</translation>
 <translation id="831207808878314375">నిర్వచనం</translation>
 <translation id="8313653172105209786">dir</translation>
-<translation id="8314546933558091113">దేనిని ఎంచుకోవద్దు</translation>
 <translation id="8316881042119029234">పాత జల్తారు రంగు</translation>
 <translation id="8324974933005349667">వచనం నుండి ప్రసంగం సెట్టింగ్‌లను వ్యక్తిగతీకరించండి</translation>
 <translation id="8326783648485765113">పచ్చిక బయలు ఆకుపచ్చ</translation>
@@ -1093,6 +1101,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="8659501358298941449">డ్రాప్-డౌన్ లిస్ట్‌లు</translation>
 <translation id="8666733765751421568"><ph name="TYPE" /> ముగింపు</translation>
 <translation id="867187640362843212">శీర్షిక 5</translation>
+<translation id="8690400660839620419">{COUNT,plural, =1{}other{నెస్ట్ చేయబడిన స్థాయి #}}</translation>
 <translation id="8693391540059827073">నాకు ఇష్టమైన సీజన్</translation>
 <translation id="8696284982970258155">హనీడ్యూ పండు రంగు</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{పైప్ గుర్తు}other{# నిలువు పైప్ గుర్తులు}}</translation>
@@ -1131,6 +1140,7 @@ Chrome బ్రౌజర్ మెనూను తెరవడానికి, 
 <translation id="9014206344398081366">ChromeVox ట్యుటోరియల్</translation>
 <translation id="9040132695316389094">శీర్షిక 1</translation>
 <translation id="9061884144798498064">8 చుక్కలు ఉన్న బ్రెయిలీ పట్టికను ఎంచుకోండి:</translation>
+<translation id="9063946545000394379">మునుపటి అక్షరానికి వెళ్లండి</translation>
 <translation id="9065283790526219006">+పాప్అప్</translation>
 <translation id="9065912140022662363">తర్వాత రేడియో బటన్ లేదు</translation>
 <translation id="9067522039955793016">పేజీ విభజన</translation>

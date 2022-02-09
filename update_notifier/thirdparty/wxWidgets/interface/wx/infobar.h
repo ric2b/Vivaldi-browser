@@ -18,9 +18,10 @@
     higher chance to be noticed by the user but without being annoying.
 
     Info bar may show an icon (on the left), text message and, optionally,
-    buttons allowing the user to react to the information presented. It always
-    has a close button at the right allowing the user to dismiss it so it isn't
-    necessary to provide a button just to close it.
+    buttons allowing the user to react to the information presented. Unless
+    a custom button was added to the info bar, it also has a close button at
+    the right allowing the user to dismiss it so it isn't necessary to provide
+    a button just to close it.
 
     wxInfoBar calls its parent wxWindow::Layout() method and assumes that it
     will change the parent layout appropriately depending on whether the info
@@ -60,8 +61,8 @@
 
     Currently this class is implemented generically (i.e. in the same
     platform-independent way for all ports) and also natively in wxGTK but the
-    native implementation requires a recent -- as of this writing -- GTK+ 2.18
-    version.
+    native implementation requires GTK+ 2.18 version or later (this requirement
+    should be satisfied by any desktop systems currently in use).
 
     @library{wxcore}
     @category{miscwnd}
@@ -130,7 +131,7 @@ public:
         Notice that the generic wxInfoBar implementation handles the button
         events itself and so they are not propagated to the info bar parent and
         you need to either inherit from wxInfoBar and handle them in your
-        derived class or use wxEvtHandler::Connect(), as is done in the dialogs
+        derived class or use wxEvtHandler::Bind(), as is done in the dialogs
         sample, to handle the button events in the parent frame.
 
         @param btnid
@@ -180,6 +181,45 @@ public:
             notification.
      */
     void ShowMessage(const wxString& msg, int flags = wxICON_INFORMATION);
+
+    /**
+        Returns the number of currently shown buttons.
+
+        This is simply the number of calls to AddButton() minus the number
+        of calls to RemoveButton() so far.
+
+        @return The number of currently shown buttons, possibly 0.
+
+        @since 3.1.0
+     */
+    virtual size_t GetButtonCount() const;
+
+    /**
+        Returns the ID of the button at the given position.
+
+        The positions of the buttons are counted in order of their addition.
+
+        @param idx
+            The position of the button in 0 to GetButtonCount() range.
+        @return
+            The ID of the button at the given position or wxID_NONE if it
+            is out of range (this also results in an assertion failure).
+
+        @since 3.1.0
+     */
+    virtual wxWindowID GetButtonId(size_t idx) const;
+
+    /**
+        Returns whether a button with the given ID is currently shown.
+
+        @param btnid
+            ID of the button to check for.
+        @return
+            \true if the button with this ID is currently shown.
+
+        @since 3.1.0
+     */
+    virtual bool HasButtonId(wxWindowID btnid) const;
 
     /**
         @name Generic version customization methods.

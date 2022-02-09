@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/net/proxy_config_monitor.h"
 #include "chrome/browser/net/stub_resolver_config_reader.h"
@@ -167,6 +167,8 @@ class SystemNetworkContextManager {
   static void SetEnableCertificateTransparencyForTesting(
       absl::optional<bool> enabled);
 
+  static bool IsCertificateTransparencyEnabled();
+
   static void set_stub_resolver_config_reader_for_testing(
       StubResolverConfigReader* reader) {
     stub_resolver_config_reader_for_testing_ = reader;
@@ -193,7 +195,7 @@ class SystemNetworkContextManager {
   void UpdateExplicitlyAllowedNetworkPorts();
 
   // The PrefService to retrieve all the pref values.
-  PrefService* local_state_;
+  raw_ptr<PrefService> local_state_;
 
   // This is an instance of the default SSLConfigServiceManager for the current
   // platform and it gets SSL preferences from the BrowserProcess's local_state
@@ -227,6 +229,8 @@ class SystemNetworkContextManager {
 
   StubResolverConfigReader stub_resolver_config_reader_;
   static StubResolverConfigReader* stub_resolver_config_reader_for_testing_;
+
+  static absl::optional<bool> certificate_transparency_enabled_for_testing_;
 };
 
 #endif  // CHROME_BROWSER_NET_SYSTEM_NETWORK_CONTEXT_MANAGER_H_

@@ -4,10 +4,12 @@
 
 #include "chrome/browser/chromeos/extensions/login_screen/login/login_api.h"
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 
+#include "ash/components/settings/cros_settings_names.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
@@ -30,7 +32,6 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -563,9 +564,10 @@ class LoginApiSharedSessionUnittest : public LoginApiUnittest {
               std::move(callback).Run(error2);
             })));
 
-    std::vector<std::unique_ptr<chromeos::CleanupHandler>> cleanup_handlers;
-    cleanup_handlers.emplace_back(std::move(mock_cleanup_handler1));
-    cleanup_handlers.emplace_back(std::move(mock_cleanup_handler2));
+    std::map<std::string, std::unique_ptr<chromeos::CleanupHandler>>
+        cleanup_handlers;
+    cleanup_handlers.insert({"Handler1", std::move(mock_cleanup_handler1)});
+    cleanup_handlers.insert({"Handler2", std::move(mock_cleanup_handler2)});
     chromeos::CleanupManager::Get()->SetCleanupHandlersForTesting(
         std::move(cleanup_handlers));
   }
@@ -574,8 +576,9 @@ class LoginApiSharedSessionUnittest : public LoginApiUnittest {
     std::unique_ptr<chromeos::MockCleanupHandler> mock_cleanup_handler =
         std::make_unique<chromeos::MockCleanupHandler>();
     EXPECT_CALL(*mock_cleanup_handler, Cleanup(_)).Times(0);
-    std::vector<std::unique_ptr<chromeos::CleanupHandler>> cleanup_handlers;
-    cleanup_handlers.emplace_back(std::move(mock_cleanup_handler));
+    std::map<std::string, std::unique_ptr<chromeos::CleanupHandler>>
+        cleanup_handlers;
+    cleanup_handlers.insert({"Handler", std::move(mock_cleanup_handler)});
     chromeos::CleanupManager::Get()->SetCleanupHandlersForTesting(
         std::move(cleanup_handlers));
   }
@@ -649,7 +652,7 @@ TEST_F(LoginApiSharedSessionUnittest, LaunchSharedManagedGuestSession) {
 TEST_F(LoginApiSharedSessionUnittest,
        LaunchSharedManagedGuestSessionRestrictedMGSNotEnabled) {
   GetCrosSettingsHelper()->SetBoolean(
-      chromeos::kDeviceRestrictedManagedGuestSessionEnabled, false);
+      ash::kDeviceRestrictedManagedGuestSessionEnabled, false);
 
   ASSERT_EQ(
       login_api_errors::kNoPermissionToUseApi,
@@ -864,7 +867,7 @@ TEST_F(LoginApiSharedSessionUnittest, EndSharedSessionCleanupError) {
   EXPECT_CALL(*mock_lock_handler_, RequestLockScreen()).WillOnce(Return());
 
   ASSERT_EQ(
-      error1 + "\n" + error2,
+      "Handler1: " + error1 + "\nHandler2: " + error2,
       RunFunctionAndReturnError(new LoginEndSharedSessionFunction(), "[]"));
 }
 
@@ -930,7 +933,7 @@ TEST_F(LoginApiSharedSessionUnittest, EnterSharedSession) {
 TEST_F(LoginApiSharedSessionUnittest,
        EnterSharedSessionRestrictedMGSNotEnabled) {
   GetCrosSettingsHelper()->SetBoolean(
-      chromeos::kDeviceRestrictedManagedGuestSessionEnabled, false);
+      ash::kDeviceRestrictedManagedGuestSessionEnabled, false);
 
   ASSERT_EQ(login_api_errors::kNoPermissionToUseApi,
             RunFunctionAndReturnError(new LoginEnterSharedSessionFunction(),

@@ -52,8 +52,8 @@ struct DownloadReport {
     // About to start the cignature verification
     kVerificationStart,
 
-    // Extracting delta download archive
-    kDeltaExtraction,
+    // Unpacking the downloaded data
+    kUnpacking,
   };
 
   Kind kind = kConnected;

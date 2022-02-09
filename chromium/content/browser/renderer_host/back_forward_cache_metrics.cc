@@ -21,6 +21,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
+#include "ui/accessibility/ax_event.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -282,7 +283,7 @@ void BackForwardCacheMetrics::CollectFeatureUsageFromSubtree(
     RenderFrameHostImpl* rfh,
     const url::Origin& main_frame_origin) {
   blink::scheduler::WebSchedulerTrackedFeatures features =
-      rfh->scheduler_tracked_features();
+      rfh->GetBackForwardCacheDisablingFeatures();
   if (!rfh->GetParent()) {
     main_frame_features_.PutAll(features);
   } else if (rfh->GetLastCommittedOrigin().IsSameOriginWith(
@@ -330,11 +331,17 @@ void BackForwardCacheMetrics::UpdateNotRestoredReasonsForNavigation(
     page_store_result_->No(NotRestoredReason::kBrowsingInstanceNotSwapped);
   }
 
+  TRACE_EVENT("navigation",
+              "BackForwardCacheMetrics::UpdateNotRestoredReasonsForNavigation",
+              ChromeTrackEvent::kBackForwardCacheCanStoreDocumentResult,
+              *(page_store_result_.get()));
+
   // This should not happen, but record this as an 'unknown' reason just in
   // case.
   if (page_store_result_->not_stored_reasons().Empty() &&
       !navigation->IsServedFromBackForwardCache()) {
     page_store_result_->No(NotRestoredReason::kUnknown);
+
     // TODO(altimin): Add a (D)CHECK here, but this code is reached in
     // unittests.
     return;
@@ -424,6 +431,14 @@ void BackForwardCacheMetrics::RecordMetricsForHistoryNavigationCommit(
         "BackForwardCache.HistoryNavigationOutcome."
         "DisallowActivationReason",
         reason);
+  }
+
+  for (const ax::mojom::Event event : page_store_result_->ax_events()) {
+    base::UmaHistogramSparse(
+        "BackForwardCache.HistoryNavigationOutcome."
+        "NotRestoredDueToAccessibility."
+        "AXEventType",
+        static_cast<int>(event));
   }
 
   if (!DidSwapBrowsingInstance()) {

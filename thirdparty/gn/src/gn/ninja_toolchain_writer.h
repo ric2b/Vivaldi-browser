@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "gn/ninja_writer.h"
 #include "gn/path_output.h"
 #include "gn/toolchain.h"
@@ -55,7 +54,8 @@ class NinjaToolchainWriter {
   std::ostream& out_;
   PathOutput path_output_;
 
-  DISALLOW_COPY_AND_ASSIGN(NinjaToolchainWriter);
+  NinjaToolchainWriter(const NinjaToolchainWriter&) = delete;
+  NinjaToolchainWriter& operator=(const NinjaToolchainWriter&) = delete;
 };
 
 #endif  // TOOLS_GN_NINJA_TOOLCHAIN_WRITER_H_

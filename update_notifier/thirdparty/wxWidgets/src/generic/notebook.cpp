@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_NOTEBOOK
 
@@ -48,14 +45,14 @@
 // event table
 // ----------------------------------------------------------------------------
 
-BEGIN_EVENT_TABLE(wxNotebook, wxBookCtrlBase)
+wxBEGIN_EVENT_TABLE(wxNotebook, wxBookCtrlBase)
     EVT_NOTEBOOK_PAGE_CHANGED(wxID_ANY, wxNotebook::OnSelChange)
     EVT_SIZE(wxNotebook::OnSize)
     EVT_PAINT(wxNotebook::OnPaint)
     EVT_MOUSE_EVENTS(wxNotebook::OnMouseEvent)
     EVT_SET_FOCUS(wxNotebook::OnSetFocus)
     EVT_NAVIGATION_KEY(wxNotebook::OnNavigationKey)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ============================================================================
 // implementation
@@ -74,7 +71,7 @@ WX_DECLARE_HASH_MAP(wxNotebookPage*, int, wxPointerHash, wxPointerEqual,
 // This reuses wxTabView to draw the tabs.
 class WXDLLEXPORT wxNotebookTabView: public wxTabView
 {
-DECLARE_DYNAMIC_CLASS(wxNotebookTabView)
+    wxDECLARE_DYNAMIC_CLASS(wxNotebookTabView);
 public:
     wxNotebookTabView(wxNotebook* notebook, long style = wxTAB_STYLE_DRAW_BOX | wxTAB_STYLE_COLOUR_INTERIOR);
     virtual ~wxNotebookTabView(void);
@@ -281,10 +278,10 @@ bool wxNotebook::DeletePage(size_t nPage)
 
     m_tabView->RemoveTab(GetPageId(m_tabView, pPage));
 
-    m_pages.Remove(pPage);
+    m_pages.erase(m_pages.begin() + nPage);
     delete pPage;
 
-    if (m_pages.GetCount() == 0)
+    if (m_pages.empty())
     {
         m_selection = -1;
         m_tabView->SetTabSelection(-1, false);
@@ -330,9 +327,9 @@ wxWindow* wxNotebook::DoRemovePage(size_t nPage)
 
     m_tabView->RemoveTab(GetPageId(m_tabView, pPage));
 
-    m_pages.Remove(pPage);
+    m_pages.erase(m_pages.begin() + nPage);
 
-    if (m_pages.GetCount() == 0)
+    if (m_pages.empty())
     {
       m_selection = -1;
       m_tabView->SetTabSelection(-1, true);
@@ -392,7 +389,7 @@ bool wxNotebook::DeleteAllPages()
     for ( nPage = 0; nPage < nPageCount; nPage++ )
         delete m_pages[nPage];
 
-    m_pages.Clear();
+    m_pages.clear();
 
     return true;
 }
@@ -413,7 +410,7 @@ bool wxNotebook::InsertPage(size_t nPage,
       pPage->Show(false);
 
     // save the pointer to the page
-    m_pages.Insert(pPage, nPage);
+    m_pages.insert(m_pages.begin() + nPage, pPage);
 
     if (bSelect)
     {
@@ -522,7 +519,7 @@ bool wxNotebook::RefreshLayout(bool force)
 
         // fit the notebook page to the tab control's display area
 
-        size_t nCount = m_pages.Count();
+        size_t nCount = m_pages.size();
         for ( size_t nPage = 0; nPage < nCount; nPage++ ) {
             wxNotebookPage *pPage = m_pages[nPage];
             wxRect clientRect = GetAvailableClientSize();
@@ -673,7 +670,7 @@ wxRect wxNotebook::GetAvailableClientSize()
  * wxNotebookTabView
  */
 
-IMPLEMENT_CLASS(wxNotebookTabView, wxTabView)
+wxIMPLEMENT_CLASS(wxNotebookTabView, wxTabView);
 
 wxNotebookTabView::wxNotebookTabView(wxNotebook *notebook, long style)
     : wxTabView(style), m_nextid(1)

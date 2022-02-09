@@ -9,9 +9,8 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/scoped_observation.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/component_updater/component_updater_service.h"
 
 // This class takes care of updating the module list component. A successful

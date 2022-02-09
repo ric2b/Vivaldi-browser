@@ -14,9 +14,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/numformatter.h"
 #include "wx/intl.h"
@@ -122,19 +119,15 @@ wxChar wxNumberFormatter::GetDecimalSeparator()
     {
         const wxString
             s = wxLocale::GetInfo(wxLOCALE_DECIMAL_POINT, wxLOCALE_CAT_NUMBER);
-        if ( s.empty() )
+        if ( s.length() == 1 )
+        {
+            s_decimalSeparator = s[0];
+        }
+        else
         {
             // We really must have something for decimal separator, so fall
             // back to the C locale default.
             s_decimalSeparator = '.';
-        }
-        else
-        {
-            // To the best of my knowledge there are no locales like this.
-            wxASSERT_MSG( s.length() == 1,
-                          "Multi-character decimal separator?" );
-
-            s_decimalSeparator = s[0];
         }
     }
 
@@ -154,11 +147,8 @@ bool wxNumberFormatter::GetThousandsSeparatorIfUsed(wxChar *sep)
     {
         const wxString
             s = wxLocale::GetInfo(wxLOCALE_THOUSANDS_SEP, wxLOCALE_CAT_NUMBER);
-        if ( !s.empty() )
+        if ( s.length() == 1 )
         {
-            wxASSERT_MSG( s.length() == 1,
-                          "Multi-character thousands separator?" );
-
             s_thousandsSeparator = s[0];
         }
         //else: Unlike above it's perfectly fine for the thousands separator to
@@ -207,6 +197,12 @@ wxString wxNumberFormatter::ToString(wxLongLong_t val, int style)
 }
 
 #endif // wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+
+wxString wxNumberFormatter::ToString(wxULongLong_t val, int style)
+{
+    return PostProcessIntString(wxString::Format("%" wxLongLongFmtSpec "u", val),
+                                style);
+}
 
 wxString wxNumberFormatter::ToString(double val, int precision, int style)
 {
@@ -309,6 +305,27 @@ bool wxNumberFormatter::FromString(wxString s, wxLongLong_t *val)
 }
 
 #endif // wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+
+bool wxNumberFormatter::FromString(wxString s, wxULongLong_t *val)
+{
+    RemoveThousandsSeparators(s);
+
+    // wxString::ToULongLong() does accept minus sign for unsigned integers,
+    // consistently with the standard functions behaviour, e.g. strtoul() does
+    // the same thing, but here we really want to accept the "true" unsigned
+    // numbers only, so check for leading minus, possibly preceded by some
+    // whitespace.
+    for ( wxString::const_iterator it = s.begin(); it != s.end(); ++it )
+    {
+        if ( *it == '-' )
+            return false;
+
+        if ( *it != ' ' && *it != '\t' )
+            break;
+    }
+
+    return s.ToULongLong(val);
+}
 
 bool wxNumberFormatter::FromString(wxString s, double *val)
 {

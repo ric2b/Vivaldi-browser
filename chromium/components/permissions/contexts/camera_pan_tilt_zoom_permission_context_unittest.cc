@@ -4,6 +4,7 @@
 
 #include "components/permissions/contexts/camera_pan_tilt_zoom_permission_context.h"
 
+#include "base/memory/raw_ptr.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -41,10 +42,11 @@ class ContentSettingsChangeWaiter : public content_settings::Observer {
         ->RemoveObserver(this);
   }
 
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override {
-    if (content_type == content_type_)
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override {
+    if (content_type_set.Contains(content_type_))
       Proceed();
   }
 
@@ -53,7 +55,7 @@ class ContentSettingsChangeWaiter : public content_settings::Observer {
  private:
   void Proceed() { run_loop_.Quit(); }
 
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
   ContentSettingsType content_type_;
   base::RunLoop run_loop_;
 };
@@ -100,7 +102,8 @@ class CameraPanTiltZoomPermissionContextTests
     HostContentSettingsMap* content_settings =
         permissions::PermissionsClient::Get()->GetSettingsMap(
             browser_context());
-    return content_settings->GetContentSetting(url.GetOrigin(), url.GetOrigin(),
+    return content_settings->GetContentSetting(url.DeprecatedGetOriginAsURL(),
+                                               url.DeprecatedGetOriginAsURL(),
                                                content_settings_type);
   }
 

@@ -21,12 +21,13 @@ LiveTab* LiveTabContext::AddRestoredTab(
     bool pin,
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     const SessionID* tab_id) {
   const std::map<std::string, bool> dummy_page_action_overrides;
   const std::string dummy_ext_data;
   return AddRestoredTab(navigations, tab_index, selected_navigation,
                         extension_app_id, group, group_visual_data, select, pin,
-                        tab_platform_data, user_agent_override, tab_id,
+                        tab_platform_data, user_agent_override, extra_data, tab_id,
                         dummy_page_action_overrides, dummy_ext_data);
 }
 
@@ -41,27 +42,13 @@ LiveTab* LiveTabContext::AddRestoredTab(
     bool pin,
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     const SessionID* tab_id,
     const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
   return AddRestoredTab(navigations, tab_index, selected_navigation,
                         extension_app_id, group, group_visual_data, select, pin,
-                        tab_platform_data, user_agent_override, tab_id);
-}
-
-LiveTab* LiveTabContext::ReplaceRestoredTab(
-    const std::vector<SerializedNavigationEntry>& navigations,
-    absl::optional<tab_groups::TabGroupId> group,
-    int selected_navigation,
-    const std::string& extension_app_id,
-    const PlatformSpecificTabData* tab_platform_data,
-    const sessions::SerializedUserAgentOverride& user_agent_override) {
-  const std::map<std::string, bool> dummy_page_action_overrides;
-  const std::string dummy_ext_data;
-  return ReplaceRestoredTab(navigations, group, selected_navigation,
-                            extension_app_id, tab_platform_data,
-                            user_agent_override, dummy_page_action_overrides,
-                            dummy_ext_data);
+                        tab_platform_data, user_agent_override, extra_data, tab_id);
 }
 
 LiveTab* LiveTabContext::ReplaceRestoredTab(
@@ -71,11 +58,28 @@ LiveTab* LiveTabContext::ReplaceRestoredTab(
     const std::string& extension_app_id,
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data) {
+  const std::map<std::string, bool> dummy_page_action_overrides;
+  const std::string dummy_ext_data;
+  return ReplaceRestoredTab(navigations, group, selected_navigation,
+                            extension_app_id, tab_platform_data,
+                            user_agent_override, extra_data,
+                            dummy_page_action_overrides, dummy_ext_data);
+}
+
+LiveTab* LiveTabContext::ReplaceRestoredTab(
+    const std::vector<SerializedNavigationEntry>& navigations,
+    absl::optional<tab_groups::TabGroupId> group,
+    int selected_navigation,
+    const std::string& extension_app_id,
+    const PlatformSpecificTabData* tab_platform_data,
+    const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, std::string>& extra_data,
     const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
   return ReplaceRestoredTab(navigations, group, selected_navigation,
                             extension_app_id, tab_platform_data,
-                            user_agent_override);
+                            user_agent_override, extra_data);
 }
 
 const std::string& ContentLiveTab::GetExtData() const {

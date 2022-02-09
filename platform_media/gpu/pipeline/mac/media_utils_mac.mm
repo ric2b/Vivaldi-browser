@@ -84,8 +84,8 @@ PlatformVideoConfig GetPlatformVideoConfig(CMFormatDescriptionRef description,
       CMVideoFormatDescriptionGetCleanAperture(description, NO));
 
   video_config.natural_size =
-      CMVideoFormatDescriptionGetPresentationDimensions(
-          description, YES, NO);
+      gfx::Size(CMVideoFormatDescriptionGetPresentationDimensions(
+          description, YES, NO));
 
   // An even width/height makes things easier for YV12 and appears to be the
   // behavior expected by WebKit layout tests.

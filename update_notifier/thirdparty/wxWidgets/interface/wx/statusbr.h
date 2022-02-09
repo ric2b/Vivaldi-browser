@@ -96,10 +96,9 @@ public:
 
     @remarks
     Notice that only the first 127 characters of a string will be shown in
-    status bar fields under pre-XP MSW systems (or even under later systems if
-    a proper manifest indicating that the program uses version 6 of common
-    controls library is not used). This is a limitation of the native control
-    on these platforms.
+    status bar fields under Windows if a proper manifest indicating that the
+    program uses version 6 of common controls library is not used. This is a
+    limitation of the native control on these platforms.
 
     @library{wxcore}
     @category{miscwnd}
@@ -280,7 +279,9 @@ public:
     /**
         Sets the status text for the @a i-th field.
 
-        The given text will replace the current text.
+        The given text will replace the current text. The display of the status
+        bar is updated immediately, so there is no need to call
+        wxWindow::Update() after calling this function.
 
         Note that if PushStatusText() had been called before the new text will
         also replace the last saved value to make sure that the next call to

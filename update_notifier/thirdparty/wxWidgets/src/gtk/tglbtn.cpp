@@ -20,8 +20,9 @@
     #include "wx/button.h"
 #endif
 
-#include <gtk/gtk.h>
 #include "wx/gtk/private.h"
+#include "wx/gtk/private/eventsdisabler.h"
+#include "wx/gtk/private/image.h"
 #include "wx/gtk/private/list.h"
 
 extern bool      g_blockEventsOnDrag;
@@ -46,7 +47,7 @@ wxDEFINE_EVENT( wxEVT_TOGGLEBUTTON, wxCommandEvent );
 // wxBitmapToggleButton
 // ------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxBitmapToggleButton, wxToggleButton)
+wxIMPLEMENT_DYNAMIC_CLASS(wxBitmapToggleButton, wxToggleButton);
 
 bool wxBitmapToggleButton::Create(wxWindow *parent, wxWindowID id,
                             const wxBitmap &bitmap, const wxPoint &pos,
@@ -75,7 +76,7 @@ bool wxBitmapToggleButton::Create(wxWindow *parent, wxWindowID id,
 // wxToggleButton
 // ------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxToggleButton, wxControl)
+wxIMPLEMENT_DYNAMIC_CLASS(wxToggleButton, wxControl);
 
 bool wxToggleButton::Create(wxWindow *parent, wxWindowID id,
                             const wxString &label, const wxPoint &pos,
@@ -103,7 +104,7 @@ bool wxToggleButton::Create(wxWindow *parent, wxWindowID id,
     {
         m_widget = gtk_toggle_button_new();
 
-        GtkWidget *image = gtk_image_new();
+        GtkWidget* image = wxGtkImage::New(this);
         gtk_widget_show(image);
         gtk_container_add(GTK_CONTAINER(m_widget), image);
     }
@@ -145,11 +146,10 @@ void wxToggleButton::SetValue(bool state)
     if (state == GetValue())
         return;
 
-    GTKDisableEvents();
+    wxGtkEventsDisabler<wxToggleButton> noEvents(this);
 
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m_widget), state);
-
-    GTKEnableEvents();
+    GTKUpdateBitmap();
 }
 
 // bool GetValue() const
@@ -217,6 +217,8 @@ void wxToggleButton::DoApplyWidgetStyle(GtkRcStyle *style)
     GtkWidget* child = gtk_bin_get_child(GTK_BIN(m_widget));
     GTKApplyStyle(child, style);
 
+#ifndef __WXGTK4__
+    wxGCC_WARNING_SUPPRESS(deprecated-declarations)
     // for buttons with images, the path to the label is (at least in 2.12)
     // GtkButton -> GtkAlignment -> GtkHBox -> GtkLabel
     if ( GTK_IS_ALIGNMENT(child) )
@@ -231,6 +233,8 @@ void wxToggleButton::DoApplyWidgetStyle(GtkRcStyle *style)
             }
         }
     }
+    wxGCC_WARNING_RESTORE()
+#endif
 }
 
 // Get the "best" size for this control.
@@ -243,7 +247,6 @@ wxSize wxToggleButton::DoGetBestSize() const
         if (ret.x < 80) ret.x = 80;
     }
 
-    CacheBestSize(ret);
     return ret;
 }
 

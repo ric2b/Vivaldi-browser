@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -144,7 +145,7 @@ class ExtensionContextMenuVisibilityApiTest
     params.page_url = frame->GetLastCommittedURL();
 
     // Create context menu.
-    menu_ = std::make_unique<TestRenderViewContextMenu>(frame, params);
+    menu_ = std::make_unique<TestRenderViewContextMenu>(*frame, params);
     menu_->Init();
 
     // Get menu model.
@@ -218,7 +219,7 @@ class ExtensionContextMenuVisibilityApiTest
 
   ProcessManager* process_manager() { return ProcessManager::Get(profile()); }
 
-  const Extension* extension_;
+  raw_ptr<const Extension> extension_;
   std::unique_ptr<TestRenderViewContextMenu> menu_;
   int top_level_index_;
 };

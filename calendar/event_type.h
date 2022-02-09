@@ -42,30 +42,30 @@ enum UpdateEventFields {
   END = 1 << 5,
   ALLDAY = 1 << 6,
   ISRECURRING = 1 << 7,
-  STARTRECURRING = 1 << 8,
-  ENDRECURRING = 1 << 9,
-  LOCATION = 1 << 10,
-  URL = 1 << 11,
-  ETAG = 1 << 12,
-  HREF = 1 << 13,
-  UID = 1 << 14,
-  EVENT_TYPE_ID = 1 << 15,
-  TASK = 1 << 16,
-  COMPLETE = 1 << 17,
-  TRASH = 1 << 18,
-  SEQUENCE = 1 << 19,
-  ICAL = 1 << 20,
-  RRULE = 1 << 21,
-  ORGANIZER = 1 << 22,
-  TIMEZONE = 1 << 23,
-  DUE = 1 << 24,
-  PRIORITY = 1 << 25,
-  STATUS = 1 << 26,
-  PERCENTAGE_COMPLETE = 1 << 27,
-  CATEGORIES = 1 << 28,
-  COMPONENT_CLASS = 1 << 29,
-  ATTACHMENT = 1 << 30,
-  COMPLETED = 1 << 31,
+  LOCATION = 1 << 8,
+  URL = 1 << 9,
+  ETAG = 1 << 10,
+  HREF = 1 << 11,
+  UID = 1 << 12,
+  EVENT_TYPE_ID = 1 << 13,
+  TASK = 1 << 14,
+  COMPLETE = 1 << 15,
+  TRASH = 1 << 16,
+  SEQUENCE = 1 << 17,
+  ICAL = 1 << 18,
+  RRULE = 1 << 19,
+  ORGANIZER = 1 << 20,
+  TIMEZONE = 1 << 21,
+  DUE = 1 << 22,
+  PRIORITY = 1 << 23,
+  STATUS = 1 << 24,
+  PERCENTAGE_COMPLETE = 1 << 25,
+  CATEGORIES = 1 << 26,
+  COMPONENT_CLASS = 1 << 27,
+  ATTACHMENT = 1 << 28,
+  COMPLETED = 1 << 29,
+  SYNC_PENDING = 1 << 30,
+  DELETE_PENDING = 1 << 31,
 };
 
 // EventRow -------------------------------------------------------------------
@@ -91,8 +91,6 @@ class EventRow {
   base::Time end;
   bool all_day;
   bool is_recurring;
-  base::Time start_recurring;
-  base::Time end_recurring;
   std::u16string location;
   std::u16string url;
   RecurrenceExceptionRows recurrence_exceptions;
@@ -123,6 +121,8 @@ class EventRow {
   std::u16string component_class;
   std::u16string attachment;
   base::Time completed;
+  bool sync_pending;
+  bool delete_pending;
   int updateFields;
 
  protected:

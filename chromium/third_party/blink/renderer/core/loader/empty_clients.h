@@ -50,9 +50,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/cursors.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
-#include "third_party/blink/renderer/platform/geometry/float_point.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
-#include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
@@ -60,6 +58,8 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
 #include "v8/include/v8.h"
 
 /*
@@ -92,15 +92,16 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   // ChromeClient implementation.
   WebViewImpl* GetWebView() const override { return nullptr; }
   void ChromeDestroyed() override {}
-  void SetWindowRect(const IntRect&, LocalFrame&) override {}
-  IntRect RootWindowRect(LocalFrame&) override { return IntRect(); }
+  void SetWindowRect(const gfx::Rect&, LocalFrame&) override {}
+  gfx::Rect RootWindowRect(LocalFrame&) override { return gfx::Rect(); }
+  void DidAccessInitialMainDocument() override {}
   void FocusPage() override {}
   void DidFocusPage() override {}
   bool CanTakeFocus(mojom::blink::FocusType) override { return false; }
   void TakeFocus(mojom::blink::FocusType) override {}
   void Show(const blink::LocalFrameToken& opener_frame_token,
             NavigationPolicy navigation_policy,
-            const IntRect& initial_rect,
+            const gfx::Rect& initial_rect,
             bool user_gesture) override {}
   void DidOverscroll(const gfx::Vector2dF&,
                      const gfx::Vector2dF&,
@@ -170,8 +171,8 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void InvalidateContainer() override {}
   void ScheduleAnimation(const LocalFrameView*,
                          base::TimeDelta delay) override {}
-  IntRect ViewportToScreen(const IntRect& r,
-                           const LocalFrameView*) const override {
+  gfx::Rect ViewportToScreen(const gfx::Rect& r,
+                             const LocalFrameView*) const override {
     return r;
   }
   float WindowToViewportScalar(LocalFrame*, const float s) const override {
@@ -183,7 +184,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   const display::ScreenInfos& GetScreenInfos(LocalFrame&) const override {
     return empty_screen_infos_;
   }
-  void ContentsSizeChanged(LocalFrame*, const IntSize&) const override {}
+  void ContentsSizeChanged(LocalFrame*, const gfx::Size&) const override {}
   void ShowMouseOverURL(const HitTestResult&) override {}
   void UpdateTooltipUnderCursor(LocalFrame&,
                                 const String&,
@@ -213,11 +214,6 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void SetEventListenerProperties(LocalFrame*,
                                   cc::EventListenerClass,
                                   cc::EventListenerProperties) override {}
-  cc::EventListenerProperties EventListenerProperties(
-      LocalFrame*,
-      cc::EventListenerClass event_class) const override {
-    return cc::EventListenerProperties::kNone;
-  }
   void SetHasScrollEventHandlers(LocalFrame*, bool) override {}
   void SetNeedsLowLatencyInput(LocalFrame*, bool) override {}
   void SetNeedsUnbufferedInputForDebugger(LocalFrame*, bool) override {}

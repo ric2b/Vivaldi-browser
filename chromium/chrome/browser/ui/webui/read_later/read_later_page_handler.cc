@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
@@ -56,11 +57,14 @@ bool IsActiveTabNTP(Browser* browser) {
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   if (web_contents) {
-    const GURL site_origin = web_contents->GetLastCommittedURL().GetOrigin();
+    const GURL site_origin =
+        web_contents->GetLastCommittedURL().DeprecatedGetOriginAsURL();
     // These are also the NTP urls checked for showing the bookmark bar on the
     // NTP.
-    if (site_origin == GURL(chrome::kChromeUINewTabURL).GetOrigin() ||
-        site_origin == GURL(chrome::kChromeUINewTabPageURL).GetOrigin()) {
+    if (site_origin ==
+            GURL(chrome::kChromeUINewTabURL).DeprecatedGetOriginAsURL() ||
+        site_origin ==
+            GURL(chrome::kChromeUINewTabPageURL).DeprecatedGetOriginAsURL()) {
       return true;
     }
   }
@@ -145,8 +149,8 @@ class ReadLaterItemContextMenu : public ui::SimpleMenuModel,
     kMarkAsUnread,
     kDelete,
   };
-  Browser* const browser_;
-  ReadingListModel* reading_list_model_;
+  const raw_ptr<Browser> browser_;
+  raw_ptr<ReadingListModel> reading_list_model_;
   GURL url_;
 };
 
@@ -167,7 +171,7 @@ ReadLaterPageHandler::ReadLaterPageHandler(
   DCHECK(profile);
 
   reading_list_model_ = ReadingListModelFactory::GetForBrowserContext(profile);
-  reading_list_model_scoped_observation_.Observe(reading_list_model_);
+  reading_list_model_scoped_observation_.Observe(reading_list_model_.get());
 }
 
 ReadLaterPageHandler::~ReadLaterPageHandler() = default;
@@ -265,8 +269,11 @@ void ReadLaterPageHandler::UpdateCurrentPageActionButtonState() {
 
 void ReadLaterPageHandler::ShowUI() {
   auto embedder = read_later_ui_->embedder();
-  if (embedder)
+  if (embedder) {
     embedder->ShowUI();
+    if (!base::FeatureList::IsEnabled(features::kSidePanel))
+      UpdateCurrentPageActionButton();
+  }
 }
 
 void ReadLaterPageHandler::CloseUI() {
@@ -289,7 +296,7 @@ void ReadLaterPageHandler::ReadingListModelBeingDeleted(
     const ReadingListModel* model) {
   DCHECK(model == reading_list_model_);
   DCHECK(reading_list_model_scoped_observation_.IsObservingSource(
-      reading_list_model_));
+      reading_list_model_.get()));
   reading_list_model_scoped_observation_.Reset();
   reading_list_model_ = nullptr;
 }

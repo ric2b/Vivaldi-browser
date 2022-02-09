@@ -10,16 +10,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_SEARCHCTRL
 
 #include "wx/xrc/xh_srchctrl.h"
 #include "wx/srchctrl.h"
 
-IMPLEMENT_DYNAMIC_CLASS(wxSearchCtrlXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSearchCtrlXmlHandler, wxXmlResourceHandler);
 
 wxSearchCtrlXmlHandler::wxSearchCtrlXmlHandler() : wxXmlResourceHandler()
 {
@@ -48,6 +45,10 @@ wxObject *wxSearchCtrlXmlHandler::DoCreateResource()
                  GetName());
 
     SetupWindow(ctrl);
+
+    const wxString& hint = GetText(wxS("hint"));
+    if ( !hint.empty() )
+        ctrl->SetDescriptiveText(hint);
 
     return ctrl;
 }

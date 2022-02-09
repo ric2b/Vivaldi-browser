@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -106,7 +107,7 @@ class CodecImageTest : public testing::Test {
   virtual bool BindsTextureOnUpdate() { return true; }
 
   base::test::TaskEnvironment task_environment_;
-  NiceMock<MockMediaCodecBridge>* codec_;
+  raw_ptr<NiceMock<MockMediaCodecBridge>> codec_;
   std::unique_ptr<CodecWrapper> wrapper_;
   scoped_refptr<NiceMock<MockCodecBufferWaitCoordinator>>
       codec_buffer_wait_coordinator_;
@@ -332,7 +333,8 @@ TEST_F(CodecImageTest, RenderAfterUnusedDoesntCrash) {
 TEST_F(CodecImageTest, CodedSizeVsVisibleSize) {
   const gfx::Size coded_size(128, 128);
   const gfx::Size visible_size(100, 100);
-  auto buffer = CodecOutputBuffer::CreateForTesting(0, visible_size);
+  auto buffer = CodecOutputBuffer::CreateForTesting(
+      0, visible_size, gfx::ColorSpace::CreateSRGB());
   auto buffer_renderer = std::make_unique<CodecOutputBufferRenderer>(
       std::move(buffer), nullptr, /*lock=*/nullptr);
 

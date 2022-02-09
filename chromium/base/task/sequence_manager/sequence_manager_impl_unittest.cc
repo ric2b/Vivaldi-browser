@@ -16,12 +16,12 @@
 #include "base/callback_helpers.h"
 #include "base/cancelable_callback.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/message_loop/message_pump_default.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -41,9 +41,11 @@
 #include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
 #include "base/task/sequence_manager/work_queue.h"
 #include "base/task/sequence_manager/work_queue_sets.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/null_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -258,6 +260,8 @@ class FixtureWithMockMessagePump : public Fixture {
   }
 
   TimeDelta NextPendingTaskDelay() const override {
+    if (pump_->next_wake_up_time().is_max())
+      return TimeDelta::Max();
     return pump_->next_wake_up_time() - mock_tick_clock()->NowTicks();
   }
 
@@ -297,7 +301,7 @@ class FixtureWithMockMessagePump : public Fixture {
   }
 
  private:
-  MockTimeMessagePump* pump_ = nullptr;
+  raw_ptr<MockTimeMessagePump> pump_ = nullptr;
   SimpleTestTickClock mock_clock_;
   CallCountingTickClock call_counting_clock_;
   std::unique_ptr<SequenceManagerForTest> sequence_manager_;
@@ -340,11 +344,9 @@ class SequenceManagerTest : public testing::TestWithParam<TestType>,
       // Advance time if we've run out of immediate work to do.
       if (!sequence_manager()->HasImmediateWork()) {
         LazyNow lazy_now(mock_tick_clock());
-        TimeTicks time =
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now);
-        if (!time.is_max()) {
-          AdvanceMockTickClock(time - lazy_now.Now());
+        auto wake_up = sequence_manager()->GetNextWakeUp();
+        if (wake_up.has_value()) {
+          AdvanceMockTickClock(wake_up->time - lazy_now.Now());
           per_run_time_callback.Run();
         } else {
           break;
@@ -443,6 +445,21 @@ class QueueTimeTaskObserver : public TaskObserver {
 
  private:
   std::vector<TimeTicks> queue_times_;
+};
+
+class ScopedNoWakeUpsForCanceledTasks {
+ public:
+  ScopedNoWakeUpsForCanceledTasks()
+      : scoped_feature_list_(SequenceManagerImpl::kNoWakeUpsForCanceledTasks) {
+    SequenceManagerImpl::MaybeSetNoWakeUpsForCanceledTasks();
+  }
+
+  ~ScopedNoWakeUpsForCanceledTasks() {
+    SequenceManagerImpl::ResetNoWakeUpsForCanceledTasksForTesting();
+  }
+
+ private:
+  test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace
@@ -1659,55 +1676,47 @@ TEST_P(SequenceManagerTest, ThreadCheckAfterTermination) {
   EXPECT_TRUE(queue->task_runner()->RunsTasksInCurrentSequence());
 }
 
-TEST_P(SequenceManagerTest, TimeDomain_GetNextTaskTime) {
+TEST_P(SequenceManagerTest, GetNextWakeUp) {
   auto queues = CreateTaskQueues(2u);
   AdvanceMockTickClock(Microseconds(10000));
   LazyNow lazy_now_1(mock_tick_clock());
 
   // With no delayed tasks.
-  EXPECT_EQ(TimeTicks::Max(),
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now_1));
+  EXPECT_FALSE(sequence_manager()->GetNextWakeUp());
 
   // With a non-delayed task.
   queues[0]->task_runner()->PostTask(FROM_HERE, BindOnce(&NopTask));
-  EXPECT_EQ(TimeTicks::Max(),
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now_1));
+  EXPECT_FALSE(sequence_manager()->GetNextWakeUp());
 
   // With a delayed task.
   TimeDelta expected_delay = Milliseconds(50);
   queues[0]->task_runner()->PostDelayedTask(FROM_HERE, BindOnce(&NopTask),
                                             expected_delay);
   EXPECT_EQ(lazy_now_1.Now() + expected_delay,
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now_1));
+            sequence_manager()->GetNextWakeUp()->time);
 
   // With another delayed task in the same queue with a longer delay.
   queues[0]->task_runner()->PostDelayedTask(FROM_HERE, BindOnce(&NopTask),
                                             Milliseconds(100));
   EXPECT_EQ(lazy_now_1.Now() + expected_delay,
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now_1));
+            sequence_manager()->GetNextWakeUp()->time);
 
   // With another delayed task in the same queue with a shorter delay.
   expected_delay = Milliseconds(20);
   queues[0]->task_runner()->PostDelayedTask(FROM_HERE, BindOnce(&NopTask),
                                             expected_delay);
   EXPECT_EQ(lazy_now_1.Now() + expected_delay,
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now_1));
+            sequence_manager()->GetNextWakeUp()->time);
 
   // With another delayed task in a different queue with a shorter delay.
   expected_delay = Milliseconds(10);
   queues[1]->task_runner()->PostDelayedTask(FROM_HERE, BindOnce(&NopTask),
                                             expected_delay);
   EXPECT_EQ(lazy_now_1.Now() + expected_delay,
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now_1));
+            sequence_manager()->GetNextWakeUp()->time);
 }
 
-TEST_P(SequenceManagerTest, TimeDomain_GetNextTaskTime_MultipleQueues) {
+TEST_P(SequenceManagerTest, GetNextWakeUp_MultipleQueues) {
   auto queues = CreateTaskQueues(3u);
 
   TimeDelta delay1 = Milliseconds(50);
@@ -1722,9 +1731,7 @@ TEST_P(SequenceManagerTest, TimeDomain_GetNextTaskTime_MultipleQueues) {
   queues[0]->task_runner()->PostTask(FROM_HERE, BindOnce(&NopTask));
 
   LazyNow lazy_now(mock_tick_clock());
-  EXPECT_EQ(lazy_now.Now() + delay2,
-            sequence_manager()->GetRealTimeDomain()->GetNextDelayedTaskTime(
-                &lazy_now));
+  EXPECT_EQ(lazy_now.Now() + delay2, sequence_manager()->GetNextWakeUp()->time);
 }
 
 TEST(SequenceManagerWithTaskRunnerTest, DeleteSequenceManagerInsideATask) {
@@ -2128,94 +2135,6 @@ TEST_P(SequenceManagerTest, ShutdownTaskQueueInNestedLoop) {
   // Just make sure that we don't crash.
 }
 
-TEST_P(SequenceManagerTest, TimeDomainsAreIndependant) {
-  auto queues = CreateTaskQueues(2u);
-
-  TimeTicks start_time_ticks = sequence_manager()->NowTicks();
-  std::unique_ptr<MockTimeDomain> domain_a =
-      std::make_unique<MockTimeDomain>(start_time_ticks);
-  std::unique_ptr<MockTimeDomain> domain_b =
-      std::make_unique<MockTimeDomain>(start_time_ticks);
-  sequence_manager()->RegisterTimeDomain(domain_a.get());
-  sequence_manager()->RegisterTimeDomain(domain_b.get());
-  queues[0]->SetTimeDomain(domain_a.get());
-  queues[1]->SetTimeDomain(domain_b.get());
-
-  std::vector<EnqueueOrder> run_order;
-  queues[0]->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 1, &run_order), Milliseconds(10));
-  queues[0]->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 2, &run_order), Milliseconds(20));
-  queues[0]->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 3, &run_order), Milliseconds(30));
-
-  queues[1]->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 4, &run_order), Milliseconds(10));
-  queues[1]->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 5, &run_order), Milliseconds(20));
-  queues[1]->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 6, &run_order), Milliseconds(30));
-
-  domain_b->SetNowTicks(start_time_ticks + Milliseconds(50));
-  sequence_manager()->ScheduleWork();
-
-  RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, ElementsAre(4u, 5u, 6u));
-
-  domain_a->SetNowTicks(start_time_ticks + Milliseconds(50));
-  sequence_manager()->ScheduleWork();
-
-  RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, ElementsAre(4u, 5u, 6u, 1u, 2u, 3u));
-
-  queues[0]->ShutdownTaskQueue();
-  queues[1]->ShutdownTaskQueue();
-
-  sequence_manager()->UnregisterTimeDomain(domain_a.get());
-  sequence_manager()->UnregisterTimeDomain(domain_b.get());
-}
-
-TEST_P(SequenceManagerTest, TimeDomainMigration) {
-  auto queue = CreateTaskQueue();
-
-  TimeTicks start_time_ticks = sequence_manager()->NowTicks();
-  std::unique_ptr<MockTimeDomain> domain_a =
-      std::make_unique<MockTimeDomain>(start_time_ticks);
-  sequence_manager()->RegisterTimeDomain(domain_a.get());
-  queue->SetTimeDomain(domain_a.get());
-
-  std::vector<EnqueueOrder> run_order;
-  queue->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 1, &run_order), Milliseconds(10));
-  queue->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 2, &run_order), Milliseconds(20));
-  queue->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 3, &run_order), Milliseconds(30));
-  queue->task_runner()->PostDelayedTask(
-      FROM_HERE, BindOnce(&TestTask, 4, &run_order), Milliseconds(40));
-
-  domain_a->SetNowTicks(start_time_ticks + Milliseconds(20));
-  sequence_manager()->ScheduleWork();
-  RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, ElementsAre(1u, 2u));
-
-  std::unique_ptr<MockTimeDomain> domain_b =
-      std::make_unique<MockTimeDomain>(start_time_ticks);
-  sequence_manager()->RegisterTimeDomain(domain_b.get());
-  queue->SetTimeDomain(domain_b.get());
-
-  domain_b->SetNowTicks(start_time_ticks + Milliseconds(50));
-  sequence_manager()->ScheduleWork();
-
-  RunLoop().RunUntilIdle();
-  EXPECT_THAT(run_order, ElementsAre(1u, 2u, 3u, 4u));
-
-  queue->ShutdownTaskQueue();
-
-  sequence_manager()->UnregisterTimeDomain(domain_a.get());
-  sequence_manager()->UnregisterTimeDomain(domain_b.get());
-}
-
 TEST_P(SequenceManagerTest, TimeDomainMigrationWithIncomingImmediateTasks) {
   auto queue = CreateTaskQueue();
 
@@ -2224,21 +2143,16 @@ TEST_P(SequenceManagerTest, TimeDomainMigrationWithIncomingImmediateTasks) {
       std::make_unique<MockTimeDomain>(start_time_ticks);
   std::unique_ptr<MockTimeDomain> domain_b =
       std::make_unique<MockTimeDomain>(start_time_ticks);
-  sequence_manager()->RegisterTimeDomain(domain_a.get());
-  sequence_manager()->RegisterTimeDomain(domain_b.get());
 
-  queue->SetTimeDomain(domain_a.get());
+  sequence_manager()->SetTimeDomain(domain_a.get());
   std::vector<EnqueueOrder> run_order;
   queue->task_runner()->PostTask(FROM_HERE, BindOnce(&TestTask, 1, &run_order));
-  queue->SetTimeDomain(domain_b.get());
+  sequence_manager()->SetTimeDomain(domain_b.get());
 
   RunLoop().RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1u));
 
   queue->ShutdownTaskQueue();
-
-  sequence_manager()->UnregisterTimeDomain(domain_a.get());
-  sequence_manager()->UnregisterTimeDomain(domain_b.get());
 }
 
 TEST_P(SequenceManagerTest,
@@ -2248,25 +2162,23 @@ TEST_P(SequenceManagerTest,
   std::vector<EnqueueOrder> run_order;
 
   std::unique_ptr<internal::RealTimeDomain> domain_a =
-      std::make_unique<internal::RealTimeDomain>();
+      std::make_unique<internal::RealTimeDomain>(mock_tick_clock());
   std::unique_ptr<internal::RealTimeDomain> domain_b =
-      std::make_unique<internal::RealTimeDomain>();
-  sequence_manager()->RegisterTimeDomain(domain_a.get());
-  sequence_manager()->RegisterTimeDomain(domain_b.get());
+      std::make_unique<internal::RealTimeDomain>(mock_tick_clock());
 
-  queue->SetTimeDomain(domain_a.get());
+  sequence_manager()->SetTimeDomain(domain_a.get());
   queue->task_runner()->PostDelayedTask(
       FROM_HERE, BindOnce(&TestTask, 1, &run_order), Milliseconds(40));
 
-  queue->SetTimeDomain(domain_b.get());
+  sequence_manager()->SetTimeDomain(domain_b.get());
   queue->task_runner()->PostDelayedTask(
       FROM_HERE, BindOnce(&TestTask, 2, &run_order), Milliseconds(30));
 
-  queue->SetTimeDomain(domain_a.get());
+  sequence_manager()->SetTimeDomain(domain_a.get());
   queue->task_runner()->PostDelayedTask(
       FROM_HERE, BindOnce(&TestTask, 3, &run_order), Milliseconds(20));
 
-  queue->SetTimeDomain(domain_b.get());
+  sequence_manager()->SetTimeDomain(domain_b.get());
   queue->task_runner()->PostDelayedTask(
       FROM_HERE, BindOnce(&TestTask, 4, &run_order), Milliseconds(10));
 
@@ -2274,16 +2186,13 @@ TEST_P(SequenceManagerTest,
   EXPECT_THAT(run_order, ElementsAre(4u, 3u, 2u, 1u));
 
   queue->ShutdownTaskQueue();
-
-  sequence_manager()->UnregisterTimeDomain(domain_a.get());
-  sequence_manager()->UnregisterTimeDomain(domain_b.get());
 }
 
 namespace {
 
 class MockTaskQueueThrottler : public TaskQueue::Throttler {
  public:
-  TaskQueue* task_queue;
+  raw_ptr<TaskQueue> task_queue;
 
   explicit MockTaskQueueThrottler(TaskQueue* task_queue)
       : task_queue(task_queue) {}
@@ -2294,9 +2203,9 @@ class MockTaskQueueThrottler : public TaskQueue::Throttler {
 
   MOCK_METHOD1(GetNextAllowedWakeUp_DesiredWakeUpTime, void(TimeTicks));
 
-  absl::optional<DelayedWakeUp> GetNextAllowedWakeUp(
+  absl::optional<WakeUp> GetNextAllowedWakeUp(
       LazyNow* lazy_now,
-      absl::optional<DelayedWakeUp> next_desired_wake_up,
+      absl::optional<WakeUp> next_desired_wake_up,
       bool has_immediate_work) override {
     if (next_desired_wake_up)
       GetNextAllowedWakeUp_DesiredWakeUpTime(next_desired_wake_up->time);
@@ -2305,13 +2214,12 @@ class MockTaskQueueThrottler : public TaskQueue::Throttler {
     return next_desired_wake_up;
   }
 
-  void SetNextAllowedWakeUp(
-      absl::optional<DelayedWakeUp> next_allowed_wake_up) {
+  void SetNextAllowedWakeUp(absl::optional<WakeUp> next_allowed_wake_up) {
     next_allowed_wake_up_ = next_allowed_wake_up;
   }
 
  private:
-  absl::optional<DelayedWakeUp> next_allowed_wake_up_;
+  absl::optional<WakeUp> next_allowed_wake_up_;
 };
 
 }  // namespace
@@ -2439,7 +2347,7 @@ TEST_P(SequenceManagerTest, TaskQueueThrottler_ResetThrottler) {
   // GetNextAllowedWakeUp should be called when a delayed task is posted on an
   // empty queue.
   throttler.SetNextAllowedWakeUp(
-      base::sequence_manager::DelayedWakeUp{start_time + delay10s});
+      base::sequence_manager::WakeUp{start_time + delay10s});
   EXPECT_CALL(throttler,
               GetNextAllowedWakeUp_DesiredWakeUpTime(start_time + delay1s));
   queue->task_runner()->PostDelayedTask(FROM_HERE, BindOnce(&NopTask), delay1s);
@@ -2515,17 +2423,14 @@ TEST_P(SequenceManagerTest, TaskQueueThrottler_DelayedTaskMultipleQueues) {
 }
 
 TEST_P(SequenceManagerTest, TaskQueueThrottler_DelayedWorkWhichCanRunNow) {
-  // This test checks that when delayed work becomes available
-  // the notification still fires. This usually happens when time advances
-  // and task becomes available in the middle of the scheduling code.
-  // For this test we rely on the fact that notification dispatching code
-  // is the same in all conditions and just change a time domain to
-  // trigger notification.
+  // This test checks that when delayed work becomes available the notification
+  // still fires. This usually happens when time advances and task becomes
+  // available in the middle of the scheduling code. For this test we force
+  // notification dispatching by calling UpdateWakeUp() explicitly.
 
   auto queue = CreateTaskQueue();
 
   TimeDelta delay1s(Seconds(1));
-  TimeDelta delay10s(Seconds(10));
 
   StrictMock<MockTaskQueueThrottler> throttler(queue.get());
   queue->SetThrottler(&throttler);
@@ -2536,14 +2441,11 @@ TEST_P(SequenceManagerTest, TaskQueueThrottler_DelayedWorkWhichCanRunNow) {
   queue->task_runner()->PostDelayedTask(FROM_HERE, BindOnce(&NopTask), delay1s);
   Mock::VerifyAndClearExpectations(&throttler);
 
-  std::unique_ptr<TimeDomain> mock_time_domain =
-      std::make_unique<internal::RealTimeDomain>();
-  sequence_manager()->RegisterTimeDomain(mock_time_domain.get());
-
-  AdvanceMockTickClock(delay10s);
+  AdvanceMockTickClock(Seconds(10));
 
   EXPECT_CALL(throttler, GetNextAllowedWakeUp_DesiredWakeUpTime(_));
-  queue->SetTimeDomain(mock_time_domain.get());
+  LazyNow lazy_now(mock_tick_clock());
+  queue->UpdateWakeUp(&lazy_now);
   Mock::VerifyAndClearExpectations(&throttler);
 
   // Tidy up.
@@ -2565,7 +2467,7 @@ class CancelableTask {
     FAIL();
   }
 
-  const TickClock* clock_;
+  raw_ptr<const TickClock> clock_;
   WeakPtrFactory<CancelableTask> weak_factory_{this};
 };
 
@@ -2638,16 +2540,16 @@ TEST_P(SequenceManagerTest, SweepLastTaskInQueue) {
   sequence_manager()->ReclaimMemory();
 }
 
-TEST_P(SequenceManagerTest, CancelledTaskPostAnother) {
+TEST_P(SequenceManagerTest, CancelledTaskPostAnother_ReclaimMemory) {
   // This check ensures that a task whose destruction causes another task to be
   // posted as a side-effect doesn't cause us to access invalid iterators while
   // sweeping away cancelled tasks.
   auto queue = CreateTaskQueue();
-  bool did_post = false;
+  bool did_destroy = false;
   auto on_destroy = BindLambdaForTesting([&] {
     queue->task_runner()->PostDelayedTask(
         FROM_HERE, BindLambdaForTesting([] {}), base::Seconds(1));
-    did_post = true;
+    did_destroy = true;
   });
 
   DestructionCallback destruction_observer(std::move(on_destroy));
@@ -2660,9 +2562,73 @@ TEST_P(SequenceManagerTest, CancelledTaskPostAnother) {
       base::Seconds(1));
 
   task.weak_factory_.InvalidateWeakPtrs();
-  EXPECT_FALSE(did_post);
+  EXPECT_FALSE(did_destroy);
   sequence_manager()->ReclaimMemory();
-  EXPECT_TRUE(did_post);
+  EXPECT_TRUE(did_destroy);
+}
+
+// Regression test to ensure that posting a new task from the destructor of a
+// canceled task doesn't crash.
+TEST_P(SequenceManagerTest,
+       CancelledTaskPostAnother_MoveReadyDelayedTasksToWorkQueues) {
+  // This check ensures that a task whose destruction causes another task to be
+  // posted as a side-effect doesn't cause us to access invalid iterators while
+  // sweeping away cancelled tasks.
+  auto queue = CreateTaskQueue();
+  bool did_destroy = false;
+  auto on_destroy = BindLambdaForTesting([&] {
+    queue->task_runner()->PostDelayedTask(
+        FROM_HERE, BindLambdaForTesting([] {}), base::Seconds(1));
+    did_destroy = true;
+  });
+
+  DestructionCallback destruction_observer(std::move(on_destroy));
+  CancelableTask task(mock_tick_clock());
+  queue->task_runner()->PostDelayedTask(
+      FROM_HERE,
+      BindOnce(&CancelableTask::FailTask<DestructionCallback>,
+               task.weak_factory_.GetWeakPtr(),
+               std::move(destruction_observer)),
+      base::Seconds(1));
+
+  AdvanceMockTickClock(base::Seconds(1));
+
+  task.weak_factory_.InvalidateWeakPtrs();
+  EXPECT_FALSE(did_destroy);
+  LazyNow lazy_now(mock_tick_clock());
+  sequence_manager()->MoveReadyDelayedTasksToWorkQueues(&lazy_now);
+  EXPECT_TRUE(did_destroy);
+}
+
+TEST_P(SequenceManagerTest,
+       CancelledTaskPostAnother_RemoveAllCanceledDelayedTasksFromFront) {
+  ScopedNoWakeUpsForCanceledTasks scoped_no_wake_ups_for_canceled_tasks;
+
+  // This check ensures that a task whose destruction causes another task to be
+  // posted as a side-effect doesn't cause us to access invalid iterators while
+  // removing canceled tasks from the front of the queues.
+  auto queue = CreateTaskQueue();
+  bool did_destroy = false;
+  auto on_destroy = BindLambdaForTesting([&] {
+    queue->task_runner()->PostDelayedTask(
+        FROM_HERE, BindLambdaForTesting([] {}), base::Seconds(1));
+    did_destroy = true;
+  });
+
+  DestructionCallback destruction_observer(std::move(on_destroy));
+  CancelableTask task(mock_tick_clock());
+  queue->task_runner()->PostDelayedTask(
+      FROM_HERE,
+      BindOnce(&CancelableTask::FailTask<DestructionCallback>,
+               task.weak_factory_.GetWeakPtr(),
+               std::move(destruction_observer)),
+      base::Seconds(1));
+
+  task.weak_factory_.InvalidateWeakPtrs();
+  EXPECT_FALSE(did_destroy);
+  LazyNow lazy_now(mock_tick_clock());
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+  EXPECT_TRUE(did_destroy);
 }
 
 TEST_P(SequenceManagerTest, CancelledImmediateTaskShutsDownQueue) {
@@ -2775,7 +2741,7 @@ class QuadraticTask {
   int count_;
   scoped_refptr<TaskRunner> task_runner_;
   TimeDelta delay_;
-  Fixture* fixture_;
+  raw_ptr<Fixture> fixture_;
   RepeatingCallback<bool()> should_exit_;
 };
 
@@ -2808,7 +2774,7 @@ class LinearTask {
   int count_;
   scoped_refptr<TaskRunner> task_runner_;
   TimeDelta delay_;
-  Fixture* fixture_;
+  raw_ptr<Fixture> fixture_;
   RepeatingCallback<bool()> should_exit_;
 };
 
@@ -3524,6 +3490,85 @@ TEST_P(SequenceManagerTest, GetNextTaskTime_DelayedTaskReady) {
   EXPECT_EQ(TimeTicks(), sequence_manager()->GetNextTaskTime(&lazy_now));
 }
 
+TEST_P(SequenceManagerTest, RemoveAllCanceledDelayedTasksFromFront) {
+  ScopedNoWakeUpsForCanceledTasks scoped_no_wake_ups_for_canceled_tasks;
+
+  auto queue = CreateTaskQueue();
+
+  // Posts a cancelable task.
+  CancelableOnceClosure cancelable_closure(base::BindOnce(&NopTask));
+  constexpr TimeDelta kDelay = Seconds(1);
+  queue->task_runner()->PostDelayedTask(FROM_HERE,
+                                        cancelable_closure.callback(), kDelay);
+
+  // Ensure it is picked to calculate the next task time.
+  LazyNow lazy_now(mock_tick_clock());
+  EXPECT_EQ(lazy_now.Now() + kDelay,
+            sequence_manager()->GetNextTaskTime(&lazy_now));
+
+  // Canceling the task is not sufficient to ensure it is not considered for the
+  // next task time.
+  cancelable_closure.Cancel();
+  EXPECT_EQ(lazy_now.Now() + kDelay,
+            sequence_manager()->GetNextTaskTime(&lazy_now));
+
+  // Removing the canceled task means it can't be considered for the next task
+  // time.
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+  EXPECT_EQ(TimeTicks::Max(), sequence_manager()->GetNextTaskTime(&lazy_now));
+}
+
+TEST_P(SequenceManagerTest,
+       RemoveAllCanceledDelayedTasksFromFront_MultipleQueues) {
+  ScopedNoWakeUpsForCanceledTasks scoped_no_wake_ups_for_canceled_tasks;
+
+  auto queues = CreateTaskQueues(2u);
+
+  // Post a task in each queue such that they would be executed in order
+  // according to their delay.
+  CancelableOnceClosure cancelable_closure_1(base::BindOnce(&NopTask));
+  constexpr TimeDelta kDelay1 = Seconds(1);
+  queues[0]->task_runner()->PostDelayedTask(
+      FROM_HERE, cancelable_closure_1.callback(), kDelay1);
+
+  CancelableOnceClosure cancelable_closure_2(base::BindOnce(&NopTask));
+  constexpr TimeDelta kDelay2 = Seconds(2);
+  queues[1]->task_runner()->PostDelayedTask(
+      FROM_HERE, cancelable_closure_2.callback(), kDelay2);
+
+  // The task from the first queue is picked to calculate the next task time.
+  LazyNow lazy_now(mock_tick_clock());
+  EXPECT_EQ(lazy_now.Now() + kDelay1,
+            sequence_manager()->GetNextTaskTime(&lazy_now));
+
+  // Test that calling RemoveAllCanceledDelayedTasksFromFront() works (and does
+  // nothing) when no task is canceled.
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+  EXPECT_EQ(lazy_now.Now() + kDelay1,
+            sequence_manager()->GetNextTaskTime(&lazy_now));
+
+  // Canceling the first task which comes from the first queue.
+  cancelable_closure_1.Cancel();
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+
+  // Now the only task remaining is the one from the second queue.
+  EXPECT_EQ(lazy_now.Now() + kDelay2,
+            sequence_manager()->GetNextTaskTime(&lazy_now));
+
+  // Cancel the remaining task.
+  cancelable_closure_2.Cancel();
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+
+  // No more valid tasks in any queues.
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+  EXPECT_EQ(TimeTicks::Max(), sequence_manager()->GetNextTaskTime(&lazy_now));
+
+  // Test that calling RemoveAllCanceledDelayedTasksFromFront() works (and does
+  // nothing) when all queues are empty.
+  sequence_manager()->RemoveAllCanceledDelayedTasksFromFront(&lazy_now);
+  EXPECT_EQ(TimeTicks::Max(), sequence_manager()->GetNextTaskTime(&lazy_now));
+}
+
 namespace {
 void MessageLoopTaskWithDelayedQuit(Fixture* fixture,
                                     scoped_refptr<TestTaskQueue> task_queue) {
@@ -3628,18 +3673,7 @@ TEST_P(SequenceManagerTest, DelayedDoWorkNotPostedForDisabledQueue) {
       queue->CreateQueueEnabledVoter();
   voter->SetVoteToEnable(false);
 
-  switch (GetUnderlyingRunnerType()) {
-    case TestType::kMessagePump:
-      EXPECT_EQ(Days(1), NextPendingTaskDelay());
-      break;
-
-    case TestType::kMockTaskRunner:
-      EXPECT_EQ(TimeDelta::Max(), NextPendingTaskDelay());
-      break;
-
-    default:
-      NOTREACHED();
-  }
+  EXPECT_EQ(TimeDelta::Max(), NextPendingTaskDelay());
 
   voter->SetVoteToEnable(true);
   EXPECT_EQ(Milliseconds(1), NextPendingTaskDelay());
@@ -3670,18 +3704,7 @@ TEST_P(SequenceManagerTest, DisablingQueuesChangesDelayTillNextDoWork) {
   EXPECT_EQ(Milliseconds(100), NextPendingTaskDelay());
 
   voter2->SetVoteToEnable(false);
-  switch (GetUnderlyingRunnerType()) {
-    case TestType::kMessagePump:
-      EXPECT_EQ(Days(1), NextPendingTaskDelay());
-      break;
-
-    case TestType::kMockTaskRunner:
-      EXPECT_EQ(TimeDelta::Max(), NextPendingTaskDelay());
-      break;
-
-    default:
-      NOTREACHED();
-  }
+  EXPECT_EQ(TimeDelta::Max(), NextPendingTaskDelay());
 }
 
 TEST_P(SequenceManagerTest, GetNextDesiredWakeUp) {
@@ -3738,12 +3761,11 @@ TEST_P(SequenceManagerTest, SetTimeDomainForDisabledQueue) {
   // We should not get a notification for a disabled queue.
   std::unique_ptr<MockTimeDomain> domain =
       std::make_unique<MockTimeDomain>(sequence_manager()->NowTicks());
-  sequence_manager()->RegisterTimeDomain(domain.get());
-  queue->SetTimeDomain(domain.get());
+  sequence_manager()->SetTimeDomain(domain.get());
 
   // Tidy up.
   queue->ShutdownTaskQueue();
-  sequence_manager()->UnregisterTimeDomain(domain.get());
+  sequence_manager()->ResetTimeDomain();
 }
 
 namespace {
@@ -4224,10 +4246,8 @@ TEST_P(SequenceManagerTest, TaskQueueTaskRunnerDetach) {
   EXPECT_FALSE(queue1->task_runner()->PostTask(FROM_HERE, BindOnce(&NopTask)));
 
   // Create without a sequence manager.
-  std::unique_ptr<TimeDomain> time_domain =
-      std::make_unique<MockTimeDomain>(TimeTicks());
   std::unique_ptr<TaskQueueImpl> queue2 = std::make_unique<TaskQueueImpl>(
-      nullptr, time_domain.get(), TaskQueue::Spec("stub"));
+      nullptr, nullptr, TaskQueue::Spec("stub"));
   scoped_refptr<SingleThreadTaskRunner> task_runner2 =
       queue2->CreateTaskRunner(0);
   EXPECT_FALSE(task_runner2->PostTask(FROM_HERE, BindOnce(&NopTask)));
@@ -4416,8 +4436,8 @@ class PostTaskWhenDeleted {
   std::string name_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   int depth_;
-  std::set<std::string>* tasks_alive_;
-  std::vector<std::string>* tasks_deleted_;
+  raw_ptr<std::set<std::string>> tasks_alive_;
+  raw_ptr<std::vector<std::string>> tasks_deleted_;
 };
 
 void CallbackWithDestructor(std::unique_ptr<PostTaskWhenDeleted> object) {}
@@ -4482,8 +4502,8 @@ class DestructionObserverProbe : public RefCounted<DestructionObserverProbe> {
     *task_destroyed_ = true;
   }
 
-  bool* task_destroyed_;
-  bool* destruction_observer_called_;
+  raw_ptr<bool> task_destroyed_;
+  raw_ptr<bool> destruction_observer_called_;
 };
 
 class SMDestructionObserver : public CurrentThread::DestructionObserver {
@@ -4501,8 +4521,8 @@ class SMDestructionObserver : public CurrentThread::DestructionObserver {
   }
 
  private:
-  bool* task_destroyed_;
-  bool* destruction_observer_called_;
+  raw_ptr<bool> task_destroyed_;
+  raw_ptr<bool> destruction_observer_called_;
   bool task_destroyed_before_message_loop_;
 };
 
@@ -4555,19 +4575,22 @@ class MockTimeDomain : public TimeDomain {
   MockTimeDomain& operator=(const MockTimeDomain&) = delete;
   ~MockTimeDomain() override = default;
 
-  LazyNow CreateLazyNow() const override { return LazyNow(now_); }
-  TimeTicks Now() const override { return now_; }
+  // TickClock:
+  TimeTicks NowTicks() const override { return now_; }
 
-  base::TimeTicks GetNextDelayedTaskTime(
-      sequence_manager::LazyNow* lazy_now) const override {
+  // TimeDomain:
+  TimeTicks GetNextDelayedTaskTime(WakeUp delayed_wakeup,
+                                   LazyNow* lazy_now) const override {
     return TimeTicks();
   }
+  bool MaybeFastForwardToWakeUp(absl::optional<WakeUp> wakeup,
+                                bool quit_when_idle_requested) override {
+    return MaybeFastForwardToWakeUp(quit_when_idle_requested);
+  }
 
-  MOCK_METHOD1(MaybeFastForwardToNextTask, bool(bool quit_when_idle_requested));
+  MOCK_METHOD1(MaybeFastForwardToWakeUp, bool(bool quit_when_idle_requested));
 
   const char* GetName() const override { return "Test"; }
-
-  void SetNextDelayedDoWork(LazyNow* lazy_now, TimeTicks run_time) override {}
 
  private:
   TimeTicks now_;
@@ -4582,25 +4605,25 @@ TEST_P(SequenceManagerTest, OnSystemIdleTimeDomainNotification) {
   auto queue = CreateTaskQueue();
 
   // If we call OnSystemIdle, we expect registered TimeDomains to receive a call
-  // to MaybeFastForwardToNextTask.  If no run loop has requested quit on idle,
+  // to MaybeFastForwardToWakeUp.  If no run loop has requested quit on idle,
   // the parameter passed in should be false.
   StrictMock<MockTimeDomain> mock_time_domain;
-  sequence_manager()->RegisterTimeDomain(&mock_time_domain);
-  EXPECT_CALL(mock_time_domain, MaybeFastForwardToNextTask(false))
+  sequence_manager()->SetTimeDomain(&mock_time_domain);
+  EXPECT_CALL(mock_time_domain, MaybeFastForwardToWakeUp(false))
       .WillOnce(Return(false));
   sequence_manager()->OnSystemIdle();
-  sequence_manager()->UnregisterTimeDomain(&mock_time_domain);
+  sequence_manager()->ResetTimeDomain();
   Mock::VerifyAndClearExpectations(&mock_time_domain);
 
   // However if RunUntilIdle is called it should be true.
   queue->task_runner()->PostTask(
       FROM_HERE, BindLambdaForTesting([&]() {
         StrictMock<MockTimeDomain> mock_time_domain;
-        EXPECT_CALL(mock_time_domain, MaybeFastForwardToNextTask(true))
+        EXPECT_CALL(mock_time_domain, MaybeFastForwardToWakeUp(true))
             .WillOnce(Return(false));
-        sequence_manager()->RegisterTimeDomain(&mock_time_domain);
+        sequence_manager()->SetTimeDomain(&mock_time_domain);
         sequence_manager()->OnSystemIdle();
-        sequence_manager()->UnregisterTimeDomain(&mock_time_domain);
+        sequence_manager()->ResetTimeDomain();
       }));
 
   RunLoop().RunUntilIdle();
@@ -5224,6 +5247,28 @@ TEST_P(SequenceManagerTest, TaskObserverBlockedOrLowPriority_Mix) {
   RunLoop().RunUntilIdle();
 
   sequence_manager()->RemoveTaskObserver(&observer);
+}
+
+TEST_P(SequenceManagerTest, DelayedTaskOrderFromMultipleQueues) {
+  // Regression test for crbug.com/1249857. The 4th task posted below should run
+  // 4th despite being in queues[0].
+  std::vector<EnqueueOrder> run_order;
+  auto queues = CreateTaskQueues(3u);
+
+  queues[0]->task_runner()->PostDelayedTask(
+      FROM_HERE, BindOnce(&TestTask, 1, &run_order), Milliseconds(9));
+  queues[1]->task_runner()->PostDelayedTask(
+      FROM_HERE, BindOnce(&TestTask, 2, &run_order), Milliseconds(10));
+  queues[2]->task_runner()->PostDelayedTask(
+      FROM_HERE, BindOnce(&TestTask, 3, &run_order), Milliseconds(10));
+  queues[0]->task_runner()->PostDelayedTask(
+      FROM_HERE, BindOnce(&TestTask, 4, &run_order), Milliseconds(100));
+
+  // All delayed tasks are now ready, but none have run.
+  AdvanceMockTickClock(Milliseconds(100));
+  RunLoop().RunUntilIdle();
+
+  EXPECT_THAT(run_order, ElementsAre(1u, 2u, 3u, 4u));
 }
 
 }  // namespace internal

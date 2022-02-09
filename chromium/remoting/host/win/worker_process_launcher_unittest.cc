@@ -10,10 +10,10 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_process_information.h"
@@ -24,8 +24,8 @@
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "remoting/base/auto_thread_task_runner.h"
+#include "remoting/host/base/host_exit_codes.h"
 #include "remoting/host/chromoting_messages.h"
-#include "remoting/host/host_exit_codes.h"
 #include "remoting/host/win/launch_process_with_token.h"
 #include "remoting/host/worker_process_ipc_delegate.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -55,6 +55,10 @@ class MockProcessLauncherDelegate : public WorkerProcessLauncher::Delegate {
   // WorkerProcessLauncher::Delegate interface.
   MOCK_METHOD(void, LaunchProcess, (WorkerProcessLauncher*), (override));
   MOCK_METHOD(void, Send, (IPC::Message*), (override));
+  MOCK_METHOD(void,
+              GetRemoteAssociatedInterface,
+              (mojo::GenericPendingAssociatedReceiver),
+              (override));
   MOCK_METHOD(void, CloseChannel, (), (override));
   MOCK_METHOD(void, KillProcess, (), (override));
 };
@@ -186,7 +190,7 @@ class WorkerProcessLauncherTest
   std::unique_ptr<IPC::ChannelProxy> channel_client_;
   std::unique_ptr<IPC::ChannelProxy> channel_server_;
 
-  WorkerProcessLauncher* event_handler_;
+  raw_ptr<WorkerProcessLauncher> event_handler_;
 
   // The worker process launcher.
   std::unique_ptr<WorkerProcessLauncher> launcher_;

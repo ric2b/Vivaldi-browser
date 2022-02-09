@@ -12,51 +12,51 @@
 #define _WX_PEN_H_BASE_
 
 #include "wx/gdiobj.h"
-#include "wx/gdicmn.h"
+#include "wx/peninfobase.h"
 
-enum wxPenStyle
+// Possible values for pen quality.
+enum wxPenQuality
 {
-    wxPENSTYLE_INVALID = -1,
-
-    wxPENSTYLE_SOLID = wxSOLID,
-    wxPENSTYLE_DOT = wxDOT,
-    wxPENSTYLE_LONG_DASH = wxLONG_DASH,
-    wxPENSTYLE_SHORT_DASH = wxSHORT_DASH,
-    wxPENSTYLE_DOT_DASH = wxDOT_DASH,
-    wxPENSTYLE_USER_DASH = wxUSER_DASH,
-
-    wxPENSTYLE_TRANSPARENT = wxTRANSPARENT,
-
-    wxPENSTYLE_STIPPLE_MASK_OPAQUE = wxSTIPPLE_MASK_OPAQUE,
-    wxPENSTYLE_STIPPLE_MASK = wxSTIPPLE_MASK,
-    wxPENSTYLE_STIPPLE = wxSTIPPLE,
-
-    wxPENSTYLE_BDIAGONAL_HATCH = wxHATCHSTYLE_BDIAGONAL,
-    wxPENSTYLE_CROSSDIAG_HATCH = wxHATCHSTYLE_CROSSDIAG,
-    wxPENSTYLE_FDIAGONAL_HATCH = wxHATCHSTYLE_FDIAGONAL,
-    wxPENSTYLE_CROSS_HATCH = wxHATCHSTYLE_CROSS,
-    wxPENSTYLE_HORIZONTAL_HATCH = wxHATCHSTYLE_HORIZONTAL,
-    wxPENSTYLE_VERTICAL_HATCH = wxHATCHSTYLE_VERTICAL,
-    wxPENSTYLE_FIRST_HATCH = wxHATCHSTYLE_FIRST,
-    wxPENSTYLE_LAST_HATCH = wxHATCHSTYLE_LAST
+    wxPEN_QUALITY_DEFAULT,  // Select the appropriate quality automatically.
+    wxPEN_QUALITY_LOW,      // Less good looking but faster.
+    wxPEN_QUALITY_HIGH      // Best looking, at the expense of speed.
 };
 
-enum wxPenJoin
+// ----------------------------------------------------------------------------
+// wxPenInfo contains all parameters describing a wxPen
+// ----------------------------------------------------------------------------
+
+class wxPenInfo : public wxPenInfoBase<wxPenInfo>
 {
-    wxJOIN_INVALID = -1,
+public:
+    explicit wxPenInfo(const wxColour& colour = wxColour(),
+                       int width = 1,
+                       wxPenStyle style = wxPENSTYLE_SOLID)
+        : wxPenInfoBase<wxPenInfo>(colour, style)
+    {
+        m_width = width;
+        m_quality = wxPEN_QUALITY_DEFAULT;
+    }
 
-    wxJOIN_BEVEL = 120,
-    wxJOIN_MITER,
-    wxJOIN_ROUND
-};
+    // Setters
 
-enum wxPenCap
-{
-    wxCAP_INVALID = -1,
+    wxPenInfo& Width(int width)
+        { m_width = width; return *this; }
 
-    wxCAP_ROUND = 130,
-    wxCAP_PROJECTING,
-    wxCAP_BUTT
+    wxPenInfo& Quality(wxPenQuality quality)
+        { m_quality = quality; return *this; }
+    wxPenInfo& LowQuality() { return Quality(wxPEN_QUALITY_LOW); }
+    wxPenInfo& HighQuality() { return Quality(wxPEN_QUALITY_HIGH); }
+
+    // Accessors
+
+    int GetWidth() const { return m_width; }
+
+    wxPenQuality GetQuality() const { return m_quality; }
+
+private:
+    int m_width;
+    wxPenQuality m_quality;
 };
 
 
@@ -74,12 +74,14 @@ public:
     virtual void SetDashes(int nb_dashes, const wxDash *dash) = 0;
     virtual void SetJoin(wxPenJoin join) = 0;
     virtual void SetCap(wxPenCap cap) = 0;
+    virtual void SetQuality(wxPenQuality quality) { wxUnusedVar(quality); }
 
     virtual wxColour GetColour() const = 0;
     virtual wxBitmap *GetStipple() const = 0;
     virtual wxPenStyle GetStyle() const = 0;
     virtual wxPenJoin GetJoin() const = 0;
     virtual wxPenCap GetCap() const = 0;
+    virtual wxPenQuality GetQuality() const { return wxPEN_QUALITY_DEFAULT; }
     virtual int GetWidth() const = 0;
     virtual int GetDashes(wxDash **ptr) const = 0;
 
@@ -109,10 +111,8 @@ public:
     #include "wx/dfb/pen.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/pen.h"
-#elif defined(__WXCOCOA__)
-    #include "wx/cocoa/pen.h"
-#elif defined(__WXPM__)
-    #include "wx/os2/pen.h"
+#elif defined(__WXQT__)
+    #include "wx/qt/pen.h"
 #endif
 
 class WXDLLIMPEXP_CORE wxPenList: public wxGDIObjListBase
@@ -122,14 +122,9 @@ public:
                            int width = 1,
                            wxPenStyle style = wxPENSTYLE_SOLID);
 
-#if FUTURE_WXWIN_COMPATIBILITY_3_0
+    wxDEPRECATED_MSG("use wxPENSTYLE_XXX constants")
     wxPen *FindOrCreatePen(const wxColour& colour, int width, int style)
         { return FindOrCreatePen(colour, width, (wxPenStyle)style); }
-#endif
-#if WXWIN_COMPATIBILITY_2_6
-    wxDEPRECATED( void AddPen(wxPen*) );
-    wxDEPRECATED( void RemovePen(wxPen*) );
-#endif
 };
 
 extern WXDLLIMPEXP_DATA_CORE(wxPenList*)   wxThePenList;
@@ -140,25 +135,17 @@ extern WXDLLIMPEXP_DATA_CORE(wxPenList*)   wxThePenList;
 //
 // to compile without warnings which it would otherwise provoke from some
 // compilers as it compares elements of different enums
-#if FUTURE_WXWIN_COMPATIBILITY_3_0
 
-// Unfortunately some compilers have ambiguity issues when enum comparisons are
-// overloaded so we have to disable the overloads in this case, see
-// wxCOMPILER_NO_OVERLOAD_ON_ENUM definition in wx/platform.h for more details.
-#ifndef wxCOMPILER_NO_OVERLOAD_ON_ENUM
-
+wxDEPRECATED_MSG("use wxPENSTYLE_XXX constants")
 inline bool operator==(wxPenStyle s, wxDeprecatedGUIConstants t)
 {
     return static_cast<int>(s) == static_cast<int>(t);
 }
 
+wxDEPRECATED_MSG("use wxPENSTYLE_XXX constants")
 inline bool operator!=(wxPenStyle s, wxDeprecatedGUIConstants t)
 {
-    return !(s == t);
+    return static_cast<int>(s) != static_cast<int>(t);
 }
-
-#endif // wxCOMPILER_NO_OVERLOAD_ON_ENUM
-
-#endif // FUTURE_WXWIN_COMPATIBILITY_3_0
 
 #endif // _WX_PEN_H_BASE_

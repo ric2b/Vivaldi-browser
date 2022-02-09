@@ -25,6 +25,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
+#include "sandbox/policy/mojom/sandbox.mojom.h"
 #endif  // OS_WIN
 
 namespace content {
@@ -53,7 +54,7 @@ class UtilityProcessHostBrowserTest : public BrowserChildProcessObserver,
 #if defined(OS_WIN)
     if (elevated)
       host->SetSandboxType(
-          sandbox::policy::SandboxType::kNoSandboxAndElevatedPrivileges);
+          sandbox::mojom::Sandbox::kNoSandboxAndElevatedPrivileges);
 #endif
     EXPECT_TRUE(host->Start());
 
@@ -141,9 +142,7 @@ IN_PROC_BROWSER_TEST_F(UtilityProcessHostBrowserTest, LaunchProcessAndCrash) {
 }
 
 #if defined(OS_WIN)
-// Times out. crbug.com/927298.
-IN_PROC_BROWSER_TEST_F(UtilityProcessHostBrowserTest,
-                       DISABLED_LaunchElevatedProcess) {
+IN_PROC_BROWSER_TEST_F(UtilityProcessHostBrowserTest, LaunchElevatedProcess) {
   RunUtilityProcess(true, false);
 }
 

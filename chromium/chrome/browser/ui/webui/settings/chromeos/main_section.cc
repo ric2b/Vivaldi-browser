@@ -162,7 +162,7 @@ void MainSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "isKioskModeActive",
       user_manager::UserManager::Get()->IsLoggedInAsAnyKioskApp());
-  html_source->AddBoolean("isSupervised", profile()->IsSupervised());
+  html_source->AddBoolean("isSupervised", profile()->IsChild());
 
   html_source->AddBoolean(
       "appManagementIntentSettingsEnabled",
@@ -241,13 +241,8 @@ void MainSection::AddChromeOSUserStrings(
 
 std::unique_ptr<PluralStringHandler> MainSection::CreatePluralStringHandler() {
   auto plural_string_handler = std::make_unique<PluralStringHandler>();
-  if (chromeos::features::IsAccountManagementFlowsV2Enabled()) {
-    plural_string_handler->AddLocalizedString("profileLabel",
-                                              IDS_OS_SETTINGS_PROFILE_LABEL_V2);
-  } else {
-    plural_string_handler->AddLocalizedString("profileLabel",
-                                              IDS_OS_SETTINGS_PROFILE_LABEL);
-  }
+  plural_string_handler->AddLocalizedString("profileLabel",
+                                            IDS_OS_SETTINGS_PROFILE_LABEL_V2);
   plural_string_handler->AddLocalizedString(
       "nearbyShareContactVisibilityNumUnreachable",
       IDS_NEARBY_CONTACT_VISIBILITY_NUM_UNREACHABLE);

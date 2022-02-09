@@ -29,9 +29,9 @@ class MyFrame;
 class MyApp: public wxApp
 {
 public:
-    virtual bool OnInit();
-    virtual int OnExit();
-    MyFrame *GetFrame() { return m_frame; };
+    virtual bool OnInit() wxOVERRIDE;
+    virtual int OnExit() wxOVERRIDE;
+    MyFrame *GetFrame() { return m_frame; }
 
 protected:
     MyFrame        *m_frame;
@@ -81,11 +81,11 @@ protected:
 class MyConnection : public MyConnectionBase
 {
 public:
-    virtual bool DoExecute(const void *data, size_t size, wxIPCFormat format);
-    virtual const void *Request(const wxString& item, size_t *size = NULL, wxIPCFormat format = wxIPC_TEXT);
-    virtual bool DoPoke(const wxString& item, const void* data, size_t size, wxIPCFormat format);
-    virtual bool OnAdvise(const wxString& topic, const wxString& item, const void *data, size_t size, wxIPCFormat format);
-    virtual bool OnDisconnect();
+    virtual bool DoExecute(const void *data, size_t size, wxIPCFormat format) wxOVERRIDE;
+    virtual const void *Request(const wxString& item, size_t *size = NULL, wxIPCFormat format = wxIPC_TEXT) wxOVERRIDE;
+    virtual bool DoPoke(const wxString& item, const void* data, size_t size, wxIPCFormat format) wxOVERRIDE;
+    virtual bool OnAdvise(const wxString& topic, const wxString& item, const void *data, size_t size, wxIPCFormat format) wxOVERRIDE;
+    virtual bool OnDisconnect() wxOVERRIDE;
 };
 
 class MyClient: public wxClient
@@ -95,9 +95,9 @@ public:
     ~MyClient();
     bool Connect(const wxString& sHost, const wxString& sService, const wxString& sTopic);
     void Disconnect();
-    wxConnectionBase *OnMakeConnection();
-    bool IsConnected() { return m_connection != NULL; };
-    MyConnection *GetConnection() { return m_connection; };
+    wxConnectionBase *OnMakeConnection() wxOVERRIDE;
+    bool IsConnected() { return m_connection != NULL; }
+    MyConnection *GetConnection() { return m_connection; }
 
 protected:
     MyConnection     *m_connection;

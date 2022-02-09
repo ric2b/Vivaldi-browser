@@ -51,7 +51,7 @@ public:
 
     static wxString MakeString(const int& v) { return wxString::Format(wxT("%d"), v); }
     static wxString MakeString(const long& v) { return wxString::Format(wxT("%ld"), v); }
-    static wxString MakeString(const double& v) { return wxString::Format(wxT("%.2f"), (float) v); }
+    static wxString MakeString(const double& v) { return wxString::Format(wxS("%.2f"), v); }
     static wxString MakeString(const wxString& s) { return s; }
     static wxString MakeString(const wxColour& col) { return wxT("#") + ColourToHexString(col); }
 
@@ -98,10 +98,10 @@ public:
 
     void OutputString(wxOutputStream& stream, const wxString& str);
     void OutputStringEnt(wxOutputStream& stream, const wxString& str);
-    
+
     static void AddString(wxString& str, const int& v) { str << wxString::Format(wxT("%d"), v); }
     static void AddString(wxString& str, const long& v) { str << wxString::Format(wxT("%ld"), v); }
-    static void AddString(wxString& str, const double& v) { str << wxString::Format(wxT("%.2f"), (float) v); }
+    static void AddString(wxString& str, const double& v) { str << wxString::Format(wxS("%.2f"), v); }
     static void AddString(wxString& str, const wxChar* s) { str << s; }
     static void AddString(wxString& str, const wxString& s) { str << s; }
     static void AddString(wxString& str, const wxColour& col) { str << wxT("#") << ColourToHexString(col); }
@@ -119,6 +119,10 @@ public:
 
     /// Create a string containing style attributes
     static wxString AddAttributes(const wxRichTextAttr& attr, bool isPara = false);
+
+    /// Create a string containing style attributes, plus further object 'attributes' (shown, id)
+    static wxString AddAttributes(wxRichTextObject* obj, bool isPara = false);
+
     virtual bool ExportStyleDefinition(wxOutputStream& stream, wxRichTextStyleDefinition* def, int level);
 
     virtual bool WriteProperties(wxOutputStream& stream, const wxRichTextProperties& properties, int level);
@@ -136,6 +140,7 @@ public:
     static void AddAttribute(wxXmlNode* node, const wxString& rootName, const wxTextAttrBorders& borders);
 
     static bool AddAttributes(wxXmlNode* node, wxRichTextAttr& attr, bool isPara = false);
+    static bool AddAttributes(wxXmlNode* node, wxRichTextObject* obj, bool isPara = false);
 
     virtual bool ExportStyleDefinition(wxXmlNode* parent, wxRichTextStyleDefinition* def);
 
@@ -170,7 +175,7 @@ class WXDLLIMPEXP_FWD_XML wxXmlDocument;
 
 class WXDLLIMPEXP_RICHTEXT wxRichTextXMLHandler: public wxRichTextFileHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxRichTextXMLHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxRichTextXMLHandler);
 public:
     wxRichTextXMLHandler(const wxString& name = wxT("XML"), const wxString& ext = wxT("xml"), int type = wxRICHTEXT_TYPE_XML)
         : wxRichTextFileHandler(name, ext, type)
@@ -197,10 +202,10 @@ public:
     virtual wxRichTextObject* CreateObjectForXMLName(wxRichTextObject* parent, const wxString& name) const;
 
     /// Can we save using this handler?
-    virtual bool CanSave() const { return true; }
+    virtual bool CanSave() const wxOVERRIDE { return true; }
 
     /// Can we load using this handler?
-    virtual bool CanLoad() const { return true; }
+    virtual bool CanLoad() const wxOVERRIDE { return true; }
 
     /// Returns the XML helper object, implementing functionality
     /// that can be reused elsewhere.
@@ -221,8 +226,8 @@ public:
 
 protected:
 #if wxUSE_STREAMS
-    virtual bool DoLoadFile(wxRichTextBuffer *buffer, wxInputStream& stream);
-    virtual bool DoSaveFile(wxRichTextBuffer *buffer, wxOutputStream& stream);
+    virtual bool DoLoadFile(wxRichTextBuffer *buffer, wxInputStream& stream) wxOVERRIDE;
+    virtual bool DoSaveFile(wxRichTextBuffer *buffer, wxOutputStream& stream) wxOVERRIDE;
 #endif
 
     wxRichTextXMLHelper m_helper;

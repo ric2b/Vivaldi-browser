@@ -5,12 +5,15 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_SURFACE_IMPL_ON_GPU_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_SURFACE_IMPL_ON_GPU_H_
 
+#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/containers/span.h"
+#include "base/memory/raw_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "base/types/id_type.h"
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -23,6 +26,7 @@
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display_embedder/skia_output_device.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
+#include "components/viz/service/display_embedder/skia_render_copy_results.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -146,7 +150,8 @@ class SkiaOutputSurfaceImplOnGpu
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane&
           output_surface_plane);
   void SwapBuffers(OutputSurfaceFrame frame, bool release_frame_buffer);
-  void ReleaseFrameBuffers(int n);
+  void AllocateFrameBuffers(size_t n);
+  void ReleaseFrameBuffers(size_t n);
 
   void SetDependenciesResolvedTimings(base::TimeTicks task_ready);
   void SetDrawTimings(base::TimeTicks task_ready);
@@ -239,11 +244,27 @@ class SkiaOutputSurfaceImplOnGpu
 
   const scoped_refptr<AsyncReadResultLock> GetAsyncReadResultLock() const;
 
-  void AddAsyncReadResultHelper(AsyncReadResultHelper* helper);
-  void RemoveAsyncReadResultHelper(AsyncReadResultHelper* helper);
+  void AddAsyncReadResultHelperWithLock(AsyncReadResultHelper* helper);
+  void RemoveAsyncReadResultHelperWithLock(AsyncReadResultHelper* helper);
 
  private:
   class DisplayContext;
+
+  struct PlaneAccessData {
+    PlaneAccessData();
+    PlaneAccessData(PlaneAccessData&& other);
+    PlaneAccessData& operator=(PlaneAccessData&& other);
+    ~PlaneAccessData();
+
+    SkISize size;
+    gpu::Mailbox mailbox;
+    std::unique_ptr<gpu::SharedImageRepresentationSkia> representation;
+    std::unique_ptr<gpu::SharedImageRepresentationSkia::ScopedWriteAccess>
+        scoped_write;
+
+    std::vector<GrBackendSemaphore> begin_semaphores;
+    std::vector<GrBackendSemaphore> end_semaphores;
+  };
 
   bool Initialize();
   bool InitializeForGL();
@@ -293,6 +314,60 @@ class SkiaOutputSurfaceImplOnGpu
                       bool is_downscale_or_identity_in_both_dimensions,
                       std::unique_ptr<CopyOutputRequest> request);
 
+  void CopyOutputRGBAInMemory(SkSurface* surface,
+                              copy_output::RenderPassGeometry geometry,
+                              const gfx::ColorSpace& color_space,
+                              const SkIRect& src_rect,
+                              SkSurface::RescaleMode rescale_mode,
+                              bool is_downscale_or_identity_in_both_dimensions,
+                              std::unique_ptr<CopyOutputRequest> request);
+
+  void CopyOutputNV12(SkSurface* surface,
+                      copy_output::RenderPassGeometry geometry,
+                      const gfx::ColorSpace& color_space,
+                      const SkIRect& src_rect,
+                      SkSurface::RescaleMode rescale_mode,
+                      bool is_downscale_or_identity_in_both_dimensions,
+                      std::unique_ptr<CopyOutputRequest> request);
+
+  // Helper for `CopyOutputNV12()` & `CopyOutputRGBA()` methods:
+  std::unique_ptr<gpu::SharedImageRepresentationSkia>
+  CreateSharedImageRepresentationSkia(ResourceFormat resource_format,
+                                      const gfx::Size& size,
+                                      const gfx::ColorSpace& color_space);
+
+  // Helper for `CopyOutputNV12()` & `CopyOutputRGBA()` methods, renders
+  // |surface| into |dest_surface|'s canvas, cropping and scaling the results
+  // appropriately. |source_selection| is the area of the |surface| that will be
+  // rendered to the destination.
+  // |begin_semaphores| will be submitted to the GPU backend prior to issuing
+  // draw calls to the |dest_surface|.
+  // |end_semaphores| will be submitted to the GPU backend alongside the draw
+  // calls to the |dest_surface|.
+  bool RenderSurface(SkSurface* surface,
+                     const SkIRect& source_selection,
+                     absl::optional<SkVector> scaling,
+                     bool is_downscale_or_identity_in_both_dimensions,
+                     SkSurface* dest_surface,
+                     std::vector<GrBackendSemaphore>& begin_semaphores,
+                     std::vector<GrBackendSemaphore>& end_semaphores);
+
+  // Creates surfaces needed to store the data in NV12 format.
+  // |plane_access_datas| will be populated with information needed to access
+  // the NV12 planes.
+  bool CreateSurfacesForNV12Planes(
+      const SkYUVAInfo& yuva_info,
+      const gfx::ColorSpace& color_space,
+      std::array<PlaneAccessData, CopyOutputResult::kNV12MaxPlanes>&
+          plane_access_datas);
+  // Imports surfaces needed to store the data in NV12 format from a blit
+  // request. |plane_access_datas| will be populated with information needed to
+  // access the NV12 planes.
+  bool ImportSurfacesForNV12Planes(
+      const BlitRequest& blit_request,
+      std::array<PlaneAccessData, CopyOutputResult::kNV12MaxPlanes>&
+          plane_access_datas);
+
   // Schedules a task to check if any skia readback requests have completed
   // after a short delay. Will not schedule a task if there is already a
   // scheduled task or no readback requests are pending.
@@ -326,15 +401,15 @@ class SkiaOutputSurfaceImplOnGpu
   // dtors are called first.
   absl::optional<ReleaseCurrent> release_current_last_;
 
-  SkiaOutputSurfaceDependency* const dependency_;
-  gpu::DisplayCompositorMemoryAndTaskControllerOnGpu* shared_gpu_deps_;
+  const raw_ptr<SkiaOutputSurfaceDependency> dependency_;
+  raw_ptr<gpu::DisplayCompositorMemoryAndTaskControllerOnGpu> shared_gpu_deps_;
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info_;
   scoped_refptr<gpu::SyncPointClientState> sync_point_client_state_;
   std::unique_ptr<gpu::SharedImageFactory> shared_image_factory_;
   std::unique_ptr<gpu::SharedImageRepresentationFactory>
       shared_image_representation_factory_;
-  VulkanContextProvider* const vulkan_context_provider_;
-  DawnContextProvider* const dawn_context_provider_;
+  const raw_ptr<VulkanContextProvider> vulkan_context_provider_;
+  const raw_ptr<DawnContextProvider> dawn_context_provider_;
   const RendererSettings renderer_settings_;
 
   // Should only be run on the client thread with PostTaskToClientThread().
@@ -350,6 +425,10 @@ class SkiaOutputSurfaceImplOnGpu
   // release callback from the client, so this vector holds all pending release
   // callbacks so resources can still be cleaned up in the dtor.
   std::vector<std::unique_ptr<ReleaseCallback>> release_on_gpu_callbacks_;
+
+  // Helper, creates a release callback for the passed in |representation|.
+  ReleaseCallback CreateDestroyCopyOutputResourcesOnGpuThreadCallback(
+      std::unique_ptr<gpu::SharedImageRepresentationSkia> representation);
 
 #if defined(USE_OZONE)
   // This should outlive gl_surface_ and vulkan_surface_.
@@ -382,7 +461,7 @@ class SkiaOutputSurfaceImplOnGpu
     void EndAccess();
 
    private:
-    SkiaOutputSurfaceImplOnGpu* const impl_on_gpu_;
+    const raw_ptr<SkiaOutputSurfaceImplOnGpu> impl_on_gpu_;
     base::flat_set<ImageContextImpl*> image_contexts_;
   };
   PromiseImageAccessHelper promise_image_access_helper_{this};

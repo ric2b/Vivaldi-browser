@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ObserverList;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -38,9 +40,14 @@ public abstract class TabModelSelectorBase
 
     private final TabModelFilterFactory mTabModelFilterFactory;
     private int mActiveModelIndex;
+
     private final ObserverList<TabModelSelectorObserver> mObservers = new ObserverList<>();
     private final ObserverList<IncognitoTabModelObserver> mIncognitoObservers =
             new ObserverList<>();
+
+    @Nullable
+    private IncognitoReauthDialogDelegate mIncognitoReauthDialogDelegate;
+
     private boolean mTabStateInitialized;
     private boolean mStartIncognito;
     private boolean mReparentingInProgress;
@@ -131,6 +138,11 @@ public abstract class TabModelSelectorBase
         mActiveModelIndex = newIndex;
         for (TabModelSelectorObserver listener : mObservers) {
             listener.onTabModelSelected(newModel, previousModel);
+        }
+
+        // This should be invoked after all the other observers have been notified.
+        if (mIncognitoReauthDialogDelegate != null) {
+            mIncognitoReauthDialogDelegate.onAfterTabModelSelected(newModel, previousModel);
         }
     }
 
@@ -360,5 +372,11 @@ public abstract class TabModelSelectorBase
         for (IncognitoTabModelObserver observer : mIncognitoObservers) {
             observer.didBecomeEmpty();
         }
+    }
+
+    @Override
+    public void setIncognitoReauthDialogDelegate(
+            IncognitoReauthDialogDelegate incognitoReauthDialogDelegate) {
+        mIncognitoReauthDialogDelegate = incognitoReauthDialogDelegate;
     }
 }

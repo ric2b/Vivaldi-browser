@@ -14,7 +14,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -47,12 +47,15 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
+#include "content/browser/renderer_host/visible_time_request_trigger.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/page_visibility_state.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/aura/aura_window_properties.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
@@ -168,7 +171,7 @@ class RenderWidgetHostViewAura::EventObserverForPopupExit
   }
 
  private:
-  RenderWidgetHostViewAura* rwhva_;
+  raw_ptr<RenderWidgetHostViewAura> rwhva_;
 };
 
 void RenderWidgetHostViewAura::ApplyEventObserverForPopupExit(
@@ -238,7 +241,7 @@ class RenderWidgetHostViewAura::WindowObserver : public aura::WindowObserver {
   }
 
  private:
-  RenderWidgetHostViewAura* view_;
+  raw_ptr<RenderWidgetHostViewAura> view_;
 };
 
 // This class provides functionality to observe the ancestors of the RWHVA for
@@ -287,7 +290,7 @@ class RenderWidgetHostViewAura::WindowAncestorObserver
     ancestors_.clear();
   }
 
-  RenderWidgetHostViewAura* view_;
+  raw_ptr<RenderWidgetHostViewAura> view_;
   std::set<aura::Window*> ancestors_;
 };
 
@@ -313,7 +316,9 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(
 #endif
       device_scale_factor_(0.0f),
       event_handler_(new RenderWidgetHostViewEventHandler(host(), this, this)),
-      frame_sink_id_(host()->GetFrameSinkId()) {
+      frame_sink_id_(host()->GetFrameSinkId()),
+      visibility_(host()->is_hidden() ? Visibility::HIDDEN
+                                      : Visibility::VISIBLE) {
   // CreateDelegatedFrameHostClient() and CreateAuraWindow() assume that the
   // FrameSinkId is valid. RenderWidgetHostImpl::GetFrameSinkId() always returns
   // a valid FrameSinkId.
@@ -426,10 +431,6 @@ void RenderWidgetHostViewAura::InitAsPopup(
       std::make_unique<EventObserverForPopupExit>(this);
 
   device_scale_factor_ = GetDeviceScaleFactor();
-}
-
-void RenderWidgetHostViewAura::Show() {
-  ShowWithVisibility(Visibility::VISIBLE);
 }
 
 void RenderWidgetHostViewAura::Hide() {
@@ -561,23 +562,38 @@ bool RenderWidgetHostViewAura::IsShowing() {
 }
 
 void RenderWidgetHostViewAura::WasUnOccluded() {
+  ShowImpl(PageVisibilityState::kVisible);
+}
+
+void RenderWidgetHostViewAura::ShowImpl(PageVisibilityState page_visibility) {
+  // OnShowWithPageVisibility will not call NotifyHostAndDelegateOnWasShown,
+  // which updates `visibility_`, unless the host is hidden. Make sure no update
+  // is needed.
+  DCHECK(host_->is_hidden() || visibility_ == Visibility::VISIBLE);
+  OnShowWithPageVisibility(PageVisibilityState::kVisible);
+}
+
+void RenderWidgetHostViewAura::NotifyHostAndDelegateOnWasShown(
+    blink::mojom::RecordContentToVisibleTimeRequestPtr tab_switch_start_state) {
   DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
+  DCHECK(host_->is_hidden());
+  DCHECK_NE(visibility_, Visibility::VISIBLE);
 
   const Visibility old_visibility = visibility_;
   visibility_ = Visibility::VISIBLE;
 
-  if (!host_->is_hidden())
-    return;
-
   if (old_visibility == Visibility::OCCLUDED) {
-    SetRecordContentToVisibleTimeRequest(
-        base::TimeTicks::Now(), false /* destination_is_loaded */,
-        false /* show_reason_tab_switching */,
-        true /* show_reason_unoccluded */,
-        false /* show_reason_bfcache_restore */);
+    // Add an unocclusion timing request. If `tab_switch_start_state` is null,
+    // this will return the new request unchanged.
+    tab_switch_start_state = VisibleTimeRequestTrigger::ConsumeAndMergeRequests(
+        std::move(tab_switch_start_state),
+        blink::mojom::RecordContentToVisibleTimeRequest::New(
+            base::TimeTicks::Now(), false /* destination_is_loaded */,
+            false /* show_reason_tab_switching */,
+            true /* show_reason_unoccluded */,
+            false /* show_reason_bfcache_restore */));
   }
 
-  auto tab_switch_start_state = TakeRecordContentToVisibleTimeRequest();
   bool has_saved_frame = delegated_frame_host_->HasSavedFrame();
 
   bool show_reason_bfcache_restore =
@@ -656,6 +672,38 @@ void RenderWidgetHostViewAura::HideImpl() {
 void RenderWidgetHostViewAura::WasOccluded() {
   visibility_ = Visibility::OCCLUDED;
   HideImpl();
+}
+
+void RenderWidgetHostViewAura::RequestPresentationTimeFromHostOrDelegate(
+    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
+  DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
+  DCHECK(!host_->is_hidden());
+  DCHECK_EQ(visibility_, Visibility::VISIBLE);
+  DCHECK(visible_time_request);
+
+  bool has_saved_frame = delegated_frame_host_->HasSavedFrame();
+
+  // No need to check for saved frames for the case of bfcache restore.
+  if (visible_time_request->show_reason_bfcache_restore || !has_saved_frame) {
+    host()->RequestPresentationTimeForNextFrame(visible_time_request.Clone());
+  }
+
+  // If the frame for the renderer is already available, then the
+  // tab-switching time is the presentation time for the browser-compositor.
+  if (has_saved_frame) {
+    delegated_frame_host_->RequestPresentationTimeForNextFrame(
+        std::move(visible_time_request));
+  }
+}
+
+void RenderWidgetHostViewAura::
+    CancelPresentationTimeRequestForHostAndDelegate() {
+  DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
+  DCHECK(!host_->is_hidden());
+  DCHECK_EQ(visibility_, Visibility::VISIBLE);
+
+  host()->CancelPresentationTimeRequest();
+  delegated_frame_host_->CancelPresentationTimeRequest();
 }
 
 bool RenderWidgetHostViewAura::ShouldShowStaleContentOnEviction() {
@@ -745,7 +793,11 @@ void RenderWidgetHostViewAura::RenderProcessGone() {
 }
 
 void RenderWidgetHostViewAura::ShowWithVisibility(
-    Visibility web_contents_visibility) {
+    PageVisibilityState page_visibility) {
+  // Make sure we grab updated ScreenInfos before synchronizing visual
+  // properties, in case they have changed or this is the initial show.
+  UpdateScreenInfo();
+
   // If the viz::LocalSurfaceId is invalid, we may have been evicted,
   // and no other visual properties have since been changed. Allocate a new id
   // and start synchronizing.
@@ -756,9 +808,9 @@ void RenderWidgetHostViewAura::ShowWithVisibility(
   }
 
   window_->Show();
-  WasUnOccluded();
+  ShowImpl(page_visibility);
 #if defined(OS_WIN)
-  if (web_contents_visibility == Visibility::HIDDEN &&
+  if (page_visibility != PageVisibilityState::kVisible &&
       legacy_render_widget_host_HWND_) {
     legacy_render_widget_host_HWND_->Hide();
   }
@@ -772,6 +824,10 @@ void RenderWidgetHostViewAura::Destroy() {
   // destructor is invoked directly from here. So all destruction/cleanup code
   // should happen there, not here.
   in_shutdown_ = true;
+  // Call this here in case any observers need access to `this` before we
+  // destruct the derived class.
+  NotifyObserversAboutShutdown();
+
   if (window_)
     delete window_;
   else
@@ -1317,6 +1373,13 @@ gfx::Rect RenderWidgetHostViewAura::GetCaretBounds() const {
   if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
     return gfx::Rect();
 
+  // Check selection bound first (currently populated only for EditContext)
+  const absl::optional<gfx::Rect> text_selection_bound =
+      text_input_manager_->GetTextSelectionBounds();
+  if (text_selection_bound)
+    return ConvertRectToScreen(text_selection_bound.value());
+
+  // If no selection bound, we fall back to use selection region.
   const TextInputManager::SelectionRegion* region =
       text_input_manager_->GetSelectionRegion();
   gfx::Rect caret_rect = ConvertRectToScreen(
@@ -1649,18 +1712,10 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
   if (!input_handler || fragments.empty())
     return false;
 
-  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
-    return false;
-
   unsigned max_fragment_end = 0;
   std::vector<::ui::ImeTextSpan> ime_text_spans;
   ime_text_spans.reserve(fragments.size());
-  bool conflict_with_spellcheck = false;
   for (auto& fragment : fragments) {
-    if (text_input_manager_->OverlapsWithSpellCheckMarker(fragment.range)) {
-      conflict_with_spellcheck = true;
-      break;
-    }
     ui::ImeTextSpan ui_ime_text_span;
     ui_ime_text_span.type = ui::ImeTextSpan::Type::kGrammarSuggestion;
     ui_ime_text_span.start_offset = fragment.range.start();
@@ -1675,10 +1730,6 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
       max_fragment_end = fragment.range.end();
     }
   }
-
-  if (conflict_with_spellcheck)
-    return false;
-
   input_handler->AddImeTextSpansToExistingText(0, max_fragment_end,
                                                ime_text_spans);
 
@@ -1692,23 +1743,21 @@ void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     absl::optional<gfx::Rect>* control_bounds,
     absl::optional<gfx::Rect>* selection_bounds) {
   if (text_input_manager_) {
-    const ui::mojom::TextInputState* state =
-        text_input_manager_->GetTextInputState();
-    if (state) {
-      if (state->edit_context_control_bounds) {
-        *control_bounds =
-            ConvertRectToScreen(state->edit_context_control_bounds.value());
-        TRACE_EVENT1(
-            "ime",
-            "RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds",
-            "control_bounds_rect", control_bounds->value().ToString());
-      }
-      // Selection bounds are currently populated only for EditContext.
-      // For editable elements we use GetCompositionCharacterBounds.
-      if (state->edit_context_selection_bounds) {
-        *selection_bounds =
-            ConvertRectToScreen(state->edit_context_selection_bounds.value());
-      }
+    const absl::optional<gfx::Rect> text_control_bounds =
+        text_input_manager_->GetTextControlBounds();
+    if (text_control_bounds) {
+      *control_bounds = ConvertRectToScreen(text_control_bounds.value());
+      TRACE_EVENT1(
+          "ime",
+          "RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds",
+          "control_bounds_rect", control_bounds->value().ToString());
+    }
+    // Selection bounds are currently populated only for EditContext.
+    // For editable elements we use GetCompositionCharacterBounds.
+    const absl::optional<gfx::Rect> text_selection_bounds =
+        text_input_manager_->GetTextSelectionBounds();
+    if (text_selection_bounds) {
+      *selection_bounds = ConvertRectToScreen(text_selection_bounds.value());
     }
   }
 }
@@ -1966,6 +2015,10 @@ void RenderWidgetHostViewAura::OnScrollEvent(ui::ScrollEvent* event) {
 
 void RenderWidgetHostViewAura::OnTouchEvent(ui::TouchEvent* event) {
   last_pointer_type_ = event->pointer_details().pointer_type;
+  ui::InputMethod* input_method = GetInputMethod();
+  if (window_ && window_->HasFocus() && input_method) {
+    input_method->OnTouch(event->pointer_details().pointer_type);
+  }
   event_handler_->OnTouchEvent(event);
 }
 
@@ -2311,7 +2364,7 @@ bool RenderWidgetHostViewAura::ShouldVirtualKeyboardOverlayContent() {
   if (!frame)
     return false;
 
-  return frame->ShouldVirtualKeyboardOverlayContent();
+  return frame->GetPage().virtual_keyboard_overlays_content();
 }
 
 void RenderWidgetHostViewAura::NotifyVirtualKeyboardOverlayRect(
@@ -2319,7 +2372,7 @@ void RenderWidgetHostViewAura::NotifyVirtualKeyboardOverlayRect(
   // geometrychange event can only be fired on main frame and not focused frame
   // which could be an iframe.
   RenderFrameHostImpl* frame = host()->frame_tree()->GetMainFrame();
-  if (!frame || !frame->ShouldVirtualKeyboardOverlayContent())
+  if (!frame || !frame->GetPage().virtual_keyboard_overlays_content())
     return;
   gfx::Rect keyboard_root_relative_rect = keyboard_rect;
   if (!keyboard_root_relative_rect.IsEmpty()) {

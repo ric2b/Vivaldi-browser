@@ -108,8 +108,6 @@ public final class ProductionSupportedFlagList {
                             + "security checks."),
             Flag.baseFeature(AwFeatures.WEBVIEW_BROTLI_SUPPORT,
                     "Enables brotli compression support in WebView."),
-            Flag.baseFeature(BlinkFeatures.APP_CACHE,
-                    "Controls AppCache to facilitate testing against future removal."),
             Flag.baseFeature(AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
                     "Only allow extra headers added via loadUrl() to be sent to the same origin "
                             + "as the original request."),
@@ -163,6 +161,8 @@ public final class ProductionSupportedFlagList {
                             + "interact with a payment form."),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_ENABLE_AUGMENTED_PHONE_COUNTRY_CODE,
                     "Enables support for phone code number fields with additional text."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_DISPLACE_REMOVED_FORMS,
+                    "Fixes memory leaks in the renderer- and browser-form caches."),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_USE_UNASSOCIATED_LISTED_ELEMENTS,
                     "Caches unowned listed elements in the document."),
             Flag.baseFeature(FeatureConstants.KEYBOARD_ACCESSORY_PAYMENT_VIRTUAL_CARD_FEATURE,
@@ -181,13 +181,52 @@ public final class ProductionSupportedFlagList {
                     "Enables use selective image inversion to automatically darken page, it will be"
                             + " used when WebView is in dark mode, but website doesn't provide dark"
                             + " style."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_DARK_MODE_MATCH_THEME,
+                    "Set prefers-color-theme according to the app's theme unless the app specifies"
+                            + " FORCE_DARK_OFF or DARK_STRATEGY_USER_AGENT_DARKENING_ONLY."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_FORCE_DARK_MODE_MATCH_THEME,
+                    "Automatically darken page if"
+                            + " WebView is set to FORCE_DARK_AUTO and the app has dark theme"),
             Flag.baseFeature(ContentFeatures.VERIFY_DID_COMMIT_PARAMS,
                     "Enables reporting of browser and renderer navigation inconsistencies on"
                             + "navigations"),
             Flag.baseFeature(ContentFeatures.USER_MEDIA_CAPTURE_ON_FOCUS,
                     "Enables GetUserMedia API will only resolve when the document calling it has"
                             + "focus"),
+            Flag.baseFeature(ContentFeatures.COMPOSITE_BG_COLOR_ANIMATION,
+                    "When enabled, the background-color animation runs on the compositor thread."),
             Flag.baseFeature(AwFeatures.WEBVIEW_USE_METRICS_UPLOAD_SERVICE,
-                    "Upload UMA metrics logs through MetricsUploadService not via GMS-core."),
+                    "Upload UMA metrics logs through MetricsUploadService not via GMS-core"
+                            + " directly."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_LOG_FIRST_PARTY_PAGE_TIME_SPENT,
+                    "Enables logging whether it was a first party page when logging"
+                            + " PageTimeSpent."),
+            Flag.baseFeature(BlinkFeatures.FORCE_MAJOR_VERSION100_IN_USER_AGENT,
+                    "Force the Chrome major version number to 100 in the User-Agent string."),
+            Flag.baseFeature(BlinkFeatures.FORCE_MINOR_VERSION100_IN_USER_AGENT,
+                    "Force the Chrome minor version number to 100 in the User-Agent string."),
+            Flag.baseFeature(NetworkServiceFeatures.URL_LOADER_SYNC_CLIENT,
+                    "Optimizes communication between URLLoader and CorsURLLoader."),
+            Flag.baseFeature(BlinkFeatures.SET_TIMEOUT_WITHOUT_CLAMP,
+                    "Enables faster setTimeout(,0) by removing the 1 ms clamping."),
+            Flag.baseFeature(BlinkFeatures.PAINT_HOLDING_CROSS_ORIGIN,
+                    "Defers the first commit until FCP or timeout for cross-origin navigations."),
+            Flag.baseFeature(BlinkFeatures.EARLY_CODE_CACHE,
+                    "Enables fetching the code cache earlier in navigation."),
+            Flag.baseFeature(ContentFeatures.NAVIGATION_NETWORK_RESPONSE_QUEUE,
+                    "Schedules tasks related to the navigation network responses on a higher "
+                            + "priority task queue."),
+            Flag.baseFeature(ContentFeatures.FONT_MANAGER_EARLY_INIT,
+                    "Whether to initialize the font manager when the renderer starts on a "
+                            + "background thread."),
+            Flag.baseFeature(BlinkFeatures.RTC_DISALLOW_PLAN_B_OUTSIDE_DEPRECATION_TRIAL,
+                    "Makes constructing an RTCPeerConnection with {sdpSemantics:'plan-b'} throw "
+                            + "an exception."),
+            Flag.baseFeature(BlinkFeatures.PREFETCH_ANDROID_FONTS,
+                    "Enables prefetching Android fonts on renderer startup."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_LEGACY_TLS_SUPPORT,
+                    "Whether legacy TLS versions (TLS 1.0/1.1) conections are allowed."),
+            Flag.baseFeature(BlinkFeatures.INITIAL_NAVIGATION_ENTRY,
+                    "Enables creation of initial NavigationEntries on WebContents creation."),
     };
 }

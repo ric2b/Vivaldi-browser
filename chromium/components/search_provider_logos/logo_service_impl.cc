@@ -12,13 +12,12 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
@@ -266,7 +265,7 @@ void LogoServiceImpl::GetLogo(LogoCallbacks callbacks, bool for_webui_ntp) {
     } else {
       doodle_url = template_url->doodle_url();
     }
-    base_url = doodle_url.GetOrigin();
+    base_url = doodle_url.DeprecatedGetOriginAsURL();
   }
 
   if (!logo_url.is_valid() && !doodle_url.is_valid()) {

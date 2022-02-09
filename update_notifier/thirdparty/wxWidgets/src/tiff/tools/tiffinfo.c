@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -43,15 +42,22 @@
 
 #include "tiffiop.h"
 
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 static TIFFErrorHandler old_error_handler = 0;
-static int status = 0;                  /* exit status */
+static int status = EXIT_SUCCESS;       /* exit status */
 static int showdata = 0;		/* show data */
 static int rawdata = 0;			/* show raw/decoded data */
 static int showwords = 0;		/* show data as bytes/words */
 static int readdata = 0;		/* read data in file */
 static int stoponerr = 1;		/* stop on first read error */
 
-static	void usage(void);
+static	void usage(int);
 static	void tiffinfo(TIFF*, uint16, long, int);
 
 static void
@@ -59,7 +65,7 @@ PrivateErrorHandler(const char* module, const char* fmt, va_list ap)
 {
         if (old_error_handler)
                 (*old_error_handler)(module,fmt,ap);
-	status = 1;
+	status = EXIT_FAILURE;
 }
 
 int
@@ -68,13 +74,15 @@ main(int argc, char* argv[])
 	int dirnum = -1, multiplefiles, c;
 	uint16 order = 0;
 	TIFF* tif;
+#if !HAVE_DECL_OPTARG
 	extern int optind;
 	extern char* optarg;
+#endif
 	long flags = 0;
 	uint64 diroff = 0;
 	int chopstrips = 0;		/* disable strip chopping */
 
-	while ((c = getopt(argc, argv, "f:o:cdDSjilmrsvwz0123456789")) != -1)
+	while ((c = getopt(argc, argv, "f:o:cdDSjilmrsvwz0123456789h")) != -1)
 		switch (c) {
 		case '0': case '1': case '2': case '3':
 		case '4': case '5': case '6': case '7':
@@ -83,7 +91,7 @@ main(int argc, char* argv[])
 			break;
 		case 'd':
 			showdata++;
-			/* fall thru... */
+			/* fall through... */
 		case 'D':
 			readdata++;
 			break;
@@ -96,7 +104,7 @@ main(int argc, char* argv[])
 			else if (streq(optarg, "msb2lsb"))
 				order = FILLORDER_MSB2LSB;
 			else
-				usage();
+				usage(EXIT_FAILURE);
 			break;
 		case 'i':
 			stoponerr = 0;
@@ -121,12 +129,15 @@ main(int argc, char* argv[])
 		case 'z':
 			chopstrips = 1;
 			break;
+		case 'h':
+			usage(EXIT_SUCCESS);
+			/*NOTREACHED*/
 		case '?':
-			usage();
+			usage(EXIT_FAILURE);
 			/*NOTREACHED*/
 		}
 	if (optind >= argc)
-		usage();
+		usage(EXIT_FAILURE);
 
 	old_error_handler = TIFFSetErrorHandler(PrivateErrorHandler);
 
@@ -144,7 +155,7 @@ main(int argc, char* argv[])
 					tiffinfo(tif, order, flags, 1);
 			} else {
 				do {
-					toff_t offset;
+					toff_t offset=0;
 
 					tiffinfo(tif, order, flags, 1);
 					if (TIFFGetField(tif, TIFFTAG_EXIFIFD,
@@ -161,7 +172,7 @@ main(int argc, char* argv[])
 	return (status);
 }
 
-char* stuff[] = {
+static const char* stuff[] = {
 "usage: tiffinfo [options] input...",
 "where options are:",
 " -D		read data",
@@ -181,16 +192,15 @@ NULL
 };
 
 static void
-usage(void)
+usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+        fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
-	exit(-1);
+		fprintf(out, "%s\n", stuff[i]);
+	exit(code);
 }
 
 static void
@@ -244,9 +254,9 @@ TIFFReadSeparateStripData(TIFF* tif)
 
 	buf = (unsigned char *)_TIFFmalloc(TIFFStripSize(tif));
 	if (buf) {
-		uint32 row, h;
+		uint32 row, h=0;
 		uint32 rowsperstrip = (uint32)-1;
-		tsample_t s, samplesperpixel;
+		tsample_t s, samplesperpixel=0;
 
 		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
 		TIFFGetField(tif, TIFFTAG_ROWSPERSTRIP, &rowsperstrip);
@@ -291,17 +301,24 @@ void
 TIFFReadContigTileData(TIFF* tif)
 {
 	unsigned char *buf;
-	tsize_t rowsize = TIFFTileRowSize(tif);
+	tmsize_t rowsize = TIFFTileRowSize(tif);
+        tmsize_t tilesize = TIFFTileSize(tif);
 
-	buf = (unsigned char *)_TIFFmalloc(TIFFTileSize(tif));
+	buf = (unsigned char *)_TIFFmalloc(tilesize);
 	if (buf) {
-		uint32 tw, th, w, h;
+		uint32 tw=0, th=0, w=0, h=0;
 		uint32 row, col;
 
 		TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
 		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
 		TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tw);
 		TIFFGetField(tif, TIFFTAG_TILELENGTH, &th);
+                if ( rowsize == 0 || th > (size_t) (tilesize / rowsize) )
+        {
+            fprintf(stderr, "Cannot display data: th * rowsize > tilesize\n");
+            _TIFFfree(buf);
+            return;
+        }
 		for (row = 0; row < h; row += th) {
 			for (col = 0; col < w; col += tw) {
 				if (TIFFReadTile(tif, buf, col, row, 0, 0) < 0) {
@@ -319,19 +336,26 @@ void
 TIFFReadSeparateTileData(TIFF* tif)
 {
 	unsigned char *buf;
-	tsize_t rowsize = TIFFTileRowSize(tif);
+        tmsize_t rowsize = TIFFTileRowSize(tif);
+        tmsize_t tilesize = TIFFTileSize(tif);
 
-	buf = (unsigned char *)_TIFFmalloc(TIFFTileSize(tif));
+	buf = (unsigned char *)_TIFFmalloc(tilesize);
 	if (buf) {
-		uint32 tw, th, w, h;
+		uint32 tw=0, th=0, w=0, h=0;
 		uint32 row, col;
-		tsample_t s, samplesperpixel;
+		tsample_t s, samplesperpixel=0;
 
 		TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
 		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
 		TIFFGetField(tif, TIFFTAG_TILEWIDTH, &tw);
 		TIFFGetField(tif, TIFFTAG_TILELENGTH, &th);
 		TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
+                if ( rowsize == 0 || th > (size_t) (tilesize / rowsize) )
+        {
+            fprintf(stderr, "Cannot display data: th * rowsize > tilesize\n");
+            _TIFFfree(buf);
+            return;
+        }
 		for (row = 0; row < h; row += th) {
 			for (col = 0; col < w; col += tw) {
 				for (s = 0; s < samplesperpixel; s++) {
@@ -392,15 +416,15 @@ ShowRawWords(uint16* pp, uint32 n)
 	putchar('\n');
 }
 
-void
-TIFFReadRawData(TIFF* tif, int bitrev)
+static void
+TIFFReadRawDataStriped(TIFF* tif, int bitrev)
 {
 	tstrip_t nstrips = TIFFNumberOfStrips(tif);
-	const char* what = TIFFIsTiled(tif) ? "Tile" : "Strip";
-	uint64* stripbc;
+	const char* what = "Strip";
+	uint64* stripbc=NULL;
 
 	TIFFGetField(tif, TIFFTAG_STRIPBYTECOUNTS, &stripbc);
-	if (nstrips > 0) {
+	if (stripbc != NULL && nstrips > 0) {
 		uint32 bufsize = (uint32) stripbc[0];
 		tdata_t buf = _TIFFmalloc(bufsize);
 		tstrip_t s;
@@ -437,6 +461,66 @@ TIFFReadRawData(TIFF* tif, int bitrev)
 		}
 		if (buf != NULL)
 			_TIFFfree(buf);
+	}
+}
+
+static void
+TIFFReadRawDataTiled(TIFF* tif, int bitrev)
+{
+	const char* what = "Tile";
+	uint32 ntiles = TIFFNumberOfTiles(tif);
+	uint64 *tilebc;
+
+	TIFFGetField(tif, TIFFTAG_TILEBYTECOUNTS, &tilebc);
+	if (tilebc != NULL && ntiles > 0) {
+		uint64 bufsize = 0;
+		tdata_t buf = NULL;
+		uint32 t;
+
+		for (t = 0; t < ntiles; t++) {
+			if (buf == NULL || tilebc[t] > bufsize) {
+				buf = _TIFFrealloc(buf, (tmsize_t)tilebc[t]);
+				bufsize = tilebc[t];
+			}
+			if (buf == NULL) {
+				fprintf(stderr,
+				   "Cannot allocate buffer to read tile %lu\n",
+				    (unsigned long) t);
+				break;
+			}
+			if (TIFFReadRawTile(tif, t, buf, (tmsize_t)tilebc[t]) < 0) {
+				fprintf(stderr, "Error reading tile %lu\n",
+				    (unsigned long) t);
+				if (stoponerr)
+					break;
+			} else if (showdata) {
+				if (bitrev) {
+					TIFFReverseBits(buf, (tmsize_t)tilebc[t]);
+					printf("%s %lu: (bit reversed)\n ",
+					    what, (unsigned long) t);
+				} else {
+					printf("%s %lu:\n ", what,
+					    (unsigned long) t);
+				}
+				if (showwords) {
+					ShowRawWords((uint16*) buf, (uint32)(tilebc[t]>>1));
+				} else {
+					ShowRawBytes((unsigned char*) buf, (uint32) tilebc[t]);
+				}
+			}
+		}
+		if (buf != NULL)
+			_TIFFfree(buf);
+	}
+}
+
+void
+TIFFReadRawData(TIFF* tif, int bitrev)
+{
+	if (TIFFIsTiled(tif)) {
+		TIFFReadRawDataTiled(tif, bitrev);
+	} else {
+		TIFFReadRawDataStriped(tif, bitrev);
 	}
 }
 

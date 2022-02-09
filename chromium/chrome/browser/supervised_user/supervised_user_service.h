@@ -10,11 +10,10 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/supervised_user/supervised_user_denylist.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "chrome/browser/supervised_user/supervised_users.h"
+#include "chrome/browser/supervised_user/web_approvals_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/sync/driver/sync_type_preference_provider.h"
@@ -39,7 +39,6 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #endif  // !defined(OS_ANDROID)
 
-class PermissionRequestCreator;
 class PrefService;
 class Profile;
 class SupervisedUserServiceObserver;
@@ -79,8 +78,6 @@ class SupervisedUserService : public KeyedService,
 #endif
                               public SupervisedUserURLFilter::Observer {
  public:
-  using SuccessCallback = base::OnceCallback<void(bool)>;
-
   class Delegate {
    public:
     virtual ~Delegate() {}
@@ -126,6 +123,10 @@ class SupervisedUserService : public KeyedService,
 
   static base::FilePath GetDenylistPathForTesting(bool isOldPath);
 
+  WebApprovalsManager& web_approvals_manager() {
+    return web_approvals_manager_;
+  }
+
   // Initializes this object.
   void Init();
 
@@ -135,13 +136,6 @@ class SupervisedUserService : public KeyedService,
   // the history view. Both this method and the returned filter may only be used
   // on the UI thread.
   SupervisedUserURLFilter* GetURLFilter();
-
-  // Whether the user can request to get access to blocked URLs or to new
-  // extensions.
-  bool AccessRequestsEnabled();
-
-  // Adds an access request for the given URL.
-  void AddURLAccessRequest(const GURL& url, SuccessCallback callback);
 
   // Get the string used to identify an extension install or update request.
   // Public for testing.
@@ -176,8 +170,8 @@ class SupervisedUserService : public KeyedService,
 
   static std::string GetEduCoexistenceLoginUrl();
 
-  // Returns true if the user is a type of Family Link Child account,
-  // but will not return true for a Legacy Supervised user (or non child users).
+  // Returns true if the user is a type of Family Link supervised account, this
+  // includes Unicorn, Geller, and Griffin accounts.
   bool IsChild() const;
 
   bool IsSupervisedUserExtensionInstallEnabled() const;
@@ -188,9 +182,6 @@ class SupervisedUserService : public KeyedService,
 
   void AddObserver(SupervisedUserServiceObserver* observer);
   void RemoveObserver(SupervisedUserServiceObserver* observer);
-
-  void AddPermissionRequestCreator(
-      std::unique_ptr<PermissionRequestCreator> creator);
 
   // ProfileKeyedService override:
   void Shutdown() override;
@@ -214,9 +205,6 @@ class SupervisedUserService : public KeyedService,
     signout_required_after_supervision_enabled_ = true;
   }
 #endif  // !defined(OS_ANDROID)
-
-  void SetPrimaryPermissionCreatorForTest(
-      std::unique_ptr<PermissionRequestCreator> permission_creator);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Updates the set of approved extensions to add approval for |extension|.
@@ -257,9 +245,6 @@ class SupervisedUserService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(
       SupervisedUserServiceExtensionTest,
       ExtensionManagementPolicyProviderWithSUInitiatedInstalls);
-
-  using CreatePermissionRequestCallback =
-      base::RepeatingCallback<void(PermissionRequestCreator*, SuccessCallback)>;
 
   // Use |SupervisedUserServiceFactory::GetForProfile(..)| to get
   // an instance of this service.
@@ -339,17 +324,6 @@ class SupervisedUserService : public KeyedService,
   // Returns the PrefService associated with |profile_|.
   PrefService* GetPrefService();
 
-  size_t FindEnabledPermissionRequestCreator(size_t start);
-  void AddPermissionRequestInternal(
-      const CreatePermissionRequestCallback& create_request,
-      SuccessCallback callback,
-      size_t index);
-  void OnPermissionRequestIssued(
-      const CreatePermissionRequestCallback& create_request,
-      SuccessCallback callback,
-      size_t index,
-      bool success);
-
   void OnSupervisedUserIdChanged();
 
   void OnDefaultFilteringBehaviorChanged();
@@ -393,11 +367,11 @@ class SupervisedUserService : public KeyedService,
   void UpdateManualURLs();
 
   // Owns us via the KeyedService mechanism.
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
 
   bool active_;
 
-  Delegate* delegate_;
+  raw_ptr<Delegate> delegate_;
 
   PrefChangeRegistrar pref_change_registrar_;
 
@@ -424,8 +398,8 @@ class SupervisedUserService : public KeyedService,
   SupervisedUserDenylist denylist_;
   std::unique_ptr<FileDownloader> denylist_downloader_;
 
-  // Used to create permission requests.
-  std::vector<std::unique_ptr<PermissionRequestCreator>> permissions_creators_;
+  // Manages local and remote web approvals.
+  WebApprovalsManager web_approvals_manager_;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   base::ScopedObservation<extensions::ExtensionRegistry,

@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -15,6 +14,11 @@
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+// TODO(https://crbug.com/1164001): remove when GeolocationHandler move to ash.
+namespace ash {
+class SimpleGeolocationWirelessTest;
+}  // namespace ash
 
 namespace chromeos {
 
@@ -62,7 +66,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) GeolocationHandler
  private:
   friend class NetworkHandler;
   friend class GeolocationHandlerTest;
-  friend class SimpleGeolocationWirelessTest;
+  friend class ash::SimpleGeolocationWirelessTest;
 
   GeolocationHandler();
 
@@ -97,5 +101,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) GeolocationHandler
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when move to ash.
+namespace ash {
+using ::chromeos::GeolocationHandler;
+}  // namespace ash
 
 #endif  // CHROMEOS_NETWORK_GEOLOCATION_HANDLER_H_

@@ -14,42 +14,54 @@
 #include "wx/gdicmn.h"
 #include "wx/dialog.h"
 
-#define wxID_ADD_CUSTOM     3000
-
 #if wxUSE_SLIDER
-
-    #define wxID_RED_SLIDER     3001
-    #define wxID_GREEN_SLIDER   3002
-    #define wxID_BLUE_SLIDER    3003
-
     class WXDLLIMPEXP_FWD_CORE wxSlider;
-
 #endif // wxUSE_SLIDER
+
+// Preview with opacity is possible only if wxGCDC and wxStaticBitmap are
+// available and currently it only works in wxOSX and wxMSW as it uses wxBitmap
+// UseAlpha() and HasAlpha() methods which only these ports provide.
+#if ((wxUSE_GRAPHICS_CONTEXT && wxUSE_STATBMP) && \
+     (defined(__WXMSW__) || defined(__WXOSX__)))
+    #define wxCLRDLGG_USE_PREVIEW_WITH_ALPHA 1
+#else
+    #define wxCLRDLGG_USE_PREVIEW_WITH_ALPHA 0
+#endif
+
+#if wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
+class wxStaticBitmap;
+#endif // wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
 
 class WXDLLIMPEXP_CORE wxGenericColourDialog : public wxDialog
 {
 public:
     wxGenericColourDialog();
     wxGenericColourDialog(wxWindow *parent,
-                          wxColourData *data = NULL);
+                          const wxColourData *data = NULL);
     virtual ~wxGenericColourDialog();
 
-    bool Create(wxWindow *parent, wxColourData *data = NULL);
+    bool Create(wxWindow *parent, const wxColourData *data = NULL);
 
     wxColourData &GetColourData() { return m_colourData; }
 
-    virtual int ShowModal();
+    virtual int ShowModal() wxOVERRIDE;
 
     // Internal functions
     void OnMouseEvent(wxMouseEvent& event);
     void OnPaint(wxPaintEvent& event);
+    void OnDPIChanged(wxDPIChangedEvent& event);
+#if wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
+    void OnCustomColourMouseClick(wxMouseEvent& event);
+#endif // wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
 
     virtual void CalculateMeasurements();
     virtual void CreateWidgets();
     virtual void InitializeColours();
 
     virtual void PaintBasicColours(wxDC& dc);
-    virtual void PaintCustomColours(wxDC& dc);
+#if !wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
+    virtual void PaintCustomColours(wxDC& dc, int clrIndex = -1);
+#endif // !wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
     virtual void PaintCustomColour(wxDC& dc);
     virtual void PaintHighlight(wxDC& dc, bool draw);
 
@@ -62,9 +74,15 @@ public:
     void OnRedSlider(wxCommandEvent& event);
     void OnGreenSlider(wxCommandEvent& event);
     void OnBlueSlider(wxCommandEvent& event);
+    void OnAlphaSlider(wxCommandEvent& event);
 #endif // wxUSE_SLIDER
 
     void OnCloseWindow(wxCloseEvent& event);
+
+#if wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
+    virtual void CreateCustomBitmaps();
+    void DoPreviewBitmap(wxBitmap& bmp, const wxColour& colour);
+#endif // wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
 
 protected:
     wxColourData m_colourData;
@@ -75,10 +93,7 @@ protected:
     wxRect m_singleCustomColourRect;
 
     // Size of each colour rectangle
-    wxPoint m_smallRectangleSize;
-
-    // For single customizable colour
-    wxPoint m_customRectangleSize;
+    wxSize m_smallRectangleSize;
 
     // Grid spacing (between rectangles)
     int m_gridSpacing;
@@ -100,17 +115,19 @@ protected:
     wxSlider *m_redSlider;
     wxSlider *m_greenSlider;
     wxSlider *m_blueSlider;
+    wxSlider *m_alphaSlider;
 #endif // wxUSE_SLIDER
-
-    int m_buttonY;
-
-    int m_okButtonX;
-    int m_customButtonX;
+#if wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
+    // Bitmap to preview selected colour (with alpha channel)
+    wxStaticBitmap *m_customColourBmp;
+    // Bitmaps to preview custom colours (with alpha channel)
+    wxStaticBitmap *m_customColoursBmp[16];
+#endif // wxCLRDLGG_USE_PREVIEW_WITH_ALPHA
 
     //  static bool colourDialogCancelled;
 
-    DECLARE_EVENT_TABLE()
-    DECLARE_DYNAMIC_CLASS(wxGenericColourDialog)
+    wxDECLARE_EVENT_TABLE();
+    wxDECLARE_DYNAMIC_CLASS(wxGenericColourDialog);
 };
 
 #endif // _WX_COLORDLGG_H_

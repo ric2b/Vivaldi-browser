@@ -9,9 +9,16 @@ import '../strings.m.js';
 
 import {CrExpandButtonElement} from 'chrome://resources/cr_elements/cr_expand_button/cr_expand_button.m.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
-import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {MetricsContext, PrintSettingsUiBucket} from '../metrics.js';
+
+interface PrintPreviewMoreSettingsElement {
+  $: {
+    label: HTMLElement,
+  };
+}
+
 
 class PrintPreviewMoreSettingsElement extends PolymerElement {
   static get is() {
@@ -62,6 +69,12 @@ class PrintPreviewMoreSettingsElement extends PolymerElement {
         this.settingsExpandedByUser ?
             PrintSettingsUiBucket.MORE_SETTINGS_CLICKED :
             PrintSettingsUiBucket.LESS_SETTINGS_CLICKED);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'print-preview-more-settings': PrintPreviewMoreSettingsElement;
   }
 }
 

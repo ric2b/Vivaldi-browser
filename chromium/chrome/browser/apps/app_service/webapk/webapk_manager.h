@@ -8,11 +8,12 @@
 #include <memory>
 #include <vector>
 
+#include "ash/components/arc/mojom/intent_helper.mojom-forward.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_forward.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "components/arc/mojom/intent_helper.mojom-forward.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 
 class PrefChangeRegistrar;
@@ -24,7 +25,6 @@ class ApkWebAppService;
 
 namespace apps {
 
-class AppServiceProxyBase;
 class WebApkInstallQueue;
 
 class WebApkManager : public AppRegistryCache::Observer,
@@ -67,7 +67,7 @@ class WebApkManager : public AppRegistryCache::Observer,
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
 
   Profile* profile_;
-  AppServiceProxyBase* proxy_;
+  AppServiceProxy* proxy_;
   ash::ApkWebAppService* apk_service_;
   ArcAppListPrefs* app_list_prefs_;
 

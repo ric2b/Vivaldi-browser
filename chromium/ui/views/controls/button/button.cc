@@ -171,6 +171,10 @@ std::u16string Button::GetTooltipText() const {
   return tooltip_text_;
 }
 
+void Button::SetCallback(PressedCallback callback) {
+  callback_ = std::move(callback);
+}
+
 void Button::SetAccessibleName(const std::u16string& name) {
   if (name == accessible_name_)
     return;
@@ -214,6 +218,17 @@ void Button::SetState(ButtonState state) {
   state_ = state;
   StateChanged(old_state);
   OnPropertyChanged(&state_, kPropertyEffectsPaint);
+}
+
+int Button::GetTag() const {
+  return tag_;
+}
+
+void Button::SetTag(int tag) {
+  if (tag_ == tag)
+    return;
+  tag_ = tag;
+  OnPropertyChanged(&tag_, kPropertyEffectsNone);
 }
 
 void Button::StartThrobbing(int cycles_til_stop) {
@@ -709,6 +724,7 @@ ADD_PROPERTY_METADATA(bool, HideInkDropWhenShowingContextMenu)
 ADD_PROPERTY_METADATA(bool, InstallFocusRingOnFocus)
 ADD_PROPERTY_METADATA(bool, RequestFocusOnPress)
 ADD_PROPERTY_METADATA(ButtonState, State)
+ADD_PROPERTY_METADATA(int, Tag)
 ADD_PROPERTY_METADATA(std::u16string, TooltipText)
 ADD_PROPERTY_METADATA(int, TriggerableEventFlags)
 END_METADATA

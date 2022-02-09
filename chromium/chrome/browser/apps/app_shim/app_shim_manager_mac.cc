@@ -56,6 +56,12 @@
 
 namespace {
 
+// A feature to control whether or not the profile icons are sent over mojo.
+// This is used to debug crashes that are only seen in release builds.
+// https://crbug.com/1274236
+const base::Feature kAppShimProfileMenuIcons{"AppShimProfileMenuIcons",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Create a SHA1 hex digest of a certificate, for use specifically in building
 // a code signing requirement string in IsAcceptablyCodeSigned(), below.
 std::string CertificateSHA1Digest(SecCertificateRef certificate) {
@@ -747,8 +753,10 @@ void AppShimManager::OpenAppURLInBrowserWindow(
       profile_path.empty() ? nullptr : ProfileForPath(profile_path);
   if (!profile)
     profile = profile_manager_->GetLastUsedProfile();
-  if (!profile)
+  if (!profile || Browser::GetCreationStatusForProfile(profile) !=
+                      Browser::CreationStatus::kOk) {
     return;
+  }
   Browser* browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_NORMAL, profile, true));
   browser->window()->Show();
@@ -1045,8 +1053,10 @@ void AppShimManager::RebuildProfileMenuItemsFromAvatarMenu() {
     mojo_item->menu_index = item.menu_index;
     mojo_item->active = item.active;
     mojo_item->profile_path = item.profile_path;
-    mojo_item->icon =
-        profiles::GetAvatarIconForNSMenu(item.profile_path).ToImageSkia()[0];
+    if (base::FeatureList::IsEnabled(kAppShimProfileMenuIcons)) {
+      mojo_item->icon =
+          profiles::GetAvatarIconForNSMenu(item.profile_path).ToImageSkia()[0];
+    }
     profile_menu_items_.push_back(std::move(mojo_item));
   }
 }

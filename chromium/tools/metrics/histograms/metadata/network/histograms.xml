@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -167,6 +168,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Network.Cellular.ESim.InstallationResult"
+    enum="NetworkCellularESimInstallResult" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the result of an attempt to install an eSIM profile either via a QR
+    code or via policy. This process includes both an attempt to inhibit modem
+    scans as well as a request to install the profile. The metric tracks
+    failures at each step of the process.
+
+    Emitted once the operation completes.
+  </summary>
+</histogram>
+
 <histogram name="Network.Cellular.ESim.InstallPendingProfile.Result"
     enum="HermesResponseStatus" expires_after="2022-03-01">
   <owner>azeemarshad@chromium.org</owner>
@@ -185,7 +201,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Cellular.ESim.InstallViaQrCode.OperationResult"
-    enum="NetworkCellularESimInstallViaQrCodeResult" expires_after="2022-09-01">
+    enum="NetworkCellularESimInstallResult" expires_after="2022-09-01">
   <owner>azeemarshad@chromium.org</owner>
   <owner>khorimoto@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
@@ -212,6 +228,144 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     downloads a profile to the device.
 
     Emitted once the operation completes.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.BlockNonManagedCellularBehavior"
+    enum="NetworkBlockNonManagedCellularBehavior" expires_after="2022-05-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks how often the admin allows only managed cellular networks to connect.
+    This metric is logged for managed, cellular-capable devices when the primary
+    user logs in or when there is an update to the
+    allowOnlyPolicyCellularNetworks policy.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.ConnectionResult.All"
+    enum="ShillCellularConnectResult" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>hsuregan@chromium.org</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the result of all connection attempts. A success is emitted when a
+    managed eSIM network becomes connected from a non-connected state. When a
+    managed eSIM network goes from a connecting state to a disconnected state, a
+    shill failure reason is emitted.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.Disconnections"
+    enum="NetworkCellularConnectionState" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks when a managed eSIM cellular network is connected and when a managed
+    eSIM cellular network is disconnected without explicit user action.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.ESimInstall.OperationResult"
+    enum="NetworkCellularESimInstallResult" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the result of an attempt to install a managed eSIM profile via
+    policy. This process includes both an attempt to inhibit modem scans as well
+    as a request to install the profile. The metric tracks failures at each step
+    of the process.
+
+    Emitted once the operation completes.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.EuiccStatusUploadResult"
+    enum="BooleanSuccess" expires_after="2022-05-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the result of an attempt to upload euicc status to DM server. This
+    metric provides the insights on how often ICCID/SM-DP+ get uploaded to the
+    DM server and whether the upload operation is successful or not.
+
+    Emitted once the euicc status upload operation completes.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.ResetEuicc.Duration" units="ms"
+    expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the amount of time taken to complete reset euicc operation.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.ResetEuicc.Result"
+    enum="NetworkCellularResetEuiccResult" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the result of an attempt to reset euicc. This process includes both
+    an attempt to inhibit modem scans as well as a request to reset EUICC. The
+    metric tracks failures at each step of the process. Emitted once the
+    operation completes.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.ServiceAtLogin.Count"
+    units="units" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivit@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks how many managed eSIM profiles are installed on the devices after a
+    primary user login.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.StatusAtLogin"
+    enum="NetworkESimPolicyStatusAtLogin" expires_after="2022-05-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks status of managed eSIM cellular networks on the device. The status
+    indicates whether the device has managed or only non-managed or both types
+    of cellular networks. This is logged for managed cellular capable devices
+    when the primary user logs in. This allows us to track what fraction of
+    cellular network usage are controlled by policy.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.Usage.Count"
+    enum="NetworkCellularUsage" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the number of times a managed eSIM cellular network is connected as
+    the only network, or with other network or not connected at all.
+  </summary>
+</histogram>
+
+<histogram name="Network.Cellular.ESim.Policy.Usage.Duration" units="seconds"
+    expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>hsuregan@chromium.org</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks how long users are using a managed eSIM cellular network as the sole
+    network for connectivity on their device.
   </summary>
 </histogram>
 
@@ -418,7 +572,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Cellular.PSim.SetupFlowResult"
-    enum="PSimSetupFlowResult" expires_after="2022-03-01">
+    enum="PSimSetupFlowResult" expires_after="2022-05-01">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>hsuregan@chromium.org</owner>
@@ -538,6 +692,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </token>
 </histogram>
 
+<histogram name="Network.Cellular.{SimType}.DisconnectByPolicy.Result"
+    enum="BooleanSuccess" expires_after="2022-09-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>jiajunz@google.com</owner>
+  <summary>
+    Tracks the rate of success of disconnecting the connected unmanaged
+    {SimType} networks when restricting cellular networks is enforced by policy.
+  </summary>
+  <token key="SimType">
+    <variant name="ESim"/>
+    <variant name="PSim"/>
+  </token>
+</histogram>
+
 <histogram name="Network.Cellular.{SimType}.Disconnections"
     enum="NetworkCellularConnectionState" expires_after="2022-03-01">
   <owner>azeemarshad@chromium.org</owner>
@@ -593,7 +762,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.DnsOverHttpsQuery.HttpErrors"
-    enum="DnsProxy.HttpError" expires_after="2021-12-01">
+    enum="DnsProxy.HttpError" expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -615,7 +784,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.Query.Failed{Stage}Duration" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -651,7 +820,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.Query.{Stage}Duration" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -687,7 +856,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.{Family}Nameservers" units="units"
-    expires_after="2021-12-01">
+    expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -702,7 +871,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.{ProcessType}.Event"
-    enum="DnsProxy.ProcessEvent" expires_after="2021-12-01">
+    enum="DnsProxy.ProcessEvent" expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -720,7 +889,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.{Type}Query.Errors"
-    enum="DnsProxy.QueryError" expires_after="2021-12-01">
+    enum="DnsProxy.QueryError" expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -735,7 +904,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.{Type}Query.FailedResolveDuration" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -756,7 +925,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.{Type}Query.ResolveDuration" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -777,7 +946,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.DnsProxy.{Type}Query.Results"
-    enum="DnsProxy.QueryResult" expires_after="2021-12-01">
+    enum="DnsProxy.QueryResult" expires_after="2022-04-03">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -791,8 +960,61 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </token>
 </histogram>
 
+<histogram name="Network.Patchpanel.ArcService"
+    enum="NetworkPatchpanelArcEvent" expires_after="2022-04-01">
+  <owner>hugobenichi@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Diagnostic metric for Chrome OS patchpanel's ArcService which controls the
+    virtual network setup for ARC++ and ARCVM. This metrics is recorded when the
+    virtual network setup for ARC or ARCVM is created, deleted, or updated to
+    track success and error rates of the various platform operations (network
+    interface creation, iptables setup, etc) involved in the ARC virtual network
+    setup.
+  </summary>
+</histogram>
+
+<histogram name="Network.Patchpanel.Dbus" enum="NetworkPatchpanelDbusEvent"
+    expires_after="2022-04-01">
+  <owner>hugobenichi@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Diagnostic metric for the Dbus APIs implemented by Chrome OS patchpanel
+    network service. This metrics is recorded whenever one of patchpanel DBus
+    APIs is called and tracks success and error rates of various network
+    platform primitives implemented by patchpanel (port forwarding APIs,
+    firewall APIs, virtual network APIs for ARC and crosvm, etc).
+  </summary>
+</histogram>
+
+<histogram name="Network.Radio.PossibleWakeupTrigger.RadioUtilsOverhead"
+    units="ms" expires_after="2022-06-01">
+  <owner>bashi@chromium.org</owner>
+  <owner>blink-network-stack@google.com</owner>
+  <summary>
+    Records overheads of calling Android's RadioUtils APIs. Only recorded on
+    Android.
+  </summary>
+</histogram>
+
 <histogram name="Network.Radio.PossibleWakeupTrigger.ResolveHostPurpose"
-    enum="ResolveHostPurpose" expires_after="2022-04-10">
+    enum="ResolveHostPurpose" expires_after="2021-12-01">
+  <obsolete>
+    Removed 12/2021. Use ResolveHostPurpose2 instead.
+  </obsolete>
+  <owner>bashi@chromium.org</owner>
+  <owner>blink-network-stack@google.com</owner>
+  <summary>
+    Records the purpose of a host resolve request. Recorded when
+    NetworkContext::ResolveHost() is called while the radio state is dormant.
+    Only recorded on Android.
+  </summary>
+</histogram>
+
+<histogram name="Network.Radio.PossibleWakeupTrigger.ResolveHostPurpose2"
+    enum="ResolveHostPurpose" expires_after="2022-06-01">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -803,12 +1025,57 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Radio.PossibleWakeupTrigger.URLLoaderAnnotationId"
-    enum="TrafficAnnotationUniqueIdHash" expires_after="2022-04-10">
+    enum="TrafficAnnotationUniqueIdHash" expires_after="2021-12-01">
+  <obsolete>
+    Removed 12/2021. Use URLLoaderAnnotationId2 instead.
+  </obsolete>
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
     Records a traffic annotation ID hash when a URLLoader is created and the
     radio state is dormant. Only recorded on Android.
+  </summary>
+</histogram>
+
+<histogram name="Network.Radio.PossibleWakeupTrigger.URLLoaderAnnotationId2"
+    enum="TrafficAnnotationUniqueIdHash" expires_after="2022-06-01">
+  <owner>bashi@chromium.org</owner>
+  <owner>blink-network-stack@google.com</owner>
+  <summary>
+    Records a traffic annotation ID hash when a URLLoader is created and the
+    radio state is dormant. Only recorded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="Network.Radio.PossibleWakeupTrigger.URLLoaderRequestDestination"
+    enum="RequestDestination" expires_after="2022-06-01">
+  <owner>bashi@chromium.org</owner>
+  <owner>blink-network-stack@google.com</owner>
+  <summary>
+    Records a request destination when a URLLoader is created and the radio
+    state is dormant. Only recorded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="Network.Radio.PossibleWakeupTrigger.URLLoaderRequestIsPrefetch"
+    enum="Boolean" expires_after="2022-06-01">
+  <owner>bashi@chromium.org</owner>
+  <owner>blink-network-stack@google.com</owner>
+  <summary>
+    Records whether a network request is a prefetch when a URLLoader is created
+    and the radio state is dormant. Only recorded on Android.
+  </summary>
+</histogram>
+
+<histogram name="Network.Radio.PossibleWakeupTrigger.URLLoaderRequestPriority"
+    enum="NetRequestPriority" expires_after="2022-06-01">
+  <owner>bashi@chromium.org</owner>
+  <owner>blink-network-stack@google.com</owner>
+  <summary>
+    Records a request priority when a URLLoader is created and the radio state
+    is dormant. Only recorded on Android.
   </summary>
 </histogram>
 
@@ -1107,7 +1374,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.CumulativeTimeOnline" units="seconds"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1122,7 +1389,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.DailyChosenFractionOnline.Cellular" units="%"
-    expires_after="2022-04-10">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1136,7 +1407,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.DailyChosenFractionOnline.Wifi" units="%"
-    expires_after="2022-04-24">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1150,7 +1425,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.DailyChosenTimeOnline.Any" units="seconds"
-    expires_after="2022-04-10">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1164,7 +1443,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.DailyChosenTimeOnline.Cellular" units="seconds"
-    expires_after="2021-12-01">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1178,7 +1461,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.DailyChosenTimeOnline.Wifi" units="seconds"
-    expires_after="2022-04-10">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1288,7 +1575,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.DevicePresenceStatus"
-    enum="BooleanPresent" expires_after="2022-01-30">
+    enum="BooleanPresent" expires_after="2022-04-24">
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1476,7 +1763,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.MonthlyChosenFractionOnline.Cellular" units="%"
-    expires_after="2021-12-01">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1490,7 +1781,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.MonthlyChosenFractionOnline.Wifi" units="%"
-    expires_after="2022-05-01">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1504,7 +1799,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.MonthlyChosenTimeOnline.Any" units="seconds"
-    expires_after="2021-12-01">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1518,7 +1817,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.MonthlyChosenTimeOnline.Cellular"
-    units="seconds" expires_after="2022-04-17">
+    units="seconds" expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1532,7 +1835,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.MonthlyChosenTimeOnline.Wifi" units="seconds"
-    expires_after="2022-04-24">
+    expires_after="M98">
+  <obsolete>
+    Removed 12/2021. b/172213047: shill's implementation of this metrics never
+    worked.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1591,7 +1898,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Network.Shill.SuspendActionResult"
     enum="ShillSuspendTerminationDarkResumeActionResult"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1601,7 +1908,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.SuspendActionTimeTaken" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1656,11 +1963,101 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Network.Shill.Vpn.Driver" enum="VPNDriver"
     expires_after="2022-04-10">
-  <owner>akhouderchah@chromium.org</owner>
+  <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
     Chrome OS network usage metric sampled on each successful VPN connection
     that tracks the VPN connection type.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.EspEncryptionAlgorithm"
+    enum="VPNIPsecEncryptionAlgorithm" expires_after="2022-06-30">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on each successful L2TP/IPsec VPN
+    connection that tracks the encryption algorithm used by the ESP protocol in
+    this connection.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.EspIntegrityAlgorithm"
+    enum="VPNIPsecIntegrirtyAlgorithm" expires_after="2022-06-30">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on each successful L2TP/IPsec VPN
+    connection that tracks the integrity algorithm used by the ESP protocol in
+    this connection.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.IkeDHGroup" enum="VPNIPsecDHGroup"
+    expires_after="2022-06-30">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on each successful L2TP/IPsec VPN
+    connection that tracks the DH group used by the IKE protocol in this
+    connection.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.IkeEncryptionAlgorithm"
+    enum="VPNIPsecEncryptionAlgorithm" expires_after="2022-06-30">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on each successful L2TP/IPsec VPN
+    connection that tracks the encryption algorithm used by the IKE protocol in
+    this connection.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.IkeIntegrityAlgorithm"
+    enum="VPNIPsecIntegrirtyAlgorithm" expires_after="2022-06-30">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on each successful L2TP/IPsec VPN
+    connection that tracks the integrity algorithm used by the IKE protocol in
+    this connection.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.StrokeEndReason"
+    enum="NetworkServiceError" expires_after="M103">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on the end of each L2TP/IPsec VPN
+    connection initiated by the stroke-based driver that tracks the reason that
+    the connection is ended. This metric will be emitted no matter if the
+    connection is established successfully, i.e., it will be emitted if an error
+    happens during connecting. This metric will be used to compare the stability
+    of the stroke-based driver and swanctl-based driver (b/204261554).
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.Vpn.L2tpIpsec.SwanctlEndReason"
+    enum="NetworkServiceError" expires_after="M103">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network usage metric emitted on the end of each L2TP/IPsec VPN
+    connection initiated by the swanctl-based driver that tracks the reason that
+    the connection is ended. This metric will be emitted no matter if the
+    connection is established successfully, i.e., it will be emitted if an error
+    happens during connecting. This metric will be used to compare the stability
+    of the stroke-based driver and swanctl-based driver (b/204261554).
   </summary>
 </histogram>
 
@@ -1676,9 +2073,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Network.Shill.Vpn.OpenVPNCipher" enum="VPNOpenVPNCipher"
+    expires_after="2022-06-30">
+  <owner>taoyl@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Chrome OS network metric emitted on each successful OpenVPN connection that
+    tracks the cipher algorithm negotiated with server.
+  </summary>
+</histogram>
+
 <histogram name="Network.Shill.Vpn.RemoteAuthenticationType"
     enum="VPNRemoteAuthenticationType" expires_after="2022-05-01">
-  <owner>akhouderchah@chromium.org</owner>
+  <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
     Chrome OS network usage metric sampled on each successful VPN connection
@@ -1688,7 +2096,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Network.Shill.Vpn.TimeOnline" units="seconds"
     expires_after="2022-04-24">
-  <owner>akhouderchah@chromium.org</owner>
+  <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
     Chrome OS network metric sampling the time spent using VPN to transport
@@ -1701,8 +2109,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Vpn.TimeToConfig" units="ms"
-    expires_after="2021-12-01">
-  <owner>akhouderchah@chromium.org</owner>
+    expires_after="2022-04-24">
+  <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
     Chrome OS network performance metric sampling the time to configure Layer 3
@@ -1711,8 +2119,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Vpn.TimeToOnline" units="ms"
-    expires_after="2021-12-01">
-  <owner>akhouderchah@chromium.org</owner>
+    expires_after="2022-04-24">
+  <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
     Chrome OS network performance metric sampling the time to determine that a
@@ -1722,7 +2130,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Network.Shill.Vpn.UserAuthenticationType"
     enum="VPNUserAuthenticationType" expires_after="2022-04-24">
-  <owner>akhouderchah@chromium.org</owner>
+  <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
     Chrome OS network usage metric sampled on each successful VPN connection
@@ -1761,7 +2169,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Ap80211kSupport" enum="WiFiAp80211kSupport"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1771,7 +2179,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Ap80211rSupport" enum="WiFiAp80211rSupport"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1781,7 +2189,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Ap80211vBSSMaxIdlePeriodSupport"
-    enum="WiFiAp80211vBSSMaxIdlePeriodSupport" expires_after="2021-12-01">
+    enum="WiFiAp80211vBSSMaxIdlePeriodSupport" expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1792,7 +2200,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Ap80211vBSSTransitionSupport"
-    enum="WiFiAp80211vBSSTransitionSupport" expires_after="2021-12-01">
+    enum="WiFiAp80211vBSSTransitionSupport" expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1803,7 +2211,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Ap80211vDMSSupport"
-    enum="WiFiAp80211vDMSSupport" expires_after="2021-12-01">
+    enum="WiFiAp80211vDMSSupport" expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1867,7 +2275,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.AutoConnectableServices" units="units"
-    expires_after="2022-01-30">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -1878,7 +2286,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.AvailableBSSesAtConnect" units="units"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1888,7 +2296,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.BSSTransitionManagementSupport"
-    enum="WiFiBSSTransitionManagementSupport" expires_after="2021-12-01">
+    enum="WiFiBSSTransitionManagementSupport" expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -1953,7 +2361,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.DarkResumeWakeReason"
-    enum="DarkResumeWakeReason" expires_after="2021-12-01">
+    enum="DarkResumeWakeReason" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2003,7 +2411,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.ExpiredLeaseLengthSeconds2" units="seconds"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2014,7 +2422,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.FallbackDNSTestResult"
-    enum="FallbackDNSTestResult" expires_after="2021-12-01">
+    enum="FallbackDNSTestResult" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2209,7 +2617,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.MBOSupport" enum="MBOSupport"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2231,7 +2639,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.NetworkConnectionIPType"
-    enum="NetworkConnectionIPType" expires_after="2022-01-30">
+    enum="NetworkConnectionIPType" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2241,7 +2649,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.NetworkProblemDetected"
-    enum="NetworkProblemType" expires_after="2021-12-01">
+    enum="NetworkProblemType" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2251,7 +2659,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.PhyMode" enum="NetworkPhyModeType"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2261,7 +2669,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.PortalAttempts" units="units"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -2297,7 +2705,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.RegulatoryDomain" enum="RegulatoryDomain"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2347,7 +2755,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Network.Shill.WiFi.RoamComplete"
-    enum="WiFiRoamComplete" expires_after="2021-12-01">
+    enum="WiFiRoamComplete" expires_after="2022-12-01">
 <!-- Name completed by histogram_suffixes name="RoamSecurityType" -->
 
   <owner>matthewmwang@chromium.org</owner>
@@ -2360,7 +2768,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Network.Shill.WiFi.RoamTime" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
 <!-- Name completed by histogram_suffixes name="RoamSecurityType" -->
 
   <owner>matthewmwang@chromium.org</owner>
@@ -2383,7 +2791,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.ScanTimeInEbusy" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2412,7 +2820,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Network.Shill.WiFi.SessionLength" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
 <!-- Name completed by histogram_suffixes name="RoamSecurityType" -->
 
   <owner>matthewmwang@chromium.org</owner>
@@ -2524,7 +2932,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.SuspendDurationWoWOnConnected"
-    units="seconds" expires_after="2021-12-01">
+    units="seconds" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2535,7 +2943,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.SuspendDurationWoWOnDisconnected"
-    units="seconds" expires_after="2021-12-01">
+    units="seconds" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2567,7 +2975,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToConfig" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2630,7 +3038,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToRedirectFound" units="ms"
-    expires_after="2021-12-01">
+    expires_after="2022-12-01">
   <owner>matthewmwang@chromium.org</owner>
   <owner>hugobenichi@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
@@ -2708,7 +3116,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.VerifyWakeOnWiFiSettingsResult"
-    enum="VerifyWakeOnWiFiSettingsResult" expires_after="2021-12-01">
+    enum="VerifyWakeOnWiFiSettingsResult" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2730,7 +3138,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.WakeOnWiFiThrottled"
-    enum="WakeOnWiFiThrottled" expires_after="2021-12-01">
+    enum="WakeOnWiFiThrottled" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -2742,7 +3150,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.WakeReasonReceivedBeforeOnDarkResume"
-    enum="WakeReasonReceivedBeforeOnDarkResume" expires_after="2021-12-01">
+    enum="WakeReasonReceivedBeforeOnDarkResume" expires_after="2022-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -3015,6 +3423,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="NetworkService.DeletedOldCacheData" enum="Boolean"
+    expires_after="2022-05-18">
+  <owner>wfh@chromium.org</owner>
+  <owner>mmenke@chromium.org</owner>
+  <summary>
+    Reports whether or not any old cache data was found and deleted from the
+    http_cache_path when creating a network context within the network service.
+    This is reported each time a network context is created in the network
+    service with a valid http_cache_path and http_cache_enabled is set to true.
+  </summary>
+</histogram>
+
 <histogram name="NetworkService.GrantSandboxResult"
     enum="NetworkServiceSandboxGrantResult" expires_after="2022-04-17">
   <owner>wfh@chromium.org</owner>
@@ -3117,7 +3537,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="NetworkService.TimeToGrantDataAccess" units="ms"
-    expires_after="M97">
+    expires_after="2022-05-01">
   <owner>wfh@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -3171,6 +3591,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Whether the Origin header is the same as the request origin in the
     URLLoaderFactory when it creates a URLLoader.
+  </summary>
+</histogram>
+
+<histogram name="NetworkService.URLLoaderFactory.UpdateLoadInfo" units="ms"
+    expires_after="2022-03-30">
+  <owner>jam@chromium.org</owner>
+  <owner>cduvall@chromium.org</owner>
+  <summary>
+    The time it takes for each invocation of URLLoaderFactory.UpdateLoadInfo.
   </summary>
 </histogram>
 

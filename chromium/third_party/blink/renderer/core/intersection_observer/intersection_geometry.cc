@@ -91,6 +91,8 @@ PhysicalRect InitializeRootRect(const LayoutObject* root,
   } else if (root->IsBox() && root->IsScrollContainer()) {
     result = To<LayoutBox>(root)->PhysicalContentBoxRect();
   } else {
+    // TODO(pdr, crbug.com/1020466): BorderBoundingBox is snapped. Should this
+    // use an unsnapped value such as PhysicalBorderBoxRect?
     result = PhysicalRect(To<LayoutBoxModelObject>(root)->BorderBoundingBox());
   }
   ApplyMargin(result, margin, root->StyleRef().EffectiveZoom());
@@ -98,11 +100,11 @@ PhysicalRect InitializeRootRect(const LayoutObject* root,
 }
 
 PhysicalRect GetBoxBounds(const LayoutBox* box, bool use_overflow_clip_edge) {
-  PhysicalRect bounds = PhysicalRect(box->BorderBoundingBox());
+  PhysicalRect bounds(box->PhysicalBorderBoxRect());
   // OverflowClipMargin() should only apply if clipping occurs on both axis.
   if (use_overflow_clip_edge && box->ShouldClipOverflowAlongBothAxis() &&
       box->StyleRef().OverflowClipMargin() != LayoutUnit()) {
-    // OverflowClipRect() may be smaller than BorderBoundingBox().
+    // OverflowClipRect() may be smaller than PhysicalBorderBoxRect().
     bounds.Unite(box->OverflowClipRect(PhysicalOffset()));
   }
   return bounds;
@@ -537,14 +539,14 @@ bool IntersectionGeometry::ClipToRoot(const LayoutObject* root,
       // kDontApplyMainFrameOverflowClip flag above, means it hasn't been
       // done yet.
       LocalFrame* local_root_frame = root->GetDocument().GetFrame();
-      IntRect clip_rect(local_root_frame->RemoteViewportIntersection());
+      gfx::Rect clip_rect(local_root_frame->RemoteViewportIntersection());
       if (clip_rect.IsEmpty()) {
         intersection_rect = PhysicalRect();
         does_intersect = false;
       } else {
         // Map clip_rect from the coordinate system of the local root frame to
         // the coordinate system of the remote main frame.
-        clip_rect = PixelSnappedIntRect(
+        clip_rect = ToPixelSnappedRect(
             local_root_frame->ContentLayoutObject()->LocalToAncestorRect(
                 PhysicalRect(clip_rect), nullptr,
                 kTraverseDocumentBoundaries | kApplyRemoteMainFrameTransform));

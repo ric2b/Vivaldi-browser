@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/memory/raw_ptr.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/request_filter.h"
 #include "content/public/browser/content_browser_client.h"
@@ -230,7 +231,7 @@ class RequestFilterManager : public KeyedService {
     // Map of request_id -> bit vector of EventTypes already signaled
     using SignaledRequestMap = std::map<uint64_t, int>;
 
-    RequestFilterManager* filter_manager_;
+    const raw_ptr<RequestFilterManager> filter_manager_;
 
     // A map of network requests that are waiting for at least one filter
     // to respond.
@@ -299,21 +300,20 @@ class RequestFilterManager : public KeyedService {
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client);
 
   static void ProxiedProxyWebTransport(
-      content::BrowserContext* context,
       int process_id,
-      int frame_id,
-      const url::Origin& frame_origin,
+      int frame_routing_id,
       const GURL& url,
+      const url::Origin& initiator_origin,
       content::ContentBrowserClient::WillCreateWebTransportCallback callback,
       mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
           handshake_client,
       absl::optional<network::mojom::WebTransportErrorPtr> error);
 
   void ProxyWebTransport(
-      int process_id,
-      int frame_id,
-      const url::Origin& frame_origin,
+      content::RenderProcessHost& render_process_host,
+      int frame_routing_id,
       const GURL& url,
+      const url::Origin& initiator_origin,
       content::ContentBrowserClient::WillCreateWebTransportCallback callback,
       mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
           handshake_client);
@@ -326,7 +326,7 @@ class RequestFilterManager : public KeyedService {
   void Shutdown() override;
 
  private:
-  content::BrowserContext* const browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   RequestIDGenerator request_id_generator_;
   std::unique_ptr<ProxySet> proxies_;

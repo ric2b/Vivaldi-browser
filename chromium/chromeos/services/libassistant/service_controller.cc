@@ -8,14 +8,16 @@
 
 #include "base/bind.h"
 #include "base/check.h"
+#include "build/buildflag.h"
+#include "chromeos/assistant/internal/buildflags.h"
 #include "chromeos/assistant/internal/internal_util.h"
+#include "chromeos/assistant/internal/libassistant/shared_headers.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/services/libassistant/chromium_api_delegate.h"
 #include "chromeos/services/libassistant/grpc/assistant_client.h"
 #include "chromeos/services/libassistant/libassistant_factory.h"
 #include "chromeos/services/libassistant/settings_controller.h"
 #include "chromeos/services/libassistant/util.h"
-#include "libassistant/shared/internal_api/assistant_manager_internal.h"
 #include "services/network/public/cpp/cross_thread_pending_shared_url_loader_factory.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 
@@ -152,16 +154,8 @@ void ServiceController::Start() {
   DCHECK(IsInitialized()) << "Initialize() must be called before Start()";
   DVLOG(1) << "Starting Libassistant service";
 
-  assistant_client_->StartServices(base::BindOnce(
-      &ServiceController::OnAllServicesReady, weak_factory_.GetWeakPtr()));
-
-  SetStateAndInformObservers(ServiceState::kStarted);
-
-  for (auto& observer : assistant_client_observers_) {
-    observer.OnAssistantClientStarted(assistant_client_.get());
-  }
-
-  DVLOG(1) << "Started Libassistant service";
+  // |this| will outlive |assistant_client_|.
+  assistant_client_->StartServices(/*services_status_observer=*/this);
 }
 
 void ServiceController::Stop() {
@@ -199,6 +193,22 @@ void ServiceController::AddAndFireStateObserver(
   observer->OnStateChanged(state_);
 
   state_observers_.Add(std::move(observer));
+}
+
+void ServiceController::OnServicesStatusChanged(ServicesStatus status) {
+  switch (status) {
+    case ServicesStatus::ONLINE_ALL_SERVICES_AVAILABLE:
+      OnAllServicesReady();
+      break;
+    case ServicesStatus::ONLINE_BOOTING_UP:
+      // Configing internal options or other essential services that are
+      // supported during bootup stage should happen here.
+      OnServicesBootingUp();
+      break;
+    case ServicesStatus::OFFLINE:
+      // No action needed.
+      break;
+  }
 }
 
 void ServiceController::AddAndFireAssistantClientObserver(
@@ -259,22 +269,24 @@ AssistantClient* ServiceController::assistant_client() {
   return assistant_client_.get();
 }
 
-assistant_client::AssistantManager* ServiceController::assistant_manager() {
-  return assistant_client_ ? assistant_client_->assistant_manager() : nullptr;
-}
-
-assistant_client::AssistantManagerInternal*
-ServiceController::assistant_manager_internal() {
-  return assistant_client_ ? assistant_client_->assistant_manager_internal()
-                           : nullptr;
-}
-
 void ServiceController::OnAllServicesReady() {
+  DVLOG(1) << "Libassistant services are ready.";
+
   // Notify observers on Libassistant services ready.
   SetStateAndInformObservers(mojom::ServiceState::kRunning);
 
   for (auto& observer : assistant_client_observers_)
     observer.OnAssistantClientRunning(assistant_client_.get());
+}
+
+void ServiceController::OnServicesBootingUp() {
+  DVLOG(1) << "Started Libassistant service";
+
+  // Notify observer on Libassistant services started.
+  SetStateAndInformObservers(ServiceState::kStarted);
+
+  for (auto& observer : assistant_client_observers_)
+    observer.OnAssistantClientStarted(assistant_client_.get());
 }
 
 void ServiceController::SetStateAndInformObservers(
@@ -291,7 +303,9 @@ void ServiceController::CreateAndRegisterChromiumApiDelegate(
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         url_loader_factory_remote) {
   CreateChromiumApiDelegate(std::move(url_loader_factory_remote));
+#if !BUILDFLAG(IS_PREBUILT_LIBASSISTANT)
   assistant_client_->SetChromeOSApiDelegate(chromium_api_delegate_.get());
+#endif  // !BUILDFLAG(IS_PREBUILT_LIBASSISTANT)
 }
 
 void ServiceController::CreateChromiumApiDelegate(

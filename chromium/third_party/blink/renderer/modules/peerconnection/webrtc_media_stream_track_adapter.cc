@@ -187,9 +187,10 @@ void WebRtcMediaStreamTrackAdapter::InitializeLocalAudioTrack(
           blink::MediaStreamAudioSource::From(component_->Source()))) {
     local_track_audio_sink_->SetLevel(media_stream_source->audio_level());
     // The sink only grabs stats from the audio processor. Stats are only
-    // available if audio processing is turned on. Therefore, only provide the
-    // sink a reference to the processor if audio processing is turned on.
-    if (media_stream_source->HasAudioProcessing()) {
+    // available if WebRtc audio processing is turned on. Therefore, only
+    // provide the sink a reference to the processor if audio processing is
+    // turned on.
+    if (media_stream_source->HasWebRtcAudioProcessing()) {
       local_track_audio_sink_->SetAudioProcessor(
           media_stream_source->GetAudioProcessor());
     }
@@ -256,7 +257,8 @@ void WebRtcMediaStreamTrackAdapter::InitializeRemoteVideoTrack(
             webrtc::MediaStreamTrackInterface::kVideoKind);
   remote_video_track_adapter_ =
       base::MakeRefCounted<blink::RemoteVideoTrackAdapter>(
-          main_thread_, webrtc_video_track.get());
+          main_thread_, webrtc_video_track.get(),
+          factory_->metronome_provider());
   webrtc_track_ = webrtc_video_track;
   remote_track_can_complete_initialization_.Signal();
   PostCrossThreadTask(

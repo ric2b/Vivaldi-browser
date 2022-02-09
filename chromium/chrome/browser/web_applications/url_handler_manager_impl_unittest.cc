@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/url_handler_prefs.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -108,8 +110,8 @@ class UrlHandlerManagerImplTest : public WebAppTest {
 
     base::RunLoop run_loop;
     url_handler_manager().RegisterUrlHandlers(
-        app_id, base::BindLambdaForTesting([&](bool success) {
-          EXPECT_TRUE(success);
+        app_id, base::BindLambdaForTesting([&](Result result) {
+          EXPECT_EQ(Result::kOk, result);
           run_loop.Quit();
         }));
     run_loop.Run();
@@ -143,7 +145,7 @@ class UrlHandlerManagerImplTest : public WebAppTest {
  private:
   base::test::ScopedFeatureList features_;
   std::unique_ptr<FakeWebAppRegistryController> fake_registry_controller_;
-  UrlHandlerManagerImpl* url_handler_manager_;
+  raw_ptr<UrlHandlerManagerImpl> url_handler_manager_;
   ScopedTestingLocalState local_state_;
 };
 

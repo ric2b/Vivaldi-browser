@@ -15,7 +15,6 @@
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/extensions/api/content_settings/content_settings_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
@@ -30,6 +29,7 @@
 #include "contact/contact_service_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
+#include "extensions/browser/api/content_settings/content_settings_helpers.h"
 #include "extensions/buildflags/buildflags.h"
 #include "notes/notes_factory.h"
 #include "ui/lazy_load_service_factory.h"
@@ -50,6 +50,7 @@
 #include "extensions/api/notes/notes_api.h"
 #include "extensions/api/page_actions/page_actions_api.h"
 #include "extensions/api/prefs/prefs_api.h"
+#include "extensions/api/reading_list/reading_list_api.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/settings/settings_api.h"
 #include "extensions/api/sync/sync_api.h"
@@ -62,12 +63,17 @@
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/vivaldi_extensions_init.h"
 #include "ui/devtools/devtools_connector.h"
+#include "ui/vivaldi_rootdocument_handler.h"
 #endif
 
 #if defined(OS_LINUX)
 #include "base/environment.h"
 #include "base/nix/xdg_util.h"
 #endif
+
+namespace vivaldi {
+void StartGitIgnoreCheck();
+}
 
 VivaldiBrowserMainExtraParts::VivaldiBrowserMainExtraParts() {}
 
@@ -121,12 +127,16 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
   extensions::PageActionsAPI::GetFactoryInstance();
+  extensions::ReadingListPrivateAPI::GetFactoryInstance();
   extensions::RuntimeAPI::Init();
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
   extensions::VivaldiWindowsAPI::Init();
   extensions::ZoomAPI::GetFactoryInstance();
   extensions::HistoryPrivateAPI::GetFactoryInstance();
   extensions::TranslateHistoryAPI::GetFactoryInstance();
+
+  extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
+
 #endif
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 
@@ -205,6 +215,8 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
     }
   }
 #endif  // OS_ANDROID
+
+  vivaldi::StartGitIgnoreCheck();
 }
 
 void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {

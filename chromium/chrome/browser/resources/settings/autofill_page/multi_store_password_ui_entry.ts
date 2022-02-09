@@ -7,10 +7,7 @@
  * are duplicated across stores as a single item in the UI.
  */
 
-import {assert} from 'chrome://resources/js/assert.m.js';
-
 import {MultiStoreIdHandler} from './multi_store_id_handler.js';
-import {PasswordManagerProxy} from './password_manager_proxy.js';
 
 /**
  * A version of chrome.passwordsPrivate.PasswordUiEntry used for deduplicating
@@ -23,7 +20,6 @@ export class MultiStorePasswordUiEntry extends MultiStoreIdHandler {
   constructor(entry: chrome.passwordsPrivate.PasswordUiEntry) {
     super();
 
-    /** @type {!MultiStorePasswordUiEntry.Contents} */
     this.contents_ = MultiStorePasswordUiEntry.getContents_(entry);
 
     this.setId(entry.id, entry.fromAccountStore);

@@ -31,14 +31,14 @@ namespace {
 class ClipPathPaintWorkletInput : public PaintWorkletInput {
  public:
   ClipPathPaintWorkletInput(
-      const FloatRect& container_rect,
+      const gfx::RectF& container_rect,
       int worklet_id,
       float zoom,
       const Vector<scoped_refptr<BasicShape>>& animated_shapes,
       const Vector<double>& offsets,
       const absl::optional<double>& progress,
       cc::PaintWorkletInput::PropertyKeys property_keys)
-      : PaintWorkletInput(container_rect.Size(),
+      : PaintWorkletInput(container_rect.size(),
                           worklet_id,
                           std::move(property_keys)),
         zoom_(zoom),
@@ -75,7 +75,7 @@ class ClipPathPaintWorkletInput : public PaintWorkletInput {
     if (basic_shape.GetType() == BasicShape::kStylePathType) {
       return PathInterpolationFunctions::ConvertValue(
           To<StylePath>(&basic_shape),
-          PathInterpolationFunctions::ForceAbsolute);
+          PathInterpolationFunctions::kForceAbsolute);
     }
     return basic_shape_interpolation_functions::MaybeConvertBasicShape(
         &basic_shape, zoom_);
@@ -162,27 +162,6 @@ void GetCompositorKeyframeOffset(const PropertySpecificKeyframe* frame,
   offsets.push_back(value.ToDouble());
 }
 
-// TODO(crbug.com/1248605): Introduce helper functions commonly used by
-// background-color and clip-path animations.
-bool CanGetValueFromKeyframe(const PropertySpecificKeyframe* frame,
-                             const KeyframeEffectModelBase* model) {
-  if (model->IsStringKeyframeEffectModel()) {
-    DCHECK(frame->IsCSSPropertySpecificKeyframe());
-    const CSSValue* value = To<CSSPropertySpecificKeyframe>(frame)->Value();
-    if (!value)
-      return false;
-  } else {
-    DCHECK(frame->IsTransitionPropertySpecificKeyframe());
-    const TransitionKeyframe::PropertySpecificKeyframe* keyframe =
-        To<TransitionKeyframe::PropertySpecificKeyframe>(frame);
-    InterpolableValue* value =
-        keyframe->GetValue()->Value().interpolable_value.get();
-    if (!value)
-      return false;
-  }
-  return true;
-}
-
 }  // namespace
 
 template <>
@@ -202,40 +181,7 @@ struct DowncastTraits<ClipPathPaintWorkletInput> {
 // background-color and clip-path animations.
 Animation* ClipPathPaintDefinition::GetAnimationIfCompositable(
     const Element* element) {
-  if (!element->GetElementAnimations())
-    return nullptr;
-  Animation* compositable_animation = nullptr;
-  // We'd composite the clip-path only if it is the only clip-path
-  // animation on this element.
-  unsigned count = 0;
-  for (const auto& animation : element->GetElementAnimations()->Animations()) {
-    if (animation.key->CalculateAnimationPlayState() == Animation::kIdle ||
-        !animation.key->Affects(*element, GetCSSPropertyClipPath()))
-      continue;
-    count++;
-    compositable_animation = animation.key;
-  }
-  if (!compositable_animation || count > 1)
-    return nullptr;
-
-  // If we are here, then this element must have one clip path animation
-  // only. Fall back to the main thread if it is not composite:replace.
-  const AnimationEffect* effect = compositable_animation->effect();
-  DCHECK(effect->IsKeyframeEffect());
-  const KeyframeEffectModelBase* model =
-      static_cast<const KeyframeEffect*>(effect)->Model();
-  if (model->AffectedByUnderlyingAnimations())
-    return nullptr;
-  const PropertySpecificKeyframeVector* frames =
-      model->GetPropertySpecificKeyframes(
-          PropertyHandle(GetCSSPropertyClipPath()));
-  DCHECK_GE(frames->size(), 2u);
-  for (const auto& frame : *frames) {
-    if (!CanGetValueFromKeyframe(frame, model)) {
-      return nullptr;
-    }
-  }
-  return compositable_animation;
+  return GetAnimationForProperty(element, GetCSSPropertyClipPath());
 }
 
 // static
@@ -245,7 +191,7 @@ ClipPathPaintDefinition* ClipPathPaintDefinition::Create(
 }
 
 ClipPathPaintDefinition::ClipPathPaintDefinition(LocalFrame& local_root)
-    : NativePaintDefinition(
+    : NativeCssPaintDefinition(
           &local_root,
           PaintWorkletInput::PaintWorkletInputType::kClipPath) {}
 
@@ -255,7 +201,7 @@ sk_sp<PaintRecord> ClipPathPaintDefinition::Paint(
         animated_property_values) {
   const ClipPathPaintWorkletInput* input =
       To<ClipPathPaintWorkletInput>(compositor_input);
-  FloatSize container_size = input->ContainerSize();
+  gfx::SizeF container_size = input->ContainerSize();
 
   const Vector<InterpolationValue>& interpolation_values =
       input->InterpolationValues();
@@ -323,12 +269,11 @@ sk_sp<PaintRecord> ClipPathPaintDefinition::Paint(
   scoped_refptr<ShapeClipPathOperation> current_shape =
       ShapeClipPathOperation::Create(result_shape);
 
-  Path path = current_shape->GetPath(
-      FloatRect(FloatPoint(0.0, 0.0), container_size), input->Zoom());
+  Path path = current_shape->GetPath(gfx::RectF(container_size), input->Zoom());
   PaintRenderingContext2DSettings* context_settings =
       PaintRenderingContext2DSettings::Create();
   auto* rendering_context = MakeGarbageCollected<PaintRenderingContext2D>(
-      RoundedIntSize(container_size), context_settings, 1, 1);
+      gfx::ToRoundedSize(container_size), context_settings, 1, 1);
 
   PaintFlags flags;
   flags.setAntiAlias(true);
@@ -339,7 +284,7 @@ sk_sp<PaintRecord> ClipPathPaintDefinition::Paint(
 
 scoped_refptr<Image> ClipPathPaintDefinition::Paint(
     float zoom,
-    const FloatRect& reference_box,
+    const gfx::RectF& reference_box,
     const Node& node) {
   DCHECK(node.IsElementNode());
   const Element* element = static_cast<Element*>(const_cast<Node*>(&node));
@@ -382,7 +327,7 @@ scoped_refptr<Image> ClipPathPaintDefinition::Paint(
           std::move(input_property_keys));
 
   return PaintWorkletDeferredImage::Create(std::move(input),
-                                           reference_box.Size());
+                                           reference_box.size());
 }
 
 void ClipPathPaintDefinition::Trace(Visitor* visitor) const {

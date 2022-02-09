@@ -30,6 +30,18 @@ if (vivaldi_microsoft_oauth_client_id != "") {
   ]
 }
 
+if (vivaldi_yahoo_oauth_client_id != "") {
+  defines += [
+    "VIVALDI_YAHOO_OAUTH_API_CLIENT_ID=\"$vivaldi_yahoo_oauth_client_id\""
+  ]
+}
+
+if (vivaldi_yahoo_oauth_client_secret != "") {
+  defines += [
+    "VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET=\"$vivaldi_yahoo_oauth_client_secret\""
+  ]
+}
+
 static_library("apis") {
   public_deps = [
     "//chrome/common:mojo_bindings",
@@ -165,6 +177,8 @@ static_library("apis") {
     "pip_private/pip_private_api.h",
     "prefs/prefs_api.cc",
     "prefs/prefs_api.h",
+    "reading_list/reading_list_api.cc",
+    "reading_list/reading_list_api.h",
     "runtime/runtime_api.cpp",
     "runtime/runtime_api.h",
     "savedpasswords/savedpasswords_api.cc",

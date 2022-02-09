@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/cxx17_backports.h"
+#include "base/ignore_result.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "chromeos/ui/base/tablet_state.h"
@@ -27,6 +28,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/strings/grit/ui_strings.h"  // Accessibility names
+#include "ui/views/background.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -241,10 +243,31 @@ void FrameCaptionButtonContainerView::SetBackgroundColor(
   minimize_button_->SetBackgroundColor(background_color);
   size_button_->SetBackgroundColor(background_color);
   close_button_->SetBackgroundColor(background_color);
+
+  // When buttons' background color changes, the entire view's background color
+  // changes if WCO is enabled.
+  if (window_controls_overlay_enabled_) {
+    SetBackground(views::CreateSolidBackground(background_color));
+  }
 }
 
 void FrameCaptionButtonContainerView::ResetWindowControls() {
   SetButtonsToNormal(Animate::kNo);
+}
+
+void FrameCaptionButtonContainerView::OnWindowControlsOverlayEnabledChanged(
+    bool enabled,
+    SkColor background_color) {
+  window_controls_overlay_enabled_ = enabled;
+  if (enabled) {
+    SetBackground(views::CreateSolidBackground(background_color));
+    // The view needs to paint to a layer so that it is painted on top of the
+    // web content.
+    SetPaintToLayer();
+  } else {
+    SetBackground(nullptr);
+    DestroyLayer();
+  }
 }
 
 void FrameCaptionButtonContainerView::UpdateCaptionButtonState(bool animate) {
@@ -551,8 +574,11 @@ bool FrameCaptionButtonContainerView::CanSnap() {
   return SnapController::Get()->CanSnap(frame_->GetNativeWindow());
 }
 
-void FrameCaptionButtonContainerView::ShowSnapPreview(SnapDirection snap) {
-  SnapController::Get()->ShowSnapPreview(frame_->GetNativeWindow(), snap);
+void FrameCaptionButtonContainerView::ShowSnapPreview(
+    SnapDirection snap,
+    bool allow_haptic_feedback) {
+  SnapController::Get()->ShowSnapPreview(frame_->GetNativeWindow(), snap,
+                                         allow_haptic_feedback);
 }
 
 void FrameCaptionButtonContainerView::CommitSnap(SnapDirection snap) {

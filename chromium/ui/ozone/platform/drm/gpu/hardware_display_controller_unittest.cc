@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -180,7 +179,7 @@ void HardwareDisplayControllerTest::InitializeDrmDevice(bool use_atomic) {
     connector_properties[i].id = kConnectorIdBase + i;
     for (const auto& pair : connector_property_names) {
       connector_properties[i].properties.push_back(
-          {/* .id = */ pair.first, /* .value = */ 0});
+          {.id = pair.first, .value = 0});
     }
   }
 
@@ -206,8 +205,7 @@ void HardwareDisplayControllerTest::InitializeDrmDevice(bool use_atomic) {
   for (size_t i = 0; i < crtc_properties.size(); ++i) {
     crtc_properties[i].id = kCrtcIdBase + i;
     for (const auto& pair : crtc_property_names) {
-      crtc_properties[i].properties.push_back(
-          {/* .id = */ pair.first, /* .value = */ 0});
+      crtc_properties[i].properties.push_back({.id = pair.first, .value = 0});
     }
 
     for (size_t j = 0; j < 2; ++j) {
@@ -223,8 +221,7 @@ void HardwareDisplayControllerTest::InitializeDrmDevice(bool use_atomic) {
         else if (pair.first == kInFormatsPropId)
           value = kInFormatsBlobPropId;
 
-        plane.properties.push_back(
-            {/* .id = */ pair.first, /*.value = */ value});
+        plane.properties.push_back({.id = pair.first, .value = value});
       }
 
       drm_->SetPropertyBlob(ui::MockDrmDevice::AllocateInFormatsBlob(

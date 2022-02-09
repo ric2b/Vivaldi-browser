@@ -41,7 +41,6 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 
-using base::DictionaryValue;
 using base::ListValue;
 using base::Value;
 using base::WeakPtr;
@@ -454,11 +453,12 @@ void ServiceWorkerInternalsHandler::OnOperationComplete(
 }
 
 void ServiceWorkerInternalsHandler::HandleGetOptions(const ListValue* args) {
-  std::string callback_id;
-  CHECK(args->GetString(0, &callback_id));
+  CHECK(args->GetList()[0].is_string());
+  CHECK(args->GetList().size() != 0);
+  std::string callback_id = args->GetList()[0].GetString();
   AllowJavascript();
-  DictionaryValue options;
-  options.SetBoolean("debug_on_start",
+  base::Value options(base::Value::Type::DICTIONARY);
+  options.SetBoolKey("debug_on_start",
                      ServiceWorkerDevToolsManager::GetInstance()
                          ->debug_service_worker_on_start());
   ResolveJavascriptCallback(base::Value(callback_id), options);
@@ -565,17 +565,21 @@ bool ServiceWorkerInternalsHandler::GetServiceWorkerContext(
 
 void ServiceWorkerInternalsHandler::HandleStopWorker(const ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string callback_id;
-  const DictionaryValue* cmd_args = nullptr;
-  int partition_id;
+  if (args->GetList().size() == 0 || !args->GetList()[0].is_string())
+    return;
+  std::string callback_id = args->GetList()[0].GetString();
+
+  const base::Value& cmd_args = args->GetList()[1];
+  if (!cmd_args.is_dict())
+    return;
+
+  absl::optional<int> partition_id = cmd_args.FindIntKey("partition_id");
   scoped_refptr<ServiceWorkerContextWrapper> context;
-  std::string version_id_string;
   int64_t version_id = 0;
-  if (!args->GetString(0, &callback_id) || !args->GetDictionary(1, &cmd_args) ||
-      !cmd_args->GetInteger("partition_id", &partition_id) ||
-      !GetServiceWorkerContext(partition_id, &context) ||
-      !cmd_args->GetString("version_id", &version_id_string) ||
-      !base::StringToInt64(version_id_string, &version_id)) {
+  const std::string* version_id_string = cmd_args.FindStringKey("version_id");
+  if (!partition_id || !GetServiceWorkerContext(*partition_id, &context) ||
+      !version_id_string ||
+      !base::StringToInt64(*version_id_string, &version_id)) {
     return;
   }
 
@@ -587,14 +591,18 @@ void ServiceWorkerInternalsHandler::HandleStopWorker(const ListValue* args) {
 
 void ServiceWorkerInternalsHandler::HandleInspectWorker(const ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string callback_id;
-  const DictionaryValue* cmd_args = nullptr;
-  int process_host_id = 0;
-  int devtools_agent_route_id = 0;
-  if (!args->GetString(0, &callback_id) || !args->GetDictionary(1, &cmd_args) ||
-      !cmd_args->GetInteger("process_host_id", &process_host_id) ||
-      !cmd_args->GetInteger("devtools_agent_route_id",
-                            &devtools_agent_route_id)) {
+  if (args->GetList().size() == 0 || !args->GetList()[0].is_string())
+    return;
+  std::string callback_id = args->GetList()[0].GetString();
+
+  const base::Value& cmd_args = args->GetList()[1];
+  if (!cmd_args.is_dict())
+    return;
+
+  absl::optional<int> process_host_id = cmd_args.FindIntKey("process_host_id");
+  absl::optional<int> devtools_agent_route_id =
+      cmd_args.FindIntKey("devtools_agent_route_id");
+  if (!process_host_id || !devtools_agent_route_id) {
     return;
   }
   base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
@@ -602,8 +610,8 @@ void ServiceWorkerInternalsHandler::HandleInspectWorker(const ListValue* args) {
                      callback_id);
   scoped_refptr<ServiceWorkerDevToolsAgentHost> agent_host(
       ServiceWorkerDevToolsManager::GetInstance()
-          ->GetDevToolsAgentHostForWorker(process_host_id,
-                                          devtools_agent_route_id));
+          ->GetDevToolsAgentHostForWorker(*process_host_id,
+                                          *devtools_agent_route_id));
   if (!agent_host.get()) {
     std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorNotFound);
     return;
@@ -614,43 +622,52 @@ void ServiceWorkerInternalsHandler::HandleInspectWorker(const ListValue* args) {
 
 void ServiceWorkerInternalsHandler::HandleUnregister(const ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string callback_id;
-  int partition_id;
-  std::string scope_string;
-  const DictionaryValue* cmd_args = nullptr;
+  if (args->GetList().size() == 0 || !args->GetList()[0].is_string())
+    return;
+  std::string callback_id = args->GetList()[0].GetString();
+
+  const base::Value& cmd_args = args->GetList()[1];
+  if (!cmd_args.is_dict())
+    return;
+
+  absl::optional<int> partition_id = cmd_args.FindIntKey("partition_id");
   scoped_refptr<ServiceWorkerContextWrapper> context;
-  if (!args->GetString(0, &callback_id) || !args->GetDictionary(1, &cmd_args) ||
-      !cmd_args->GetInteger("partition_id", &partition_id) ||
-      !GetServiceWorkerContext(partition_id, &context) ||
-      !cmd_args->GetString("scope", &scope_string)) {
+  const std::string* scope_string = cmd_args.FindStringKey("scope");
+  if (!partition_id || !GetServiceWorkerContext(*partition_id, &context) ||
+      !scope_string) {
     return;
   }
 
   base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
       base::BindOnce(OperationCompleteCallback, weak_ptr_factory_.GetWeakPtr(),
                      callback_id);
-  UnregisterWithScope(context, GURL(scope_string), std::move(callback));
+  UnregisterWithScope(context, GURL(*scope_string), std::move(callback));
 }
 
 void ServiceWorkerInternalsHandler::HandleStartWorker(const ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string callback_id;
-  int partition_id;
-  std::string scope_string;
-  const DictionaryValue* cmd_args = nullptr;
+  if (args->GetList().size() == 0 || !args->GetList()[0].is_string())
+    return;
+  std::string callback_id = args->GetList()[0].GetString();
+
+  const base::Value& cmd_args = args->GetList()[1];
+  if (!cmd_args.is_dict())
+    return;
+
+  absl::optional<int> partition_id = cmd_args.FindIntKey("partition_id");
+
   scoped_refptr<ServiceWorkerContextWrapper> context;
-  if (!args->GetString(0, &callback_id) || !args->GetDictionary(1, &cmd_args) ||
-      !cmd_args->GetInteger("partition_id", &partition_id) ||
-      !GetServiceWorkerContext(partition_id, &context) ||
-      !cmd_args->GetString("scope", &scope_string)) {
+  const std::string* scope_string = cmd_args.FindStringKey("scope");
+  if (!partition_id || !GetServiceWorkerContext(*partition_id, &context) ||
+      !scope_string) {
     return;
   }
   base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback =
       base::BindOnce(OperationCompleteCallback, weak_ptr_factory_.GetWeakPtr(),
                      callback_id);
   context->StartActiveServiceWorker(
-      GURL(scope_string),
-      blink::StorageKey(url::Origin::Create(GURL(scope_string))),
+      GURL(*scope_string),
+      blink::StorageKey(url::Origin::Create(GURL(*scope_string))),
       std::move(callback));
 }
 

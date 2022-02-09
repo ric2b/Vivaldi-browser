@@ -35,6 +35,8 @@ class LabelPattern {
   LabelPattern(const LabelPattern& other);
   ~LabelPattern();
 
+  LabelPattern& operator=(const LabelPattern&) = default;
+
   // Converts the given input string to a pattern. This does special stuff
   // to treat the pattern as a label. Sets the error on failure.
   static LabelPattern GetPattern(const SourceDir& current_dir,

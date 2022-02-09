@@ -12,10 +12,11 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -132,6 +133,10 @@ class Service {
 };
 
 class WebOTPServiceTest : public RenderViewHostTestHarness {
+ public:
+  WebOTPServiceTest(const WebOTPServiceTest&) = delete;
+  WebOTPServiceTest& operator=(const WebOTPServiceTest&) = delete;
+
  protected:
   WebOTPServiceTest() {
     ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
@@ -285,8 +290,6 @@ class WebOTPServiceTest : public RenderViewHostTestHarness {
  private:
   base::HistogramTester histogram_tester_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebOTPServiceTest);
 };
 
 }  // namespace
@@ -576,7 +579,7 @@ class ServiceWithPrompt : public Service {
   // The actual consent handler is owned by WebOTPService but we keep a ptr to
   // it so it can be used to set expectations for it. It is safe since the
   // sms service lifetime is the same as this object.
-  NiceMock<MockUserConsentHandler>* mock_handler_;
+  raw_ptr<NiceMock<MockUserConsentHandler>> mock_handler_;
   CompletionCallback on_complete_callback_;
 };
 

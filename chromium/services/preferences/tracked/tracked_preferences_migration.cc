@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/values.h"
@@ -40,6 +39,10 @@ class TrackedPreferencesMigrator
       std::unique_ptr<PrefHashStore> protected_pref_hash_store,
       InterceptablePrefFilter* unprotected_pref_filter,
       InterceptablePrefFilter* protected_pref_filter);
+
+  TrackedPreferencesMigrator(const TrackedPreferencesMigrator&) = delete;
+  TrackedPreferencesMigrator& operator=(const TrackedPreferencesMigrator&) =
+      delete;
 
   // Stores the data coming in from the filter identified by |id| into this
   // class and then calls MigrateIfReady();
@@ -80,8 +83,6 @@ class TrackedPreferencesMigrator
 
   std::unique_ptr<base::DictionaryValue> unprotected_prefs_;
   std::unique_ptr<base::DictionaryValue> protected_prefs_;
-
-  DISALLOW_COPY_AND_ASSIGN(TrackedPreferencesMigrator);
 };
 
 // Invokes |store_cleaner| for every |keys_to_clean|.

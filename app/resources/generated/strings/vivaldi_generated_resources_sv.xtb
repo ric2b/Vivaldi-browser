@@ -28,6 +28,7 @@
 <translation id="1476607407192946488">&amp;Språkinställningar</translation>
 <translation id="150411034776756821">Ta bort <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Det här tillägget har ändrat vilken sida som visas när du klickar på knappen Startsida.</translation>
+<translation id="1552752544932680961">Hantera Tillägg</translation>
 <translation id="15662109988763471">Den valda skrivaren är inte tillgänglig eller har inte installerats korrekt. Kontrollera skrivaren eller välj en annan.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Öppna länk med ...</translation>
@@ -295,6 +296,7 @@
 <translation id="6156863943908443225">Cacheminne för skript</translation>
 <translation id="6169666352732958425">Det gick inte att casta skrivbordet.</translation>
 <translation id="6196854373336333322">Tillägget <ph name="EXTENSION_NAME" /> har tagit kontroll över dina proxyinställningar, vilket innebär att det kan ändra, knäcka eller tjuvlyssna på allt du gör på webben. Om du inte vet varför den här ändringen inträffade är den troligen inte önskvärd.</translation>
+<translation id="6200151268994853226">Hantera Tillägg</translation>
 <translation id="6206311232642889873">Kopi&amp;era bild</translation>
 <translation id="6239558157302047471">Läs in &amp;ram igen</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -333,7 +335,6 @@
 <translation id="6892812721183419409">Öppna länk som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrundsapp: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Återkalla filåtkomst</translation>
-<translation id="6916590542764765824">Hantera tillägg</translation>
 <translation id="6945221475159498467">Välj</translation>
 <translation id="6955446738988643816">Inspektera popup-fönster</translation>
 <translation id="6970856801391541997">Skriv ut vissa sidor</translation>
@@ -401,7 +402,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8032244173881942855">Det gick inte att casta fliken.</translation>
 <translation id="8071432093239591881">Skriv ut som bild</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
-<translation id="8137559199583651773">Hantera tillägg</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Hämtning pågår} other {Hämtningar pågår}}</translation>
 <translation id="8230134520748321204">Vill du spara lösenordet för <ph name="ORIGIN" />?</translation>

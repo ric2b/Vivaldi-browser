@@ -4,7 +4,6 @@
 
 #include "components/url_pattern_index/url_rule_util.h"
 
-#include "base/macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "components/url_pattern_index/flat/url_pattern_index_generated.h"
@@ -114,6 +113,8 @@ std::string TypeOptionsToString(
     out += options_printer->PrintOption("websocket");
   if (types & url_pattern_index::flat::ElementType_WEBTRANSPORT)
     out += options_printer->PrintOption("webtransport");
+  if (types & url_pattern_index::flat::ElementType_WEBBUNDLE)
+    out += options_printer->PrintOption("webbundle");
 
   return out;
 }

@@ -99,8 +99,8 @@ class FrameHostImpl final : public fuchsia::web::FrameHost {
 
 WebEngineBrowserMainParts::WebEngineBrowserMainParts(
     content::ContentBrowserClient* browser_client,
-    const content::MainFunctionParams& parameters)
-    : browser_client_(browser_client), parameters_(parameters) {}
+    content::MainFunctionParams parameters)
+    : browser_client_(browser_client), parameters_(std::move(parameters)) {}
 
 WebEngineBrowserMainParts::~WebEngineBrowserMainParts() {
   display::Screen::SetScreenInstance(nullptr);
@@ -208,6 +208,15 @@ int WebEngineBrowserMainParts::PreMainMessageLoopRun() {
       fidl::InterfaceRequestHandler<fuchsia::web::FrameHost>(fit::bind_member(
           this, &WebEngineBrowserMainParts::HandleFrameHostRequest)));
 
+  // Publish the fuchsia.process.lifecycle.Lifecycle service to allow graceful
+  // teardown.  If there is a |ui_task| then this is a browser-test and graceful
+  // shutdown is not required.
+  if (!parameters_.ui_task) {
+    lifecycle_ = std::make_unique<base::ProcessLifecycle>(
+        base::BindOnce(&WebEngineBrowserMainParts::BeginGracefulShutdown,
+                       base::Unretained(this)));
+  }
+
   // Now that all services have been published, it is safe to start processing
   // requests to the service directory.
   base::ComponentContextForProcess()->outgoing()->ServeFromStartupInfo();
@@ -221,10 +230,6 @@ int WebEngineBrowserMainParts::PreMainMessageLoopRun() {
   if (parameters_.ui_task) {
     // Since the main loop won't run, there is nothing to quit.
     quit_closure_ = base::DoNothing();
-
-    std::move(*parameters_.ui_task).Run();
-    delete parameters_.ui_task;
-    run_message_loop_ = false;
   }
 
   return content::RESULT_CODE_NORMAL_EXIT;
@@ -232,10 +237,7 @@ int WebEngineBrowserMainParts::PreMainMessageLoopRun() {
 
 void WebEngineBrowserMainParts::WillRunMainMessageLoop(
     std::unique_ptr<base::RunLoop>& run_loop) {
-  if (run_message_loop_)
-    quit_closure_ = run_loop->QuitClosure();
-  else
-    run_loop.reset();
+  quit_closure_ = run_loop->QuitClosure();
 }
 
 void WebEngineBrowserMainParts::PostMainMessageLoopRun() {
@@ -301,7 +303,7 @@ void WebEngineBrowserMainParts::HandleContextRequest(
       [this](zx_status_t status) {
         ZX_LOG_IF(ERROR, status != ZX_ERR_PEER_CLOSED, status)
             << " Context disconnected.";
-        std::move(quit_closure_).Run();
+        BeginGracefulShutdown();
       });
 }
 
@@ -345,4 +347,9 @@ void WebEngineBrowserMainParts::OnIntlProfileChanged(
         ->GetNetworkContext()
         ->SetAcceptLanguage(accept_language);
   }
+}
+
+void WebEngineBrowserMainParts::BeginGracefulShutdown() {
+  if (quit_closure_)
+    std::move(quit_closure_).Run();
 }

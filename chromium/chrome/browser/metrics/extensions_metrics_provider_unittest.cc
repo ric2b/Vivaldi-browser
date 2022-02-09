@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
@@ -172,7 +173,7 @@ class ExtensionMetricsProviderInstallsTest
   }
 
  private:
-  extensions::ExtensionPrefs* prefs_ = nullptr;
+  raw_ptr<extensions::ExtensionPrefs> prefs_ = nullptr;
   base::Time last_sample_time_;
 };
 
@@ -318,17 +319,6 @@ TEST_F(ExtensionMetricsProviderInstallsTest, TestProtoConstruction) {
                 install.disable_reasons().Get(0));
       EXPECT_EQ(ExtensionInstallProto::CORRUPTED,
                 install.disable_reasons().Get(1));
-    }
-    // Adding additional disable reasons should result in all reasons being
-    // reported.
-    prefs()->AddDisableReason(
-        extension->id(),
-        extensions::disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
-    {
-      ExtensionInstallProto install = ConstructProto(*extension);
-      ASSERT_EQ(3, install.disable_reasons_size());
-      EXPECT_EQ(ExtensionInstallProto::DISABLE_REMOTELY_FOR_MALWARE,
-                install.disable_reasons().Get(2));
     }
   }
 

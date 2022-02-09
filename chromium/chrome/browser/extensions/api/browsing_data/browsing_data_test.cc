@@ -41,6 +41,7 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {};
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+// TODO(http://crbug.com/1266606): appcache is a noop and should be removed.
 const char kRemoveEverythingArguments[] =
     R"([{"since": 1000}, {
     "appcache": true, "cache": true, "cookies": true,
@@ -112,8 +113,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, Syncing) {
   ASSERT_EQ(SyncStatusMessageType::kSynced, GetSyncStatusMessageType(profile));
   // Clear browsing data.
   auto function = base::MakeRefCounted<BrowsingDataRemoveFunction>();
-  EXPECT_EQ(NULL, RunFunctionAndReturnSingleResult(
-                      function.get(), kRemoveEverythingArguments, browser()));
+  EXPECT_EQ(nullptr,
+            RunFunctionAndReturnSingleResult(
+                function.get(), kRemoveEverythingArguments, browser()));
   // Check that the Sync token was not revoked.
   EXPECT_TRUE(identity_manager->HasAccountWithRefreshToken(
       primary_account_info.account_id));
@@ -147,8 +149,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SyncError) {
   ASSERT_NE(SyncStatusMessageType::kSynced, GetSyncStatusMessageType(profile));
   // Clear browsing data.
   auto function = base::MakeRefCounted<BrowsingDataRemoveFunction>();
-  EXPECT_EQ(NULL, RunFunctionAndReturnSingleResult(
-                      function.get(), kRemoveEverythingArguments, browser()));
+  EXPECT_EQ(nullptr,
+            RunFunctionAndReturnSingleResult(
+                function.get(), kRemoveEverythingArguments, browser()));
   // Check that the account was not removed and Sync was paused.
   EXPECT_TRUE(
       identity_manager->HasAccountWithRefreshToken(account_info.account_id));
@@ -172,8 +175,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, NotSyncing) {
       signin::MakeAccountAvailable(identity_manager, kAccountEmail);
   // Clear browsing data.
   auto function = base::MakeRefCounted<BrowsingDataRemoveFunction>();
-  EXPECT_EQ(NULL, RunFunctionAndReturnSingleResult(
-                      function.get(), kRemoveEverythingArguments, browser()));
+  EXPECT_EQ(nullptr,
+            RunFunctionAndReturnSingleResult(
+                function.get(), kRemoveEverythingArguments, browser()));
   // Check that the account was removed.
   EXPECT_FALSE(
       identity_manager->HasAccountWithRefreshToken(account_info.account_id));

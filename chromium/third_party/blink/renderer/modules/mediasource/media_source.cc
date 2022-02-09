@@ -41,7 +41,7 @@
 #include "third_party/blink/renderer/modules/webcodecs/video_decoder.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -555,6 +555,8 @@ bool MediaSource::IsTypeSupportedInternal(ExecutionContext* context,
   // does not make sense for a MediaSource to support a type the
   // HTMLMediaElement knows it cannot play.
   String codecs = content_type.Parameter("codecs");
+#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC) || \
+    !defined(USE_SYSTEM_PROPRIETARY_CODECS)
   MIMETypeRegistry::SupportsType get_supports_type_result;
 #if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
   // Here, we special-case when encrypted HEVC is supported.
@@ -621,6 +623,8 @@ bool MediaSource::IsTypeSupportedInternal(ExecutionContext* context,
     return false;
   }
 #endif
+#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC) ||
+        // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
   // 3. If type contains a media type or media subtype that the MediaSource does
   //    not support, then return false.
@@ -1050,8 +1054,8 @@ void MediaSource::DurationChangeAlgorithm(
     // then call remove(new duration, old duration) on all all objects in
     // sourceBuffers.
     for (unsigned i = 0; i < source_buffers_->length(); ++i) {
-      source_buffers_->item(i)->remove(new_duration, old_duration,
-                                       ASSERT_NO_EXCEPTION);
+      source_buffers_->item(i)->Remove_Locked(new_duration, old_duration,
+                                              &ASSERT_NO_EXCEPTION, pass_key);
     }
   }
 

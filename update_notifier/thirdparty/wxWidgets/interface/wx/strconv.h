@@ -49,6 +49,26 @@ public:
     virtual wxMBConv* Clone() const = 0;
 
     /**
+        This function must be overridden in the derived classes to return the
+        maximum length, in bytes, of a single Unicode character representation
+        in this encoding.
+
+        As a consequence, the conversion object must be able to decode any
+        valid sequence of bytes in the corresponding encoding if it's at least
+        that many bytes long, but may fail if it is shorter. For example, for
+        UTF-8 the maximum character length is 4, as 3 bytes or less may be
+        insufficient to represent a Unicode character in UTF-8, but 4 are
+        always enough.
+
+        For compatibility reasons, this method is not pure virtual and returns
+        1 by default in the base class, however it should be always overridden
+        in the derived classes.
+
+        @since 3.1.3
+     */
+    virtual size_t GetMaxCharLen() const;
+
+    /**
         This function returns 1 for most of the multibyte encodings in which the
         string is terminated by a single @c NUL, 2 for UTF-16 and 4 for UTF-32 for
         which the string is terminated with 2 and 4 @c NUL characters respectively.
@@ -69,11 +89,24 @@ public:
     static size_t GetMaxMBNulLen();
 
     /**
+        Return true if the converter's charset is UTF-8.
+
+        This is provided to optimize creating wxStrings from the @c char*
+        strings returned by this converter, as they can be directly used with
+        wxString::FromUTF8() or even wxString::FromUTF8Unchecked() when this
+        method returns @true.
+
+        This function is universally available since wxWidgets 3.1.1 (it was
+        previously only available in some of the build configurations).
+    */
+    virtual bool IsUTF8() const;
+
+    /**
         Convert multibyte string to a wide character one.
 
         This is the most general function for converting a multibyte string to
         a wide string, cMB2WC() may be often more convenient, however this
-        function is the most efficient one as it allows to avoid any
+        function is the most efficient one as it allows avoiding any
         unnecessary copying.
 
         The main case is when @a dst is not @NULL and @a srcLen is not
@@ -121,7 +154,7 @@ public:
             including the terminating @c NUL character(s).
 
         @return
-            The number of character written (or which would have been written
+            The number of characters written (or which would have been written
             if it were non-@NULL) to @a dst or @c wxCONV_FAILED on error.
     */
     virtual size_t ToWChar(wchar_t* dst, size_t dstLen, const char* src,
@@ -148,8 +181,13 @@ public:
             including the terminating @c NUL character.
 
         @return
-            The number of character written (or which would have been written
-            if it were non-@NULL) to @a dst or @c wxCONV_FAILED on error.
+            If @a dst is non-@NULL, the number of characters actually written to
+            it. If @a dst is @NULL, the returned value is at least equal to the
+            number of characters that would have been written out if it were
+            non-@NULL, but can be larger than it under the platforms using
+            UTF-16 as @c wchar_t encoding (this allows a useful optimization in
+            the implementation of this function for UTF-32). In any case,
+            @c wxCONV_FAILED is returned on conversion error.
     */
     virtual size_t FromWChar(char* dst, size_t dstLen, const wchar_t* src,
                              size_t srcLen = wxNO_LEN) const;
@@ -172,7 +210,7 @@ public:
         invalid and @a outLen is set to 0 (and not @c wxCONV_FAILED for
         compatibility concerns).
     */
-    const wxWCharBuffer cMB2WC(const char* in,
+    wxWCharBuffer cMB2WC(const char* in,
                                size_t inLen,
                                size_t *outLen) const;
 
@@ -191,7 +229,7 @@ public:
 
         @since 2.9.1
      */
-    const wxWCharBuffer cMB2WC(const wxCharBuffer& buf) const;
+    wxWCharBuffer cMB2WC(const wxCharBuffer& buf) const;
 
     //@{
     /**
@@ -203,7 +241,7 @@ public:
         is defined as the correct return type (without const).
     */
     const char* cMB2WX(const char* psz) const;
-    const wxWCharBuffer cMB2WX(const char* psz) const;
+    wxWCharBuffer cMB2WX(const char* psz) const;
     //@}
 
     /**
@@ -216,7 +254,7 @@ public:
         Its parameters have the same meaning as the corresponding parameters of
         FromWChar(), please see the description of cMB2WC() for more details.
     */
-    const wxCharBuffer cWC2MB(const wchar_t* in,
+    wxCharBuffer cWC2MB(const wchar_t* in,
                               size_t inLen,
                               size_t *outLen) const;
 
@@ -235,7 +273,7 @@ public:
 
         @since 2.9.1
      */
-    const wxCharBuffer cWC2MB(const wxWCharBuffer& buf) const;
+    wxCharBuffer cWC2MB(const wxWCharBuffer& buf) const;
 
     //@{
     /**
@@ -246,7 +284,7 @@ public:
         defined as the correct return type (without const).
     */
     const wchar_t* cWC2WX(const wchar_t* psz) const;
-    const wxCharBuffer cWC2WX(const wchar_t* psz) const;
+    wxCharBuffer cWC2WX(const wchar_t* psz) const;
     //@}
 
     //@{
@@ -258,7 +296,7 @@ public:
         is defined as the correct return type (without const).
     */
     const char* cWX2MB(const wxChar* psz) const;
-    const wxCharBuffer cWX2MB(const wxChar* psz) const;
+    wxCharBuffer cWX2MB(const wxChar* psz) const;
     //@}
 
     //@{
@@ -270,7 +308,7 @@ public:
         defined as the correct return type (without const).
     */
     const wchar_t* cWX2WC(const wxChar* psz) const;
-    const wxWCharBuffer cWX2WC(const wxChar* psz) const;
+    wxWCharBuffer cWX2WC(const wxChar* psz) const;
     //@}
 
     /**
@@ -478,6 +516,30 @@ public:
     bool IsOk() const;
 };
 
+/**
+    Conversion object always producing non-empty output for non-empty input.
+
+    Conversions done using this object never lose data, at the cost of possibly
+    producing the output in an unwanted encoding or misinterpreting input
+    encoding.
+
+    To be precise, converting Unicode to multibyte strings using this object
+    tries to use the current locale encoding first but if this doesn't work, it
+    falls back to using UTF-8. In the other direction, UTF-8 is tried first,
+    then the current locale encoding and if this fails too, input is
+    interpreted as using ISO 8859-1, which never fails.
+
+    It is almost always @e wrong to use this converter for multibyte-to-Unicode
+    direction as the program should know which encoding the input data is
+    supposed to use and use the appropriate converter instead. However it may
+    be useful in the Unicode-to-multibyte direction if the goal is to produce
+    the output in the current locale encoding if possible, but still output
+    something, instead of nothing at all, even if the Unicode string is not
+    representable in this encoding.
+
+    @since 3.1.0
+ */
+extern wxMBConv& wxConvWhateverWorks;
 
 
 /**

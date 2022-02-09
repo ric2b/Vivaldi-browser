@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/component_export.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/pass_key.h"
@@ -56,13 +56,13 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
                        StatusCallback callback) override;
   void Copy(const FileSystemURL& src_url,
             const FileSystemURL& dest_url,
-            CopyOrMoveOption option,
+            CopyOrMoveOptionSet options,
             ErrorBehavior error_behavior,
             const CopyOrMoveProgressCallback& progress_callback,
             StatusCallback callback) override;
   void Move(const FileSystemURL& src_url,
             const FileSystemURL& dest_url,
-            CopyOrMoveOption option,
+            CopyOrMoveOptionSet options,
             ErrorBehavior error_behavior,
             const CopyOrMoveProgressCallback& progress_callback,
             StatusCallback callback) override;
@@ -106,12 +106,12 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
                        StatusCallback callback) override;
   void CopyFileLocal(const FileSystemURL& src_url,
                      const FileSystemURL& dest_url,
-                     CopyOrMoveOption option,
+                     CopyOrMoveOptionSet options,
                      const CopyFileProgressCallback& progress_callback,
                      StatusCallback callback) override;
   void MoveFileLocal(const FileSystemURL& src_url,
                      const FileSystemURL& dest_url,
-                     CopyOrMoveOption option,
+                     CopyOrMoveOptionSet options,
                      StatusCallback callback) override;
   base::File::Error SyncGetPlatformPath(const FileSystemURL& url,
                                         base::FilePath* platform_path) override;
@@ -151,12 +151,12 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
                          bool recursive);
   void DoCopyFileLocal(const FileSystemURL& src,
                        const FileSystemURL& dest,
-                       CopyOrMoveOption option,
+                       CopyOrMoveOptionSet options,
                        const CopyFileProgressCallback& progress_callback,
                        StatusCallback callback);
   void DoMoveFileLocal(const FileSystemURL& src,
                        const FileSystemURL& dest,
-                       CopyOrMoveOption option,
+                       CopyOrMoveOptionSet options,
                        StatusCallback callback);
   void DoCopyInForeignFile(const base::FilePath& src_local_disk_file_path,
                            const FileSystemURL& dest,
@@ -201,7 +201,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemOperationImpl
   scoped_refptr<FileSystemContext> file_system_context_;
 
   std::unique_ptr<FileSystemOperationContext> operation_context_;
-  AsyncFileUtil* async_file_util_;  // Not owned.
+  raw_ptr<AsyncFileUtil> async_file_util_;  // Not owned.
 
   std::unique_ptr<FileWriterDelegate> file_writer_delegate_;
   std::unique_ptr<RecursiveOperationDelegate> recursive_operation_delegate_;

@@ -11,7 +11,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/win/scoped_gdi_object.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
@@ -85,11 +84,7 @@ class GFX_EXPORT IconUtil {
   IconUtil& operator=(const IconUtil&) = delete;
 
   // Given an SkBitmap object, the function converts the bitmap to a Windows
-  // icon and returns the corresponding HICON handle. If the function cannot
-  // convert the bitmap, NULL is returned.
-  //
-  // The client is responsible for destroying the icon when it is no longer
-  // needed by calling ::DestroyIcon().
+  // icon and returns the corresponding HICON handle if conversion succeeds.
   static base::win::ScopedHICON CreateHICONFromSkBitmap(const SkBitmap& bitmap);
 
   // Given a valid HICON handle representing an icon, this function converts

@@ -17,9 +17,10 @@
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/layout.h"
 #include "ui/gfx/font_list.h"
@@ -32,6 +33,11 @@ namespace base {
 class File;
 class Lock;
 class RefCountedMemory;
+class RefCountedString;
+}  // namespace base
+
+namespace gfx {
+class ImageSkiaRep;
 }
 
 namespace ui {
@@ -150,6 +156,9 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
     virtual ~Delegate() = default;
   };
 
+  using LottieImageParseFunction =
+      gfx::ImageSkiaRep (*)(const base::RefCountedString& bytes_string);
+
   // Initialize the ResourceBundle for this process. Does not take ownership of
   // the |delegate| value. Returns the language selected or an empty string if
   // no candidate bundle file could be determined, or crashes the process if a
@@ -190,6 +199,11 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
   // Initialize the ResourceBundle using data pack from given buffer.
   // Return the global resource loader instance.
   static ResourceBundle& GetSharedInstance();
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  static void SetParseLottieAsStillImage(
+      LottieImageParseFunction parse_lottie_as_still_image);
+#endif
 
   ResourceBundle(const ResourceBundle&) = delete;
   ResourceBundle& operator=(const ResourceBundle&) = delete;
@@ -286,7 +300,8 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
   // (such as wallpaper).
   base::StringPiece GetRawDataResourceForScale(
       int resource_id,
-      ResourceScaleFactor scale_factor) const;
+      ResourceScaleFactor scale_factor,
+      ResourceScaleFactor* loaded_scale_factor = nullptr) const;
 
   // Return the contents of a scale independent resource, decompressed
   // into a newly allocated string given the resource id. Todo: Look into
@@ -384,8 +399,10 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
   friend class ResourceBundleTest;
   friend class ChromeBrowserMainMacBrowserTest;
 
-  class ResourceBundleImageSource;
-  friend class ResourceBundleImageSource;
+  class BitmapImageSource;
+  friend class BitmapImageSource;
+  class LottieImageSource;
+  friend class LottieImageSource;
 
   using IdToStringMap = std::unordered_map<int, std::u16string>;
 
@@ -434,6 +451,9 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
   // Initializes the font description of default gfx::FontList.
   void InitDefaultFontList();
 
+  // Creates a |gfx::ImageSkia| for the given |resource_id|.
+  gfx::ImageSkia CreateImageSkia(int resource_id);
+
   // Fills the |bitmap| given the data file to look in and the |resource_id|.
   // Returns false if the resource does not exist.
   //
@@ -466,6 +486,12 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
                         SkBitmap* bitmap,
                         bool* fell_back_to_1x);
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Creates the |rep| from a Lottie asset, given the |resource_id|. Returns
+  // false if the resource does not exist.
+  bool LoadLottie(int resource_id, gfx::ImageSkiaRep* rep) const;
+#endif
+
   // Returns an empty image for when a resource cannot be loaded. This is a
   // bright red bitmap.
   gfx::Image& GetEmptyImage();
@@ -486,7 +512,7 @@ class COMPONENT_EXPORT(UI_BASE) ResourceBundle {
 
   // This pointer is guaranteed to outlive the ResourceBundle instance and may
   // be null.
-  Delegate* delegate_;
+  raw_ptr<Delegate> delegate_;
 
   // Protects |locale_resources_data_|.
   std::unique_ptr<base::Lock> locale_resources_data_lock_;

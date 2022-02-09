@@ -11,7 +11,7 @@
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "net/url_request/redirect_info.h"
@@ -23,6 +23,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_back_forward_cache_loader_helper.h"
 #include "third_party/blink/public/platform/web_resource_request_sender.h"
+#include "third_party/blink/renderer/platform/back_forward_cache_buffer_limit_tracker.h"
 #include "third_party/blink/renderer/platform/back_forward_cache_utils.h"
 #include "third_party/blink/renderer/platform/loader/fetch/back_forward_cache_loader_helper.h"
 #include "third_party/blink/renderer/platform/loader/fetch/loader_freeze_mode.h"
@@ -365,11 +366,8 @@ void MojoURLLoaderClient::DidBufferLoadWhileInBackForwardCache(
 }
 
 bool MojoURLLoaderClient::CanContinueBufferingWhileInBackForwardCache() {
-  auto* back_forward_cache_loader_helper = GetBackForwardCacheLoaderHelper();
-  if (!back_forward_cache_loader_helper)
-    return false;
-  return back_forward_cache_loader_helper
-      ->CanContinueBufferingWhileInBackForwardCache();
+  return BackForwardCacheBufferLimitTracker::Get()
+      .IsUnderPerProcessBufferLimit();
 }
 
 void MojoURLLoaderClient::EvictFromBackForwardCacheDueToTimeout() {

@@ -22,7 +22,7 @@ public:
            const wxSize& size = wxDefaultSize,
            long style = wxSB_HORIZONTAL,
            const wxValidator& validator = wxDefaultValidator,
-           const wxString& name = wxScrollBarNameStr )
+           const wxString& name = wxASCII_STR(wxScrollBarNameStr) )
     {
         Create( parent, id, pos, size, style, validator, name );
     }
@@ -31,15 +31,15 @@ public:
            const wxSize& size = wxDefaultSize,
            long style = wxSB_HORIZONTAL,
            const wxValidator& validator = wxDefaultValidator,
-           const wxString& name = wxScrollBarNameStr );
+           const wxString& name = wxASCII_STR(wxScrollBarNameStr) );
     virtual ~wxScrollBar();
-    int GetThumbPosition() const;
-    int GetThumbSize() const;
-    int GetPageSize() const;
-    int GetRange() const;
-    virtual void SetThumbPosition( int viewStart );
+    int GetThumbPosition() const wxOVERRIDE;
+    int GetThumbSize() const wxOVERRIDE;
+    int GetPageSize() const wxOVERRIDE;
+    int GetRange() const wxOVERRIDE;
+    virtual void SetThumbPosition( int viewStart ) wxOVERRIDE;
     virtual void SetScrollbar( int position, int thumbSize, int range, int pageSize,
-      bool refresh = true );
+      bool refresh = true ) wxOVERRIDE;
 
     void SetThumbSize(int thumbSize);
     void SetPageSize( int pageLength );
@@ -48,7 +48,7 @@ public:
     static wxVisualAttributes
     GetClassDefaultAttributes(wxWindowVariant variant = wxWINDOW_VARIANT_NORMAL);
 
-    DECLARE_DYNAMIC_CLASS(wxScrollBar)
+    wxDECLARE_DYNAMIC_CLASS(wxScrollBar);
 };
 
 #endif // _WX_GTK_SCROLLBAR_H_

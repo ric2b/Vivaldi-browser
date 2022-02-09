@@ -15,11 +15,6 @@
 
 #include "wx/msw/wrapwin.h"
 
-#ifdef __WXMICROWIN__
-    // Extra prototypes and symbols not defined by MicroWindows
-    #include "wx/msw/microwin.h"
-#endif
-
 #include "wx/log.h"
 
 #if wxUSE_GUI
@@ -38,6 +33,10 @@ class WXDLLIMPEXP_FWD_CORE wxWindowBase;
 #ifndef MAX_PATH
     #define MAX_PATH  260
 #endif
+
+// Many MSW functions have parameters which are "reserved". Passing them this
+// constant is more clear than just using "0" or "NULL".
+#define wxRESERVED_PARAM    0
 
 // ---------------------------------------------------------------------------
 // standard icons from the resources
@@ -72,12 +71,6 @@ WXDLLIMPEXP_BASE void wxSetInstance(HINSTANCE hInst);
 // define things missing from some compilers' headers
 // ---------------------------------------------------------------------------
 
-#if defined(__WXWINCE__) || (defined(__GNUWIN32__) && !wxUSE_NORLANDER_HEADERS)
-#ifndef ZeroMemory
-    inline void ZeroMemory(void *buf, size_t len) { memset(buf, 0, len); }
-#endif
-#endif // old mingw32
-
 // this defines a CASTWNDPROC macro which casts a pointer to the type of a
 // window proc
 #if defined(STRICT) || defined(__GNUC__)
@@ -86,100 +79,58 @@ WXDLLIMPEXP_BASE void wxSetInstance(HINSTANCE hInst);
     typedef FARPROC WndProcCast;
 #endif
 
-
 #define CASTWNDPROC (WndProcCast)
 
-
-
-// ---------------------------------------------------------------------------
-// some stuff for old Windows versions (FIXME: what does it do here??)
-// ---------------------------------------------------------------------------
-
-#if !defined(APIENTRY)  // NT defines APIENTRY, 3.x not
-    #define APIENTRY FAR PASCAL
-#endif
-
-#ifdef __WIN32__
-    #define _EXPORT
-#else
-    #define _EXPORT _export
-#endif
-
-#ifndef __WIN32__
-    typedef signed short int SHORT;
-#endif
-
-#if !defined(__WIN32__)  // 3.x uses FARPROC for dialogs
-#ifndef STRICT
-    #define DLGPROC FARPROC
-#endif
-#endif
-
-/*
- * Decide what window classes we're going to use
- * for this combination of CTl3D/FAFA settings
- */
-
-#define STATIC_CLASS     wxT("STATIC")
-#define STATIC_FLAGS     (SS_LEFT|WS_CHILD|WS_VISIBLE)
-#define CHECK_CLASS      wxT("BUTTON")
-#define CHECK_FLAGS      (BS_AUTOCHECKBOX|WS_TABSTOP|WS_CHILD)
-#define CHECK_IS_FAFA    FALSE
-#define RADIO_CLASS      wxT("BUTTON")
-#define RADIO_FLAGS      (BS_AUTORADIOBUTTON|WS_CHILD|WS_VISIBLE)
-#define RADIO_SIZE       20
-#define RADIO_IS_FAFA    FALSE
-#define PURE_WINDOWS
-#define GROUP_CLASS      wxT("BUTTON")
-#define GROUP_FLAGS      (BS_GROUPBOX|WS_CHILD|WS_VISIBLE)
-
-/*
-#define BITCHECK_FLAGS   (FB_BITMAP|FC_BUTTONDRAW|FC_DEFAULT|WS_VISIBLE)
-#define BITRADIO_FLAGS   (FC_BUTTONDRAW|FB_BITMAP|FC_RADIO|WS_CHILD|WS_VISIBLE)
-*/
 
 // ---------------------------------------------------------------------------
 // misc macros
 // ---------------------------------------------------------------------------
 
+#if wxUSE_GUI
+
 #define MEANING_CHARACTER '0'
 #define DEFAULT_ITEM_WIDTH  100
 #define DEFAULT_ITEM_HEIGHT 80
 
-// Scale font to get edit control height
-//#define EDIT_HEIGHT_FROM_CHAR_HEIGHT(cy)    (3*(cy)/2)
-#define EDIT_HEIGHT_FROM_CHAR_HEIGHT(cy)    (cy+8)
+// Return the height of a native text control corresponding to the given
+// character height (as returned by GetCharHeight() or wxGetCharSize()).
+//
+// The wxWindow parameter is currently not used but should still be valid.
+inline int wxGetEditHeightFromCharHeight(int cy, const wxWindow* WXUNUSED(w))
+{
+    // The value 8 here is empiric, i.e. it's not necessarily correct, but
+    // seems to work relatively well.
+    // Don't use FromDIP(8), this seems not needed.
+    return cy + 8;
+}
+
+// Compatibility macro used in the existing code. It assumes that it's called
+// from a method of wxWindow-derived object.
+#define EDIT_HEIGHT_FROM_CHAR_HEIGHT(cy) \
+    wxGetEditHeightFromCharHeight((cy), this)
 
 // Generic subclass proc, for panel item moving/sizing and intercept
 // EDIT control VK_RETURN messages
-extern LONG APIENTRY _EXPORT
+extern LONG APIENTRY
   wxSubclassedGenericControlProc(WXHWND hWnd, WXUINT message, WXWPARAM wParam, WXLPARAM lParam);
+
+#endif // wxUSE_GUI
 
 // ---------------------------------------------------------------------------
 // useful macros and functions
 // ---------------------------------------------------------------------------
 
 // a wrapper macro for ZeroMemory()
-#if defined(__WIN32__) && !defined(__WXMICROWIN__)
 #define wxZeroMemory(obj)   ::ZeroMemory(&obj, sizeof(obj))
-#else
-#define wxZeroMemory(obj)   memset((void*) & obj, 0, sizeof(obj))
-#endif
 
 // This one is a macro so that it can be tested with #ifdef, it will be
 // undefined if it cannot be implemented for a given compiler.
-// Vc++, bcc, dmc, ow, mingw akk have _get_osfhandle() and Cygwin has
+// Vc++, dmc, ow, mingw akk have _get_osfhandle() and Cygwin has
 // get_osfhandle. Others are currently unknown, e.g. Salford, Intel, Visual
 // Age.
-#if defined(__WXWINCE__)
-    #define wxGetOSFHandle(fd) ((HANDLE)fd)
-    #define wxOpenOSFHandle(h, flags) ((int)wxPtrToUInt(h))
-#elif defined(__CYGWIN__)
+#if defined(__CYGWIN__)
     #define wxGetOSFHandle(fd) ((HANDLE)get_osfhandle(fd))
 #elif defined(__VISUALC__) \
-   || defined(__BORLANDC__) \
-   || defined(__DMC__) \
-   || defined(__WATCOMC__) \
    || defined(__MINGW32__)
     #define wxGetOSFHandle(fd) ((HANDLE)_get_osfhandle(fd))
     #define wxOpenOSFHandle(h, flags) (_open_osfhandle(wxPtrToUInt(h), flags))
@@ -189,21 +140,45 @@ extern LONG APIENTRY _EXPORT
 #endif
 
 // close the handle in the class dtor
+template <wxUIntPtr INVALID_VALUE>
 class AutoHANDLE
 {
 public:
-    wxEXPLICIT AutoHANDLE(HANDLE handle) : m_handle(handle) { }
+    explicit AutoHANDLE(HANDLE handle = InvalidHandle()) : m_handle(handle) { }
 
-    bool IsOk() const { return m_handle != INVALID_HANDLE_VALUE; }
+    bool IsOk() const { return m_handle != InvalidHandle(); }
     operator HANDLE() const { return m_handle; }
 
-    ~AutoHANDLE() { if ( IsOk() ) ::CloseHandle(m_handle); }
+    ~AutoHANDLE() { if ( IsOk() ) DoClose(); }
+
+    void Close()
+    {
+        wxCHECK_RET(IsOk(), wxT("Handle must be valid"));
+
+        DoClose();
+
+        m_handle = InvalidHandle();
+    }
 
 protected:
-    HANDLE m_handle;
+    // We need this helper function because integer INVALID_VALUE is not
+    // implicitly convertible to HANDLE, which is a pointer.
+    static HANDLE InvalidHandle()
+    {
+        wxUIntPtr h = INVALID_VALUE;
+        return reinterpret_cast<HANDLE>(h);
+    }
+
+    void DoClose()
+    {
+        if ( !::CloseHandle(m_handle) )
+            wxLogLastError(wxT("CloseHandle"));
+    }
+
+    WXHANDLE m_handle;
 };
 
-// a template to make initializing Windows styructs less painful: it zeroes all
+// a template to make initializing Windows structs less painful: it zeros all
 // the struct fields and also sets cbSize member to the correct value (and so
 // can be only used with structures which have this member...)
 template <class T>
@@ -238,6 +213,12 @@ struct WinStruct : public T
 
 #include "wx/gdicmn.h"
 #include "wx/colour.h"
+
+#ifdef COM_DECLSPEC_NOTHROW
+    #define wxSTDMETHODIMP COM_DECLSPEC_NOTHROW STDMETHODIMP
+#else
+    #define wxSTDMETHODIMP STDMETHODIMP
+#endif
 
 // make conversion from wxColour and COLORREF a bit less painful
 inline COLORREF wxColourToRGB(const wxColour& c)
@@ -325,11 +306,16 @@ extern HBITMAP wxInvertMask(HBITMAP hbmpMask, int w = 0, int h = 0);
 // mask is created using light grey as the transparent colour.
 extern HICON wxBitmapToHICON(const wxBitmap& bmp);
 
-// Same requirments as above apply and the bitmap must also have the correct
+// Same requirements as above apply and the bitmap must also have the correct
 // size.
 extern
 HCURSOR wxBitmapToHCURSOR(const wxBitmap& bmp, int hotSpotX, int hotSpotY);
 
+extern int wxGetSystemMetrics(int nIndex, const wxWindow* win);
+
+extern bool wxSystemParametersInfo(UINT uiAction, UINT uiParam,
+                                   PVOID pvParam, UINT fWinIni,
+                                   const wxWindow* win);
 
 #if wxUSE_OWNER_DRAWN
 
@@ -345,15 +331,6 @@ extern
 BOOL wxDrawStateBitmap(HDC hDC, HBITMAP hBitmap, int x, int y, UINT uState);
 
 #endif // wxUSE_OWNER_DRAWN
-
-// get (x, y) from DWORD - notice that HI/LOWORD can *not* be used because they
-// will fail on system with multiple monitors where the coords may be negative
-//
-// these macros are standard now (Win98) but some older headers don't have them
-#ifndef GET_X_LPARAM
-    #define GET_X_LPARAM(lp) ((int)(short)LOWORD(lp))
-    #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
-#endif // GET_X_LPARAM
 
 // get the current state of SHIFT/CTRL/ALT keys
 inline bool wxIsModifierDown(int vk)
@@ -413,6 +390,37 @@ inline RECT wxGetClientRect(HWND hwnd)
 // small helper classes
 // ---------------------------------------------------------------------------
 
+// This class can only be used with wxMSW wxWindow, as it doesn't have
+// {Set,Get}HWND() methods in the other ports, but this file is currently
+// included for wxQt/MSW too. It's not clear whether it should be, really, but
+// for now allow it to compile in this port too.
+#ifdef __WXMSW__
+
+// Temporarily assign the given HWND to the window in ctor and unset it back to
+// the original value (usually 0) in dtor.
+class TempHWNDSetter
+{
+public:
+    TempHWNDSetter(wxWindow* win, WXHWND hWnd)
+        : m_win(win), m_hWndOrig(m_win->GetHWND())
+    {
+        m_win->SetHWND(hWnd);
+    }
+
+    ~TempHWNDSetter()
+    {
+        m_win->SetHWND(m_hWndOrig);
+    }
+
+private:
+    wxWindow* const m_win;
+    WXHWND const m_hWndOrig;
+
+    wxDECLARE_NO_COPY_CLASS(TempHWNDSetter);
+};
+
+#endif // __WXMSW__
+
 // create an instance of this class and use it as the HDC for screen, will
 // automatically release the DC going out of scope
 class ScreenHDC
@@ -451,7 +459,7 @@ private:
 class MemoryHDC
 {
 public:
-    MemoryHDC(HDC hdc = 0) { m_hdc = ::CreateCompatibleDC(hdc); }
+    MemoryHDC(HDC hdc = NULL) { m_hdc = ::CreateCompatibleDC(hdc); }
    ~MemoryHDC() { ::DeleteDC(m_hdc); }
 
     operator HDC() const { return m_hdc; }
@@ -485,7 +493,7 @@ public:
     ~SelectInHDC() { if ( m_hdc ) ::SelectObject(m_hdc, m_hgdiobj); }
 
     // return true if the object was successfully selected
-    operator bool() const { return m_hgdiobj != 0; }
+    operator bool() const { return m_hgdiobj != NULL; }
 
 private:
     HDC m_hdc;
@@ -580,7 +588,7 @@ class MonoBitmap : public AutoHBITMAP
 {
 public:
     MonoBitmap(int w, int h)
-        : AutoHBITMAP(::CreateBitmap(w, h, 1, 1, 0))
+        : AutoHBITMAP(::CreateBitmap(w, h, 1, 1, NULL))
     {
     }
 };
@@ -592,6 +600,33 @@ public:
     AutoHRGN(HRGN hrgn) : AutoGDIObject(hrgn) { }
 
     operator HRGN() const { return (HRGN)GetObject(); }
+};
+
+// Class automatically freeing ICONINFO struct fields after retrieving it using
+// GetIconInfo().
+class AutoIconInfo : public ICONINFO
+{
+public:
+    AutoIconInfo() { wxZeroMemory(*this); }
+
+    bool GetFrom(HICON hIcon)
+    {
+        if ( !::GetIconInfo(hIcon, this) )
+        {
+            wxLogLastError(wxT("GetIconInfo"));
+            return false;
+        }
+
+        return true;
+    }
+
+    ~AutoIconInfo()
+    {
+        if ( hbmColor )
+            ::DeleteObject(hbmColor);
+        if ( hbmMask )
+            ::DeleteObject(hbmMask);
+    }
 };
 
 // class sets the specified clipping region during its life time
@@ -619,12 +654,6 @@ private:
 };
 
 // set the given map mode for the life time of this object
-//
-// NB: SetMapMode() is not supported by CE so we also define a helper macro
-//     to avoid using it there
-#ifdef __WXWINCE__
-    #define wxCHANGE_HDC_MAP_MODE(hdc, mm)
-#else // !__WXWINCE__
     class HDCMapModeChanger
     {
     public:
@@ -653,7 +682,6 @@ private:
 
     #define wxCHANGE_HDC_MAP_MODE(hdc, mm) \
         HDCMapModeChanger wxMAKE_UNIQUE_NAME(wxHDCMapModeChanger)(hdc, mm)
-#endif // __WXWINCE__/!__WXWINCE__
 
 // smart pointer using GlobalAlloc/GlobalFree()
 class GlobalPtr
@@ -748,6 +776,15 @@ public:
     void *Get() const { return m_ptr; }
     operator void *() const { return m_ptr; }
 
+    size_t GetSize() const
+    {
+        const size_t size = ::GlobalSize(m_hGlobal);
+        if ( !size )
+            wxLogLastError(wxT("GlobalSize"));
+
+        return size;
+    }
+
 private:
     HGLOBAL m_hGlobal;
     void *m_ptr;
@@ -815,7 +852,7 @@ private:
 
 // ---------------------------------------------------------------------------
 // macros to make casting between WXFOO and FOO a bit easier: the GetFoo()
-// returns Foo cast to the Windows type for oruselves, while GetFooOf() takes
+// returns Foo cast to the Windows type for ourselves, while GetFooOf() takes
 // an argument which should be a pointer or reference to the object of the
 // corresponding class (this depends on the macro)
 // ---------------------------------------------------------------------------
@@ -893,21 +930,17 @@ inline wxString wxGetFullModuleName()
 // return the run-time version of the OS in a format similar to
 // WINVER/_WIN32_WINNT compile-time macros:
 //
-//      0x0300      Windows NT 3.51
-//      0x0400      Windows 95, NT4
-//      0x0410      Windows 98
-//      0x0500      Windows ME, 2000
 //      0x0501      Windows XP, 2003
 //      0x0502      Windows XP SP2, 2003 SP1
 //      0x0600      Windows Vista, 2008
 //      0x0601      Windows 7
-//      0x0602      Windows 8 (currently also returned for 8.1)
+//      0x0602      Windows 8 (currently also returned for 8.1 if program does not have a manifest indicating 8.1 support)
+//      0x0603      Windows 8.1 (currently only returned for 8.1 if program has a manifest indicating 8.1 support)
+//      0x1000      Windows 10 (currently only returned for 10 if program has a manifest indicating 10 support)
 //
-// for the other Windows versions 0 is currently returned
+// for the other Windows versions wxWinVersion_Unknown is currently returned.
 enum wxWinVersion
 {
-    wxWinVersion_Unknown = 0,
-
     wxWinVersion_3 = 0x0300,
     wxWinVersion_NT3 = wxWinVersion_3,
 
@@ -931,10 +964,21 @@ enum wxWinVersion
 
     wxWinVersion_7 = 0x601,
 
-    wxWinVersion_8 = 0x602
+    wxWinVersion_8 = 0x602,
+    wxWinVersion_8_1 = 0x603,
+
+    wxWinVersion_10 = 0x1000,
+
+    // Any version we can't recognize will be later than the last currently
+    // known one, so give it a value greater than any in the known range.
+    wxWinVersion_Unknown = 0x7fff
 };
 
 WXDLLIMPEXP_BASE wxWinVersion wxGetWinVersion();
+
+// This is similar to wxSysErrorMsgStr(), but takes an extra HMODULE parameter
+// specific to wxMSW.
+WXDLLIMPEXP_BASE wxString wxMSWFormatMessage(DWORD nErrCode, HMODULE hModule = 0);
 
 #if wxUSE_GUI && defined(__WXMSW__)
 
@@ -945,10 +989,21 @@ extern const wxCursor *wxGetGlobalCursor(); // from msw/cursor.cpp
 // GetCursorPos can fail without populating the POINT. This falls back to GetMessagePos.
 WXDLLIMPEXP_CORE void wxGetCursorPosMSW(POINT* pt);
 
-WXDLLIMPEXP_CORE void wxGetCharSize(WXHWND wnd, int *x, int *y, const wxFont& the_font);
+#if WXWIN_COMPATIBILITY_3_0
+wxDEPRECATED_MSG("Use wxNativeFontInfo::lf directly instead of this private function")
 WXDLLIMPEXP_CORE void wxFillLogFont(LOGFONT *logFont, const wxFont *font);
+wxDEPRECATED_MSG("Use wxNativeFontInfo(LOGFONT) ctor instead of this private function")
 WXDLLIMPEXP_CORE wxFont wxCreateFontFromLogFont(const LOGFONT *logFont);
+#endif // WXWIN_COMPATIBILITY_3_0
+
+WXDLLIMPEXP_CORE void wxGetCharSize(WXHWND wnd, int *x, int *y, const wxFont& the_font);
 WXDLLIMPEXP_CORE wxFontEncoding wxGetFontEncFromCharSet(int charset);
+
+inline void wxSetWindowFont(HWND hwnd, const wxFont& font)
+{
+    ::SendMessage(hwnd, WM_SETFONT,
+                  (WPARAM)GetHfontOf(font), MAKELPARAM(TRUE, 0));
+}
 
 WXDLLIMPEXP_CORE void wxSliderEvent(WXHWND control, WXWORD wParam, WXWORD pos);
 WXDLLIMPEXP_CORE void wxScrollBarEvent(WXHWND hbar, WXWORD wParam, WXWORD pos);
@@ -968,7 +1023,10 @@ extern WXDLLIMPEXP_CORE int wxGetWindowId(WXHWND hWnd);
 
 // check if hWnd's WNDPROC is wndProc. Return true if yes, false if they are
 // different
-extern WXDLLIMPEXP_CORE bool wxCheckWindowWndProc(WXHWND hWnd, WXFARPROC wndProc);
+//
+// wndProc parameter is unused and only kept for compatibility
+extern WXDLLIMPEXP_CORE
+bool wxCheckWindowWndProc(WXHWND hWnd, WXWNDPROC wndProc = NULL);
 
 // Does this window style specify any border?
 inline bool wxStyleHasBorder(long style)
@@ -977,19 +1035,82 @@ inline bool wxStyleHasBorder(long style)
                      wxSUNKEN_BORDER | wxDOUBLE_BORDER)) != 0;
 }
 
-inline long wxGetWindowExStyle(const wxWindowMSW *win)
-{
-    return ::GetWindowLong(GetHwndOf(win), GWL_EXSTYLE);
-}
-
 inline bool wxHasWindowExStyle(const wxWindowMSW *win, long style)
 {
-    return (wxGetWindowExStyle(win) & style) != 0;
+    return (::GetWindowLong(GetHwndOf(win), GWL_EXSTYLE) & style) != 0;
 }
 
-inline long wxSetWindowExStyle(const wxWindowMSW *win, long style)
+// Common helper of wxUpdate{,Edit}LayoutDirection() below: sets or clears the
+// given flag(s) depending on wxLayoutDirection and returns true if the flags
+// really changed.
+inline bool
+wxUpdateExStyleForLayoutDirection(WXHWND hWnd,
+                                  wxLayoutDirection dir,
+                                  LONG_PTR flagsForRTL)
 {
-    return ::SetWindowLong(GetHwndOf(win), GWL_EXSTYLE, style);
+    wxCHECK_MSG( hWnd, false,
+                 wxS("Can't set layout direction for invalid window") );
+
+    const LONG_PTR styleOld = ::GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+
+    LONG_PTR styleNew = styleOld;
+    switch ( dir )
+    {
+        case wxLayout_LeftToRight:
+            styleNew &= ~flagsForRTL;
+            break;
+
+        case wxLayout_RightToLeft:
+            styleNew |= flagsForRTL;
+            break;
+
+        case wxLayout_Default:
+            wxFAIL_MSG(wxS("Invalid layout direction"));
+    }
+
+    if ( styleNew == styleOld )
+        return false;
+
+    ::SetWindowLongPtr(hWnd, GWL_EXSTYLE, styleNew);
+
+    return true;
+}
+
+// Update layout direction flag for a generic window.
+//
+// See below for the special version that must be used with EDIT controls.
+//
+// Returns true if the layout direction did change.
+inline bool wxUpdateLayoutDirection(WXHWND hWnd, wxLayoutDirection dir)
+{
+    return wxUpdateExStyleForLayoutDirection(hWnd, dir, WS_EX_LAYOUTRTL);
+}
+
+// Update layout direction flag for an EDIT control.
+//
+// Returns true if anything changed or false if the direction flag was already
+// set to the desired direction (which can't be wxLayout_Default).
+inline bool wxUpdateEditLayoutDirection(WXHWND hWnd, wxLayoutDirection dir)
+{
+    return wxUpdateExStyleForLayoutDirection(hWnd, dir,
+                                             WS_EX_RIGHT |
+                                             WS_EX_RTLREADING |
+                                             WS_EX_LEFTSCROLLBAR);
+}
+
+// Companion of the above function checking if an EDIT control uses RTL.
+inline wxLayoutDirection wxGetEditLayoutDirection(WXHWND hWnd)
+{
+    wxCHECK_MSG( hWnd, wxLayout_Default, wxS("invalid window") );
+
+    // While we set 3 style bits above, we're only really interested in one of
+    // them here. In particularly, don't check for WS_EX_RIGHT as it can be set
+    // for a right-aligned control even if it doesn't use RTL. And while we
+    // could test WS_EX_LEFTSCROLLBAR, this doesn't really seem useful.
+    const LONG_PTR style = ::GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+
+    return style & WS_EX_RTLREADING ? wxLayout_RightToLeft
+                                    : wxLayout_LeftToRight;
 }
 
 // ----------------------------------------------------------------------------
@@ -1010,8 +1131,9 @@ extern WXDLLIMPEXP_CORE wxWindow *wxGetWindowFromHWND(WXHWND hwnd);
 // Get the size of an icon
 extern WXDLLIMPEXP_CORE wxSize wxGetHiconSize(HICON hicon);
 
-// Lines are drawn differently for WinCE and regular WIN32
 WXDLLIMPEXP_CORE void wxDrawLine(HDC hdc, int x1, int y1, int x2, int y2);
+
+WXDLLIMPEXP_CORE void wxDrawHVLine(HDC hdc, int x1, int y1, int x2, int y2, COLORREF color, int width);
 
 // fill the client rect of the given window on the provided dc using this brush
 inline void wxFillRect(HWND hwnd, HDC hdc, HBRUSH hbr)
@@ -1025,53 +1147,27 @@ inline void wxFillRect(HWND hwnd, HDC hdc, HBRUSH hbr)
 // 32/64 bit helpers
 // ----------------------------------------------------------------------------
 
-#ifdef __WIN64__
-
-inline void *wxGetWindowProc(HWND hwnd)
-{
-    return (void *)::GetWindowLongPtr(hwnd, GWLP_WNDPROC);
-}
-
-inline void *wxGetWindowUserData(HWND hwnd)
-{
-    return (void *)::GetWindowLongPtr(hwnd, GWLP_USERDATA);
-}
-
-inline WNDPROC wxSetWindowProc(HWND hwnd, WNDPROC func)
-{
-    return (WNDPROC)::SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)func);
-}
-
-inline void *wxSetWindowUserData(HWND hwnd, void *data)
-{
-    return (void *)::SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)data);
-}
-
-#else // __WIN32__
-
 // note that the casts to LONG_PTR here are required even on 32-bit machines
 // for the 64-bit warning mode of later versions of MSVC (C4311/4312)
 inline WNDPROC wxGetWindowProc(HWND hwnd)
 {
-    return (WNDPROC)(LONG_PTR)::GetWindowLong(hwnd, GWL_WNDPROC);
+    return (WNDPROC)(LONG_PTR)::GetWindowLongPtr(hwnd, GWLP_WNDPROC);
 }
 
 inline void *wxGetWindowUserData(HWND hwnd)
 {
-    return (void *)(LONG_PTR)::GetWindowLong(hwnd, GWL_USERDATA);
+    return (void *)(LONG_PTR)::GetWindowLongPtr(hwnd, GWLP_USERDATA);
 }
 
 inline WNDPROC wxSetWindowProc(HWND hwnd, WNDPROC func)
 {
-    return (WNDPROC)(LONG_PTR)::SetWindowLong(hwnd, GWL_WNDPROC, (LONG_PTR)func);
+    return (WNDPROC)(LONG_PTR)::SetWindowLongPtr(hwnd, GWLP_WNDPROC, (LONG_PTR)func);
 }
 
 inline void *wxSetWindowUserData(HWND hwnd, void *data)
 {
-    return (void *)(LONG_PTR)::SetWindowLong(hwnd, GWL_USERDATA, (LONG_PTR)data);
+    return (void *)(LONG_PTR)::SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)data);
 }
-
-#endif // __WIN64__/__WIN32__
 
 #endif // wxUSE_GUI && __WXMSW__
 

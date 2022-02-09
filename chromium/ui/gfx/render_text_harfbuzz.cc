@@ -9,7 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/containers/mru_cache.h"
+#include "base/containers/lru_cache.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/hash/hash.h"
@@ -18,8 +18,8 @@
 #include "base/i18n/char_iterator.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
@@ -744,7 +744,7 @@ class HarfBuzzLineBreaker {
   const float glyph_height_for_test_;
   const WordWrapBehavior word_wrap_behavior_;
   const std::u16string& text_;
-  const BreakList<size_t>* const words_;
+  const raw_ptr<const BreakList<size_t>> words_;
   const internal::TextRunList& run_list_;
 
   // Stores the resulting lines.
@@ -1261,11 +1261,11 @@ struct ShapeRunWithFontInput {
   size_t hash = 0;
 };
 
-// An MRU cache of the results from calling ShapeRunWithFont. The maximum cache
+// An LRU cache of the results from calling ShapeRunWithFont. The maximum cache
 // size used in blink::ShapeCache is 10k. A Finch experiment showed that
 // reducing the cache size to 1k has no performance impact.
 constexpr int kShapeRunCacheSize = 1000;
-using ShapeRunCacheBase = base::HashingMRUCache<ShapeRunWithFontInput,
+using ShapeRunCacheBase = base::HashingLRUCache<ShapeRunWithFontInput,
                                                 TextRunHarfBuzz::ShapeOutput,
                                                 ShapeRunWithFontInput::Hash>;
 class ShapeRunCache : public ShapeRunCacheBase {

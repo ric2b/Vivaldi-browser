@@ -209,6 +209,7 @@ if (!is_android && !is_mac) {
         "//gpu/command_buffer/service",
         "//sandbox",
         "//sandbox/policy",
+        "//sandbox/policy/mojom",
         "//third_party/breakpad:breakpad_handler",
         "//third_party/breakpad:breakpad_sender",
         "//third_party/crashpad/crashpad/util",
@@ -316,6 +317,10 @@ if (!is_android && !is_mac) {
                      rebase_path(version_script, root_build_dir) ]
       }
 
+      if (is_chromeos_ash) {
+        public_deps += [ "//ui/lottie" ]
+      }
+
       if (is_chromeos_lacros) {
         deps += [ "//chromeos/crosapi/mojom" ]
       }
@@ -345,17 +350,8 @@ if (!is_android && !is_mac) {
       configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
     }
 
-    # Lacros is built with "{arch}-generic" configuration. However, in Chrome
-    # OS, it is just "one board variation", so the libraries on the *-generic
-    # boards may not be compatible with the ones on the actual DUTs.
-    # One of the common pattern recently we hit is symbols exposed by libgcc.
-    # The symbols start to be exposed recently because of libunwind transition
-    # and along with it they are or are not re-exposed by other libraries, too,
-    # depending on per-board implementation.
-    # To mitigate the situation, marking -shared-libgcc to look up the system
-    # libgcc always.
     if (is_chromeos_lacros && is_chromeos_device) {
-      ldflags += [ "-shared-libgcc" ]
+      configs += [ "//build/lacros:optional_shared_libgcc" ]
     }
 
     data_deps += [
@@ -489,6 +485,7 @@ if (is_win) {
       ":chrome_app_strings_bundle_data",
       ":chrome_resources",
       ":chrome_versioned_bundle_data",
+      "//base/allocator:early_zone_registration_mac",
       "//chrome/common:buildflags",
       "//chrome/common:version_header",
     ]
@@ -713,6 +710,7 @@ if (is_win) {
       defines = [ "HELPER_EXECUTABLE" ]
 
       deps = [
+        "//base/allocator:early_zone_registration_mac",
         "//chrome/common:version_header",
         "//sandbox/mac:seatbelt",
       ]
@@ -881,12 +879,6 @@ if (is_win) {
         "//chrome/updater/mac:updater_install_script",
       ]
     }
-
-    if (is_asan) {
-      # crashpad_handler requires the ASan runtime at its @executable_path.
-      sources += [ "$root_out_dir/libclang_rt.asan_osx_dynamic.dylib" ]
-      public_deps += [ "//build/config/sanitizers:copy_asan_runtime" ]
-    }
   }
 
   bundle_data("chrome_framework_resources") {
@@ -926,7 +918,8 @@ if (is_win) {
       if (use_v8_context_snapshot) {
         sources += [ "$root_out_dir/$v8_context_snapshot_filename" ]
         public_deps += [ "//tools/v8_context_snapshot" ]
-      } else {
+      }
+      if (!use_v8_context_snapshot || include_both_v8_snapshots) {
         sources += [ "$root_out_dir/snapshot_blob.bin" ]
       }
     }
@@ -1387,7 +1380,10 @@ group("browser_dependencies") {
   }
 
   if (is_chromeos_lacros) {
-    public_deps += [ "//chromeos/lacros" ]
+    public_deps += [
+      "//chromeos/lacros",
+      "//chromeos/lacros/dbus",
+    ]
   }
 
   if (is_chromeos_ash) {
@@ -1595,6 +1591,10 @@ repack("browser_tests_pak") {
   sources = [ "$root_gen_dir/chrome/webui_test_resources.pak" ]
   output = "$root_out_dir/browser_tests.pak"
   deps = [ "//chrome/test/data:webui_test_resources" ]
+  if (!is_android) {
+    sources += [ "$root_gen_dir/chrome/webui_generated_test_resources.pak" ]
+    deps += [ "//chrome/test/data/webui:resources" ]
+  }
 }
 
 group("strings") {
@@ -1692,6 +1692,10 @@ if (is_android) {
         "//device/gamepad",
         "//ui/events/devices",
       ]
+    }
+
+    if (is_chromeos_ash) {
+      public_deps += [ "//ui/lottie" ]
     }
 
     if (enable_vr) {

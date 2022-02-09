@@ -63,10 +63,6 @@ const base::Feature kSyncAutofillWalletOfferData{
 const base::Feature kSyncWifiConfigurations{"SyncWifiConfigurations",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Stops honoring the Android master sync toggle.
-const base::Feature kDecoupleSyncFromAndroidMasterSync{
-    "DecoupleSyncFromAndroidMasterSync", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Sync requires policies to be loaded before starting.
 const base::Feature kSyncRequiresPoliciesLoaded{
     "SyncRequiresPoliciesLoaded", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -84,7 +80,13 @@ const base::Feature kSyncTrustedVaultPassphraseiOSRPC{
 // Keep this entry in sync with the equivalent name in
 // ChromeFeatureList.java.
 const base::Feature kSyncTrustedVaultPassphraseRecovery{
-    "SyncTrustedVaultPassphraseRecovery", base::FEATURE_DISABLED_BY_DEFAULT};
+  "SyncTrustedVaultPassphraseRecovery",
+#if defined(OS_IOS)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Whether the entry point to opt in to trusted vault in settings should be
 // shown.

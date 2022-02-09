@@ -11,7 +11,6 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
@@ -107,7 +106,8 @@ void AppendSwitchesAndArguments(CommandLine* command_line,
 }
 
 #if defined(OS_WIN)
-// Quote a string as necessary for CommandLineToArgvW compatibility *on Windows*.
+// Quote a string as necessary for CommandLineToArgvW compatibility *on
+// Windows*.
 std::u16string QuoteForCommandLineToArgvW(const std::u16string& arg,
                                           bool quote_placeholders) {
   // We follow the quoting rules of CommandLineToArgvW.

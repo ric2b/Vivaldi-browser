@@ -13,7 +13,7 @@ TabIdAttribute.prototype.__proto__ =
 
 TabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
   // nothing to do here
-};
+}
 
 function InspectTabIdAttribute(view) {
   GuestViewAttributes.Attribute.call(this,
@@ -25,7 +25,7 @@ InspectTabIdAttribute.prototype.__proto__ =
 
 InspectTabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
   // nothing to do here
-};
+}
 
 function WasTypedAttribute(view) {
   GuestViewAttributes.BooleanAttribute.call(this,
@@ -41,25 +41,29 @@ WasTypedAttribute.prototype.handleMutation = function (oldValue, newValue) {
     this.wasTyped = (newValue === 'true');
     this.setValueIgnoreMutation(newValue);
   }
-};
+}
 
 function ViewtypeAttribute(view) {
-  $Function.call(
-      GuestViewAttributes.Attribute, this, WebViewConstants.ATTRIBUTE_VIEW_TYPE,
-      view);
+  GuestViewAttributes.Attribute.call(this,
+    WebViewConstants.ATTRIBUTE_VIEW_TYPE, view);
 }
 
 ViewtypeAttribute.prototype.__proto__ = GuestViewAttributes.Attribute.prototype;
 
-ViewtypeAttribute.prototype.handleMutation = function (oldValue, newValue) {
-  // nothing to do here
-};
+function WindowIdAttribute(view) {
+  GuestViewAttributes.Attribute.call(this,
+    WebViewConstants.ATTRIBUTE_WINDOW_ID, view);
+}
+
+WindowIdAttribute.prototype.__proto__ =
+  GuestViewAttributes.Attribute.prototype;
 
 function addVivaldiWebViewAttributes(athis) {
   athis.InspectTabIdAttribute = InspectTabIdAttribute;
   athis.TabIdAttribute = TabIdAttribute;
   athis.WasTypedAttribute = WasTypedAttribute;
   athis.ViewtypeAttribute = ViewtypeAttribute;
+  athis.WindowIdAttribute = WindowIdAttribute;
 }
 
 // Exports.

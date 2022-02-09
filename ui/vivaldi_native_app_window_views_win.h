@@ -7,7 +7,6 @@
 #ifndef UI_VIVALDI_NATIVE_APP_WINDOW_VIEWS_WIN_H_
 #define UI_VIVALDI_NATIVE_APP_WINDOW_VIEWS_WIN_H_
 
-#include "base/macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/vivaldi_native_app_window_views_aura.h"
 

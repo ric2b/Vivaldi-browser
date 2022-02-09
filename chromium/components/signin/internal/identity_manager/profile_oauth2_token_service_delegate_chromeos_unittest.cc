@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
@@ -345,7 +344,8 @@ class ProfileOAuth2TokenServiceDelegateChromeOSTest : public testing::Test {
         remote.BindNewPipeAndPassReceiver());
     return std::make_unique<account_manager::AccountManagerFacadeImpl>(
         std::move(remote),
-        std::numeric_limits<uint32_t>::max() /* remote_version */);
+        /*remote_version=*/std::numeric_limits<uint32_t>::max(),
+        /*account_manager_for_tests=*/nullptr);
   }
 
   base::test::TaskEnvironment task_environment_;

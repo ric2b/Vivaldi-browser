@@ -8,7 +8,7 @@
 #include "base/cxx17_backports.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/customization/customization_document.h"
@@ -72,7 +72,9 @@ class LanguageListWaiter : public WelcomeScreen::Observer {
   void RunUntilLanguageListReady() { loop_.Run(); }
 
  private:
-  bool LanguageListReady() const { return welcome_screen_->language_list(); }
+  bool LanguageListReady() const {
+    return !welcome_screen_->language_list().GetList().empty();
+  }
 
   void CheckLanguageList() {
     if (LanguageListReady())

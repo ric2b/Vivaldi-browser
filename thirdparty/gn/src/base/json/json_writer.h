@@ -9,8 +9,6 @@
 
 #include <string>
 
-#include "base/macros.h"
-
 namespace base {
 
 class Value;
@@ -59,7 +57,8 @@ class JSONWriter {
   // Where we write JSON data as we generate it.
   std::string* json_string_;
 
-  DISALLOW_COPY_AND_ASSIGN(JSONWriter);
+  JSONWriter(const JSONWriter&) = delete;
+  JSONWriter& operator=(const JSONWriter&) = delete;
 };
 
 }  // namespace base

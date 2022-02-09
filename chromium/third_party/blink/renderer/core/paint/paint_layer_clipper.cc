@@ -156,8 +156,8 @@ PhysicalRect PaintLayerClipper::LocalClipRect(
   GeometryMapper::SourceToDestinationRect(
       clip_root_layer_transform, layer_transform, clipped_rect_in_local_space);
   // TODO(chrishtr): not correct for fragmentation.
-  clipped_rect_in_local_space.MoveBy(
-      -FloatPoint(layer_->GetLayoutObject().FirstFragment().PaintOffset()));
+  clipped_rect_in_local_space.Offset(
+      -gfx::Vector2dF(layer_->GetLayoutObject().FirstFragment().PaintOffset()));
 
   return PhysicalRect::FastAndLossyFromFloatRect(clipped_rect_in_local_space);
 }
@@ -374,8 +374,8 @@ void PaintLayerClipper::CalculateBackgroundClipRectWithGeometryMapper(
     if (is_clipping_root)
       clip_behavior = kIgnoreOverlayScrollbarSize;
 
-    FloatClipRect clip_rect(FloatRect(LocalVisualRect(context)));
-    clip_rect.MoveBy(FloatPoint(fragment_data.PaintOffset()));
+    FloatClipRect clip_rect(ToGfxRectF(FloatRect(LocalVisualRect(context))));
+    clip_rect.Move(gfx::Vector2dF(fragment_data.PaintOffset()));
 
     GeometryMapper::LocalToAncestorVisualRect(source_property_tree_state,
                                               destination_property_tree_state,

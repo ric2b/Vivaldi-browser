@@ -467,37 +467,46 @@ bool StructTraits<network::mojom::CookiePartitionKeyDataView,
                   net::CookiePartitionKey>::
     Read(network::mojom::CookiePartitionKeyDataView partition_key,
          net::CookiePartitionKey* out) {
+  if (partition_key.from_script()) {
+    *out = net::CookiePartitionKey::FromScript().value();
+    return true;
+  }
   net::SchemefulSite site;
   if (!partition_key.ReadSite(&site))
     return false;
-  *out = net::CookiePartitionKey::FromWire(site);
+
+  absl::optional<base::UnguessableToken> nonce;
+  if (!partition_key.ReadNonce(&nonce))
+    return false;
+  *out = net::CookiePartitionKey::FromWire(site, nonce);
   return true;
 }
 
-const std::vector<net::CookiePartitionKey> StructTraits<
-    network::mojom::CookiePartitionKeychainDataView,
-    net::CookiePartitionKeychain>::keys(const net::CookiePartitionKeychain&
-                                            keychain) {
+const std::vector<net::CookiePartitionKey>
+StructTraits<network::mojom::CookiePartitionKeyCollectionDataView,
+             net::CookiePartitionKeyCollection>::
+    keys(const net::CookiePartitionKeyCollection& key_collection) {
   std::vector<net::CookiePartitionKey> result;
-  if (keychain.ContainsAllKeys() || keychain.IsEmpty())
+  if (key_collection.ContainsAllKeys() || key_collection.IsEmpty())
     return result;
-  result.insert(result.begin(), keychain.PartitionKeys().begin(),
-                keychain.PartitionKeys().end());
+  result.insert(result.begin(), key_collection.PartitionKeys().begin(),
+                key_collection.PartitionKeys().end());
   return result;
 }
 
-bool StructTraits<network::mojom::CookiePartitionKeychainDataView,
-                  net::CookiePartitionKeychain>::
-    Read(network::mojom::CookiePartitionKeychainDataView keychain,
-         net::CookiePartitionKeychain* out) {
-  if (keychain.contains_all_partitions()) {
-    *out = net::CookiePartitionKeychain::ContainsAll();
+bool StructTraits<network::mojom::CookiePartitionKeyCollectionDataView,
+                  net::CookiePartitionKeyCollection>::
+    Read(network::mojom::CookiePartitionKeyCollectionDataView
+             key_collection_data_view,
+         net::CookiePartitionKeyCollection* out) {
+  if (key_collection_data_view.contains_all_partitions()) {
+    *out = net::CookiePartitionKeyCollection::ContainsAll();
     return true;
   }
   std::vector<net::CookiePartitionKey> keys;
-  if (!keychain.ReadKeys(&keys))
+  if (!key_collection_data_view.ReadKeys(&keys))
     return false;
-  *out = net::CookiePartitionKeychain(keys);
+  *out = net::CookiePartitionKeyCollection(keys);
   return true;
 }
 

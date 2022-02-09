@@ -5,8 +5,8 @@
 #include "chromecast/media/gpu/cast_gpu_factory_impl.h"
 
 #include "base/check.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chromecast/mojo/remote_interfaces.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -110,8 +110,13 @@ CastGpuFactoryImpl::CreateVideoEncoder() {
   return CreateVideoEncodeAccelerator();
 }
 
-// Return whether GPU encoding/decoding is enabled.
-bool CastGpuFactoryImpl::IsGpuVideoAcceleratorEnabled() {
+// Return whether GPU decoding is enabled.
+bool CastGpuFactoryImpl::IsGpuVideoDecodeAcceleratorEnabled() {
+  return true;
+}
+
+// Return whether GPU encoding is enabled.
+bool CastGpuFactoryImpl::IsGpuVideoEncodeAcceleratorEnabled() {
   return true;
 }
 

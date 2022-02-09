@@ -38,7 +38,7 @@ void NativeWindowOcclusionTracker::DisableNativeWindowOcclusionTracking(
     WindowTreeHost* host) {
 #if defined(OS_WIN)
   if (host->IsNativeWindowOcclusionEnabled()) {
-    host->SetNativeWindowOcclusionState(Window::OcclusionState::UNKNOWN);
+    host->SetNativeWindowOcclusionState(Window::OcclusionState::UNKNOWN, {});
     NativeWindowOcclusionTrackerWin::GetOrCreateInstance()->Disable(
         host->window());
   }
@@ -62,8 +62,8 @@ bool NativeWindowOcclusionTracker::IsNativeWindowOcclusionTrackingAlwaysEnabled(
   const std::string type = base::GetFieldTrialParamValueByFeature(
       features::kApplyNativeOcclusionToCompositor,
       features::kApplyNativeOcclusionToCompositorType);
-  return type == features::kApplyNativeOcclusionToCompositorTypeApplyOnly ||
-         type == features::kApplyNativeOcclusionToCompositorTypeApplyAndEvict;
+  return type == features::kApplyNativeOcclusionToCompositorTypeRelease ||
+         type == features::kApplyNativeOcclusionToCompositorTypeThrottle;
 #else
   return false;
 #endif

@@ -12,14 +12,15 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/process/process_handle.h"
-#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/viz/common/features.h"
 #include "components/viz/host/gpu_host_impl.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -355,7 +356,13 @@ void BrowserGpuChannelHostFactory::EstablishGpuChannel(
     gpu::GpuChannelEstablishedCallback callback,
     bool sync) {
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
+// TODO(crbug.com/1248936): DCHECKs are disabled during automated testing on
+// CrOS and this check failed when tested on an experimental builder. Revert
+// https://crrev.com/c/3174621 to enable it. See go/chrome-dcheck-on-cros
+// or http://crbug.com/1113456 for more details.
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
     DCHECK(!pending_request_.get());
+#endif
     // Recreate the channel if it has been lost.
     gpu_channel_->DestroyChannel();
     gpu_channel_ = nullptr;

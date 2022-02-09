@@ -64,11 +64,17 @@ PaintPreviewTabService::TabServiceTask::TabServiceTask(
     const DirectoryKey& key,
     int frame_tree_node_id,
     content::GlobalRenderFrameHostId frame_routing_id,
+    float page_scale_factor,
+    int scroll_offset_x,
+    int scroll_offset_y,
     base::ScopedClosureRunner capture_handle)
     : tab_id_(tab_id),
       key_(key),
       frame_tree_node_id_(frame_tree_node_id),
       frame_routing_id_(frame_routing_id),
+      page_scale_factor_(page_scale_factor),
+      scroll_offset_x_(scroll_offset_x),
+      scroll_offset_y_(scroll_offset_y),
       capture_handle_(std::move(capture_handle)) {}
 
 PaintPreviewTabService::TabServiceTask::~TabServiceTask() = default;
@@ -116,6 +122,9 @@ PaintPreviewTabService::~PaintPreviewTabService() {
 void PaintPreviewTabService::CaptureTab(int tab_id,
                                         content::WebContents* contents,
                                         bool accessibility_enabled,
+                                        float page_scale_factor,
+                                        int x,
+                                        int y,
                                         FinishedCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -137,10 +146,10 @@ void PaintPreviewTabService::CaptureTab(int tab_id,
 
   auto key = file_manager->CreateKey(tab_id);
   auto it = tasks_.emplace(
-      tab_id,
-      std::make_unique<TabServiceTask>(
-          tab_id, key, contents->GetMainFrame()->GetFrameTreeNodeId(),
-          contents->GetMainFrame()->GetGlobalId(), std::move(capture_handle)));
+      tab_id, std::make_unique<TabServiceTask>(
+                  tab_id, key, contents->GetMainFrame()->GetFrameTreeNodeId(),
+                  contents->GetMainFrame()->GetGlobalId(), page_scale_factor, x,
+                  y, std::move(capture_handle)));
   if (!it.second) {
     std::move(callback).Run(Status::kCaptureInProgress);
     return;
@@ -209,11 +218,17 @@ void PaintPreviewTabService::CaptureTabAndroid(
     JNIEnv* env,
     jint j_tab_id,
     const base::android::JavaParamRef<jobject>& j_web_contents,
-    jboolean accessibility_enabled,
+    jboolean j_accessibility_enabled,
+    jfloat j_page_scale_factor,
+    jint j_x,
+    jint j_y,
     const base::android::JavaParamRef<jobject>& j_callback) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
-  CaptureTab(static_cast<int>(j_tab_id), web_contents, accessibility_enabled,
+  CaptureTab(static_cast<int>(j_tab_id), web_contents,
+             static_cast<bool>(j_accessibility_enabled),
+             static_cast<float>(j_page_scale_factor), static_cast<int>(j_x),
+             static_cast<int>(j_y),
              base::BindOnce(
                  &JavaBooleanCallbackAdapter,
                  base::BindOnce(
@@ -256,12 +271,8 @@ void PaintPreviewTabService::DeleteTask(int tab_id) {
 void PaintPreviewTabService::InitializeCache(
     const base::flat_set<DirectoryKey>& in_use_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::vector<int> tab_ids;
-  tab_ids.reserve(in_use_keys.size());
-  for (const auto& key : in_use_keys)
-    tab_ids.push_back(TabIdFromDirectoryKey(key));
-
-  captured_tab_ids_ = base::flat_set<int>(std::move(tab_ids));
+  captured_tab_ids_ =
+      base::MakeFlatSet<int>(in_use_keys, {}, &TabIdFromDirectoryKey);
   cache_ready_ = true;
 }
 
@@ -338,6 +349,13 @@ void PaintPreviewTabService::OnCaptured(
     task->OnCaptured(Status::kCaptureFailed);
     return;
   }
+  // Override viewport state for root frame.
+  result->proto.mutable_metadata()->set_page_scale_factor(
+      task->page_scale_factor());
+  result->proto.mutable_root_frame()->set_scroll_offset_x(
+      task->scroll_offset_x());
+  result->proto.mutable_root_frame()->set_scroll_offset_y(
+      task->scroll_offset_y());
   auto file_manager = GetFileMixin()->GetFileManager();
   GetFileMixin()->GetTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -371,11 +389,9 @@ void PaintPreviewTabService::RunAudit(
     const base::flat_set<DirectoryKey>& in_use_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto file_manager = GetFileMixin()->GetFileManager();
-  std::vector<DirectoryKey> keys;
-  keys.reserve(active_tab_ids.size());
-  for (const auto& tab_id : active_tab_ids)
-    keys.push_back(file_manager->CreateKey(tab_id));
-  base::flat_set<DirectoryKey> active_tab_keys(std::move(keys));
+  auto active_tab_keys = base::MakeFlatSet<DirectoryKey>(
+      active_tab_ids, {},
+      [&](const auto& tab_id) { return file_manager->CreateKey(tab_id); });
 
   std::vector<DirectoryKey> keys_to_delete(active_tab_keys.size() +
                                            in_use_keys.size());

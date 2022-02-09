@@ -11,11 +11,11 @@
 #include <string>
 #include <utility>
 
+#include "ash/components/arc/test/fake_app_instance.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -43,7 +43,6 @@
 #include "chromeos/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/seneschal/seneschal_client.h"
-#include "components/arc/test/fake_app_instance.h"
 #include "components/crx_file/id_util.h"
 #include "components/services/app_service/public/cpp/stub_icon_loader.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -116,8 +115,7 @@ bool MoreRelevant(const ChromeSearchResult* result1,
   return result1->relevance() > result2->relevance();
 }
 
-void UpdateIconKey(apps::AppServiceProxyChromeOs& proxy,
-                   const std::string& app_id) {
+void UpdateIconKey(apps::AppServiceProxy& proxy, const std::string& app_id) {
   apps::mojom::AppPtr app = apps::mojom::App::New();
   app->app_id = app_id;
   proxy.AppRegistryCache().ForOneApp(
@@ -155,7 +153,8 @@ class AppSearchProviderTest : public AppListTestBase {
   void SetUp() override {
     AppListTestBase::SetUp();
 
-    model_updater_ = std::make_unique<FakeAppListModelUpdater>();
+    model_updater_ = std::make_unique<FakeAppListModelUpdater>(
+        /*profile=*/nullptr, /*reorder_delegate=*/nullptr);
     controller_ = std::make_unique<::test::TestAppListControllerDelegate>();
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
   }
@@ -834,7 +833,7 @@ TEST_F(AppSearchProviderCrostiniTest, CrostiniApp) {
 }
 
 TEST_F(AppSearchProviderTest, AppServiceIconCache) {
-  apps::AppServiceProxyChromeOs* proxy =
+  apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile());
   ASSERT_NE(proxy, nullptr);
 

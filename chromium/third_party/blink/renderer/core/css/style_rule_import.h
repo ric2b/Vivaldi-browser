@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/css/css_origin_clean.h"
 #include "third_party/blink/renderer/core/css/style_rule.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/prefinalizer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
@@ -60,6 +61,7 @@ class StyleRuleImport : public StyleRuleBase {
 
   bool IsLayered() const { return layer_.size(); }
   const LayerName& GetLayerName() const { return layer_; }
+  String GetLayerNameAsString() const;
 
   void TraceAfterDispatch(blink::Visitor*) const;
 

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
@@ -156,13 +156,13 @@ class SendTabToSelfBridge : public syncer::ModelTypeSyncBridge,
   SendTabToSelfEntries entries_;
 
   // |clock_| isn't owned.
-  const base::Clock* const clock_;
+  const raw_ptr<const base::Clock> clock_;
 
   // |history_service_| isn't owned.
-  history::HistoryService* const history_service_;
+  const raw_ptr<history::HistoryService> history_service_;
 
   // |device_info_tracker_| isn't owned.
-  syncer::DeviceInfoTracker* const device_info_tracker_;
+  const raw_ptr<syncer::DeviceInfoTracker> device_info_tracker_;
 
   // The name of this local device.
   std::string local_device_name_;
@@ -171,11 +171,10 @@ class SendTabToSelfBridge : public syncer::ModelTypeSyncBridge,
   std::unique_ptr<syncer::ModelTypeStore> store_;
 
   // A pointer to the most recently used entry used for deduplication.
-  const SendTabToSelfEntry* mru_entry_;
+  raw_ptr<const SendTabToSelfEntry> mru_entry_;
 
-  // A list of target devices and their associated cache information.
-  // TODO(crbug.com/1257573): Rename. This used to be a map, hence the name.
-  std::vector<TargetDeviceInfo> target_device_name_to_cache_info_;
+  // The list of target devices, deduplicated and sorted by most recently used.
+  std::vector<TargetDeviceInfo> target_device_info_sorted_list_;
 
   base::ScopedObservation<history::HistoryService, HistoryServiceObserver>
       history_service_observation_{this};

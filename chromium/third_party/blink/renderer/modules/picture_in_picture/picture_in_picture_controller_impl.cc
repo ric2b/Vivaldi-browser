@@ -26,7 +26,7 @@
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_event.h"
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_window.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
@@ -136,6 +136,7 @@ void PictureInPictureControllerImpl::EnterPictureInPicture(
     ScriptPromiseResolver* resolver) {
   auto* video_element = DynamicTo<HTMLVideoElement>(*element);
   if (!video_element) {
+    DCHECK(RuntimeEnabledFeatures::PictureInPictureV2Enabled());
     // TODO(https://crbug.com/953957): Support element level pip.
     if (resolver)
       resolver->Resolve();
@@ -143,7 +144,15 @@ void PictureInPictureControllerImpl::EnterPictureInPicture(
     return;
   }
 
-  DCHECK(video_element->GetWebMediaPlayer());
+  if (!video_element->GetWebMediaPlayer()) {
+    if (resolver) {
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kInvalidStateError, ""));
+    }
+
+    return;
+  }
+
   DCHECK(!options);
 
   if (picture_in_picture_element_ == video_element) {
@@ -240,6 +249,13 @@ void PictureInPictureControllerImpl::OnEnteredPictureInPicture(
 
   if (resolver)
     resolver->Resolve(picture_in_picture_window_);
+
+  // Unregister the video frame sink from the element since it will be moved
+  // to be the child of the PiP window frame sink.
+  if (picture_in_picture_element_->GetWebMediaPlayer()) {
+    picture_in_picture_element_->GetWebMediaPlayer()
+        ->UnregisterFrameSinkHierarchy();
+  }
 }
 
 void PictureInPictureControllerImpl::ExitPictureInPicture(
@@ -284,6 +300,12 @@ void PictureInPictureControllerImpl::OnExitedPictureInPicture(
     element->DispatchEvent(*PictureInPictureEvent::Create(
         event_type_names::kLeavepictureinpicture,
         WrapPersistent(picture_in_picture_window_.Get())));
+
+    // Register the video frame sink back to the element when the PiP window
+    // is closed and if the video is not unset.
+    if (element->GetWebMediaPlayer()) {
+      element->GetWebMediaPlayer()->RegisterFrameSinkHierarchy();
+    }
   }
 
   if (resolver)

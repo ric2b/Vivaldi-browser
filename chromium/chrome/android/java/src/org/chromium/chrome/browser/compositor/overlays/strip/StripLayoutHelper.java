@@ -27,6 +27,7 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.MathUtils;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
@@ -49,12 +50,18 @@ import java.util.List;
 // Vivaldi
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManagerSupplier;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.TabWidthPreference;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.toolbar.VivaldiTopToolbarCoordinator;
 
 /**
  * This class handles managing the positions and behavior of all tabs in a tab strip.  It is
@@ -91,7 +98,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     // Visibility Constants
     private static final float TAB_STACK_WIDTH_DP = 4.f;
     private static final float TAB_OVERLAP_WIDTH_DP = 24.f;
-    private static final float MIN_TAB_WIDTH_DP = 90.f; // Vivaldi
+    private static final float MIN_TAB_WIDTH_DP = 190.f;
     private static final float MAX_TAB_WIDTH_DP = 265.f;
     private static final float REORDER_MOVE_START_THRESHOLD_DP = 50.f;
     private static final float REORDER_EDGE_SCROLL_MAX_SPEED_DP = 1000.f;
@@ -159,6 +166,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     private boolean mShouldCascadeTabs;
     private boolean mIsFirstLayoutPass;
     private boolean mAnimationsDisabledForTesting;
+    // Whether tab strip scrolling is in progress
+    private boolean mIsStripScrollInProgress;
 
     // Tab menu item IDs
     public static final int ID_CLOSE_ALL_TABS = 0;
@@ -167,11 +176,12 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
     /** Vivaldi **/
     private TabModelObserver mModelObserver;
+    private SharedPreferencesManager.Observer mPreferenceObserver;
     private int mOrientation;
     private boolean mIsStackStrip;
     private TabModelSelector mTabModelSelector;
     private TabGroupModelFilter mTabGroupModelFilter;
-    public boolean mShowTabsAsFavIcon;
+    private boolean mShowTabsAsFavIcon;
 
     private static float NO_X_BUTTON_OFFSET_DP = 20;
 
@@ -258,6 +268,18 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 scrollToSelectedTab();
             }
         };
+
+        mPreferenceObserver = key -> {
+            if (VivaldiPreferences.SHOW_TAB_AS_FAVICON.equals(key)
+                    || VivaldiPreferences.ENABLE_TAB_STACK.equals(key)
+                    || VivaldiPreferences.MIN_TAB_WIDTH.equals(key)) {
+                computeAndUpdateTabOrders();
+                updateScrollOffsetLimits();
+                scrollToSelectedTab();
+            }
+
+        };
+        VivaldiPreferences.getSharedPreferencesManager().addObserver(mPreferenceObserver);
     }
 
     /**
@@ -267,6 +289,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         mStripTabEventHandler.removeCallbacksAndMessages(null);
         // Vivaldi
         if (mModelObserver != null) mModel.removeObserver(mModelObserver);
+        VivaldiPreferences.getSharedPreferencesManager().removeObserver(mPreferenceObserver);
     }
 
     /**
@@ -427,6 +450,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
      * @param shouldCascadeTabs Whether the {@link CascadingStripStacker} should be used.
      */
     void setShouldCascadeTabs(boolean shouldCascadeTabs) {
+        if (mModel == null) return;
+
         if (shouldCascadeTabs != mShouldCascadeTabs) {
             mShouldCascadeTabs = shouldCascadeTabs;
             setTabStacker(shouldCascadeTabs ? mCascadingStripStacker : mScrollingStripStacker);
@@ -474,6 +499,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         if (mModel == model) return;
         mModel = model;
         mTabCreator = tabCreator;
+        setShouldCascadeTabs(mShouldCascadeTabs);
         computeAndUpdateTabOrders(false);
         // Vivaldi
         mModel.addObserver(mModelObserver);
@@ -600,6 +626,11 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
      * @param selected Whether the tab will be selected.
      */
     public void tabCreated(long time, int id, int prevId, boolean selected) {
+        // Note(david@vivaldi.com): We don't do anything when tab is restored. This will give us
+        // some performance improvements. The tabs will be updated anyway with the next update loop.
+        Tab newTab = TabModelUtils.getTabById(mModel, id);
+        if (newTab != null && newTab.getLaunchType() == TabLaunchType.FROM_RESTORE) return;
+
         if (findTabById(id) != null) return;
 
         // 1. Build any tabs that are missing.
@@ -761,6 +792,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                             mScrollOffset, 0, (int) fastExpandDelta, 0, time, EXPAND_DURATION_MS);
                 }
             } else {
+                if (!mIsStripScrollInProgress) {
+                    mIsStripScrollInProgress = true;
+                    RecordUserAction.record("MobileToolbarSlideTabs");
+                }
                 updateScrollOffsetPosition((int) (mScrollOffset + deltaX));
             }
         }
@@ -925,7 +960,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         if (tab == null || tab.isDying()) return;
 
         int newIndex = TabModelUtils.getTabIndexById(mModel, tab.getId());
-        TabModelUtils.setIndex(mModel, newIndex);
+        TabModelUtils.setIndex(mModel, newIndex, false);
     }
 
     /**
@@ -940,6 +975,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         resetResizeTimeout(false);
 
         if (mNewTabButton.click(x, y)) {
+            RecordUserAction.record("MobileToolbarNewTab");
             mNewTabButton.handleClick(time);
             return;
         }
@@ -948,6 +984,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         if (clickedTab == null || clickedTab.isDying()) return;
         if (clickedTab.checkCloseHitTest(x, y)
                 || (fromMouse && (buttons & MotionEvent.BUTTON_TERTIARY) != 0)) {
+            RecordUserAction.record("MobileToolbarCloseTab");
             clickedTab.getCloseButton().handleClick(time);
         } else {
             clickedTab.handleClick(time);
@@ -973,6 +1010,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             if (!mModel.isIncognito()) mModel.commitAllTabClosures();
             mTabCreator.launchNTP();
         }
+        mIsStripScrollInProgress = false;
     }
 
     /**
@@ -1066,9 +1104,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             // Note(david@vivaldi): Substract the offset here in regards to our setting. This
             // applies only when tab is shown as favicon.
             if (mShowTabsAsFavIcon) {
-                boolean showXButton = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                        VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
-                tabsWidth = !showXButton
+                tabsWidth = !showXButtonForBackgroundTabs()
                         ? tabsWidth - ((mStripTabs.length - 1) * NO_X_BUTTON_OFFSET_DP)
                         : tabsWidth;
             }
@@ -1179,6 +1215,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         float optimalTabWidth = (stripWidth + overlapWidth) / numTabs;
 
         // 4. Calculate the realistic tab width.
+        // Note(david@vivaldi.com): Read user defined minimum tab width.
+        int mMinTabWidth = getMinTabWidth();
         mCachedTabWidth = MathUtils.clamp(optimalTabWidth, mMinTabWidth, mMaxTabWidth);
 
         // 5. Prepare animations and propagate width to all tabs.
@@ -1193,8 +1231,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         for (int i = 0; i < mStripTabs.length; i++) {
             StripLayoutTab tab = mStripTabs[i];
             // Note(david@vivaldi.com): Calculate the correct tab width here.
-            setShowTabAsFavIcon(mCachedTabWidth <= MIN_TAB_WIDTH_DP);
-            mCachedTabWidth = mShowTabsAsFavIcon ? MIN_TAB_WIDTH_DP : mCachedTabWidth;
+            setShowTabAsFavIcon();
+            mCachedTabWidth =
+                    mShowTabsAsFavIcon ? TabWidthPreference.MIN_TAB_WIDTH_DP : mCachedTabWidth;
             float newWidth = mCachedTabWidth;
             tab.setTabModelSelector(mTabModelSelector);
             if (mShowTabsAsFavIcon && !tab.isCloseButtonVisible())
@@ -1223,12 +1262,24 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     private void updateStrip() {
         if (mModel == null) return;
 
-        // Note(david@vivaldi.com: Make sure we always update.
-        if (ChromeApplicationImpl.isVivaldi())
+        // Note(david@vivaldi.com: We don't update when there is any scrolling.
+        if (ChromeApplicationImpl.isVivaldi()) {
+            BrowserControlsManager controlsManagerSupplier = null;
+            if (mTabModelSelector.getCurrentTab() != null)
+                controlsManagerSupplier = BrowserControlsManagerSupplier.getValueOrNullFrom(
+                        mTabModelSelector.getCurrentTab().getWindowAndroid());
+            if (controlsManagerSupplier != null
+                    && controlsManagerSupplier.getBrowserControlHiddenRatio() != 0)
+                return;
             computeAndUpdateTabOrders(false);
-        else
-        // TODO(dtrainor): Remove this once tabCreated() is refactored to be called even from
-        // restore.
+            // Check if we need to show the tab stack bar in the user interface.
+            ChromeActivity activity = (ChromeActivity) mContext;
+            if (activity != null && activity.getToolbarManager() != null)
+                ((VivaldiTopToolbarCoordinator) activity.getToolbarManager().getToolbar())
+                        .updateTabStackVisibility();
+        } else
+        // TODO(dtrainor): Remove this once tabCreated() is refactored to be called even
+        // from restore.
         if (mStripTabs == null || mModel.getCount() != mStripTabs.length) {
             computeAndUpdateTabOrders(false);
         }
@@ -1330,6 +1381,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             boolean canExpandLeft, boolean canExpandRight) {
         if (tab == null) return 0.f;
 
+        // Note(david@vivaldi.com): We have a more specific way on how to calculate the offset.
+        if (ChromeApplicationImpl.isVivaldi()) return calculateOffsetToMakeTabVisible(tab);
+
         final int selIndex = mModel.index();
         final int index = TabModelUtils.getTabIndexById(mModel, tab.getId());
 
@@ -1413,7 +1467,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
     private void startReorderMode(long time, float currentX, float startX) {
         if (mInReorderMode) return;
-
+        RecordUserAction.record("MobileToolbarStartReorderTab");
         // 1. Reset the last pressed close button state.
         if (mLastPressedCloseButton != null && mLastPressedCloseButton.isPressed()) {
             mLastPressedCloseButton.setPressed(false);
@@ -1432,7 +1486,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
         // 4. Select this tab so that it is always in the foreground.
         TabModelUtils.setIndex(
-                mModel, TabModelUtils.getTabIndexById(mModel, mInteractingTab.getId()));
+                mModel, TabModelUtils.getTabIndexById(mModel, mInteractingTab.getId()), false);
 
         // 5. Fast expand to make sure this tab is visible. If tabs are not cascaded, the selected
         //    tab will already be visible, so there's no need to fast expand to make it visible.
@@ -1733,7 +1787,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     private void showTabMenu(StripLayoutTab anchorTab) {
         // 1. Bring the anchor tab to the foreground.
         int tabIndex = TabModelUtils.getTabIndexById(mModel, anchorTab.getId());
-        TabModelUtils.setIndex(mModel, tabIndex);
+        TabModelUtils.setIndex(mModel, tabIndex, false);
 
         // 2. Anchor the popupMenu to the view associated with the tab
         View tabView = TabModelUtils.getCurrentTab(mModel).getView();
@@ -2036,14 +2090,46 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     }
 
     /** Vivaldi **/
-    private void setShowTabAsFavIcon(boolean show) {
-        mShowTabsAsFavIcon = show;
+    private void setShowTabAsFavIcon() {
+        mShowTabsAsFavIcon = getMinTabWidth() == TabWidthPreference.MIN_TAB_WIDTH_DP;
+        mShowTabsAsFavIcon &= mCachedTabWidth <= TabWidthPreference.MIN_TAB_WIDTH_DP;
         mShowTabsAsFavIcon |= VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                 VivaldiPreferences.SHOW_TAB_AS_FAVICON, false);
     }
 
     /** Vivaldi **/
+    private int getMinTabWidth() {
+        return VivaldiPreferences.getSharedPreferencesManager().readInt(
+                VivaldiPreferences.MIN_TAB_WIDTH, TabWidthPreference.MIN_TAB_WIDTH_DP);
+    }
+
+    /** Vivaldi **/
     public boolean showTabsAsFavIcon() {
         return mShowTabsAsFavIcon;
+    }
+
+    /** Vivaldi **/
+    public float calculateOffsetToMakeTabVisible(StripLayoutTab tab) {
+        int index = 0;
+        int selIndex = 0;
+
+        for (int i = 0; i < mStripTabs.length; i++) {
+            if (mStripTabs[i].getId() == mTabModelSelector.getCurrentTabId()) selIndex = i;
+            if (mStripTabs[i].getId() == tab.getId()) index = i;
+        }
+
+        float tabWidth = mCachedTabWidth - mTabOverlapWidth;
+        int offset = 0;
+        if (mShowTabsAsFavIcon && !showXButtonForBackgroundTabs())
+            offset = (int) NO_X_BUTTON_OFFSET_DP;
+        float optimalLeft = ((index * (tabWidth - offset)) - offset) * -1;
+        if (index > selIndex) optimalLeft += tabWidth;
+        return optimalLeft - mScrollOffset;
+    }
+
+    /** Vivaldi **/
+    private boolean showXButtonForBackgroundTabs() {
+        return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
     }
 }

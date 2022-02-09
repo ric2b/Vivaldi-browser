@@ -129,13 +129,13 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_CONST_METHOD0(GetWebContents, content::WebContents*());
   MOCK_CONST_METHOD0(GetWebController, WebController*());
   MOCK_CONST_METHOD0(GetEmailAddressForAccessTokenAccount, std::string());
+  MOCK_CONST_METHOD0(GetUkmRecorder, ukm::UkmRecorder*());
   MOCK_METHOD2(SetDetails,
                void(std::unique_ptr<Details> details, base::TimeDelta delay));
   MOCK_METHOD2(AppendDetails,
                void(std::unique_ptr<Details> details, base::TimeDelta delay));
   MOCK_METHOD1(SetInfoBox, void(const InfoBox& info_box));
   MOCK_METHOD0(ClearInfoBox, void());
-  MOCK_METHOD1(SetProgress, void(int progress));
   MOCK_METHOD1(SetProgressActiveStepIdentifier,
                bool(const std::string& active_step_identifier));
   MOCK_METHOD1(SetProgressActiveStep, void(int active_step));
@@ -198,6 +198,8 @@ class MockActionDelegate : public ActionDelegate {
   MOCK_METHOD1(MaybeShowSlowWebsiteWarning,
                void(base::OnceCallback<void(bool)>));
   MOCK_METHOD0(MaybeShowSlowConnectionWarning, void());
+  MOCK_METHOD0(GetLogInfo, ProcessedActionStatusDetailsProto&());
+  MOCK_CONST_METHOD0(GetElementStore, ElementStore*());
 
   base::WeakPtr<ActionDelegate> GetWeakPtr() const override {
     return weak_ptr_factory_.GetWeakPtr();
@@ -207,15 +209,10 @@ class MockActionDelegate : public ActionDelegate {
     return client_settings_;
   }
 
-  ElementStore* GetElementStore() const override {
-    if (!element_store_) {
-      element_store_ = std::make_unique<FakeElementStore>();
-    }
-    return element_store_.get();
-  }
-
+ private:
+  FakeElementStore fake_element_store_;
   ClientSettings client_settings_;
-  mutable std::unique_ptr<ElementStore> element_store_;
+  ProcessedActionStatusDetailsProto log_info_;
 
   base::WeakPtrFactory<MockActionDelegate> weak_ptr_factory_{this};
 };

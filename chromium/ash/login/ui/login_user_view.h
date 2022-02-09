@@ -10,7 +10,6 @@
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/login_remove_account_dialog.h"
 #include "ash/public/cpp/login_types.h"
-#include "base/macros.h"
 #include "base/scoped_observation.h"
 #include "ui/display/manager/display_configurator.h"
 #include "ui/views/view.h"
@@ -109,6 +108,8 @@ class ASH_EXPORT LoginUserView : public views::View,
 
   void SetLargeLayout();
   void SetSmallishLayout();
+
+  void DeleteDialog();
 
   // Executed when the user view is pressed.
   OnTap on_tap_;

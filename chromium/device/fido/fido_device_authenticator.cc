@@ -720,6 +720,29 @@ void FidoDeviceAuthenticator::DeleteCredential(
       /*string_fixup_predicate=*/nullptr);
 }
 
+bool FidoDeviceAuthenticator::SupportsUpdateUserInformation() const {
+  return device_->device_info() &&
+         device_->device_info()->SupportsAtLeast(Ctap2Version::kCtap2_1);
+}
+
+void FidoDeviceAuthenticator::UpdateUserInformation(
+    const pin::TokenResponse& pin_token,
+    const PublicKeyCredentialDescriptor& credential_id,
+    const PublicKeyCredentialUserEntity& updated_user,
+    UpdateUserInformationCallback callback) {
+  DCHECK(Options()->supports_credential_management ||
+         Options()->supports_credential_management_preview);
+  DCHECK(chosen_pin_uv_auth_protocol_ == pin_token.protocol());
+
+  RunOperation<CredentialManagementRequest, UpdateUserInformationResponse>(
+      CredentialManagementRequest::ForUpdateUserInformation(
+          GetCredentialManagementRequestVersion(*Options()), pin_token,
+          credential_id, updated_user),
+      std::move(callback),
+      base::BindOnce(&UpdateUserInformationResponse::Parse),
+      /*string_fixup_predicate=*/nullptr);
+}
+
 void FidoDeviceAuthenticator::GetModality(BioEnrollmentCallback callback) {
   RunOperation<BioEnrollmentRequest, BioEnrollmentResponse>(
       BioEnrollmentRequest::ForGetModality(

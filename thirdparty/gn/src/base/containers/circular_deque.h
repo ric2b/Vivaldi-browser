@@ -13,7 +13,6 @@
 
 #include "base/containers/vector_buffer.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/template_util.h"
 
 // base::circular_deque is similar to std::deque. Unlike std::deque, the

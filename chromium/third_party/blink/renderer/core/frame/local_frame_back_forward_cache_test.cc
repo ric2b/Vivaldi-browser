@@ -46,6 +46,9 @@ class TestLocalFrameBackForwardCacheClient
     quit_closure_.Run();
   }
 
+  void DidChangeBackForwardCacheDisablingFeatures(
+      uint64_t features_mask) override {}
+
   void WaitUntilEvictedFromBackForwardCache() {
     base::RunLoop run_loop;
     quit_closure_ = run_loop.QuitClosure();
@@ -102,8 +105,7 @@ TEST_F(LocalFrameBackForwardCacheTest, EvictionOnV8ExecutionAtMicrotask) {
   // hand, the case 2) can happen. See https://crbug.com/994169
   Microtask::EnqueueMicrotask(base::BindOnce(
       [](LocalFrame* frame) {
-        ClassicScript::CreateUnspecifiedScript(
-            ScriptSourceCode("console.log('hi');"))
+        ClassicScript::CreateUnspecifiedScript("console.log('hi');")
             ->RunScript(frame->DomWindow());
       },
       frame));

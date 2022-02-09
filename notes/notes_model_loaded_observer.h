@@ -7,7 +7,6 @@
 #define NOTES_NOTES_MODEL_LOADED_OBSERVER_H_
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "notes/notes_model_observer.h"
 
 class Profile;

@@ -101,8 +101,8 @@ void DialMediaSinkServiceImpl::Start() {
 
   StartTimer();
 
-  dial_registry_ =
-      test_dial_registry_ ? test_dial_registry_ : DialRegistry::GetInstance();
+  dial_registry_ = test_dial_registry_ ? test_dial_registry_.get()
+                                       : DialRegistry::GetInstance();
   dial_registry_->RegisterObserver(this);
   dial_registry_->OnListenerAdded();
 }
@@ -223,10 +223,7 @@ void DialMediaSinkServiceImpl::OnDeviceDescriptionAvailable(
   DialSinkExtraData extra_data;
   extra_data.app_url = description_data.app_url;
   extra_data.model_name = description_data.model_name;
-  std::string ip_address = device_data.device_description_url().host();
-  if (!extra_data.ip_address.AssignFromIPLiteral(ip_address)) {
-    return;
-  }
+  extra_data.ip_address = device_data.ip_address();
 
   MediaSinkInternal dial_sink(sink, extra_data);
   latest_sinks_.insert_or_assign(sink_id, dial_sink);
@@ -366,8 +363,12 @@ std::vector<MediaSinkInternal> DialMediaSinkServiceImpl::GetAvailableSinks(
 void DialMediaSinkServiceImpl::BindLogger(
     mojo::PendingRemote<mojom::Logger> pending_remote) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Reset |logger_| if it is bound to a disconnected remote.
+  if (logger_.is_bound())
+    return;
   logger_.Bind(std::move(pending_remote));
-  DCHECK(dial_registry_);
+  logger_.reset_on_disconnect();
+
   logger_->LogInfo(mojom::LogCategory::kDiscovery, kLoggerComponent,
                    "DialMediaSinkService has started.", "", "", "");
 }

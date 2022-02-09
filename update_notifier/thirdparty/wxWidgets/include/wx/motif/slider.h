@@ -16,7 +16,7 @@
 // Slider
 class WXDLLIMPEXP_CORE wxSlider: public wxSliderBase
 {
-    DECLARE_DYNAMIC_CLASS(wxSlider)
+    wxDECLARE_DYNAMIC_CLASS(wxSlider);
 
 public:
     wxSlider();
@@ -27,7 +27,7 @@ public:
         const wxSize& size = wxDefaultSize,
         long style = wxSL_HORIZONTAL,
         const wxValidator& validator = wxDefaultValidator,
-        const wxString& name = wxSliderNameStr)
+        const wxString& name = wxASCII_STR(wxSliderNameStr))
     {
         Create(parent, id, value, minValue, maxValue, pos, size, style, validator, name);
     }
@@ -40,7 +40,7 @@ public:
         const wxSize& size = wxDefaultSize,
         long style = wxSL_HORIZONTAL,
         const wxValidator& validator = wxDefaultValidator,
-        const wxString& name = wxSliderNameStr);
+        const wxString& name = wxASCII_STR(wxSliderNameStr));
 
     virtual int GetValue() const ;
     virtual void SetValue(int);
@@ -71,7 +71,7 @@ protected:
         int sizeFlags = wxSIZE_AUTO);
 
 private:
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 };
 
 #endif

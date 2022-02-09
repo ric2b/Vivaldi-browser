@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_RESOURCE_COORDINATOR_TAB_HELPER_H_
 #define CHROME_BROWSER_RESOURCE_COORDINATOR_TAB_HELPER_H_
 
-#include "base/macros.h"
 #include "base/process/kill.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
@@ -32,7 +31,8 @@ class ResourceCoordinatorTabHelper
 
   // WebContentsObserver overrides.
   void DidStopLoading() override;
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
   void WebContentsDestroyed() override;
   void PrimaryPageChanged(content::Page& page) override;
 

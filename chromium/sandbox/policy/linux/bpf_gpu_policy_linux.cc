@@ -11,7 +11,6 @@
 #include <unistd.h>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
@@ -42,6 +41,12 @@ GpuProcessPolicy::~GpuProcessPolicy() {}
 
 // Main policy for x86_64/i386. Extended by CrosArmGpuProcessPolicy.
 ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
+  // Many GPU drivers need to dlopen additional libraries (see the file
+  // permissions in gpu_sandbox_hook_linux.cc that end in .so).
+  if (SyscallSets::IsDlopen(sysno)) {
+    return Allow();
+  }
+
   switch (sysno) {
     case __NR_kcmp:
       return Error(ENOSYS);
@@ -63,10 +68,6 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
 
       return If(add_seals, Allow()).Else(BPFBasePolicy::EvaluateSyscall(sysno));
     }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    // Needed for dlopen.
-    case __NR_fstatfs:
-#endif
     case __NR_ftruncate:
 #if defined(__i386__) || defined(__arm__) || \
     (defined(ARCH_CPU_MIPS_FAMILY) && defined(ARCH_CPU_32_BITS))
@@ -101,7 +102,7 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
       break;
   }
 
-#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_X11)
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (SyscallSets::IsSystemVSharedMemory(sysno))
     return Allow();
 #endif

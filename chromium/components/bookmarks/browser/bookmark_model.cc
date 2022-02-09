@@ -15,7 +15,7 @@
 #include "base/check_op.h"
 #include "base/guid.h"
 #include "base/i18n/string_compare.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
@@ -256,7 +256,7 @@ void BookmarkModel::RemoveAllUserBookmarks() {
   DCHECK(loaded_);
   std::set<GURL> removed_urls;
   struct RemoveNodeData {
-    const BookmarkNode* parent;
+    raw_ptr<const BookmarkNode> parent;
     int index;
     std::unique_ptr<BookmarkNode> node;
   };
@@ -461,7 +461,20 @@ void BookmarkModel::SetNodeMetaInfoMap(
   for (BookmarkModelObserver& observer : observers_)
     observer.OnWillChangeBookmarkMetaInfo(this, node);
 
+  // NOTE(jarle@vivaldi.com): The index doesn't support changing metadata
+  // (description, nickname), instead we remove the node and then add it back.
+  #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  if (node->is_url())
+    titled_url_index_->Remove(node);
+  #endif
+
   AsMutable(node)->SetMetaInfoMap(meta_info_map);
+
+  #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  if (node->is_url())
+    titled_url_index_->Add(node);
+  #endif
+
   if (store_)
     store_->ScheduleSave();
 
@@ -949,7 +962,7 @@ void BookmarkModel::SetUndoDelegate(BookmarkUndoDelegate* undo_delegate) {
 
 BookmarkUndoDelegate* BookmarkModel::undo_delegate() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return undo_delegate_ ? undo_delegate_ : empty_undo_delegate_.get();
+  return undo_delegate_ ? undo_delegate_.get() : empty_undo_delegate_.get();
 }
 
 }  // namespace bookmarks

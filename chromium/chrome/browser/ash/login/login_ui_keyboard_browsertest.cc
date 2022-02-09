@@ -8,7 +8,7 @@
 #include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ash/input_method/input_method_persistence.h"
@@ -130,11 +130,11 @@ IN_PROC_BROWSER_TEST_F(LoginUIUserAddingKeyboardTest, PRE_CheckPODSwitches) {
 }
 
 IN_PROC_BROWSER_TEST_F(LoginUIUserAddingKeyboardTest, CheckPODSwitches) {
-  EXPECT_EQ(lock_screen_utils::GetUserLastInputMethod(test_users_[2]),
+  EXPECT_EQ(lock_screen_utils::GetUserLastInputMethodId(test_users_[2]),
             std::string());
   LoginUser(test_users_[2]);
   const std::string logged_user_input_method =
-      lock_screen_utils::GetUserLastInputMethod(test_users_[2]);
+      lock_screen_utils::GetUserLastInputMethodId(test_users_[2]);
   test::ShowUserAddingScreen();
 
   std::vector<std::string> expected_input_methods;
@@ -164,7 +164,7 @@ IN_PROC_BROWSER_TEST_F(LoginUIUserAddingKeyboardTest, CheckPODSwitches) {
                                        .id());
 
   // Check that logged in user settings did not change.
-  EXPECT_EQ(lock_screen_utils::GetUserLastInputMethod(test_users_[2]),
+  EXPECT_EQ(lock_screen_utils::GetUserLastInputMethodId(test_users_[2]),
             logged_user_input_method);
 }
 
@@ -341,7 +341,7 @@ class LoginUIKeyboardPolicy : public LoginManagerTest {
     proto.mutable_login_screen_input_methods()->add_login_screen_input_methods(
         method);
     policy_helper_.RefreshPolicyAndWaitUntilDeviceSettingsUpdated(
-        {chromeos::kDeviceLoginScreenInputMethods});
+        {kDeviceLoginScreenInputMethods});
   }
   LoginManagerMixin login_manager_{&mixin_host_};
   DeviceStateMixin device_state_{
@@ -384,7 +384,7 @@ IN_PROC_BROWSER_TEST_F(LoginUIKeyboardPolicy, RestrictInputMethods) {
   proto.mutable_login_screen_input_methods()
       ->clear_login_screen_input_methods();
   policy_helper_.RefreshPolicyAndWaitUntilDeviceSettingsUpdated(
-      {chromeos::kDeviceLoginScreenInputMethods});
+      {kDeviceLoginScreenInputMethods});
 
   ASSERT_EQ(imm->GetActiveIMEState()->GetAllowedInputMethodIds().size(), 0U);
   ASSERT_EQ(expected_input_methods, input_method::InputMethodManager::Get()
@@ -449,7 +449,7 @@ class FirstLoginKeyboardTest : public LoginManagerTest {
 // session unlock.
 IN_PROC_BROWSER_TEST_F(FirstLoginKeyboardTest,
                        UsersLastInputMethodPersistsOnLoginOrUnlock) {
-  EXPECT_TRUE(lock_screen_utils::GetUserLastInputMethod(test_user_).empty());
+  EXPECT_TRUE(lock_screen_utils::GetUserLastInputMethodId(test_user_).empty());
 
   WizardController::SkipPostLoginScreensForTesting();
 
@@ -459,7 +459,7 @@ IN_PROC_BROWSER_TEST_F(FirstLoginKeyboardTest,
   LoginUser(test_user_);
 
   // Last input method should be stored.
-  EXPECT_FALSE(lock_screen_utils::GetUserLastInputMethod(test_user_).empty());
+  EXPECT_FALSE(lock_screen_utils::GetUserLastInputMethodId(test_user_).empty());
 
   ScreenLockerTester locker_tester;
   locker_tester.Lock();
@@ -467,13 +467,13 @@ IN_PROC_BROWSER_TEST_F(FirstLoginKeyboardTest,
   // Clear user input method.
   input_method::SetUserLastInputMethodPreferenceForTesting(test_user_,
                                                            std::string());
-  EXPECT_TRUE(lock_screen_utils::GetUserLastInputMethod(test_user_).empty());
+  EXPECT_TRUE(lock_screen_utils::GetUserLastInputMethodId(test_user_).empty());
 
   locker_tester.UnlockWithPassword(test_user_, "password");
   locker_tester.WaitForUnlock();
 
   // Last input method should be stored.
-  EXPECT_FALSE(lock_screen_utils::GetUserLastInputMethod(test_user_).empty());
+  EXPECT_FALSE(lock_screen_utils::GetUserLastInputMethodId(test_user_).empty());
 }
 
 class EphemeralUserKeyboardTest : public LoginManagerTest {
@@ -505,11 +505,11 @@ IN_PROC_BROWSER_TEST_F(EphemeralUserKeyboardTest, PersistToProfile) {
   // Should be empty because known_user does not persist data for ephemeral
   // users.
   EXPECT_FALSE(
-      user_manager::known_user::GetUserLastInputMethod(account_id, nullptr));
+      user_manager::known_user::GetUserLastInputMethodId(account_id, nullptr));
 
   std::vector<std::string> expected_input_method;
   Append_en_US_InputMethod(&expected_input_method);
-  EXPECT_EQ(lock_screen_utils::GetUserLastInputMethod(account_id),
+  EXPECT_EQ(lock_screen_utils::GetUserLastInputMethodId(account_id),
             expected_input_method[0]);
 }
 

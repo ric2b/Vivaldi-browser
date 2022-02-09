@@ -7,7 +7,6 @@
 
 #include <windows.h>
 
-#include "base/macros.h"
 #include "base/win/scoped_handle.h"
 
 namespace base {
@@ -65,7 +64,8 @@ class ScopedProcessInformation {
   DWORD process_id_;
   DWORD thread_id_;
 
-  DISALLOW_COPY_AND_ASSIGN(ScopedProcessInformation);
+  ScopedProcessInformation(const ScopedProcessInformation&) = delete;
+  ScopedProcessInformation& operator=(const ScopedProcessInformation&) = delete;
 };
 
 }  // namespace win

@@ -12,24 +12,22 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-#   pragma hdrstop
-#endif
-
 #include "wx/module.h"
 #include "wx/wxcrt.h"       // for wxStrcat()
+
+static bool gs_wasInitialized = wxModule::AreInitialized();
 
 // ----------------------------------------------------------------------------
 // test classes derived from wxModule
 // ----------------------------------------------------------------------------
 
-char g_strLoadOrder[256] = "\0";
+wxString g_strLoadOrder;
 
 class Module : public wxModule
 {
 protected:
-    virtual bool OnInit() { wxStrcat(g_strLoadOrder, GetClassInfo()->GetClassName()); return true; }
-    virtual void OnExit() { }
+    virtual bool OnInit() wxOVERRIDE { g_strLoadOrder += GetClassInfo()->GetClassName(); return true; }
+    virtual void OnExit() wxOVERRIDE { }
 };
 
 class ModuleA : public Module
@@ -37,7 +35,7 @@ class ModuleA : public Module
 public:
     ModuleA();
 private:
-    DECLARE_DYNAMIC_CLASS(ModuleA)
+    wxDECLARE_DYNAMIC_CLASS(ModuleA);
 };
 
 class ModuleB : public Module
@@ -45,7 +43,7 @@ class ModuleB : public Module
 public:
     ModuleB();
 private:
-    DECLARE_DYNAMIC_CLASS(ModuleB)
+    wxDECLARE_DYNAMIC_CLASS(ModuleB);
 };
 
 class ModuleC : public Module
@@ -53,7 +51,7 @@ class ModuleC : public Module
 public:
     ModuleC();
 private:
-    DECLARE_DYNAMIC_CLASS(ModuleC)
+    wxDECLARE_DYNAMIC_CLASS(ModuleC);
 };
 
 class ModuleD : public Module
@@ -61,60 +59,46 @@ class ModuleD : public Module
 public:
     ModuleD();
 private:
-    DECLARE_DYNAMIC_CLASS(ModuleD)
+    wxDECLARE_DYNAMIC_CLASS(ModuleD);
 };
 
-IMPLEMENT_DYNAMIC_CLASS(ModuleA, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(ModuleA, wxModule);
 ModuleA::ModuleA()
 {
     AddDependency(CLASSINFO(ModuleB));
     AddDependency(CLASSINFO(ModuleD));
 }
 
-IMPLEMENT_DYNAMIC_CLASS(ModuleB, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(ModuleB, wxModule);
 ModuleB::ModuleB()
 {
     AddDependency(CLASSINFO(ModuleC));
     AddDependency(CLASSINFO(ModuleD));
 }
 
-IMPLEMENT_DYNAMIC_CLASS(ModuleC, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(ModuleC, wxModule);
 ModuleC::ModuleC()
 {
     AddDependency(CLASSINFO(ModuleD));
 }
 
-IMPLEMENT_DYNAMIC_CLASS(ModuleD, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(ModuleD, wxModule);
 ModuleD::ModuleD()
 {
 }
 
 // ----------------------------------------------------------------------------
-// test class
+// tests themselves
 // ----------------------------------------------------------------------------
 
-class ModuleTestCase : public CppUnit::TestCase
+TEST_CASE("wxModule::Initialized", "[module]")
 {
-public:
-    ModuleTestCase() { }
+    CHECK( !gs_wasInitialized );
+    CHECK( wxModule::AreInitialized() );
+}
 
-private:
-    CPPUNIT_TEST_SUITE( ModuleTestCase );
-        CPPUNIT_TEST( LoadOrder );
-    CPPUNIT_TEST_SUITE_END();
-
-    void LoadOrder();
-    DECLARE_NO_COPY_CLASS(ModuleTestCase)
-};
-
-// register in the unnamed registry so that these tests are run by default
-CPPUNIT_TEST_SUITE_REGISTRATION( ModuleTestCase );
-
-// also include in its own registry so that these tests can be run alone
-CPPUNIT_TEST_SUITE_NAMED_REGISTRATION( ModuleTestCase, "ModuleTestCase" );
-
-void ModuleTestCase::LoadOrder()
+TEST_CASE("wxModule::LoadOrder", "[module]")
 {
     // module D is the only one with no dependencies and so should load as first (and so on):
-    CPPUNIT_ASSERT_EQUAL( "ModuleDModuleCModuleBModuleA", g_strLoadOrder );
+    CHECK( g_strLoadOrder == "ModuleDModuleCModuleBModuleA" );
 }

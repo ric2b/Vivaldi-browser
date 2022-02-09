@@ -19,8 +19,7 @@ namespace {
 const base::FilePath::CharType kCSSExtension[] = FILE_PATH_LITERAL(".css");
 const base::FilePath::CharType kJSExtension[] = FILE_PATH_LITERAL(".js");
 
-constexpr base::TimeDelta kUpdateCooldownTime =
-    base::TimeDelta::FromMilliseconds(500);
+constexpr base::TimeDelta kUpdateCooldownTime = base::Milliseconds(500);
 
 std::unique_ptr<base::Value> ReadApkAssets(base::FilePath apk_assets) {
 #ifdef OS_ANDROID

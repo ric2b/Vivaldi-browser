@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/components/settings/cros_settings_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/system_tray.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
-#include "chromeos/settings/cros_settings_names.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -60,7 +60,7 @@ UpdateRequiredScreen::UpdateRequiredScreen(UpdateRequiredView* view,
   error_message_delay_ = kDelayErrorMessage;
 
   eol_message_subscription_ = CrosSettings::Get()->AddSettingsObserver(
-      chromeos::kDeviceMinimumVersionAueMessage,
+      kDeviceMinimumVersionAueMessage,
       base::BindRepeating(&UpdateRequiredScreen::OnEolMessageChanged,
                           weak_factory_.GetWeakPtr()));
   if (view_)
@@ -82,7 +82,7 @@ void UpdateRequiredScreen::ShowImpl() {
   LoginScreen::Get()->SetAllowLoginAsGuest(false);
   policy::BrowserPolicyConnectorAsh* connector =
       g_browser_process->platform_part()->browser_policy_connector_ash();
-  view_->SetEnterpriseAndDeviceName(connector->GetEnterpriseDisplayDomain(),
+  view_->SetEnterpriseAndDeviceName(connector->GetEnterpriseDomainManager(),
                                     ui::GetChromeOSDeviceName());
 
   is_shown_ = true;
@@ -124,16 +124,16 @@ void UpdateRequiredScreen::OnGetEolInfo(
 }
 
 void UpdateRequiredScreen::OnEolMessageChanged() {
-  chromeos::CrosSettingsProvider::TrustedStatus status =
+  CrosSettingsProvider::TrustedStatus status =
       CrosSettings::Get()->PrepareTrustedValues(
           base::BindOnce(&UpdateRequiredScreen::OnEolMessageChanged,
                          weak_factory_.GetWeakPtr()));
-  if (status != chromeos::CrosSettingsProvider::TRUSTED)
+  if (status != CrosSettingsProvider::TRUSTED)
     return;
 
   std::string eol_message;
-  if (view_ && CrosSettings::Get()->GetString(
-                   chromeos::kDeviceMinimumVersionAueMessage, &eol_message)) {
+  if (view_ && CrosSettings::Get()->GetString(kDeviceMinimumVersionAueMessage,
+                                              &eol_message)) {
     view_->SetEolMessage(eol_message);
   }
 }

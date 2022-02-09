@@ -41,13 +41,13 @@ public:
     bool Create(wxWindow *parent);
     bool Create(wxWindow *parent, const wxFontData& data);
 
-    int ShowModal();
+    int ShowModal() wxOVERRIDE;
     wxFontData& GetFontData() { return m_fontData; }
 
 protected:
     wxFontData m_fontData;
 
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxFontDialog)
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxFontDialog);
 };
 
 extern "C" int RunMixedFontDialog(wxFontDialog* dialog) ;
@@ -87,10 +87,10 @@ class WXDLLIMPEXP_FWD_CORE wxCheckBox;
 
 class WXDLLIMPEXP_CORE wxFontDialog: public wxDialog
 {
-DECLARE_DYNAMIC_CLASS(wxFontDialog)
+    wxDECLARE_DYNAMIC_CLASS(wxFontDialog);
 
 #if !USE_NATIVE_FONT_DIALOG_FOR_MACOSX
-DECLARE_EVENT_TABLE()
+    wxDECLARE_EVENT_TABLE();
 #endif
 
 public:

@@ -5,7 +5,6 @@
 
 #include <Windows.h>
 
-#include "base/macros.h"
 #include "base/synchronization/lock.h"
 
 namespace installer {

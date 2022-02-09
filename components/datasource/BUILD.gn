@@ -10,6 +10,7 @@ source_set("dataurl") {
   ]
   deps = [
     "//base:base",
+    "//third_party/widevine/cdm:buildflags",
     "//url:url",
   ]
 }

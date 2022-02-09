@@ -18,12 +18,20 @@ import '//resources/polymer/v3_0/iron-pages/iron-pages.js';
 
 import {assert} from '//resources/js/assert.m.js';
 import {focusWithoutInk} from '//resources/js/cr/ui/focus_without_ink.m.js';
+
+// <if expr="chromeos">
 import {loadTimeData} from '//resources/js/load_time_data.m.js';
+// </if>
+
 import {IronPagesElement} from '//resources/polymer/v3_0/iron-pages/iron-pages.js';
-import {dom, DomIf, FlattenedNodesObserver, html, microTask, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {DomIf, FlattenedNodesObserver, html, microTask, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
+
+// <if expr="chromeos">
 import {getSettingIdParameter} from '../setting_id_param_util.js';
+// </if>
+
 import {SettingsSubpageElement} from './settings_subpage.js';
 
 type FocusConfig = Map<string, (string|Element|(() => void))>;
@@ -37,7 +45,6 @@ interface SettingsAnimatedPagesElement {
 const SettingsAnimatedPagesElementBase = RouteObserverMixin(PolymerElement) as
     {new (): PolymerElement & RouteObserverMixinInterface};
 
-/** @polymer */
 class SettingsAnimatedPagesElement extends SettingsAnimatedPagesElementBase {
   static get is() {
     return 'settings-animated-pages';
@@ -111,9 +118,8 @@ class SettingsAnimatedPagesElement extends SettingsAnimatedPagesElementBase {
     //     focused (further below in this function).
     if (this.previousRoute_ &&
         !Router.getInstance().lastRouteChangeWasPopstate()) {
-      const subpage = /** @type {{focusBackButton: Function}} */ (
-          this.querySelector<SettingsSubpageElement>(
-              'settings-subpage.iron-selected'));
+      const subpage = this.querySelector<SettingsSubpageElement>(
+          'settings-subpage.iron-selected');
       if (subpage) {
         subpage.focusBackButton();
         return;

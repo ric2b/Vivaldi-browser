@@ -10,7 +10,6 @@
 #define CALENDAR_CALENDAR_MODEL_LOADED_OBSERVER_H_
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "calendar/calendar_model_observer.h"
 #include "calendar/calendar_service.h"
 

@@ -20,7 +20,6 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.Toolbar;
 import androidx.preference.PreferenceFragmentCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.components.browser_ui.util.ToolbarUtils;
 
 /**
@@ -68,7 +67,7 @@ public class SettingsUtils {
      * Creates a {@link Drawable} for the given resource id with the default icon color applied.
      */
     public static Drawable getTintedIcon(Context context, @DrawableRes int resId) {
-        return getTintedIcon(context, resId, R.color.default_icon_color);
+        return getTintedIcon(context, resId, R.color.default_icon_color_tint_list);
     }
 
     /**
@@ -78,7 +77,8 @@ public class SettingsUtils {
             Context context, @DrawableRes int resId, @ColorRes int colorId) {
         Drawable icon = AppCompatResources.getDrawable(context, resId);
         // DrawableCompat.setTint() doesn't work well on BitmapDrawables on older versions.
-        icon.setColorFilter(ApiCompatibilityUtils.getColor(context.getResources(), colorId),
+        icon.setColorFilter(
+                AppCompatResources.getColorStateList(context, colorId).getDefaultColor(),
                 PorterDuff.Mode.SRC_IN);
         return icon;
     }

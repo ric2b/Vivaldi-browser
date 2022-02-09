@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -24,6 +23,11 @@ class AccessibilityIpcErrorBrowserTest : public ContentBrowserTest {
  public:
   AccessibilityIpcErrorBrowserTest() {}
 
+  AccessibilityIpcErrorBrowserTest(const AccessibilityIpcErrorBrowserTest&) =
+      delete;
+  AccessibilityIpcErrorBrowserTest& operator=(
+      const AccessibilityIpcErrorBrowserTest&) = delete;
+
  protected:
   // Convenience method to get the value of a particular AXNode
   // attribute as a UTF-8 string.
@@ -35,8 +39,6 @@ class AccessibilityIpcErrorBrowserTest : public ContentBrowserTest {
     }
     return std::string();
   }
-
-  DISALLOW_COPY_AND_ASSIGN(AccessibilityIpcErrorBrowserTest);
 };
 
 // Failed on Android x86 in crbug.com/1123641.

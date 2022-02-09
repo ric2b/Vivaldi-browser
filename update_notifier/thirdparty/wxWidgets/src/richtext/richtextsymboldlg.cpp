@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_RICHTEXT
 
@@ -281,13 +278,13 @@ bool wxSymbolPickerDialog::sm_showToolTips = false;
  * wxSymbolPickerDialog type definition
  */
 
-IMPLEMENT_DYNAMIC_CLASS( wxSymbolPickerDialog, wxDialog )
+wxIMPLEMENT_DYNAMIC_CLASS(wxSymbolPickerDialog, wxDialog);
 
 /*!
  * wxSymbolPickerDialog event table definition
  */
 
-BEGIN_EVENT_TABLE( wxSymbolPickerDialog, wxDialog )
+wxBEGIN_EVENT_TABLE(wxSymbolPickerDialog, wxDialog)
     EVT_LISTBOX(ID_SYMBOLPICKERDIALOG_LISTCTRL, wxSymbolPickerDialog::OnSymbolSelected)
 
 ////@begin wxSymbolPickerDialog event table entries
@@ -306,7 +303,7 @@ BEGIN_EVENT_TABLE( wxSymbolPickerDialog, wxDialog )
     EVT_UPDATE_UI( wxID_HELP, wxSymbolPickerDialog::OnHelpUpdate )
 ////@end wxSymbolPickerDialog event table entries
 
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 IMPLEMENT_HELP_PROVISION(wxSymbolPickerDialog)
 
@@ -489,6 +486,8 @@ void wxSymbolPickerDialog::CreateControls()
         if (button)
             m_stdButtonSizer->Show(button, false);
     }
+
+    m_symbolsCtrl->SetFocus();
 }
 
 /// Data transfer
@@ -556,7 +555,7 @@ void wxSymbolPickerDialog::UpdateSymbolDisplay(bool updateSymbolList, bool showA
 
     if (!fontNameToUse.empty())
     {
-        font = wxFont(14, wxDEFAULT, wxNORMAL, wxNORMAL, false, fontNameToUse);
+        font = wxFont(14, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false, fontNameToUse);
     }
     else
         font = *wxNORMAL_FONT;
@@ -605,7 +604,7 @@ void wxSymbolPickerDialog::ShowAtSubset()
 void wxSymbolPickerDialog::OnFontCtrlSelected( wxCommandEvent& WXUNUSED(event) )
 {
     if (m_fontCtrl->GetSelection() == 0)
-        m_fontName = wxEmptyString;
+        m_fontName.clear();
     else
         m_fontName = m_fontCtrl->GetStringSelection();
 
@@ -619,13 +618,9 @@ void wxSymbolPickerDialog::OnSymbolSelected( wxCommandEvent& event )
         return;
 
     int sel = event.GetSelection();
-    if (sel == wxNOT_FOUND)
-        m_symbol = wxEmptyString;
-    else
-    {
-        m_symbol = wxEmptyString;
+    m_symbol.clear();
+    if (sel != wxNOT_FOUND)
         m_symbol << (wxChar) sel;
-    }
 
 #if defined(__UNICODE__)
     if (sel != -1 && m_fromUnicode)
@@ -750,20 +745,20 @@ wxIcon wxSymbolPickerDialog::GetIconResource( const wxString& name )
 // event tables
 // ----------------------------------------------------------------------------
 
-BEGIN_EVENT_TABLE(wxSymbolListCtrl, wxVScrolledWindow)
+wxBEGIN_EVENT_TABLE(wxSymbolListCtrl, wxVScrolledWindow)
     EVT_PAINT(wxSymbolListCtrl::OnPaint)
     EVT_SIZE(wxSymbolListCtrl::OnSize)
 
     EVT_KEY_DOWN(wxSymbolListCtrl::OnKeyDown)
     EVT_LEFT_DOWN(wxSymbolListCtrl::OnLeftDown)
     EVT_LEFT_DCLICK(wxSymbolListCtrl::OnLeftDClick)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ============================================================================
 // implementation
 // ============================================================================
 
-IMPLEMENT_ABSTRACT_CLASS(wxSymbolListCtrl, wxVScrolledWindow)
+wxIMPLEMENT_ABSTRACT_CLASS(wxSymbolListCtrl, wxVScrolledWindow);
 
 // ----------------------------------------------------------------------------
 // wxSymbolListCtrl creation
@@ -801,7 +796,7 @@ bool wxSymbolListCtrl::Create(wxWindow *parent,
     m_colBgSel = wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHT);
 
     // flicker-free drawing requires this
-    SetBackgroundStyle(wxBG_STYLE_CUSTOM);
+    SetBackgroundStyle(wxBG_STYLE_PAINT);
 
     SetFont(*wxNORMAL_FONT);
 
@@ -1052,64 +1047,77 @@ void wxSymbolListCtrl::DoHandleItemClick(int item, int WXUNUSED(flags))
 
 void wxSymbolListCtrl::OnKeyDown(wxKeyEvent& event)
 {
-    // No keyboard interface for now
-    event.Skip();
-#if 0
     // flags for DoHandleItemClick()
     int flags = ItemClick_Kbd;
+    int current = m_current;
+    // m_current might not be wxNOT_FOUND if a Unicode symbol is selected
+    // before the mode is changed to ANSI
+    if( current < m_minSymbolValue || current > m_maxSymbolValue )
+        current = m_minSymbolValue;
 
-    int currentLineNow = SymbolValueToLineNumber(m_current);
+    // Original first visible row
+    int firstVisibleRow = GetVisibleRowsBegin();
+    // Current row
+    int currentRow = SymbolValueToLineNumber( current );
+    // Number of visible rows
+    int visibleRows = GetClientSize().y / OnGetRowHeight( 0 );
 
-    int currentLine;
+    // Which row to scroll to
+    int scrollToRow = firstVisibleRow;
+    // Check if the current symbol is visible
+    if( currentRow < firstVisibleRow )
+        scrollToRow = firstVisibleRow = currentRow;
+    else if( currentRow >= firstVisibleRow + visibleRows )
+        scrollToRow = firstVisibleRow = currentRow - visibleRows + 1;
+
     switch ( event.GetKeyCode() )
     {
         case WXK_HOME:
-            currentLine = 0;
+            current = m_minSymbolValue;
+            scrollToRow = 0;
             break;
 
         case WXK_END:
-            currentLine = GetLineCount() - 1;
+            current = m_maxSymbolValue;
+            scrollToRow = GetRowCount();
             break;
 
         case WXK_DOWN:
-            if ( currentLineNow == (int)GetLineCount() - 1 )
-                return;
-
-            currentLine = currentLineNow + 1;
+            current += m_symbolsPerLine;
+            if( currentRow >= firstVisibleRow + visibleRows - 1 )
+                scrollToRow++;
             break;
 
         case WXK_UP:
-            if ( m_current == wxNOT_FOUND )
-                currentLine = GetLineCount() - 1;
-            else if ( currentLineNow != 0 )
-                currentLine = currentLineNow - 1;
-            else // currentLineNow == 0
-                return;
+            current -= m_symbolsPerLine;
+            if( currentRow == firstVisibleRow )
+                scrollToRow--;
+            break;
+
+        case WXK_LEFT:
+            current--;
+            // Scroll up at leftmost position
+            if( current < scrollToRow * m_symbolsPerLine )
+                scrollToRow--;
+            break;
+
+        case WXK_RIGHT:
+            current++;
+            // Scroll down at rightmost position
+            if( current >= ( scrollToRow + visibleRows ) * m_symbolsPerLine )
+                scrollToRow++;
             break;
 
         case WXK_PAGEDOWN:
-            PageDown();
-            currentLine = GetFirstVisibleLine();
+            current += visibleRows * m_symbolsPerLine;
+            scrollToRow += visibleRows;
             break;
 
         case WXK_PAGEUP:
-            if ( currentLineNow == (int)GetFirstVisibleLine() )
-            {
-                PageUp();
-            }
-
-            currentLine = GetFirstVisibleLine();
+            current -= visibleRows * m_symbolsPerLine;
+            scrollToRow -= visibleRows;
             break;
 
-        case WXK_SPACE:
-            // hack: pressing space should work like a mouse click rather than
-            // like a keyboard arrow press, so trick DoHandleItemClick() in
-            // thinking we were clicked
-            flags &= ~ItemClick_Kbd;
-            currentLine = currentLineNow;
-            break;
-
-#ifdef __WXMSW__
         case WXK_TAB:
             // Since we are using wxWANTS_CHARS we need to send navigation
             // events for the tabs on MSW
@@ -1120,24 +1128,22 @@ void wxSymbolListCtrl::OnKeyDown(wxKeyEvent& event)
                 ne.SetEventObject(this);
                 GetParent()->GetEventHandler()->ProcessEvent(ne);
             }
-            // fall through to default
-#endif
+            wxFALLTHROUGH;
+
         default:
             event.Skip();
-            currentLine = 0; // just to silent the stupid compiler warnings
-            wxUnusedVar(currentNow);
             return;
     }
 
-#if 0
+    if( current < m_minSymbolValue || current > m_maxSymbolValue )
+        return;
     if ( event.ShiftDown() )
        flags |= ItemClick_Shift;
     if ( event.ControlDown() )
         flags |= ItemClick_Ctrl;
 
     DoHandleItemClick(current, flags);
-#endif
-#endif
+    ScrollToRow( scrollToRow );
 }
 
 // ----------------------------------------------------------------------------
@@ -1237,7 +1243,7 @@ int wxSymbolListCtrl::HitTest(const wxPoint& pt)
     if (symbol >= m_minSymbolValue && symbol <= m_maxSymbolValue)
         return symbol;
 
-    return -1;
+    return wxNOT_FOUND;
 }
 
 // Respond to size change

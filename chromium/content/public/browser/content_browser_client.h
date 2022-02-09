@@ -34,6 +34,7 @@
 #include "content/public/browser/mojo_binder_policy_map.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_ui_browser_interface_broker_registry.h"
+#include "content/public/common/main_function_params.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "device/vr/buildflags/buildflags.h"
@@ -173,9 +174,9 @@ struct ResourceRequest;
 namespace sandbox {
 class SeatbeltExecClient;
 class TargetPolicy;
-namespace policy {
-enum class SandboxType;
-}  // namespace policy
+namespace mojom {
+enum class Sandbox;
+}  // namespace mojom
 }  // namespace sandbox
 
 namespace ui {
@@ -240,7 +241,6 @@ class WebUIBrowserInterfaceBrokerRegistry;
 class XrIntegrationClient;
 struct GlobalRenderFrameHostId;
 struct GlobalRequestID;
-struct MainFunctionParams;
 struct OpenURLParams;
 struct PepperPluginInfo;
 struct Referrer;
@@ -277,7 +277,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // implementations for the browser startup code. See comments in
   // browser_main_parts.h.
   virtual std::unique_ptr<BrowserMainParts> CreateBrowserMainParts(
-      const MainFunctionParams& parameters);
+      MainFunctionParams parameters);
 
   // Allows the embedder to change the default behavior of
   // BrowserThread::PostAfterStartupTask to better match whatever
@@ -551,6 +551,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldSubframesTryToReuseExistingProcess(
       RenderFrameHost* main_frame);
 
+  // Returns whether a process that no longer has active RenderFrameHosts (or
+  // other reasons to be kept alive) can safely exit. This should return true,
+  // unless the embedder cannot easily handle a process exit in non-live frames.
+  virtual bool ShouldAllowNoLongerUsedProcessToExit();
+
   // Called when a site instance is first associated with a process.
   virtual void SiteInstanceGotProcess(SiteInstance* site_instance) {}
 
@@ -671,14 +676,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual base::FilePath GetLoggingFileName(
       const base::CommandLine& command_line);
 
-  // Allow the embedder to control if an AppCache can be used for the given url.
-  // This is called on the UI thread.
-  virtual bool AllowAppCache(
-      const GURL& manifest_url,
-      const net::SiteForCookies& site_for_cookies,
-      const absl::optional<url::Origin>& top_frame_origin,
-      BrowserContext* context);
-
   // Allows the embedder to control if a service worker is allowed at the given
   // `scope` and can be accessed from `site_for_cookies` and `top_frame_origin`.
   // `site_for_cookies` is used to determine whether the request is done in a
@@ -701,6 +698,13 @@ class CONTENT_EXPORT ContentBrowserClient {
       const absl::optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
       BrowserContext* context);
+
+  // Called when a service worker will start on a render process. The embedder
+  // can configure process-wide features here. (e.g. enable extra blink runtime
+  // features).
+  virtual void WillStartServiceWorker(BrowserContext* context,
+                                      const GURL& script_url,
+                                      RenderProcessHost* render_process_host);
 
   // Allow the embedder to control if a Shared Worker can be connected from a
   // given tab.
@@ -1127,8 +1131,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // about capability control.
   //
   // The embedder can add entries to `policy_map` for interfaces that it
-  // registers in `RegisterBrowserInterfaceBindersForFrame()`. It should not
-  // change or remove existing entries.
+  // registers in `RegisterBrowserInterfaceBindersForFrame()` and
+  // `BindAssociatedReceiverFromFrame()`. It should not change or remove
+  // existing entries.
   //
   // This function is called at most once, when the first RenderFrameHost is
   // created for prerendering a page that is same-origin to the page that
@@ -1243,7 +1248,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Only use this for embedder-specific policies, since the bulk of sandbox
   // policies should go inside the relevant SandboxedProcessLauncherDelegate.
   virtual bool PreSpawnChild(sandbox::TargetPolicy* policy,
-                             sandbox::policy::SandboxType sandbox_type,
+                             sandbox::mojom::Sandbox sandbox_type,
                              ChildSpawnFlags flags);
 
   // This may be called on the PROCESS_LAUNCHER thread before the child process
@@ -1251,14 +1256,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // not be compatible with Hardware-enforced Stack Protection (CET).
   // |utility_sub_type| should match that provided on the command line to the
   // child process. Only use this for embedder-specific processes, and prefer to
-  // key off SandboxType in the relevant SandboxedProcessLauncherDelegate.
+  // key off Sandbox in the relevant SandboxedProcessLauncherDelegate.
   virtual bool IsUtilityCetCompatible(const std::string& utility_sub_type);
 
   // Returns the AppContainer SID for the specified sandboxed process type, or
   // empty string if this sandboxed process type does not support living inside
   // an AppContainer. Called on PROCESS_LAUNCHER thread.
   virtual std::wstring GetAppContainerSidForSandboxType(
-      sandbox::policy::SandboxType sandbox_type);
+      sandbox::mojom::Sandbox sandbox_type);
 
   // Returns the LPAC capability name to use for file data that the network
   // service needs to access to when running within LPAC sandbox. Embedders
@@ -1508,7 +1513,14 @@ class CONTENT_EXPORT ContentBrowserClient {
           handshake_client);
 
   // Allows the embedder to control if establishing a WebTransport connection is
-  // allowed. When the connection is blocked, `callback` is called with `error`.
+  // allowed.
+  //
+  // `process_id` is the ID of the process which hosts the initiator context.
+  // `frame_routing_id` is the ID of the frame with which the initiator context
+  // is associated, or MSG_ROUTING_NONE if there is no associated frame.
+  // `url` is the destination URL and
+  // `initiator_origin` is the origin of the initiator context.
+  // When the connection is blocked, `callback` is called with `error`.
   // `handshake_client` will be proxied to block the connection while
   // handshaking.
   using WillCreateWebTransportCallback = base::OnceCallback<void(
@@ -1516,8 +1528,10 @@ class CONTENT_EXPORT ContentBrowserClient {
           handshake_client,
       absl::optional<network::mojom::WebTransportErrorPtr> error)>;
   virtual void WillCreateWebTransport(
-      RenderFrameHost* frame,
+      int process_id,
+      int frame_routing_id,
       const GURL& url,
+      const url::Origin& initiator_origin,
       mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
           handshake_client,
       WillCreateWebTransportCallback callback);
@@ -1769,7 +1783,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       const net::AuthChallengeInfo& auth_info,
       WebContents* web_contents,
       const GlobalRequestID& request_id,
-      bool is_request_for_main_frame,
+      bool is_request_for_primary_main_frame,
       const GURL& url,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
@@ -1879,10 +1893,16 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Used as part of the user agent string.
   virtual std::string GetProduct();
 
-  // Returns the user agent.Content may cache this value.
+  // Returns the user agent. This can also return the reduced user agent, based
+  // on blink::features::kUserAgentReduction. Content may cache this value.
   virtual std::string GetUserAgent();
 
-  // Returns the reduced user agent string. Defaults to |GetUserAgent| Content
+  // Returns the user agent, allowing for preferences (i.e. enterprise policy).
+  // Default to the non-context |GetUserAgent| above.
+  virtual std::string GetUserAgentBasedOnPolicy(
+      content::BrowserContext* context);
+
+  // Returns the reduced user agent string. Defaults to |GetUserAgent|. Content
   // may cache this value.
   virtual std::string GetReducedUserAgent();
 
@@ -2025,6 +2045,17 @@ class CONTENT_EXPORT ContentBrowserClient {
       const std::string& data,
       IsClipboardPasteContentAllowedCallback callback);
 
+  // Returns true if a copy to the clipboard from `url` is allowed by the
+  // CopyPreventionSettings policy, false otherwise. The check is only performed
+  // if `data_size_in_bytes` is greater or equal than the minimum data size
+  // specified in the policy. If the copy is blocked `replacement_data` will be
+  // filled with an explainer message meant to be written to the clipboard for
+  // the user to see.
+  virtual bool IsClipboardCopyAllowed(content::BrowserContext* browser_context,
+                                      const GURL& url,
+                                      size_t data_size_in_bytes,
+                                      std::u16string& replacement_data);
+
   // Allows the embedder to override normal user activation checks done when
   // entering fullscreen. For example, it is used in layout tests to allow
   // fullscreen when mock screen orientation changes.
@@ -2043,9 +2074,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // functionality.
   virtual XrIntegrationClient* GetXrIntegrationClient();
 #endif
-
-  virtual bool IsOriginTrialRequiredForAppCache(
-      content::BrowserContext* browser_text);
 
   // External applications and services may launch the browser in a mode which
   // exposes browser control interfaces via Mojo. Any such interface binding
@@ -2093,7 +2121,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // true if parameters were successfully set up or false if no additional
   // parameters were set up.
   virtual bool SetupEmbedderSandboxParameters(
-      sandbox::policy::SandboxType sandbox_type,
+      sandbox::mojom::Sandbox sandbox_type,
       sandbox::SeatbeltExecClient* client);
 #endif  // defined(OS_MAC)
 
@@ -2129,6 +2157,25 @@ class CONTENT_EXPORT ContentBrowserClient {
       base::OnceCallback<void(bool accepted,
                               const std::string& address,
                               const std::string& port)> callback);
+
+  // Returns true if find-in-page should be disabled for a given `origin`.
+  virtual bool IsFindInPageDisabledForOrigin(const url::Origin& origin);
+
+  // Called on every WebContents creation.
+  virtual void OnWebContentsCreated(WebContents* web_contents);
+
+  // Background attributions are attributions coming from other applications
+  // that are not processed immediately, typically because the browser has not
+  // yet been started. This method is called before processing any new
+  // attributions or conversions coming from a renderer, to notify the embedder
+  // that it should flush any attributions that have not been processed yet. The
+  // provided |callback| should be run when all background attributions have
+  // been flushed, or immediately if background attributions are not supported
+  // by the embedder.
+  virtual void FlushBackgroundAttributions(base::OnceClosure callback);
+
+  // Whether a navigation in |browser_context| should preconnect early.
+  virtual bool ShouldPreconnectNavigation(BrowserContext* browser_context);
 };
 
 }  // namespace content

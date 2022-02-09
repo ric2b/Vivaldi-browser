@@ -7,9 +7,10 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/thread_annotations.h"
 #include "remoting/base/running_samples.h"
 #include "remoting/codec/webrtc_video_encoder.h"
@@ -65,10 +66,6 @@ class WebrtcVideoEncoderWrapper : public webrtc::VideoEncoder {
   // Notifies WebRTC that this encoder has dropped a frame.
   void NotifyFrameDropped();
 
-  // Sets whether top-off is active, and fires a notification if the setting
-  // changes.
-  void SetTopOffActive(bool active);
-
   // Returns whether the frame should be encoded at low quality, to reduce
   // latency for large frame updates. This is only done here for VP8, as VP9
   // automatically detects target-overshoot and re-encodes the frame at
@@ -80,7 +77,7 @@ class WebrtcVideoEncoderWrapper : public webrtc::VideoEncoder {
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // Callback registered by WebRTC to receive encoded frames.
-  webrtc::EncodedImageCallback* encoded_callback_
+  raw_ptr<webrtc::EncodedImageCallback> encoded_callback_
       GUARDED_BY_CONTEXT(sequence_checker_) = nullptr;
 
   // Timestamp to be added to the EncodedImage when sending it to
@@ -95,6 +92,10 @@ class WebrtcVideoEncoderWrapper : public webrtc::VideoEncoder {
   // Bandwidth estimate from SetRates(), which is expected to be called before
   // Encode().
   int bitrate_kbps_ GUARDED_BY_CONTEXT(sequence_checker_) = 0;
+
+  // Latest RTT estimate provided by OnRttUpdate().
+  base::TimeDelta rtt_estimate_ GUARDED_BY_CONTEXT(sequence_checker_){
+      base::TimeDelta::Max()};
 
   // True when encoding unchanged frames for top-off.
   bool top_off_active_ GUARDED_BY_CONTEXT(sequence_checker_) = false;

@@ -21,13 +21,12 @@
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/favicon_base/favicon_callback.h"
@@ -535,10 +534,7 @@ class HistoryService : public KeyedService {
 
   // Gets a vector of reverse-chronological `AnnotatedVisit` instances based on
   // `options`. Uses the same deduplication and visibility logic as
-  // `HistoryService::QueryHistory()`. Notably, this method EXCLUDES from the
-  // result any visits that lack context annotations. To make a continuation
-  // call, the last item's visit time can be used as the `end_time` constraint
-  // in the next page's `options`.
+  // `HistoryService::QueryHistory()`.
   using GetAnnotatedVisitsCallback =
       base::OnceCallback<void(std::vector<AnnotatedVisit>)>;
   base::CancelableTaskTracker::TaskId GetAnnotatedVisits(

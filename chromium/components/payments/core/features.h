@@ -43,17 +43,9 @@ extern const base::Feature kAppStoreBillingDebug;
 // Used to control whether allow crawling just-in-time installable payment app.
 extern const base::Feature kWebPaymentsJustInTimePaymentApp;
 
-// Used to enable crawling just-in-time installable payment apps even if
-// basic-card is also requested.
-extern const base::Feature kAlwaysAllowJustInTimePaymentApp;
-
 // Used to control whether the shipping address returned for the
 // ShippingAddressChangeEvent is redacted of fine-grained details.
 extern const base::Feature kWebPaymentsRedactShippingAddress;
-
-// Used to make autofill instrument more restrictive when responding to
-// hasEnrolledInstrument() queries.
-extern const base::Feature kStrictHasEnrolledAutofillInstrument;
 
 // If enabled, just-in-time installable payment handlers are ranked lower than
 // complete autofill instruments in payment sheet's method selection section.
@@ -65,11 +57,6 @@ extern const base::Feature kPaymentHandlerPopUpSizeWindow;
 
 // Used to test icon refetch for JIT installed apps with missing icons.
 extern const base::Feature kAllowJITInstallationWhenAppIconIsMissing;
-
-// Desktop only, if enabled the security icon would be showed next to the
-// payment handler's URL bar. It indicate that only secure content is
-// allowed inside the payment handler.
-extern const base::Feature kPaymentHandlerSecurityIcon;
 
 // Used to reject the apps with partial delegation.
 extern const base::Feature kEnforceFullDelegation;

@@ -11,6 +11,7 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
@@ -216,11 +217,6 @@ RegistrationState* GetRegistrationState() {
 void RegisterForCloudMessages() {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
-  if (!base::FeatureList::IsEnabled(device::kWebAuthCableSecondFactor) &&
-      !base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
-    return;
-  }
-
   GetRegistrationState()->Register();
 }
 
@@ -232,8 +228,7 @@ absl::optional<syncer::DeviceInfo::PhoneAsASecurityKeyInfo>
 GetSyncDataIfRegistered() {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
-  if (!base::FeatureList::IsEnabled(device::kWebAuthCableSecondFactor) ||
-      !Java_CableAuthenticatorModuleProvider_canDeviceSupportCable(
+  if (!Java_CableAuthenticatorModuleProvider_canDeviceSupportCable(
           base::android::AttachCurrentThread())) {
     return absl::nullopt;
   }
@@ -274,6 +269,17 @@ GetSyncDataIfRegistered() {
   return paask_info;
 }
 
+// IsMetricsAndCrashReportingEnabled is a friend class of
+// |ChromeMetricsServiceAccessor| and thus can call
+// |IsMetricsAndCrashReportingEnabled|. It exists to expose that function to
+// |JNI_CableAuthenticatorModuleProvider_IsMetricsAndCrashReportingEnabled|.
+class IsMetricsAndCrashReportingEnabled {
+ public:
+  static bool value() {
+    return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
+  }
+};
+
 }  // namespace authenticator
 }  // namespace webauthn
 
@@ -307,4 +313,10 @@ static base::android::ScopedJavaLocalRef<jbyteArray>
 JNI_CableAuthenticatorModuleProvider_GetSecret(JNIEnv* env) {
   return base::android::ToJavaByteArray(
       env, webauthn::authenticator::GetRegistrationState()->secret());
+}
+
+static jboolean
+JNI_CableAuthenticatorModuleProvider_IsMetricsAndCrashReportingEnabled(
+    JNIEnv* env) {
+  return webauthn::authenticator::IsMetricsAndCrashReportingEnabled::value();
 }

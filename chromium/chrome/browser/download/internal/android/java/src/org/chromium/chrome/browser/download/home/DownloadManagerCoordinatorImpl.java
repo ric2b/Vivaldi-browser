@@ -11,7 +11,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ObserverList;
@@ -27,6 +26,7 @@ import org.chromium.chrome.browser.download.home.snackbars.DeleteUndoCoordinator
 import org.chromium.chrome.browser.download.home.toolbar.ToolbarCoordinator;
 import org.chromium.chrome.browser.download.internal.R;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
@@ -66,18 +66,15 @@ class DownloadManagerCoordinatorImpl
             Callback<Context> settingsLauncher, SnackbarManager snackbarManager,
             ModalDialogManager modalDialogManager, PrefService prefService, Tracker tracker,
             FaviconProvider faviconProvider, OfflineContentProvider provider,
-            LegacyDownloadProvider legacyProvider,
             DiscardableReferencePool discardableReferencePool) {
         mActivity = activity;
         mSettingsLauncher = settingsLauncher;
         mDeleteCoordinator = new DeleteUndoCoordinator(snackbarManager);
         mSelectionDelegate = new SelectionDelegate<ListItem>();
         mListCoordinator = new DateOrderedListCoordinator(mActivity, config,
-                exploreOfflineTabVisibilitySupplier, provider, legacyProvider,
-                mDeleteCoordinator::showSnackbar, mSelectionDelegate, this::notifyFilterChanged,
-                createDateOrderedListObserver(), modalDialogManager, prefService, faviconProvider,
-                discardableReferencePool);
-        // Vivaldi
+                exploreOfflineTabVisibilitySupplier, provider, mDeleteCoordinator::showSnackbar,
+                mSelectionDelegate, this::notifyFilterChanged, createDateOrderedListObserver(),
+                modalDialogManager, prefService, faviconProvider, discardableReferencePool);
         mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
                 mSelectionDelegate, config.isSeparateActivity, tracker);
 
@@ -95,8 +92,8 @@ class DownloadManagerCoordinatorImpl
     private void initializeView() {
         mMainView = new FrameLayout(mActivity);
         if (!BuildConfig.IS_VIVALDI)
-        mMainView.setBackgroundColor(
-                ApiCompatibilityUtils.getColor(mActivity.getResources(), R.color.default_bg_color));
+        mMainView.setBackgroundColor(SemanticColorUtils.getDefaultBgColor(mActivity));
+
         FrameLayout.LayoutParams listParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         listParams.setMargins(0,

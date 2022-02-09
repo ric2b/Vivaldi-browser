@@ -17,7 +17,7 @@
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -69,7 +69,7 @@ constexpr auto kNotifyCycleTimeForTesting = base::Milliseconds(500);
 constexpr auto kOutdatedBuildDetectorPeriod = base::Days(1);
 
 // The number of days after which we identify a build/install as outdated.
-constexpr auto kOutdatedBuildAge = base::Days(7) * 12;
+constexpr auto kOutdatedBuildAge = base::Days(7) * 8;
 
 constexpr bool ShouldDetectOutdatedBuilds() {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

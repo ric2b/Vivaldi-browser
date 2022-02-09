@@ -10,16 +10,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_BANNERWINDOW
 
 #include "wx/xrc/xh_bannerwindow.h"
 #include "wx/bannerwindow.h"
 
-wxIMPLEMENT_DYNAMIC_CLASS(wxBannerWindowXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxBannerWindowXmlHandler, wxXmlResourceHandler);
 
 wxBannerWindowXmlHandler::wxBannerWindowXmlHandler()
     : wxXmlResourceHandler()

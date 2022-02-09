@@ -9,8 +9,8 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
@@ -68,6 +68,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -96,7 +97,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
-#endif  // ENABLE_DICE_SUPPORT
+#endif  // BUIDLFLAG(ENABLE_DICE_SUPPORT)
 
 using autofill::ParsingResult;
 using base::ASCIIToUTF16;
@@ -226,10 +227,11 @@ class ObservingAutofillClient
   }
 
  private:
-  explicit ObservingAutofillClient(content::WebContents* web_contents) {}
+  explicit ObservingAutofillClient(content::WebContents* web_contents)
+      : content::WebContentsUserData<ObservingAutofillClient>(*web_contents) {}
   friend class content::WebContentsUserData<ObservingAutofillClient>;
 
-  base::RunLoop* run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> run_loop_ = nullptr;
   bool popup_shown_ = false;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
@@ -2211,7 +2213,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                                           ServiceAccessType::IMPLICIT_ACCESS)
           .get();
   password_manager::PasswordForm signin_form;
-  signin_form.signon_realm = iframe_url.GetOrigin().spec();
+  signin_form.signon_realm = iframe_url.DeprecatedGetOriginAsURL().spec();
   signin_form.url = iframe_url;
   signin_form.username_value = u"temp";
   signin_form.password_value = u"pa55w0rd";
@@ -2275,7 +2277,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                                           ServiceAccessType::IMPLICIT_ACCESS)
           .get();
   password_manager::PasswordForm signin_form;
-  signin_form.signon_realm = iframe_url.GetOrigin().spec();
+  signin_form.signon_realm = iframe_url.DeprecatedGetOriginAsURL().spec();
   signin_form.url = iframe_url;
   signin_form.username_value = u"temp";
   signin_form.password_value = u"pa55w0rd";
@@ -2945,7 +2947,14 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
 }
 
 // Check that the internals page contains logs from the renderer.
-IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, InternalsPage_Renderer) {
+// Flaky on linux-bfcache-rel crbug.com/1276313.
+#if defined(OS_LINUX)
+#define MAYBE_InternalsPage_Renderer DISABLED_InternalsPage_Renderer
+#else
+#define MAYBE_InternalsPage_Renderer InternalsPage_Renderer
+#endif
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+                       MAYBE_InternalsPage_Renderer) {
   // Open the internals page.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL("chrome://password-manager-internals"),
@@ -3661,7 +3670,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
               browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
               .get());
   password_manager::PasswordForm signin_form;
-  signin_form.signon_realm = url_A.GetOrigin().spec();
+  signin_form.signon_realm = url_A.DeprecatedGetOriginAsURL().spec();
   signin_form.url = url_A;
   signin_form.username_value = u"user";
   signin_form.password_value = u"oldpassword";
@@ -3692,7 +3701,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   // update bubble is shown instead.
   WaitForPasswordStore();  // Let the navigation take its effect on storing.
   ASSERT_THAT(password_store->stored_passwords(),
-              ElementsAre(testing::Key(url_A.GetOrigin())));
+              ElementsAre(testing::Key(url_A.DeprecatedGetOriginAsURL())));
   CheckThatCredentialsStored("user", "oldpassword");
   BubbleObserver prompt_observer(WebContents());
   EXPECT_TRUE(prompt_observer.IsUpdatePromptShownAutomatically());
@@ -3703,7 +3712,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   WaitForPasswordStore();
   // The stored credential has been updated with the new password.
   const auto& passwords_map = password_store->stored_passwords();
-  ASSERT_THAT(passwords_map, ElementsAre(testing::Key(url_A.GetOrigin())));
+  ASSERT_THAT(passwords_map,
+              ElementsAre(testing::Key(url_A.DeprecatedGetOriginAsURL())));
   for (const auto& credentials : passwords_map) {
     ASSERT_THAT(credentials.second, testing::SizeIs(1));
     EXPECT_EQ(u"user", credentials.second[0].username_value);
@@ -3748,7 +3758,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
-                       DeleteCredentialsUpdateDropdow) {
+                       DeleteCredentialsUpdateDropdown) {
   password_manager::PasswordStoreInterface* password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS)
@@ -3773,9 +3783,16 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   autofill::mojom::PasswordManagerDriver* driver =
       factory->GetDriverForFrame(WebContents()->GetMainFrame());
 
+  // Just fake a position of the <input> element within the content_area_bounds.
+  // For this test it does not matter where the dropdown is rendered.
+  gfx::Rect content_area_bounds = WebContents()->GetContainerBounds();
+  gfx::RectF element_bounds(content_area_bounds.x(), content_area_bounds.y(),
+                            content_area_bounds.width(),
+                            content_area_bounds.height() * 0.1);
+
   // Instruct Chrome to show the password dropdown.
   driver->ShowPasswordSuggestions(base::i18n::LEFT_TO_RIGHT, std::u16string(),
-                                  0, gfx::RectF());
+                                  0, element_bounds);
   autofill::ChromeAutofillClient* autofill_client =
       autofill::ChromeAutofillClient::FromWebContents(WebContents());
   autofill::AutofillPopupController* controller =
@@ -3798,7 +3815,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   WaitForPasswordStore();
   // Reshow the dropdown.
   driver->ShowPasswordSuggestions(base::i18n::LEFT_TO_RIGHT, std::u16string(),
-                                  0, gfx::RectF());
+                                  0, element_bounds);
   controller = autofill_client->popup_controller_for_testing().get();
   ASSERT_TRUE(controller);
   EXPECT_EQ(2, controller->GetLineCount());
@@ -3817,7 +3834,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   WaitForPasswordStore();
   // Reshow the dropdown won't work because there is nothing to suggest.
   driver->ShowPasswordSuggestions(base::i18n::LEFT_TO_RIGHT, std::u16string(),
-                                  0, gfx::RectF());
+                                  0, element_bounds);
   EXPECT_FALSE(autofill_client->popup_controller_for_testing());
 
   WaitForElementValue("username_field", "");
@@ -4023,7 +4040,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   content::RenderFrameHost* frame =
       ChildFrameAt(WebContents()->GetMainFrame(), 0);
   EXPECT_EQ(GURL(url::kAboutBlankURL), frame->GetLastCommittedURL());
-  EXPECT_EQ(submit_url.GetOrigin(), frame->GetLastCommittedOrigin().GetURL());
+  EXPECT_EQ(submit_url.DeprecatedGetOriginAsURL(),
+            frame->GetLastCommittedOrigin().GetURL());
   EXPECT_TRUE(frame->IsRenderFrameLive());
   EXPECT_FALSE(prompt_observer.IsSavePromptAvailable());
 
@@ -4034,7 +4052,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   EXPECT_TRUE(prompt_observer.IsSavePromptAvailable());
 }
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 // This test suite only applies to Gaia signin page, and checks that the
 // signin interception bubble and the password bubbles never conflict.
 class PasswordManagerBrowserTestWithSigninInterception
@@ -4207,7 +4225,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestWithSigninInterception,
   FillAndSubmitGaiaPassword();
   EXPECT_FALSE(prompt_observer.IsSavePromptShownAutomatically());
 }
-#endif  // ENABLE_DICE_SUPPORT && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUIDLFLAG(ENABLE_DICE_SUPPORT)
 
 class TestPasswordManagerClient : public ChromePasswordManagerClient {
  public:
@@ -4406,7 +4424,7 @@ class MockPrerenderPasswordManagerDriver
   }
   base::OnceClosure quit_closure_;
   uint32_t wait_type_ = WAIT_FOR_NOTHING;
-  autofill::mojom::PasswordManagerDriver* impl_ = nullptr;
+  raw_ptr<autofill::mojom::PasswordManagerDriver> impl_ = nullptr;
 };
 
 class MockPrerenderPasswordManagerDriverInjector

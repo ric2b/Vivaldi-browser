@@ -5,6 +5,9 @@
 #include "base/command_line.h"
 #include "base/strings/string_util.h"
 #include "components/version_info/version_info_values.h"
+#include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace vivaldi_user_agent {
 
@@ -73,6 +76,21 @@ bool IsWhiteListedHost(base::StringPiece host) {
     return false;
 
   return true;
+}
+
+void UpdateAgentString(bool reduced, std::string& user_agent) {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
+  if (!g_ui_thread_gurl)
+    return;
+
+  if (!IsWhiteListedHost(g_ui_thread_gurl->host_piece()))
+    return;
+
+  // TODO(igor@vivaldi.com): Drop the build number and minor version if reduced,
+  // VB-86068.
+  user_agent += kVivaldiSuffix;
 }
 
 }  // namespace vivaldi_user_agent

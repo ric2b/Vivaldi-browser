@@ -7,7 +7,6 @@
 
 #include <jni.h>
 
-#include "base/macros.h"
 #include "content/public/browser/screen_orientation_delegate.h"
 #include "services/device/public/mojom/screen_orientation_lock_types.mojom-shared.h"
 
@@ -32,7 +31,7 @@ class ScreenOrientationDelegateAndroid : public ScreenOrientationDelegate {
   bool FullScreenRequired(WebContents* web_contents) override;
   void Lock(WebContents* web_contents,
             device::mojom::ScreenOrientationLockType lock_orientation) override;
-  bool ScreenOrientationProviderSupported() override;
+  bool ScreenOrientationProviderSupported(WebContents* web_contents) override;
   void Unlock(WebContents* web_contents) override;
 };
 

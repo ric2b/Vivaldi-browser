@@ -23,6 +23,7 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
+#include "ui/strings/grit/ax_strings.h"
 
 namespace {
 
@@ -52,6 +53,15 @@ enum {
 // android.view.accessibility.AccessibilityNodeInfo.RangeInfo in Java:
 enum { ANDROID_VIEW_ACCESSIBILITY_RANGE_TYPE_FLOAT = 1 };
 
+// These define reasons a node may be marked as clickable and provide a
+// relative score to AT. Higher means more likely to be the clickable node.
+enum {
+  kNotClickable = 0,
+  kHasClickAncestor = 100,
+  kHasClickListener = 200,
+  kHasClickListenerAndIsControl = 300
+};
+
 }  // namespace
 
 namespace content {
@@ -63,8 +73,11 @@ constexpr int kMinimumCharacterCountForInvalid = 7;
 }  // namespace
 
 // static
-BrowserAccessibility* BrowserAccessibility::Create() {
-  return new BrowserAccessibilityAndroid();
+std::unique_ptr<BrowserAccessibility> BrowserAccessibility::Create(
+    BrowserAccessibilityManager* manager,
+    ui::AXNode* node) {
+  return std::unique_ptr<BrowserAccessibilityAndroid>(
+      new BrowserAccessibilityAndroid(manager, node));
 }
 
 using UniqueIdMap = std::unordered_map<int32_t, BrowserAccessibilityAndroid*>;
@@ -83,7 +96,10 @@ BrowserAccessibilityAndroid* BrowserAccessibilityAndroid::GetFromUniqueId(
   return nullptr;
 }
 
-BrowserAccessibilityAndroid::BrowserAccessibilityAndroid() {
+BrowserAccessibilityAndroid::BrowserAccessibilityAndroid(
+    BrowserAccessibilityManager* manager,
+    ui::AXNode* node)
+    : BrowserAccessibility(manager, node) {
   g_unique_id_map.Get()[unique_id()] = this;
 }
 
@@ -164,18 +180,14 @@ bool BrowserAccessibilityAndroid::IsClickable() const {
   if (IsHeadingLink())
     return true;
 
-  if (!IsEnabled()) {
-    // TalkBack won't announce a control as disabled unless it's also marked
-    // as clickable. In other words, Talkback wants to know if the control
-    // might be clickable, if it wasn't disabled.
-    return ui::IsControl(GetRole());
-  }
-
   // Skip web areas, PDFs and iframes, they're focusable but not clickable.
   if (ui::IsIframe(GetRole()) || ui::IsPlatformDocument(GetRole()))
     return false;
 
-  // Otherwise it's clickable if it's a control.
+  // Otherwise it's clickable if it's a control. We include disabled nodes
+  // because TalkBack won't announce a control as disabled unless it's also
+  // marked as clickable. In other words, Talkback wants to know if the control
+  // might be clickable, if it wasn't disabled.
   return ui::IsControlOnAndroid(GetRole(), IsFocusable());
 }
 
@@ -220,7 +232,7 @@ bool BrowserAccessibilityAndroid::IsContentInvalid() const {
       GetData().GetInvalidState() != ax::mojom::InvalidState::kFalse) {
     // We will not report content as invalid until a certain number of
     // characters have been typed to prevent verbose announcements to the user.
-    return (GetInnerText().length() > kMinimumCharacterCountForInvalid);
+    return (GetTextContentUTF16().length() > kMinimumCharacterCountForInvalid);
   }
 
   return false;
@@ -319,7 +331,8 @@ bool BrowserAccessibilityAndroid::IsMultiselectable() const {
 
 bool BrowserAccessibilityAndroid::IsRangeControlWithoutAriaValueText() const {
   return GetData().IsRangeValueSupported() &&
-         !HasStringAttribute(ax::mojom::StringAttribute::kValue);
+         !HasStringAttribute(ax::mojom::StringAttribute::kValue) &&
+         HasFloatAttribute(ax::mojom::FloatAttribute::kValueForRange);
 }
 
 bool BrowserAccessibilityAndroid::IsReportingCheckable() const {
@@ -354,7 +367,7 @@ bool BrowserAccessibilityAndroid::IsVisibleToUser() const {
 bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   // The root is not interesting if it doesn't have a title, even
   // though it's focusable.
-  if (ui::IsPlatformDocument(GetRole()) && GetInnerText().empty())
+  if (ui::IsPlatformDocument(GetRole()) && GetTextContentUTF16().empty())
     return false;
 
   // The root inside a portal is not interesting.
@@ -406,8 +419,8 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   }
 
   // Otherwise, the interesting nodes are leaf nodes with non-whitespace text.
-  return IsLeaf() &&
-         !base::ContainsOnlyChars(GetInnerText(), base::kWhitespaceUTF16);
+  return IsLeaf() && !base::ContainsOnlyChars(GetTextContentUTF16(),
+                                              base::kWhitespaceUTF16);
 }
 
 bool BrowserAccessibilityAndroid::IsHeadingLink() const {
@@ -455,6 +468,37 @@ bool BrowserAccessibilityAndroid::AreInlineTextBoxesLoaded() const {
   // Otherwise return true - either they're all loaded, or there aren't
   // any descendants that need to load inline text boxes.
   return true;
+}
+
+int BrowserAccessibilityAndroid::ClickableScore() const {
+  // For nodes that do not have the default action verb, return not clickable.
+  if (!HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb))
+    return kNotClickable;
+
+  switch (GetData().GetDefaultActionVerb()) {
+    // Differentiate between nodes that are clickable because of an ancestor.
+    case ax::mojom::DefaultActionVerb::kClickAncestor:
+      return kHasClickAncestor;
+
+    // For all other clickable nodes, check whether the node is also a control
+    // on Android, and return score based on the result.
+    case ax::mojom::DefaultActionVerb::kActivate:
+    case ax::mojom::DefaultActionVerb::kCheck:
+    case ax::mojom::DefaultActionVerb::kClick:
+    case ax::mojom::DefaultActionVerb::kJump:
+    case ax::mojom::DefaultActionVerb::kOpen:
+    case ax::mojom::DefaultActionVerb::kPress:
+    case ax::mojom::DefaultActionVerb::kSelect:
+    case ax::mojom::DefaultActionVerb::kUncheck: {
+      return ui::IsControlOnAndroid(GetRole(), IsFocusable())
+                 ? kHasClickListenerAndIsControl
+                 : kHasClickListener;
+    }
+
+    case ax::mojom::DefaultActionVerb::kNone:
+    default:
+      return kNotClickable;
+  }
 }
 
 bool BrowserAccessibilityAndroid::CanOpenPopup() const {
@@ -522,7 +566,7 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
     // and allow the child nodes to be set as a leaf.
 
     // Headings with text can drop their children (with exceptions).
-    std::u16string name = GetInnerText();
+    std::u16string name = GetTextContentUTF16();
     if (GetRole() == ax::mojom::Role::kHeading && !name.empty()) {
       return IsLeafConsideringChildren();
     }
@@ -586,7 +630,7 @@ bool BrowserAccessibilityAndroid::IsLeafConsideringChildren() const {
 // the name field in Android dump tree tests.
 // TODO(accessibility) Should it be called GetName() so that engineers not
 // familiar with Android can find it more easily?
-std::u16string BrowserAccessibilityAndroid::GetInnerText() const {
+std::u16string BrowserAccessibilityAndroid::GetTextContentUTF16() const {
   if (ui::IsIframe(GetRole()))
     return std::u16string();
 
@@ -609,14 +653,26 @@ std::u16string BrowserAccessibilityAndroid::GetInnerText() const {
   }
 
   std::u16string text = GetNameAsString16();
-  if (text.empty()) {
-    // When a node does not have a name (e.g. a label), use its value instead.
-    text = value;
-  } else if (ui::IsRangeValueSupported(GetRole()) && !value.empty()) {
+  if (ui::IsRangeValueSupported(GetRole())) {
     // For controls that support range values such as sliders, when a non-empty
     // name is present (e.g. a label), append this to the value so both the
     // valuetext and label are included, rather than replacing the value.
-    text = value + u", " + text;
+    // If the value itself is empty on a progress indicator, then this would
+    // suggest it is indeterminate, so add that keyword.
+    if (value.empty() && GetRole() == ax::mojom::Role::kProgressIndicator) {
+      content::ContentClient* content_client = content::GetContentClient();
+      value = content_client->GetLocalizedString(IDS_AX_INDETERMINATE_VALUE);
+    }
+
+    // To prevent extra commas, only add if the text is non-empty
+    if (!text.empty() && !value.empty()) {
+      text = value + u", " + text;
+    } else if (!value.empty()) {
+      text = value;
+    }
+  } else if (text.empty()) {
+    // When a node does not have a name (e.g. a label), use its value instead.
+    text = value;
   }
 
   // For almost all focusable nodes we try to get text from contents, but for
@@ -662,8 +718,8 @@ std::u16string BrowserAccessibilityAndroid::GetInnerText() const {
   if (text.empty() && ((HasOnlyTextChildren() && !HasListMarkerChild()) ||
                        (IsFocusable() && HasOnlyTextAndImageChildren()))) {
     for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
-      text +=
-          static_cast<BrowserAccessibilityAndroid*>(it.get())->GetInnerText();
+      text += static_cast<BrowserAccessibilityAndroid*>(it.get())
+                  ->GetTextContentUTF16();
     }
   }
 
@@ -691,7 +747,7 @@ std::u16string BrowserAccessibilityAndroid::GetValueForControl() const {
       // true we should try to expose whatever's actually visually displayed,
       // whether that's the actual password or dots or whatever. To do this
       // we rely on the password field's shadow dom.
-      value = BrowserAccessibility::GetInnerText();
+      value = BrowserAccessibility::GetTextContentUTF16();
     } else if (!manager->ShouldExposePasswordText()) {
       value = std::u16string(value.size(), ui::kSecurePasswordBullet);
     }
@@ -1461,7 +1517,31 @@ std::u16string BrowserAccessibilityAndroid::GetRoleDescription() const {
       message_id = IDS_AX_ROLE_MARQUEE;
       break;
     case ax::mojom::Role::kMath:
+    case ax::mojom::Role::kMathMLMath:
       message_id = IDS_AX_ROLE_MATH;
+      break;
+    case ax::mojom::Role::kMathMLFraction:
+    case ax::mojom::Role::kMathMLIdentifier:
+    case ax::mojom::Role::kMathMLMultiscripts:
+    case ax::mojom::Role::kMathMLNoneScript:
+    case ax::mojom::Role::kMathMLNumber:
+    case ax::mojom::Role::kMathMLOperator:
+    case ax::mojom::Role::kMathMLOver:
+    case ax::mojom::Role::kMathMLPrescriptDelimiter:
+    case ax::mojom::Role::kMathMLRoot:
+    case ax::mojom::Role::kMathMLRow:
+    case ax::mojom::Role::kMathMLSquareRoot:
+    case ax::mojom::Role::kMathMLStringLiteral:
+    case ax::mojom::Role::kMathMLSub:
+    case ax::mojom::Role::kMathMLSubSup:
+    case ax::mojom::Role::kMathMLSup:
+    case ax::mojom::Role::kMathMLTable:
+    case ax::mojom::Role::kMathMLTableCell:
+    case ax::mojom::Role::kMathMLTableRow:
+    case ax::mojom::Role::kMathMLText:
+    case ax::mojom::Role::kMathMLUnder:
+    case ax::mojom::Role::kMathMLUnderOver:
+      // No role description.
       break;
     case ax::mojom::Role::kMenu:
       message_id = IDS_AX_ROLE_MENU;
@@ -2114,9 +2194,9 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
     std::vector<int32_t>* line_ends,
     int offset) {
   // If this node has no children, treat it as all one line.
-  if (GetInnerText().size() > 0 && !InternalChildCount()) {
+  if (GetTextContentUTF16().size() > 0 && !InternalChildCount()) {
     line_starts->push_back(offset);
-    line_ends->push_back(offset + GetInnerText().size());
+    line_ends->push_back(offset + GetTextContentUTF16().size());
   }
 
   // If this is a static text node, get the line boundaries from the
@@ -2138,7 +2218,7 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
         line_ends->push_back(offset);
         line_starts->push_back(offset);
       }
-      offset += child->GetInnerText().size();
+      offset += child->GetTextContentUTF16().size();
       last_y = y;
     }
     line_ends->push_back(offset);
@@ -2150,7 +2230,7 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
     BrowserAccessibilityAndroid* child =
         static_cast<BrowserAccessibilityAndroid*>(it.get());
     child->GetLineBoundaries(line_starts, line_ends, offset);
-    offset += child->GetInnerText().size();
+    offset += child->GetTextContentUTF16().size();
   }
 }
 
@@ -2174,11 +2254,11 @@ void BrowserAccessibilityAndroid::GetWordBoundaries(
   for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
     BrowserAccessibilityAndroid* child =
         static_cast<BrowserAccessibilityAndroid*>(it.get());
-    std::u16string child_text = child->GetInnerText();
-    concatenated_text += child->GetInnerText();
+    std::u16string child_text = child->GetTextContentUTF16();
+    concatenated_text += child->GetTextContentUTF16();
   }
 
-  std::u16string text = GetInnerText();
+  std::u16string text = GetTextContentUTF16();
   if (text.empty() || concatenated_text == text) {
     // Great - this node is just the concatenation of its children, so
     // we can get the word boundaries recursively.
@@ -2186,7 +2266,7 @@ void BrowserAccessibilityAndroid::GetWordBoundaries(
       BrowserAccessibilityAndroid* child =
           static_cast<BrowserAccessibilityAndroid*>(it.get());
       child->GetWordBoundaries(word_starts, word_ends, offset);
-      offset += child->GetInnerText().size();
+      offset += child->GetTextContentUTF16().size();
     }
   } else {
     // This node has its own accessible text that doesn't match its
@@ -2251,7 +2331,7 @@ void BrowserAccessibilityAndroid::GetSuggestions(
           suggestion_ends->push_back(suggestion_end);
         }
       }
-      start_offset += node->GetInnerText().length();
+      start_offset += node->GetTextContentUTF16().length();
     }
 
     // Implementation of NextInTreeOrder, but walking the internal tree.
@@ -2373,6 +2453,7 @@ bool BrowserAccessibilityAndroid::ShouldExposeValueAsName() const {
   switch (GetRole()) {
     case ax::mojom::Role::kDate:
     case ax::mojom::Role::kDateTime:
+    case ax::mojom::Role::kInputTime:
       return true;
     case ax::mojom::Role::kColorWell:
       return false;
@@ -2449,16 +2530,31 @@ std::u16string BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
 
     case ax::mojom::InvalidState::kTrue:
       message_id = CONTENT_INVALID_TRUE;
-      break;
-    case ax::mojom::InvalidState::kOther:
-      std::string ariaInvalid = GetData().GetStringAttribute(
-          ax::mojom::StringAttribute::kAriaInvalidValue);
-      if (ariaInvalid == "spelling")
-        message_id = CONTENT_INVALID_SPELLING;
-      else if (ariaInvalid == "grammar")
-        message_id = CONTENT_INVALID_GRAMMAR;
-      else
-        message_id = CONTENT_INVALID_TRUE;
+      // Handle Grammar or Spelling errors.
+      // TODO(accessibility): using FindTextOnlyObjectsInRange or
+      // NextInTreeOrder doesn't work because Android's IsLeaf implementation
+      // deliberately excludes a lot of nodes.
+      for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd();
+           ++it) {
+        BrowserAccessibilityAndroid* child =
+            static_cast<BrowserAccessibilityAndroid*>(it.get());
+        if (child->IsText()) {
+          const std::vector<int32_t>& marker_types = child->GetIntListAttribute(
+              ax::mojom::IntListAttribute::kMarkerTypes);
+
+          for (size_t i = 0; i < marker_types.size(); ++i) {
+            if (marker_types[i] &
+                static_cast<int32_t>(ax::mojom::MarkerType::kSpelling)) {
+              message_id = CONTENT_INVALID_SPELLING;
+              break;
+            } else if (marker_types[i] &
+                       static_cast<int32_t>(ax::mojom::MarkerType::kGrammar)) {
+              message_id = CONTENT_INVALID_GRAMMAR;
+              break;
+            }
+          }
+        }
+      }
       break;
   }
 
@@ -2466,6 +2562,13 @@ std::u16string BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
     return content_client->GetLocalizedString(message_id);
 
   return std::u16string();
+}
+
+std::u16string
+BrowserAccessibilityAndroid::GenerateAccessibilityNodeInfoString() const {
+  auto* manager =
+      static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
+  return manager->GenerateAccessibilityNodeInfoString(unique_id());
 }
 
 }  // namespace content

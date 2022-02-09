@@ -10,9 +10,10 @@
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/auth.h"
@@ -80,7 +81,7 @@ class URLRequestJob::URLRequestJobSourceStream : public SourceStream {
   // It is safe to keep a raw pointer because |job_| owns the last stream which
   // indirectly owns |this|. Therefore, |job_| will not be destroyed when |this|
   // is alive.
-  URLRequestJob* const job_;
+  const raw_ptr<URLRequestJob> job_;
 };
 
 URLRequestJob::URLRequestJob(URLRequest* request)
@@ -287,7 +288,7 @@ GURL MaybeStripToOrigin(GURL url, bool should_strip_to_origin) {
   if (!should_strip_to_origin)
     return url;
 
-  return url.GetOrigin();
+  return url.DeprecatedGetOriginAsURL();
 }
 
 }  // namespace
@@ -415,10 +416,6 @@ void URLRequestJob::AnnotateAndMoveUserBlockedCookies(
 bool URLRequestJob::CanSetCookie(const net::CanonicalCookie& cookie,
                                  CookieOptions* options) const {
   return request_->CanSetCookie(cookie, options);
-}
-
-PrivacyMode URLRequestJob::privacy_mode() const {
-  return request_->privacy_mode();
 }
 
 void URLRequestJob::NotifyHeadersComplete() {

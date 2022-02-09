@@ -117,7 +117,8 @@ bool TestPasswordSyncMetadataStore::HasUnsyncedDeletions() {
 
 TestPasswordStore::TestPasswordStore(
     password_manager::IsAccountStore is_account_store)
-    : is_account_store_(is_account_store),
+    : PasswordStore(nullptr),  // TestPasswordStore is its own backend.
+      is_account_store_(is_account_store),
       metadata_store_(std::make_unique<TestPasswordSyncMetadataStore>()) {
   backend_ = this;
 }
@@ -144,6 +145,10 @@ bool TestPasswordStore::IsEmpty() const {
 
 TestPasswordStore::~TestPasswordStore() = default;
 
+base::WeakPtr<PasswordStoreBackend> TestPasswordStore::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 void TestPasswordStore::InitBackend(
     RemoteChangesReceived remote_form_changes_received,
     base::RepeatingClosure sync_enabled_or_disabled_cb,
@@ -160,7 +165,7 @@ void TestPasswordStore::Shutdown(base::OnceClosure shutdown_completed) {
   std::move(shutdown_completed).Run();
 }
 
-void TestPasswordStore::GetAllLoginsAsync(LoginsReply callback) {
+void TestPasswordStore::GetAllLoginsAsync(LoginsOrErrorReply callback) {
   background_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&TestPasswordStore::GetAllLoginsInternal,
@@ -168,7 +173,8 @@ void TestPasswordStore::GetAllLoginsAsync(LoginsReply callback) {
       std::move(callback));
 }
 
-void TestPasswordStore::GetAutofillableLoginsAsync(LoginsReply callback) {
+void TestPasswordStore::GetAutofillableLoginsAsync(
+    LoginsOrErrorReply callback) {
   background_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&TestPasswordStore::GetAutofillableLoginsInternal,
@@ -247,7 +253,7 @@ FieldInfoStore* TestPasswordStore::GetFieldInfoStore() {
 }
 
 std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
-TestPasswordStore::CreateSyncControllerDelegateFactory() {
+TestPasswordStore::CreateSyncControllerDelegate() {
   NOTIMPLEMENTED();
   return nullptr;
 }
@@ -296,7 +302,8 @@ LoginsResult TestPasswordStore::FillMatchingLogins(
         // Repeat the condition above with an additional check for origin.
         if (realm_matches || realm_psl_matches ||
             (form.scheme == PasswordForm::Scheme::kHtml &&
-             stored_form.url.GetOrigin() == form.url.GetOrigin() &&
+             stored_form.url.DeprecatedGetOriginAsURL() ==
+                 form.url.DeprecatedGetOriginAsURL() &&
              password_manager::IsFederatedRealm(stored_form.signon_realm,
                                                 form.url))) {
           matched_forms.push_back(std::make_unique<PasswordForm>(stored_form));

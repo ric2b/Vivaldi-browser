@@ -11,7 +11,6 @@
   }
 
   #policyIndicator {
-    fill: var(--google-grey-refresh-700);
     padding-inline-end: var(--settings-controlled-by-spacing);
   }
 </style>
@@ -22,7 +21,7 @@
       <iron-icon id="icon" icon="[[icon]]"></iron-icon>
     </template>
     <div class="vertical-align">
-      <div id="label" class="header-text">[[label]]</div>
+      <div id="label">[[label]]</div>
       <template is="dom-if" if="[[description]]">
           <div id="description" class="secondary-text">
             [[description]]

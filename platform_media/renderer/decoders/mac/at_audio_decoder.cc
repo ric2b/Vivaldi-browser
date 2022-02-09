@@ -16,7 +16,7 @@
 #include "base/mac/mac_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_discard_helper.h"
 #include "media/base/demuxer_stream.h"

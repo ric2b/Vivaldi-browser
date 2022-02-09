@@ -7,6 +7,10 @@
 #include <iterator>
 #include <utility>
 
+#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "ash/components/arc/audio/arc_audio_bridge.h"
+#include "ash/components/arc/session/arc_bridge_service.h"
+#include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "base/json/json_writer.h"
@@ -16,13 +20,9 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "components/arc/arc_service_manager.h"
-#include "components/arc/audio/arc_audio_bridge.h"
 #include "components/arc/intent_helper/control_camera_app_delegate.h"
 #include "components/arc/intent_helper/intent_constants.h"
 #include "components/arc/intent_helper/open_url_delegate.h"
-#include "components/arc/session/arc_bridge_service.h"
 #include "components/url_formatter/url_fixer.h"
 #include "net/base/url_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -165,11 +165,15 @@ ArcIntentHelperBridge::ArcIntentHelperBridge(content::BrowserContext* context,
 ArcIntentHelperBridge::~ArcIntentHelperBridge() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   arc_bridge_service_->intent_helper()->SetHost(nullptr);
+  for (auto& observer : observer_list_)
+    observer.OnArcIntentHelperBridgeDestruction();
 }
 
 void ArcIntentHelperBridge::OnIconInvalidated(const std::string& package_name) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   icon_loader_.InvalidateIcons(package_name);
+  for (auto& observer : observer_list_)
+    observer.OnIconInvalidated(package_name);
 }
 
 void ArcIntentHelperBridge::OnIntentFiltersUpdated(
@@ -317,13 +321,22 @@ void ArcIntentHelperBridge::IsChromeAppEnabled(
   std::move(callback).Run(false);
 }
 
-void ArcIntentHelperBridge::OnPreferredAppsChanged(
+void ArcIntentHelperBridge::OnPreferredAppsChangedDeprecated(
     std::vector<IntentFilter> added,
     std::vector<IntentFilter> deleted) {
   added_preferred_apps_ = std::move(added);
   deleted_preferred_apps_ = std::move(deleted);
   for (auto& observer : observer_list_)
     observer.OnPreferredAppsChanged();
+}
+
+void ArcIntentHelperBridge::OnSupportedLinksChanged(
+    std::vector<arc::mojom::SupportedLinksPtr> added_packages,
+    std::vector<arc::mojom::SupportedLinksPtr> removed_packages,
+    arc::mojom::SupportedLinkChangeSource source) {
+  for (auto& observer : observer_list_)
+    observer.OnArcSupportedLinksChanged(added_packages, removed_packages,
+                                        source);
 }
 
 void ArcIntentHelperBridge::OnDownloadAdded(

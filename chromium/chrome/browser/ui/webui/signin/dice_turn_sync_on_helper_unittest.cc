@@ -14,8 +14,10 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
@@ -42,6 +44,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/mock_sync_service.h"
 #include "components/sync/driver/sync_user_settings_mock.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
@@ -103,7 +106,7 @@ class TestDiceTurnSyncOnHelperDelegate : public DiceTurnSyncOnHelper::Delegate {
   void ShowSyncSettings() override;
   void SwitchToProfile(Profile* new_profile) override;
 
-  DiceTurnSyncOnHelperTest* test_fixture_;
+  raw_ptr<DiceTurnSyncOnHelperTest> test_fixture_;
 };
 
 // Simple ProfileManager creating testing profiles and allowing to register a
@@ -191,8 +194,7 @@ class FakeUserPolicySigninService : public policy::UserPolicySigninService {
 std::unique_ptr<KeyedService> BuildMockSyncService(
     content::BrowserContext* context) {
   auto service = std::make_unique<testing::NiceMock<syncer::MockSyncService>>();
-  ON_CALL(*service, IsAuthenticatedAccountPrimary())
-      .WillByDefault(Return(true));
+  ON_CALL(*service, HasSyncConsent()).WillByDefault(Return(true));
   return service;
 }
 
@@ -344,6 +346,40 @@ class DiceTurnSyncOnHelperTest : public testing::Test {
             syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY)));
   }
 
+  void SetExpectationsForSyncAborted() {
+// TODO(crbug.com/1263553): Get rid of the lacros special casing once sync
+// disabled is fully supported on lacros.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    EXPECT_CALL(*GetMockSyncService()->GetMockUserSettings(),
+                SetSelectedTypes(/*sync_everything=*/false,
+                                 /*types=*/syncer::UserSelectableTypeSet()));
+    EXPECT_CALL(*GetMockSyncService()->GetMockUserSettings(),
+                SetFirstSetupComplete(
+                    syncer::SyncFirstSetupCompleteSource::BASIC_FLOW));
+#else
+    EXPECT_CALL(
+        *GetMockSyncService()->GetMockUserSettings(),
+        SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW))
+        .Times(0);
+#endif
+  }
+
+  void CheckSyncAborted() {
+// TODO(crbug.com/1263553): Get rid of the lacros special casing once sync
+// disabled is fully supported on lacros.
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    // Disabling all data types is asserted in
+    // `SetExpectationsForSyncAborted()`.
+    EXPECT_TRUE(
+        identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
+    EXPECT_TRUE(identity_manager()->HasAccountWithRefreshToken(account_id()));
+#else
+    EXPECT_FALSE(
+        identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
+    EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
+#endif
+  }
+
   void CheckDelegateCalls() {
     EXPECT_EQ(expected_login_error_, login_error_);
     EXPECT_EQ(expected_merge_data_previous_email_, merge_data_previous_email_);
@@ -478,7 +514,7 @@ class DiceTurnSyncOnHelperTest : public testing::Test {
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_profile_adaptor_;
-  FakeUserPolicySigninService* user_policy_signin_service_ = nullptr;
+  raw_ptr<FakeUserPolicySigninService> user_policy_signin_service_ = nullptr;
   std::string initial_device_id_;
   testing::NiceMock<syncer::SyncUserSettingsMock> mock_sync_settings_;
 
@@ -494,7 +530,7 @@ class DiceTurnSyncOnHelperTest : public testing::Test {
   std::string merge_data_previous_email_;
   std::string merge_data_new_email_;
   bool switched_to_new_profile_ = false;
-  Profile* new_profile_ = nullptr;
+  raw_ptr<Profile> new_profile_ = nullptr;
   bool sync_confirmation_shown_ = false;
   SyncDisabledConfirmation sync_disabled_confirmation_ = kNotShown;
   bool sync_settings_shown_ = false;
@@ -576,6 +612,8 @@ TEST_F(DiceTurnSyncOnHelperTest, CanOfferSigninErrorKeepAccount) {
   CheckDelegateCalls();
 }
 
+// TODO(https://crbug.com/1260291): Enable this test on Lacros.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Tests that the login error is displayed and that the account is removed.
 TEST_F(DiceTurnSyncOnHelperTest, CanOfferSigninErrorRemoveAccount) {
   // Set expectations.
@@ -592,6 +630,7 @@ TEST_F(DiceTurnSyncOnHelperTest, CanOfferSigninErrorRemoveAccount) {
   EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
   CheckDelegateCalls();
 }
+#endif
 
 // Tests that the sync disabled message is displayed and that the account is
 // removed upon the ABORT_SYNC action.
@@ -610,9 +649,7 @@ TEST_F(DiceTurnSyncOnHelperTest, SyncDisabledAbortRemoveAccount) {
       DiceTurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   base::RunLoop().RunUntilIdle();
   // Check expectations.
-  EXPECT_FALSE(
-      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
-  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
+  CheckSyncAborted();
   CheckDelegateCalls();
 }
 
@@ -633,9 +670,7 @@ TEST_F(DiceTurnSyncOnHelperTest, SyncDisabledAbortKeepAccount) {
       DiceTurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
   base::RunLoop().RunUntilIdle();
   // Check expectations.
-  EXPECT_FALSE(
-      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
-  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
+  CheckSyncAborted();
   CheckDelegateCalls();
 }
 
@@ -687,6 +722,8 @@ TEST_F(DiceTurnSyncOnHelperTest, SyncDisabledManagedContinueKeepAccount) {
   CheckDelegateCalls();
 }
 
+// TODO(https://crbug.com/1260291): Enable this test on Lacros.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Aborts the flow after the cross account dialog.
 TEST_F(DiceTurnSyncOnHelperTest, CrossAccountAbort) {
   // Set expectations.
@@ -704,6 +741,7 @@ TEST_F(DiceTurnSyncOnHelperTest, CrossAccountAbort) {
   EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
   CheckDelegateCalls();
 }
+#endif
 
 // Merge data after the cross account dialog.
 TEST_F(DiceTurnSyncOnHelperTest, CrossAccountContinue) {
@@ -720,12 +758,12 @@ TEST_F(DiceTurnSyncOnHelperTest, CrossAccountContinue) {
   CreateDiceTurnOnSyncHelper(
       DiceTurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   // Check expectations.
-  EXPECT_FALSE(
-      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
-  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
+  CheckSyncAborted();
   CheckDelegateCalls();
 }
 
+// TODO(https://crbug.com/1260291): Enable these tests on Lacros.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Create a new profile after the cross account dialog and show the signin page.
 TEST_F(DiceTurnSyncOnHelperTest, CrossAccountNewProfile) {
   // Set expectations.
@@ -767,6 +805,7 @@ TEST_F(DiceTurnSyncOnHelperTest, EnterpriseConfirmationAbort) {
   EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
   CheckDelegateCalls();
 }
+#endif
 
 // Continue after the enterprise confirmation prompt.
 TEST_F(DiceTurnSyncOnHelperTest, DISABLED_EnterpriseConfirmationContinue) {
@@ -787,6 +826,8 @@ TEST_F(DiceTurnSyncOnHelperTest, DISABLED_EnterpriseConfirmationContinue) {
   CheckDelegateCalls();
 }
 
+// TODO(https://crbug.com/1260291): Enable this test on Lacros.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Continue with a new profile after the enterprise confirmation prompt.
 TEST_F(DiceTurnSyncOnHelperTest, EnterpriseConfirmationNewProfile) {
   // Set expectations.
@@ -844,16 +885,14 @@ TEST_F(DiceTurnSyncOnHelperTest, SignedInAccountUndoSyncKeepAccount) {
                               signin::ConsentLevel::kSignin));
   CheckDelegateCalls();
 }
+#endif
 
 // Tests that the sync confirmation is shown and the user can abort.
 TEST_F(DiceTurnSyncOnHelperTest, UndoSync) {
   // Set expectations.
   expected_sync_confirmation_shown_ = true;
   SetExpectationsForSyncStartupCompleted(profile());
-  EXPECT_CALL(
-      *GetMockSyncService()->GetMockUserSettings(),
-      SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource::BASIC_FLOW))
-      .Times(0);
+  SetExpectationsForSyncAborted();
 
   // Signin flow.
   EXPECT_FALSE(
@@ -861,9 +900,7 @@ TEST_F(DiceTurnSyncOnHelperTest, UndoSync) {
   CreateDiceTurnOnSyncHelper(
       DiceTurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
   // Check expectations.
-  EXPECT_FALSE(
-      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
-  EXPECT_FALSE(identity_manager()->HasAccountWithRefreshToken(account_id()));
+  CheckSyncAborted();
   CheckDelegateCalls();
 }
 

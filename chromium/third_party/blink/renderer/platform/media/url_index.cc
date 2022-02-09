@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "media/base/media_switches.h"
 #include "third_party/blink/renderer/platform/media/resource_multi_buffer_data_provider.h"
@@ -115,6 +115,10 @@ void UrlData::set_is_cors_cross_origin(bool is_cors_cross_origin) {
 
 void UrlData::set_has_access_control() {
   has_access_control_ = true;
+}
+
+void UrlData::set_mime_type(std::string mime_type) {
+  mime_type_ = std::move(mime_type);
 }
 
 void UrlData::RedirectTo(const scoped_refptr<UrlData>& url_data) {
@@ -334,11 +338,6 @@ scoped_refptr<UrlData> UrlIndex::TryInsert(
     }
   }
   return iter->second;
-}
-
-void UrlData::set_mime_type(std::string mime_type) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  mime_type_ = mime_type;
 }
 
 }  // namespace blink

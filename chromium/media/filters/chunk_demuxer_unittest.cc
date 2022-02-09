@@ -16,6 +16,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -183,6 +184,9 @@ class ChunkDemuxerTest : public ::testing::Test {
         &ChunkDemuxerTest::InitSegmentReceived, base::Unretained(this));
     CreateNewDemuxer();
   }
+
+  ChunkDemuxerTest(const ChunkDemuxerTest&) = delete;
+  ChunkDemuxerTest& operator=(const ChunkDemuxerTest&) = delete;
 
   void CreateNewDemuxer() {
     base::OnceClosure open_cb = base::BindOnce(&ChunkDemuxerTest::DemuxerOpened,
@@ -1283,9 +1287,6 @@ class ChunkDemuxerTest : public ::testing::Test {
 
     InitSegmentReceivedMock(tracks);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChunkDemuxerTest);
 };
 
 TEST_F(ChunkDemuxerTest, Init) {
@@ -1776,6 +1777,9 @@ class EndOfStreamHelper {
         audio_read_done_(false),
         video_read_done_(false) {}
 
+  EndOfStreamHelper(const EndOfStreamHelper&) = delete;
+  EndOfStreamHelper& operator=(const EndOfStreamHelper&) = delete;
+
   // Request a read on the audio and video streams.
   void RequestReads() {
     EXPECT_FALSE(audio_read_done_);
@@ -1805,12 +1809,10 @@ class EndOfStreamHelper {
     *called = true;
   }
 
-  DemuxerStream* audio_stream_;
-  DemuxerStream* video_stream_;
+  raw_ptr<DemuxerStream> audio_stream_;
+  raw_ptr<DemuxerStream> video_stream_;
   bool audio_read_done_;
   bool video_read_done_;
-
-  DISALLOW_COPY_AND_ASSIGN(EndOfStreamHelper);
 };
 
 // Make sure that all pending reads that we don't have media data for get an
@@ -2836,14 +2838,7 @@ TEST_F(ChunkDemuxerTest, CodecPrefixMatching) {
   ChunkDemuxer::Status expected = ChunkDemuxer::kNotSupported;
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-
-#if defined(OS_ANDROID)
-  if (HasPlatformDecoderSupport())
-    expected = ChunkDemuxer::kOk;
-#else
   expected = ChunkDemuxer::kOk;
-#endif  // defined(OS_ANDROID)
-
 #else
   EXPECT_MEDIA_LOG(CodecUnsupportedInContainer("avc1.4D4041", "video/mp4"));
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)

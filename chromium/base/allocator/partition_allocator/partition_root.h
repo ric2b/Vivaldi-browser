@@ -32,9 +32,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 
 #include "base/allocator/buildflags.h"
 #include "base/allocator/partition_allocator/address_pool_manager_types.h"
+#include "base/allocator/partition_allocator/allocation_guard.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
@@ -42,12 +44,12 @@
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/allocator/partition_allocator/partition_alloc_hooks.h"
 #include "base/allocator/partition_allocator/partition_alloc_notreached.h"
 #include "base/allocator/partition_allocator/partition_bucket_lookup.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
+#include "base/allocator/partition_allocator/partition_freelist_entry.h"
 #include "base/allocator/partition_allocator/partition_lock.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
@@ -57,8 +59,10 @@
 #include "base/allocator/partition_allocator/starscan/state_bitmap.h"
 #include "base/allocator/partition_allocator/thread_cache.h"
 #include "base/compiler_specific.h"
+#include "base/memory/tagging.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 
 // We use this to make MEMORY_TOOL_REPLACES_ALLOCATOR behave the same for max
 // size as other alloc code.
@@ -78,9 +82,9 @@ namespace internal {
 // Avoid including partition_address_space.h from this .h file, by moving the
 // call to IsManagedByPartitionAllocBRPPool into the .cc file.
 #if DCHECK_IS_ON()
-BASE_EXPORT void DCheckIfManagedByPartitionAllocBRPPool(void* ptr);
+BASE_EXPORT void DCheckIfManagedByPartitionAllocBRPPool(uintptr_t address);
 #else
-ALWAYS_INLINE void DCheckIfManagedByPartitionAllocBRPPool(void*) {}
+ALWAYS_INLINE void DCheckIfManagedByPartitionAllocBRPPool(uintptr_t address) {}
 #endif
 }  // namespace internal
 
@@ -135,19 +139,26 @@ struct PartitionOptions {
     kIfAvailable,
   };
 
+  enum class LazyCommit : uint8_t {
+    kDisabled,
+    kEnabled,
+  };
+
   // Constructor to suppress aggregate initialization.
   constexpr PartitionOptions(AlignedAlloc aligned_alloc,
                              ThreadCache thread_cache,
                              Quarantine quarantine,
                              Cookie cookie,
                              BackupRefPtr backup_ref_ptr,
-                             UseConfigurablePool use_configurable_pool)
+                             UseConfigurablePool use_configurable_pool,
+                             LazyCommit lazy_commit)
       : aligned_alloc(aligned_alloc),
         thread_cache(thread_cache),
         quarantine(quarantine),
         cookie(cookie),
         backup_ref_ptr(backup_ref_ptr),
-        use_configurable_pool(use_configurable_pool) {}
+        use_configurable_pool(use_configurable_pool),
+        lazy_commit(lazy_commit) {}
 
   AlignedAlloc aligned_alloc;
   ThreadCache thread_cache;
@@ -155,6 +166,7 @@ struct PartitionOptions {
   Cookie cookie;
   BackupRefPtr backup_ref_ptr;
   UseConfigurablePool use_configurable_pool;
+  LazyCommit lazy_commit;
 };
 
 namespace internal {
@@ -190,10 +202,11 @@ class ScopedSyscallTimer {
 // Never instantiate a PartitionRoot directly, instead use
 // PartitionAllocator.
 template <bool thread_safe>
-struct BASE_EXPORT PartitionRoot {
+struct alignas(64) BASE_EXPORT PartitionRoot {
   using SlotSpan = internal::SlotSpanMetadata<thread_safe>;
   using Page = internal::PartitionPage<thread_safe>;
   using Bucket = internal::PartitionBucket<thread_safe>;
+  using FreeListEntry = internal::PartitionFreelistEntry;
   using SuperPageExtentEntry =
       internal::PartitionSuperPageExtentEntry<thread_safe>;
   using DirectMapExtent = internal::PartitionDirectMapExtent<thread_safe>;
@@ -259,21 +272,20 @@ struct BASE_EXPORT PartitionRoot {
   // read-only. They should not share a cacheline with the data below, which is
   // only touched when the lock is taken.
   //
-  // Adding a whole cacheline of padding is a bit heavy-handed, but with all the
-  // various configurations, it is cumbersome to compute the precise
-  // values. Besides, adding an entire cacheline worth of padding removes any
-  // constraint on the root alignment itself.
+  // We add too much padding for most configurations, since the size of the
+  // flags above is not fixed, and the computation below accounts for the
+  // minimum size.
   //
   // Note: with C++17, it will be possible to reduce the padding, but as of
   // C++14, static members are forbidden inside anonymous structs, so we cannot
   // use the union { struct { /* all flags */}; /* padding */} trick. Wasting an
   // entire cacheline per PartitionRoot is not a big issue, given that
-  // the opbject is very large anyway.
-  uint8_t padding[64];  // Assume a cacheline size <= 64 bytes.
+  // the object is very large anyway.
+  uint8_t padding[kPartitionCachelineSize - 7];
 
   // Not used on the fastest path (thread cache allocations), but on the fast
   // path of the central allocator.
-  internal::MaybeSpinLock<thread_safe> lock_;
+  internal::MaybeLock<thread_safe> lock_;
 
   Bucket buckets[kNumBuckets] = {};
   Bucket sentinel_bucket;
@@ -318,6 +330,14 @@ struct BASE_EXPORT PartitionRoot {
   // can be decommitted at any time.
   size_t empty_slot_spans_dirty_bytes GUARDED_BY(lock_) = 0;
 
+  // Only tolerate up to |total_size_of_committed_pages >>
+  // max_empty_slot_spans_dirty_bytes_shift| dirty bytes in empty slot
+  // spans. That is, the default value of 3 tolerates up to 1/8. Since
+  // |empty_slot_spans_dirty_bytes| is never strictly larger than
+  // total_size_of_committed_pages, setting this to 0 removes the cap. This is
+  // useful to make tests deterministic and easier to reason about.
+  int max_empty_slot_spans_dirty_bytes_shift = 3;
+
   char* next_super_page = nullptr;
   char* next_partition_page = nullptr;
   char* next_partition_page_end = nullptr;
@@ -331,6 +351,8 @@ struct BASE_EXPORT PartitionRoot {
   // Integrity check = ~reinterpret_cast<uintptr_t>(this).
   uintptr_t inverted_self = 0;
   std::atomic<int> thread_caches_being_constructed_{0};
+
+  bool quarantine_always_for_testing = false;
 
   PartitionRoot() = default;
   explicit PartitionRoot(PartitionOptions opts) { Init(opts); }
@@ -349,36 +371,36 @@ struct BASE_EXPORT PartitionRoot {
   void Init(PartitionOptions);
 
   void EnableThreadCacheIfSupported();
-  void ConfigureLazyCommit();
+  void ConfigureLazyCommit(bool enabled);
 
   ALWAYS_INLINE static bool IsValidSlotSpan(SlotSpan* slot_span);
   ALWAYS_INLINE static PartitionRoot* FromSlotSpan(SlotSpan* slot_span);
-  ALWAYS_INLINE static PartitionRoot* FromSuperPage(char* super_page);
-  // Works for any pointer inside a normal bucket allocation.
-  //
-  // For direct-mapped allocations, only works for a pointer which is inside the
-  // first SuperPage of a given allocation, that is the first "2MiB minus a
-  // bit". In particular always works for a pointer at the start of an
-  // allocation.  See partition_alloc_constants.h to see the layout of a
-  // direct-mapped allocation.
+  // These two functions work unconditionally for normal buckets.
+  // For direct map, they only work for the first SuperPage of an allocation,
+  // that is the first "2MiB minus a bit" (see partition_alloc_constants.h for
+  // the direct map allocation layout).
+  // In particular, the functions always work for a pointer to the start of an
+  // allocation.
+  ALWAYS_INLINE static PartitionRoot* FromFirstSuperPage(char* super_page);
   ALWAYS_INLINE static PartitionRoot* FromPointerInFirstSuperpage(char* ptr);
 
   ALWAYS_INLINE void IncreaseCommittedPages(size_t len);
   ALWAYS_INLINE void DecreaseCommittedPages(size_t len);
   ALWAYS_INLINE void DecommitSystemPagesForData(
-      void* address,
+      uintptr_t address,
       size_t length,
       PageAccessibilityDisposition accessibility_disposition)
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
   ALWAYS_INLINE void RecommitSystemPagesForData(
-      void* address,
+      uintptr_t address,
       size_t length,
       PageAccessibilityDisposition accessibility_disposition)
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
   ALWAYS_INLINE bool TryRecommitSystemPagesForData(
-      void* address,
+      uintptr_t address,
       size_t length,
-      PageAccessibilityDisposition accessibility_disposition);
+      PageAccessibilityDisposition accessibility_disposition)
+      LOCKS_EXCLUDED(lock_);
 
   [[noreturn]] NOINLINE void OutOfMemory(size_t size);
 
@@ -441,7 +463,9 @@ struct BASE_EXPORT PartitionRoot {
   // Same as |Free()|, bypasses the allocator hooks.
   ALWAYS_INLINE static void FreeNoHooks(void* ptr);
   // Immediately frees the pointer bypassing the quarantine.
-  ALWAYS_INLINE void FreeNoHooksImmediate(void* ptr, SlotSpan* slot_span);
+  ALWAYS_INLINE void FreeNoHooksImmediate(void* ptr,
+                                          SlotSpan* slot_span,
+                                          void* slot_start);
 
   ALWAYS_INLINE static size_t GetUsableSize(void* ptr);
 
@@ -449,8 +473,12 @@ struct BASE_EXPORT PartitionRoot {
   ALWAYS_INLINE size_t AllocationCapacityFromRequestedSize(size_t size) const;
 
   // Frees memory from this partition, if possible, by decommitting pages or
-  // even etnire slot spans. |flags| is an OR of base::PartitionPurgeFlags.
+  // even entire slot spans. |flags| is an OR of base::PartitionPurgeFlags.
   void PurgeMemory(int flags);
+
+  // Reduces the size of the empty slot spans ring, until the dirty size is <=
+  // |limit|.
+  void ShrinkEmptySlotSpansRing(size_t limit) EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   void DumpStats(const char* partition_name,
                  bool is_light_dump,
@@ -461,13 +489,18 @@ struct BASE_EXPORT PartitionRoot {
 
   static uint16_t SizeToBucketIndex(size_t size);
 
-  ALWAYS_INLINE void FreeSlotSpan(void* slot_start, SlotSpan* slot_span)
+  ALWAYS_INLINE void FreeInSlotSpan(void* slot_start, SlotSpan* slot_span)
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Frees memory, with |slot_start| as returned by |RawAlloc()|.
   ALWAYS_INLINE void RawFree(void* slot_start);
   ALWAYS_INLINE void RawFree(void* slot_start, SlotSpan* slot_span)
       LOCKS_EXCLUDED(lock_);
+
+  ALWAYS_INLINE void RawFreeBatch(FreeListEntry* head,
+                                  FreeListEntry* tail,
+                                  size_t size,
+                                  SlotSpan* slot_span) LOCKS_EXCLUDED(lock_);
 
   ALWAYS_INLINE void RawFreeWithThreadCache(void* slot_start,
                                             SlotSpan* slot_span);
@@ -499,9 +532,9 @@ struct BASE_EXPORT PartitionRoot {
       return internal::GetConfigurablePool();
     }
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
-    return brp_enabled() ? internal::GetBRPPool() : internal::GetNonBRPPool();
+    return brp_enabled() ? internal::GetBRPPool() : internal::GetRegularPool();
 #else
-    return internal::GetNonBRPPool();
+    return internal::GetRegularPool();
 #endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
   }
 
@@ -511,6 +544,24 @@ struct BASE_EXPORT PartitionRoot {
 
   ALWAYS_INLINE bool IsQuarantineEnabled() const {
     return quarantine_mode == QuarantineMode::kEnabled;
+  }
+
+  ALWAYS_INLINE bool ShouldQuarantine(void* slot_start) const {
+    if (UNLIKELY(quarantine_mode != QuarantineMode::kEnabled))
+      return false;
+#if HAS_MEMORY_TAGGING
+    if (UNLIKELY(quarantine_always_for_testing))
+      return true;
+    // If quarantine is enabled and tag overflows, move slot to quarantine, to
+    // prevent the attacker from exploiting a pointer that has old tag.
+    return HasOverflowTag(reinterpret_cast<uintptr_t>(slot_start));
+#else
+    return true;
+#endif
+  }
+
+  ALWAYS_INLINE void SetQuarantineAlwaysForTesting(bool value) {
+    quarantine_always_for_testing = value;
   }
 
   ALWAYS_INLINE bool IsScanEnabled() const {
@@ -614,6 +665,14 @@ struct BASE_EXPORT PartitionRoot {
 #endif
   }
 
+  // To make tests deterministic, it is necessary to uncap the amount of memory
+  // waste incurred by empty slot spans. Otherwise, the size of various
+  // freelists, and committed memory becomes harder to reason about (and
+  // brittle) with a single thread, and non-deterministic with several.
+  void UncapEmptySlotSpanMemoryForTesting() {
+    max_empty_slot_spans_dirty_bytes_shift = 0;
+  }
+
  private:
   // |buckets| has `kNumBuckets` elements, but we sometimes access it at index
   // `kNumBuckets`, which is occupied by the sentinel bucket. The correct layout
@@ -688,35 +747,37 @@ struct BASE_EXPORT PartitionRoot {
 
 namespace internal {
 
-// Gets the SlotSpanMetadata object of the slot span that contains |ptr|. It's
-// used with intention to do obtain the slot size.
+// Gets the SlotSpanMetadata object of the slot span that contains |address|.
+// It's used with intention to do obtain the slot size.
 //
-// CAUTION! For direct-mapped allocation, |ptr| has to be within the first
+// CAUTION! For direct-mapped allocation, |address| has to be within the first
 // partition page.
 template <bool thread_safe>
 ALWAYS_INLINE internal::SlotSpanMetadata<thread_safe>*
-PartitionAllocGetSlotSpanForSizeQuery(void* ptr) {
-  // No need to lock here. Only |ptr| being freed by another thread could
+PartitionAllocGetSlotSpanForSizeQuery(uintptr_t address) {
+  // No need to lock here. Only |address| being freed by another thread could
   // cause trouble, and the caller is responsible for that not happening.
-  auto* slot_span =
-      internal::SlotSpanMetadata<thread_safe>::FromSlotInnerPtr(ptr);
-  // TODO(palmer): See if we can afford to make this a CHECK.
+  auto* slot_span = internal::SlotSpanMetadata<thread_safe>::FromSlotInnerPtr(
+      reinterpret_cast<void*>(address));
+  // TODO(crbug.com/1257655): See if we can afford to make this a CHECK.
   PA_DCHECK(PartitionRoot<thread_safe>::IsValidSlotSpan(slot_span));
   return slot_span;
 }
 
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
 
-ALWAYS_INLINE void* PartitionAllocGetDirectMapSlotStartInBRPPool(void* ptr) {
-  PA_DCHECK(IsManagedByPartitionAllocBRPPool(ptr));
+// TODO(bartekn): void* -> uintptr_t
+ALWAYS_INLINE void* PartitionAllocGetDirectMapSlotStartInBRPPool(
+    uintptr_t address) {
+  PA_DCHECK(IsManagedByPartitionAllocBRPPool(address));
 #if defined(PA_HAS_64_BITS_POINTERS)
   // Use this variant of GetDirectMapReservationStart as it has better
   // performance.
-  uintptr_t offset = OffsetInBRPPool(ptr);
+  uintptr_t offset = OffsetInBRPPool(address);
   uintptr_t reservation_start =
-      GetDirectMapReservationStart(ptr, kBRPPoolHandle, offset);
+      GetDirectMapReservationStart(address, kBRPPoolHandle, offset);
 #else
-  uintptr_t reservation_start = GetDirectMapReservationStart(ptr);
+  uintptr_t reservation_start = GetDirectMapReservationStart(address);
 #endif
   if (!reservation_start)
     return nullptr;
@@ -753,7 +814,9 @@ ALWAYS_INLINE void* PartitionAllocGetDirectMapSlotStartInBRPPool(void* ptr) {
 // This function is not a template, and can be used on either variant
 // (thread-safe or not) of the allocator. This relies on the two PartitionRoot<>
 // having the same layout, which is enforced by static_assert().
-ALWAYS_INLINE void* PartitionAllocGetSlotStartInBRPPool(void* ptr) {
+//
+// TODO(bartekn): void* -> uinptr_t
+ALWAYS_INLINE void* PartitionAllocGetSlotStartInBRPPool(uintptr_t address) {
   // Adjust to support pointers right past the end of an allocation, which in
   // some cases appear to point outside the designated allocation slot.
   //
@@ -762,33 +825,32 @@ ALWAYS_INLINE void* PartitionAllocGetSlotStartInBRPPool(void* ptr) {
   // no adjustment is needed (and likely wouldn't be correct as there is
   // a risk of going down to the previous slot). Either way,
   // kPartitionPastAllocationAdjustment takes care of that detail.
-  ptr = reinterpret_cast<char*>(ptr) - kPartitionPastAllocationAdjustment;
-
-  PA_DCHECK(IsManagedByNormalBucketsOrDirectMap(ptr));
-  DCheckIfManagedByPartitionAllocBRPPool(ptr);
+  address -= kPartitionPastAllocationAdjustment;
+  PA_DCHECK(IsManagedByNormalBucketsOrDirectMap(address));
+  DCheckIfManagedByPartitionAllocBRPPool(address);
 
   void* directmap_slot_start =
-      PartitionAllocGetDirectMapSlotStartInBRPPool(ptr);
+      PartitionAllocGetDirectMapSlotStartInBRPPool(address);
   if (UNLIKELY(directmap_slot_start))
     return directmap_slot_start;
   auto* slot_span =
       internal::PartitionAllocGetSlotSpanForSizeQuery<internal::ThreadSafe>(
-          ptr);
+          address);
   auto* root = PartitionRoot<internal::ThreadSafe>::FromSlotSpan(slot_span);
   // Double check that ref-count is indeed present.
   PA_DCHECK(root->brp_enabled());
 
   // Get the offset from the beginning of the slot span.
-  uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
   uintptr_t slot_span_start = reinterpret_cast<uintptr_t>(
       internal::SlotSpanMetadata<internal::ThreadSafe>::ToSlotSpanStartPtr(
           slot_span));
-  size_t offset_in_slot_span = ptr_addr - slot_span_start;
+  PA_DCHECK(slot_span_start == memory::UnmaskPtr(slot_span_start));
+  size_t offset_in_slot_span = address - slot_span_start;
 
   auto* bucket = slot_span->bucket;
-  return reinterpret_cast<void*>(
+  return memory::RemaskPtr(reinterpret_cast<void*>(
       slot_span_start +
-      bucket->slot_size * bucket->GetSlotNumber(offset_in_slot_span));
+      bucket->slot_size * bucket->GetSlotNumber(offset_in_slot_span)));
 }
 
 // Checks whether a given pointer stays within the same allocation slot after
@@ -800,38 +862,38 @@ ALWAYS_INLINE void* PartitionAllocGetSlotStartInBRPPool(void* ptr) {
 // This function is not a template, and can be used on either variant
 // (thread-safe or not) of the allocator. This relies on the two PartitionRoot<>
 // having the same layout, which is enforced by static_assert().
-ALWAYS_INLINE bool PartitionAllocIsValidPtrDelta(void* ptr, ptrdiff_t delta) {
+ALWAYS_INLINE bool PartitionAllocIsValidPtrDelta(uintptr_t address,
+                                                 ptrdiff_t delta_in_bytes) {
   // Required for pointers right past an allocation. See
   // |PartitionAllocGetSlotStartInBRPPool()|.
-  void* adjusted_ptr =
-      reinterpret_cast<char*>(ptr) - kPartitionPastAllocationAdjustment;
+  uintptr_t adjusted_address = address - kPartitionPastAllocationAdjustment;
+  PA_DCHECK(IsManagedByNormalBucketsOrDirectMap(adjusted_address));
+  DCheckIfManagedByPartitionAllocBRPPool(adjusted_address);
 
-  internal::DCheckIfManagedByPartitionAllocBRPPool(adjusted_ptr);
-
-  void* directmap_old_slot_start =
-      PartitionAllocGetDirectMapSlotStartInBRPPool(adjusted_ptr);
-  if (UNLIKELY(directmap_old_slot_start)) {
-    void* new_slot_start = PartitionAllocGetDirectMapSlotStartInBRPPool(
-        reinterpret_cast<char*>(ptr) + delta);
-    return directmap_old_slot_start == new_slot_start;
-  }
+  void* slot_start = PartitionAllocGetSlotStartInBRPPool(adjusted_address);
+  // Get |slot_span| from |slot_start| instead of |adjusted_address|, because
+  // for direct map, PartitionAllocGetSlotSpanForSizeQuery() only works on the
+  // first partition page of the allocation.
+  //
+  // As a matter of fact, don't use |adjusted_address| beyond this point at all.
+  // It was needed to pick the right slot, but now we're dealing with very
+  // concrete addresses. Nullify it just in case, to catch errors.
+  adjusted_address = 0;
   auto* slot_span =
       internal::PartitionAllocGetSlotSpanForSizeQuery<internal::ThreadSafe>(
-          adjusted_ptr);
+          reinterpret_cast<uintptr_t>(slot_start));
   auto* root = PartitionRoot<internal::ThreadSafe>::FromSlotSpan(slot_span);
   // Double check that ref-count is indeed present.
   PA_DCHECK(root->brp_enabled());
 
   uintptr_t user_data_start =
-      reinterpret_cast<uintptr_t>(root->AdjustPointerForExtrasAdd(
-          PartitionAllocGetSlotStartInBRPPool(ptr)));
+      reinterpret_cast<uintptr_t>(root->AdjustPointerForExtrasAdd(slot_start));
   size_t user_data_size = slot_span->GetUsableSize(root);
-  uintptr_t new_ptr = reinterpret_cast<uintptr_t>(ptr) + delta;
-
-  return user_data_start <= new_ptr &&
+  uintptr_t new_address = address + delta_in_bytes;
+  return user_data_start <= new_address &&
          // We use "greater then or equal" below because we want to include
          // pointers right past the end of an allocation.
-         new_ptr <= user_data_start + user_data_size;
+         new_address <= user_data_start + user_data_size;
 }
 
 // TODO(glazunov): Simplify the function once the non-thread-safe PartitionRoot
@@ -856,7 +918,7 @@ ALWAYS_INLINE void PartitionAllocFreeForRefCounting(void* slot_start) {
 #endif
 
   root->total_size_of_brp_quarantined_bytes.fetch_sub(
-      slot_span->GetSizeForBookkeeping(), std::memory_order_relaxed);
+      slot_span->GetSlotSizeForBookkeeping(), std::memory_order_relaxed);
   root->total_count_of_brp_quarantined_slots.fetch_sub(
       1, std::memory_order_relaxed);
 
@@ -891,7 +953,7 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocFromBucket(
   PA_DCHECK(slot_span);
   PA_DCHECK(slot_span->num_allocated_slots >= 0);
 
-  void* slot_start = slot_span->freelist_head;
+  void* slot_start = slot_span->get_freelist_head();
   // Use the fast path when a slot is readily available on the free list of the
   // first active slot span. However, fall back to the slow path if a
   // higher-order alignment is requested, because an inner slot of an existing
@@ -903,18 +965,16 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocFromBucket(
     *usable_size = AdjustSizeForExtrasSubtract(bucket->slot_size);
     PA_DCHECK(*usable_size == slot_span->GetUsableSize(this));
 
-    // If these DCHECKs fire, you probably corrupted memory. TODO(palmer): See
-    // if we can afford to make these CHECKs.
+    // If these DCHECKs fire, you probably corrupted memory.
+    // TODO(crbug.com/1257655): See if we can afford to make these CHECKs.
     PA_DCHECK(IsValidSlotSpan(slot_span));
 
     // All large allocations must go through the slow path to correctly update
     // the size metadata.
     PA_DCHECK(!slot_span->CanStoreRawSize());
     PA_DCHECK(!slot_span->bucket->is_direct_mapped());
-    internal::PartitionFreelistEntry* new_head =
-        slot_span->freelist_head->GetNext(bucket->slot_size);
-    slot_span->SetFreelistHead(new_head);
-    slot_span->num_allocated_slots++;
+    void* entry = slot_span->PopForAlloc(bucket->slot_size);
+    PA_DCHECK(entry == slot_start);
 
     PA_DCHECK(slot_span->bucket == bucket);
   } else {
@@ -924,7 +984,7 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocFromBucket(
       return nullptr;
 
     slot_span = SlotSpan::FromSlotStartPtr(slot_start);
-    // TODO(palmer): See if we can afford to make this a CHECK.
+    // TODO(crbug.com/1257655): See if we can afford to make this a CHECK.
     PA_DCHECK(IsValidSlotSpan(slot_span));
     // For direct mapped allocations, |bucket| is the sentinel.
     PA_DCHECK((slot_span->bucket == bucket) ||
@@ -934,7 +994,7 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocFromBucket(
     *usable_size = slot_span->GetUsableSize(this);
   }
   PA_DCHECK(slot_span->GetUtilizedSlotSize() <= slot_span->bucket->slot_size);
-  total_size_of_allocated_bytes += slot_span->GetSizeForBookkeeping();
+  total_size_of_allocated_bytes += slot_span->GetSlotSizeForBookkeeping();
   max_size_of_allocated_bytes =
       std::max(max_size_of_allocated_bytes, total_size_of_allocated_bytes);
   return slot_start;
@@ -976,8 +1036,16 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* ptr) {
   // This is a crash to detect imperfect symbol interception. However, we can
   // forward allocations we don't own to the system malloc() implementation in
   // these rare cases, assuming that some remain.
-#if defined(OS_ANDROID) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-  PA_CHECK(IsManagedByPartitionAlloc(ptr));
+  //
+  // On Chromecast, this is already checked in PartitionFree() in the shim.
+  //
+  // On Linux, this is intended to ease debugging of crbug.com/1266412. Enabled
+  // on 64 bit only, as the check is pretty cheap in this case (range check,
+  // essentially).
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) &&            \
+    ((defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMECAST)) || \
+     (defined(OS_LINUX) && defined(ARCH_CPU_64_BITS)))
+  PA_CHECK(IsManagedByPartitionAlloc(reinterpret_cast<uintptr_t>(ptr)));
 #endif
 
   // Fetch the root from the pointer, and not the SlotSpan. This is important,
@@ -1004,29 +1072,40 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* ptr) {
   // cacheline ping-pong.
   PA_PREFETCH(slot_span);
 
-  // TODO(palmer): See if we can afford to make this a CHECK.
+  // TODO(crbug.com/1257655): See if we can afford to make this a CHECK.
   PA_DCHECK(IsValidSlotSpan(slot_span));
   PA_DCHECK(FromSlotSpan(slot_span) == root);
 
+  const size_t slot_size = slot_span->bucket->slot_size;
+  void* slot_start = root->AdjustPointerForExtrasSubtract(ptr);
+  if (LIKELY(slot_size <= kMaxMemoryTaggingSize)) {
+    // Incrementing the memory range returns the true underlying tag, so
+    // RemaskPtr is not required here.
+    slot_start = memory::TagMemoryRangeIncrement(slot_start, slot_size);
+    ptr = memory::RemaskPtr(ptr);
+  }
+
   // TODO(bikineev): Change the condition to LIKELY once PCScan is enabled by
   // default.
-  if (UNLIKELY(root->IsQuarantineEnabled())) {
+  if (UNLIKELY(root->ShouldQuarantine(slot_start))) {
     // PCScan safepoint. Call before potentially scheduling scanning task.
     PCScan::JoinScanIfNeeded();
-    if (LIKELY(internal::IsManagedByNormalBuckets(ptr))) {
-      PCScan::MoveToQuarantine(ptr, slot_span->GetUsableSize(root),
+    if (LIKELY(internal::IsManagedByNormalBuckets(
+            reinterpret_cast<uintptr_t>(ptr)))) {
+      PCScan::MoveToQuarantine(ptr, slot_span->GetUsableSize(root), slot_start,
                                slot_span->bucket->slot_size);
       return;
     }
   }
 
-  root->FreeNoHooksImmediate(ptr, slot_span);
+  root->FreeNoHooksImmediate(ptr, slot_span, slot_start);
 }
 
 template <bool thread_safe>
 ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
     void* ptr,
-    SlotSpan* slot_span) {
+    SlotSpan* slot_span,
+    void* slot_start) {
   // The thread cache is added "in the middle" of the main allocator, that is:
   // - After all the cookie/ref-count management
   // - Before the "raw" allocator.
@@ -1054,8 +1133,6 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
   //
   // For more context, see the other "Layout inside the slot" comment below.
 
-  void* slot_start = AdjustPointerForExtrasSubtract(ptr);
-
 #if DCHECK_IS_ON()
   if (allow_cookie) {
     // Verify the cookie after the allocated region.
@@ -1069,10 +1146,12 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
   // TODO(bikineev): Change the condition to LIKELY once PCScan is enabled by
   // default.
   if (UNLIKELY(IsQuarantineEnabled())) {
-    if (LIKELY(internal::IsManagedByNormalBuckets(ptr))) {
+    if (LIKELY(internal::IsManagedByNormalBuckets(
+            reinterpret_cast<uintptr_t>(ptr)))) {
+      auto* unmasked_slot_start = memory::UnmaskPtr(slot_start);
       // Mark the state in the state bitmap as freed.
-      internal::StateBitmapFromPointer(ptr)->Free(
-          reinterpret_cast<uintptr_t>(ptr));
+      internal::StateBitmapFromPointer(unmasked_slot_start)
+          ->Free(reinterpret_cast<uintptr_t>(unmasked_slot_start));
     }
   }
 
@@ -1090,7 +1169,7 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
 
     if (UNLIKELY(!(ref_count->ReleaseFromAllocator()))) {
       total_size_of_brp_quarantined_bytes.fetch_add(
-          slot_span->GetSizeForBookkeeping(), std::memory_order_relaxed);
+          slot_span->GetSlotSizeForBookkeeping(), std::memory_order_relaxed);
       total_count_of_brp_quarantined_slots.fetch_add(1,
                                                      std::memory_order_relaxed);
       return;
@@ -1124,10 +1203,14 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
 }
 
 template <bool thread_safe>
-ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeSlotSpan(
+ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeInSlotSpan(
     void* slot_start,
     SlotSpan* slot_span) {
-  total_size_of_allocated_bytes -= slot_span->GetSizeForBookkeeping();
+  // An underflow here means we've miscounted |total_size_of_allocated_bytes|
+  // somewhere.
+  PA_DCHECK(total_size_of_allocated_bytes >=
+            slot_span->GetSlotSizeForBookkeeping());
+  total_size_of_allocated_bytes -= slot_span->GetSlotSizeForBookkeeping();
   return slot_span->Free(slot_start);
 }
 
@@ -1173,7 +1256,27 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFree(void* slot_start,
   __asm__ __volatile__("" : : "r"(slot_start) : "memory");
 
   ScopedGuard guard{lock_};
-  FreeSlotSpan(slot_start, slot_span);
+  FreeInSlotSpan(slot_start, slot_span);
+}
+
+template <bool thread_safe>
+ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFreeBatch(
+    FreeListEntry* head,
+    FreeListEntry* tail,
+    size_t size,
+    SlotSpan* slot_span) {
+  PA_DCHECK(head);
+  PA_DCHECK(tail);
+  PA_DCHECK(size > 0);
+  PA_DCHECK(slot_span);
+  PA_DCHECK(IsValidSlotSpan(slot_span));
+  // The passed freelist is likely to be just built up, which means that the
+  // corresponding pages were faulted in (without acquiring the lock). So there
+  // is no need to touch pages manually here before the lock.
+  ScopedGuard guard{lock_};
+  total_size_of_allocated_bytes -=
+      (slot_span->GetSlotSizeForBookkeeping() * size);
+  slot_span->AppendFreeList(head, tail, size);
 }
 
 template <bool thread_safe>
@@ -1207,13 +1310,14 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFreeLocked(void* slot_start) {
   // may not expect that, but we never call this function on direct-mapped
   // allocations.
   PA_DCHECK(!IsDirectMappedBucket(slot_span->bucket));
-  FreeSlotSpan(slot_start, slot_span);
+  FreeInSlotSpan(slot_start, slot_span);
 }
 
 // static
 template <bool thread_safe>
 ALWAYS_INLINE bool PartitionRoot<thread_safe>::IsValidSlotSpan(
     SlotSpan* slot_span) {
+  slot_span = memory::UnmaskPtr(slot_span);
   PartitionRoot* root = FromSlotSpan(slot_span);
   return root->inverted_self == ~reinterpret_cast<uintptr_t>(root);
 }
@@ -1226,23 +1330,29 @@ PartitionRoot<thread_safe>::FromSlotSpan(SlotSpan* slot_span) {
   return extent_entry->root;
 }
 
+// TODO(bartekn): char* -> uintptr_t
 template <bool thread_safe>
 ALWAYS_INLINE PartitionRoot<thread_safe>*
-PartitionRoot<thread_safe>::FromSuperPage(char* super_page) {
+PartitionRoot<thread_safe>::FromFirstSuperPage(char* super_page) {
+  PA_DCHECK(
+      internal::IsReservationStart(reinterpret_cast<uintptr_t>(super_page)));
   auto* extent_entry = reinterpret_cast<SuperPageExtentEntry*>(
-      internal::PartitionSuperPageToMetadataArea(super_page));
+      internal::PartitionSuperPageToMetadataArea(
+          reinterpret_cast<uintptr_t>(super_page)));
   PartitionRoot* root = extent_entry->root;
   PA_DCHECK(root->inverted_self == ~reinterpret_cast<uintptr_t>(root));
   return root;
 }
 
+// TODO(bartekn): char* -> uintptr_t
 template <bool thread_safe>
 ALWAYS_INLINE PartitionRoot<thread_safe>*
 PartitionRoot<thread_safe>::FromPointerInFirstSuperpage(char* ptr) {
   char* super_page = reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(ptr) &
                                              kSuperPageBaseMask);
-  PA_DCHECK(internal::IsReservationStart(super_page));
-  return FromSuperPage(super_page);
+  PA_DCHECK(
+      internal::IsReservationStart(reinterpret_cast<uintptr_t>(super_page)));
+  return FromFirstSuperPage(super_page);
 }
 
 template <bool thread_safe>
@@ -1271,33 +1381,56 @@ ALWAYS_INLINE void PartitionRoot<thread_safe>::DecreaseCommittedPages(
 
 template <bool thread_safe>
 ALWAYS_INLINE void PartitionRoot<thread_safe>::DecommitSystemPagesForData(
-    void* address,
+    uintptr_t address,
     size_t length,
     PageAccessibilityDisposition accessibility_disposition) {
   internal::ScopedSyscallTimer<thread_safe> timer{this};
-  DecommitSystemPages(address, length, accessibility_disposition);
+  DecommitSystemPages(reinterpret_cast<void*>(address), length,
+                      accessibility_disposition);
   DecreaseCommittedPages(length);
 }
 
+// Not unified with TryRecommitSystemPagesForData() to preserve error codes.
 template <bool thread_safe>
 ALWAYS_INLINE void PartitionRoot<thread_safe>::RecommitSystemPagesForData(
-    void* address,
+    uintptr_t address,
     size_t length,
     PageAccessibilityDisposition accessibility_disposition) {
   internal::ScopedSyscallTimer<thread_safe> timer{this};
-  RecommitSystemPages(address, length, PageReadWrite,
-                      accessibility_disposition);
+
+  void* ptr = reinterpret_cast<void*>(address);
+  bool ok = TryRecommitSystemPages(ptr, length, PageReadWriteTagged,
+                                   accessibility_disposition);
+  if (UNLIKELY(!ok)) {
+    // Decommit some memory and retry. The alternative is crashing.
+    DecommitEmptySlotSpans();
+    RecommitSystemPages(ptr, length, PageReadWriteTagged,
+                        accessibility_disposition);
+  }
+
   IncreaseCommittedPages(length);
 }
 
 template <bool thread_safe>
 ALWAYS_INLINE bool PartitionRoot<thread_safe>::TryRecommitSystemPagesForData(
-    void* address,
+    uintptr_t address,
     size_t length,
     PageAccessibilityDisposition accessibility_disposition) {
   internal::ScopedSyscallTimer<thread_safe> timer{this};
-  bool ok = TryRecommitSystemPages(address, length, PageReadWrite,
+  void* ptr = reinterpret_cast<void*>(address);
+  bool ok = TryRecommitSystemPages(ptr, length, PageReadWriteTagged,
                                    accessibility_disposition);
+#if defined(PA_COMMIT_CHARGE_IS_LIMITED)
+  if (UNLIKELY(!ok)) {
+    {
+      ScopedGuard guard(lock_);
+      DecommitEmptySlotSpans();
+    }
+    ok = TryRecommitSystemPages(ptr, length, PageReadWriteTagged,
+                                accessibility_disposition);
+  }
+#endif  // defined(PA_COMMIT_CHARGE_IS_LIMITED)
+
   if (ok)
     IncreaseCommittedPages(length);
 
@@ -1331,7 +1464,8 @@ ALWAYS_INLINE size_t
 PartitionRoot<thread_safe>::AllocationCapacityFromPtr(void* ptr) const {
   ptr = AdjustPointerForExtrasSubtract(ptr);
   auto* slot_span =
-      internal::PartitionAllocGetSlotSpanForSizeQuery<thread_safe>(ptr);
+      internal::PartitionAllocGetSlotSpanForSizeQuery<thread_safe>(
+          reinterpret_cast<uintptr_t>(ptr));
   size_t size = AdjustSizeForExtrasSubtract(slot_span->bucket->slot_size);
   return size;
 }
@@ -1425,8 +1559,11 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocFlagsNoHooks(
 
   const bool is_quarantine_enabled = IsQuarantineEnabled();
   // PCScan safepoint. Call before trying to allocate from cache.
-  if (is_quarantine_enabled)
+  // TODO(bikineev): Change the condition to LIKELY once PCScan is enabled by
+  // default.
+  if (UNLIKELY(is_quarantine_enabled)) {
     PCScan::JoinScanIfNeeded();
+  }
 
   // !thread_safe => !with_thread_cache, but adding the condition allows the
   // compiler to statically remove this branch for the thread-unsafe variant.
@@ -1572,10 +1709,12 @@ ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocFlagsNoHooks(
   // TODO(bikineev): Change the condition to LIKELY once PCScan is enabled by
   // default.
   if (UNLIKELY(is_quarantine_enabled)) {
-    if (LIKELY(internal::IsManagedByNormalBuckets(ret))) {
+    if (LIKELY(internal::IsManagedByNormalBuckets(
+            reinterpret_cast<uintptr_t>(ret)))) {
+      auto* unmasked_slot_start = memory::UnmaskPtr(slot_start);
       // Mark the corresponding bits in the state bitmap as allocated.
-      internal::StateBitmapFromPointer(ret)->Allocate(
-          reinterpret_cast<uintptr_t>(ret));
+      internal::StateBitmapFromPointer(unmasked_slot_start)
+          ->Allocate(reinterpret_cast<uintptr_t>(unmasked_slot_start));
     }
   }
 

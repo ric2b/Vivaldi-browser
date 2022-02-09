@@ -27,7 +27,7 @@ namespace vivaldi {
 namespace {
 
 // Time to wait for the capture result before reporting an error.
-constexpr base::TimeDelta kMaxWaitForCapture = base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kMaxWaitForCapture = base::Seconds(30);
 
 void ReleaseSharedMemoryPixels(void* addr, void* context) {
   // Let std::unique_ptr destructor to release the mapping.

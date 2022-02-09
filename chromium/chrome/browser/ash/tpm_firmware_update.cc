@@ -15,10 +15,10 @@
 #include "base/files/file_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
@@ -30,7 +30,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 
-namespace chromeos {
+namespace ash {
 namespace tpm_firmware_update {
 
 namespace {
@@ -319,4 +319,4 @@ void UpdateAvailable(base::OnceCallback<void(bool)> completion,
 }
 
 }  // namespace tpm_firmware_update
-}  // namespace chromeos
+}  // namespace ash

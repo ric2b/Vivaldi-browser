@@ -189,7 +189,7 @@ public:
     /**
         Makes sure that idle events are sent again.
     */
-    virtual void WakeUpIdle();
+    void WakeUpIdle();
 
     /**
         This virtual function is called  when the application becomes idle and
@@ -217,14 +217,13 @@ public:
 
         This can be useful, for example, when a time-consuming process writes to a
         text window. Without an occasional yield, the text window will not be updated
-        properly, and on systems with cooperative multitasking, such as Windows 3.1
-        other processes will not respond.
+        properly, and on systems with cooperative multitasking, other processes
+        will not respond.
 
         Caution should be exercised, however, since yielding may allow the
         user to perform actions which are not compatible with the current task.
         Disabling menu items or whole menus during processing can avoid unwanted
         reentrance of code: see ::wxSafeYield for a better function.
-        You can avoid unwanted reentrancies also using IsYielding().
 
         Note that Yield() will not flush the message logs. This is intentional as
         calling Yield() is usually done to quickly update the screen and popping up
@@ -232,10 +231,9 @@ public:
         messages immediately (otherwise it will be done during the next idle loop
         iteration), call wxLog::FlushActive.
 
-        Calling Yield() recursively is normally an error and an assert failure is
-        raised in debug build if such situation is detected. However if the
-        @a onlyIfNeeded parameter is @true, the method will just silently
-        return @false instead.
+        If @a onlyIfNeeded parameter is @true and the flow control is already
+        inside Yield(), i.e. IsYielding() returns @true, the method just
+        silently returns @false and doesn't do anything.
     */
     bool Yield(bool onlyIfNeeded = false);
 
@@ -326,7 +324,7 @@ public:
     @class wxGUIEventLoop
 
     A generic implementation of the GUI event loop.
-    
+
     @library{wxbase}
     @category{appmanagement}
 */

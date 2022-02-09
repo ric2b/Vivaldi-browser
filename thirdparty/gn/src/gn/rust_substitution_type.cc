@@ -9,6 +9,7 @@
 
 #include "gn/err.h"
 #include "gn/substitution_type.h"
+#include "gn/c_substitution_type.h"
 
 const SubstitutionTypes RustSubstitutions = {
     &kRustSubstitutionCrateName,       &kRustSubstitutionCrateType,
@@ -39,4 +40,9 @@ bool IsValidRustSubstitution(const Substitution* type) {
          type == &kRustSubstitutionRustEnv ||
          type == &kRustSubstitutionRustFlags ||
          type == &kRustSubstitutionSources;
+}
+
+bool IsValidRustLinkerSubstitution(const Substitution* type) {
+  return IsValidRustSubstitution(type) ||
+         type == &CSubstitutionLdFlags;
 }

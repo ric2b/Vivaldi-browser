@@ -19,11 +19,11 @@
 #include "chrome/browser/ash/borealis/borealis_engagement_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_game_mode_controller.h"
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
+#include "chrome/browser/ash/borealis/borealis_power_controller.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
 #include "chrome/browser/ash/borealis/borealis_shutdown_monitor.h"
 #include "chrome/browser/ash/borealis/borealis_util.h"
 #include "chrome/browser/ash/borealis/borealis_window_manager.h"
-#include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_stability_monitor.h"
 #include "components/exo/shell_surface_util.h"
 #include "url/gurl.h"
@@ -83,8 +83,7 @@ class BorealisLifetimeObserver
     // Launch post-game survey.
     // TODO(b/188745351): Remove this once it's no longer wanted.
     FeedbackFormUrl(
-        guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile_),
-        app_id, base::UTF16ToUTF8(last_window->GetTitle()),
+        profile_, app_id, base::UTF16ToUTF8(last_window->GetTitle()),
         base::BindOnce(&BorealisLifetimeObserver::OnFeedbackUrlGenerated,
                        weak_factory_.GetWeakPtr(), app_id));
   }
@@ -182,6 +181,7 @@ BorealisContext::BorealisContext(Profile* profile)
       game_mode_controller_(std::make_unique<BorealisGameModeController>()),
       engagement_metrics_(std::make_unique<BorealisEngagementMetrics>(profile)),
       disk_manager_(std::make_unique<BorealisDiskManagerImpl>(this)),
+      power_controller_(std::make_unique<BorealisPowerController>()),
       self_activation_granter_(
           std::make_unique<SelfActivationPermissionGranter>(profile)) {}
 

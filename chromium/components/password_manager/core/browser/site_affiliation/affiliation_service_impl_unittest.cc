@@ -8,10 +8,10 @@
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
@@ -205,7 +205,7 @@ class AffiliationServiceImplTest : public testing::Test {
   }
 
   base::HistogramTester histogram_tester_;
-  MockAffiliationFetcherFactory* fetcher_factory_;
+  raw_ptr<MockAffiliationFetcherFactory> fetcher_factory_;
 
   base::test::SingleThreadTaskEnvironment task_environment_;
 

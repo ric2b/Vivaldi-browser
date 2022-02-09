@@ -28,10 +28,10 @@
 
 #if defined(OS_WIN)
 #include "chrome/updater/win/net/network.h"
-#endif
-
-#if defined(OS_MAC)
+#elif defined(OS_MAC)
 #include "chrome/updater/mac/net/network.h"
+#elif defined(OS_LINUX)
+#include "chrome/updater/linux/net/network.h"
 #endif
 
 namespace {
@@ -101,10 +101,6 @@ std::string Configurator::GetChannel() const {
   return {};
 }
 
-std::string Configurator::GetBrand() const {
-  return {};
-}
-
 std::string Configurator::GetLang() const {
   return "en-US";
 }
@@ -155,10 +151,6 @@ bool Configurator::EnabledDeltas() const {
   return false;
 }
 
-bool Configurator::EnabledComponentUpdates() const {
-  return false;
-}
-
 bool Configurator::EnabledBackgroundDownloader() const {
   return false;
 }
@@ -177,7 +169,12 @@ update_client::ActivityDataService* Configurator::GetActivityDataService()
 }
 
 bool Configurator::IsPerUserInstall() const {
-  return true;
+  switch (GetUpdaterScope()) {
+    case UpdaterScope::kSystem:
+      return false;
+    case UpdaterScope::kUser:
+      return true;
+  }
 }
 
 std::unique_ptr<update_client::ProtocolHandlerFactory>

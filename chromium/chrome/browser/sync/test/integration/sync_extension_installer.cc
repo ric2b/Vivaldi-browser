@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
@@ -18,7 +18,7 @@ SyncedExtensionInstaller::SyncedExtensionInstaller(Profile* profile)
     : profile_(profile) {
   DoInstallSyncedExtensions();
   registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_UPDATING_STARTED,
-                 content::Source<Profile>(profile_));
+                 content::Source<Profile>(profile_.get()));
 }
 
 SyncedExtensionInstaller::~SyncedExtensionInstaller() {}

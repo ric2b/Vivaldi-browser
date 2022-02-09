@@ -16,17 +16,11 @@ const base::Feature kTestFeature{"TestFeature",
 const base::Feature kSharedHighlightingIOS{"SharedHighlightingIOS",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kEnableFREDefaultBrowserScreen{
-    "EnableFREDefaultBrowserScreen", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kEnableFREDefaultBrowserScreenTesting{
     "EnableFREDefaultBrowserScreenTesting", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableFREUIModuleIOS{"EnableFREUIModuleIOS",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kOldSyncStringFRE{"OldSyncStringFRE",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // TODO(crbug.com/1128242): Remove this flag after the refactoring work is
 // finished.
@@ -39,9 +33,6 @@ const base::Feature kIncognitoBrandConsistencyForIOS{
 const base::Feature kIncognitoNtpRevamp{"IncognitoNtpRevamp",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kLocationPermissionsPrompt{
-    "LocationPermissionsPrompt", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kDefaultBrowserFullscreenPromoExperiment{
     "DefaultBrowserFullscreenPromoExperiment",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -51,6 +42,9 @@ const base::Feature kIOSNewOmniboxImplementation{
 
 const base::Feature kIOSOmniboxAllowEditsDuringDictation{
     "IOSOmniboxAllowEditsDuringDictation", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kIOSLocationBarUseNativeContextMenu{
+    "IOSLocationBarUseNativeContextMenu", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kIOSPersistCrashRestore{"IOSPersistCrashRestore",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
@@ -69,6 +63,13 @@ const base::Feature kUseLensToSearchForImage{"UseLensToSearchForImage",
 
 const base::Feature kCredentialProviderExtensionPromo{
     "CredentialProviderExtensionPromo", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kRemoveExcessNTPs{"RemoveExcessNTPs",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableShortenedPasswordAutoFillInstruction{
+    "EnableShortenedPasswordAutoFillInstruction",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 bool IsContextMenuActionsRefreshEnabled() {
   return base::FeatureList::IsEnabled(kContextMenuActionsRefresh);

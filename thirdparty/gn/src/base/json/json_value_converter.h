@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
 
@@ -101,7 +100,8 @@ class FieldConverterBase {
 
  private:
   std::string field_path_;
-  DISALLOW_COPY_AND_ASSIGN(FieldConverterBase);
+  FieldConverterBase(const FieldConverterBase&) = delete;
+  FieldConverterBase& operator=(const FieldConverterBase&) = delete;
 };
 
 template <typename FieldType>
@@ -128,7 +128,8 @@ class FieldConverter : public FieldConverterBase<StructType> {
  private:
   FieldType StructType::*field_pointer_;
   std::unique_ptr<ValueConverter<FieldType>> value_converter_;
-  DISALLOW_COPY_AND_ASSIGN(FieldConverter);
+  FieldConverter(const FieldConverter&) = delete;
+  FieldConverter& operator=(const FieldConverter&) = delete;
 };
 
 template <typename FieldType>
@@ -142,7 +143,8 @@ class BasicValueConverter<int> : public ValueConverter<int> {
   bool Convert(const base::Value& value, int* field) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(BasicValueConverter);
+  BasicValueConverter(const BasicValueConverter&) = delete;
+  BasicValueConverter& operator=(const BasicValueConverter&) = delete;
 };
 
 template <>
@@ -153,7 +155,8 @@ class BasicValueConverter<std::string> : public ValueConverter<std::string> {
   bool Convert(const base::Value& value, std::string* field) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(BasicValueConverter);
+  BasicValueConverter(const BasicValueConverter&) = delete;
+  BasicValueConverter& operator=(const BasicValueConverter&) = delete;
 };
 
 template <>
@@ -165,7 +168,8 @@ class BasicValueConverter<std::u16string>
   bool Convert(const base::Value& value, std::u16string* field) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(BasicValueConverter);
+  BasicValueConverter(const BasicValueConverter&) = delete;
+  BasicValueConverter& operator=(const BasicValueConverter&) = delete;
 };
 
 template <>
@@ -176,7 +180,8 @@ class BasicValueConverter<double> : public ValueConverter<double> {
   bool Convert(const base::Value& value, double* field) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(BasicValueConverter);
+  BasicValueConverter(const BasicValueConverter&) = delete;
+  BasicValueConverter& operator=(const BasicValueConverter&) = delete;
 };
 
 template <>
@@ -187,7 +192,8 @@ class BasicValueConverter<bool> : public ValueConverter<bool> {
   bool Convert(const base::Value& value, bool* field) const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(BasicValueConverter);
+  BasicValueConverter(const BasicValueConverter&) = delete;
+  BasicValueConverter& operator=(const BasicValueConverter&) = delete;
 };
 
 template <typename FieldType>
@@ -205,7 +211,8 @@ class ValueFieldConverter : public ValueConverter<FieldType> {
  private:
   ConvertFunc convert_func_;
 
-  DISALLOW_COPY_AND_ASSIGN(ValueFieldConverter);
+  ValueFieldConverter(const ValueFieldConverter&) = delete;
+  ValueFieldConverter& operator=(const ValueFieldConverter&) = delete;
 };
 
 template <typename FieldType>
@@ -225,7 +232,8 @@ class CustomFieldConverter : public ValueConverter<FieldType> {
  private:
   ConvertFunc convert_func_;
 
-  DISALLOW_COPY_AND_ASSIGN(CustomFieldConverter);
+  CustomFieldConverter(const CustomFieldConverter&) = delete;
+  CustomFieldConverter& operator=(const CustomFieldConverter&) = delete;
 };
 
 template <typename NestedType>
@@ -239,7 +247,8 @@ class NestedValueConverter : public ValueConverter<NestedType> {
 
  private:
   JSONValueConverter<NestedType> converter_;
-  DISALLOW_COPY_AND_ASSIGN(NestedValueConverter);
+  NestedValueConverter(const NestedValueConverter&) = delete;
+  NestedValueConverter& operator=(const NestedValueConverter&) = delete;
 };
 
 template <typename Element>
@@ -274,7 +283,8 @@ class RepeatedValueConverter
 
  private:
   BasicValueConverter<Element> basic_converter_;
-  DISALLOW_COPY_AND_ASSIGN(RepeatedValueConverter);
+  RepeatedValueConverter(const RepeatedValueConverter&) = delete;
+  RepeatedValueConverter& operator=(const RepeatedValueConverter&) = delete;
 };
 
 template <typename NestedType>
@@ -307,7 +317,8 @@ class RepeatedMessageConverter
 
  private:
   JSONValueConverter<NestedType> converter_;
-  DISALLOW_COPY_AND_ASSIGN(RepeatedMessageConverter);
+  RepeatedMessageConverter(const RepeatedMessageConverter&) = delete;
+  RepeatedMessageConverter& operator=(const RepeatedMessageConverter&) = delete;
 };
 
 template <typename NestedType>
@@ -343,7 +354,9 @@ class RepeatedCustomValueConverter
 
  private:
   ConvertFunc convert_func_;
-  DISALLOW_COPY_AND_ASSIGN(RepeatedCustomValueConverter);
+  RepeatedCustomValueConverter(const RepeatedCustomValueConverter&) = delete;
+  RepeatedCustomValueConverter& operator=(const RepeatedCustomValueConverter&) =
+      delete;
 };
 
 }  // namespace internal
@@ -507,7 +520,8 @@ class JSONValueConverter {
   std::vector<std::unique_ptr<internal::FieldConverterBase<StructType>>>
       fields_;
 
-  DISALLOW_COPY_AND_ASSIGN(JSONValueConverter);
+  JSONValueConverter(const JSONValueConverter&) = delete;
+  JSONValueConverter& operator=(const JSONValueConverter&) = delete;
 };
 
 }  // namespace base

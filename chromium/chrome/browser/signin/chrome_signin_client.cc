@@ -196,7 +196,7 @@ void ChromeSigninClient::PreSignOut(
       signout_source_metric == signin_metrics::SIGNOUT_PREF_CHANGED ||
       user_declines_sync_after_consenting_to_management;
   if (signin_util::IsForceSigninEnabled() && !profile_->IsSystemProfile() &&
-      !profile_->IsGuestSession() && !profile_->IsSupervised() &&
+      !profile_->IsGuestSession() && !profile_->IsChild() &&
       !keep_window_opened) {
     if (signout_source_metric ==
         signin_metrics::SIGNIN_PREF_CHANGED_DURING_SIGNIN) {
@@ -304,11 +304,8 @@ bool ChromeSigninClient::IsNonEnterpriseUser(const std::string& username) {
 // signed-in by default.
 absl::optional<account_manager::Account>
 ChromeSigninClient::GetInitialPrimaryAccount() {
-  if (!IsAccountManagerAvailable(profile_)) {
-    // Secondary Profiles in Lacros do not start with the Device Account signed
-    // in.
+  if (!profile_->IsMainProfile())
     return absl::nullopt;
-  }
 
   const crosapi::mojom::AccountPtr& device_account =
       chromeos::LacrosService::Get()->init_params()->device_account;

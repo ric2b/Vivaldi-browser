@@ -21,20 +21,20 @@
 #include "base/containers/contains.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/hash/hash.h"
 #include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/optional_trace_event.h"
@@ -80,6 +80,7 @@
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/visible_time_request_trigger.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/cursors/webcursor.h"
@@ -608,6 +609,26 @@ RenderWidgetHostViewBase* RenderWidgetHostImpl::GetView() {
   return view_.get();
 }
 
+VisibleTimeRequestTrigger*
+RenderWidgetHostImpl::GetVisibleTimeRequestTrigger() {
+  auto* trigger = delegate()->GetVisibleTimeRequestTrigger();
+
+  // Use the delegate's trigger only if the kTabSwitchMetrics2 feature is
+  // enabled. `trigger` can never be null if the feature is enabled.
+  if (trigger && trigger->is_tab_switch_metrics2_feature_enabled())
+    return trigger;
+
+  // Go through this widget's view. This is different from
+  // delegate()->GetVisibleTimeRequestTrigger() which goes through the current
+  // view for the WebContents - this widget may not be current.
+  // TODO(crbug.com/1164477): Remove this obsolete implementation and return a
+  // reference instead of a pointer once kTabSwitchMetrics2 is validated and
+  // becomes the default.
+  if (GetView())
+    return GetView()->GetVisibleTimeRequestTrigger();
+  return nullptr;
+}
+
 const viz::FrameSinkId& RenderWidgetHostImpl::GetFrameSinkId() {
   return frame_sink_id_;
 }
@@ -754,10 +775,14 @@ void RenderWidgetHostImpl::Init() {
   SynchronizeVisualProperties();
   // Show/Hide state is not given to the renderer while we are
   // `waiting_for_init_`, but Init() signals that the renderer is ready to
-  // receive them. This closure will inform the renderer that the widget is
-  // shown.
-  if (pending_show_closure_)
-    std::move(pending_show_closure_).Run();
+  // receive them. This call will inform the renderer that the widget is shown.
+  if (pending_show_params_) {
+    DCHECK(blink_widget_.is_bound());
+    blink_widget_->WasShown(
+        pending_show_params_->is_evicted,
+        std::move(pending_show_params_->visible_time_request));
+    pending_show_params_.reset();
+  }
 }
 
 bool RenderWidgetHostImpl::ShouldShowStaleContentOnEviction() {
@@ -798,11 +823,11 @@ void RenderWidgetHostImpl::WasHidden() {
 
   // Show/Hide state is not sent to the renderer when it has requested for us to
   // wait until it requests them via Init().
-  if (pending_show_closure_) {
-    pending_show_closure_.Reset();
+  if (pending_show_params_) {
+    pending_show_params_.reset();
   } else {
     // Widgets start out hidden, so we must have previously been shown to get
-    // here, and we'd have a `pending_show_closure_` if we are
+    // here, and we'd have a `pending_show_params_` if we are
     // `waiting_for_init_`.
     DCHECK(!waiting_for_init_);
     blink_widget_->WasHidden();
@@ -842,17 +867,14 @@ void RenderWidgetHostImpl::WasShown(
   // all state gets to the renderer as close together as possible.
   SynchronizeVisualProperties();
 
-  auto show_request_timestamp = record_tab_switch_time_request
-                                    ? base::TimeTicks::Now()
-                                    : base::TimeTicks();
+  DCHECK(!pending_show_params_);
   if (!waiting_for_init_) {
-    blink_widget_->WasShown(show_request_timestamp, view_->is_evicted(),
+    blink_widget_->WasShown(view_->is_evicted(),
                             std::move(record_tab_switch_time_request));
   } else {
-    pending_show_closure_ = base::BindOnce(
-        &RenderWidgetHostImpl::RunPendingWasShown, base::Unretained(this),
-        show_request_timestamp, view_->is_evicted(),
-        std::move(record_tab_switch_time_request));
+    // Delay the WasShown message until Init is called.
+    pending_show_params_.emplace(view_->is_evicted(),
+                                 std::move(record_tab_switch_time_request));
   }
   view_->reset_is_evicted();
 
@@ -885,14 +907,36 @@ void RenderWidgetHostImpl::WasShown(
   SynchronizeVisualProperties();
 }
 
-void RenderWidgetHostImpl::RunPendingWasShown(
-    base::TimeTicks show_request_timestamp,
-    bool is_evicted,
-    blink::mojom::RecordContentToVisibleTimeRequestPtr
-        record_tab_switch_time_request) {
-  DCHECK(blink_widget_.is_bound());
-  blink_widget_->WasShown(show_request_timestamp, is_evicted,
-                          std::move(record_tab_switch_time_request));
+void RenderWidgetHostImpl::RequestPresentationTimeForNextFrame(
+    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
+  DCHECK(!is_hidden_);
+  DCHECK(visible_time_request);
+  if (waiting_for_init_) {
+    // This method should only be called if the RWHI is already visible, meaning
+    // there will be a WasShown call that's queued until init. Update that with
+    // the new request.
+    DCHECK(pending_show_params_);
+    pending_show_params_->visible_time_request =
+        std::move(visible_time_request);
+    return;
+  }
+  DCHECK(!pending_show_params_);
+  blink_widget_->RequestPresentationTimeForNextFrame(
+      std::move(visible_time_request));
+}
+
+void RenderWidgetHostImpl::CancelPresentationTimeRequest() {
+  DCHECK(!is_hidden_);
+  if (waiting_for_init_) {
+    // This method should only be called if the RWHI is already visible, meaning
+    // there will be a WasShown call that's queued until init. Update that to
+    // clear any request that was set.
+    DCHECK(pending_show_params_);
+    pending_show_params_->visible_time_request = nullptr;
+    return;
+  }
+  DCHECK(!pending_show_params_);
+  blink_widget_->CancelPresentationTimeRequest();
 }
 
 #if defined(OS_ANDROID)
@@ -1894,12 +1938,24 @@ void RenderWidgetHostImpl::RemoveObserver(RenderWidgetHostObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void RenderWidgetHostImpl::GetScreenInfo(display::ScreenInfo* result) {
+display::ScreenInfo RenderWidgetHostImpl::GetScreenInfo() const {
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetScreenInfo");
+
   if (view_)
-    view_->GetScreenInfo(result);
-  else
-    display::DisplayUtil::GetDefaultScreenInfo(result);
+    return view_->GetScreenInfo();
+
+  // If this widget has not been connected to a view yet (or has been
+  // disconnected), the display code may be using a fake primary display.
+  display::ScreenInfo screen_info;
+  display::DisplayUtil::GetDefaultScreenInfo(&screen_info);
+  return screen_info;
+}
+
+display::ScreenInfos RenderWidgetHostImpl::GetScreenInfos() const {
+  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetScreenInfos");
+
+  return view_ ? view_->GetScreenInfos()
+               : display::ScreenInfos(GetScreenInfo());
 }
 
 float RenderWidgetHostImpl::GetDeviceScaleFactor() {
@@ -2098,30 +2154,13 @@ void RenderWidgetHostImpl::NotifyScreenInfoChanged() {
   SynchronizeVisualPropertiesIgnoringPendingAck();
 
   // The device scale factor will be same for all the views contained by the
-  // MainFrame, so just set it once.
-  if (delegate_ && !delegate_->IsWidgetForMainFrame(this))
+  // primary main frame, so just set it once.
+  if (delegate_ && !delegate_->IsWidgetForPrimaryMainFrame(this))
     return;
 
   // The delegate may not have an input event router in tests.
   if (auto* touch_emulator = GetExistingTouchEmulator())
     touch_emulator->SetDeviceScaleFactor(GetScaleFactorForView(view_.get()));
-}
-
-display::ScreenInfos RenderWidgetHostImpl::GetScreenInfos() {
-  TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetScreenInfos");
-
-  // If this widget has not been connected to a view yet (or has been
-  // disconnected), the display code may be using a fake primary display.
-  // In these cases, temporarily return the legacy screen info until
-  // it is connected and visual properties updates this correctly.
-  if (!view_) {
-    // Use GetScreenInfo here to retain legacy behavior for the current screen.
-    display::ScreenInfo current_screen_info;
-    GetScreenInfo(&current_screen_info);
-    return display::ScreenInfos(current_screen_info);
-  }
-
-  return view_->GetScreenInfos();
 }
 
 void RenderWidgetHostImpl::GetSnapshotFromBrowser(
@@ -3735,5 +3774,13 @@ RenderWidgetHostImpl::MainFramePropagationProperties::
 
 RenderWidgetHostImpl::MainFramePropagationProperties::
     ~MainFramePropagationProperties() = default;
+
+RenderWidgetHostImpl::PendingShowParams::PendingShowParams(
+    bool is_evicted,
+    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
+    : is_evicted(is_evicted),
+      visible_time_request(std::move(visible_time_request)) {}
+
+RenderWidgetHostImpl::PendingShowParams::~PendingShowParams() = default;
 
 }  // namespace content

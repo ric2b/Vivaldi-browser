@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -75,10 +76,7 @@ bool UrlMatcherForSerializedNavigationEntry(
 }
 
 base::flat_set<GURL> CreateUrlSet(const history::URLRows& deleted_rows) {
-  std::vector<GURL> urls;
-  for (const history::URLRow& row : deleted_rows)
-    urls.push_back(row.url());
-  return base::flat_set<GURL>(std::move(urls));
+  return base::MakeFlatSet<GURL>(deleted_rows, {}, &history::URLRow::url);
 }
 
 void DeleteNavigationEntries(
@@ -172,7 +170,7 @@ class TabRestoreDeletionHelper : public sessions::TabRestoreServiceObserver {
  private:
   ~TabRestoreDeletionHelper() override { service_->RemoveObserver(this); }
 
-  sessions::TabRestoreService* service_;
+  raw_ptr<sessions::TabRestoreService> service_;
   sessions::TabRestoreService::DeletionPredicate deletion_predicate_;
 };
 

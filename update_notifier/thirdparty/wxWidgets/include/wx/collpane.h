@@ -41,8 +41,25 @@ public:
 
     virtual wxWindow *GetPane() const = 0;
 
-    virtual wxString GetLabel() const = 0;
-    virtual void SetLabel(const wxString& label) = 0;
+    virtual wxString GetLabel() const wxOVERRIDE = 0;
+    virtual void SetLabel(const wxString& label) wxOVERRIDE = 0;
+
+    virtual bool
+    InformFirstDirection(int direction,
+                         int size,
+                         int availableOtherDir) wxOVERRIDE
+    {
+        wxWindow* const p = GetPane();
+        if ( !p )
+            return false;
+
+        if ( !p->InformFirstDirection(direction, size, availableOtherDir) )
+            return false;
+
+        InvalidateBestSize();
+
+        return true;
+    }
 };
 
 
@@ -70,12 +87,12 @@ public:
 
 
     // default copy ctor, assignment operator and dtor are ok
-    virtual wxEvent *Clone() const { return new wxCollapsiblePaneEvent(*this); }
+    virtual wxEvent *Clone() const wxOVERRIDE { return new wxCollapsiblePaneEvent(*this); }
 
 private:
     bool m_bCollapsed;
 
-    DECLARE_DYNAMIC_CLASS_NO_ASSIGN(wxCollapsiblePaneEvent)
+    wxDECLARE_DYNAMIC_CLASS_NO_ASSIGN(wxCollapsiblePaneEvent);
 };
 
 // ----------------------------------------------------------------------------

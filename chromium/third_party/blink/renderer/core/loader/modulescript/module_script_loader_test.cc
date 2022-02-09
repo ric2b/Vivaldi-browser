@@ -163,7 +163,7 @@ class ModuleScriptLoaderTest : public PageTestBase {
 };
 
 void ModuleScriptLoaderTest::SetUp() {
-  PageTestBase::SetUp(IntSize(500, 500));
+  PageTestBase::SetUp(gfx::Size(500, 500));
 }
 
 ModuleScriptLoaderTest::ModuleScriptLoaderTest()
@@ -205,6 +205,7 @@ void ModuleScriptLoaderTest::InitializeForWorklet() {
   auto creation_params = std::make_unique<GlobalScopeCreationParams>(
       url_, mojom::blink::ScriptType::kModule, "GlobalScopeName", "UserAgent",
       UserAgentMetadata(), nullptr /* web_worker_fetch_context */,
+      Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
       Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
       network::mojom::ReferrerPolicy::kDefault, security_origin_.get(),
       true /* is_secure_context */, HttpsState::kModern,

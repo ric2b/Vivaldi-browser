@@ -12,6 +12,7 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -241,12 +242,13 @@ void SafeBrowsingNavigationObserver::DidOpenRequestedURL(
 void SafeBrowsingNavigationObserver::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type) {
+    ContentSettingsTypeSet content_type_set) {
   // For all the content settings that can be changed via page info UI, we
   // assume there is a user gesture associated with the content setting change.
   if (web_contents() && !primary_pattern.MatchesAllHosts() &&
       primary_pattern.Matches(web_contents()->GetLastCommittedURL()) &&
-      PageInfoUI::ContentSettingsTypeInPageInfo(content_type)) {
+      (content_type_set.ContainsAllTypes() ||
+       PageInfoUI::ContentSettingsTypeInPageInfo(content_type_set.GetType()))) {
     OnUserInteraction();
   }
 }
@@ -256,8 +258,10 @@ void SafeBrowsingNavigationObserver::MaybeRecordNewWebContentsForPortalContents(
   // When navigating a newly created portal contents, establish an association
   // with its creator, so we can track the referrer chain across portal
   // activations.
+  content::NavigationEntry* current_entry =
+      web_contents()->GetController().GetLastCommittedEntry();
   if (web_contents()->IsPortal() &&
-      !web_contents()->GetController().GetLastCommittedEntry()) {
+      (!current_entry || current_entry->IsInitialEntry())) {
     content::RenderFrameHost* initiator_frame_host =
         navigation_handle->GetInitiatorFrameToken().has_value()
             ? content::RenderFrameHost::FromFrameToken(

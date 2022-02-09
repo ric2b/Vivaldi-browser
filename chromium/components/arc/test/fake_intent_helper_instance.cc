@@ -59,12 +59,13 @@ void FakeIntentHelperInstance::AddPreferredApp(const std::string& package_name,
                                                IntentFilter intent_filter,
                                                mojom::IntentInfoPtr intent) {}
 
-void FakeIntentHelperInstance::ResetVerifiedLinksDeprecated(
-    const std::vector<std::string>& package_names) {}
-
 void FakeIntentHelperInstance::SetVerifiedLinks(
     const std::vector<std::string>& package_names,
-    bool always_open) {}
+    bool always_open) {
+  for (const auto& package : package_names) {
+    verified_links_[package] = always_open;
+  }
+}
 
 void FakeIntentHelperInstance::HandleIntent(mojom::IntentInfoPtr intent,
                                             mojom::ActivityNamePtr activity) {

@@ -3,7 +3,7 @@
 #ifndef PLATFORM_MEDIA_TEST_IPC_PIPELINE_TEST_SETUP_H_
 #define PLATFORM_MEDIA_TEST_IPC_PIPELINE_TEST_SETUP_H_
 
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 
 namespace media {
 

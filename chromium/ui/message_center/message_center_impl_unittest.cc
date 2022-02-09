@@ -9,13 +9,13 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -54,7 +54,7 @@ class CheckObserver : public MessageCenterObserver {
   }
 
  private:
-  MessageCenter* message_center_;
+  raw_ptr<MessageCenter> message_center_;
   std::string target_id_;
 };
 
@@ -74,7 +74,7 @@ class RemoveObserver : public MessageCenterObserver {
   }
 
  private:
-  MessageCenter* message_center_;
+  raw_ptr<MessageCenter> message_center_;
   std::string target_id_;
 };
 
@@ -106,7 +106,7 @@ class TestAddObserver : public MessageCenterObserver {
 
  private:
   std::map<std::string, std::string> logs_;
-  MessageCenter* message_center_;
+  raw_ptr<MessageCenter> message_center_;
 };
 
 class TestDelegate : public NotificationDelegate {
@@ -160,7 +160,7 @@ class DeleteOnCloseDelegate : public NotificationDelegate {
  private:
   ~DeleteOnCloseDelegate() override = default;
 
-  MessageCenter* message_center_;
+  raw_ptr<MessageCenter> message_center_;
   std::string notification_id_;
 };
 
@@ -194,7 +194,7 @@ class MessageCenterImplTest : public testing::Test {
 
   MessageCenter* message_center() const { return message_center_; }
   MessageCenterImpl* message_center_impl() const {
-    return reinterpret_cast<MessageCenterImpl*>(message_center_);
+    return reinterpret_cast<MessageCenterImpl*>(message_center_.get());
   }
 
   base::RunLoop* run_loop() const { return run_loop_.get(); }
@@ -262,7 +262,7 @@ class MessageCenterImplTest : public testing::Test {
   }
 
  private:
-  MessageCenter* message_center_;
+  raw_ptr<MessageCenter> message_center_;
   std::unique_ptr<base::test::SingleThreadTaskEnvironment> task_environment_;
   std::unique_ptr<base::RunLoop> run_loop_;
   base::RepeatingClosure closure_;

@@ -13,22 +13,29 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
-#include "prefs/vivaldi_browser_prefs_util.h"
+
+#include "components/datasource/resource_reader.h"
+#include "components/datasource/vivaldi_theme_io.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
-#if defined(OS_ANDROID)
-#include "base/android/apk_assets.h"
+
+// Preference override is available on Linux or in internal desktop builds on
+// any platform for testing convenience.
+#if defined(OS_LINUX) || !(defined(OFFICIAL_BUILD) || defined(OS_ANDROID))
+#define VIVALDI_PREFERENCE_OVERRIDE_FILE
 #endif
 
 namespace vivaldi {
@@ -39,12 +46,37 @@ base::Value GetPlatformComputedDefault(const std::string& path);
 
 namespace {
 
-#if !defined(OS_ANDROID)
-const base::FilePath::CharType kVivaldiResourcesFolder[] =
-    FILE_PATH_LITERAL("vivaldi");
-#endif
-const base::FilePath::CharType kPrefsDefinitionFileName[] =
-    FILE_PATH_LITERAL("prefs_definitions.json");
+const char kPrefsDefinitionFileName[] = "prefs_definitions.json";
+
+#ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
+
+namespace prefs_overrides {
+
+// Extra file to allow overriding of some preferences without changing the main
+// file.
+const char kFileName[] = "prefs_overrides.json";
+
+// Suported keys in prefs_overrides.
+const char kComment[] = "comment";
+
+// Default theme to use.
+const char kThemeDefault[] = "themeDefault";
+
+// Default theme to use during day with active scheduling.
+const char kThemeDefaultDay[] = "themeDefaultDay";
+
+// Default theme to use during night with active scheduling.
+const char kThemeDefaultNight[] = "themeDefaultNight";
+
+// Default theme for private windows.
+const char kThemeDefaultPrivate[] = "themeDefaultPrivate";
+
+// Themes to prepend to the list of default themes.
+const char kThemeExtra[] = "themeExtra";
+
+}  // namespace prefs_overrides
+
+#endif  // VIVALDI_PREFERENCE_OVERRIDE_FILE
 
 const char kVivaldiKeyName[] = "vivaldi";
 #if !defined(OS_ANDROID)
@@ -198,10 +230,10 @@ enum class PrefKind {
 
 base::Value GetComputedDefault(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesCaptureDirectory) {
-    base::FilePath path;
-    base::PathService::Get(chrome::DIR_USER_PICTURES, &path);
-    path = path.AppendASCII("Vivaldi Captures");
-    return base::Value(path.AsUTF16Unsafe());
+    base::FilePath pictures_path;
+    base::PathService::Get(chrome::DIR_USER_PICTURES, &pictures_path);
+    pictures_path = pictures_path.AppendASCII("Vivaldi Captures");
+    return base::Value(pictures_path.AsUTF16Unsafe());
   }
   return GetPlatformComputedDefault(path);
 }
@@ -470,53 +502,181 @@ void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
 
 #endif  // !defined(OS_ANDROID)
 
+#ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
+
+namespace prefs_overrides {
+
+struct PrefOverrideValues {
+  std::string theme_default;
+  std::string theme_default_day_or_night[2];
+  std::string theme_default_private;
+
+  std::vector<base::Value> theme_extra;
+};
+
+// Patch default preferences according to the override JSON. The code trusts
+// prefs structure (in the release builds erroneous assumptions will CHECK() or
+// crash on null pointer), but verifies the overrides reporting errors there.
+void PatchPrefsJson(base::Value& prefs, base::Value& overrides) {
+  bool has_errors = false;
+  auto error = [&](std::string message) {
+    LOG(ERROR) << prefs_overrides::kFileName << ": " << message;
+    has_errors = true;
+  };
+  auto append_default = [](base::StringPiece path) {
+    return std::string(path) + ".default";
+  };
+
+  if (!overrides.is_dict()) {
+    error("JSON is not an object");
+    return;
+  }
+
+  constexpr size_t kDayIndex = 0;
+  constexpr size_t kNightIndex = 1;
+
+  PrefOverrideValues values;
+  for (auto name_value : overrides.DictItems()) {
+    base::StringPiece name = name_value.first;
+    base::Value& value = name_value.second;
+    std::string* values_string = nullptr;
+    if (name == kComment) {
+      continue;
+    } else if (name == kThemeDefault) {
+      values_string = &values.theme_default;
+    } else if (name == kThemeDefaultDay) {
+      values_string = &values.theme_default_day_or_night[kDayIndex];
+    } else if (name == kThemeDefaultNight) {
+      values_string = &values.theme_default_day_or_night[kNightIndex];
+    } else if (name == kThemeDefaultPrivate) {
+      values_string = &values.theme_default_private;
+    } else if (name == kThemeExtra) {
+      if (!value.is_list()) {
+        error("the value of " + std::string(name) +
+              " property is not an array");
+        continue;
+      }
+      std::vector<std::string> all_theme_ids;
+      for (base::Value& elem : value.GetList()) {
+        std::string verify_error;
+        vivaldi_theme_io::VerifyAndNormalizeJson({.allow_named_id = true}, elem,
+                                                 verify_error);
+        if (!verify_error.empty()) {
+          error(verify_error);
+          break;
+        }
+        std::string* theme_id = elem.FindStringKey(vivaldi_theme_io::kIdKey);
+        if (base::StartsWith(*theme_id, vivaldi_theme_io::kVivaldiIdPrefix)) {
+          error(std::string("id of an extra theme cannot start with ") +
+                vivaldi_theme_io::kVivaldiIdPrefix + ". Use " +
+                vivaldi_theme_io::kVendorIdPrefix + " instead");
+          break;
+        }
+        all_theme_ids.push_back(*theme_id);
+      }
+      if (base::flat_set<std::string>(std::move(all_theme_ids)).size() !=
+          value.GetList().size()) {
+        error("Duplicated theme ids in " + std::string(name));
+      }
+      if (has_errors)
+        continue;
+      values.theme_extra = std::move(value).TakeList();
+    } else {
+      error("unsupported object property - " + std::string(name));
+      continue;
+    }
+    if (values_string) {
+      if (!value.is_string()) {
+        error("the value of " + std::string(name) +
+              " property is not a string");
+        continue;
+      }
+      *values_string = std::move(value.GetString());
+    }
+    VLOG(2) << prefs_overrides::kFileName << ": processed " << name
+            << " override";
+  }
+  if (has_errors)
+    return;
+
+  if (!values.theme_default.empty()) {
+    prefs.FindPath(append_default(vivaldiprefs::kThemesCurrent))->GetString() =
+        std::move(values.theme_default);
+  }
+  if (!values.theme_default_private.empty()) {
+    prefs.FindPath(append_default(vivaldiprefs::kThemesCurrentPrivate))
+        ->GetString() = std::move(values.theme_default_private);
+  }
+  for (size_t i = 0; i < 2; ++i) {
+    DCHECK(i == kDayIndex || i == kNightIndex);
+    std::string& value = values.theme_default_day_or_night[i];
+    if (value.empty()) {
+      value = values.theme_default;
+    }
+    if (value.empty())
+      continue;
+    prefs.FindPath(append_default(vivaldiprefs::kThemeScheduleTimeline))
+        ->GetList()[i]
+        .FindKey("themeId")
+        ->GetString() = value;
+    std::string schedule_path = append_default(vivaldiprefs::kThemeScheduleOS);
+    schedule_path.append(i == kDayIndex ? ".light" : ".dark");
+    prefs.FindPath(schedule_path)->GetString() = std::move(value);
+  }
+  if (!values.theme_extra.empty()) {
+    // Prepent value elements to the original list.
+    base::Value* themes_value =
+        prefs.FindPath(append_default(vivaldiprefs::kThemesSystem));
+    std::vector<base::Value> themes = std::move(*themes_value).TakeList();
+    themes.insert(themes.begin(),
+                  std::make_move_iterator(values.theme_extra.begin()),
+                  std::make_move_iterator(values.theme_extra.end()));
+    *themes_value = base::Value(themes);
+  }
+
+  auto pretty_print_patched_prefs = [](const base::Value& prefs) {
+    std::string text;
+    base::JSONWriter::WriteWithOptions(
+        prefs, base::JSONWriter::OPTIONS_PRETTY_PRINT, &text);
+    return text;
+  };
+  VLOG(7) << "patched default preferences: "
+          << pretty_print_patched_prefs(prefs);
+}
+
+}  // namespace prefs_overrides
+
+#endif  // VIVALDI_PREFERENCE_OVERRIDE_FILE
+
 base::Value ReadPrefsJson() {
   // This might be called outside the startup, eg. during creation of a guest
   // window, so need to allow IO.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
-  base::FilePath prefs_definition_file;
-  std::string prefs_definitions_content;
 
-#if defined(OS_ANDROID)
-  // For Android, get the prefs definitions from assets.
-  prefs_definition_file = base::FilePath(FILE_PATH_LITERAL("assets"));
-  prefs_definition_file =
-      prefs_definition_file.Append(kPrefsDefinitionFileName);
-
-  base::MemoryMappedFile::Region prefs_region;
-  int prefs_fd =
-      base::android::OpenApkAsset(prefs_definition_file.value(), &prefs_region);
-  LOG_IF(FATAL, prefs_fd < 0)
-      << "No preference definitions file in APK assets: "
-      << prefs_definition_file.value();
-  std::unique_ptr<base::MemoryMappedFile> mapped_file(
-      new base::MemoryMappedFile());
-  if (mapped_file->Initialize(base::File(prefs_fd), prefs_region)) {
-    prefs_definitions_content.assign(
-        reinterpret_cast<char*>(mapped_file->data()), mapped_file->length());
+  ResourceReader reader_main(kPrefsDefinitionFileName);
+  absl::optional<base::Value> dictionary = reader_main.ParseJSON();
+  if (!dictionary) {
+    // Any error in the primary preference file is fatal.
+    LOG(FATAL) << reader_main.GetError();
   }
-#else   // defined(OS_ANDROID)
-  GetDeveloperFilePath(kPrefsDefinitionFileName, &prefs_definition_file);
-  if (prefs_definition_file.empty() ||
-      !base::PathExists(prefs_definition_file)) {
-    base::PathService::Get(chrome::DIR_RESOURCES, &prefs_definition_file);
-    prefs_definition_file =
-        prefs_definition_file.Append(kVivaldiResourcesFolder)
-            .Append(kPrefsDefinitionFileName);
+  if (!dictionary->is_dict()) {
+    LOG(FATAL) << kPrefsDefinitionFileName << ": JSON is not an object";
   }
 
-  LOG_IF(FATAL, !base::PathExists(prefs_definition_file))
-      << "Could not find the preference definitions file";
-
-  base::ReadFileToString(prefs_definition_file, &prefs_definitions_content);
-#endif  // OS_ANDROID
-
-  absl::optional<base::Value> prefs_definitions =
-      base::JSONReader::Read(prefs_definitions_content);
-  if (!prefs_definitions || !prefs_definitions->is_dict()) {
-    LOG(FATAL) << "Expected a dictionary at the root of the pref definitions";
+#ifdef VIVALDI_PREFERENCE_OVERRIDE_FILE
+  ResourceReader reader_overrides(prefs_overrides::kFileName);
+  absl::optional<base::Value> overrides = reader_overrides.ParseJSON();
+  if (!overrides) {
+    if (!reader_overrides.IsNotFoundError()) {
+      LOG(ERROR) << prefs_overrides::kFileName << ": "
+                 << reader_overrides.GetError();
+    }
+  } else {
+    prefs_overrides::PatchPrefsJson(*dictionary, *overrides);
   }
-  return std::move(*prefs_definitions);
+#endif  // VIVALDI_PREFERENCE_OVERRIDE_FILE
+
+  return std::move(*dictionary);
 }
 
 }  // namespace

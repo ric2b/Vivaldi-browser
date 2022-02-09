@@ -13,7 +13,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/synchronization/lock.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_log.h"
@@ -34,6 +34,7 @@ namespace power_scheduler {
 // ComputeActiveModeLocked().
 class COMPONENT_EXPORT(POWER_SCHEDULER) PowerModeArbiter
     : public base::trace_event::TraceLog::EnabledStateObserver,
+      public base::trace_event::TraceLog::IncrementalStateObserver,
       public PowerModeVoter::Delegate {
  public:
   class COMPONENT_EXPORT(POWER_SCHEDULER) Observer {
@@ -108,6 +109,9 @@ class COMPONENT_EXPORT(POWER_SCHEDULER) PowerModeArbiter
   // trace_event::TraceLog::EnabledStateObserver implementation:
   void OnTraceLogEnabled() override;
   void OnTraceLogDisabled() override;
+
+  // trace_event::TraceLog::IncrementalStateObserver implementation:
+  void OnIncrementalStateCleared() override;
 
   // Protects trace_observer_{,added_}. Should only be acquired when |lock_| is
   // not held.

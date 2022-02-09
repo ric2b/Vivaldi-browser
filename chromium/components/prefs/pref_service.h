@@ -21,7 +21,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
@@ -46,10 +46,6 @@ class PrefServiceAndroid;
 
 namespace base {
 class FilePath;
-}
-
-namespace metrics {
-class CleanExitBeacon;
 }
 
 namespace prefs {
@@ -172,7 +168,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
     const uint32_t registration_flags_;
 
     // Reference to the PrefService in which this pref was created.
-    const PrefService* const pref_service_;
+    const raw_ptr<const PrefService> pref_service_;
   };
 
   // You may wish to use PrefServiceFactory or one of its subclasses
@@ -427,10 +423,6 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   friend class PrefChangeRegistrar;
   friend class subtle::PrefMemberBase;
 
-  // Give access to CommitPendingWriteSynchronously().
-  // TODO(crbug/1218908): Maybe limit CleanExitBeacon's access.
-  friend class metrics::CleanExitBeacon;
-
   // These are protected so they can only be accessed by the friend
   // classes listed above.
   //
@@ -476,12 +468,6 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // actually get the value.).
   const base::Value* GetPreferenceValue(const std::string& path) const;
   const base::Value* GetPreferenceValueChecked(const std::string& path) const;
-
-  // Like CommitPendingWrite(), but writes to disk on this thread synchronously
-  // rather than scheduling a write. CommitPendingWriteSynchronously() is
-  // appropriate to call only in the exceptional situation in which you need to
-  // write to disk early on during startup before threads have been started.
-  void CommitPendingWriteSynchronously();
 
   const scoped_refptr<PrefRegistry> pref_registry_;
 

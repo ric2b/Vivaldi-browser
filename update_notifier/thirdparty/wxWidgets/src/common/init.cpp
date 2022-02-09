@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef    __BORLANDC__
-    #pragma hdrstop
-#endif  //__BORLANDC__
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
@@ -68,7 +65,7 @@ class wxDummyConsoleApp : public wxAppConsole
 public:
     wxDummyConsoleApp() { }
 
-    virtual int OnRun() { wxFAIL_MSG( wxT("unreachable code") ); return 0; }
+    virtual int OnRun() wxOVERRIDE { wxFAIL_MSG( wxT("unreachable code") ); return 0; }
     virtual bool DoYield(bool, long) { return true; }
 
     wxDECLARE_NO_COPY_CLASS(wxDummyConsoleApp);
@@ -82,7 +79,7 @@ wxDEFINE_SCOPED_PTR(wxAppConsole, wxAppPtrBase)
 class wxAppPtr : public wxAppPtrBase
 {
 public:
-    wxEXPLICIT wxAppPtr(wxAppConsole *ptr = NULL) : wxAppPtrBase(ptr) { }
+    explicit wxAppPtr(wxAppConsole *ptr = NULL) : wxAppPtrBase(ptr) { }
     ~wxAppPtr()
     {
         if ( get() )
@@ -240,7 +237,7 @@ static bool DoCommonPreInit()
     // Note that this must be done for any app, Cocoa or console, whether or
     // not it uses wxLocale.
     //
-    // See http://stackoverflow.com/questions/11713745/why-does-the-printf-family-of-functions-care-about-locale
+    // See https://stackoverflow.com/questions/11713745/why-does-the-printf-family-of-functions-care-about-locale
     setlocale(LC_CTYPE, "UTF-8");
 #endif // wxUSE_UNICODE && defined(__WXOSX__)
 
@@ -308,8 +305,8 @@ bool wxEntryStart(int& argc, wxChar **argv)
     wxAppPtr app(wxTheApp);
     if ( !app.get() )
     {
-        // if not, he might have used IMPLEMENT_APP() to give us a function to
-        // create it
+        // if not, he might have used wxIMPLEMENT_APP() to give us a
+        // function to create it
         wxAppInitializerFunction fnCreate = wxApp::GetInitializerFunction();
 
         if ( fnCreate )
@@ -321,8 +318,8 @@ bool wxEntryStart(int& argc, wxChar **argv)
 
     if ( !app.get() )
     {
-        // either IMPLEMENT_APP() was not used at all or it failed -- in any
-        // case we still need something
+        // either wxIMPLEMENT_APP() was not used at all or it failed -- in
+        // any case we still need something
         app.Set(new wxDummyConsoleApp);
     }
 
@@ -336,7 +333,11 @@ bool wxEntryStart(int& argc, wxChar **argv)
     // remember, possibly modified (e.g. due to removal of toolkit-specific
     // parameters), command line arguments in member variables
     app->argc = argc;
+#if wxUSE_UNICODE
+    app->argv.Init(argc, argv);
+#else
     app->argv = argv;
+#endif
 
     wxCallAppCleanup callAppCleanup(app.get());
 
@@ -483,9 +484,6 @@ int wxEntryReal(int& argc, wxChar **argv)
 
     wxTRY
     {
-#if 0 // defined(__WXOSX__) && wxOSX_USE_COCOA_OR_IPHONE
-        // everything done in OnRun using native callbacks
-#else
         // app initialization
         if ( !wxTheApp->CallOnInit() )
         {
@@ -501,7 +499,7 @@ int wxEntryReal(int& argc, wxChar **argv)
         } callOnExit;
 
         WX_SUPPRESS_UNUSED_WARN(callOnExit);
-#endif
+
         // app execution
         return wxTheApp->OnRun();
     }
@@ -526,10 +524,11 @@ int wxEntry(int& argc, char **argv)
 
 bool wxInitialize()
 {
-    return wxInitialize(0, (wxChar**)NULL);
+    int argc = 0;
+    return wxInitialize(argc, (wxChar**)NULL);
 }
 
-bool wxInitialize(int argc, wxChar **argv)
+bool wxInitialize(int& argc, wxChar **argv)
 {
     wxCRIT_SECT_LOCKER(lockInit, gs_initData.csInit);
 
@@ -543,7 +542,7 @@ bool wxInitialize(int argc, wxChar **argv)
 }
 
 #if wxUSE_UNICODE
-bool wxInitialize(int argc, char **argv)
+bool wxInitialize(int& argc, char **argv)
 {
     wxCRIT_SECT_LOCKER(lockInit, gs_initData.csInit);
 

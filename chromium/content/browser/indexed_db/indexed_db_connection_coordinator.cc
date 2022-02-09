@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -109,10 +110,10 @@ class IndexedDBConnectionCoordinator::ConnectionRequest {
 
   IndexedDBStorageKeyStateHandle storage_key_state_handle_;
   // This is safe because IndexedDBDatabase owns this object.
-  IndexedDBDatabase* db_;
+  raw_ptr<IndexedDBDatabase> db_;
 
   // Rawptr safe because IndexedDBConnectionCoordinator owns this object.
-  IndexedDBConnectionCoordinator* connection_coordinator_;
+  raw_ptr<IndexedDBConnectionCoordinator> connection_coordinator_;
 
   TasksAvailableCallback tasks_available_callback_;
 
@@ -134,6 +135,9 @@ class IndexedDBConnectionCoordinator::OpenRequest
         pending_(std::move(pending_connection)) {
     db_->metadata_.was_cold_open = pending_->was_cold_open;
   }
+
+  OpenRequest(const OpenRequest&) = delete;
+  OpenRequest& operator=(const OpenRequest&) = delete;
 
   // Note: the |tasks_available_callback_| is NOT called here because the state
   // is checked after this method.
@@ -374,10 +378,9 @@ class IndexedDBConnectionCoordinator::OpenRequest
 
   // This raw pointer is stored solely for comparison to the connection in
   // OnConnectionClosed. It is not guaranteed to be pointing to a live object.
-  IndexedDBConnection* connection_ptr_for_close_comparision_ = nullptr;
+  raw_ptr<IndexedDBConnection> connection_ptr_for_close_comparision_ = nullptr;
 
   base::WeakPtrFactory<OpenRequest> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(OpenRequest);
 };
 
 class IndexedDBConnectionCoordinator::DeleteRequest
@@ -395,6 +398,9 @@ class IndexedDBConnectionCoordinator::DeleteRequest
                           std::move(tasks_available_callback)),
         callbacks_(callbacks),
         on_database_deleted_(std::move(on_database_deleted)) {}
+
+  DeleteRequest(const DeleteRequest&) = delete;
+  DeleteRequest& operator=(const DeleteRequest&) = delete;
 
   void Perform(bool has_connections) override {
     if (!has_connections) {
@@ -510,7 +516,6 @@ class IndexedDBConnectionCoordinator::DeleteRequest
   base::OnceClosure on_database_deleted_;
 
   base::WeakPtrFactory<DeleteRequest> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(DeleteRequest);
 };
 
 IndexedDBConnectionCoordinator::IndexedDBConnectionCoordinator(

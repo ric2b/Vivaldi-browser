@@ -73,6 +73,10 @@ base::WeakPtr<Page> PageImpl::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
+bool PageImpl::IsPageScaleFactorOne() {
+  return page_scale_factor_ == 1.f;
+}
+
 void PageImpl::OnFirstVisuallyNonEmptyPaint() {
   did_first_visually_non_empty_paint_ = true;
   delegate_.OnFirstVisuallyNonEmptyPaint(*this);
@@ -100,6 +104,12 @@ void PageImpl::DidChangeBackgroundColor(SkColor background_color,
     main_document_.GetRenderWidgetHost()->GetView()->SetContentBackgroundColor(
         background_color);
   }
+}
+
+void PageImpl::DidInferColorScheme(
+    blink::mojom::PreferredColorScheme color_scheme) {
+  main_document_inferred_color_scheme_ = color_scheme;
+  delegate_.DidInferColorScheme(*this);
 }
 
 void PageImpl::SetContentsMimeType(std::string mime_type) {
@@ -190,6 +200,11 @@ void PageImpl::MaybeDispatchLoadEventsOnPrerenderActivation() {
   if (load_progress() != blink::kFinalLoadProgress)
     main_document_.DidChangeLoadProgress(load_progress());
 
+  // Dispatch DocumentAvailableInMainFrame before dispatching following load
+  // complete events.
+  if (is_document_available_in_main_document())
+    main_document_.DocumentAvailableInMainFrame(uses_temporary_zoom_level());
+
   main_document_.ForEachRenderFrameHost(
       base::BindRepeating([](RenderFrameHostImpl* rfh) {
         rfh->MaybeDispatchDOMContentLoadedOnPrerenderActivation();
@@ -221,6 +236,18 @@ RenderFrameHost& PageImpl::GetMainDocumentHelper() {
 
 RenderFrameHostImpl& PageImpl::GetMainDocument() const {
   return main_document_;
+}
+
+void PageImpl::UpdateBrowserControlsState(cc::BrowserControlsState constraints,
+                                          cc::BrowserControlsState current,
+                                          bool animate) {
+  // TODO(https://crbug.com/1154852): Asking for the LocalMainFrame interface
+  // before the RenderFrame is created is racy.
+  if (!GetMainDocument().IsRenderFrameCreated())
+    return;
+
+  GetMainDocument().GetAssociatedLocalMainFrame()->UpdateBrowserControlsState(
+      constraints, current, animate);
 }
 
 }  // namespace content

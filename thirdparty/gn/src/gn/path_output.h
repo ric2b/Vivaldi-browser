@@ -9,7 +9,6 @@
 #include <string>
 #include <string_view>
 
-#include "base/macros.h"
 #include "gn/escape.h"
 #include "gn/source_dir.h"
 #include "gn/unique_vector.h"

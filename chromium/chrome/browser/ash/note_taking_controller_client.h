@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_ASH_NOTE_TAKING_CONTROLLER_CLIENT_H_
 
 #include "ash/public/cpp/note_taking_client.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/note_taking_helper.h"
@@ -14,10 +13,10 @@
 #include "chrome/browser/profiles/profile_observer.h"
 #include "components/user_manager/user_manager.h"
 
-namespace chromeos {
+namespace ash {
 
 class NoteTakingControllerClient
-    : public ash::NoteTakingClient,
+    : public NoteTakingClient,
       public user_manager::UserManager::UserSessionStateObserver,
       public ProfileObserver {
  public:
@@ -29,7 +28,7 @@ class NoteTakingControllerClient
 
   ~NoteTakingControllerClient() override;
 
-  // ash::NoteTakingClient:
+  // NoteTakingClient:
   bool CanCreateNote() override;
   void CreateNote() override;
 
@@ -54,6 +53,6 @@ class NoteTakingControllerClient
   base::WeakPtrFactory<NoteTakingControllerClient> weak_ptr_factory_{this};
 };
 
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_NOTE_TAKING_CONTROLLER_CLIENT_H_

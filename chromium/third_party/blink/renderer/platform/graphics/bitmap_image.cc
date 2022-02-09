@@ -34,6 +34,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image_metrics.h"
+#include "third_party/blink/renderer/platform/graphics/dark_mode_filter_helper.h"
 #include "third_party/blink/renderer/platform/graphics/deferred_image_decoder.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
@@ -111,7 +112,7 @@ void BitmapImage::NotifyMemoryChanged() {
 
 size_t BitmapImage::TotalFrameBytes() {
   if (cached_frame_)
-    return static_cast<size_t>(Size().Area()) * sizeof(ImageFrame::PixelData);
+    return ClampTo<size_t>(Size().Area64() * sizeof(ImageFrame::PixelData));
   return 0u;
 }
 
@@ -150,13 +151,13 @@ void BitmapImage::UpdateSize() const {
   have_size_ = true;
 }
 
-IntSize BitmapImage::SizeWithConfig(SizeConfig config) const {
+gfx::Size BitmapImage::SizeWithConfig(SizeConfig config) const {
   UpdateSize();
-  IntSize size = size_;
+  gfx::Size size = size_;
   if (config.apply_density && !density_corrected_size_.IsEmpty())
     size = density_corrected_size_;
   if (config.apply_orientation && preferred_size_is_transposed_)
-    return size.TransposedSize();
+    return gfx::TransposeSize(size);
   return size;
 }
 
@@ -165,7 +166,7 @@ void BitmapImage::RecordDecodedImageType(UseCounter* use_counter) {
                                             use_counter);
 }
 
-bool BitmapImage::GetHotSpot(IntPoint& hot_spot) const {
+bool BitmapImage::GetHotSpot(gfx::Point& hot_spot) const {
   return decoder_ && decoder_->HotSpot(hot_spot);
 }
 
@@ -209,9 +210,9 @@ Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
 
 // Return the image density in 0.01 "bits per pixel" rounded to the nearest
 // integer.
-static inline uint64_t ImageDensityInCentiBpp(IntSize size,
+static inline uint64_t ImageDensityInCentiBpp(gfx::Size size,
                                               size_t image_size_bytes) {
-  uint64_t image_area = static_cast<uint64_t>(size.Width()) * size.Height();
+  uint64_t image_area = size.Area64();
   return (static_cast<uint64_t>(image_size_bytes) * 100 * 8 + image_area / 2) /
          image_area;
 }
@@ -227,10 +228,10 @@ Image::SizeAvailability BitmapImage::DataChanged(bool all_data_received) {
   // Report the image density metric right after we received all the data. The
   // SetData() call on the decoder_ (if there is one) should have decoded the
   // images and we should know the image size at this point.
-  if (ShouldReportByteSizeUMAs(all_data_received) &&
-      decoder_->FilenameExtension() == "jpg") {
-    BitmapImageMetrics::CountImageJpegDensity(
-        std::min(Size().Width(), Size().Height()),
+  if (ShouldReportByteSizeUMAs(all_data_received)) {
+    BitmapImageMetrics::CountDecodedImageDensity(
+        decoder_->FilenameExtension(),
+        std::min(Size().width(), Size().height()),
         ImageDensityInCentiBpp(Size(), decoder_->ByteSize()),
         decoder_->ByteSize());
   }
@@ -252,8 +253,8 @@ String BitmapImage::FilenameExtension() const {
 
 void BitmapImage::Draw(cc::PaintCanvas* canvas,
                        const PaintFlags& flags,
-                       const FloatRect& dst_rect,
-                       const FloatRect& src_rect,
+                       const gfx::RectF& dst_rect,
+                       const gfx::RectF& src_rect,
                        const ImageDrawOptions& draw_options) {
   TRACE_EVENT0("skia", "BitmapImage::draw");
 
@@ -269,15 +270,15 @@ void BitmapImage::Draw(cc::PaintCanvas* canvas,
                 .TakePaintImage();
   }
 
-  FloatRect adjusted_src_rect = src_rect;
+  gfx::RectF adjusted_src_rect = src_rect;
   if (!density_corrected_size_.IsEmpty()) {
     FloatSize src_size(size_);
     adjusted_src_rect.Scale(
-        src_size.Width() / density_corrected_size_.Width(),
-        src_size.Height() / density_corrected_size_.Height());
+        src_size.width() / density_corrected_size_.width(),
+        src_size.height() / density_corrected_size_.height());
   }
 
-  adjusted_src_rect.Intersect(SkRect::MakeWH(image.width(), image.height()));
+  adjusted_src_rect.Intersect(gfx::RectF(image.width(), image.height()));
 
   if (adjusted_src_rect.IsEmpty() || dst_rect.IsEmpty())
     return;  // Nothing to draw.
@@ -287,32 +288,42 @@ void BitmapImage::Draw(cc::PaintCanvas* canvas,
     orientation = CurrentFrameOrientation();
 
   PaintCanvasAutoRestore auto_restore(canvas, false);
-  FloatRect adjusted_dst_rect = dst_rect;
+  gfx::RectF adjusted_dst_rect = dst_rect;
   if (orientation != ImageOrientationEnum::kDefault) {
     canvas->save();
 
     // ImageOrientation expects the origin to be at (0, 0)
-    canvas->translate(adjusted_dst_rect.X(), adjusted_dst_rect.Y());
-    adjusted_dst_rect.SetLocation(FloatPoint());
+    canvas->translate(adjusted_dst_rect.x(), adjusted_dst_rect.y());
+    adjusted_dst_rect.set_origin(gfx::PointF());
 
     canvas->concat(AffineTransformToSkMatrix(
-        orientation.TransformFromDefault(adjusted_dst_rect.Size())));
+        orientation.TransformFromDefault(adjusted_dst_rect.size())));
 
     if (orientation.UsesWidthAsHeight()) {
       // The destination rect will have its width and height already reversed
       // for the orientation of the image, as it was needed for page layout, so
       // we need to reverse it back here.
-      adjusted_dst_rect =
-          FloatRect(adjusted_dst_rect.X(), adjusted_dst_rect.Y(),
-                    adjusted_dst_rect.Height(), adjusted_dst_rect.Width());
+      adjusted_dst_rect.set_size(gfx::TransposeSize(adjusted_dst_rect.size()));
     }
   }
 
   uint32_t stable_id = image.stable_id();
   bool is_lazy_generated = image.IsLazyGenerated();
+
+  const cc::PaintFlags* image_flags = &flags;
+  absl::optional<cc::PaintFlags> dark_mode_flags;
+  if (draw_options.apply_dark_mode) {
+    dark_mode_flags = flags;
+    DarkModeFilter* dark_mode_filter = draw_options.dark_mode_filter;
+    DarkModeFilterHelper::ApplyToImageIfNeeded(
+        *dark_mode_filter, this, &dark_mode_flags.value(),
+        gfx::RectFToSkRect(src_rect), gfx::RectFToSkRect(dst_rect));
+    image_flags = &dark_mode_flags.value();
+  }
   canvas->drawImageRect(
-      std::move(image), adjusted_src_rect, adjusted_dst_rect,
-      draw_options.sampling_options, &flags,
+      std::move(image), gfx::RectFToSkRect(adjusted_src_rect),
+      gfx::RectFToSkRect(adjusted_dst_rect), draw_options.sampling_options,
+      image_flags,
       WebCoreClampingModeToSkiaRectConstraint(draw_options.clamping_mode));
 
   if (is_lazy_generated) {
@@ -332,8 +343,8 @@ size_t BitmapImage::FrameCount() {
   return frame_count_;
 }
 
-static inline bool HasVisibleImageSize(IntSize size) {
-  return (size.Width() > 1 || size.Height() > 1);
+static inline bool HasVisibleImageSize(gfx::Size size) {
+  return (size.width() > 1 || size.height() > 1);
 }
 
 bool BitmapImage::IsSizeAvailable() {

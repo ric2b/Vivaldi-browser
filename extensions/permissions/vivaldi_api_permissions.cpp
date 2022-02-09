@@ -42,6 +42,7 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermissionID::kPageActions, "pageActions"},
     {APIPermissionID::kPipPrivate, "pipPrivate"},
     {APIPermissionID::kPrefs, "prefs"},
+    {APIPermissionID::kReadingListPrivate, "readingListPrivate"},
     {APIPermissionID::kRuntimePrivate, "runtimePrivate"},
     {APIPermissionID::kSessionsPrivate, "sessionsPrivate"},
     {APIPermissionID::kSettings, "settings"},

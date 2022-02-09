@@ -56,7 +56,7 @@ private:
     wxSize m_size;
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxMask)
+    wxDECLARE_DYNAMIC_CLASS(wxMask);
 };
 
 //-----------------------------------------------------------------------------
@@ -72,13 +72,6 @@ public:
 
     wxBitmap( const char bits[], int width, int height, int depth = 1 );
     wxBitmap( const char* const* bits );
-#ifdef wxNEEDS_CHARPP
-    // needed for old GCC
-    wxBitmap(char** data)
-    {
-        *this = wxBitmap(const_cast<const char* const*>(data));
-    }
-#endif
     wxBitmap( const wxString &filename, wxBitmapType type = wxBITMAP_DEFAULT_TYPE );
     virtual ~wxBitmap();
 
@@ -100,7 +93,7 @@ public:
     int GetDepth() const;
 
 #if wxUSE_IMAGE
-    wxBitmap( const wxImage& image, int depth = -1 ) { (void)CreateFromImage(image, depth); }
+    wxBitmap( const wxImage& image, int depth = -1, double WXUNUSED(scale) = 1.0 ) { (void)CreateFromImage(image, depth); }
     wxImage ConvertToImage() const;
     bool CreateFromImage(const wxImage& image, int depth = -1);
 #endif // wxUSE_IMAGE
@@ -124,9 +117,11 @@ public:
     // implementation
     // --------------
 
-    void SetHeight( int height );
-    void SetWidth( int width );
-    void SetDepth( int depth );
+#if WXWIN_COMPATIBILITY_3_0
+    wxDEPRECATED(void SetHeight( int height ));
+    wxDEPRECATED(void SetWidth( int width ));
+    wxDEPRECATED(void SetDepth( int depth ));
+#endif
     void SetPixmap( WXPixmap pixmap );
     void SetBitmap( WXPixmap bitmap );
 
@@ -137,12 +132,16 @@ public:
 
     WXDisplay *GetDisplay() const;
 
+    // This is provided only for compatibility with the other ports, there is
+    // no alpha support in X11 bitmaps.
+    bool HasAlpha() const { return false; }
+
 protected:
     virtual wxGDIRefData *CreateGDIRefData() const;
     virtual wxGDIRefData *CloneGDIRefData(const wxGDIRefData *data) const;
 
 private:
-    DECLARE_DYNAMIC_CLASS(wxBitmap)
+    wxDECLARE_DYNAMIC_CLASS(wxBitmap);
 };
 
 #endif // _WX_BITMAP_H_

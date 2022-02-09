@@ -19,23 +19,21 @@ class WXDLLIMPEXP_CORE wxFileDialog: public wxFileDialogBase
 {
 public:
     wxFileDialog(wxWindow *parent,
-                 const wxString& message = wxFileSelectorPromptStr,
+                 const wxString& message = wxASCII_STR(wxFileSelectorPromptStr),
                  const wxString& defaultDir = wxEmptyString,
                  const wxString& defaultFile = wxEmptyString,
-                 const wxString& wildCard = wxFileSelectorDefaultWildcardStr,
+                 const wxString& wildCard = wxASCII_STR(wxFileSelectorDefaultWildcardStr),
                  long style = wxFD_DEFAULT_STYLE,
                  const wxPoint& pos = wxDefaultPosition,
                  const wxSize& sz = wxDefaultSize,
-                 const wxString& name = wxFileDialogNameStr);
+                 const wxString& name = wxASCII_STR(wxFileDialogNameStr));
 
-    virtual void GetPaths(wxArrayString& paths) const;
-    virtual void GetFilenames(wxArrayString& files) const;
-#ifndef __WXWINCE__
-    virtual bool SupportsExtraControl() const { return true; }
+    virtual void GetPaths(wxArrayString& paths) const wxOVERRIDE;
+    virtual void GetFilenames(wxArrayString& files) const wxOVERRIDE;
+    virtual bool SupportsExtraControl() const wxOVERRIDE { return true; }
     void MSWOnInitDialogHook(WXHWND hwnd);
-#endif // __WXWINCE__
 
-    virtual int ShowModal();
+    virtual int ShowModal() wxOVERRIDE;
 
     // wxMSW-specific implementation from now on
     // -----------------------------------------
@@ -46,14 +44,15 @@ public:
     // called from the hook procedure on CDN_SELCHANGE.
     void MSWOnSelChange(WXHWND hDlg);
 
+    // called from the hook procedure on CDN_TYPECHANGE.
+    void MSWOnTypeChange(WXHWND hDlg, int nFilterIndex);
+
 protected:
 
-#if !(defined(__SMARTPHONE__) && defined(__WXWINCE__))
-    virtual void DoMoveWindow(int x, int y, int width, int height);
-    virtual void DoCentre(int dir);
-    virtual void DoGetSize( int *width, int *height ) const;
-    virtual void DoGetPosition( int *x, int *y ) const;
-#endif // !(__SMARTPHONE__ && __WXWINCE__)
+    virtual void DoMoveWindow(int x, int y, int width, int height) wxOVERRIDE;
+    virtual void DoCentre(int dir) wxOVERRIDE;
+    virtual void DoGetSize( int *width, int *height ) const wxOVERRIDE;
+    virtual void DoGetPosition( int *x, int *y ) const wxOVERRIDE;
 
 private:
     wxArrayString m_fileNames;
@@ -63,7 +62,7 @@ private:
     bool m_bMovedWindow;
     int m_centreDir;        // nothing to do if 0
 
-    DECLARE_DYNAMIC_CLASS(wxFileDialog)
+    wxDECLARE_DYNAMIC_CLASS(wxFileDialog);
     wxDECLARE_NO_COPY_CLASS(wxFileDialog);
 };
 

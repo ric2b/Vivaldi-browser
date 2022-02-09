@@ -16,8 +16,8 @@
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -182,7 +182,7 @@ class FrameSchedulerDelegateForTesting : public FrameScheduler::Delegate {
     return base::UnguessableToken::Null();
   }
 
-  MOCK_METHOD1(UpdateActiveSchedulerTrackedFeatures, void(uint64_t));
+  MOCK_METHOD1(UpdateBackForwardCacheDisablingFeatures, void(uint64_t));
 
   int update_task_time_calls_ = 0;
 };
@@ -550,7 +550,7 @@ class FrameSchedulerImplStopInBackgroundDisabledTest
 
 namespace {
 
-class MockLifecycleObserver final : public FrameScheduler::Observer {
+class MockLifecycleObserver {
  public:
   MockLifecycleObserver()
       : not_throttled_count_(0u),
@@ -570,7 +570,7 @@ class MockLifecycleObserver final : public FrameScheduler::Observer {
     EXPECT_EQ(stopped_count_expectation, stopped_count_) << from.ToString();
   }
 
-  void OnLifecycleStateChanged(SchedulingLifecycleState state) override {
+  void OnLifecycleStateChanged(SchedulingLifecycleState state) {
     switch (state) {
       case SchedulingLifecycleState::kNotThrottled:
         not_throttled_count_++;
@@ -586,6 +586,11 @@ class MockLifecycleObserver final : public FrameScheduler::Observer {
         break;
         // We should not have another state, and compiler checks it.
     }
+  }
+
+  FrameOrWorkerScheduler::OnLifecycleStateChangedCallback GetCallback() {
+    return base::BindRepeating(&MockLifecycleObserver::OnLifecycleStateChanged,
+                               base::Unretained(this));
   }
 
  private:
@@ -1102,7 +1107,7 @@ TEST_F(FrameSchedulerImplTestWithUnfreezableLoading,
   EXPECT_EQ(2, counter);
 }
 
-// Tests if throttling observer interfaces work.
+// Tests if throttling observer callbacks work.
 TEST_F(FrameSchedulerImplTest, LifecycleObserver) {
   std::unique_ptr<MockLifecycleObserver> observer =
       std::make_unique<MockLifecycleObserver>();
@@ -1116,7 +1121,7 @@ TEST_F(FrameSchedulerImplTest, LifecycleObserver) {
                                throttled_count, stopped_count);
 
   auto observer_handle = frame_scheduler_->AddLifecycleObserver(
-      FrameScheduler::ObserverType::kLoader, observer.get());
+      FrameScheduler::ObserverType::kLoader, observer->GetCallback());
 
   // Initial state should be synchronously notified here.
   // We assume kNotThrottled is notified as an initial state, but it could
@@ -1215,10 +1220,11 @@ TEST_F(FrameSchedulerImplTest, SubesourceLoadingPaused) {
 
   // Adding the observers should recieve a non-throttled response
   auto loader_observer_handle = frame_scheduler_->AddLifecycleObserver(
-      FrameScheduler::ObserverType::kLoader, loader_observer.get());
+      FrameScheduler::ObserverType::kLoader, loader_observer->GetCallback());
 
   auto worker_observer_handle = frame_scheduler_->AddLifecycleObserver(
-      FrameScheduler::ObserverType::kWorkerScheduler, worker_observer.get());
+      FrameScheduler::ObserverType::kWorkerScheduler,
+      worker_observer->GetCallback());
 
   loader_observer->CheckObserverState(
       FROM_HERE, ++loader_not_throttled_count, loader_hidden_count,
@@ -1245,7 +1251,7 @@ TEST_F(FrameSchedulerImplTest, SubesourceLoadingPaused) {
     auto loader_observer_added_after_stopped_handle =
         frame_scheduler_->AddLifecycleObserver(
             FrameScheduler::ObserverType::kLoader,
-            loader_observer_added_after_stopped.get());
+            loader_observer_added_after_stopped->GetCallback());
     // This observer should see stopped when added.
     loader_observer_added_after_stopped->CheckObserverState(FROM_HERE, 0, 0, 0,
                                                             1u);
@@ -2654,7 +2660,7 @@ TEST_F(FrameSchedulerImplTest, FeatureUpload) {
                 testing::Mock::VerifyAndClearExpectations(delegate);
                 EXPECT_CALL(
                     *delegate,
-                    UpdateActiveSchedulerTrackedFeatures(
+                    UpdateBackForwardCacheDisablingFeatures(
                         (1 << static_cast<size_t>(
                              SchedulingPolicy::Feature::
                                  kMainResourceHasCacheControlNoStore)) |
@@ -2688,7 +2694,7 @@ TEST_F(FrameSchedulerImplTest, FeatureUpload_FrameDestruction) {
                 // Ensure that the feature upload is delayed.
                 testing::Mock::VerifyAndClearExpectations(delegate);
                 EXPECT_CALL(*delegate,
-                            UpdateActiveSchedulerTrackedFeatures(
+                            UpdateBackForwardCacheDisablingFeatures(
                                 (1 << static_cast<size_t>(
                                      SchedulingPolicy::Feature::kWebSocket))));
               },
@@ -2708,7 +2714,7 @@ TEST_F(FrameSchedulerImplTest, FeatureUpload_FrameDestruction) {
                        testing::Mock::VerifyAndClearExpectations(delegate);
                        EXPECT_CALL(
                            *delegate,
-                           UpdateActiveSchedulerTrackedFeatures(testing::_))
+                           UpdateBackForwardCacheDisablingFeatures(testing::_))
                            .Times(0);
                      },
                      frame_scheduler_.get(), frame_scheduler_delegate_.get(),

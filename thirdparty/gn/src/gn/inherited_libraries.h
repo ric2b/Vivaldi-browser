@@ -11,8 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
-
 class Target;
 
 // Represents an ordered uniquified set of all shared/static libraries for
@@ -65,7 +63,8 @@ class InheritedLibraries {
   using LibraryMap = std::map<const Target*, Node>;
   LibraryMap map_;
 
-  DISALLOW_COPY_AND_ASSIGN(InheritedLibraries);
+  InheritedLibraries(const InheritedLibraries&) = delete;
+  InheritedLibraries& operator=(const InheritedLibraries&) = delete;
 };
 
 #endif  // TOOLS_GN_INHERITED_LIBRARIES_H_

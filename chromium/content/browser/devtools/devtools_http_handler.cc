@@ -16,13 +16,12 @@
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
@@ -56,7 +55,7 @@
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
-#include "content/browser/devtools/grit/devtools_resources.h"  // nogncheck
+extern const int kCcompressedProtocolJSON;
 #endif
 
 namespace content {
@@ -662,7 +661,7 @@ void DevToolsHttpHandler::DecompressAndSendJsonProtocol(int connection_id) {
   NOTREACHED();
 #else
   scoped_refptr<base::RefCountedMemory> bytes =
-      GetContentClient()->GetDataResourceBytes(COMPRESSED_PROTOCOL_JSON);
+      GetContentClient()->GetDataResourceBytes(kCcompressedProtocolJSON);
   std::string json_protocol(reinterpret_cast<const char*>(bytes->front()),
                             bytes->size());
 

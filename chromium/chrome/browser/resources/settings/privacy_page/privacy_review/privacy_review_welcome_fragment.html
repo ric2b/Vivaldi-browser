@@ -1,10 +1,16 @@
 <style include="privacy-review-fragment-shared">
+  :host {
+    display: flex;
+    flex-flow: column;
+  }
+
   .main-content {
     align-items: center;
     display: flex;
+    flex: 1;
     flex-direction: column;
     justify-content: space-between;
-    padding: var(--cr-section-padding) 120px;
+    padding: 36px 120px var(--cr-section-padding) 120px;
     text-align: center;
   }
 
@@ -12,25 +18,25 @@
     align-items: center;
     display: flex;
     justify-content: space-between;
-    padding: 16px;
-  }
-
-  h2 {
-    color: var(--cr-primary-text-color);
-    font-size: 22px;
-    line-height: 1.15;
+    padding: 8px 0;
   }
 </style>
 <div class="main-content">
-  <img aria-hidden="true"
-      src="chrome://settings/images/privacy_review_promo_banner.svg">
-  <h2>$i18n{privacyReviewWelcomeCardHeader}</h2>
+  <picture>
+    <source
+        srcset="./images/privacy_review/promo_banner_dark.svg"
+        media="(prefers-color-scheme: dark)">
+    <img alt="" src="./images/privacy_review/promo_banner.svg">
+  </picture>
+  <div class="headline">$i18n{privacyReviewWelcomeCardHeader}</div>
   <div class="cr-secondary-text">$i18n{privacyReviewWelcomeCardSubHeader}</div>
 </div>
 <div class="footer">
-  <cr-checkbox>
-    $i18n{privacyReviewWelcomeCardDontShowAgainCheckbox}
-  </cr-checkbox>
+  <settings-checkbox id="dontShowAgainCheckbox"
+      pref="{{prefs.privacy_review.show_welcome_card}}"
+      label="$i18n{privacyReviewWelcomeCardDontShowAgainCheckbox}"
+      inverted no-set-pref>
+  </settings-checkbox>
   <cr-button class="action-button" id="startButton"
       on-click="onStartButtonClick_">
     $i18n{privacyReviewWelcomeCardStartButton}

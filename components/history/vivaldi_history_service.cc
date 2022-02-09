@@ -2,9 +2,9 @@
 
 #include "components/history/core/browser/history_service.h"
 
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/post_task.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "components/history/core/browser/history_backend.h"
 

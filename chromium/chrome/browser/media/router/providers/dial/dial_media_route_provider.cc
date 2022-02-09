@@ -71,12 +71,6 @@ void DialMediaRouteProvider::Init(
 
   message_sender_ =
       std::make_unique<BufferedMessageSender>(media_router_.get());
-
-  // TODO(crbug.com/816702): This needs to be set properly according to sinks
-  // discovered.
-  media_router_->OnSinkAvailabilityUpdated(
-      mojom::MediaRouteProviderId::DIAL,
-      mojom::MediaRouter::SinkAvailability::PER_SOURCE);
 }
 
 DialMediaRouteProvider::~DialMediaRouteProvider() {
@@ -171,21 +165,6 @@ void DialMediaRouteProvider::JoinRoute(const std::string& media_source,
                             "DIAL activity not found",
                             RouteRequestResult::ROUTE_NOT_FOUND);
   }
-}
-
-void DialMediaRouteProvider::ConnectRouteByRouteId(
-    const std::string& media_source,
-    const std::string& route_id,
-    const std::string& presentation_id,
-    const url::Origin& origin,
-    int32_t tab_id,
-    base::TimeDelta timeout,
-    bool incognito,
-    ConnectRouteByRouteIdCallback callback) {
-  NOTIMPLEMENTED();
-  std::move(callback).Run(
-      absl::nullopt, nullptr, std::string("Not implemented"),
-      RouteRequestResult::ResultCode::NO_SUPPORTED_PROVIDER);
 }
 
 void DialMediaRouteProvider::TerminateRoute(const std::string& route_id,

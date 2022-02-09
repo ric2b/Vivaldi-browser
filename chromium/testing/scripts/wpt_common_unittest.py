@@ -12,9 +12,7 @@ import re
 import unittest
 
 from wpt_common import (
-    BaseWptScriptAdapter, EXTERNAL_WPT_TESTS_DIR, WEB_TESTS_DIR,
-    LAYOUT_TEST_RESULTS_SUBDIR
-)
+    BaseWptScriptAdapter, EXTERNAL_WPT_TESTS_DIR, WEB_TESTS_DIR)
 
 from blinkpy.common.host_mock import MockHost
 from blinkpy.web_tests.port.factory_mock import MockPortFactory
@@ -95,8 +93,9 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
 
     def _create_json_output(self, json_dict):
         """Writing some json output for processing."""
-        self.host.filesystem.write_text_file(OUTPUT_JSON_FILENAME,
-                                             json.dumps(json_dict))
+        with self.host.filesystem.open_text_file_for_writing(
+            OUTPUT_JSON_FILENAME) as f:
+            json.dump(json_dict, f)
 
     def _load_json_output(self, filename=OUTPUT_JSON_FILENAME):
         """Loads the json output after post-processing."""
@@ -245,15 +244,19 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         written_files = self.wpt_adapter.fs.written_files
         self.assertEqual(written_files[OUTPUT_JSON_FILENAME],
                          written_files[os.path.join(
-                             LAYOUT_TEST_RESULTS_SUBDIR, 'full_results.json')])
+                             self.wpt_adapter.layout_test_results_subdir,
+                             'full_results.json')])
         # Verify JSONP
         full_results_jsonp = written_files[os.path.join(
-            LAYOUT_TEST_RESULTS_SUBDIR, 'full_results_jsonp.js')]
+            self.wpt_adapter.layout_test_results_subdir,
+            'full_results_jsonp.js')]
         match = re.match(r'ADD_FULL_RESULTS\((.*)\);$', full_results_jsonp)
         self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), written_files[OUTPUT_JSON_FILENAME])
+        self.assertEqual(match.group(1),
+            written_files[OUTPUT_JSON_FILENAME].decode(encoding='utf-8'))
         failing_results_jsonp = written_files[os.path.join(
-            LAYOUT_TEST_RESULTS_SUBDIR, 'failing_results.json')]
+            self.wpt_adapter.layout_test_results_subdir,
+            'failing_results.json')]
         match = re.match(r'ADD_RESULTS\((.*)\);$', failing_results_jsonp)
         self.assertIsNotNone(match)
         failing_results = json.loads(match.group(1))
@@ -285,8 +288,9 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         self._create_json_output(json_dict)
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         actual_path = os.path.join(artifact_subdir,
                                    "test-actual.txt")
         diff_path = os.path.join(artifact_subdir, "test-diff.txt")
@@ -303,7 +307,8 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
         actual_path = os.path.join(artifact_subdir, "test-actual.txt")
-        self.assertEqual("test.html actual text", written_files[actual_path])
+        self.assertEqual("test.html actual text",
+            written_files[actual_path].decode(encoding='utf-8'))
         # Ensure the artifact in the json was replaced with the location of
         # the newly-created file.
         updated_json = self._load_json_output()
@@ -337,11 +342,13 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         self._create_json_output(json_dict)
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         stderr_path = os.path.join(artifact_subdir,
                                    "test-stderr.txt")
-        self.assertEqual("test.html exceptions", written_files[stderr_path])
+        self.assertEqual("test.html exceptions",
+            written_files[stderr_path].decode(encoding='utf-8'))
         # Ensure the artifact in the json was replaced with the location of
         # the newly-created file.
         updated_json = self._load_json_output()
@@ -372,11 +379,13 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         self._create_json_output(json_dict)
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         crash_log_path = os.path.join(artifact_subdir,
                                       "test-crash-log.txt")
-        self.assertEqual("test.html crashed!", written_files[crash_log_path])
+        self.assertEqual("test.html crashed!",
+            written_files[crash_log_path].decode(encoding='utf-8'))
         # Ensure the artifact in the json was replaced with the location of
         # the newly-created file.
         updated_json = self._load_json_output()
@@ -409,8 +418,9 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         self._create_json_output(json_dict)
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         actual_image_path = os.path.join(artifact_subdir,
                                          "reftest-actual.png")
         self.assertEqual(base64.b64decode('abcd'),
@@ -466,16 +476,18 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
             "test.html checked-in metadata")
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         actual_path = os.path.join(artifact_subdir,
                                    "test-actual.txt")
-        self.assertEqual("test.html actual text", written_files[actual_path])
+        self.assertEqual("test.html actual text",
+            written_files[actual_path].decode(encoding='utf-8'))
         # The checked-in metadata file gets renamed from .ini to -expected.txt
         expected_path = os.path.join(artifact_subdir,
                                      "test-expected.txt")
         self.assertEqual("test.html checked-in metadata",
-                         written_files[expected_path])
+                         written_files[expected_path].decode(encoding='utf-8'))
         # Ensure the artifacts in the json were replaced with the locations of
         # the newly-created files.
         updated_json = self._load_json_output()
@@ -496,8 +508,9 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         # validate the entire diff files to avoid checking line numbers/markup.
         diff_path = os.path.join(artifact_subdir, "test-diff.txt")
         self.assertIn("-test.html checked-in metadata",
-                      written_files[diff_path])
-        self.assertIn("+test.html actual text", written_files[diff_path])
+                      written_files[diff_path].decode(encoding='utf-8'))
+        self.assertIn("+test.html actual text",
+            written_files[diff_path].decode(encoding='utf-8'))
         self.assertEqual(
             [diff_path],
             updated_json["tests"]["external"]["wpt"]["test.html"]["artifacts"]
@@ -505,8 +518,9 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
         pretty_diff_path = os.path.join(artifact_subdir,
                                         "test-pretty-diff.html")
         self.assertIn("test.html checked-in metadata",
-                      written_files[pretty_diff_path])
-        self.assertIn("test.html actual text", written_files[pretty_diff_path])
+                      written_files[pretty_diff_path].decode(encoding='utf-8'))
+        self.assertIn("test.html actual text",
+            written_files[pretty_diff_path].decode(encoding='utf-8'))
         self.assertEqual(
             [pretty_diff_path],
             updated_json["tests"]["external"]["wpt"]["test.html"]["artifacts"]
@@ -541,17 +555,18 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
             "variant.html checked-in metadata")
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         actual_path = os.path.join(artifact_subdir,
                                    "variant_foo=bar_abc-actual.txt")
         self.assertEqual("variant bar/abc actual text",
-                         written_files[actual_path])
+                         written_files[actual_path].decode(encoding='utf-8'))
         # The checked-in metadata file gets renamed from .ini to -expected.txt
         expected_path = os.path.join(artifact_subdir,
                                      "variant_foo=bar_abc-expected.txt")
         self.assertEqual("variant.html checked-in metadata",
-                         written_files[expected_path])
+                         written_files[expected_path].decode(encoding='utf-8'))
         # Ensure the artifacts in the json were replaced with the locations of
         # the newly-created files.
         updated_json = self._load_json_output()
@@ -600,18 +615,19 @@ class BaseWptScriptAdapterTest(unittest.TestCase):
             "dir/multiglob checked-in metadata")
         self.wpt_adapter.do_post_test_run_tasks()
         written_files = self.wpt_adapter.fs.written_files
-        artifact_subdir = os.path.join(LAYOUT_TEST_RESULTS_SUBDIR,
-                                       "external", "wpt")
+        artifact_subdir = os.path.join(
+            self.wpt_adapter.layout_test_results_subdir,
+            "external", "wpt")
         actual_path = os.path.join(artifact_subdir,
                                    "dir/multiglob.https.any.worker-actual.txt")
         self.assertEqual("dir/multiglob worker actual text",
-                         written_files[actual_path])
+                         written_files[actual_path].decode(encoding='utf-8'))
         # The checked-in metadata file gets renamed from .ini to -expected.txt
         expected_path = os.path.join(
             artifact_subdir,
             "dir/multiglob.https.any.worker-expected.txt")
         self.assertEqual("dir/multiglob checked-in metadata",
-                         written_files[expected_path])
+                         written_files[expected_path].decode(encoding='utf-8'))
         # Ensure the artifacts in the json were replaced with the locations of
         # the newly-created files.
         updated_json = self._load_json_output()

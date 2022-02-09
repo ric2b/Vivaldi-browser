@@ -60,7 +60,6 @@ class Origin;
 
 namespace content {
 
-class AppCacheService;
 class BackgroundSyncContext;
 class BrowserContext;
 class ContentIndexContext;
@@ -134,7 +133,6 @@ class CONTENT_EXPORT StoragePartition {
       int frame_tree_node_id) = 0;
 
   virtual storage::QuotaManager* GetQuotaManager() = 0;
-  virtual AppCacheService* GetAppCacheService() = 0;
   virtual BackgroundSyncContext* GetBackgroundSyncContext() = 0;
   virtual storage::FileSystemContext* GetFileSystemContext() = 0;
   virtual FontAccessContext* GetFontAccessContext() = 0;
@@ -165,7 +163,7 @@ class CONTENT_EXPORT StoragePartition {
           optional_proto_db_provider) = 0;
 
   enum : uint32_t {
-    REMOVE_DATA_MASK_APPCACHE = 1 << 0,
+    REMOVE_DATA_MASK_APPCACHE_DEPRECATED = 1 << 0,
     REMOVE_DATA_MASK_COOKIES = 1 << 1,
     REMOVE_DATA_MASK_FILE_SYSTEMS = 1 << 2,
     REMOVE_DATA_MASK_INDEXEDDB = 1 << 3,
@@ -319,8 +317,6 @@ class CONTENT_EXPORT StoragePartition {
   // the function is called again with a new value or a nullptr.
   static void SetDefaultQuotaSettingsForTesting(
       const storage::QuotaSettings* settings);
-
-  static bool IsAppCacheEnabled();
 
  protected:
   virtual ~StoragePartition() {}

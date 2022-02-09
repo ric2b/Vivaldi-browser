@@ -2,7 +2,7 @@
 #                                                                            *
 # Make file for VMS                                                          *
 # Author : J.Jansen (joukj@hrem.nano.tudelft.nl)                             *
-# Date : 24 August 2012                                                      *
+# Date : 4 March 2020                                                        *
 #                                                                            *
 #*****************************************************************************
 
@@ -12,28 +12,28 @@
 .suffixes : .cpp
 
 .ifdef __WXMOTIF__
-CXX_DEFINE = /define=(__WX__=1,__WXMOTIF__=1,__USE_STD_IOSTREAM=1)/name=(as_is,short)\
+CXX_DEFINE = /define=(__WX__=1,__WXMOTIF__=1,__USE_STD_IOSTREAM=1,WXBUILDING=1)/name=(as_is,short)\
 	   /assume=(nostdnew,noglobal_array_new)/include=([],[-.src],[-.include])
-CC_DEFINE = /define=(__WX__=1,__WXMOTIF__=1)/name=(as_is,short)\
+CC_DEFINE = /define=(__WX__=1,__WXMOTIF__=1,WXBUILDING=1)/name=(as_is,short)\
 	/include=([],[-.src],[-.include])
 .else
 .ifdef __WXGTK__
-CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,__USE_STD_IOSTREAM=1)/float=ieee/name=(as_is,short)/ieee=denorm\
+CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,__USE_STD_IOSTREAM=1,WXBUILDING=1)/float=ieee/name=(as_is,short)/ieee=denorm\
 	   /assume=(nostdnew,noglobal_array_new)/include=([],[-.src],[-.include])
-CC_DEFINE = /define=(__WX__=1,__WXGTK__=1)/float=ieee/name=(as_is,short)/ieee=denorm\
+CC_DEFINE = /define=(__WX__=1,__WXGTK__=1,WXBUILDING=1)/float=ieee/name=(as_is,short)/ieee=denorm\
 	/include=([],[-.src],[-.include])
 .else
 .ifdef __WXGTK2__
-CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1,__USE_STD_IOSTREAM=1)/float=ieee/name=(as_is,short)/ieee=denorm\
+CXX_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1,__USE_STD_IOSTREAM=1,WXBUILDING=1)/float=ieee/name=(as_is,short)/ieee=denorm\
 	   /assume=(nostdnew,noglobal_array_new)/include=([],[-.src],[-.include])
-CC_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1)/float=ieee/name=(as_is,short)\
+CC_DEFINE = /define=(__WX__=1,__WXGTK__=1,VMS_GTK2=1,WXBUILDING=1)/float=ieee/name=(as_is,short)\
 	/ieee=denorm/include=([],[-.src],[-.include])
 .else
 .ifdef __WXX11__
-CXX_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__==1,__USE_STD_IOSTREAM=1)/float=ieee\
+CXX_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__==1,__USE_STD_IOSTREAM=1,WXBUILDING=1)/float=ieee\
 	/name=(as_is,short)/assume=(nostdnew,noglobal_array_new)\
 	/include=([],[-.src],[-.include])
-CC_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__==1)/float=ieee\
+CC_DEFINE = /define=(__WX__=1,__WXX11__=1,__WXUNIVERSAL__==1,WXBUILDING=1)/float=ieee\
 	/name=(as_is,short)/include=([],[-.src],[-.include])
 .else
 CXX_DEFINE =
@@ -50,12 +50,12 @@ CC_DEFINE =
 .c.obj :
 	cc $(CFLAGS)$(CC_DEFINE) $(MMS$TARGET_NAME).c
 
-OBJECTS=Accessor.obj,CharacterSet.obj,LexerBase.obj,LexerModule.obj,\
-	LexerNoExceptions.obj,LexerSimple.obj,PropSetSimple.obj,\
+OBJECTS=Accessor.obj,CharacterCategory.obj,CharacterSet.obj,LexerBase.obj,\
+	LexerModule.obj,LexerNoExceptions.obj,LexerSimple.obj,PropSetSimple.obj,\
 	StyleContext.obj,WordList.obj
 
-SOURCES=Accessor.cxx,CharacterSet.cxx,LexerBase.cxx,LexerModule.cxx,\
-	LexerNoExceptions.cxx,LexerSimple.cxx,PropSetSimple.cxx,\
+SOURCES=Accessor.cxx,CharacterCategory.cxx,CharacterSet.cxx,LexerBase.cxx,\
+	LexerModule.cxx,LexerNoExceptions.cxx,LexerSimple.cxx,PropSetSimple.cxx,\
 	StyleContext.cxx,WordList.cxx
 
 all : $(SOURCES)
@@ -83,6 +83,7 @@ all : $(SOURCES)
 $(OBJECTS) : [----.include.wx]setup.h
 
 Accessor.obj : Accessor.cxx
+CharacterCategory.obj : CharacterCategory.cxx
 CharacterSet.obj : CharacterSet.cxx
 LexerBase.obj : LexerBase.cxx
 LexerModule.obj : LexerModule.cxx

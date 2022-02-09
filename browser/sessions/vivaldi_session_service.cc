@@ -164,8 +164,8 @@ base::File* VivaldiSessionService::OpenAndWriteHeader(
   DCHECK(!path.empty());
   std::unique_ptr<base::File> file(new base::File(
       path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE |
-                base::File::FLAG_EXCLUSIVE_WRITE |
-                base::File::FLAG_EXCLUSIVE_READ));
+                base::File::FLAG_WIN_EXCLUSIVE_WRITE |
+                base::File::FLAG_WIN_EXCLUSIVE_READ));
   if (!file->IsValid())
     return NULL;
   FileHeader header;
@@ -247,11 +247,7 @@ bool VivaldiSessionService::Save(const base::FilePath& file_name) {
   return true;
 }
 
-bool VivaldiSessionService::ShouldTrackWindow(Browser* browser,
-                                              Profile* profile) {
-  // Skip windows not opened with the same profile.
-  if (browser->profile() != profile)
-    return false;
+bool VivaldiSessionService::ShouldTrackWindow(Browser* browser) {
   if (browser->is_type_app() && browser->is_type_popup() &&
       !browser->is_trusted_source()) {
     return false;
@@ -545,7 +541,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       group, false,  // select
       tab.pinned, base::TimeTicks(), session_storage_namespace.get(),
-      tab.user_agent_override, true /* from_session_restore */,
+      tab.user_agent_override, tab.extra_data, true /* from_session_restore */,
       tab.page_action_overrides, tab.ext_data);
   // Regression check: check that the tab didn't start loading right away. The
   // focused tab will be loaded by Browser, and TabLoader will load the rest.

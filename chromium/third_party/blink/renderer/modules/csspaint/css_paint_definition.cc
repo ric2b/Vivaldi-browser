@@ -26,12 +26,12 @@ namespace blink {
 
 namespace {
 
-FloatSize GetSpecifiedSize(const FloatSize& size, float zoom) {
+gfx::SizeF GetSpecifiedSize(const gfx::SizeF& size, float zoom) {
   float un_zoom_factor = 1 / zoom;
   auto un_zoom_fn = [un_zoom_factor](float a) -> float {
     return a * un_zoom_factor;
   };
-  return FloatSize(un_zoom_fn(size.Width()), un_zoom_fn(size.Height()));
+  return gfx::SizeF(un_zoom_fn(size.width()), un_zoom_fn(size.height()));
 }
 
 }  // namespace
@@ -43,12 +43,14 @@ CSSPaintDefinition::CSSPaintDefinition(
     const Vector<CSSPropertyID>& native_invalidation_properties,
     const Vector<AtomicString>& custom_invalidation_properties,
     const Vector<CSSSyntaxDefinition>& input_argument_types,
-    const PaintRenderingContext2DSettings* context_settings)
+    const PaintRenderingContext2DSettings* context_settings,
+    PaintWorkletGlobalScope* global_scope)
     : script_state_(script_state),
       constructor_(constructor),
       paint_(paint),
       did_call_constructor_(false),
-      context_settings_(context_settings) {
+      context_settings_(context_settings),
+      global_scope_(global_scope) {
   native_invalidation_properties_ = native_invalidation_properties;
   custom_invalidation_properties_ = custom_invalidation_properties;
   input_argument_types_ = input_argument_types;
@@ -73,7 +75,7 @@ sk_sp<PaintRecord> CSSPaintDefinition::Paint(
   ApplyAnimatedPropertyOverrides(style_map, animated_property_values);
 
   sk_sp<PaintRecord> result =
-      Paint(FloatSize(input->GetSize()), input->EffectiveZoom(), style_map,
+      Paint(input->GetSize(), input->EffectiveZoom(), style_map,
             &paint_arguments, input->DeviceScaleFactor());
 
   // Return empty record if paint fails.
@@ -83,12 +85,12 @@ sk_sp<PaintRecord> CSSPaintDefinition::Paint(
 }
 
 sk_sp<PaintRecord> CSSPaintDefinition::Paint(
-    const FloatSize& container_size,
+    const gfx::SizeF& container_size,
     float zoom,
     StylePropertyMapReadOnly* style_map,
     const CSSStyleValueVector* paint_arguments,
     float device_scale_factor) {
-  const FloatSize specified_size = GetSpecifiedSize(container_size, zoom);
+  const gfx::SizeF specified_size = GetSpecifiedSize(container_size, zoom);
   ScriptState::Scope scope(script_state_);
 
   MaybeCreatePaintInstance();
@@ -101,8 +103,8 @@ sk_sp<PaintRecord> CSSPaintDefinition::Paint(
 
   // Do subpixel snapping for the |container_size|.
   auto* rendering_context = MakeGarbageCollected<PaintRenderingContext2D>(
-      RoundedIntSize(container_size), context_settings_, zoom,
-      device_scale_factor);
+      ToRoundedSize(container_size), context_settings_, zoom,
+      device_scale_factor, global_scope_);
   PaintSize* paint_size = MakeGarbageCollected<PaintSize>(specified_size);
 
   CSSStyleValueVector empty_paint_arguments;
@@ -115,7 +117,7 @@ sk_sp<PaintRecord> CSSPaintDefinition::Paint(
   // The paint function may have produced an error, in which case produce an
   // invalid image.
   if (paint_
-          ->Invoke(instance_.NewLocal(isolate), rendering_context, paint_size,
+          ->Invoke(instance_.Get(isolate), rendering_context, paint_size,
                    style_map, *paint_arguments)
           .IsNothing()) {
     return nullptr;
@@ -173,7 +175,7 @@ void CSSPaintDefinition::MaybeCreatePaintInstance() {
   if (!constructor_->Construct().To(&paint_instance))
     return;
 
-  instance_.Set(constructor_->GetIsolate(), paint_instance.V8Value());
+  instance_.Reset(constructor_->GetIsolate(), paint_instance.V8Value());
 }
 
 void CSSPaintDefinition::Trace(Visitor* visitor) const {
@@ -182,6 +184,7 @@ void CSSPaintDefinition::Trace(Visitor* visitor) const {
   visitor->Trace(instance_);
   visitor->Trace(context_settings_);
   visitor->Trace(script_state_);
+  visitor->Trace(global_scope_);
   PaintDefinition::Trace(visitor);
 }
 

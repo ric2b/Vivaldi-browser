@@ -13,21 +13,13 @@
 #include "base/values.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/chrome_constants.h"
-#include "chrome/common/pref_names.h"
-#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/policy_constants.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/version_info/channel.h"
-#include "components/version_info/version_info.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -76,7 +68,7 @@ class ScopedLacrosLaunchSwitchCache {
 
 class BrowserUtilTest : public testing::Test {
  public:
-  BrowserUtilTest() : local_state_(TestingBrowserProcess::GetGlobal()) {}
+  BrowserUtilTest() = default;
   ~BrowserUtilTest() override = default;
 
   void SetUp() override {
@@ -103,20 +95,58 @@ class BrowserUtilTest : public testing::Test {
   ash::FakeChromeUserManager* fake_user_manager_ = nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   TestingPrefServiceSimple pref_service_;
-
-  ScopedTestingLocalState local_state_;
 };
 
-TEST_F(BrowserUtilTest, LacrosEnabledByFlag) {
+class LacrosSupportBrowserUtilTest : public BrowserUtilTest {
+ public:
+  LacrosSupportBrowserUtilTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        chromeos::features::kLacrosSupport);
+  }
+  ~LacrosSupportBrowserUtilTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(LacrosSupportBrowserUtilTest, LacrosEnabledByFlag) {
   AddRegularUser("user@test.com");
 
-  // Lacros is disabled because the feature isn't enabled by default.
+  // Lacros is initially disabled.
   EXPECT_FALSE(browser_util::IsLacrosEnabled());
 
   // Enabling the flag enables Lacros.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(chromeos::features::kLacrosSupport);
   EXPECT_TRUE(browser_util::IsLacrosEnabled());
+}
+
+TEST_F(BrowserUtilTest, LacrosDisabledWithoutMigration) {
+  // This sets `g_browser_process->local_state()` which activates the check
+  // `IsProfileMigrationCompletedForUser()` inside `IsLacrosEnabled()`.
+  TestingBrowserProcess::GetGlobal()->SetLocalState(&pref_service_);
+  // Note that disabling lacros is only enabled for Googlers at the moment.
+  // TODO(crbug.com/1266669): Once profile migration is enabled for
+  // non-googlers, add a @test.com account instead.
+  AddRegularUser("user@google.com");
+  const user_manager::User* const user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(&testing_profile_);
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(chromeos::features::kLacrosSupport);
+
+  // Lacros is now enabled for profile migration to happen.
+  EXPECT_TRUE(browser_util::IsLacrosEnabledForMigration(user));
+  // Since profile migration hasn't been marked as completed, this returns
+  // false.
+  EXPECT_FALSE(browser_util::IsLacrosEnabled());
+
+  browser_util::SetProfileMigrationCompletedForUser(&pref_service_,
+                                                    user->username_hash());
+
+  EXPECT_TRUE(browser_util::IsLacrosEnabled());
+
+  // Clean up Local State.
+  TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
 }
 
 TEST_F(BrowserUtilTest, LacrosGoogleRollout) {
@@ -202,7 +232,7 @@ TEST_F(BrowserUtilTest, BlockedForChildUser) {
   EXPECT_FALSE(browser_util::IsLacrosEnabled(Channel::UNKNOWN));
 }
 
-TEST_F(BrowserUtilTest, AshWebBrowserEnabled) {
+TEST_F(LacrosSupportBrowserUtilTest, AshWebBrowserEnabled) {
   base::test::ScopedFeatureList feature_list;
   AddRegularUser("user@managedchrome.com");
   testing_profile_.GetProfilePolicyConnector()->OverrideIsManagedForTesting(
@@ -278,7 +308,7 @@ TEST_F(BrowserUtilTest, IsAshWebBrowserDisabled) {
   EXPECT_FALSE(browser_util::IsAshWebBrowserEnabled(Channel::STABLE));
 }
 
-TEST_F(BrowserUtilTest, LacrosPrimaryBrowserByFlags) {
+TEST_F(LacrosSupportBrowserUtilTest, LacrosPrimaryBrowserByFlags) {
   AddRegularUser("user@test.com");
   { EXPECT_FALSE(browser_util::IsLacrosPrimaryBrowser()); }
 
@@ -367,20 +397,6 @@ TEST_F(BrowserUtilTest, ManagedAccountLacrosPrimary) {
     EXPECT_TRUE(browser_util::IsLacrosPrimaryBrowserAllowed(Channel::STABLE));
     EXPECT_TRUE(browser_util::IsLacrosPrimaryBrowser(Channel::STABLE));
   }
-}
-
-TEST_F(BrowserUtilTest, GetInterfaceVersions) {
-  base::flat_map<base::Token, uint32_t> versions =
-      browser_util::GetInterfaceVersions();
-
-  // Check that a known interface with version > 0 is present and has non-zero
-  // version.
-  EXPECT_GT(versions[mojom::KeystoreService::Uuid_], 0);
-
-  // Check that the empty token is not present.
-  base::Token token;
-  auto it = versions.find(token);
-  EXPECT_EQ(it, versions.end());
 }
 
 TEST_F(BrowserUtilTest, MetadataMissing) {
@@ -620,58 +636,6 @@ TEST_F(BrowserUtilTest, GetRootfsLacrosVersionMayBlockBadJson) {
   EXPECT_FALSE(browser_util::GetRootfsLacrosVersionMayBlock(path).IsValid());
 }
 
-TEST_F(BrowserUtilTest, IsSigninProfileOrBelongsToAffiliatedUserSigninProfile) {
-  TestingProfile::Builder builder;
-  builder.SetPath(base::FilePath(FILE_PATH_LITERAL(chrome::kInitialProfile)));
-  std::unique_ptr<Profile> signin_profile = builder.Build();
-
-  EXPECT_TRUE(browser_util::IsSigninProfileOrBelongsToAffiliatedUser(
-      signin_profile.get()));
-}
-
-TEST_F(BrowserUtilTest, IsSigninProfileOrBelongsToAffiliatedUserOffTheRecord) {
-  Profile* otr_profile = testing_profile_.GetOffTheRecordProfile(
-      Profile::OTRProfileID::CreateUniqueForTesting(),
-      /*create_if_needed=*/true);
-
-  EXPECT_FALSE(
-      browser_util::IsSigninProfileOrBelongsToAffiliatedUser(otr_profile));
-}
-
-TEST_F(BrowserUtilTest,
-       IsSigninProfileOrBelongsToAffiliatedUserAffiliatedUser) {
-  AccountId account_id = AccountId::FromUserEmail("user@test.com");
-  const User* user = fake_user_manager_->AddUserWithAffiliation(
-      account_id, /*is_affiliated=*/true);
-  fake_user_manager_->UserLoggedIn(account_id, user->username_hash(),
-                                   /*browser_restart=*/false,
-                                   /*is_child=*/false);
-  chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
-      user, &testing_profile_);
-
-  EXPECT_TRUE(browser_util::IsSigninProfileOrBelongsToAffiliatedUser(
-      &testing_profile_));
-}
-
-TEST_F(BrowserUtilTest,
-       IsSigninProfileOrBelongsToAffiliatedUserNotAffiliatedUser) {
-  AddRegularUser("user@test.com");
-
-  EXPECT_FALSE(browser_util::IsSigninProfileOrBelongsToAffiliatedUser(
-      &testing_profile_));
-}
-
-TEST_F(BrowserUtilTest,
-       IsSigninProfileOrBelongsToAffiliatedUserLockScreenProfile) {
-  TestingProfile::Builder builder;
-  builder.SetPath(
-      base::FilePath(FILE_PATH_LITERAL(chrome::kLockScreenProfile)));
-  std::unique_ptr<Profile> lock_screen_profile = builder.Build();
-
-  EXPECT_FALSE(browser_util::IsSigninProfileOrBelongsToAffiliatedUser(
-      lock_screen_profile.get()));
-}
-
 TEST_F(BrowserUtilTest, StatefulLacrosSelectionUpdateChannel) {
   // Assert that when no Lacros stability switch is specified, we return the
   // "unknown" channel.
@@ -686,6 +650,25 @@ TEST_F(BrowserUtilTest, StatefulLacrosSelectionUpdateChannel) {
   ASSERT_EQ(Channel::BETA, browser_util::GetLacrosSelectionUpdateChannel(
                                LacrosSelection::kStateful));
   cmdline->RemoveSwitch(browser_util::kLacrosStabilitySwitch);
+}
+
+TEST_F(BrowserUtilTest, IsProfileMigrationCompletedForUser) {
+  const std::string user_id_hash = "abcd";
+
+  // `IsLacrosDisabledAfterSkippedOrFailedMigration()` should return
+  // false by default.
+  EXPECT_FALSE(browser_util::IsProfileMigrationCompletedForUser(&pref_service_,
+                                                                user_id_hash));
+
+  browser_util::SetProfileMigrationCompletedForUser(&pref_service_,
+                                                    user_id_hash);
+  EXPECT_TRUE(browser_util::IsProfileMigrationCompletedForUser(&pref_service_,
+                                                               user_id_hash));
+
+  browser_util::ClearProfileMigrationCompletedForUser(&pref_service_,
+                                                      user_id_hash);
+  EXPECT_FALSE(browser_util::IsProfileMigrationCompletedForUser(&pref_service_,
+                                                                user_id_hash));
 }
 
 }  // namespace crosapi

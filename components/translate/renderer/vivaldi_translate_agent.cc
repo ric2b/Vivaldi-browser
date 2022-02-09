@@ -103,7 +103,7 @@ void VivaldiTranslateAgent::ReadyToCommitNavigation(
 const int kVivaldiTranslateStatusCheckDelayMs = 50;
 
 base::TimeDelta VivaldiTranslateAgent::AdjustDelay(int delay_in_milliseconds) {
-  return base::TimeDelta::FromMilliseconds(kVivaldiTranslateStatusCheckDelayMs);
+  return base::Milliseconds(kVivaldiTranslateStatusCheckDelayMs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/i18n/rtl.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -137,6 +138,10 @@ class CONTENT_EXPORT TextInputManager {
   };
 
   explicit TextInputManager(bool should_do_learning);
+
+  TextInputManager(const TextInputManager&) = delete;
+  TextInputManager& operator=(const TextInputManager&) = delete;
+
   ~TextInputManager();
 
   // Returns the currently active widget, i.e., the RWH which is associated with
@@ -164,10 +169,6 @@ class CONTENT_EXPORT TextInputManager {
   absl::optional<ui::GrammarFragment> GetGrammarFragment(
       gfx::Range range) const;
 
-  // Returns if the given |range| is overlapping with any existing spellcheck
-  // markers.
-  bool OverlapsWithSpellCheckMarker(const gfx::Range range) const;
-
   // Returns the selection bounds information for |view|. If |view| == nullptr,
   // it will return the corresponding information for |active_view_| or nullptr
   // if there are no active views.
@@ -183,6 +184,12 @@ class CONTENT_EXPORT TextInputManager {
   // In the case of |active_view_| == nullptr, the method will return nullptr.
   const TextSelection* GetTextSelection(
       RenderWidgetHostViewBase* view = nullptr) const;
+
+  // Returns the bounds of the text control in the root frame.
+  const absl::optional<gfx::Rect> GetTextControlBounds() const;
+
+  // Returns the bounds of the selected text in the root frame.
+  const absl::optional<gfx::Rect> GetTextSelectionBounds() const;
 
   // ---------------------------------------------------------------------------
   // The following methods are called by RWHVs on the tab to update their IME-
@@ -268,7 +275,7 @@ class CONTENT_EXPORT TextInputManager {
   // The view with active text input state, i.e., a focused <input> element.
   // It will be nullptr if no such view exists. Note that the active view
   // cannot have a |TextInputState.type| of ui::TEXT_INPUT_TYPE_NONE.
-  RenderWidgetHostViewBase* active_view_;
+  raw_ptr<RenderWidgetHostViewBase> active_view_;
 
   // The following maps track corresponding IME state for views. For each view,
   // the values in the map are initialized and cleared in Register and
@@ -283,8 +290,6 @@ class CONTENT_EXPORT TextInputManager {
   bool should_do_learning_;
 
   base::ObserverList<Observer>::Unchecked observer_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(TextInputManager);
 };
 }
 

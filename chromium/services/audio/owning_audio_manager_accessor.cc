@@ -8,12 +8,11 @@
 #include <utility>
 
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/sequenced_task_runner.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/default_tick_clock.h"
 #include "media/audio/audio_features.h"
@@ -145,8 +144,9 @@ media::AudioManager* OwningAudioManagerAccessor::GetAudioManager() {
     DCHECK(audio_manager_factory_cb_);
     DCHECK(log_factory_);
     base::TimeTicks creation_start_time = base::TimeTicks::Now();
-    audio_manager_ = std::move(audio_manager_factory_cb_)
-                         .Run(std::make_unique<MainThread>(), log_factory_);
+    audio_manager_ =
+        std::move(audio_manager_factory_cb_)
+            .Run(std::make_unique<MainThread>(), log_factory_.get());
     DCHECK(audio_manager_);
     UMA_HISTOGRAM_TIMES("Media.AudioService.AudioManagerStartupTime",
                         base::TimeTicks::Now() - creation_start_time);

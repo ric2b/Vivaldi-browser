@@ -10,6 +10,7 @@
 #include "base/callback_helpers.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/guid.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "content/browser/background_fetch/background_fetch_job_controller.h"
@@ -66,7 +67,7 @@ class FakeController : public BackgroundFetchJobController {
   }
 
  private:
-  std::vector<std::string>* controller_sequence_list_;
+  raw_ptr<std::vector<std::string>> controller_sequence_list_;
 };
 
 class BackgroundFetchSchedulerTest : public BackgroundFetchTestBase {
@@ -120,7 +121,7 @@ class BackgroundFetchSchedulerTest : public BackgroundFetchTestBase {
     data_manager_->CreateRegistration(
         registration_id, std::move(fetch_requests),
         blink::mojom::BackgroundFetchOptions::New(), SkBitmap(),
-        /* start_paused= */ false, base::DoNothing());
+        /* start_paused= */ false, net::IsolationInfo(), base::DoNothing());
     task_environment_.RunUntilIdle();
 
     auto controller = std::make_unique<FakeController>(
@@ -131,7 +132,8 @@ class BackgroundFetchSchedulerTest : public BackgroundFetchTestBase {
     controller->InitializeRequestStatus(/* completed_downloads= */ 0,
                                         requests.size(),
                                         /* active_fetch_requests= */ {},
-                                        /* start_paused= */ false);
+                                        /* start_paused= */ false,
+                                        /* isolation_info= */ absl::nullopt);
     scheduler_->job_controllers_[registration_id.unique_id()] =
         std::move(controller);
     scheduler_->controller_ids_.push_back(registration_id);

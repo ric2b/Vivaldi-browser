@@ -4,7 +4,7 @@
 // Author:      Vadim Zeitlin
 // Modified by:
 // Created:     2005-01-09
-// Copyright:   (c) 2005 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2005 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 /////////////////////////////////////////////////////////////////////////////
 
@@ -18,9 +18,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_DATEPICKCTRL
 
@@ -37,7 +34,7 @@
 #include "wx/datectrl.h"
 #include "wx/dateevt.h"
 
-IMPLEMENT_DYNAMIC_CLASS(wxDatePickerCtrl, wxControl)
+wxIMPLEMENT_DYNAMIC_CLASS(wxDatePickerCtrl, wxControl);
 
 // ============================================================================
 // implementation
@@ -70,17 +67,13 @@ WXDWORD wxDatePickerCtrl::MSWGetStyle(long style, WXDWORD *exstyle) const
 {
     WXDWORD styleMSW = wxDatePickerCtrlBase::MSWGetStyle(style, exstyle);
 
-    // although MSDN doesn't mention it, DTS_UPDOWN doesn't work with
-    // comctl32.dll 4.72
-    if ( wxApp::GetComCtl32Version() > 472 && (style & wxDP_SPIN) )
+    if ( style & wxDP_SPIN )
         styleMSW |= DTS_UPDOWN;
     //else: drop down by default
 
-#ifdef DTS_SHORTDATECENTURYFORMAT
     if ( style & wxDP_SHOWCENTURY )
         styleMSW |= DTS_SHORTDATECENTURYFORMAT;
     else
-#endif // DTS_SHORTDATECENTURYFORMAT
         styleMSW |= DTS_SHORTDATEFORMAT;
 
     if ( style & wxDP_ALLOWNONE )
@@ -138,15 +131,22 @@ void wxDatePickerCtrl::SetValue(const wxDateTime& dt)
         m_date.ResetTime();
 }
 
-wxDateTime wxDatePickerCtrl::GetValue() const
+wxDateTime wxDatePickerCtrl::MSWGetControlValue() const
 {
-#if wxDEBUG_LEVEL
     wxDateTime dt;
     SYSTEMTIME st;
     if ( DateTime_GetSystemtime(GetHwnd(), &st) == GDT_VALID )
     {
         dt.SetFromMSWSysDate(st);
     }
+
+    return dt;
+}
+
+wxDateTime wxDatePickerCtrl::GetValue() const
+{
+#if wxDEBUG_LEVEL
+    const wxDateTime dt = MSWGetControlValue();
 
     wxASSERT_MSG( m_date.IsValid() == dt.IsValid() &&
                     (!dt.IsValid() || dt == m_date),
@@ -176,7 +176,12 @@ void wxDatePickerCtrl::SetRange(const wxDateTime& dt1, const wxDateTime& dt2)
     if ( !DateTime_SetRange(GetHwnd(), flags, st) )
     {
         wxLogDebug(wxT("DateTime_SetRange() failed"));
+        return;
     }
+
+    // Setting the range could have changed the current control value if the
+    // old one wasn't inside the new range, so update it.
+    m_date = MSWGetControlValue();
 }
 
 bool wxDatePickerCtrl::GetRange(wxDateTime *dt1, wxDateTime *dt2) const
@@ -186,7 +191,11 @@ bool wxDatePickerCtrl::GetRange(wxDateTime *dt1, wxDateTime *dt2) const
     DWORD flags = DateTime_GetRange(GetHwnd(), st);
     if ( dt1 )
     {
-        if ( flags & GDTR_MIN )
+        // Workaround for https://bugs.winehq.org/show_bug.cgi?id=40301: WINE
+        // returns GDTR_MIN even if there is no lower range bound. Luckily we
+        // can check for it easily as the SYSTEMTIME contains only zeroes in
+        // this case and 0 is invalid value for wMonth field.
+        if ( (flags & GDTR_MIN) && (st[0].wMonth != 0) )
             dt1->SetFromMSWSysDate(st[0]);
         else
             *dt1 = wxDefaultDateTime;

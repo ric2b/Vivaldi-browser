@@ -26,7 +26,7 @@ import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.j
 import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
-import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {GlobalScrollTargetMixin} from '../global_scroll_target_mixin.js';
 import {loadTimeData} from '../i18n_setup.js';
@@ -35,7 +35,7 @@ import {StoredAccount, SyncBrowserProxyImpl, SyncStatus} from '../people_page/sy
 import {routes} from '../route.js';
 import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
 
-import {MergePasswordsStoreCopiesBehavior, MergePasswordsStoreCopiesBehaviorInterface} from './merge_passwords_store_copies_behavior.js';
+import {MergePasswordsStoreCopiesMixin, MergePasswordsStoreCopiesMixinInterface} from './merge_passwords_store_copies_mixin.js';
 import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
 import {AccountStorageOptInStateChangedListener, PasswordManagerImpl} from './password_manager_proxy.js';
 import {PasswordsListHandlerElement} from './passwords_list_handler.js';
@@ -65,15 +65,11 @@ interface PasswordsDeviceSectionElement {
 type Constructor<T> = new (...args: any[]) => T;
 
 const PasswordsDeviceSectionElementBase =
-    mixinBehaviors(
-        [
-          MergePasswordsStoreCopiesBehavior,
-        ],
-        GlobalScrollTargetMixin(
-            RouteObserverMixin(WebUIListenerMixin(PolymerElement)) as unknown as
-            Constructor<PolymerElement>)) as {
+    MergePasswordsStoreCopiesMixin(GlobalScrollTargetMixin(WebUIListenerMixin(
+        RouteObserverMixin(PolymerElement) as unknown as
+        Constructor<PolymerElement>))) as {
       new (): PolymerElement & WebUIListenerMixinInterface &
-      MergePasswordsStoreCopiesBehaviorInterface & RouteObserverMixinInterface
+      MergePasswordsStoreCopiesMixinInterface & RouteObserverMixinInterface
     };
 
 class PasswordsDeviceSectionElement extends PasswordsDeviceSectionElementBase {
@@ -283,10 +279,6 @@ class PasswordsDeviceSectionElement extends PasswordsDeviceSectionElementBase {
   }
 
   private computeShouldShowMoveMultiplePasswordsBanner_(): boolean {
-    if (!loadTimeData.getBoolean('enableMovingMultiplePasswordsToAccount')) {
-      return false;
-    }
-
     if (this.allDevicePasswords_.length === 0) {
       return false;
     }

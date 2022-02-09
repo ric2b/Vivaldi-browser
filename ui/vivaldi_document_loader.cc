@@ -16,6 +16,7 @@
 VivaldiDocumentLoader::VivaldiDocumentLoader(
     Profile* profile,
     const extensions::Extension* vivaldi_extension) {
+
   scoped_refptr<content::SiteInstance> site_instance =
       content::SiteInstance::CreateForURL(profile, vivaldi_extension->url());
 

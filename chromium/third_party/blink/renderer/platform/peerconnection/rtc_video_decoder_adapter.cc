@@ -17,8 +17,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/sequenced_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
@@ -289,9 +289,23 @@ int32_t RTCVideoDecoderAdapter::Decode(const webrtc::EncodedImage& input_image,
   if (video_codec_type_ == webrtc::kVideoCodecVP9 &&
       input_image.SpatialIndex().value_or(0) > 0 &&
       !Vp9HwSupportForSpatialLayers()) {
-    RecordRTCVideoDecoderFallbackReason(
-        config_.codec(), RTCVideoDecoderFallbackReason::kSpatialLayers);
-    return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+    // D3D11 supports decoding the VP9 kSVC stream, but DXVA not. Currently just
+    // a reasonably temporary measure. Once the DXVA supports decoding VP9 kSVC
+    // stream, the boolen |need_fallback_to_software| should be removed, and if
+    // the OS is windows but not win7, we will return true in
+    // 'Vp9HwSupportForSpatialLayers' instead of false.
+    bool need_fallback_to_software = true;
+#if defined(OS_WIN)
+    if (video_decoder_->GetDecoderType() == media::VideoDecoderType::kD3D11 &&
+        base::FeatureList::IsEnabled(media::kD3D11Vp9kSVCHWDecoding)) {
+      need_fallback_to_software = false;
+    }
+#endif
+    if (need_fallback_to_software) {
+      RecordRTCVideoDecoderFallbackReason(
+          config_.codec(), RTCVideoDecoderFallbackReason::kSpatialLayers);
+      return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+    }
   }
 
   if (missing_frames) {
@@ -647,12 +661,7 @@ void RTCVideoDecoderAdapter::DecrementCurrentDecoderCountForTesting() {
 
 // static
 bool RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers() {
-  // Most hardware VP9 decoders don't handle more than one spatial layer.
-#if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH)
-  return base::FeatureList::IsEnabled(media::kVaapiVp9kSVCHWDecoding);
-#else
-  return false;
-#endif
+  return base::FeatureList::IsEnabled(media::kVp9kSVCHWDecoding);
 }
 
 }  // namespace blink

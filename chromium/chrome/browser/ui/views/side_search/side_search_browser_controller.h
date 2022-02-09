@@ -49,6 +49,7 @@ class SideSearchBrowserController
       content::WebContents* source,
       const content::OpenURLParams& params) override;
   void SidePanelAvailabilityChanged(bool should_close) override;
+  void OpenSidePanel() override;
 
   // content::WebContentsObserver:
   void DidFinishNavigation(
@@ -64,11 +65,12 @@ class SideSearchBrowserController
 
   views::WebView* web_view_for_testing() { return web_view_; }
 
+  bool GetSidePanelToggledOpen() const;
+
  private:
   // Gets and sets the toggled state of the side panel. If called with
   // kSideSearchStatePerTab enabled this determines whether the side panel
   // should be open for the currently active tab.
-  bool GetSidePanelToggledOpen() const;
   void SetSidePanelToggledOpen(bool toggled_open);
 
   // Toggles panel visibility on side panel toolbar button press.
@@ -76,8 +78,6 @@ class SideSearchBrowserController
 
   // Closes side panel on close button press.
   void SidePanelCloseButtonPressed();
-
-  void OpenSidePanel();
 
   void CloseSidePanel(
       absl::optional<SideSearchCloseActionType> action = absl::nullopt);
@@ -94,6 +94,14 @@ class SideSearchBrowserController
   // Updates the `side_panel_`'s visibility and updates it to host the side
   // contents associated with the currently active tab for this browser window.
   void UpdateSidePanel();
+
+  // Callback invoked when the `web_view_`'s visibility state has changed.
+  // Visibility changes happens after we update the visibility of the
+  // `side_panel_` and a Layout() occurs. This can cause the side panel's layout
+  // manager to update the visibility of its web_view_ child.
+  void OnWebViewVisibilityChanged();
+
+  base::CallbackListSubscription web_view_visibility_subscription_;
 
   // The toggled state of the side panel (i.e. the state of the side panel
   // as controlled by the toolbar button).

@@ -6,7 +6,7 @@
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {dashToCamelCase, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ImportDataBrowserProxyImpl, ImportDataStatus} from 'chrome://settings/lazy_load.js';
-import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.js';
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 // clang-format on
 
 /** @implements {ImportDataBrowserProxy} */
@@ -196,7 +196,7 @@ suite('ImportDataDialog', function() {
   test('ImportFromBookmarksFile', function() {
     simulateBrowserProfileChange(2);
     dialog.$.import.click();
-    return browserProxy.whenCalled('importFromBookmarksFile').then(function() {
+    browserProxy.whenCalled('importFromBookmarksFile').then(function() {
       simulateImportStatusChange(ImportDataStatus.IN_PROGRESS);
       assertInProgressButtons();
 
@@ -218,7 +218,7 @@ suite('ImportDataDialog', function() {
     dialog.$.import.click();
 
     const importCalled = browserProxy.whenCalled('importData');
-    return importCalled.then(([actualIndex, types]) => {
+    importCalled.then(([actualIndex, types]) => {
       assertEquals(expectedIndex, actualIndex);
       assertFalse(types['import_dialog_bookmarks']);
       assertTrue(types['import_dialog_search_engine']);
@@ -246,7 +246,7 @@ suite('ImportDataDialog', function() {
     dialog.$.import.click();
 
     const importCalled = browserProxy.whenCalled('importData');
-    return importCalled.then(([actualIndex, types]) => {
+    importCalled.then(([actualIndex, types]) => {
       assertEquals(expectedIndex, actualIndex);
 
       Object.keys(prefs).forEach(function(prefName) {

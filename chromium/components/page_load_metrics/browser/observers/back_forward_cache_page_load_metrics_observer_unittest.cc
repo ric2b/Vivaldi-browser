@@ -4,7 +4,8 @@
 
 #include "components/page_load_metrics/browser/observers/back_forward_cache_page_load_metrics_observer.h"
 
-#include "base/test/scoped_mock_clock_override.h"
+#include "base/memory/raw_ptr.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "components/page_load_metrics/browser/fake_page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/browser/observers/page_load_metrics_observer_content_test_harness.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
@@ -20,6 +21,7 @@ using content::Visibility;
 using page_load_metrics::FakePageLoadMetricsObserverDelegate;
 using page_load_metrics::PageLoadMetricsObserverDelegate;
 using ukm::builders::HistoryNavigation;
+using ukm::builders::UserPerceivedPageVisit;
 
 class BackForwardCachePageLoadMetricsObserverTest
     : public page_load_metrics::PageLoadMetricsObserverContentTestHarness {
@@ -27,6 +29,9 @@ class BackForwardCachePageLoadMetricsObserverTest
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
     auto observer = std::make_unique<BackForwardCachePageLoadMetricsObserver>();
     observer_ = observer.get();
+    // TODO(crbug.com/1265307): Remove this when removing the DCHECK for lack of
+    // page end metric logging from the back forward page load metrics observer.
+    observer_->logged_page_end_metrics_ = true;
     tracker->AddObserver(std::move(observer));
   }
 
@@ -46,6 +51,11 @@ class BackForwardCachePageLoadMetricsObserverTest
     observer_with_fake_delegate_->has_ever_entered_back_forward_cache_ = true;
     observer_with_fake_delegate_->back_forward_cache_navigation_ids_.push_back(
         123456);
+    // TODO(crbug.com/1265307): Remove this when removing the DCHECK for lack of
+    // page end metric logging from the back forward page load metrics observer.
+    observer_with_fake_delegate_->logged_page_end_metrics_ = true;
+    test_clock_ = std::make_unique<base::SimpleTestTickClock>();
+    test_clock_->SetNowTicks(base::TimeTicks() + base::Milliseconds(25000));
   }
 
   void AssertHistoryNavigationRecordedAmpNavigation(bool was_amp) {
@@ -92,13 +102,17 @@ class BackForwardCachePageLoadMetricsObserverTest
       BackForwardCachePageLoadMetricsObserver* observer,
       bool simulate_app_backgrounding) {
     observer->MaybeRecordForegroundDurationAfterBackForwardCacheRestore(
-        simulate_app_backgrounding);
+        test_clock_.get(), simulate_app_backgrounding);
   }
 
   void SetObserverHidden() { observer_with_fake_delegate_->was_hidden_ = true; }
 
+  // TODO(crbug.com/1265307): Remove this when removing the DCHECK for lack of
+  // page end metric logging from the back forward page load metrics observer.
+  void SetPageEndReasonLogged() { observer_->logged_page_end_metrics_ = true; }
+
   page_load_metrics::mojom::PageLoadTiming timing_;
-  BackForwardCachePageLoadMetricsObserver* observer_;
+  raw_ptr<BackForwardCachePageLoadMetricsObserver> observer_;
 
   // |observer_with_fake_delegate_| is an observer set up with |fake_delegate_|
   // as its PageLoadMetricsObserverDelegate. This is for unit tests where it's
@@ -110,6 +124,7 @@ class BackForwardCachePageLoadMetricsObserverTest
   std::unique_ptr<FakePageLoadMetricsObserverDelegate> fake_delegate_;
 
   content::MockNavigationHandle navigation_handle_;
+  std::unique_ptr<base::SimpleTestTickClock> test_clock_;
 };
 
 TEST_F(BackForwardCachePageLoadMetricsObserverTest,
@@ -121,6 +136,7 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
   observer_->OnRestoreFromBackForwardCache(timing_, &navigation_handle_);
 
   AssertHistoryNavigationRecordedAmpNavigation(false);
+  SetPageEndReasonLogged();
 }
 
 TEST_F(BackForwardCachePageLoadMetricsObserverTest,
@@ -132,6 +148,7 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
   observer_->OnRestoreFromBackForwardCache(timing_, &navigation_handle_);
 
   AssertHistoryNavigationRecordedAmpNavigation(true);
+  SetPageEndReasonLogged();
 }
 
 TEST_F(BackForwardCachePageLoadMetricsObserverTest,
@@ -324,16 +341,13 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
 
 // TODO(crbug.com/1255496): Flaky under TSan.
 TEST_F(BackForwardCachePageLoadMetricsObserverTest,
-       DISABLED_TestLoggingWithNoPageEndWithNoFirstBackgroundTime) {
+       TestLoggingWithNoPageEndWithNoFirstBackgroundTime) {
   // In the case that there is no page end time and the page has never
   // backgrounded, the observer falls back to using Now as the end point of
   // the time in foreground. So override what 'Now' means.
-  base::ScopedMockClockOverride clock_override;
-  base::TimeTicks scoped_clock_start_time =
-      base::ScopedMockClockOverride::NowTicks();
-
   base::TimeTicks navigation_start =
-      scoped_clock_start_time + base::Milliseconds(100);
+      test_clock_->NowTicks() - base::Milliseconds(1000);
+  base::TimeTicks() + base::Milliseconds(100);
   auto in_foreground_bf_state =
       PageLoadMetricsObserverDelegate::BackForwardCacheRestore(
           /*was_in_foreground=*/true, navigation_start);
@@ -350,7 +364,7 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
       HistoryNavigation::kEntryName,
       HistoryNavigation::kForegroundDurationAfterBackForwardCacheRestoreName);
   EXPECT_EQ(0U, result_metrics.size());
-  clock_override.Advance(base::Milliseconds(250));
+  test_clock_->Advance(base::Milliseconds(250));
   // This time the app is entering the background, so a metric should be
   // logged.
   InvokeMeasureForegroundDuration(observer_with_fake_delegate_.get(),
@@ -363,7 +377,7 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
   // The recorded time has been bucketed, so the test needs to figure out what
   // the bucketed version of the over-ridden Now is.
   base::TimeDelta expected_foreground_time =
-      base::ScopedMockClockOverride::NowTicks() - navigation_start;
+      test_clock_->NowTicks() - navigation_start;
   int64_t bucketed_expected_time = ukm::GetSemanticBucketMinForDurationTiming(
       expected_foreground_time.InMilliseconds());
   EXPECT_EQ(bucketed_expected_time, result_metrics.begin()->begin()->second);
@@ -445,10 +459,9 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
 TEST_F(BackForwardCachePageLoadMetricsObserverTest,
        TestPageEndWhenBackgrounding) {
   // Give the stored BackForwardCacheRestoreState a starting navigation time of
-  // twenty seconds ago, because later in the test we'll need a page_end_time,
-  // and we can use base::TimeTicks::Now for that.
+  // twenty seconds ago, because later in the test we'll need a page_end_time.
   auto bf_state = PageLoadMetricsObserverDelegate::BackForwardCacheRestore(
-      /*was_in_foreground=*/true, base::TimeTicks::Now() - base::Seconds(20));
+      /*was_in_foreground=*/true, test_clock_->NowTicks() - base::Seconds(20));
 
   fake_delegate_->AddBackForwardCacheRestore(bf_state);
   // 'END_NONE' is the default, but set it explicitly because this test needs to
@@ -465,6 +478,12 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
   EXPECT_EQ(page_load_metrics::PageEndReason::END_APP_ENTER_BACKGROUND,
             result_metrics.begin()->begin()->second);
 
+  // Observers stop logging after FlushMetricsOnAppEnterBackground is called,
+  // until they're restored.
+  observer_with_fake_delegate_->OnRestoreFromBackForwardCache(
+      timing_, &navigation_handle_);
+  fake_delegate_->AddBackForwardCacheRestore(bf_state);
+
   // Verify that backgrounding does not take precedence over other page end
   // reasons. Note that if there's a page_end_reason, there needs to be a
   // page_end_time as well.
@@ -480,4 +499,38 @@ TEST_F(BackForwardCachePageLoadMetricsObserverTest,
             result_metrics[1].begin()->first);
   EXPECT_EQ(page_load_metrics::PageEndReason::END_NEW_NAVIGATION,
             result_metrics[1].begin()->second);
+}
+
+TEST_F(BackForwardCachePageLoadMetricsObserverTest, TestLogsNonCWVPageVisit) {
+  auto fake_bfcache_restore =
+      PageLoadMetricsObserverDelegate::BackForwardCacheRestore(
+          /*was_in_foreground=*/true, base::TimeTicks());
+  fake_delegate_->AddBackForwardCacheRestore(fake_bfcache_restore);
+  observer_with_fake_delegate_->ShouldObserveMimeType("fake-mime-type");
+  auto& test_ukm_recorder = tester()->test_ukm_recorder();
+  auto result_metrics = test_ukm_recorder.FilteredHumanReadableMetricForEntry(
+      UserPerceivedPageVisit::kEntryName,
+      UserPerceivedPageVisit::kNotCountedForCoreWebVitalsName);
+  EXPECT_EQ(1U, result_metrics.size());
+  EXPECT_EQ(UserPerceivedPageVisit::kNotCountedForCoreWebVitalsName,
+            result_metrics[0].begin()->first);
+  EXPECT_TRUE(result_metrics[0].begin()->second);
+
+  observer_with_fake_delegate_->ShouldObserveMimeType("text/html");
+  result_metrics = test_ukm_recorder.FilteredHumanReadableMetricForEntry(
+      UserPerceivedPageVisit::kEntryName,
+      UserPerceivedPageVisit::kNotCountedForCoreWebVitalsName);
+  // The metric being tested here indicates whether or not logs should be
+  // ignored when counting logs towards Core Web Vitals. Either the metric being
+  // present and false, or the metric being absent completely, means the logs
+  // shouldn't be counted.
+  // We've just indicated that these logs *should* be counted.
+  // So if the result metrics size is still 1, this test has passed, and if the
+  // result metrics are of size 2, the new value should be false.
+  if (result_metrics.size() > 1) {
+    EXPECT_EQ(2U, result_metrics.size());
+    EXPECT_EQ(UserPerceivedPageVisit::kNotCountedForCoreWebVitalsName,
+              result_metrics[1].begin()->first);
+    EXPECT_FALSE(result_metrics[1].begin()->second);
+  }
 }

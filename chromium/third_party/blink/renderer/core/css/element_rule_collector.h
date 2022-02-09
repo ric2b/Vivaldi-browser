@@ -122,13 +122,13 @@ class CORE_EXPORT ElementRuleCollector {
   StyleRuleList* MatchedStyleRuleList();
   RuleIndexList* MatchedCSSRuleList();
 
-  void CollectMatchingRules(const MatchRequest&,
-                            bool matching_tree_boundary_rules = false);
+  void CollectMatchingRules(const MatchRequest&);
   void CollectMatchingShadowHostRules(const MatchRequest&);
+  void CollectMatchingSlottedRules(const MatchRequest&);
   void CollectMatchingPartPseudoRules(const MatchRequest&,
                                       PartNames&,
                                       bool for_shadow_pseudo);
-  void SortAndTransferMatchedRules();
+  void SortAndTransferMatchedRules(bool is_vtt_embedded_style = false);
   void ClearMatchedRules();
   void AddElementStyleProperties(const CSSPropertyValueSet*,
                                  bool is_cacheable = true,

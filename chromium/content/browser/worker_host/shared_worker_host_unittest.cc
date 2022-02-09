@@ -9,12 +9,11 @@
 #include <utility>
 
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
-#include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
@@ -73,8 +72,10 @@ class SharedWorkerHostTest : public testing::Test {
 
   SharedWorkerHostTest()
       : service_(nullptr /* storage_partition */,
-                 nullptr /* service_worker_context */,
-                 nullptr /* appcache_service */) {}
+                 nullptr /* service_worker_context */) {}
+
+  SharedWorkerHostTest(const SharedWorkerHostTest&) = delete;
+  SharedWorkerHostTest& operator=(const SharedWorkerHostTest&) = delete;
 
   base::WeakPtr<SharedWorkerHost> CreateHost() {
     SharedWorkerInstance instance(
@@ -113,8 +114,6 @@ class SharedWorkerHostTest : public testing::Test {
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         loader_factory_remote =
             network::NotImplementedURLLoaderFactory::Create();
-    subresource_loader_params->pending_appcache_loader_factory =
-        std::move(loader_factory_remote);
 
     // Set up for service worker.
     auto service_worker_handle =
@@ -166,14 +165,12 @@ class SharedWorkerHostTest : public testing::Test {
   BrowserTaskEnvironment task_environment_;
   TestBrowserContext browser_context_;
   MockRenderProcessHostFactory mock_render_process_host_factory_;
-  MockRenderProcessHost* mock_render_process_host_;
+  raw_ptr<MockRenderProcessHost> mock_render_process_host_;
 
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   scoped_refptr<SiteInstanceImpl> site_instance_;
 
   SharedWorkerServiceImpl service_;
-
-  DISALLOW_COPY_AND_ASSIGN(SharedWorkerHostTest);
 };
 
 TEST_F(SharedWorkerHostTest, Normal) {
@@ -353,12 +350,20 @@ TEST_F(SharedWorkerHostTest, OnContextClosed) {
   EXPECT_FALSE(host);
 }
 
-TEST_F(SharedWorkerHostTest, CreateNetworkFactoryParamsForSubresources) {
-  // Enable COEPForSharedWorker, since CreateNetworkFactoryParamsForSubresources
-  // does more logic in that case.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(blink::features::kCOEPForSharedWorker);
+// Enable COEPForSharedWorker, since CreateNetworkFactoryParamsForSubresources
+// does more logic in that case.
+class SharedWorkerHostTestWithCOEPEnabled : public SharedWorkerHostTest {
+ public:
+  SharedWorkerHostTestWithCOEPEnabled() = default;
+  ~SharedWorkerHostTestWithCOEPEnabled() override = default;
 
+ private:
+  base::test::ScopedFeatureList feature_list{
+      /*enable_feature=*/blink::features::kCOEPForSharedWorker};
+};
+
+TEST_F(SharedWorkerHostTestWithCOEPEnabled,
+       CreateNetworkFactoryParamsForSubresources) {
   base::WeakPtr<SharedWorkerHost> host = CreateHost();
 
   // Start the worker.
@@ -374,13 +379,8 @@ TEST_F(SharedWorkerHostTest, CreateNetworkFactoryParamsForSubresources) {
   EXPECT_FALSE(params->isolation_info.nonce().has_value());
 }
 
-TEST_F(SharedWorkerHostTest,
+TEST_F(SharedWorkerHostTestWithCOEPEnabled,
        CreateNetworkFactoryParamsForSubresourcesWithNonce) {
-  // Enable COEPForSharedWorker, since CreateNetworkFactoryParamsForSubresources
-  // does more logic in that case.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(blink::features::kCOEPForSharedWorker);
-
   base::UnguessableToken nonce = base::UnguessableToken::Create();
   SharedWorkerInstance instance(
       kWorkerUrl, blink::mojom::ScriptType::kClassic,

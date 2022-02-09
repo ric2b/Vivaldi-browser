@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/safe_browsing/chrome_client_side_detection_host_delegate.h"
 
 #include <memory>
@@ -11,7 +12,6 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -292,7 +292,7 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
 
    private:
     // The raw pointer is safe because `harness_` owns this.
-    ClientSideDetectionHostTestBase* harness_;
+    raw_ptr<ClientSideDetectionHostTestBase> harness_;
   };
 
   explicit ClientSideDetectionHostTestBase(bool is_incognito)
@@ -438,7 +438,8 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
   scoped_refptr<StrictMock<MockSafeBrowsingUIManager> > ui_manager_;
   scoped_refptr<StrictMock<MockSafeBrowsingDatabaseManager>> database_manager_;
   FakePhishingDetector fake_phishing_detector_;
-  StrictMock<MockSafeBrowsingTokenFetcher>* raw_token_fetcher_ = nullptr;
+  raw_ptr<StrictMock<MockSafeBrowsingTokenFetcher>> raw_token_fetcher_ =
+      nullptr;
   base::SimpleTestTickClock clock_;
   const bool is_incognito_;
   signin::IdentityTestEnvironment identity_test_env_;
@@ -733,9 +734,6 @@ TEST_F(
 TEST_F(ClientSideDetectionHostTest,
        PhishingDetectionDoneEnhancedProtectionShouldHaveToken) {
   SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
-  SetFeatures(
-      /*enable_features*/ {kClientSideDetectionWithToken},
-      /*disable_features*/ {});
 
   ClientPhishingRequest verdict;
   verdict.set_url("http://example.com/");
@@ -764,9 +762,6 @@ TEST_F(ClientSideDetectionHostTest,
 TEST_F(ClientSideDetectionHostTest,
        PhishingDetectionDoneCalledTwiceShouldSucceed) {
   SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
-  SetFeatures(
-      /*enable_features*/ {kClientSideDetectionWithToken},
-      /*disable_features*/ {});
 
   ClientPhishingRequest verdict;
   verdict.set_url("http://example.com/");
@@ -813,9 +808,6 @@ TEST_F(ClientSideDetectionHostTest,
 TEST_F(ClientSideDetectionHostIncognitoTest,
        PhishingDetectionDoneIncognitoShouldNotHaveToken) {
   SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
-  SetFeatures(
-      /*enable_features*/ {kClientSideDetectionWithToken},
-      /*disable_features*/ {});
 
   ClientPhishingRequest verdict;
   verdict.set_url("http://example.com/");
@@ -836,32 +828,6 @@ TEST_F(ClientSideDetectionHostIncognitoTest,
 
 TEST_F(ClientSideDetectionHostTest,
        PhishingDetectionDoneNoEnhancedProtectionShouldNotHaveToken) {
-  SetFeatures(/*enable_features*/ {},
-              /*disable_features*/ {kClientSideDetectionWithToken});
-
-  ClientPhishingRequest verdict;
-  verdict.set_url("http://example.com/");
-  verdict.set_client_score(1.0f);
-  verdict.set_is_phishing(true);
-
-  // Set up mock call to csd service.
-  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
-                                 PartiallyEqualVerdict(verdict), _, ""));
-
-  // Set up mock call to token fetcher.
-  SafeBrowsingTokenFetcher::Callback cb;
-  EXPECT_CALL(*raw_token_fetcher_, Start(_)).Times(0);
-
-  // Make the call.
-  PhishingDetectionDone(verdict.SerializeAsString());
-}
-
-TEST_F(ClientSideDetectionHostTest,
-       PhishingDetectionDoneDisabledFeatureShouldNotHaveToken) {
-  SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
-  SetFeatures(/*enable_features*/ {},
-              /*disable_features*/ {kClientSideDetectionWithToken});
-
   ClientPhishingRequest verdict;
   verdict.set_url("http://example.com/");
   verdict.set_client_score(1.0f);

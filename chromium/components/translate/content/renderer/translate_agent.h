@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/translate/content/common/translate.mojom.h"
@@ -17,6 +16,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -61,6 +61,9 @@ class TranslateAgent : public content::RenderFrameObserver,
                       const std::string& target_lang,
                       TranslateFrameCallback callback) override;
   void RevertTranslation() override;
+
+  // Set the language detection model for used by |this|. For testing only.
+  void SeedLanguageDetectionModelForTesting(base::File model_file);
 
  protected:
   // Returns true if the translate library is available, meaning the JavaScript

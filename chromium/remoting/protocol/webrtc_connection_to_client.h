@@ -10,19 +10,20 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "remoting/protocol/channel_dispatcher_base.h"
 #include "remoting/protocol/connection_to_client.h"
+#include "remoting/protocol/host_video_stats_dispatcher.h"
 #include "remoting/protocol/session.h"
 #include "remoting/protocol/webrtc_transport.h"
 
 namespace remoting {
 namespace protocol {
 
-class WebrtcDummyVideoEncoderFactory;
+class WebrtcVideoEncoderFactory;
 class HostControlDispatcher;
 class HostEventDispatcher;
 
@@ -34,7 +35,6 @@ class WebrtcConnectionToClient : public ConnectionToClient,
   WebrtcConnectionToClient(
       std::unique_ptr<Session> session,
       scoped_refptr<protocol::TransportContext> transport_context,
-      scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner);
 
   WebrtcConnectionToClient(const WebrtcConnectionToClient&) = delete;
@@ -86,15 +86,16 @@ class WebrtcConnectionToClient : public ConnectionToClient,
   base::ThreadChecker thread_checker_;
 
   // Event handler for handling events sent from this object.
-  ConnectionToClient::EventHandler* event_handler_ = nullptr;
+  raw_ptr<ConnectionToClient::EventHandler> event_handler_ = nullptr;
 
   std::unique_ptr<WebrtcTransport> transport_;
 
   std::unique_ptr<Session> session_;
 
-  WebrtcDummyVideoEncoderFactory* video_encoder_factory_;
+  raw_ptr<WebrtcVideoEncoderFactory> video_encoder_factory_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner_;
+  HostVideoStatsDispatcher video_stats_dispatcher_;
+
   scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
 
   SessionOptions session_options_;

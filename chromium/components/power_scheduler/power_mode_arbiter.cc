@@ -11,9 +11,9 @@
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/synchronization/lock.h"
+#include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_log.h"
@@ -92,10 +92,13 @@ PowerModeArbiter::PowerModeArbiter()
           base::MakeRefCounted<base::ObserverListThreadSafe<Observer>>()),
       charging_voter_(std::make_unique<ChargingPowerModeVoter>(this)) {
   base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(this);
+  base::trace_event::TraceLog::GetInstance()->AddIncrementalStateObserver(this);
 }
 
 PowerModeArbiter::~PowerModeArbiter() {
   base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(this);
+  base::trace_event::TraceLog::GetInstance()->RemoveIncrementalStateObserver(
+      this);
 }
 
 void PowerModeArbiter::OnThreadPoolAvailable() {
@@ -437,7 +440,7 @@ void PowerModeArbiter::UpdateTraceObserver() {
 void PowerModeArbiter::OnTraceLogEnabled() {
   {
     base::AutoLock lock(lock_);
-    for (const auto& voter_and_vote : votes_)
+    for (auto& voter_and_vote : votes_)
       voter_and_vote.second.OnTraceLogEnabled();
     active_mode_.OnTraceLogEnabled();
   }
@@ -447,6 +450,13 @@ void PowerModeArbiter::OnTraceLogEnabled() {
 
 void PowerModeArbiter::OnTraceLogDisabled() {
   UpdateTraceObserver();
+}
+
+void PowerModeArbiter::OnIncrementalStateCleared() {
+  base::AutoLock lock(lock_);
+  for (auto& voter_and_vote : votes_)
+    voter_and_vote.second.OnIncrementalStateCleared();
+  active_mode_.OnIncrementalStateCleared();
 }
 
 }  // namespace power_scheduler

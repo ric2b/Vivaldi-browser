@@ -145,6 +145,7 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
   void Match(mojom::blink::FetchAPIRequestPtr fetch_api_request,
              mojom::blink::CacheQueryOptionsPtr query_options,
              bool in_related_fetch_event,
+             bool in_range_fetch_event,
              int64_t trace_id,
              MatchCallback callback) override {
     last_error_web_cache_method_called_ = "dispatchMatch";
@@ -309,7 +310,7 @@ class TestCache : public Cache {
 
 class CacheStorageTest : public PageTestBase {
  public:
-  void SetUp() override { PageTestBase::SetUp(IntSize(1, 1)); }
+  void SetUp() override { PageTestBase::SetUp(gfx::Size(1, 1)); }
 
   TestCache* CreateCache(ScopedFetcherForTests* fetcher,
                          std::unique_ptr<ErrorCacheForTests> cache) {
@@ -582,6 +583,7 @@ class MatchTestCache : public NotImplementedErrorCache {
   void Match(mojom::blink::FetchAPIRequestPtr fetch_api_request,
              mojom::blink::CacheQueryOptionsPtr query_options,
              bool in_related_fetch_event,
+             bool in_range_fetch_event,
              int64_t trace_id,
              MatchCallback callback) override {
     mojom::blink::MatchResultPtr result = mojom::blink::MatchResult::New();

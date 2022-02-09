@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_WEB_APP_PROTOCOL_HANDLER_MANAGER_H_
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "content/public/common/custom_handlers/protocol_handler.h"
@@ -64,16 +66,15 @@ class WebAppProtocolHandlerManager {
 
   // Registers OS specific protocol handlers for OSs that need them, using the
   // protocol handler information supplied in the app manifest.
-  void RegisterOsProtocolHandlers(const AppId& app_id,
-                                  base::OnceCallback<void(bool)> callback);
+  void RegisterOsProtocolHandlers(const AppId& app_id, ResultCallback callback);
 
   // Unregisters OS specific protocol handlers for an app.
   void UnregisterOsProtocolHandlers(const AppId& app_id,
-                                    base::OnceCallback<void(bool)> callback);
+                                    ResultCallback callback);
 
  private:
-  WebAppRegistrar* app_registrar_;
-  Profile* const profile_;
+  raw_ptr<WebAppRegistrar> app_registrar_;
+  const raw_ptr<Profile> profile_;
 };
 
 }  // namespace web_app

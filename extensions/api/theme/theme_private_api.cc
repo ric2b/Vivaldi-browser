@@ -63,8 +63,8 @@ ExtensionFunction::ResponseAction ThemePrivateExportFunction::Run() {
 
   theme_object_ = std::move(*params->theme.ToValue());
   std::string error;
-  vivaldi_theme_io::VerifyAndNormalizeJson(/*for_export=*/true, theme_object_,
-                                           error);
+  vivaldi_theme_io::VerifyAndNormalizeJson(
+      {.for_export = true, .allow_named_id = true}, theme_object_, error);
   if (!error.empty()) {
     return RespondNow(Error(error));
   }

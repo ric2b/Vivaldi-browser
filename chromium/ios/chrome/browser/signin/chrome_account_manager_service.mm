@@ -155,7 +155,6 @@ PatternAccountRestriction PatternAccountRestrictionFromPreference(
     PrefService* pref_service) {
   auto maybe_restriction = PatternAccountRestrictionFromValue(
       pref_service->GetList(prefs::kRestrictAccountsToPatterns));
-  CHECK(maybe_restriction.has_value());
   return *std::move(maybe_restriction);
 }
 
@@ -294,6 +293,11 @@ void ChromeAccountManagerService::OnChromeIdentityServiceDidChange(
     ios::ChromeIdentityService* new_service) {
   identity_service_observation_.Observe(
       ios::GetChromeBrowserProvider().GetChromeIdentityService());
+  // All avatar caches needs to be removed to avoid mixing fake identities and
+  // sso identities.
+  default_table_view_avatar_cache_ = nil;
+  small_size_avatar_cache_ = nil;
+  default_large_avatar_cache_ = nil;
 }
 
 void ChromeAccountManagerService::OnChromeBrowserProviderWillBeDestroyed() {

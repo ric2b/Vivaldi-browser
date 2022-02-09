@@ -167,13 +167,9 @@ class CRWWebControllerTest : public WebTestWithWebController {
   // The value for web view OCMock objects to expect for |-setFrame:|.
   CGRect GetExpectedWebViewFrame() const {
     CGSize container_view_size = GetAnyKeyWindow().bounds.size;
-#if !defined(__IPHONE_13_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_13_0
-    container_view_size.height -=
-        CGRectGetHeight([UIApplication sharedApplication].statusBarFrame);
-#else
+
     container_view_size.height -= CGRectGetHeight(
         GetAnyKeyWindow().windowScene.statusBarManager.statusBarFrame);
-#endif
     return {CGPointZero, container_view_size};
   }
 
@@ -255,7 +251,6 @@ TEST_F(CRWWebControllerTest, CancelCommittedNavigation) {
 // Tests returning pending item stored in navigation context.
 TEST_F(CRWWebControllerTest, TestPendingItem) {
   ASSERT_FALSE([web_controller() lastPendingItemForNewNavigation]);
-  ASSERT_FALSE(web_controller().webStateImpl->GetPendingItem());
 
   // Create pending item by simulating a renderer-initiated navigation.
   [navigation_delegate_ webView:mock_web_view_
@@ -263,11 +258,7 @@ TEST_F(CRWWebControllerTest, TestPendingItem) {
 
   NavigationItemImpl* item = [web_controller() lastPendingItemForNewNavigation];
 
-  // Verify that the same item is returned by NavigationManagerDelegate and
-  // CRWWebController.
   ASSERT_TRUE(item);
-  EXPECT_EQ(item, web_controller().webStateImpl->GetPendingItem());
-
   EXPECT_EQ(kTestURLString, item->GetURL());
 }
 
@@ -282,10 +273,6 @@ TEST_F(CRWWebControllerTest, SetAllowsBackForwardNavigationGestures) {
 // Tests that a web view is created after calling -[ensureWebViewCreated] and
 // check its user agent.
 TEST_F(CRWWebControllerTest, WebViewCreatedAfterEnsureWebViewCreated) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kUseDefaultUserAgentInWebClient);
-
   FakeWebClient* web_client = static_cast<FakeWebClient*>(GetWebClient());
 
   [web_controller() removeWebView];
@@ -295,14 +282,12 @@ TEST_F(CRWWebControllerTest, WebViewCreatedAfterEnsureWebViewCreated) {
       base::SysUTF8ToNSString(web_client->GetUserAgent(UserAgentType::MOBILE)),
       web_view.customUserAgent);
 
-  if (@available(iOS 13, *)) {
-    web_client->SetDefaultUserAgent(UserAgentType::DESKTOP);
-    [web_controller() removeWebView];
-    web_view = [web_controller() ensureWebViewCreated];
-    EXPECT_NSEQ(base::SysUTF8ToNSString(
-                    web_client->GetUserAgent(UserAgentType::DESKTOP)),
-                web_view.customUserAgent);
-  }
+  web_client->SetDefaultUserAgent(UserAgentType::DESKTOP);
+  [web_controller() removeWebView];
+  web_view = [web_controller() ensureWebViewCreated];
+  EXPECT_NSEQ(
+      base::SysUTF8ToNSString(web_client->GetUserAgent(UserAgentType::DESKTOP)),
+      web_view.customUserAgent);
 }
 
 // Tests that the WebView is correctly removed/added from the view hierarchy.
@@ -423,7 +408,8 @@ TEST_F(JavaScriptDialogPresenterTest, DifferentVisibleUrl) {
   // Change visible URL.
   AddPendingItem(GURL("https://pending.test/"), ui::PAGE_TRANSITION_TYPED);
   web_controller().webStateImpl->SetIsLoading(true);
-  ASSERT_NE(page_url().GetOrigin(), web_state()->GetVisibleURL().GetOrigin());
+  ASSERT_NE(page_url().DeprecatedGetOriginAsURL(),
+            web_state()->GetVisibleURL().DeprecatedGetOriginAsURL());
 
   ExecuteJavaScript(@"alert('test')");
   ASSERT_TRUE(requested_dialogs().empty());
@@ -819,9 +805,10 @@ class CRWWebControllerPolicyDeciderTest : public CRWWebControllerTest {
   void SetUp() override {
     CRWWebControllerTest::SetUp();
   }
-  // Calls webView:decidePolicyForNavigationAction:decisionHandler: callback
-  // and waits for decision handler call. Returns false if decision handler
-  // policy parameter didn't match |expected_policy| or if the call timed out.
+  // Calls webView:decidePolicyForNavigationAction:preferences:decisionHandler:
+  // callback and waits for decision handler call. Returns false if decision
+  // handler policy parameter didn't match |expected_policy| or if the call
+  // timed out.
   bool VerifyDecidePolicyForNavigationAction(
       NSURLRequest* request,
       WKNavigationActionPolicy expected_policy) WARN_UNUSED_RESULT {
@@ -833,19 +820,24 @@ class CRWWebControllerPolicyDeciderTest : public CRWWebControllerTest {
     frame_info.mainFrame = YES;
     navigation_action.targetFrame = frame_info;
 
-    // Call decidePolicyForNavigationResponse and wait for decisionHandler's
-    // callback.
+    WKWebpagePreferences* preferences = [[WKWebpagePreferences alloc] init];
+
+    // Call webView:decidePolicyForNavigationAction:preferences:decisionHandler:
+    // and wait for decisionHandler's callback.
     __block bool policy_match = false;
     __block bool callback_called = false;
     [navigation_delegate_ webView:mock_web_view_
         decidePolicyForNavigationAction:navigation_action
-                        decisionHandler:^(WKNavigationActionPolicy policy) {
+                            preferences:preferences
+                        decisionHandler:^(WKNavigationActionPolicy policy,
+                                          WKWebpagePreferences* preferences) {
                           policy_match = expected_policy == policy;
                           callback_called = true;
                         }];
     callback_called = WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
       return callback_called;
     });
+
     return policy_match;
   }
 

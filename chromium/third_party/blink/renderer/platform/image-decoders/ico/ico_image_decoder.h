@@ -53,15 +53,15 @@ class PLATFORM_EXPORT ICOImageDecoder final : public ImageDecoder {
   // ImageDecoder:
   String FilenameExtension() const override { return "ico"; }
   void OnSetData(SegmentReader*) override;
-  IntSize Size() const override;
-  IntSize FrameSizeAtIndex(wtf_size_t) const override;
+  gfx::Size Size() const override;
+  gfx::Size FrameSizeAtIndex(wtf_size_t) const override;
   bool SetSize(unsigned width, unsigned height) override;
   bool FrameIsReceivedAtIndex(wtf_size_t) const override;
   // CAUTION: SetFailed() deletes all readers and decoders.  Be careful to
   // avoid accessing deleted memory, especially when calling this from
   // inside BMPImageReader!
   bool SetFailed() override;
-  bool HotSpot(IntPoint&) const override;
+  bool HotSpot(gfx::Point&) const override;
 
  private:
   enum ImageType {
@@ -77,9 +77,9 @@ class PLATFORM_EXPORT ICOImageDecoder final : public ImageDecoder {
 
   struct IconDirectoryEntry {
     DISALLOW_NEW();
-    IntSize size_;
+    gfx::Size size_;
     uint16_t bit_count_;
-    IntPoint hot_spot_;
+    gfx::Point hot_spot_;
     uint32_t image_offset_;
     uint32_t byte_size_;
   };
@@ -141,7 +141,7 @@ class PLATFORM_EXPORT ICOImageDecoder final : public ImageDecoder {
 
   // Stores the hot-spot for |index| in |hot_spot| and returns true,
   // or returns false if there is none.
-  bool HotSpotAtIndex(wtf_size_t index, IntPoint& hot_spot) const;
+  bool HotSpotAtIndex(wtf_size_t index, gfx::Point& hot_spot) const;
 
   // Reads and returns a directory entry from the current offset into
   // |data|.
@@ -178,7 +178,7 @@ class PLATFORM_EXPORT ICOImageDecoder final : public ImageDecoder {
 
   // Valid only while a BMPImageReader is decoding, this holds the size
   // for the particular entry being decoded.
-  IntSize frame_size_;
+  gfx::Size frame_size_;
 };
 
 }  // namespace blink

@@ -148,7 +148,7 @@ CredentialManagerPendingRequestTask::CredentialManagerPendingRequestTask(
 
   for (const GURL& federation : request_federations)
     federations_.insert(
-        url::Origin::Create(federation.GetOrigin()).Serialize());
+        url::Origin::Create(federation.DeprecatedGetOriginAsURL()).Serialize());
 }
 
 CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
@@ -173,6 +173,11 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResultsFrom(
     return;
   }
   AggregatePasswordStoreResults(std::move(results));
+}
+
+base::WeakPtr<PasswordStoreConsumer>
+CredentialManagerPendingRequestTask::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 void CredentialManagerPendingRequestTask::ProcessMigratedForms(

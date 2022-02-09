@@ -39,6 +39,7 @@ class VivaldiBookmarkMenu;
 class VivaldiContextMenu;
 class VivaldiMenubarMenu;
 struct BookmarkMenuContainer;
+class VivaldiRenderViewContextMenu;
 }  // namespace vivaldi
 
 namespace vivaldi {
@@ -127,7 +128,8 @@ struct BookmarkMenuContainer {
 VivaldiContextMenu* CreateVivaldiContextMenu(content::WebContents* web_contents,
                                              ui::SimpleMenuModel* menu_model,
                                              const gfx::Rect& rect,
-                                             bool force_views);
+                                             bool force_views,
+                                             VivaldiRenderViewContextMenu* context_menu);
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
@@ -171,7 +173,6 @@ class VivaldiContextMenu : public VivaldiMenu {
   virtual bool Show() = 0;
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
-  virtual RenderViewContextMenuBase::ToolkitDelegate* GetToolkitDelegate();
   virtual bool HasDarkTextColor();
   virtual void SetParentView(gfx::NativeView parent_view) {}
 };

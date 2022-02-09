@@ -70,8 +70,8 @@ public:
 #define M_REGIONDATA static_cast<wxRegionRefData*>(m_refData)
 #define M_REGIONDATA_OF(r) static_cast<wxRegionRefData*>(r.m_refData)
 
-IMPLEMENT_DYNAMIC_CLASS(wxRegion, wxGDIObject)
-IMPLEMENT_DYNAMIC_CLASS(wxRegionIterator,wxObject)
+wxIMPLEMENT_DYNAMIC_CLASS(wxRegion, wxGDIObject);
+wxIMPLEMENT_DYNAMIC_CLASS(wxRegionIterator, wxObject);
 
 // ----------------------------------------------------------------------------
 // wxRegion construction
@@ -79,6 +79,20 @@ IMPLEMENT_DYNAMIC_CLASS(wxRegionIterator,wxObject)
 
 void wxRegion::InitRect(wxCoord x, wxCoord y, wxCoord w, wxCoord h)
 {
+    // Rectangle needs to be defined in the canonical form,
+    // with (x,y) pointing to the top-left corner of the box
+    // and with non-negative width and height.
+    if ( w < 0 )
+    {
+        w = -w;
+        x -= (w - 1);
+    }
+    if ( h < 0 )
+    {
+        h = -h;
+        y -= (h - 1);
+    }
+
     GdkRectangle rect;
     rect.x = x;
     rect.y = y;

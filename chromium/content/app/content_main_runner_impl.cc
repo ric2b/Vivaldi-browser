@@ -25,10 +25,10 @@
 #include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/i18n/icu_util.h"
+#include "base/ignore_result.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_base.h"
 #include "base/path_service.h"
@@ -38,10 +38,10 @@
 #include "base/process/memory.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/hang_watcher.h"
 #include "base/threading/platform_thread.h"
@@ -179,12 +179,12 @@
 #endif
 
 namespace content {
-extern int GpuMain(const content::MainFunctionParams&);
+extern int GpuMain(MainFunctionParams);
 #if BUILDFLAG(ENABLE_PLUGINS)
-extern int PpapiPluginMain(const MainFunctionParams&);
+extern int PpapiPluginMain(MainFunctionParams);
 #endif
-extern int RendererMain(const content::MainFunctionParams&);
-extern int UtilityMain(const MainFunctionParams&);
+extern int RendererMain(MainFunctionParams);
+extern int UtilityMain(MainFunctionParams);
 }  // namespace content
 
 namespace content {
@@ -200,35 +200,56 @@ namespace {
 #endif
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
-void LoadV8SnapshotFile() {
-#if defined(USE_V8_CONTEXT_SNAPSHOT)
-  static constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-      gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
-  static const char* snapshot_data_descriptor =
-      kV8ContextSnapshotDataDescriptor;
-#else
-  static constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-      gin::V8Initializer::V8SnapshotFileType::kDefault;
-  static const char* snapshot_data_descriptor = kV8SnapshotDataDescriptor;
-#endif  // USE_V8_CONTEXT_SNAPSHOT
-  ALLOW_UNUSED_LOCAL(kSnapshotType);
-  ALLOW_UNUSED_LOCAL(snapshot_data_descriptor);
 
+gin::V8SnapshotFileType GetSnapshotType(const base::CommandLine& command_line) {
+#if defined(OS_ANDROID) && defined(INCLUDE_BOTH_V8_SNAPSHOTS)
+  if (command_line.HasSwitch(switches::kUseContextSnapshotSwitch))
+    return gin::V8SnapshotFileType::kWithAdditionalContext;
+  return gin::V8SnapshotFileType::kDefault;
+#elif defined(USE_V8_CONTEXT_SNAPSHOT)
+  return gin::V8SnapshotFileType::kWithAdditionalContext;
+#else
+  return gin::V8SnapshotFileType::kDefault;
+#endif
+}
+
+#if defined(OS_POSIX) && !defined(OS_MAC)
+std::string GetSnapshotDataDescriptor(const base::CommandLine& command_line) {
+#if defined(OS_ANDROID) && defined(INCLUDE_BOTH_V8_SNAPSHOTS)
+  if (command_line.HasSwitch(switches::kUseContextSnapshotSwitch))
+    return std::string();
+  return kV8SnapshotDataDescriptor;
+#elif defined(USE_V8_CONTEXT_SNAPSHOT)
+#if defined(OS_ANDROID)
+  // On android, the renderer loads the context snapshot directly.
+  return std::string();
+#else
+  return kV8ContextSnapshotDataDescriptor;
+#endif
+#else
+  return kV8SnapshotDataDescriptor;
+#endif
+}
+
+#endif
+
+void LoadV8SnapshotFile(const base::CommandLine& command_line) {
+  const gin::V8SnapshotFileType snapshot_type = GetSnapshotType(command_line);
 #if defined(OS_POSIX) && !defined(OS_MAC)
   base::FileDescriptorStore& file_descriptor_store =
       base::FileDescriptorStore::GetInstance();
   base::MemoryMappedFile::Region region;
-  base::ScopedFD fd =
-      file_descriptor_store.MaybeTakeFD(snapshot_data_descriptor, &region);
+  base::ScopedFD fd = file_descriptor_store.MaybeTakeFD(
+      GetSnapshotDataDescriptor(command_line), &region);
   if (fd.is_valid()) {
     base::File file(std::move(fd));
     gin::V8Initializer::LoadV8SnapshotFromFile(std::move(file), &region,
-                                               kSnapshotType);
+                                               snapshot_type);
     return;
   }
 #endif  // OS_POSIX && !OS_MAC
 
-  gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
+  gin::V8Initializer::LoadV8Snapshot(snapshot_type);
 }
 
 bool ShouldLoadV8Snapshot(const base::CommandLine& command_line,
@@ -249,7 +270,7 @@ void LoadV8SnapshotIfNeeded(const base::CommandLine& command_line,
                             const std::string& process_type) {
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   if (ShouldLoadV8Snapshot(command_line, process_type))
-    LoadV8SnapshotFile();
+    LoadV8SnapshotFile(command_line);
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 }
 
@@ -471,7 +492,7 @@ void InstallConsoleControlHandler(bool is_browser_process) {
 bool ShouldAllowSystemTracingConsumer() {
 // System tracing consumer support is currently only supported on ChromeOS.
 // TODO(crbug.com/1173395): Also enable for Lacros-Chrome.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
   // The consumer should only be enabled when the delegate allows it.
   TracingDelegate* delegate =
       GetContentClient()->browser()->GetTracingDelegate();
@@ -520,7 +541,7 @@ class ContentClientInitializer {
 // flag.  This struct is used to build a table of (flag, main function) pairs.
 struct MainFunction {
   const char* name;
-  int (*function)(const MainFunctionParams&);
+  int (*function)(MainFunctionParams);
 };
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -555,13 +576,13 @@ int NO_STACK_PROTECTOR RunZygote(ContentMainDelegate* delegate) {
 
   // Zygote::HandleForkRequest may have reallocated the command
   // line so update it here with the new version.
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
 
   // Re-randomize our stack canary, so processes don't share a single
   // stack canary.
   base::ScopedClosureRunner stack_canary_debug_message;
-  if (command_line.GetSwitchValueASCII(switches::kChangeStackGuardOnFork) ==
+  if (command_line->GetSwitchValueASCII(switches::kChangeStackGuardOnFork) ==
       switches::kChangeStackGuardOnForkEnabled) {
     base::ResetStackCanaryIfPossible();
     stack_canary_debug_message.ReplaceClosure(
@@ -571,7 +592,7 @@ int NO_STACK_PROTECTOR RunZygote(ContentMainDelegate* delegate) {
   delegate->ZygoteForked();
 
   std::string process_type =
-      command_line.GetSwitchValueASCII(switches::kProcessType);
+      command_line->GetSwitchValueASCII(switches::kProcessType);
 
   internal::PartitionAllocSupport::Get()->ReconfigureAfterZygoteFork(
       process_type);
@@ -591,10 +612,13 @@ int NO_STACK_PROTECTOR RunZygote(ContentMainDelegate* delegate) {
 
   for (size_t i = 0; i < base::size(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name)
-      return kMainFunctions[i].function(main_params);
+      return kMainFunctions[i].function(std::move(main_params));
   }
 
-  return delegate->RunProcess(process_type, main_params);
+  auto exit_code = delegate->RunProcess(process_type, std::move(main_params));
+  DCHECK(absl::holds_alternative<int>(exit_code));
+  DCHECK_GE(absl::get<int>(exit_code), 0);
+  return absl::get<int>(exit_code);
 }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
@@ -608,16 +632,18 @@ static void RegisterMainThreadFactories() {
 
 // Run the main function for browser process.
 // Returns the exit code for this process.
-int RunBrowserProcessMain(const MainFunctionParams& main_function_params,
+int RunBrowserProcessMain(MainFunctionParams main_function_params,
                           ContentMainDelegate* delegate) {
 #if defined(OS_WIN)
   if (delegate->ShouldHandleConsoleControlEvents())
     InstallConsoleControlHandler(/*is_browser_process=*/true);
 #endif
-  int exit_code = delegate->RunProcess("", main_function_params);
-  if (exit_code >= 0)
-    return exit_code;
-  return BrowserMain(main_function_params);
+  auto exit_code = delegate->RunProcess("", std::move(main_function_params));
+  if (absl::holds_alternative<int>(exit_code)) {
+    DCHECK_GE(absl::get<int>(exit_code), 0);
+    return absl::get<int>(exit_code);
+  }
+  return BrowserMain(std::move(absl::get<MainFunctionParams>(exit_code)));
 }
 
 // Run the FooMain() for a given process type.
@@ -626,7 +652,7 @@ int RunBrowserProcessMain(const MainFunctionParams& main_function_params,
 // return, see the --change-stack-guard-on-fork command line flag.
 int NO_STACK_PROTECTOR
 RunOtherNamedProcessTypeMain(const std::string& process_type,
-                             const MainFunctionParams& main_function_params,
+                             MainFunctionParams main_function_params,
                              ContentMainDelegate* delegate) {
 #if defined(OS_WIN)
   if (delegate->ShouldHandleConsoleControlEvents())
@@ -643,10 +669,14 @@ RunOtherNamedProcessTypeMain(const std::string& process_type,
 
   for (size_t i = 0; i < base::size(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name) {
-      int exit_code = delegate->RunProcess(process_type, main_function_params);
-      if (exit_code >= 0)
-        return exit_code;
-      return kMainFunctions[i].function(main_function_params);
+      auto exit_code =
+          delegate->RunProcess(process_type, std::move(main_function_params));
+      if (absl::holds_alternative<int>(exit_code)) {
+        DCHECK_GE(absl::get<int>(exit_code), 0);
+        return absl::get<int>(exit_code);
+      }
+      return kMainFunctions[i].function(
+          std::move(absl::get<MainFunctionParams>(exit_code)));
     }
   }
 
@@ -658,7 +688,11 @@ RunOtherNamedProcessTypeMain(const std::string& process_type,
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
   // If it's a process we don't know about, the embedder should know.
-  return delegate->RunProcess(process_type, main_function_params);
+  auto exit_code =
+      delegate->RunProcess(process_type, std::move(main_function_params));
+  DCHECK(absl::holds_alternative<int>(exit_code));
+  DCHECK_GE(absl::get<int>(exit_code), 0);
+  return absl::get<int>(exit_code);
 }
 
 // static
@@ -666,11 +700,7 @@ std::unique_ptr<ContentMainRunnerImpl> ContentMainRunnerImpl::Create() {
   return std::make_unique<ContentMainRunnerImpl>();
 }
 
-ContentMainRunnerImpl::ContentMainRunnerImpl() {
-#if defined(OS_WIN)
-  memset(&sandbox_info_, 0, sizeof(sandbox_info_));
-#endif
-}
+ContentMainRunnerImpl::ContentMainRunnerImpl() = default;
 
 ContentMainRunnerImpl::~ContentMainRunnerImpl() {
   if (is_initialized_ && !is_shutdown_)
@@ -681,17 +711,10 @@ int ContentMainRunnerImpl::TerminateForFatalInitializationError() {
   return delegate_->TerminateForFatalInitializationError();
 }
 
-int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
-  ui_task_ = params.ui_task;
-  created_main_parts_closure_ = params.created_main_parts_closure;
-
-#if defined(OS_WIN)
-  sandbox_info_ = *params.sandbox_info;
-#else  // !OS_WIN
-
-#if defined(OS_MAC)
-  autorelease_pool_ = params.autorelease_pool;
-#endif  // defined(OS_MAC)
+int ContentMainRunnerImpl::Initialize(ContentMainParams params) {
+  // ContentMainDelegate is used by this class, not forwarded to embedders.
+  delegate_ = std::exchange(params.delegate, nullptr);
+  content_main_params_.emplace(std::move(params));
 
 #if defined(OS_ANDROID)
   // Now that mojo's core is initialized we can enable tracing. Note that only
@@ -703,6 +726,8 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
 
   TRACE_EVENT0("startup,benchmark,rail", "ContentMainRunnerImpl::Initialize");
 #endif  // OS_ANDROID
+
+#if !defined(OS_WIN)
 
   base::GlobalDescriptors* g_fds = base::GlobalDescriptors::GetInstance();
   ALLOW_UNUSED_LOCAL(g_fds);
@@ -724,14 +749,13 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
 #endif  // !OS_WIN
 
   is_initialized_ = true;
-  delegate_ = params.delegate;
 
 // The exit manager is in charge of calling the dtors of singleton objects.
 // On Android, AtExitManager is set up when library is loaded.
 // A consequence of this is that you can't use the ctor/dtor-based
 // TRACE_EVENT methods on Linux or iOS builds till after we set this up.
 #if !defined(OS_ANDROID)
-  if (!ui_task_) {
+  if (!content_main_params_->ui_task) {
     // When running browser tests, don't create a second AtExitManager as that
     // interfers with shutdown when objects created before ContentMain is
     // called are destructed when it returns.
@@ -763,7 +787,7 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
   }
 #endif
 
-  RegisterContentSchemes();
+  RegisterContentSchemes(delegate_->ShouldLockSchemeRegistry());
   ContentClientInitializer::Set(process_type, delegate_);
 
 #if !defined(OS_ANDROID)
@@ -898,7 +922,7 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
 #if defined(OS_WIN)
   if (!InitializeSandbox(
           sandbox::policy::SandboxTypeFromCommandLine(command_line),
-          params.sandbox_info))
+          content_main_params_->sandbox_info))
     return TerminateForFatalInitializationError();
 #elif defined(OS_MAC)
   if (!sandbox::policy::IsUnsandboxedSandboxType(
@@ -932,15 +956,24 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
   return -1;
 }
 
+void ContentMainRunnerImpl::ReInitializeParams(ContentMainParams new_params) {
+  DCHECK(!content_main_params_);
+  // Initialize() already set |delegate_|, expect the same one.
+  DCHECK_EQ(delegate_, new_params.delegate);
+  new_params.delegate = nullptr;
+  content_main_params_.emplace(std::move(new_params));
+}
+
 // This function must be marked with NO_STACK_PROTECTOR or it may crash on
 // return, see the --change-stack-guard-on-fork command line flag.
-int NO_STACK_PROTECTOR ContentMainRunnerImpl::Run(bool start_minimal_browser) {
+int NO_STACK_PROTECTOR ContentMainRunnerImpl::Run() {
   DCHECK(is_initialized_);
+  DCHECK(content_main_params_);
   DCHECK(!is_shutdown_);
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
   std::string process_type =
-      command_line.GetSwitchValueASCII(switches::kProcessType);
+      command_line->GetSwitchValueASCII(switches::kProcessType);
   // Run this logic on all child processes.
   if (!process_type.empty()) {
     if (process_type != switches::kZygoteProcess) {
@@ -969,23 +1002,34 @@ int NO_STACK_PROTECTOR ContentMainRunnerImpl::Run(bool start_minimal_browser) {
   }
 
   MainFunctionParams main_params(command_line);
-  main_params.ui_task = ui_task_;
-  main_params.created_main_parts_closure = created_main_parts_closure_;
+  main_params.ui_task = std::move(content_main_params_->ui_task);
+  main_params.created_main_parts_closure =
+      std::move(content_main_params_->created_main_parts_closure);
 #if defined(OS_WIN)
-  main_params.sandbox_info = &sandbox_info_;
+  main_params.sandbox_info = content_main_params_->sandbox_info;
 #elif defined(OS_MAC)
-  main_params.autorelease_pool = autorelease_pool_;
+  main_params.autorelease_pool = content_main_params_->autorelease_pool;
 #endif
+
+  const bool start_minimal_browser = content_main_params_->minimal_browser_mode;
+
+  // ContentMainParams cannot be wholesaled moved into MainFunctionParams
+  // because MainFunctionParams is in common/ and can't depend on
+  // ContentMainParams, but this is the effective intent.
+  // |content_main_params_| shouldn't be reused after being handed off to
+  // RunBrowser/RunOtherNamedProcessTypeMain below.
+  content_main_params_.reset();
 
   RegisterMainThreadFactories();
 
   if (process_type.empty())
-    return RunBrowser(main_params, start_minimal_browser);
+    return RunBrowser(std::move(main_params), start_minimal_browser);
 
-  return RunOtherNamedProcessTypeMain(process_type, main_params, delegate_);
+  return RunOtherNamedProcessTypeMain(process_type, std::move(main_params),
+                                      delegate_);
 }
 
-int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
+int ContentMainRunnerImpl::RunBrowser(MainFunctionParams main_params,
                                       bool start_minimal_browser) {
   TRACE_EVENT_INSTANT0("startup", "ContentMainRunnerImpl::RunBrowser(begin)",
                        TRACE_EVENT_SCOPE_THREAD);
@@ -1032,7 +1076,7 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
           variations::VariationsIdsProvider::Mode::kUseSignedInState);
     }
 
-    delegate_->PostEarlyInitialization(main_params.ui_task != nullptr);
+    delegate_->PostEarlyInitialization(!!main_params.ui_task);
 
     // The hang watcher needs to be started once the feature list is available
     // but before the IO thread is started.
@@ -1054,7 +1098,8 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
     tracing::PerfettoTracedProcess::Get()
         ->SetAllowSystemTracingConsumerCallback(
             base::BindRepeating(&ShouldAllowSystemTracingConsumer));
-    tracing::InitTracingPostThreadPoolStartAndFeatureList();
+    tracing::InitTracingPostThreadPoolStartAndFeatureList(
+        /* enable_consumer */ true);
 
     // PowerMonitor is needed in reduced mode. BrowserMainLoop will safely skip
     // initializing it again if it has already been initialized.
@@ -1111,9 +1156,8 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
 
   DVLOG(0) << "Chrome is running in full browser mode.";
   is_browser_main_loop_started_ = true;
-  startup_data_ = mojo_ipc_support_->CreateBrowserStartupData();
-  main_params.startup_data = startup_data_.get();
-  return RunBrowserProcessMain(main_params, delegate_);
+  main_params.startup_data = mojo_ipc_support_->CreateBrowserStartupData();
+  return RunBrowserProcessMain(std::move(main_params), delegate_);
 }
 
 void ContentMainRunnerImpl::Shutdown() {

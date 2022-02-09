@@ -24,9 +24,6 @@ enum
     wxTB_VERTICAL    = wxVERTICAL,
     wxTB_LEFT        = wxTB_VERTICAL,
 
-    /** show 3D buttons (wxToolBarSimple only) */
-    wxTB_3DBUTTONS,
-
     /** "flat" buttons (Win32/GTK only) */
     wxTB_FLAT,
 
@@ -59,7 +56,7 @@ enum
     wxTB_RIGHT,
 
     /** flags that are closest to the native look*/
-    wxTB_DEFAULT_STYLE = wxTB_HORIZONTAL | wxTB_FLAT
+    wxTB_DEFAULT_STYLE = wxTB_HORIZONTAL
 };
 
 
@@ -75,6 +72,10 @@ enum
     implementations use the short help string for the tooltip text which is
     popped up when the mouse pointer enters the tool and the long help string
     for the applications status bar.
+
+    Notice that the toolbar can @e not be modified by changing its tools via
+    the (intentionally undocumented here) setter methods of this class, all the
+    modifications must be done using the methods of wxToolBar itself.
 */
 class wxToolBarToolBase : public wxObject
 {
@@ -92,8 +93,6 @@ public:
     wxToolBarToolBase(wxToolBarBase *tbar,
                       wxControl *control,
                       const wxString& label);
-
-    virtual ~wxToolBarToolBase();
 
     int GetId() const;
 
@@ -124,21 +123,21 @@ public:
 
     wxObject *GetClientData() const;
 
-    virtual bool Enable(bool enable);
-    virtual bool Toggle(bool toggle);
-    virtual bool SetToggle(bool toggle);
-    virtual bool SetShortHelp(const wxString& help);
-    virtual bool SetLongHelp(const wxString& help);
+    bool Enable(bool enable);
+    bool Toggle(bool toggle);
+    bool SetToggle(bool toggle);
+    bool SetShortHelp(const wxString& help);
+    bool SetLongHelp(const wxString& help);
     void Toggle();
-    virtual void SetNormalBitmap(const wxBitmap& bmp);
-    virtual void SetDisabledBitmap(const wxBitmap& bmp);
-    virtual void SetLabel(const wxString& label);
+    void SetNormalBitmap(const wxBitmap& bmp);
+    void SetDisabledBitmap(const wxBitmap& bmp);
+    void SetLabel(const wxString& label);
     void SetClientData(wxObject *clientData);
-    
-    virtual void Detach();
-    virtual void Attach(wxToolBarBase *tbar);
 
-    virtual void SetDropdownMenu(wxMenu *menu);
+    void Detach();
+    void Attach(wxToolBarBase *tbar);
+
+    void SetDropdownMenu(wxMenu *menu);
     wxMenu *GetDropdownMenu() const;
 };
 
@@ -168,6 +167,9 @@ public:
     for example wxToolBar::EnableTool.
     Calls to @c wxToolBarToolBase methods (undocumented by purpose) will not change
     the visible state of the item within the tool bar.
+
+    After you have added all the tools you need, you must call Realize() to
+    effectively construct and display the toolbar.
 
     <b>wxMSW note</b>: Note that under wxMSW toolbar paints tools to reflect
     system-wide colours. If you use more than 16 colours in your tool bitmaps,
@@ -219,8 +221,7 @@ public:
     @style{wxTB_RIGHT}
         Align the toolbar at the right side of parent window.
     @style{wxTB_DEFAULT_STYLE}
-        Combination of @c wxTB_HORIZONTAL and @c wxTB_FLAT. This style is new
-        since wxWidgets 2.9.5.
+        The @c wxTB_HORIZONTAL style. This style is new since wxWidgets 2.9.5.
     @endStyleTable
 
     See also @ref overview_windowstyles. Note that the wxMSW native toolbar
@@ -332,10 +333,6 @@ public:
             Text to be displayed near the control.
 
         @remarks
-            wxMSW: the label is only displayed if there is enough space
-            available below the embedded control.
-
-        @remarks
             wxMac: labels are only displayed if wxWidgets is built with @c
             wxMAC_USE_NATIVE_TOOLBAR set to 1
     */
@@ -415,7 +412,10 @@ public:
             An integer by which the tool may be identified in subsequent
             operations.
         @param label
-            The string to be displayed with the tool.
+            The string to be displayed with the tool. This string may include
+            mnemonics, i.e. characters prefixed by an ampersand ("&"), but they
+            are stripped from it and not actually shown in the toolbar as tools
+            can't be activated from keyboard.
         @param bitmap
             The primary tool bitmap.
         @param shortHelp
@@ -462,9 +462,9 @@ public:
             whenever another button in the group is checked. ::wxITEM_DROPDOWN
             specifies that a drop-down menu button will appear next to the
             tool button (only GTK+ and MSW). Call SetDropdownMenu() afterwards.
-        @param shortHelpString
+        @param shortHelp
             This string is used for the tools tooltip.
-        @param longHelpString
+        @param longHelp
             This string is shown in the statusbar (if any) of the parent frame
             when the mouse pointer is inside the tool.
         @param clientData
@@ -481,8 +481,8 @@ public:
                                const wxBitmap& bitmap,
                                const wxBitmap& bmpDisabled,
                                wxItemKind kind = wxITEM_NORMAL,
-                               const wxString& shortHelpString = wxEmptyString,
-                               const wxString& longHelpString = wxEmptyString,
+                               const wxString& shortHelp = wxEmptyString,
+                               const wxString& longHelp = wxEmptyString,
                                wxObject* clientData = NULL);
     //@}
 
@@ -589,6 +589,8 @@ public:
 
         @see GetToolsCount()
     */
+    wxToolBarToolBase *GetToolByPos(int pos);
+
     const wxToolBarToolBase *GetToolByPos(int pos) const;
 
     /**
@@ -802,7 +804,7 @@ public:
 
     /**
         Removes the given tool from the toolbar but doesn't delete it. This
-        allows to insert/add this tool back to this (or another) toolbar later.
+        allows inserting/adding this tool back to this (or another) toolbar later.
 
         @note It is unnecessary to call Realize() for the change to take place,
             it will happen immediately.
@@ -811,16 +813,6 @@ public:
         @see DeleteTool()
     */
     virtual wxToolBarToolBase* RemoveTool(int id);
-
-    /**
-        Sets the bitmap resource identifier for specifying tool bitmaps as
-        indices into a custom bitmap.
-
-        This is a Windows CE-specific method not available in the other ports.
-
-        @onlyfor{wxmsw_wince}
-    */
-    void SetBitmapResource(int resourceId);
 
     /**
         Sets the dropdown menu for the tool given by its @e id. The tool itself
@@ -1005,6 +997,6 @@ public:
     /**
        Factory function to create a new separator toolbar tool.
     */
-    wxToolBarToolBase *CreateSeparator()
+    wxToolBarToolBase *CreateSeparator();
 };
 

@@ -17,6 +17,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/ignore_result.h"
 #include "base/path_service.h"
 #include "base/strings/safe_sprintf.h"
 #include "build/chromeos_buildflags.h"
@@ -1401,7 +1402,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, TestPermissionBubble) {
                                TopChromeShownState::kFullyShown);
 
   // Dismiss the bubble.
-  permission_manager->Closing();
+  permission_manager->Dismiss();
   EXPECT_FALSE(permission_manager->IsRequestInProgress());
   SynchronizeBrowserWithRenderer(active_contents);
 

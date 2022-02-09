@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './accessibility_features.mojom-lite.js';
 import './action_toolbar.js';
 import './scanning_fonts_css.js';
 import './scanning_shared_css.js';
@@ -13,7 +14,8 @@ import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {afterNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {AppState} from './scanning_app_types.js';
+import {getAccessibilityFeaturesInterface} from './mojo_interface_provider.js';
+import {AppState, ForceHiddenElementsVisibleObserverInterface} from './scanning_app_types.js';
 import {ScanningBrowserProxy, ScanningBrowserProxyImpl} from './scanning_browser_proxy.js';
 
 /** @type {number} */
@@ -60,6 +62,13 @@ Polymer({
 
   /** @private {number} */
   actionToolbarWidth_: 0,
+
+  /**
+   * Receives the status of the enabled accesbility features that should force
+   * the hidden elements visible.
+   * @private {?ash.common.mojom.ForceHiddenElementsVisibleObserverReceiver}
+   */
+  forceHiddenElementsVisibleObserverReceiver_: null,
 
   properties: {
     /** @type {!AppState} */
@@ -182,6 +191,19 @@ Polymer({
       type: Boolean,
       reflectToAttribute: true,
     },
+
+    /**
+     * True when the ChromeVox, Switch, or Screen Magnifier accessibility
+     * features are turned on that require the action toolbar to always be
+     * visible during multi-page scan sessions. Only used for CSS selector
+     * logic.
+     * @private {boolean}
+     */
+    forceActionToolbarVisible_: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
+    },
   },
 
   observers: [
@@ -210,6 +232,20 @@ Polymer({
         parseFloat(this.getComputedStyleValue('--action-toolbar-height'));
     this.actionToolbarWidth_ =
         parseFloat(this.getComputedStyleValue('--action-toolbar-width'));
+
+    this.forceHiddenElementsVisibleObserverReceiver_ =
+        new ash.common.mojom.ForceHiddenElementsVisibleObserverReceiver(
+            /**
+               @type {!ForceHiddenElementsVisibleObserverInterface}
+             */
+            (this));
+    getAccessibilityFeaturesInterface()
+        .observeForceHiddenElementsVisible(
+            this.forceHiddenElementsVisibleObserverReceiver_.$
+                .bindNewPipeAndPassRemote())
+        .then(
+            response => this.forceActionToolbarVisible_ =
+                response.forceVisible);
   },
 
   /** @override */
@@ -218,6 +254,18 @@ Polymer({
       window.removeEventListener('resize', this.onWindowResized_);
       this.previewAreaResizeObserver_.disconnect();
     }
+
+    if (this.forceHiddenElementsVisibleObserverReceiver_) {
+      this.forceHiddenElementsVisibleObserverReceiver_.$.close();
+    }
+  },
+
+  /**
+   * Overrides ash.common.mojom.ForceHiddenElementsVisibleObserverReceiver.
+   * @param {boolean} forceVisible
+   */
+  onForceHiddenElementsVisibleChange(forceVisible) {
+    this.forceActionToolbarVisible_ = forceVisible;
   },
 
   /** @private */
@@ -583,7 +631,7 @@ Polymer({
               this.dialogTitleText_ =
                   isRemoveFromMultiplePages ? '' : pluralString;
               if (isRemoveFromMultiplePages) {
-                this.dialogConfirmationText_ = pluralString
+                this.dialogConfirmationText_ = pluralString;
               }
 
               // Once strings are loaded, open the dialog.
@@ -614,7 +662,7 @@ Polymer({
   },
 
   /**
-   * Scrolls down until the page at |pageIndex| is at the top of the viewport.
+   * Scrolls the image specified by |pageIndex| into view.
    * @param {number} pageIndex
    * @private
    */
@@ -628,12 +676,8 @@ Polymer({
     }
 
     assert(pageIndex >= 0 && pageIndex < scannedImages.length);
-    const imageHeight = scannedImages[0].height;
-
-    // Use |pageIndex| to calculate the number of pages needed to scroll by to
-    // get to our desired page. Ex: If we want to scroll to the page with
-    // |pageIndex| = 3, we should scroll past 3 pages.
-    this.$$('#previewDiv').scrollTop = imageHeight * pageIndex;
+    this.$$('#previewDiv').scrollTop =
+        scannedImages[pageIndex].offsetTop - /*imageFocusBorder=*/ 2;
   },
 
   /** @private */

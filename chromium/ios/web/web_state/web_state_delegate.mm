@@ -35,8 +35,6 @@ WebState* WebStateDelegate::OpenURLFromWebState(
   return nullptr;
 }
 
-void WebStateDelegate::HandleContextMenu(WebState*, const ContextMenuParams&) {}
-
 void WebStateDelegate::ShowRepostFormWarningDialog(
     WebState*,
     base::OnceCallback<void(bool)> callback) {
@@ -72,23 +70,13 @@ void WebStateDelegate::Detach(WebState* source) {
 void WebStateDelegate::ContextMenuConfiguration(
     WebState* source,
     const ContextMenuParams& params,
-    void (^completion_handler)(UIContextMenuConfiguration*))
-    API_AVAILABLE(ios(13.0)) {
+    void (^completion_handler)(UIContextMenuConfiguration*)) {
   completion_handler(nil);
 }
 
-void WebStateDelegate::ContextMenuDidEnd(WebState* source, const GURL& link_url)
-    API_AVAILABLE(ios(13.0)) {}
-
 void WebStateDelegate::ContextMenuWillCommitWithAnimator(
     WebState* source,
-    const GURL& link_url,
-    id<UIContextMenuInteractionCommitAnimating> animator)
-    API_AVAILABLE(ios(13.0)) {}
-
-void WebStateDelegate::ContextMenuWillPresent(WebState* source,
-                                              const GURL& link_url)
-    API_AVAILABLE(ios(13.0)) {}
+    id<UIContextMenuInteractionCommitAnimating> animator) {}
 
 id<CRWResponderInputView> WebStateDelegate::GetResponderInputView(
     WebState* source) {

@@ -4,7 +4,7 @@
 
 (async function() {
   TestRunner.addResult(`Verify that syncing Node.js contents works fine.\n`);
-  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadLegacyModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.loadTestModule('bindings_test_runner');
 
   var testMapping = BindingsTestRunner.initializeTestMapping();
@@ -24,7 +24,7 @@
   await SourcesTestRunner.addScriptUISourceCode('http://127.0.0.1:8000/nodejs.js', nodeContent);
 
   // Add filesystem UISourceCode and mapping.
-  var fs = new BindingsTestRunner.TestFileSystem('file:///var/www');
+  var fs = new BindingsTestRunner.TestFileSystem('/var/www');
   var fsEntry = fs.root.addFile('nodejs.js', fsContent);
   fs.reportCreated(function() {});
 

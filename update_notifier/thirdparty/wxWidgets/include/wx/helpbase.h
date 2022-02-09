@@ -50,7 +50,7 @@ public:
     virtual bool LoadFile(const wxString& file = wxEmptyString) = 0;
 
     // Displays the contents
-    virtual bool DisplayContents(void) = 0;
+    virtual bool DisplayContents() = 0;
 
     // Display the given section
     virtual bool DisplaySection(int sectionNo) = 0;
@@ -96,7 +96,7 @@ public:
 protected:
     wxWindow* m_parentWindow;
 private:
-    DECLARE_CLASS(wxHelpControllerBase)
+    wxDECLARE_CLASS(wxHelpControllerBase);
 };
 
 #endif // wxUSE_HELP

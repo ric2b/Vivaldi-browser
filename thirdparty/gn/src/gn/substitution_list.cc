@@ -59,7 +59,8 @@ SubstitutionList SubstitutionList::MakeForTest(const char* a,
 
   Err err;
   SubstitutionList result;
-  result.Parse(input_strings, nullptr, &err);
+  CHECK(result.Parse(input_strings, nullptr, &err))
+      << err.message() << "\n" << err.help_text();
   return result;
 }
 

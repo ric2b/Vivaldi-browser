@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -22,7 +22,6 @@ except ImportError:  # py2
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
-
 
 class Platform(object):
   """Represents a host/target platform."""
@@ -55,10 +54,12 @@ class Platform(object):
       self._platform = 'haiku'
     elif self._platform.startswith('sunos'):
       self._platform = 'solaris'
+    elif self._platform.startswith('zos'):
+      self._platform = 'zos'
 
   @staticmethod
   def known_platforms():
-    return ['linux', 'darwin', 'mingw', 'msys', 'msvc', 'aix', 'fuchsia', 'freebsd', 'netbsd', 'openbsd', 'haiku', 'solaris']
+    return ['linux', 'darwin', 'mingw', 'msys', 'msvc', 'aix', 'fuchsia', 'freebsd', 'netbsd', 'openbsd', 'haiku', 'solaris', 'zos']
 
   def platform(self):
     return self._platform
@@ -92,6 +93,9 @@ class Platform(object):
 
   def is_posix(self):
     return self._platform in ['linux', 'freebsd', 'darwin', 'aix', 'openbsd', 'haiku', 'solaris', 'msys', 'netbsd']
+
+  def is_zos(self):
+    return self._platform == 'zos'
 
 
 def main(argv):
@@ -129,6 +133,16 @@ def main(argv):
                           'library, or \'-l<name>\' on POSIX systems. Can be ' +
                           'used multiple times. Useful to link custom malloc ' +
                           'or cpu profiling libraries.'))
+  if sys.platform == 'zos':
+    parser.add_option('--zoslib-dir',
+                      action='store',
+                      default='../third_party/zoslib',
+                      dest='zoslib_dir',
+                      help=('Specify the path of ZOSLIB directory, to link ' +
+                            'with <ZOSLIB_DIR>/install/lib/libzoslib.a, and ' +
+                            'add -I<ZOSLIB_DIR>/install/include to the compile ' +
+                            'commands. See README.md for details.'))
+
   options, args = parser.parse_args(argv)
 
   if args:
@@ -222,6 +236,7 @@ def WriteGenericNinja(path, static_libraries, executables,
       'haiku': 'build_haiku.ninja.template',
       'solaris': 'build_linux.ninja.template',
       'netbsd': 'build_linux.ninja.template',
+      'zos': 'build_zos.ninja.template',
   }[platform.platform()])
 
   with open(template_filename) as f:
@@ -323,6 +338,9 @@ def WriteGNNinja(path, platform, host, options):
       os.path.relpath(os.path.join(REPO_ROOT, 'src'), os.path.dirname(path)),
       '.',
   ]
+  if platform.is_zos():
+    include_dirs += [ options.zoslib_dir + '/install/include' ]
+
   libs = []
 
   if not platform.is_msvc():
@@ -341,8 +359,8 @@ def WriteGNNinja(path, platform, host, options):
       ldflags.extend(['-fdata-sections', '-ffunction-sections'])
       if platform.is_darwin():
         ldflags.append('-Wl,-dead_strip')
-      elif not platform.is_aix() and not platform.is_solaris():
-        # Garbage collection is done by default on aix.
+      elif not platform.is_aix() and not platform.is_solaris() and not platform.is_zos():
+        # Garbage collection is done by default on aix, and option is unsupported on z/OS.
         ldflags.append('-Wl,--gc-sections')
 
       # Omit all symbol information from the output file.
@@ -353,7 +371,8 @@ def WriteGNNinja(path, platform, host, options):
           ldflags.append('-Wl,-s')
         elif platform.is_solaris():
           ldflags.append('-Wl,--strip-all')
-        else:
+        elif not platform.is_zos():
+          # /bin/ld on z/OS doesn't have an equivalent option.
           ldflags.append('-Wl,-strip-all')
 
       # Enable identical code-folding.
@@ -409,6 +428,11 @@ def WriteGNNinja(path, platform, host, options):
     elif platform.is_haiku():
       cflags.append('-fPIC')
       cflags.extend(['-D_BSD_SOURCE'])
+    elif platform.is_zos():
+      cflags.append('-fzos-le-char-mode=ascii')
+      cflags.append('-Wno-unused-function')
+      cflags.append('-D_OPEN_SYS_FILE_EXT')
+      cflags.append('-DPATH_MAX=1024')
 
     if platform.is_posix() and not platform.is_haiku():
       ldflags.append('-pthread')
@@ -720,6 +744,7 @@ def WriteGNNinja(path, platform, host, options):
         'src/gn/parser_unittest.cc',
         'src/gn/path_output_unittest.cc',
         'src/gn/pattern_unittest.cc',
+        'src/gn/pointer_set_unittest.cc',
         'src/gn/runtime_deps_unittest.cc',
         'src/gn/scope_per_file_provider_unittest.cc',
         'src/gn/scope_unittest.cc',
@@ -749,7 +774,7 @@ def WriteGNNinja(path, platform, host, options):
       ], 'libs': []},
   }
 
-  if platform.is_posix():
+  if platform.is_posix() or platform.is_zos():
     static_libraries['base']['sources'].extend([
         'src/base/files/file_enumerator_posix.cc',
         'src/base/files/file_posix.cc',
@@ -757,6 +782,9 @@ def WriteGNNinja(path, platform, host, options):
         'src/base/posix/file_descriptor_shuffle.cc',
         'src/base/posix/safe_strerror.cc',
     ])
+
+  if platform.is_zos():
+    libs.extend([ options.zoslib_dir + '/install/lib/libzoslib.a' ])
 
   if platform.is_windows():
     static_libraries['base']['sources'].extend([

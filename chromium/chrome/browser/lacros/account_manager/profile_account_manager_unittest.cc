@@ -13,7 +13,6 @@
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/mock_account_manager_facade.h"
 #include "content/public/test/browser_task_environment.h"
-#include "google_apis/gaia/oauth2_access_token_fetcher.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -22,10 +21,16 @@ class ProfileAccountManagerTest : public testing::Test {
   ProfileAccountManagerTest()
       : testing_profile_manager_(TestingBrowserProcess::GetGlobal()) {
     CHECK(testing_profile_manager_.SetUp());
-    mapper_ = std::make_unique<AccountProfileMapper>(&mock_facade_, storage());
+    testing_profile_manager_.SetAccountProfileMapper(
+        std::make_unique<AccountProfileMapper>(
+            &mock_facade_, storage(),
+            testing_profile_manager_.local_state()->Get()));
   }
 
-  AccountProfileMapper* mapper() { return mapper_.get(); }
+  AccountProfileMapper* mapper() {
+    return testing_profile_manager_.profile_manager()
+        ->GetAccountProfileMapper();
+  }
 
  private:
   ProfileAttributesStorage* storage() {
@@ -34,9 +39,8 @@ class ProfileAccountManagerTest : public testing::Test {
   }
 
   content::BrowserTaskEnvironment task_environment_;
-  TestingProfileManager testing_profile_manager_;
   account_manager::MockAccountManagerFacade mock_facade_;
-  std::unique_ptr<AccountProfileMapper> mapper_;
+  TestingProfileManager testing_profile_manager_;
 };
 
 TEST_F(ProfileAccountManagerTest, Observer) {

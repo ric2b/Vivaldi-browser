@@ -9,8 +9,9 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/version_info/version_info.h"
@@ -118,7 +119,7 @@ class ProfileSyncComponentsFactoryImpl
       syncer::SyncService* sync_service);
 
   // Client/platform specific members.
-  BrowserSyncClient* const sync_client_;
+  const raw_ptr<BrowserSyncClient> sync_client_;
   const version_info::Channel channel_;
   const scoped_refptr<base::SequencedTaskRunner> ui_thread_;
   const scoped_refptr<base::SequencedTaskRunner> db_thread_;
@@ -132,7 +133,7 @@ class ProfileSyncComponentsFactoryImpl
       profile_password_store_;
   const scoped_refptr<password_manager::PasswordStoreInterface>
       account_password_store_;
-  sync_bookmarks::BookmarkSyncService* const bookmark_sync_service_;
+  const raw_ptr<sync_bookmarks::BookmarkSyncService> bookmark_sync_service_;
 
   sync_notes::NoteSyncService* const note_sync_service_;
 

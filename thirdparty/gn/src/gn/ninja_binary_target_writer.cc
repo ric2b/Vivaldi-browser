@@ -228,7 +228,7 @@ void NinjaBinaryTargetWriter::AddSourceSetFiles(
     for (const OutputFile& output : outputs) {
       SourceFile output_as_source =
           output.AsSourceFile(source_set->settings()->build_settings());
-      if (output_as_source.type() == SourceFile::SOURCE_O) {
+      if (output_as_source.IsObjectType()) {
         obj_files->push_back(output);
       }
     }
@@ -294,19 +294,24 @@ void NinjaBinaryTargetWriter::WriteCompilerBuildLine(
   out_ << std::endl;
 }
 
-void NinjaBinaryTargetWriter::WriteLinkerFlags(
+void NinjaBinaryTargetWriter::WriteCustomLinkerFlags(
     std::ostream& out,
-    const Tool* tool,
-    const SourceFile* optional_def_file) {
-  if (tool->AsC()) {
-    // First the ldflags from the target and its config.
-    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::ldflags,
-                                       GetFlagOptions(), out);
-  }
+    const Tool* tool) {
 
-  // Followed by library search paths that have been recursively pushed
+  if (tool->AsC() || (tool->AsRust() && tool->AsRust()->MayLink())) {
+    // First the ldflags from the target and its config.
+    RecursiveTargetConfigStringsToStream(kRecursiveWriterKeepDuplicates,
+                                         target_, &ConfigValues::ldflags,
+                                         GetFlagOptions(), out);
+  }
+}
+
+void NinjaBinaryTargetWriter::WriteLibrarySearchPath(
+    std::ostream& out,
+    const Tool* tool) {
+  // Write library search paths that have been recursively pushed
   // through the dependency tree.
-  const OrderedSet<SourceDir> all_lib_dirs = target_->all_lib_dirs();
+  const UniqueVector<SourceDir>& all_lib_dirs = target_->all_lib_dirs();
   if (!all_lib_dirs.empty()) {
     // Since we're passing these on the command line to the linker and not
     // to Ninja, we need to do shell escaping.
@@ -333,6 +338,16 @@ void NinjaBinaryTargetWriter::WriteLinkerFlags(
                                      PathOutput::DIR_NO_LAST_SLASH);
     }
   }
+}
+
+void NinjaBinaryTargetWriter::WriteLinkerFlags(
+    std::ostream& out,
+    const Tool* tool,
+    const SourceFile* optional_def_file) {
+  // First any ldflags
+  WriteCustomLinkerFlags(out, tool);
+  // Then the library search path
+  WriteLibrarySearchPath(out, tool);
 
   if (optional_def_file) {
     out_ << " /DEF:";
@@ -342,15 +357,20 @@ void NinjaBinaryTargetWriter::WriteLinkerFlags(
 
 void NinjaBinaryTargetWriter::WriteLibs(std::ostream& out, const Tool* tool) {
   // Libraries that have been recursively pushed through the dependency tree.
+  // Since we're passing these on the command line to the linker and not
+  // to Ninja, we need to do shell escaping.
+  PathOutput lib_path_output(
+      path_output_.current_dir(), settings_->build_settings()->root_path_utf8(),
+      ESCAPE_NINJA_COMMAND);
   EscapeOptions lib_escape_opts;
   lib_escape_opts.mode = ESCAPE_NINJA_COMMAND;
-  const OrderedSet<LibFile> all_libs = target_->all_libs();
+  const UniqueVector<LibFile>& all_libs = target_->all_libs();
   for (size_t i = 0; i < all_libs.size(); i++) {
     const LibFile& lib_file = all_libs[i];
     const std::string& lib_value = lib_file.value();
     if (lib_file.is_source_file()) {
       out << " " << tool->linker_arg();
-      path_output_.WriteFile(out, lib_file.source_file());
+      lib_path_output.WriteFile(out, lib_file.source_file());
     } else {
       out << " " << tool->lib_switch();
       EscapeStringToStream(out, lib_value, lib_escape_opts);

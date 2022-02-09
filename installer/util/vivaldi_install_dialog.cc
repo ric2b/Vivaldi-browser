@@ -5,9 +5,7 @@
 #include "installer/util/vivaldi_install_util.h"
 #include "installer/win/setup/setup_resource.h"
 
-#include <Shellapi.h>
-#include <shlobj.h>
-#include <windowsx.h>
+#include <math.h>
 
 #include <iterator>
 #include <map>
@@ -31,6 +29,13 @@
 
 #include "installer/win/vivaldi_install_l10n.h"
 #include "vivaldi/installer/win/vivaldi_install_language_names.h"
+
+#include <Windows.h>
+
+#include <Shellapi.h>
+#include <shellscalingapi.h>
+#include <shlobj.h>
+#include <windowsx.h>
 
 namespace installer {
 
@@ -69,12 +74,28 @@ DWORD ToComboIndex(vivaldi::InstallType install_type) {
   }
 }
 
-void GetDPI(int* dpi_x, int* dpi_y) {
-  HDC screen_dc = GetDC(NULL);
-  *dpi_x = GetDeviceCaps(screen_dc, LOGPIXELSX);
-  *dpi_y = GetDeviceCaps(screen_dc, LOGPIXELSY);
-  if (screen_dc)
-    ReleaseDC(NULL, screen_dc);
+int GetCurrentDpi(HWND window) {
+  // GetDpiForMonitor() is available only in Windows 8.1.
+  static auto get_dpi_for_monitor_func = []() {
+    const HMODULE shcore_dll = ::LoadLibrary(L"shcore.dll");
+    return reinterpret_cast<decltype(&::GetDpiForMonitor)>(
+        shcore_dll ? ::GetProcAddress(shcore_dll, "GetDpiForMonitor")
+                   : nullptr);
+  }();
+  if (get_dpi_for_monitor_func) {
+    HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpi_x;
+    UINT dpi_y;
+    HRESULT hr =
+        get_dpi_for_monitor_func(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y);
+    if (SUCCEEDED(hr)) {
+      return static_cast<int>(dpi_x);
+    }
+  }
+  HDC screen_dc = GetDC(nullptr);
+  int dpi_x = GetDeviceCaps(screen_dc, LOGPIXELSX);
+  ReleaseDC(nullptr, screen_dc);
+  return dpi_x;
 }
 
 }  // namespace
@@ -86,7 +107,7 @@ VivaldiInstallUIOptions::VivaldiInstallUIOptions(VivaldiInstallUIOptions&&) =
 VivaldiInstallUIOptions& VivaldiInstallUIOptions::operator=(
     VivaldiInstallUIOptions&&) = default;
 
-VivaldiInstallDialog* VivaldiInstallDialog::this_ = NULL;
+VivaldiInstallDialog* VivaldiInstallDialog::this_ = nullptr;
 
 VivaldiInstallDialog::VivaldiInstallDialog(HINSTANCE instance,
                                            VivaldiInstallUIOptions options)
@@ -125,7 +146,7 @@ VivaldiInstallDialog::~VivaldiInstallDialog() {
 VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
   if (!InstallUtil::IsOSSupported()) {
     // TODO(jarle@vivaldi.com): Localize
-    MessageBox(NULL, L"Vivaldi requires Windows 7 or higher.", NULL,
+    MessageBox(nullptr, L"Vivaldi requires Windows 7 or higher.", nullptr,
                MB_ICONINFORMATION | MB_SETFOREGROUND);
     return INSTALL_DLG_ERROR;
   }
@@ -136,22 +157,9 @@ VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
                ICC_USEREX_CLASSES;
   ::InitCommonControlsEx(&iccx);
 
-  int dpi_x = 0;
-  int dpi_y = 0;
-  GetDPI(&dpi_x, &dpi_y);
-  if (dpi_x <= 96)
-    dpi_scale_ = DPI_NORMAL;
-  else if (dpi_x <= 120)
-    dpi_scale_ = DPI_MEDIUM;
-  else if (dpi_x <= 144)
-    dpi_scale_ = DPI_LARGE;
-  else if (dpi_x <= 192)
-    dpi_scale_ = DPI_XL;
-  else
-    dpi_scale_ = DPI_XXL;
-
-  HWND hdlg = CreateDialogParam(instance_, MAKEINTRESOURCE(IDD_DIALOG1), NULL,
-                                DlgProc, reinterpret_cast<LPARAM>(this));
+  HWND hdlg =
+      CreateDialogParam(instance_, MAKEINTRESOURCE(IDD_DIALOG1), nullptr,
+                        DlgProc, reinterpret_cast<LPARAM>(this));
   DCHECK_EQ(hdlg, hdlg_);
 
   InitDialog();
@@ -395,7 +403,7 @@ void VivaldiInstallDialog::TranslateDialog() {
                      ToComboIndex(options_.install_type));
 
   // Reset background image after string changes
-  InitBkgnd();
+  UpdateSize();
 }
 
 // Finds the tree view of the SHBrowseForFolder dialog
@@ -412,7 +420,7 @@ static BOOL CALLBACK EnumChildProcFindTreeView(HWND hwnd, LPARAM lparam) {
     *tree_view = hwnd;
     return FALSE;
   }
-  *tree_view = NULL;
+  *tree_view = nullptr;
   return TRUE;
 }
 
@@ -420,7 +428,7 @@ static int CALLBACK BrowseCallbackProc(HWND hwnd,
                                        UINT msg,
                                        LPARAM lparam,
                                        LPARAM lpdata) {
-  static HWND tree_view = NULL;
+  static HWND tree_view = nullptr;
   switch (msg) {
     case BFFM_INITIALIZED:
       if (lpdata)
@@ -449,11 +457,11 @@ void VivaldiInstallDialog::ShowBrowseFolderDialog() {
   bi.lpfn = BrowseCallbackProc;
   bi.lParam = (LPARAM)options_.install_dir.value().c_str();
 
-  OleInitialize(NULL);
+  OleInitialize(nullptr);
 
   LPITEMIDLIST pIDL = SHBrowseForFolder(&bi);
 
-  if (pIDL == NULL)
+  if (!pIDL)
     return;
 
   std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
@@ -537,7 +545,7 @@ bool VivaldiInstallDialog::IsInstallPathValid(const base::FilePath& path) {
   if (!path_is_valid)
     MessageBox(hdlg_,
                GetLocalizedString(IDS_INSTALL_DEST_FOLDER_INVALID_BASE).c_str(),
-               NULL, MB_ICONERROR);
+               nullptr, MB_ICONERROR);
   return path_is_valid;
 }
 
@@ -571,12 +579,12 @@ InstallStatus VivaldiInstallDialog::ShowEULADialog() {
 
 std::wstring VivaldiInstallDialog::GetInnerFrameEULAResource() {
   wchar_t full_exe_path[MAX_PATH];
-  int len = ::GetModuleFileName(NULL, full_exe_path, MAX_PATH);
+  int len = ::GetModuleFileName(nullptr, full_exe_path, MAX_PATH);
   if (len == 0 || len == MAX_PATH)
     return L"";
 
   const wchar_t* inner_frame_resource = L"IDR_OEM_EULA_VIV.HTML";
-  if (NULL == FindResource(NULL, inner_frame_resource, RT_HTML))
+  if (!FindResource(nullptr, inner_frame_resource, RT_HTML))
     return L"";
   // spaces and DOS paths must be url encoded.
   std::wstring url_path = base::StringPrintf(
@@ -645,128 +653,72 @@ void VivaldiInstallDialog::ShowControl(int id, bool show) {
   ShowWindow(hControl, show ? SW_SHOW : SW_HIDE);
 }
 
-void VivaldiInstallDialog::InitCtlBrushes() {
-  DCHECK(brushes_.empty());
-
-  auto add_brush = [&](int id) { brushes_.emplace_back(id, GetCtlBrush(id)); };
-
-  brushes_.clear();
-  add_brush(IDC_BTN_MODE);
-  add_brush(advanced_mode_ ? IDC_SYSLINK_TOS : IDC_SYSLINK_TOS_SIMPLE);
-  add_brush(advanced_mode_ ? IDOK : IDC_BTN_OK_SIMPLE);
-  add_brush(advanced_mode_ ? IDCANCEL : IDC_BTN_CANCEL_SIMPLE);
-  add_brush(advanced_mode_ ? IDC_SYSLINK_PRIVACY_POLICY
-                           : IDC_SYSLINK_PRIVACY_POLICY_SIMPLE);
-  if (advanced_mode_) {
-    add_brush(IDC_BTN_BROWSE);
-    add_brush(IDC_CHECK_REGISTER);
-    add_brush(IDC_CHECK_NO_AUTOUPDATE);
-  }
-}
-
 void VivaldiInstallDialog::ClearAll() {
-  for (const std::pair<int, HBRUSH>& id_brush : brushes_) {
-    DeleteObject(id_brush.second);
-  }
-  brushes_.clear();
   if (back_bmp_) {
     DeleteObject(back_bmp_);
-    back_bmp_ = NULL;
+    back_bmp_ = nullptr;
   }
-  if (hbitmap_bkgnd_) {
-    DeleteObject(hbitmap_bkgnd_);
-    hbitmap_bkgnd_ = NULL;
-  }
-  std::vector<HGLOBAL>::iterator it;
-  for (it = dibs_.begin(); it != dibs_.end(); it++) {
-    HGLOBAL hDIB = *it;
-    GlobalFree(hDIB);
-  }
-  dibs_.clear();
 }
 
-void VivaldiInstallDialog::InitBkgnd() {
+void VivaldiInstallDialog::UpdateSize() {
   if (back_bmp_)
     ClearAll();
 
   DCHECK(instance_);
-  switch (dpi_scale_) {
-    case DPI_NORMAL:
-      hbitmap_bkgnd_ = LoadBitmap(
-          instance_, (advanced_mode_)
-                         ? MAKEINTRESOURCE(IDB_BITMAP_BKGND_100_ADVANCED)
-                         : MAKEINTRESOURCE(IDB_BITMAP_BKGND_100_SIMPLE));
-      break;
-    case DPI_MEDIUM:
-      hbitmap_bkgnd_ = LoadBitmap(
-          instance_, (advanced_mode_)
-                         ? MAKEINTRESOURCE(IDB_BITMAP_BKGND_125_ADVANCED)
-                         : MAKEINTRESOURCE(IDB_BITMAP_BKGND_125_SIMPLE));
-      break;
-    case DPI_LARGE:
-      hbitmap_bkgnd_ = LoadBitmap(
-          instance_, (advanced_mode_)
-                         ? MAKEINTRESOURCE(IDB_BITMAP_BKGND_150_ADVANCED)
-                         : MAKEINTRESOURCE(IDB_BITMAP_BKGND_150_SIMPLE));
-      break;
-    case DPI_XL:
-      hbitmap_bkgnd_ = LoadBitmap(
-          instance_, (advanced_mode_)
-                         ? MAKEINTRESOURCE(IDB_BITMAP_BKGND_200_ADVANCED)
-                         : MAKEINTRESOURCE(IDB_BITMAP_BKGND_200_SIMPLE));
-      break;
-    case DPI_XXL:
-      hbitmap_bkgnd_ = LoadBitmap(
-          instance_, (advanced_mode_)
-                         ? MAKEINTRESOURCE(IDB_BITMAP_BKGND_250_ADVANCED)
-                         : MAKEINTRESOURCE(IDB_BITMAP_BKGND_250_SIMPLE));
-      break;
+
+  // Currently we do not scale the controls on dynamic DPI updates. Thus we want
+  // to keep the background image and the window size at the initial DPI to
+  // continue to match controls even after DPI change. So cache the DPI.
+  //
+  // TODO(igor@vivaldi.com): Call base::win::EnableHighDPISupport() somewhere
+  // and react to WM_DPICHANGED to rescale everything dynamically.
+  static const int initial_dpi = GetCurrentDpi(hdlg_);
+
+  // For DPI above 240 we scale bitmaps, but to avoid artifacts we limit the
+  // scale factor only to integers.
+  int dpi = initial_dpi;
+  int bitmap_scale = 1.0;
+  constexpr int kMaxUnscaledDpi = 240;
+  if (dpi > kMaxUnscaledDpi) {
+    bitmap_scale = (dpi + kMaxUnscaledDpi - 1) / kMaxUnscaledDpi;
+    dpi /= bitmap_scale;
   }
-  DCHECK(hbitmap_bkgnd_);
-  if (!hbitmap_bkgnd_)
-    return;
+  int bitmap_id;
+  if (dpi <= 96) {
+    bitmap_id = advanced_mode_ ? IDB_BITMAP_BKGND_100_ADVANCED
+                               : IDB_BITMAP_BKGND_100_SIMPLE;
+  } else if (dpi <= 120) {
+    bitmap_id = advanced_mode_ ? IDB_BITMAP_BKGND_125_ADVANCED
+                               : IDB_BITMAP_BKGND_125_SIMPLE;
+  } else if (dpi <= 144) {
+    bitmap_id = advanced_mode_ ? IDB_BITMAP_BKGND_150_ADVANCED
+                               : IDB_BITMAP_BKGND_150_SIMPLE;
+  } else if (dpi <= 192) {
+    bitmap_id = advanced_mode_ ? IDB_BITMAP_BKGND_200_ADVANCED
+                               : IDB_BITMAP_BKGND_200_SIMPLE;
+  } else {
+    bitmap_id = advanced_mode_ ? IDB_BITMAP_BKGND_250_ADVANCED
+                               : IDB_BITMAP_BKGND_250_SIMPLE;
+  }
+
+  back_bmp_ = LoadBitmap(instance_, MAKEINTRESOURCE(bitmap_id));
+  CHECK(back_bmp_);  // We cannot recover from the out-of-memory.
 
   BITMAP bm = {0};
-  GetObject(hbitmap_bkgnd_, sizeof(bm), &bm);
+  GetObject(back_bmp_, sizeof(bm), &bm);
 
-  back_bmp_width_ = bm.bmWidth;
-  back_bmp_height_ = bm.bmHeight;
+  background_bitmap_width_ = bm.bmWidth;
+  background_bitmap_height_ = bm.bmHeight;
+  window_client_width_ = background_bitmap_width_ * bitmap_scale;
+  window_client_height_ = background_bitmap_height_ * bitmap_scale;
 
-  HDC hdc = GetDC(NULL);
-  if (hdc) {
-    BITMAPINFO bmi;
-    memset(&bmi, 0, sizeof(bmi));
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    bmi.bmiHeader.biWidth = back_bmp_width_;
-    bmi.bmiHeader.biHeight = back_bmp_height_;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biSizeImage = back_bmp_width_ * back_bmp_height_ * 4;
-
-    back_bmp_ =
-        CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &back_bits_, NULL, 0);
-    if (back_bmp_) {
-      GetDIBits(hdc, hbitmap_bkgnd_, 0, back_bmp_height_, back_bits_, &bmi,
-                DIB_RGB_COLORS);
-    }
-    ReleaseDC(NULL, hdc);
-
-    InitCtlBrushes();
-    Resize();
-  }
-}
-
-void VivaldiInstallDialog::Resize() {
-  RECT size_rect = {0, 0, back_bmp_width_ - 1, back_bmp_height_ - 1};
+  RECT size_rect = {0, 0, window_client_width_, window_client_height_};
   AdjustWindowRectEx(&size_rect, GetWindowLong(hdlg_, GWL_STYLE), FALSE,
                      GetWindowLong(hdlg_, GWL_EXSTYLE));
-  back_bmp_width_ = size_rect.right - size_rect.left;
-  back_bmp_height_ = size_rect.bottom - size_rect.top;
-  SetWindowPos(hdlg_, NULL, 0, 0, size_rect.right - size_rect.left,
+  SetWindowPos(hdlg_, nullptr, 0, 0, size_rect.right - size_rect.left,
                size_rect.bottom - size_rect.top,
                SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE);
-  InvalidateRect(hdlg_, NULL, TRUE);
+  InvalidateRect(hdlg_, nullptr, TRUE);
 }
 
 void VivaldiInstallDialog::Center() {
@@ -789,92 +741,52 @@ BOOL VivaldiInstallDialog::OnEraseBkgnd(HDC hdc) {
   if (back_bmp_) {
     HDC hdc_mem = CreateCompatibleDC(hdc);
     HGDIOBJ old_bmp = SelectObject(hdc_mem, back_bmp_);
-    BitBlt(hdc, 0, 0, back_bmp_width_, back_bmp_height_, hdc_mem, 0, 0,
-           SRCCOPY);
+    StretchBlt(hdc, 0, 0, window_client_width_, window_client_height_, hdc_mem,
+               0, 0, background_bitmap_width_, background_bitmap_height_,
+               SRCCOPY);
     SelectObject(hdc_mem, old_bmp);
     DeleteDC(hdc_mem);
   }
   return TRUE;
 }
 
-HBRUSH VivaldiInstallDialog::CreateDIBrush(int x, int y, int cx, int cy) {
-  if ((x < 0) || (y < 0) || (0 == cx) || (0 == cy) ||
-      ((x + cx) > back_bmp_width_) || ((y + cy) > back_bmp_height_) ||
-      (NULL == back_bits_)) {
-    DCHECK(false);
-    return NULL;
-  }
-  HGLOBAL hDIB = GlobalAlloc(GHND, sizeof(BITMAPINFOHEADER) + cx * cy * 4);
-
-  if (NULL == hDIB)
-    return NULL;
-
-  LPVOID lpvBits = GlobalLock(hDIB);
-
-  if (NULL == lpvBits) {
-    GlobalFree(hDIB);
-    return NULL;
-  }
-
-  BITMAPINFOHEADER* bih = reinterpret_cast<BITMAPINFOHEADER*>(lpvBits);
-
-  bih->biBitCount = 32;
-  bih->biCompression = BI_RGB;
-  bih->biWidth = cx;
-  bih->biHeight = cy;
-  bih->biPlanes = 1;
-  bih->biSize = sizeof(BITMAPINFOHEADER);
-  bih->biSizeImage = cx * cy * 4;
-
-  PDWORD pdwData = (PDWORD)(bih + 1);
-
-  size_t cnt = cx << 2;
-  int src_start_offset = back_bmp_height_ - 1 - y;
-
-  for (int j = 0; j < cy; j++) {
-    int dst_off = (cy - 1 - j) * cx;
-    int src_off = (src_start_offset - j) * back_bmp_width_ + x;
-
-    PDWORD pdwDst = pdwData + dst_off;
-    PDWORD pdwSrc = ((PDWORD)back_bits_) + src_off;
-    memcpy(pdwDst, pdwSrc, cnt);
-  }
-
-  GlobalUnlock(hDIB);
-
-  LOGBRUSH lb;
-
-  lb.lbStyle = BS_DIBPATTERN;
-  lb.lbColor = DIB_RGB_COLORS;
-  lb.lbHatch = (ULONG_PTR)hDIB;
-
-  HBRUSH hBrush = CreateBrushIndirect(&lb);
-
-  if (NULL == hBrush)
-    GlobalFree(hDIB);
-
-  dibs_.push_back(hDIB);
-  return hBrush;
-}
-
-HBRUSH VivaldiInstallDialog::GetCtlBrush(int id_dlg_item) {
-  RECT rcControl;
-  GetWindowRect(GetDlgItem(hdlg_, id_dlg_item), &rcControl);
-  int w = rcControl.right - rcControl.left;
-  int h = rcControl.bottom - rcControl.top;
-  POINT pt = {rcControl.left, rcControl.top};
-  ScreenToClient(hdlg_, &pt);
-  return CreateDIBrush(pt.x, pt.y, w, h);
-}
-
 HBRUSH VivaldiInstallDialog::OnCtlColor(HWND hwnd_ctl, HDC hdc) {
+  int id = GetDlgCtrlID(hwnd_ctl);
+  bool is_link = (id == IDC_SYSLINK_PRIVACY_POLICY ||
+                  id == IDC_SYSLINK_PRIVACY_POLICY_SIMPLE);
+  if (is_link) {
+    SetTextColor(hdc, RGB(0x0e, 0x0e, 0x0e));  // dark gray
+  }
+
+  // Make controls transparent.
   SetBkMode(hdc, TRANSPARENT);
 
-  for (const std::pair<int, HBRUSH>& id_brush : brushes_) {
-    if (hwnd_ctl == GetDlgItem(hdlg_, id_brush.first))
-      return id_brush.second;
+  bool is_checkbox =
+      (id == IDC_CHECK_NO_AUTOUPDATE || id == IDC_CHECK_REGISTER);
+  if (is_checkbox) {
+    // With checkboxes Windows already painted the background with the parent
+    // window background color at this point. Apparently there is no flags like
+    // LWS_TRANSPARENT but that works for checkboxes. So to get the effect of a
+    // transparent background draw that background again against the area of the
+    // control.
+    RECT r{};
+    GetWindowRect(hwnd_ctl, &r);
+
+    // the above is a window rect; convert to client rect
+    POINT p = {.x = r.left, .y = r.top};
+    ScreenToClient(hdlg_, &p);
+    int saved = SaveDC(hdc);
+    if (saved != 0) {
+      SetViewportOrgEx(hdc, -p.x, -p.y, nullptr);
+      POINT p2 = {.x = r.right, .y = r.bottom};
+      ScreenToClient(hdlg_, &p2);
+      IntersectClipRect(hdc, p.x, p.y, p2.x, p2.y);
+      OnEraseBkgnd(hdc);
+      RestoreDC(hdc, saved);
+    }
   }
 
+  // Prevent any futher background rendering.
   return (HBRUSH)GetStockObject(NULL_BRUSH);
 }
 
@@ -901,7 +813,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
         SendMessage(GetDlgItem(hdlg, IDC_SYSLINK_PRIVACY_POLICY_SIMPLE),
                     LM_SETITEM, 0, (LPARAM)&item);
       }
-      this_->InitBkgnd();
+      this_->UpdateSize();
       this_->Center();
       return (INT_PTR)TRUE;
 
@@ -911,10 +823,6 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
       break;
 
     case WM_CTLCOLORSTATIC:
-      if ((HWND)lparam == GetDlgItem(hdlg, IDC_SYSLINK_PRIVACY_POLICY) ||
-          (HWND)lparam == GetDlgItem(hdlg, IDC_SYSLINK_PRIVACY_POLICY_SIMPLE))
-        SetTextColor((HDC)wparam, RGB(0x0e, 0x0e, 0x0e));  // dark gray
-      FALLTHROUGH;
     case WM_CTLCOLORBTN:
       if (this_)
         return (INT_PTR)this_->OnCtlColor((HWND)lparam, (HDC)wparam);
@@ -930,8 +838,8 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
       } else if (pnmh->idFrom == IDC_SYSLINK_PRIVACY_POLICY ||
                  pnmh->idFrom == IDC_SYSLINK_PRIVACY_POLICY_SIMPLE) {
         if ((pnmh->code == NM_CLICK) || (pnmh->code == NM_RETURN)) {
-          ShellExecute(NULL, L"open", L"https://vivaldi.com/privacy", NULL,
-                       NULL, SW_SHOWNORMAL);
+          ShellExecute(nullptr, L"open", L"https://vivaldi.com/privacy",
+                       nullptr, nullptr, SW_SHOWNORMAL);
         }
       }
     } break;
@@ -991,7 +899,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
         case IDC_BTN_MODE:
           this_->advanced_mode_ = !this_->advanced_mode_;
           this_->ShowOptions();
-          this_->InitBkgnd();
+          this_->UpdateSize();
           break;
         case IDC_COMBO_INSTALLTYPES:
           if (HIWORD(wparam) == CBN_SELCHANGE)

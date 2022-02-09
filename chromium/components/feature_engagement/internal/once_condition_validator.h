@@ -7,7 +7,6 @@
 
 #include <unordered_set>
 
-#include "base/macros.h"
 #include "components/feature_engagement/internal/condition_validator.h"
 #include "components/feature_engagement/public/feature_list.h"
 
@@ -49,6 +48,7 @@ class OnceConditionValidator : public ConditionValidator {
       const EventModel& event_model,
       const AvailabilityModel& availability_model,
       const DisplayLockController& display_lock_controller,
+      const Configuration* configuration,
       uint32_t current_day) const override;
   void NotifyIsShowing(
       const base::Feature& feature,

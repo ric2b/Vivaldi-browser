@@ -4,80 +4,86 @@
   "SRCDIR": "../..",
 
   "app/native_resources/vivaldi_native_resources.grd": {
-    "includes": [36000],
-    "structures": [36100],
-  },
-  "app/native_resources/vivaldi_native_strings.grd": {
-    "messages": [36200],
+    "includes": [60000],
+    "structures": [60100],
   },
   "app/native_resources/vivaldi_native_unscaled.grd": {
-    "includes": [36300],
-    "structures": [36400],
+    "includes": [60200],
+    "structures": [60300],
   },
   "extensions/vivaldi_extension_resources.grd": {
-    "includes": [36500],
-    "structures": [36600],
+    "includes": [60400],
+    "structures": [60500],
+  },
+
+  # Long sections, hundreds of strings
+  "app/native_resources/vivaldi_native_strings.grd": {
+    "messages": [61000],
   },
   "app/android/vivaldi_android_strings.grd": {
-    "messages": [36700],
+    "messages": [62000],
   },
+
+
+  # Dummy values, since these are not actually used because
+  # the files are merged with their chromium counterparts
   "app/resources/android-permissions/vivaldi_android_permissions_strings.grd": {
-    "messages": [39000],
+    "messages": [90000],
   },
   "app/resources/strings/vivaldi_strings.grd": {
-    "messages": [400],
+    "messages": [90100],
   },
   "app/resources/generated/vivaldi_generated_resources.grd": {
-    "messages": [800],
+    "messages": [90200],
   },
   "app/resources/locale/vivaldi_locale_settings.grd": {
-    "messages": [10000],
+    "messages": [90300],
   },
   "app/resources/theme/vivaldi_unscaled_resources.grd": {
-    "includes": [10150],
+    "includes": [90400],
   },
   "app/resources/theme/vivaldi_theme_resources.grd": {
-    "structures": [10250],
+    "structures": [90500],
   },
   "app/resources/components_strings/vivaldi_components_strings.grd": {
-    "messages": [15120],
+    "messages": [90600],
   },
   "app/resources/components_locale_settings/vivaldi_components_locale_settings.grd": {
-    "includes": [15080],
-    "messages": [15090],
+    "includes": [90700],
+    "messages": [90800],
   },
   "app/resources/components/vivaldi_components.grd": {
-    "messages": [15060],
+    "messages": [90900],
   },
   "app/resources/components_resources/vivaldi_components.grd": {
-    "includes": [17230],
+    "includes": [91000],
   },
   "app/resources/components_scaled/vivaldi_components_scaled.grd": {
-    "structures": [17400],
+    "structures": [91100],
   },
   "app/resources/content/vivaldi_content_strings.grd": {
-    "messages": [25600],
+    "messages": [91200],
   },
   "app/resources/android/vivaldi_android_chrome_strings.grd": {
-    "messages": [38000]
+    "messages": [91300]
   },
   "app/resources/renderer/vivaldi_renderer_resources.grd": {
-    "includes": [14250],
-    "structures": [14360],
+    "includes": [91400],
+    "structures": [91500],
   },
   "app/resources/platform_locale_settings/vivaldi_platform_locale_settings.grd": {
-    "messages": [10100],
+    "messages": [91600],
   },
   "app/resources/ui/vivaldi_ui_resources.grd": {
-    "structures": [27000],
+    "structures": [91700],
   },
   "app/resources/ui_strings/vivaldi_ui_strings.grd": {
-    "messages": [27350],
+    "messages": [91800],
   },
   "app/resources/theme/vivaldi_theme.grd": {
-    "structures": [10250],
+    "structures": [91900],
   },
   "app/resources/locale/vivaldi_locale_strings.grd": {
-    "messages": [10000],
+    "messages": [92000],
   }
 }

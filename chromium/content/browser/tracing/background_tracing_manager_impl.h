@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/no_destructor.h"
 #include "content/browser/tracing/background_tracing_config_impl.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/background_tracing_manager.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/tracing/public/cpp/perfetto/trace_event_data_source.h"
@@ -94,6 +94,10 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   static void RecordMetric(Metrics metric);
 
   CONTENT_EXPORT static BackgroundTracingManagerImpl* GetInstance();
+
+  BackgroundTracingManagerImpl(const BackgroundTracingManagerImpl&) = delete;
+  BackgroundTracingManagerImpl& operator=(const BackgroundTracingManagerImpl&) =
+      delete;
 
   // Callable from any thread.
   static void ActivateForProcess(int child_process_id,
@@ -198,8 +202,6 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
 
   // Callback to override the background tracing config for testing.
   ConfigTextFilterForTesting config_text_filter_for_testing_;
-
-  DISALLOW_COPY_AND_ASSIGN(BackgroundTracingManagerImpl);
 };
 
 }  // namespace content

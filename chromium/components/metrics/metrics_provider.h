@@ -6,7 +6,6 @@
 #define COMPONENTS_METRICS_METRICS_PROVIDER_H_
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -110,6 +109,11 @@ class MetricsProvider {
   // Called when building a log about the current session, so the provider
   // can provide data about it.
   virtual void ProvideCurrentSessionData(ChromeUserMetricsExtension* uma_proto);
+
+  // Called when building a UKM log about the current session. UKM-specific data
+  // should generally only be emitted through this method, and UMA data should
+  // be emitted through ProvideCurrentSessionData().
+  virtual void ProvideCurrentSessionUKMData();
 
   // Provides additional stability metrics. Stability metrics can be provided
   // directly into |stability_proto| fields or by logging stability histograms

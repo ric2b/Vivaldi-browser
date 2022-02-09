@@ -9,7 +9,10 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/span.h"
 #include "content/common/content_export.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -71,6 +74,15 @@ struct ClientIdData {
   GURL privacy_policy_url;
 };
 
+struct CONTENT_EXPORT IdentityProviderMetadata {
+  IdentityProviderMetadata();
+  IdentityProviderMetadata(const IdentityProviderMetadata& other);
+  ~IdentityProviderMetadata();
+
+  absl::optional<SkColor> brand_text_color;
+  absl::optional<SkColor> brand_background_color;
+};
+
 // IdentityRequestDialogController is in interface for control of the UI
 // surfaces that are displayed to intermediate the exchange of ID tokens.
 class CONTENT_EXPORT IdentityRequestDialogController {
@@ -85,7 +97,6 @@ class CONTENT_EXPORT IdentityRequestDialogController {
     kStateful,
   };
 
-  using AccountList = std::vector<content::IdentityRequestAccount>;
   using InitialApprovalCallback = base::OnceCallback<void(UserApproval)>;
   using IdProviderWindowClosedCallback = base::OnceCallback<void()>;
   using TokenExchangeApprovalCallback = base::OnceCallback<void(UserApproval)>;
@@ -127,7 +138,8 @@ class CONTENT_EXPORT IdentityRequestDialogController {
       content::WebContents* rp_web_contents,
       content::WebContents* idp_web_contents,
       const GURL& idp_signin_url,
-      AccountList accounts,
+      base::span<const IdentityRequestAccount> accounts,
+      const IdentityProviderMetadata& idp_metadata,
       const ClientIdData& client_id_data,
       IdentityRequestAccount::SignInMode sign_in_mode,
       AccountSelectionCallback on_selected) {}

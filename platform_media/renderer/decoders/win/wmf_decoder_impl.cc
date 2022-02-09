@@ -873,8 +873,7 @@ WMFDecoderImpl<StreamType>::CreateOutputBuffer(
     return nullptr;
   }
   // The sample time in IMFSample is expressed in hundreds of nanoseconds.
-  const base::TimeDelta timestamp =
-      base::TimeDelta::FromMicroseconds(sample_time / 10);
+  const base::TimeDelta timestamp = base::Microseconds(sample_time / 10);
 
   scoped_refptr<typename WMFDecoderImpl<StreamType>::OutputType> output =
       CreateOutputBufferInternal(data, data_size, timestamp);

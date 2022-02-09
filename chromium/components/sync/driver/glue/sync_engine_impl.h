@@ -11,11 +11,11 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/invalidation/public/invalidation_handler.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
@@ -78,8 +78,7 @@ class SyncEngineImpl : public SyncEngine,
   void StartConfiguration() override;
   void StartSyncingWithServer() override;
   void SetEncryptionPassphrase(const std::string& passphrase) override;
-  void SetDecryptionPassphrase(const std::string& passphrase) override;
-  void SetKeystoreEncryptionBootstrapToken(const std::string& token) override;
+  void SetExplicitPassphraseDecryptionKey(std::unique_ptr<Nigori> key) override;
   void AddTrustedVaultDecryptionKeys(
       const std::vector<std::vector<uint8_t>>& keys,
       base::OnceClosure done_cb) override;
@@ -201,16 +200,16 @@ class SyncEngineImpl : public SyncEngine,
 
   // The host which we serve (and are owned by). Set in Initialize() and nulled
   // out in StopSyncingForShutdown().
-  SyncEngineHost* host_ = nullptr;
+  raw_ptr<SyncEngineHost> host_ = nullptr;
 
-  invalidation::InvalidationService* invalidator_ = nullptr;
+  raw_ptr<invalidation::InvalidationService> invalidator_ = nullptr;
   bool invalidation_handler_registered_ = false;
 
   // Sync invalidation service, it may be nullptr if sync invalidations are
   // disabled or not supported. It doesn't need to have the same as
   // |invalidation_handler_registered_| flag as the service doesn't have topics
   // to unsibscribe.
-  SyncInvalidationsService* sync_invalidations_service_ = nullptr;
+  raw_ptr<SyncInvalidationsService> sync_invalidations_service_ = nullptr;
 
   ModelTypeSet last_enabled_types_;
   bool sessions_invalidation_enabled_;

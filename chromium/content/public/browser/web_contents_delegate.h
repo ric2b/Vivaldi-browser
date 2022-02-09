@@ -25,7 +25,6 @@
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
-#include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom-forward.h"
@@ -69,7 +68,6 @@ struct DropData;
 struct MediaPlayerWatchTime;
 struct NativeWebKeyboardEvent;
 struct Referrer;
-struct SecurityStyleExplanations;
 }  // namespace content
 
 namespace device {
@@ -186,10 +184,15 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Notifies the delegate that this contents is starting or is done loading
   // some resource. The delegate should use this notification to represent
   // loading feedback. See WebContents::IsLoading()
-  // |to_different_document| will be true unless the load is a fragment
-  // navigation, or triggered by history.pushState/replaceState.
+  // |should_show_loading_ui| indicates whether a load start should be visible
+  // in UI elements. It is generally true for different-document navigations and
+  // false for most same-document navigations (because same-documents are
+  // typically instantaneous so there's no point in flickering the UI). The
+  // exception is appHistory's transitionWhile, which is the sole type of
+  // same-document navigation that is asynchronous, and therefore a UI change is
+  // sensible.
   virtual void LoadingStateChanged(WebContents* source,
-                                   bool to_different_document) {}
+                                   bool should_show_loading_ui) {}
 
   // Request the delegate to close this web contents, and do whatever cleanup
   // it needs to do.
@@ -286,8 +289,14 @@ class CONTENT_EXPORT WebContentsDelegate {
                            const std::string& request_method,
                            base::OnceCallback<void(bool)> callback);
 
+  // Asks the delegate to open/show the context menu based on `params`.
+  //
+  // The `render_frame_host` represents the frame that requests the context menu
+  // (typically this frame is focused, but this is not necessarily the case -
+  // see https://crbug.com/1257907#c14).
+  //
   // Returns true if the context menu operation was handled by the delegate.
-  virtual bool HandleContextMenu(RenderFrameHost* render_frame_host,
+  virtual bool HandleContextMenu(RenderFrameHost& render_frame_host,
                                  const ContextMenuParams& params);
 
   // Allows delegates to handle keyboard events before sending to the renderer.
@@ -456,8 +465,15 @@ class CONTENT_EXPORT WebContentsDelegate {
                                base::OnceCallback<void()> on_confirm,
                                base::OnceCallback<void()> on_cancel);
 
+  // Returns whether entering fullscreen with |EnterFullscreenModeForTab()| is
+  // allowed.
+  virtual bool CanEnterFullscreenModeForTab(
+      RenderFrameHost* requesting_frame,
+      const blink::mojom::FullscreenOptions& options);
+
   // Called when the renderer puts a tab into fullscreen mode.
   // |requesting_frame| is the specific content frame requesting fullscreen.
+  // |CanEnterFullscreenModeForTab()| must return true on entry.
   virtual void EnterFullscreenModeForTab(
       RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) {}
@@ -606,14 +622,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool SaveFrame(const GURL& url,
                          const Referrer& referrer,
                          content::RenderFrameHost* rfh);
-
-  // Can be overridden by a delegate to return the security style of the
-  // given |web_contents|, populating |security_style_explanations| to
-  // explain why the SecurityStyle was downgraded. Returns
-  // SecurityStyleUnknown if not overriden.
-  virtual blink::SecurityStyle GetSecurityStyle(
-      WebContents* web_contents,
-      SecurityStyleExplanations* security_style_explanations);
 
   // Called when a suspicious navigation of the main frame has been blocked.
   // Allows the delegate to provide some UI to let the user know about the

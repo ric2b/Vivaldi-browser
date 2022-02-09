@@ -17,6 +17,15 @@
 int wxFinite(double x);
 
 /**
+    Returns the greatest common divisor of the two given numbers.
+
+    @since 3.1.0
+
+    @header{wx/math.h}
+*/
+unsigned int wxGCD(unsigned int u, unsigned int v);
+
+/**
     Returns a non-zero value if x is NaN (not a number), returns 0 otherwise.
 
     @header{wx/math.h}
@@ -43,11 +52,57 @@ wxFloat64 wxConvertFromIeeeExtended(const wxInt8 *bytes);
 void wxConvertToIeeeExtended(wxFloat64 num, wxInt8 *bytes);
 
 /**
-    Small wrapper around round().
-*/
-int wxRound(double x);
+    Convert degrees to radians.
 
-/** 
+    This function simply returns its argument multiplied by @c M_PI/180 but is
+    more readable than writing this expression directly.
+
+    @see wxRadToDeg()
+
+    @since 3.1.0
+ */
+double wxDegToRad(double deg);
+
+/**
+    Convert radians to degrees.
+
+    This function simply returns its argument multiplied by @c 180/M_PI but is
+    more readable than writing this expression directly.
+
+    @see wxDegToRad()
+
+    @since 3.1.0
+ */
+double wxRadToDeg(double rad);
+
+/**
+    Count the number of trailing zeros.
+
+    This function returns the number of trailing zeros in the binary notation
+    of its argument @a x. E.g. for @a x equal to 4, or 0b100, the return value
+    is 2.
+
+    @param x Strictly positive, i.e. non-zero, 32 bit number.
+
+    @since 3.1.2
+ */
+unsigned int wxCTZ(wxUint32 x);
+
+/**
+    Small wrapper around std::lround().
+
+    This function exists for compatibility, as it was more convenient than
+    std::round() before C++11. Use std::lround() in the new code.
+
+    It is defined for all floating point types @c T and can be also used with
+    integer types for compatibility, but such use is deprecated -- simply
+    remove the calls to wxRound() from your code if you're using it with
+    integer types, it is unnecessary in this case.
+*/
+template <typename T>
+int wxRound(T x);
+
+/**
    Returns true if both double values are identical. This is
    only reliable if both values have been assigned the same
    value.

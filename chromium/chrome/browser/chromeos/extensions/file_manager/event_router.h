@@ -12,13 +12,15 @@
 #include <string>
 #include <vector>
 
+#include "ash/components/arc/session/arc_service_manager.h"
+#include "ash/components/disks/disk_mount_manager.h"
+#include "ash/components/settings/timezone_settings.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
-#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/file_watcher.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
+#include "chrome/browser/ash/file_manager/io_task_controller.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_manager/volume_manager_observer.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
@@ -27,9 +29,6 @@
 #include "chrome/browser/chromeos/extensions/file_manager/drivefs_event_router.h"
 #include "chrome/browser/chromeos/extensions/file_manager/system_notification_manager.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "chromeos/disks/disk_mount_manager.h"
-#include "chromeos/settings/timezone_settings.h"
-#include "components/arc/arc_service_manager.h"
 #include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -52,12 +51,13 @@ class EventRouter
     : public KeyedService,
       public network::NetworkConnectionTracker::NetworkConnectionObserver,
       public extensions::ExtensionRegistryObserver,
-      public chromeos::system::TimezoneSettings::Observer,
+      public ash::system::TimezoneSettings::Observer,
       public VolumeManagerObserver,
       public arc::ArcIntentHelperObserver,
       public drive::DriveIntegrationServiceObserver,
       public guest_os::GuestOsSharePath::Observer,
-      public ash::TabletModeObserver {
+      public ash::TabletModeObserver,
+      public file_manager::io_task::IOTaskController::Observer {
  public:
   using DispatchDirectoryChangeEventImplCallback =
       base::RepeatingCallback<void(const base::FilePath& virtual_path,
@@ -134,12 +134,12 @@ class EventRouter
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
 
-  // chromeos::system::TimezoneSettings::Observer overrides.
+  // ash::system::TimezoneSettings::Observer overrides.
   void TimezoneChanged(const icu::TimeZone& timezone) override;
 
   // VolumeManagerObserver overrides.
-  void OnDiskAdded(const chromeos::disks::Disk& disk, bool mounting) override;
-  void OnDiskRemoved(const chromeos::disks::Disk& disk) override;
+  void OnDiskAdded(const ash::disks::Disk& disk, bool mounting) override;
+  void OnDiskRemoved(const ash::disks::Disk& disk) override;
   void OnDeviceAdded(const std::string& device_path) override;
   void OnDeviceRemoved(const std::string& device_path) override;
   void OnVolumeMounted(chromeos::MountError error_code,
@@ -191,6 +191,9 @@ class EventRouter
 
   // Returns a weak pointer for the event router.
   base::WeakPtr<EventRouter> GetWeakPtr();
+
+  // IOTaskController::Observer:
+  void OnIOTaskStatus(const io_task::ProgressStatus& status) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(EventRouterTest, PopulateCrostiniEvent);

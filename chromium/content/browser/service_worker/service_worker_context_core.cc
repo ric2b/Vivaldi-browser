@@ -14,10 +14,9 @@
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/services/storage/public/cpp/quota_client_callback_wrapper.h"
 #include "content/browser/log_console_message.h"
@@ -34,10 +33,10 @@
 #include "content/browser/service_worker/service_worker_quota_client.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_registration.h"
+#include "content/browser/service_worker/service_worker_security_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/content_navigation_policy.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/console_message.h"
@@ -48,6 +47,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "third_party/blink/public/common/service_worker/service_worker_scope_match.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration_options.mojom.h"
@@ -171,6 +171,10 @@ class ClearAllServiceWorkersHelper
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
   }
 
+  ClearAllServiceWorkersHelper(const ClearAllServiceWorkersHelper&) = delete;
+  ClearAllServiceWorkersHelper& operator=(const ClearAllServiceWorkersHelper&) =
+      delete;
+
   void OnResult(blink::ServiceWorkerStatusCode) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     // We do nothing in this method. We use this class to wait for all callbacks
@@ -210,7 +214,6 @@ class ClearAllServiceWorkersHelper
   }
 
   base::OnceClosure callback_;
-  DISALLOW_COPY_AND_ASSIGN(ClearAllServiceWorkersHelper);
 };
 
 }  // namespace
@@ -694,8 +697,8 @@ bool ServiceWorkerContextCore::IsValidRegisterRequest(
     *out_error = ServiceWorkerConsts::kBadMessageInvalidURL;
     return false;
   }
-  if (ServiceWorkerUtils::ContainsDisallowedCharacter(scope_url, script_url,
-                                                      out_error)) {
+  if (blink::ServiceWorkerScopeOrScriptUrlContainsDisallowedCharacter(
+          scope_url, script_url, out_error)) {
     return false;
   }
   std::vector<GURL> urls = {scope_url, script_url};
@@ -704,7 +707,8 @@ bool ServiceWorkerContextCore::IsValidRegisterRequest(
     return false;
 
   urls.push_back(key.origin().GetURL());
-  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
+  if (!service_worker_security_utils::AllOriginsMatchAndCanAccessServiceWorkers(
+          urls)) {
     *out_error = ServiceWorkerConsts::kBadMessageImproperOrigins;
     return false;
   }
@@ -922,8 +926,8 @@ void ServiceWorkerContextCore::NotifyAllRegistrationsDeletedForStorageKey(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   observer_list_->Notify(
       FROM_HERE,
-      &ServiceWorkerContextCoreObserver::OnAllRegistrationsDeletedForOrigin,
-      key.origin());
+      &ServiceWorkerContextCoreObserver::OnAllRegistrationsDeletedForStorageKey,
+      key);
 }
 
 void ServiceWorkerContextCore::OnStorageWiped() {

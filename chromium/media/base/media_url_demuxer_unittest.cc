@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -23,6 +22,9 @@ class MediaUrlDemuxerTest : public testing::Test {
   MediaUrlDemuxerTest()
       : default_media_url_(GURL("http://example.com/file.mp4")),
         default_first_party_url_(GURL("http://example.com/")) {}
+
+  MediaUrlDemuxerTest(const MediaUrlDemuxerTest&) = delete;
+  MediaUrlDemuxerTest& operator=(const MediaUrlDemuxerTest&) = delete;
 
   void InitializeTest(const GURL& media_url,
                       const GURL& first_party,
@@ -47,9 +49,6 @@ class MediaUrlDemuxerTest : public testing::Test {
 
   // Necessary, or else base::ThreadTaskRunnerHandle::Get() fails.
   base::test::SingleThreadTaskEnvironment task_environment_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MediaUrlDemuxerTest);
 };
 
 TEST_F(MediaUrlDemuxerTest, BaseCase) {

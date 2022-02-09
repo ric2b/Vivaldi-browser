@@ -13,7 +13,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -198,7 +197,8 @@ class SelectFileDialogWinTest : public ::testing::Test,
   bool was_cancelled_ = false;
 };
 
-TEST_F(SelectFileDialogWinTest, CancelAllDialogs) {
+// TODO(crbug.com/1265379): Flaky.
+TEST_F(SelectFileDialogWinTest, DISABLED_CancelAllDialogs) {
   // Intentionally not testing SELECT_UPLOAD_FOLDER because the dialog is
   // customized for that case.
   struct {

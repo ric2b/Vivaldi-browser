@@ -15,7 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/trusted_vault_client.h"
 #include "components/sync/trusted_vault/trusted_vault_access_token_fetcher_frontend.h"
@@ -68,6 +68,7 @@ class StandaloneTrustedVaultClient : public TrustedVaultClient {
                                 const std::vector<uint8_t>& public_key,
                                 int method_type_hint,
                                 base::OnceClosure cb) override;
+  void ClearDataForAccount(const CoreAccountInfo& account_info) override;
 
   // Runs |cb| when all requests have completed.
   void WaitForFlushForTesting(base::OnceClosure cb) const;

@@ -16,7 +16,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/renderer/service_worker/controller_service_worker_connector.h"
 #include "content/test/fake_network_url_loader_factory.h"
@@ -524,6 +523,12 @@ const char kHistogramSubresourceFetchEvent[] =
     "ServiceWorker.FetchEvent.Subresource.Status";
 
 class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
+ public:
+  ServiceWorkerSubresourceLoaderTest(
+      const ServiceWorkerSubresourceLoaderTest&) = delete;
+  ServiceWorkerSubresourceLoaderTest& operator=(
+      const ServiceWorkerSubresourceLoaderTest&) = delete;
+
  protected:
   ServiceWorkerSubresourceLoaderTest()
       : fake_container_host_(&fake_controller_) {}
@@ -680,8 +685,6 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
   scoped_refptr<ControllerServiceWorkerConnector> connector_;
   FakeServiceWorkerContainerHost fake_container_host_;
   FakeControllerServiceWorker fake_controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerSubresourceLoaderTest);
 };
 
 TEST_F(ServiceWorkerSubresourceLoaderTest, Basic) {

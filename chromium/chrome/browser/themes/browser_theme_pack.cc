@@ -93,10 +93,10 @@ constexpr int kTallestFrameHeight = kTallestTabHeight + 19;
 
 // Version number of the current theme pack. We just throw out and rebuild
 // theme packs that aren't int-equal to this. Increment this number if you
-// change default theme assets, if you need themes to recreate their generated
-// images (which are cached), or if you changed how missing values are
-// generated.
-const int kThemePackVersion = 75;
+// changed default theme assets, if you need themes to recreate their generated
+// images (which are cached), if you changed how missing values are
+// generated, or if you changed any constants.
+const int kThemePackVersion = 77;
 
 // IDs that are in the DataPack won't clash with the positive integer
 // uint16_t. kHeaderID should always have the maximum value because we want the
@@ -153,7 +153,8 @@ constexpr PersistingImagesTable kPersistingImages[] = {
     {PRS::kWindowControlBackground, IDR_THEME_WINDOW_CONTROL_BACKGROUND,
      "theme_window_control_background"},
 
-    // NOTE! If you make any changes here, please update kThemePackVersion.
+    // /!\ If you make any changes here, you must also increment
+    // kThemePackVersion above, or else themes will display incorrectly.
 };
 
 BrowserThemePack::PersistentID GetPersistentIDByName(const std::string& key) {
@@ -213,7 +214,8 @@ const StringToIntTable kTintTable[] = {
     {"frame_incognito_inactive", TP::TINT_FRAME_INCOGNITO_INACTIVE},
     {"background_tab", TP::TINT_BACKGROUND_TAB},
 
-    // NOTE! If you make any changes here, please update kThemePackVersion.
+    // /!\ If you make any changes here, you must also increment
+    // kThemePackVersion above, or else themes will display incorrectly.
 };
 const size_t kTintTableLength = base::size(kTintTable);
 
@@ -249,7 +251,8 @@ constexpr StringToIntTable kOverwritableColorTable[] = {
     {"ntp_link", TP::COLOR_NTP_LINK},
     {"ntp_text", TP::COLOR_NTP_TEXT},
 
-    // NOTE! If you make any changes here, please update kThemePackVersion.
+    // /!\ If you make any changes here, you must also increment
+    // kThemePackVersion above, or else themes will display incorrectly.
 };
 constexpr size_t kOverwritableColorTableLength =
     base::size(kOverwritableColorTable);
@@ -269,7 +272,8 @@ constexpr int kNonOverwritableColorTable[] = {
     TP::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_INACTIVE,
     TP::COLOR_TAB_FOREGROUND_ACTIVE_FRAME_INACTIVE
 
-    // NOTE! If you make any changes here, please update kThemePackVersion.
+    // /!\ If you make any changes here, you must also increment
+    // kThemePackVersion above, or else themes will display incorrectly.
 };
 constexpr size_t kNonOverwritableColorTableLength =
     base::size(kNonOverwritableColorTable);
@@ -285,7 +289,8 @@ const StringToIntTable kDisplayProperties[] = {
     {"ntp_background_repeat", TP::NTP_BACKGROUND_TILING},
     {"ntp_logo_alternate", TP::NTP_LOGO_ALTERNATE},
 
-    // NOTE! If you make any changes here, please update kThemePackVersion.
+    // /!\ If you make any changes here, you must also increment
+    // kThemePackVersion above, or else themes will display incorrectly.
 };
 const size_t kDisplayPropertiesSize = base::size(kDisplayProperties);
 
@@ -875,16 +880,17 @@ BrowserThemePack::BrowserThemePack(ThemeType theme_type)
 bool BrowserThemePack::WriteToDisk(const base::FilePath& path) const {
   // Add resources for each of the property arrays.
   RawDataForWriting resources;
-  resources[kHeaderID] = base::StringPiece(
-      reinterpret_cast<const char*>(header_), sizeof(BrowserThemePackHeader));
-  resources[kTintsID] = base::StringPiece(
-      reinterpret_cast<const char*>(tints_),
-      sizeof(TintEntry[kTintTableLength]));
+  resources[kHeaderID] =
+      base::StringPiece(reinterpret_cast<const char*>(header_.get()),
+                        sizeof(BrowserThemePackHeader));
+  resources[kTintsID] =
+      base::StringPiece(reinterpret_cast<const char*>(tints_.get()),
+                        sizeof(TintEntry[kTintTableLength]));
   resources[kColorsID] =
-      base::StringPiece(reinterpret_cast<const char*>(colors_),
+      base::StringPiece(reinterpret_cast<const char*>(colors_.get()),
                         sizeof(ColorPair[kColorsArrayLength]));
   resources[kDisplayPropertiesID] = base::StringPiece(
-      reinterpret_cast<const char*>(display_properties_),
+      reinterpret_cast<const char*>(display_properties_.get()),
       sizeof(DisplayPropertyPair[kDisplayPropertiesSize]));
 
   int source_count = 1;
@@ -892,7 +898,7 @@ bool BrowserThemePack::WriteToDisk(const base::FilePath& path) const {
   for (; *end != -1; end++)
     source_count++;
   resources[kSourceImagesID] =
-      base::StringPiece(reinterpret_cast<const char*>(source_images_),
+      base::StringPiece(reinterpret_cast<const char*>(source_images_.get()),
                         source_count * sizeof(*source_images_));
 
   // Store results of GetResourceScaleFactorsAsString() in std::string as
@@ -1048,6 +1054,7 @@ void BrowserThemePack::AddColorMixers(
     int property_id;
     int color_id;
   } kThemePropertiesMap[] = {
+      {TP::COLOR_DOWNLOAD_SHELF, kColorDownloadShelf},
       {TP::COLOR_TOOLBAR, kColorToolbar},
       {TP::COLOR_OMNIBOX_TEXT, kColorOmniboxText},
       {TP::COLOR_OMNIBOX_BACKGROUND, kColorOmniboxBackground},
@@ -1405,7 +1412,7 @@ void BrowserThemePack::AddFileAtScaleToMap(const std::string& image_name,
 
 void BrowserThemePack::BuildSourceImagesArray(const FilePathMap& file_paths) {
   source_images_ = new int[file_paths.size() + 1];
-  std::transform(file_paths.begin(), file_paths.end(), source_images_,
+  std::transform(file_paths.begin(), file_paths.end(), source_images_.get(),
                  [](const auto& entry) { return entry.first; });
   source_images_[file_paths.size()] = -1;
 }

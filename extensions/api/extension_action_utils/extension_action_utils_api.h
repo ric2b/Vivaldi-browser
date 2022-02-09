@@ -22,7 +22,6 @@
 #include "extensions/schema/browser_action_utilities.h"
 
 class PrefChangeRegistrar;
-class VivaldiDocumentLoader;
 
 namespace extensions {
 
@@ -105,9 +104,7 @@ class ExtensionActionUtil : public KeyedService,
 
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
 
-  std::unique_ptr<VivaldiDocumentLoader> vivaldi_document_loader_;
-
-  Profile* profile_;
+  Profile* profile_ = nullptr;
 
   SessionID last_active_tab_window_ = SessionID::InvalidValue();
 };

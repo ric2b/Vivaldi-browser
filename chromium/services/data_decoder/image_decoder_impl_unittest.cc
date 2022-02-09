@@ -8,6 +8,7 @@
 #include "base/bind.h"
 #include "base/cxx17_backports.h"
 #include "base/lazy_instance.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "gin/array_buffer.h"
@@ -32,11 +33,11 @@ const int64_t kTestMaxImageSize = 128 * 1024;
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 #if defined(USE_V8_CONTEXT_SNAPSHOT)
-constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-    gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
+constexpr gin::V8SnapshotFileType kSnapshotType =
+    gin::V8SnapshotFileType::kWithAdditionalContext;
 #else
-constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
-    gin::V8Initializer::V8SnapshotFileType::kDefault;
+constexpr gin::V8SnapshotFileType kSnapshotType =
+    gin::V8SnapshotFileType::kDefault;
 #endif
 #endif
 
@@ -75,7 +76,7 @@ class Request {
     bitmap_ = result_image;
   }
 
-  ImageDecoderImpl* decoder_;
+  raw_ptr<ImageDecoderImpl> decoder_;
   SkBitmap bitmap_;
 };
 
@@ -112,7 +113,9 @@ class ImageDecoderImplTest : public testing::Test {
   ImageDecoderImpl* decoder() { return &decoder_; }
 
  private:
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  // V8 is generally multi threaded and may use tasks for arbitrary reasons,
+  // such as GC and off-thread compilation.
+  base::test::TaskEnvironment task_environment_;
   ImageDecoderImpl decoder_;
 };
 

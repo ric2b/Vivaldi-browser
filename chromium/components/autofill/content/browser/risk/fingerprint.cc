@@ -18,7 +18,7 @@
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/cpu.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_split.h"
@@ -92,13 +92,9 @@ void AddFontsToFingerprint(const base::ListValue& fonts,
   for (const auto& it : fonts.GetList()) {
     // Each item in the list is a two-element list such that the first element
     // is the font family and the second is the font name.
-    const base::ListValue* font_description = nullptr;
-    bool success = it.GetAsList(&font_description);
-    DCHECK(success);
+    DCHECK(it.is_list());
 
-    std::string font_name;
-    success = font_description->GetString(1, &font_name);
-    DCHECK(success);
+    std::string font_name = it.GetList()[1].GetString();
 
     machine->add_font(font_name);
   }
@@ -219,7 +215,7 @@ class FingerprintDataLoader : public content::GpuDataManagerObserver {
 
   // The GPU data provider.
   // Weak reference because the GpuDataManager class is a singleton.
-  content::GpuDataManager* const gpu_data_manager_;
+  const raw_ptr<content::GpuDataManager> gpu_data_manager_;
 
   // Ensures that any observer registrations for the GPU data are cleaned up by
   // the time this object is destroyed.
@@ -296,7 +292,7 @@ FingerprintDataLoader::FingerprintDataLoader(
   // Load GPU data if needed.
   if (gpu_data_manager_->GpuAccessAllowed(nullptr) &&
       !gpu_data_manager_->IsEssentialGpuInfoAvailable()) {
-    gpu_observation_.Observe(gpu_data_manager_);
+    gpu_observation_.Observe(gpu_data_manager_.get());
     OnGpuInfoUpdate();
   }
 
@@ -327,7 +323,7 @@ void FingerprintDataLoader::OnGpuInfoUpdate() {
   if (!gpu_data_manager_->IsEssentialGpuInfoAvailable())
     return;
 
-  DCHECK(gpu_observation_.IsObservingSource(gpu_data_manager_));
+  DCHECK(gpu_observation_.IsObservingSource(gpu_data_manager_.get()));
   gpu_observation_.Reset();
   MaybeFillFingerprint();
 }
@@ -484,7 +480,7 @@ void GetFingerprint(
   content::RenderWidgetHostView* host_view =
       web_contents->GetRenderWidgetHostView();
   if (host_view)
-    host_view->GetRenderWidgetHost()->GetScreenInfo(&screen_info);
+    screen_info = host_view->GetRenderWidgetHost()->GetScreenInfo();
 
   internal::GetFingerprintInternal(
       obfuscated_gaia_id, window_bounds, content_bounds, screen_info, version,

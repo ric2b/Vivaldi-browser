@@ -39,6 +39,7 @@
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_long_press_delegate.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
+#import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_container_view.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_view.h"
 #import "ios/chrome/browser/ui/tabs/tab_view.h"
@@ -103,9 +104,6 @@ const CGFloat kCollapsedTabWidthThreshold = 40.0;
 // one for each |kAutoscrollDecrementWidth| points.
 const CGFloat kMaxAutoscrollDistance = 10.0;
 const CGFloat kAutoscrollDecrementWidth = 10.0;
-
-// The size of the tab strip view.
-const CGFloat kTabStripHeight = 39.0;
 
 // The size of the new tab button.
 const CGFloat kNewTabButtonWidth = 44;
@@ -465,7 +463,7 @@ UIColor* BackgroundColor() {
     _tabStripView.backgroundColor = _view.backgroundColor;
     _tabStripView.layoutDelegate = self;
     _tabStripView.accessibilityIdentifier =
-        style == INCOGNITO ? @"Incognito Tab Strip" : @"Tab Strip";
+        style == INCOGNITO ? kIncognitoTabStripId : kRegularTabStripId;
     [_view addSubview:_tabStripView];
     _view.tabStripView = _tabStripView;
 

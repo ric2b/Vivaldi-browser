@@ -5,13 +5,15 @@ GN is a meta-build system that generates build files for
 
 Related resources:
 
-  * Documentation in [docs/](https://gn.googlesource.com/gn/+/master/docs/). In
-    particular [GN Quick Start
-    guide](https://gn.googlesource.com/gn/+/master/docs/quick_start.md)
-    and the [reference](https://gn.googlesource.com/gn/+/master/docs/reference.md)
-    (the latter is all builtin help converted to a single file).
+  * Documentation in [docs/](https://gn.googlesource.com/gn/+/main/docs/). In
+    particular:
+    *  [GN quick start guide](https://gn.googlesource.com/gn/+/main/docs/quick_start.md).
+    *  [Frequently asked questions](https://gn.googlesource.com/gn/+/main/docs/faq.md)
+    *  [Reference](https://gn.googlesource.com/gn/+/main/docs/reference.md)
+       (all builtin help converted to a single file).
   * An introductory [presentation](https://docs.google.com/presentation/d/15Zwb53JcncHfEwHpnG_PoIbbzQ3GQi_cpujYwbpcbZo/edit?usp=sharing).
   * The [mailing list](https://groups.google.com/a/chromium.org/forum/#!forum/gn-dev).
+  * The [bug database](https://bugs.chromium.org/p/gn/issues/list).
 
 ## What GN is for
 
@@ -69,7 +71,7 @@ some disadvanages:
   * There is no simple release scheme (see "Versioning and distribution" below).
     Projects are expected to manage the version of GN they require. Getting an
     appropriate GN binary can be a hurdle for new contributors to a project.
-    Since it is relatively uncommon, it can be more difficult to find
+    Since GN is relatively uncommon, it can be more difficult to find
     information and examples.
 
 GN can generate Ninja build files for C, C++, Rust, Objective C, and Swift
@@ -101,9 +103,19 @@ On Windows, it is expected that `cl.exe`, `link.exe`, and `lib.exe` can be found
 in `PATH`, so you'll want to run from a Visual Studio command prompt, or
 similar.
 
-On Linux and Mac, the default compiler is `clang++`, a recent version is
+On Linux, Mac and z/OS, the default compiler is `clang++`, a recent version is
 expected to be found in `PATH`. This can be overridden by setting `CC`, `CXX`,
 and `AR`.
+
+On z/OS, building GN requires [ZOSLIB](https://github.com/ibmruntimes/zoslib) to be
+installed, as described at that URL. When building with `build/gen.py`, use the option
+`--zoslib-dir` to specify the path to [ZOSLIB](https://github.com/ibmruntimes/zoslib):
+
+    cd gn
+    python build/gen.py --zoslib-dir /path/to/zoslib
+
+By default, if you don't specify `--zoslib-dir`, `gn/build/gen.py` expects to find
+`zoslib` directory under `gn/third_party/`.
 
 ## Examples
 
@@ -124,10 +136,10 @@ For a maximal configuration see the Chromium setup:
   * [Compiler setup](https://cs.chromium.org/chromium/src/build/config/compiler/BUILD.gn)
 
 and the Fuchsia setup:
-  * [.gn](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/master/.gn)
-  * [BUILDCONFIG.gn](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/master/build/config/BUILDCONFIG.gn)
-  * [Toolchain setup](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/master/build/toolchain/)
-  * [Compiler setup](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/master/build/config/BUILD.gn)
+  * [.gn](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/.gn)
+  * [BUILDCONFIG.gn](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/build/config/BUILDCONFIG.gn)
+  * [Toolchain setup](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/build/toolchain/)
+  * [Compiler setup](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/build/config/BUILD.gn)
 
 ## Reporting bugs
 
@@ -136,7 +148,8 @@ database](https://bugs.chromium.org/p/gn/issues/list).
 
 ## Sending patches
 
-GN uses [Gerrit](https://www.gerritcodereview.com/) for code review. The short
+GN uses [Gerrit](https://www.gerritcodereview.com/) for code review hosted at
+[gn-review.googlesource.com](https://gn-review.googlesource.com/). The short
 version of how to patch is:
 
     Register at https://gn-review.googlesource.com.
@@ -147,7 +160,7 @@ version of how to patch is:
 Then, to upload a change for review:
 
     git commit
-    git push origin HEAD:refs/for/master
+    git push origin HEAD:refs/for/main
 
 The first time you do this you'll get an error from the server about a missing
 change-ID. Follow the directions in the error message to install the change-ID
@@ -156,7 +169,7 @@ hook and run `git commit --amend` to apply the hook to the current commit.
 When revising a change, use:
 
     git commit --amend
-    git push origin HEAD:refs/for/master
+    git push origin HEAD:refs/for/main
 
 which will add the new changes to the existing code review, rather than creating
 a new one.
@@ -178,22 +191,22 @@ Most open-source projects are designed to use the developer's computer's current
 toolchain such as compiler, linker, and build tool. But the large
 centrally controlled projects that GN is designed for typically want a more
 hermetic environment. They will ensure that developers are using a specific
-compatible toolchain that is versioned with the code
+compatible toolchain that is versioned with the code.
 
 As a result, GN expects that the project choose the appropriate version of GN
 that will work with each version of the project. There is no "current stable
 version" of GN that is expected to work for all projects.
 
-As a result, the GN developers to not maintain any packages in any of the
+As a result, the GN developers do not maintain any packages in any of the
 various packaging systems (Debian, RedHat, HomeBrew, etc.). Some of these
 systems to have GN packages, but they are maintained by third parties and you
-should use at your own risk. Instead, we recommend you refer your checkout
+should use them at your own risk. Instead, we recommend you refer your checkout
 tooling to download binaries for a specific hash from [Google's build
 infrastructure](https://chrome-infra-packages.appspot.com/p/gn/gn) or compile
 your own.
 
 GN does not guarantee the backwards-compatibility of new versions and has no
-branches or versioning scheme beyond the sequence of commits to the master git
+branches or versioning scheme beyond the sequence of commits to the main git
 branch (which is expected to be stable).
 
 In practice, however, GN is very backwards-compatible. The core functionality

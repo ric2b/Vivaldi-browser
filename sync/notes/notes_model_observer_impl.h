@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "notes/note_node.h"
 #include "notes/notes_model_observer.h"
 #include "url/gurl.h"
@@ -83,7 +84,7 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
 
   // Points to the tracker owned by the processor. It keeps the mapping between
   // note nodes and corresponding sync server entities.
-  SyncedNoteTracker* const note_tracker_;
+  const raw_ptr<SyncedNoteTracker> note_tracker_;
 
   // The callback used to inform the sync engine that there are local changes to
   // be committed.

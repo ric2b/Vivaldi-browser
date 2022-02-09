@@ -12,7 +12,6 @@
 #include <thread>
 
 #include "base/logging.h"
-#include "base/macros.h"
 
 class WorkerPool {
  public:
@@ -31,7 +30,8 @@ class WorkerPool {
   std::condition_variable_any pool_notifier_;
   bool should_stop_processing_;
 
-  DISALLOW_COPY_AND_ASSIGN(WorkerPool);
+  WorkerPool(const WorkerPool&) = delete;
+  WorkerPool& operator=(const WorkerPool&) = delete;
 };
 
 #endif  // UTIL_WORKER_POOL_H_

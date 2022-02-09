@@ -5,31 +5,21 @@
 #ifndef CHROMECAST_BROWSER_SERVICE_CAST_SERVICE_SIMPLE_H_
 #define CHROMECAST_BROWSER_SERVICE_CAST_SERVICE_SIMPLE_H_
 
-#include <memory>
-
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/cast_web_view.h"
 #include "chromecast/service/cast_service.h"
 #include "url/gurl.h"
 
-namespace content {
-class BrowserContext;
-}  // namespace content
-
 namespace chromecast {
 
 class CastWebService;
-class CastWebViewFactory;
-class CastWindowManager;
 
 namespace shell {
 
-class CastServiceSimple : public CastService, public CastWebView::Delegate {
+class CastServiceSimple : public CastService {
  public:
-  CastServiceSimple(content::BrowserContext* browser_context,
-                    CastWindowManager* window_manager);
+  explicit CastServiceSimple(CastWebService* web_service);
 
   CastServiceSimple(const CastServiceSimple&) = delete;
   CastServiceSimple& operator=(const CastServiceSimple&) = delete;
@@ -43,16 +33,8 @@ class CastServiceSimple : public CastService, public CastWebView::Delegate {
   void StartInternal() override;
   void StopInternal() override;
 
-  // CastContentWindow::Delegate implementation:
-  void OnWindowDestroyed() override;
-  bool CanHandleGesture(GestureType gesture_type) override;
-  void ConsumeGesture(GestureType gesture_type,
-                      GestureHandledCallback handled_callback) override;
-  void OnVisibilityChange(VisibilityType visibility_type) override;
-
  private:
-  const std::unique_ptr<CastWebViewFactory> web_view_factory_;
-  const std::unique_ptr<CastWebService> web_service_;
+  CastWebService* const web_service_;
   CastWebView::Scoped cast_web_view_;
   GURL startup_url_;
 

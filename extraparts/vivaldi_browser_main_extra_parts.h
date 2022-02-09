@@ -5,7 +5,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "browser/translate/vivaldi_translate_language_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"

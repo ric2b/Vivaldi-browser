@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/overlay/overlay_window_views.h"
+#include "base/memory/raw_ptr.h"
 
 #include <memory>
 #include <string>
@@ -37,6 +38,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -203,7 +205,7 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
   }
 
  private:
-  views::Widget* widget_;
+  raw_ptr<views::Widget> widget_;
 };
 
 // OverlayWindow implementation of WidgetDelegate.
@@ -383,7 +385,9 @@ void OverlayWindowViews::SetUpViews() {
   auto close_controls_view =
       std::make_unique<views::CloseImageButton>(base::BindRepeating(
           [](OverlayWindowViews* overlay) {
-            overlay->controller_->Close(/*should_pause_video=*/true);
+            // Only pause the video if play/pause is available.
+            const bool should_pause_video = overlay->show_play_pause_button_;
+            overlay->controller_->Close(should_pause_video);
             overlay->RecordButtonPressed(OverlayWindowControl::kClose);
           },
           base::Unretained(this)));
@@ -867,8 +871,11 @@ bool OverlayWindowViews::IsActive() const {
 void OverlayWindowViews::Close() {
   views::Widget::Close();
 
-  if (auto* frame_sink_id = GetCurrentFrameSinkId())
-    GetCompositor()->RemoveChildFrameSink(*frame_sink_id);
+  if (has_registered_frame_sink_hierarchy_) {
+    DCHECK(GetCurrentFrameSinkId());
+    GetCompositor()->RemoveChildFrameSink(*GetCurrentFrameSinkId());
+    has_registered_frame_sink_hierarchy_ = false;
+  }
 }
 
 void OverlayWindowViews::ShowInactive() {
@@ -901,6 +908,12 @@ void OverlayWindowViews::ShowInactive() {
 
 void OverlayWindowViews::Hide() {
   views::Widget::Hide();
+
+  if (has_registered_frame_sink_hierarchy_) {
+    DCHECK(GetCurrentFrameSinkId());
+    GetCompositor()->RemoveChildFrameSink(*GetCurrentFrameSinkId());
+    has_registered_frame_sink_hierarchy_ = false;
+  }
 }
 
 bool OverlayWindowViews::IsVisible() {
@@ -999,15 +1012,17 @@ void OverlayWindowViews::SetHangUpButtonVisibility(bool is_visible) {
 }
 
 void OverlayWindowViews::SetSurfaceId(const viz::SurfaceId& surface_id) {
-  // TODO(https://crbug.com/925346): We also want to unregister the page that
-  // used to embed the video as its parent.
-  if (!GetCurrentFrameSinkId()) {
-    GetCompositor()->AddChildFrameSink(surface_id.frame_sink_id());
-  } else if (*GetCurrentFrameSinkId() != surface_id.frame_sink_id()) {
+  // The PiP window may have a previous surface set. If the window stays open
+  // since then, we need to unregister the previous frame sink; otherwise the
+  // surface frame sink should already be removed when the window closed.
+  if (has_registered_frame_sink_hierarchy_) {
+    DCHECK(GetCurrentFrameSinkId());
     GetCompositor()->RemoveChildFrameSink(*GetCurrentFrameSinkId());
-    GetCompositor()->AddChildFrameSink(surface_id.frame_sink_id());
   }
 
+  // Add the new frame sink to the PiP window and set the surface.
+  GetCompositor()->AddChildFrameSink(surface_id.frame_sink_id());
+  has_registered_frame_sink_hierarchy_ = true;
   video_view_->layer()->SetShowSurface(
       surface_id, GetBounds().size(), SK_ColorBLACK,
       cc::DeadlinePolicy::UseDefaultDeadline(),
@@ -1028,9 +1043,19 @@ void OverlayWindowViews::OnNativeBlur() {
   views::Widget::OnNativeBlur();
 }
 
+void OverlayWindowViews::OnNativeWidgetDestroying() {
+  views::Widget::OnNativeWidgetDestroying();
+  if (has_registered_frame_sink_hierarchy_) {
+    DCHECK(GetCurrentFrameSinkId());
+    GetCompositor()->RemoveChildFrameSink(*GetCurrentFrameSinkId());
+    has_registered_frame_sink_hierarchy_ = false;
+  }
+}
+
 void OverlayWindowViews::OnNativeWidgetDestroyed() {
   views::Widget::OnNativeWidgetDestroyed();
-  controller_->OnWindowDestroyed(/*should_pause_video=*/true);
+  controller_->OnWindowDestroyed(
+      /*should_pause_video=*/show_play_pause_button_);
 }
 
 gfx::Size OverlayWindowViews::GetMinimumSize() const {
@@ -1073,6 +1098,26 @@ void OverlayWindowViews::OnNativeWidgetWorkspaceChanged() {
   // TODO(apacible): Update sizes and maybe resize the current
   // Picture-in-Picture window. Currently, switching between workspaces on linux
   // does not trigger this function. http://crbug.com/819673
+}
+
+// When the PiP window is moved to different displays on Chrome OS, we need to
+// re-parent the frame sink since the compositor will change. After
+// OnNativeWidgetRemovingFromCompositor() is called, the window layer containing
+// the compositor will be removed in Window::RemoveChildImpl(), and
+// OnNativeWidgetAddedToCompositor() is called once another compositor is added.
+void OverlayWindowViews::OnNativeWidgetAddedToCompositor() {
+  if (!has_registered_frame_sink_hierarchy_ && GetCurrentFrameSinkId()) {
+    GetCompositor()->AddChildFrameSink(*GetCurrentFrameSinkId());
+    has_registered_frame_sink_hierarchy_ = true;
+  }
+}
+
+void OverlayWindowViews::OnNativeWidgetRemovingFromCompositor() {
+  if (has_registered_frame_sink_hierarchy_) {
+    DCHECK(GetCurrentFrameSinkId());
+    GetCompositor()->RemoveChildFrameSink(*GetCurrentFrameSinkId());
+    has_registered_frame_sink_hierarchy_ = false;
+  }
 }
 
 void OverlayWindowViews::OnKeyEvent(ui::KeyEvent* event) {
@@ -1380,6 +1425,10 @@ HangUpButton* OverlayWindowViews::hang_up_button_for_testing() const {
 BackToTabLabelButton* OverlayWindowViews::back_to_tab_label_button_for_testing()
     const {
   return back_to_tab_label_button_;
+}
+
+views::CloseImageButton* OverlayWindowViews::close_button_for_testing() const {
+  return close_controls_view_;
 }
 
 gfx::Point OverlayWindowViews::close_image_position_for_testing() const {

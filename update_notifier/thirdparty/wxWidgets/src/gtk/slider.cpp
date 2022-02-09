@@ -18,8 +18,8 @@
     #include "wx/math.h"
 #endif
 
-#include <gtk/gtk.h>
-#include "wx/gtk/private/gtk2-compat.h"
+#include "wx/gtk/private/wrapgtk.h"
+#include "wx/gtk/private/eventsdisabler.h"
 
 //-----------------------------------------------------------------------------
 // data
@@ -231,9 +231,8 @@ gtk_event_after(GtkRange* range, GdkEvent* event, wxSlider* win)
             ProcessScrollEvent(win, wxEVT_SCROLL_THUMBRELEASE);
         }
         // Keep slider at an integral position
-        win->GTKDisableEvents();
+        wxGtkEventsDisabler<wxSlider> noEvents(win);
         gtk_range_set_value(GTK_RANGE (win->m_scale), win->GetValue());
-        win->GTKEnableEvents();
     }
 }
 }
@@ -274,13 +273,22 @@ static gchar* gtk_format_value(GtkScale*, double value, void*)
 
 wxSlider::wxSlider()
 {
-    m_scale = NULL;
+    Init();
 }
 
 wxSlider::~wxSlider()
 {
     if (m_scale && m_scale != m_widget)
         GTKDisconnect(m_scale);
+}
+
+void wxSlider::Init()
+{
+    m_scrollEventType = GTK_SCROLL_NONE;
+    m_needThumbRelease = false;
+    m_blockScrollEvent = false;
+    m_tickFreq = 0;
+    m_scale = NULL;
 }
 
 bool wxSlider::Create(wxWindow *parent,
@@ -294,10 +302,8 @@ bool wxSlider::Create(wxWindow *parent,
                       const wxValidator& validator,
                       const wxString& name)
 {
+    Init();
     m_pos = value;
-    m_scrollEventType = GTK_SCROLL_NONE;
-    m_needThumbRelease = false;
-    m_blockScrollEvent = false;
 
     if (!PreCreation( parent, pos, size ) ||
         !CreateBase( parent, id, pos, size, style, validator, name ))
@@ -345,9 +351,9 @@ bool wxSlider::Create(wxWindow *parent,
     gtk_scale_set_draw_value(GTK_SCALE (m_scale), showValueLabel );
     if ( showValueLabel )
     {
-        // position the label appropriately: notice that wxSL_DIRECTION flags
-        // specify the position of the ticks, not label, under MSW and so the
-        // label is on the opposite side
+        // Position the label appropriately: notice that wxSL_DIRECTION flags
+        // specify the position of the ticks, not label, and so the
+        // label is on the opposite side.
         GtkPositionType posLabel;
         if ( style & wxSL_VERTICAL )
         {
@@ -422,21 +428,20 @@ void wxSlider::SetValue( int value )
 
 void wxSlider::GTKSetValue(int value)
 {
-    GTKDisableEvents();
+    wxGtkEventsDisabler<wxSlider> noEvents(this);
+
     gtk_range_set_value(GTK_RANGE (m_scale), value);
     // GTK only updates value label if handle moves at least 1 pixel
     gtk_widget_queue_draw(m_scale);
-    GTKEnableEvents();
 }
 
 void wxSlider::SetRange( int minValue, int maxValue )
 {
-    GTKDisableEvents();
+    wxGtkEventsDisabler<wxSlider> noEvents(this);
     if (minValue == maxValue)
        maxValue++;
     gtk_range_set_range(GTK_RANGE (m_scale), minValue, maxValue);
     gtk_range_set_increments(GTK_RANGE (m_scale), 1, (maxValue - minValue + 9) / 10);
-    GTKEnableEvents();
 
     if (HasFlag(wxSL_MIN_MAX_LABELS))
     {
@@ -471,9 +476,8 @@ int wxSlider::GetMax() const
 
 void wxSlider::SetPageSize( int pageSize )
 {
-    GTKDisableEvents();
+    wxGtkEventsDisabler<wxSlider> noEvents(this);
     gtk_range_set_increments(GTK_RANGE (m_scale), GetLineSize(), pageSize);
-    GTKEnableEvents();
 }
 
 int wxSlider::GetPageSize() const
@@ -494,9 +498,8 @@ int wxSlider::GetThumbLength() const
 
 void wxSlider::SetLineSize( int lineSize )
 {
-    GTKDisableEvents();
+    wxGtkEventsDisabler<wxSlider> noEvents(this);
     gtk_range_set_increments(GTK_RANGE (m_scale), lineSize, GetPageSize());
-    GTKEnableEvents();
 }
 
 int wxSlider::GetLineSize() const
@@ -505,11 +508,83 @@ int wxSlider::GetLineSize() const
     return int(gtk_adjustment_get_step_increment(adj));
 }
 
+void wxSlider::ClearTicks()
+{
+#if GTK_CHECK_VERSION(2,16,0)
+    if (wx_is_at_least_gtk2(16))
+        gtk_scale_clear_marks(GTK_SCALE (m_scale));
+#endif
+}
+
+void wxSlider::SetTick(int tickPos)
+{
+#if GTK_CHECK_VERSION(2,16,0)
+    if ( wx_is_at_least_gtk2(16) )
+    {
+        GtkPositionType posTicks;
+        long style = GetWindowStyle();
+
+        if ( style & wxSL_VERTICAL )
+        {
+            if ( style & wxSL_LEFT )
+                posTicks = GTK_POS_LEFT;
+            else
+                posTicks = GTK_POS_RIGHT;
+        }
+        else // horizontal slider
+        {
+            if ( style & wxSL_TOP )
+                posTicks = GTK_POS_TOP;
+            else
+                posTicks = GTK_POS_BOTTOM;
+        }
+
+        gtk_scale_add_mark(GTK_SCALE (m_scale), (double)tickPos, posTicks, NULL);
+    }
+#else
+    wxUnusedVar(tickPos);
+#endif
+}
+
+void wxSlider::DoSetTickFreq(int freq)
+{
+#if GTK_CHECK_VERSION(2,16,0)
+    if ( wx_is_at_least_gtk2(16) )
+    {
+        m_tickFreq = freq;
+        gtk_scale_clear_marks(GTK_SCALE (m_scale));
+
+        for (int i = GetMin() + freq; i < GetMax(); i += freq)
+            SetTick(i);
+    }
+#else
+    wxUnusedVar(freq);
+#endif
+}
+
+int wxSlider::GetTickFreq() const
+{
+#if GTK_CHECK_VERSION(2,16,0)
+    return wx_is_at_least_gtk2(16) ? m_tickFreq : -1;
+#else
+    return -1;
+#endif
+}
+
+wxSize wxSlider::DoGetBestSize() const
+{
+    // We need to get the size in the transverse direction from GTK, but we use
+    // hard-coded default in the other direction, as otherwise the slider would
+    // have the smallest possible size and not have any extent at all.
+    wxSize size = GTKGetPreferredSize(m_widget);
+    (HasFlag(wxSL_VERTICAL) ? size.y : size.x) = 100;
+    return size;
+}
+
 GdkWindow *wxSlider::GTKGetWindow(wxArrayGdkWindows& WXUNUSED(windows)) const
 {
 #ifdef __WXGTK3__
-    GdkWindow* wxGTKFindWindow(GtkWidget* widget);
-    return wxGTKFindWindow(m_scale);
+    return GTKFindWindow(m_scale);
 #else
     return GTK_RANGE(m_scale)->event_window;
 #endif

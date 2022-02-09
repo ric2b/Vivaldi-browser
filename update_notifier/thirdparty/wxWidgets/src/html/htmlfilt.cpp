@@ -8,9 +8,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_HTML && wxUSE_STREAMS
 
@@ -39,14 +36,14 @@ There is code for several default filters:
 
 */
 
-IMPLEMENT_ABSTRACT_CLASS(wxHtmlFilter, wxObject)
+wxIMPLEMENT_ABSTRACT_CLASS(wxHtmlFilter, wxObject);
 
 //--------------------------------------------------------------------------------
 // wxHtmlFilterPlainText
 //          filter for text/plain or uknown
 //--------------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterPlainText, wxHtmlFilter)
+wxIMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterPlainText, wxHtmlFilter);
 
 bool wxHtmlFilterPlainText::CanRead(const wxFSFile& WXUNUSED(file)) const
 {
@@ -81,14 +78,14 @@ wxString wxHtmlFilterPlainText::ReadFile(const wxFSFile& file) const
 
 class wxHtmlFilterImage : public wxHtmlFilter
 {
-    DECLARE_DYNAMIC_CLASS(wxHtmlFilterImage)
+    wxDECLARE_DYNAMIC_CLASS(wxHtmlFilterImage);
 
     public:
-        virtual bool CanRead(const wxFSFile& file) const;
-        virtual wxString ReadFile(const wxFSFile& file) const;
+        virtual bool CanRead(const wxFSFile& file) const wxOVERRIDE;
+        virtual wxString ReadFile(const wxFSFile& file) const wxOVERRIDE;
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterImage, wxHtmlFilter)
+wxIMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterImage, wxHtmlFilter);
 
 
 
@@ -114,7 +111,7 @@ wxString wxHtmlFilterImage::ReadFile(const wxFSFile& file) const
 //--------------------------------------------------------------------------------
 
 
-IMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterHTML, wxHtmlFilter)
+wxIMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterHTML, wxHtmlFilter);
 
 bool wxHtmlFilterHTML::CanRead(const wxFSFile& file) const
 {
@@ -188,18 +185,18 @@ wxString wxHtmlFilterHTML::ReadFile(const wxFSFile& file) const
 
 class wxHtmlFilterModule : public wxModule
 {
-    DECLARE_DYNAMIC_CLASS(wxHtmlFilterModule)
+    wxDECLARE_DYNAMIC_CLASS(wxHtmlFilterModule);
 
     public:
-        virtual bool OnInit()
+        virtual bool OnInit() wxOVERRIDE
         {
             wxHtmlWindow::AddFilter(new wxHtmlFilterHTML);
             wxHtmlWindow::AddFilter(new wxHtmlFilterImage);
             return true;
         }
-        virtual void OnExit() {}
+        virtual void OnExit() wxOVERRIDE {}
 };
 
-IMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterModule, wxModule)
+wxIMPLEMENT_DYNAMIC_CLASS(wxHtmlFilterModule, wxModule);
 
 #endif

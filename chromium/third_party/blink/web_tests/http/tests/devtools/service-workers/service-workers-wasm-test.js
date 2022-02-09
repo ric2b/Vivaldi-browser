@@ -4,9 +4,9 @@
 
 (async function() {
   TestRunner.addResult(`Tests V8 code cache for WebAssembly resources using Service Workers.\n`);
-  await TestRunner.loadModule('timeline');
+  await TestRunner.loadLegacyModule('timeline');
   await TestRunner.loadTestModule('performance_test_runner');
-  await TestRunner.loadModule('console');
+  await TestRunner.loadLegacyModule('console');
   await TestRunner.loadTestModule('application_test_runner');
 
   await ApplicationTestRunner.resetState();

@@ -20,14 +20,14 @@ class WXDLLIMPEXP_XRC wxCollapsiblePaneXmlHandler : public wxXmlResourceHandler
 {
 public:
     wxCollapsiblePaneXmlHandler();
-    virtual wxObject *DoCreateResource();
-    virtual bool CanHandle(wxXmlNode *node);
+    virtual wxObject *DoCreateResource() wxOVERRIDE;
+    virtual bool CanHandle(wxXmlNode *node) wxOVERRIDE;
 
 private:
     bool m_isInside;
     wxCollapsiblePane *m_collpane;
 
-    DECLARE_DYNAMIC_CLASS(wxCollapsiblePaneXmlHandler)
+    wxDECLARE_DYNAMIC_CLASS(wxCollapsiblePaneXmlHandler);
 };
 
 #endif // wxUSE_XRC && wxUSE_COLLPANE

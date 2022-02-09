@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_NEARBY_SHARING_SHARESHEET_NEARBY_SHARE_ACTION_H_
 #define CHROME_BROWSER_NEARBY_SHARING_SHARESHEET_NEARBY_SHARE_ACTION_H_
 
-#include "chrome/browser/sharesheet/share_action.h"
+#include "chrome/browser/sharesheet/share_action/share_action.h"
 #include "chrome/browser/ui/webui/nearby_share/nearby_share_dialog_ui.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
@@ -31,6 +31,7 @@ class NearbyShareAction : public sharesheet::ShareAction,
                     views::View* root_view,
                     apps::mojom::IntentPtr intent) override;
   void OnClosing(sharesheet::SharesheetController* controller) override {}
+  bool HasActionView() override;
   bool ShouldShowAction(const apps::mojom::IntentPtr& intent,
                         bool contains_hosted_document) override;
   bool OnAcceleratorPressed(const ui::Accelerator& accelerator) override;

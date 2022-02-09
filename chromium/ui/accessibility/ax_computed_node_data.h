@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/accessibility/ax_export.h"
@@ -67,14 +68,33 @@ class AX_EXPORT AXComputedNodeData final {
   // Retrieves from the cache or computes the on-screen text that is found
   // inside the associated node and all its descendants, caches the result, and
   // returns a reference to the cached text.
-  const std::string& GetOrComputeInnerTextUTF8() const;
-  const std::u16string& GetOrComputeInnerTextUTF16() const;
+  //
+  // Takes into account any formatting changes, such as paragraph breaks, that
+  // have been introduced by layout. For example, in the Web context,
+  // "A<div>B</div>C" would produce "A\nB\nC". Note that since hidden elements
+  // are not in the accessibility tree, they are not included in the result.
+  const std::string& GetOrComputeTextContentWithParagraphBreaksUTF8() const;
+  const std::u16string& GetOrComputeTextContentWithParagraphBreaksUTF16() const;
+
+  // Retrieves from the cache or computes the on-screen text that is found
+  // inside the associated node and all its descendants, caches the result, and
+  // returns a reference to the cached text.
+  //
+  // Does not take into account any formatting changes, such as extra paragraph
+  // breaks, that have been introduced by layout. For example, in the Web
+  // context, "A<div>B</div>C" would produce "ABC".
+  const std::string& GetOrComputeTextContentUTF8() const;
+  const std::u16string& GetOrComputeTextContentUTF16() const;
 
   // Returns the length of the on-screen text that is found inside the
   // associated node and all its descendants. The text is either retrieved from
   // the cache, or computed and then cached.
-  int GetOrComputeInnerTextLengthUTF8() const;
-  int GetOrComputeInnerTextLengthUTF16() const;
+  //
+  // Does not take into account line breaks that have been introduced by layout.
+  // For example, in the Web context, "A<div>B</div>C" would produce 3 and
+  // not 5.
+  int GetOrComputeTextContentLengthUTF8() const;
+  int GetOrComputeTextContentLengthUTF16() const;
 
  private:
   // Computes and caches the `unignored_index_in_parent_`,
@@ -99,11 +119,11 @@ class AX_EXPORT AXComputedNodeData final {
 
   // Computes the on-screen text that is found inside the associated node and
   // all its descendants.
-  std::string ComputeInnerTextUTF8() const;
-  std::u16string ComputeInnerTextUTF16() const;
+  std::string ComputeTextContentUTF8() const;
+  std::u16string ComputeTextContentUTF16() const;
 
   // The node that is associated with this instance. Weak, owns us.
-  const AXNode* const owner_;
+  const raw_ptr<const AXNode> owner_;
 
   mutable absl::optional<int> unignored_index_in_parent_;
   mutable absl::optional<int> unignored_child_count_;
@@ -115,10 +135,18 @@ class AX_EXPORT AXComputedNodeData final {
   mutable absl::optional<std::vector<int32_t>> word_starts_;
   mutable absl::optional<std::vector<int32_t>> word_ends_;
 
+  // There are two types of "text content". The first takes into
+  // account any formatting changes, such as paragraph breaks, that have been
+  // introduced by layout, whilst the other doesn't.
+  //
   // Only one copy (either UTF8 or UTF16) should be cached as each platform
-  // should only need one of the encodings.
-  mutable absl::optional<std::string> inner_text_utf8_;
-  mutable absl::optional<std::u16string> inner_text_utf16_;
+  // should only need one of the encodings. This applies to both text content as
+  // well as text content with paragraph breaks.
+  mutable absl::optional<std::string> text_content_with_paragraph_breaks_utf8_;
+  mutable absl::optional<std::u16string>
+      text_content_with_paragraph_breaks_utf16_;
+  mutable absl::optional<std::string> text_content_utf8_;
+  mutable absl::optional<std::u16string> text_content_utf16_;
 };
 
 }  // namespace ui

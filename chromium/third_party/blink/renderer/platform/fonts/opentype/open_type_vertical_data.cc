@@ -29,7 +29,6 @@
 #include "third_party/blink/renderer/platform/fonts/opentype/open_type_types.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
 #include "third_party/blink/renderer/platform/fonts/skia/skia_text_metrics.h"
-#include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 
@@ -305,10 +304,9 @@ void OpenTypeVerticalData::GetVerticalTranslationsForGlyphs(
                                  : count_top_side_bearings - 1];
       float top_side_bearing = top_side_bearing_f_unit * size_per_unit_;
 
-      SkRect skiaBounds;
-      SkFontGetBoundsForGlyph(font, glyph, &skiaBounds);
-      FloatRect bounds(skiaBounds);
-      out_xy_array[1] = bounds.Y() - top_side_bearing;
+      SkRect bounds;
+      SkFontGetBoundsForGlyph(font, glyph, &bounds);
+      out_xy_array[1] = bounds.y() - top_side_bearing;
       continue;
     }
 

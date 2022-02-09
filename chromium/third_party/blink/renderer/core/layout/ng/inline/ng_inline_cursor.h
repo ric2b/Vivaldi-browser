@@ -142,7 +142,7 @@ class CORE_EXPORT NGInlineCursorPosition {
   const PhysicalRect RectInContainerFragment() const {
     return item_->RectInContainerFragment();
   }
-  FloatRect ObjectBoundingBox(const NGInlineCursor& cursor) const;
+  gfx::RectF ObjectBoundingBox(const NGInlineCursor& cursor) const;
   const PhysicalOffset OffsetInContainerFragment() const {
     return item_->OffsetInContainerFragment();
   }
@@ -451,6 +451,7 @@ class CORE_EXPORT NGInlineCursor {
   // Move the current position to next line. It is error to call other than line
   // box.
   void MoveToNextLine();
+  void MoveToNextLineIncludingFragmentainer();
 
   // Same as |MoveToNext| except that this skips children even if they exist.
   void MoveToNextSkippingChildren();

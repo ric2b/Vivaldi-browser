@@ -11,14 +11,11 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_SPLASH
 
 #ifdef __WXGTK20__
-    #include <gtk/gtk.h>
+    #include "wx/gtk/private/wrapgtk.h"
 #endif
 
 #include "wx/splash.h"
@@ -35,11 +32,11 @@
 
 #define wxSPLASH_TIMER_ID       9999
 
-IMPLEMENT_DYNAMIC_CLASS(wxSplashScreen, wxFrame)
-BEGIN_EVENT_TABLE(wxSplashScreen, wxFrame)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSplashScreen, wxFrame);
+wxBEGIN_EVENT_TABLE(wxSplashScreen, wxFrame)
     EVT_TIMER(wxSPLASH_TIMER_ID, wxSplashScreen::OnNotify)
     EVT_CLOSE(wxSplashScreen::OnCloseWindow)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 void wxSplashScreen::Init()
 {
@@ -75,7 +72,7 @@ wxSplashScreen::wxSplashScreen(const wxBitmap& bitmap, long splashStyle, int mil
 
     m_window = new wxSplashScreenWindow(bitmap, this, wxID_ANY, pos, size, wxNO_BORDER);
 
-    SetClientSize(bitmap.GetWidth(), bitmap.GetHeight());
+    SetClientSize(bitmap.GetScaledWidth(), bitmap.GetScaledHeight());
 
     if (m_splashStyle & wxSPLASH_CENTRE_ON_PARENT)
         CentreOnParent();
@@ -133,19 +130,19 @@ void wxSplashScreen::OnCloseWindow(wxCloseEvent& WXUNUSED(event))
 // wxSplashScreenWindow
 // ----------------------------------------------------------------------------
 
-BEGIN_EVENT_TABLE(wxSplashScreenWindow, wxWindow)
+wxBEGIN_EVENT_TABLE(wxSplashScreenWindow, wxWindow)
 #ifdef __WXGTK__
     EVT_PAINT(wxSplashScreenWindow::OnPaint)
 #endif
     EVT_ERASE_BACKGROUND(wxSplashScreenWindow::OnEraseBackground)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 wxSplashScreenWindow::wxSplashScreenWindow(const wxBitmap& bitmap, wxWindow* parent,
                                            wxWindowID id, const wxPoint& pos,
                                            const wxSize& size, long style)
     : wxWindow(parent, id, pos, size, style)
+    , m_bitmap(bitmap)
 {
-    m_bitmap = bitmap;
 
 #if !defined(__WXGTK__) && wxUSE_PALETTE
     bool hiColour = (wxDisplayDepth() >= 16) ;
@@ -176,7 +173,7 @@ static void wxDrawSplashBitmap(wxDC& dc, const wxBitmap& bitmap, int WXUNUSED(x)
 #endif // USE_PALETTE_IN_SPLASH
 
     dcMem.SelectObjectAsSource(bitmap);
-    dc.Blit(0, 0, bitmap.GetWidth(), bitmap.GetHeight(), &dcMem, 0, 0, wxCOPY,
+    dc.Blit(0, 0, bitmap.GetScaledWidth(), bitmap.GetScaledHeight(), &dcMem, 0, 0, wxCOPY,
             true /* use mask */);
     dcMem.SelectObject(wxNullBitmap);
 

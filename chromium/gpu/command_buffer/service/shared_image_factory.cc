@@ -28,19 +28,20 @@
 #include "gpu/command_buffer/service/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
 #include "gpu/command_buffer/service/wrapped_sk_image.h"
-#include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_preferences.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_switches.h"
 #include "ui/gl/trace_util.h"
 
 #if defined(OS_LINUX) && defined(USE_OZONE) && BUILDFLAG(ENABLE_VULKAN)
-#include "ui/base/ui_base_features.h"  // nogncheck
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #if (defined(OS_LINUX) || defined(OS_FUCHSIA) || defined(OS_WIN)) && \
     BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/command_buffer/service/external_vk_image_factory.h"
+#include "gpu/command_buffer/service/shared_image_backing_factory_angle_vulkan.h"
 #elif defined(OS_ANDROID) && BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/command_buffer/service/external_vk_image_factory.h"
 #include "gpu/command_buffer/service/shared_image_backing_factory_ahardwarebuffer.h"
@@ -52,6 +53,7 @@
 #endif
 
 #if defined(OS_WIN)
+#include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
 #include "gpu/command_buffer/service/shared_image_backing_factory_d3d.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/gl_angle_util_win.h"
@@ -81,14 +83,9 @@ namespace {
 
 bool ShouldUseExternalVulkanImageFactory() {
 #if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform()) {
-    return ui::OzonePlatform::GetInstance()
-        ->GetPlatformProperties()
-        .uses_external_vulkan_image_factory;
-  }
-#endif
-#if defined(USE_X11)
-  return true;
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .uses_external_vulkan_image_factory;
 #else
   return false;
 #endif
@@ -151,7 +148,7 @@ SharedImageFactory::SharedImageFactory(
   }
 
   if (features::IsUsingRawDraw() && context_state) {
-    auto factory = std::make_unique<raster::SharedImageBackingFactoryRawDraw>();
+    auto factory = std::make_unique<SharedImageBackingFactoryRawDraw>();
     factories_.push_back(std::move(factory));
   }
 
@@ -179,7 +176,11 @@ SharedImageFactory::SharedImageFactory(
 #if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_ASH) && \
     !BUILDFLAG(IS_CHROMEOS_LACROS) && !BUILDFLAG(IS_CHROMECAST)
     // Desktop Linux, not ChromeOS.
-    if (ShouldUseExternalVulkanImageFactory()) {
+    if (base::FeatureList::IsEnabled(features::kVulkanFromANGLE)) {
+      auto factory = std::make_unique<SharedImageBackingFactoryAngleVulkan>(
+          gpu_preferences, workarounds, gpu_feature_info, context_state);
+      factories_.push_back(std::move(factory));
+    } else if (ShouldUseExternalVulkanImageFactory()) {
       auto external_vk_image_factory =
           std::make_unique<ExternalVkImageFactory>(context_state);
       factories_.push_back(std::move(external_vk_image_factory));
@@ -232,8 +233,9 @@ SharedImageFactory::SharedImageFactory(
   // TODO(sunnyps): Should we get the device from SharedContextState instead?
   auto d3d11_device = gl::QueryD3D11DeviceObjectFromANGLE();
   if (use_passthrough && is_skia_gl && d3d11_device) {
-    auto d3d_factory =
-        std::make_unique<SharedImageBackingFactoryD3D>(std::move(d3d11_device));
+    auto d3d_factory = std::make_unique<SharedImageBackingFactoryD3D>(
+        std::move(d3d11_device),
+        shared_image_manager_->dxgi_shared_handle_manager());
     d3d_backing_factory_ = d3d_factory.get();
     factories_.push_back(std::move(d3d_factory));
   }

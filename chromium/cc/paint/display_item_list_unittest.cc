@@ -19,7 +19,6 @@
 #include "cc/paint/paint_record.h"
 #include "cc/paint/render_surface_filters.h"
 #include "cc/paint/skia_paint_canvas.h"
-#include "cc/test/geometry_test_utils.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/skia_common.h"
 #include "cc/test/test_skcanvas.h"
@@ -114,17 +113,22 @@ TEST_F(DisplayItemListTest, TraceEmptyVisualRect) {
   ASSERT_TRUE(params_dict->GetList("items", &items));
   ASSERT_EQ(2u, items->GetList().size());
 
+  const base::Value* item_value;
   const base::DictionaryValue* item_dict;
   const base::ListValue* visual_rect;
   std::string name;
 
-  ASSERT_TRUE(items->GetDictionary(0, &item_dict));
+  item_value = &items->GetList()[0];
+  ASSERT_TRUE(item_value->is_dict());
+  item_dict = &base::Value::AsDictionaryValue(*item_value);
   ASSERT_TRUE(item_dict->GetList("visual_rect", &visual_rect));
   EXPECT_TRACED_RECT(0, 0, 0, 0, visual_rect);
   EXPECT_TRUE(item_dict->GetString("name", &name));
   EXPECT_EQ("DrawRect", name);
 
-  ASSERT_TRUE(items->GetDictionary(1, &item_dict));
+  item_value = &items->GetList()[1];
+  ASSERT_TRUE(item_value->is_dict());
+  item_dict = &base::Value::AsDictionaryValue(*item_value);
   ASSERT_TRUE(item_dict->GetList("visual_rect", &visual_rect));
   EXPECT_TRACED_RECT(8, 9, 10, 10, visual_rect);
   EXPECT_TRUE(item_dict->GetString("name", &name));
@@ -562,20 +566,22 @@ TEST_F(DisplayItemListTest, AsValueWithOps) {
       bool expected_has_skp[] = {false, true, true, true, true, false, false};
 
       for (int i = 0; i < 7; ++i) {
-        const base::DictionaryValue* item_dict;
-        ASSERT_TRUE(items->GetDictionary(i, &item_dict));
+        const base::Value& item_value = items->GetList()[i];
+        ASSERT_TRUE(item_value.is_dict());
+        const base::DictionaryValue& item_dict =
+            base::Value::AsDictionaryValue(item_value);
 
         const base::ListValue* visual_rect;
-        ASSERT_TRUE(item_dict->GetList("visual_rect", &visual_rect));
+        ASSERT_TRUE(item_dict.GetList("visual_rect", &visual_rect));
         EXPECT_TRACED_RECT(2, 3, 8, 9, visual_rect);
 
         std::string name;
-        EXPECT_TRUE(item_dict->GetString("name", &name));
+        EXPECT_TRUE(item_dict.GetString("name", &name));
         EXPECT_EQ(expected_names[i], name);
 
         EXPECT_EQ(
             expected_has_skp[i],
-            item_dict->GetString("skp64", static_cast<std::string*>(nullptr)));
+            item_dict.GetString("skp64", static_cast<std::string*>(nullptr)));
       }
     }
   }
@@ -648,7 +654,7 @@ TEST_F(DisplayItemListTest, AppendVisualRectSimple) {
   }
 
   EXPECT_EQ(1u, list->TotalOpCount());
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
 }
 
 TEST_F(DisplayItemListTest, AppendVisualRectEmptyBlock) {
@@ -671,9 +677,9 @@ TEST_F(DisplayItemListTest, AppendVisualRectEmptyBlock) {
   }
 
   EXPECT_EQ(3u, list->TotalOpCount());
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(2));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(0));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(1));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(2));
 }
 
 TEST_F(DisplayItemListTest, AppendVisualRectEmptyBlockContainingEmptyBlock) {
@@ -708,11 +714,11 @@ TEST_F(DisplayItemListTest, AppendVisualRectEmptyBlockContainingEmptyBlock) {
   }
 
   EXPECT_EQ(5u, list->TotalOpCount());
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(3));
-  EXPECT_RECT_EQ(gfx::Rect(), list->VisualRectForTesting(4));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(0));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(1));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(2));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(3));
+  EXPECT_EQ(gfx::Rect(), list->VisualRectForTesting(4));
 }
 
 TEST_F(DisplayItemListTest, AppendVisualRectBlockContainingDrawing) {
@@ -743,10 +749,10 @@ TEST_F(DisplayItemListTest, AppendVisualRectBlockContainingDrawing) {
   }
 
   EXPECT_EQ(4u, list->TotalOpCount());
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(3));
 }
 
 TEST_F(DisplayItemListTest, AppendVisualRectBlockContainingEscapedDrawing) {
@@ -777,10 +783,10 @@ TEST_F(DisplayItemListTest, AppendVisualRectBlockContainingEscapedDrawing) {
   }
 
   EXPECT_EQ(4u, list->TotalOpCount());
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_bounds, list->VisualRectForTesting(3));
 }
 
 TEST_F(DisplayItemListTest,
@@ -820,11 +826,11 @@ TEST_F(DisplayItemListTest,
   }
 
   EXPECT_EQ(5u, list->TotalOpCount());
-  EXPECT_RECT_EQ(drawing_a_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
+  EXPECT_EQ(drawing_a_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
 }
 
 TEST_F(DisplayItemListTest, AppendVisualRectTwoBlocksTwoDrawings) {
@@ -878,14 +884,14 @@ TEST_F(DisplayItemListTest, AppendVisualRectTwoBlocksTwoDrawings) {
   EXPECT_EQ(8u, list->TotalOpCount());
   gfx::Rect merged_drawing_bounds = gfx::Rect(drawing_a_bounds);
   merged_drawing_bounds.Union(drawing_b_bounds);
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
 }
 
 TEST_F(DisplayItemListTest,
@@ -941,14 +947,14 @@ TEST_F(DisplayItemListTest,
   EXPECT_EQ(8u, list->TotalOpCount());
   gfx::Rect merged_drawing_bounds = gfx::Rect(drawing_a_bounds);
   merged_drawing_bounds.Union(drawing_b_bounds);
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
 }
 
 TEST_F(DisplayItemListTest,
@@ -1004,14 +1010,14 @@ TEST_F(DisplayItemListTest,
   EXPECT_EQ(8u, list->TotalOpCount());
   gfx::Rect merged_drawing_bounds = gfx::Rect(drawing_a_bounds);
   merged_drawing_bounds.Union(drawing_b_bounds);
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
 }
 
 TEST_F(DisplayItemListTest,
@@ -1067,14 +1073,14 @@ TEST_F(DisplayItemListTest,
   EXPECT_EQ(8u, list->TotalOpCount());
   gfx::Rect merged_drawing_bounds = gfx::Rect(drawing_a_bounds);
   merged_drawing_bounds.Union(drawing_b_bounds);
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
-  EXPECT_RECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
-  EXPECT_RECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(0));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(1));
+  EXPECT_EQ(drawing_a_bounds, list->VisualRectForTesting(2));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(3));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(4));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(5));
+  EXPECT_EQ(drawing_b_bounds, list->VisualRectForTesting(6));
+  EXPECT_EQ(merged_drawing_bounds, list->VisualRectForTesting(7));
 }
 
 TEST_F(DisplayItemListTest, VisualRectForPairsEnclosingEmptyPainting) {
@@ -1103,9 +1109,9 @@ TEST_F(DisplayItemListTest, VisualRectForPairsEnclosingEmptyPainting) {
   }
 
   EXPECT_EQ(3u, list->TotalOpCount());
-  EXPECT_RECT_EQ(visual_rect, list->VisualRectForTesting(0));
-  EXPECT_RECT_EQ(visual_rect, list->VisualRectForTesting(1));
-  EXPECT_RECT_EQ(visual_rect, list->VisualRectForTesting(2));
+  EXPECT_EQ(visual_rect, list->VisualRectForTesting(0));
+  EXPECT_EQ(visual_rect, list->VisualRectForTesting(1));
+  EXPECT_EQ(visual_rect, list->VisualRectForTesting(2));
 }
 
 TEST_F(DisplayItemListTest, TotalOpCount) {

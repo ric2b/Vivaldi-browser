@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/system/message_center/message_center_scroll_bar.h"
 #include "ash/system/message_center/unified_message_list_view.h"
+#include "base/memory/scoped_refptr.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
@@ -25,18 +26,18 @@ class Notification;
 
 namespace views {
 class ScrollView;
+class ScrollBar;
 }  // namespace views
 
 namespace ash {
 
-class MessageCenterScrollBar;
 class StackedNotificationBar;
 class UnifiedMessageCenterBubble;
 class UnifiedSystemTrayModel;
 class UnifiedSystemTrayView;
 
 // Note: This enum represents the current animation state for
-// UnifiedMessageCenterView. There is an equivalent animation state emum in
+// UnifiedMessageCenterView. There is an equivalent animation state enum in
 // the child UnifiedMessageListView. The animations for these two views can
 // occur simultaneously or independently, so states for both views are tracked
 // separately.
@@ -62,7 +63,7 @@ class ASH_EXPORT UnifiedMessageCenterView
       public gfx::AnimationDelegate {
  public:
   UnifiedMessageCenterView(UnifiedSystemTrayView* parent,
-                           UnifiedSystemTrayModel* model,
+                           scoped_refptr<UnifiedSystemTrayModel> model,
                            UnifiedMessageCenterBubble* bubble);
 
   UnifiedMessageCenterView(const UnifiedMessageCenterView&) = delete;
@@ -95,8 +96,15 @@ class ASH_EXPORT UnifiedMessageCenterView
   // UnifiedMessageListView.
   void ConfigureMessageView(message_center::MessageView* message_view);
 
-  // Count number of notifications that are above visible area.
+  // Count number of notifications that are still in the MessageCenter that are
+  // above visible area. NOTE: views may be in the view hierarchy, but no longer
+  // in the message center.
   std::vector<message_center::Notification*> GetStackedNotifications() const;
+
+  // Count the number of notifications that are not visible in the scrollable
+  // window, but still in the view hierarchy, with no checks for whether they
+  // are in the message center.
+  std::vector<std::string> GetNonVisibleNotificationIdsInViewHierarchy() const;
 
   // Relinquish focus and transfer it to the quick settings widget.
   void FocusOut(bool reverse);
@@ -120,7 +128,7 @@ class ASH_EXPORT UnifiedMessageCenterView
   void ExpandMessageCenter();
 
   // Returns true if the notification bar is visible.
-  bool IsNotificationBarVisible();
+  bool IsNotificationBarVisible() const;
 
   // views::View:
   void AddedToWidget() override;
@@ -171,10 +179,10 @@ class ASH_EXPORT UnifiedMessageCenterView
   View* GetLastFocusableChild();
 
   UnifiedSystemTrayView* const parent_;
-  UnifiedSystemTrayModel* const model_;
+  scoped_refptr<UnifiedSystemTrayModel> model_;
   UnifiedMessageCenterBubble* const message_center_bubble_;
   StackedNotificationBar* const notification_bar_;
-  MessageCenterScrollBar* const scroll_bar_;
+  views::ScrollBar* scroll_bar_;
   views::ScrollView* const scroller_;
   UnifiedMessageListView* const message_list_view_;
 

@@ -47,7 +47,7 @@ constexpr HRESULT kAccessDeniedObjectError = 0x80070005;
 // daily time moment to run the notifier for Windows task scheduler. When the
 // scheduler reacts on the enable event, that time moment for the current day
 // may already be in the past if this delay is too short.
-constexpr base::TimeDelta kEnableDelay = base::TimeDelta::FromSeconds(10);
+constexpr base::TimeDelta kEnableDelay = base::Seconds(10);
 
 enum class Subaction {
   kDisable,

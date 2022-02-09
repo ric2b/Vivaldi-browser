@@ -89,10 +89,6 @@ struct BeginNavigationParams {
   blink.mojom.RequestContextType request_context_type =
       blink.mojom.RequestContextType.UNSPECIFIED;
 
-  // Indicates the request destination.
-  network.mojom.RequestDestination request_destination =
-      network.mojom.RequestDestination.kEmpty;
-
   // The mixed content context type for potential mixed content checks.
   blink.mojom.MixedContentContextType mixed_content_context_type =
       blink.mojom.MixedContentContextType.kNotMixedContent;
@@ -237,6 +233,10 @@ struct CommonNavigationParams {
   // not always be set; it depends on the creator of the CommonNavigationParams
   // setting it.
   mojo_base.mojom.TimeTicks input_start;
+
+  // Indicates the request destination.
+  network.mojom.RequestDestination request_destination =
+      network.mojom.RequestDestination.kEmpty;
 };
 
 // Provided by the browser -----------------------------------------------------
@@ -275,6 +275,9 @@ struct AppHistoryEntry {
   mojo_base.mojom.String16 key;
   mojo_base.mojom.String16 id;
   mojo_base.mojom.String16 url;
+  int64 item_sequence_number;
+  int64 document_sequence_number;
+  mojo_base.mojom.String16 state;
 };
 
 // Used by commit IPC messages. Holds the parameters needed by the renderer to
@@ -382,9 +385,6 @@ struct CommitNavigationParams {
   // Timing of navigation events.
   NavigationTiming navigation_timing;
 
-  // The AppCache host id to be used to identify this navigation.
-  mojo_base.mojom.UnguessableToken? appcache_host_id;
-
   // Set to |kYes| if a navigation is following the rules of user activation
   // propagation. This is different from |has_user_gesture|
   // (in CommonNavigationParams) as the activation may have happened before
@@ -476,4 +476,17 @@ struct CommitNavigationParams {
   array<AppHistoryEntry> app_history_forward_entries;
 
   array<url.mojom.Url> early_hints_preloaded_resources;
+
+  // If this is a navigation to the result of an InterestGroup auction, this
+  // is a list of URNs that map to auction component URLs. Null, otherwise.
+  // When non-null, always contains exactly kMaxAdAuctionAdComponents=20 URNs
+  // to avoid use as a data sidechannel between auction worklets and the
+  // fenced frames their results are loaded in.
+  //
+  // Mojo doesn't allow using symbolic constants as array lengths, so hard-code
+  // the length here directly.
+  array<url.mojom.Url, 20>? ad_auction_components;
+
+  // The time the commit was sent from the browser.
+  mojo_base.mojom.TimeTicks commit_sent;
 };

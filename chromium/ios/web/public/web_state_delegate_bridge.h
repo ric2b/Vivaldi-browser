@@ -35,12 +35,6 @@
 - (web::WebState*)webState:(web::WebState*)webState
          openURLWithParams:(const web::WebState::OpenURLParams&)params;
 
-// Called when the user triggers the context menu with the given
-// |ContextMenuParams|. If this method is not implemented, no context menu will
-// be displayed.
-- (void)webState:(web::WebState*)webState
-    handleContextMenu:(const web::ContextMenuParams&)params;
-
 // Requests the repost form confirmation dialog. Clients must call |handler|
 // with YES to allow repost and with NO to cancel the repost. If this method is
 // not implemented then WebState will repost the form.
@@ -65,31 +59,18 @@
 // Called to know the size of the view containing the WebView.
 - (UIView*)webViewContainerForWebState:(web::WebState*)webState;
 
-// Called when iOS13+ context menu is triggered and now it is required to
-// provide a UIContextMenuConfiguration to |completion_handler| to generate the
-// context menu.
+// Called when the context menu is triggered and now it is required to provide a
+// UIContextMenuConfiguration to |completion_handler| to generate the context
+// menu.
 - (void)webState:(web::WebState*)webState
     contextMenuConfigurationForParams:(const web::ContextMenuParams&)params
-                    completionHandler:
-                        (void (^)(UIContextMenuConfiguration*))completionHandler
-    API_AVAILABLE(ios(13.0));
+                    completionHandler:(void (^)(UIContextMenuConfiguration*))
+                                          completionHandler;
 
-// Called when iOS13+ context menu is ready to be showed.
+// Called when the context menu will commit with animator.
 - (void)webState:(web::WebState*)webState
-    contextMenuWillPresentForLinkWithURL:(const GURL&)linkURL
-    API_AVAILABLE(ios(13.0));
-
-// Called when iOS13+ context menu will commit with animator.
-- (void)webState:(web::WebState*)webState
-    contextMenuForLinkWithURL:(const GURL&)linkURL
-       willCommitWithAnimator:
-           (id<UIContextMenuInteractionCommitAnimating>)animator
-    API_AVAILABLE(ios(13.0));
-
-// Called when iOS13+ context menu will present.
-- (void)webState:(web::WebState*)webState
-    contextMenuDidEndForLinkWithURL:(const GURL&)linkURL
-    API_AVAILABLE(ios(13.0));
+    contextMenuWillCommitWithAnimator:
+        (id<UIContextMenuInteractionCommitAnimating>)animator;
 
 // This API can be used to show custom input views in the web view.
 - (id<CRWResponderInputView>)webStateInputViewProvider:(web::WebState*)webState;
@@ -116,8 +97,6 @@ class WebStateDelegateBridge : public web::WebStateDelegate {
   void CloseWebState(WebState* source) override;
   WebState* OpenURLFromWebState(WebState*,
                                 const WebState::OpenURLParams&) override;
-  void HandleContextMenu(WebState* source,
-                         const ContextMenuParams& params) override;
   void ShowRepostFormWarningDialog(
       WebState* source,
       base::OnceCallback<void(bool)> callback) override;
@@ -131,17 +110,10 @@ class WebStateDelegateBridge : public web::WebStateDelegate {
   void ContextMenuConfiguration(
       WebState* source,
       const ContextMenuParams& params,
-      void (^completion_handler)(UIContextMenuConfiguration*))
-      API_AVAILABLE(ios(13.0)) override;
-  void ContextMenuDidEnd(WebState* source, const GURL& link_url)
-      API_AVAILABLE(ios(13.0)) override;
+      void (^completion_handler)(UIContextMenuConfiguration*)) override;
   void ContextMenuWillCommitWithAnimator(
       WebState* source,
-      const GURL& link_url,
-      id<UIContextMenuInteractionCommitAnimating> animator)
-      API_AVAILABLE(ios(13.0)) override;
-  void ContextMenuWillPresent(WebState* source, const GURL& link_url)
-      API_AVAILABLE(ios(13.0)) override;
+      id<UIContextMenuInteractionCommitAnimating> animator) override;
 
   id<CRWResponderInputView> GetResponderInputView(WebState* source) override;
 

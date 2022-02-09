@@ -8,11 +8,12 @@
 #include <map>
 #include <vector>
 
+#include "ash/components/arc/arc_prefs.h"
 #include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_string_value_serializer.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/gmock_move_support.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -25,7 +26,6 @@
 #include "chrome/browser/profiles/reporting_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/system/fake_statistics_provider.h"
-#include "components/arc/arc_prefs.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
@@ -226,7 +226,7 @@ class ArcAppInstallEventLogManagerTest : public testing::Test {
   void ClearEventsDict() {
     base::DictionaryValue* mutable_dict;
     if (events_value_.GetAsDictionary(&mutable_dict))
-      mutable_dict->Clear();
+      mutable_dict->DictClear();
     else
       NOTREACHED();
   }

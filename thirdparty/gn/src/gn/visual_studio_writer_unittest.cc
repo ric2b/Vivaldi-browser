@@ -193,8 +193,54 @@ TEST_F(VisualStudioWriterTest, NoDotSlash) {
 
   std::stringstream file_contents;
   writer.WriteProjectFileContents(file_contents, *writer.projects_.back(),
-                                  &target, "", &source_types, &err);
+                                  &target, "", "", &source_types, &err);
 
   // Should find args of a ninja clean command, with no ./ before the file name.
   ASSERT_NE(file_contents.str().find("-tclean baz"), std::string::npos);
+}
+
+TEST_F(VisualStudioWriterTest, NinjaExecutable) {
+  VisualStudioWriter writer(setup_.build_settings(), "Win32",
+                            VisualStudioWriter::Version::Vs2015,
+                            "10.0.17134.0");
+
+  std::string path = MakeTestPath("blah.vcxproj");
+  writer.projects_.push_back(
+      std::make_unique<VisualStudioWriter::SolutionProject>(
+          "base", path, MakeGuid(path, "project"), MakeTestPath("/foo"),
+          "Win32"));
+
+  std::unique_ptr<Tool> tool = Tool::CreateTool(CTool::kCToolAlink);
+  tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{root_out_dir}}/{{target_output_name}}{{output_extension}}", ""));
+
+  Toolchain toolchain(setup_.settings(), Label(SourceDir("//tc/"), "tc"));
+  toolchain.SetTool(std::move(tool));
+
+  Target target(setup_.settings(), Label(SourceDir("//baz/"), "baz"));
+  target.set_output_type(Target::STATIC_LIBRARY);
+  target.SetToolchain(&toolchain);
+
+  Err err;
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  VisualStudioWriter::SourceFileCompileTypePairs source_types;
+
+  std::stringstream file_contents_without_flag;
+  writer.WriteProjectFileContents(file_contents_without_flag,
+                                  *writer.projects_.back(), &target, "", "",
+                                  &source_types, &err);
+
+  // Should default to ninja.exe if ninja_executable flag is not set.
+  ASSERT_NE(file_contents_without_flag.str().find("call ninja.exe"),
+            std::string::npos);
+
+  std::stringstream file_contents_with_flag;
+  writer.WriteProjectFileContents(file_contents_with_flag,
+                                  *writer.projects_.back(), &target, "",
+                                  "ninja_wrapper.exe", &source_types, &err);
+
+  // Should use ninja_wrapper.exe because ninja_executable flag is set.
+  ASSERT_NE(file_contents_with_flag.str().find("call ninja_wrapper.exe"),
+            std::string::npos);
 }

@@ -21,7 +21,7 @@ import org.chromium.build.BuildConfig;
  * TODO(crbug.com/1138005): Move to chrome/browser/tabmodel/internal when all usages are
  * modularized.
  */
-class TabModelOrderControllerImpl implements TabModelOrderController {
+public class TabModelOrderControllerImpl implements TabModelOrderController { // Vivaldi
     private static final int NO_TAB = -1;
     private final TabModelSelector mTabModelSelector;
 
@@ -59,28 +59,6 @@ class TabModelOrderControllerImpl implements TabModelOrderController {
             }
             int currentId = currentTab.getId();
             int currentIndex = TabModelUtils.getTabIndexById(currentModel, currentId);
-
-            // Note(david@vivaldi.com): We determine the index of the new tab according to the
-            // selected new tab position setting.
-            if (BuildConfig.IS_VIVALDI) {
-                int tabPositionSetting =
-                        SharedPreferencesManager.getInstance().readInt("new_tab_position", 1);
-                // We check for NewTabPositionSetting.AFTER_RELATED_TAB. Magic number due to dep
-                // issues.
-                if (tabPositionSetting == 0) {
-                    int relatedTabIndex = getIndexAfterRelatedTabs(newTab, currentIndex);
-                    // When a link has been clicked we assume a relation.
-                    int index = linkClicked(type) ? currentIndex + 1 : -1;
-                    // If there are more related tabs we set our index accordingly otherwise we
-                    // add our tab after the active one. If there is no relation at all we add
-                    // it to the end of the list.
-                    return (relatedTabIndex == currentIndex ? index : relatedTabIndex);
-                }
-                // We check for NewTabPositionSetting.AFTER_ACTIVE_TAB. Magic number due to dep
-                // issues.
-                boolean afterActiveTab = (tabPositionSetting == 1);
-                return (afterActiveTab ? currentIndex + 1 : -1);
-            }
 
             if (willOpenInForeground(type, newTab.isIncognito())) {
                 // If the tab was opened in the foreground, insert it adjacent to its parent tab if
@@ -170,18 +148,5 @@ class TabModelOrderControllerImpl implements TabModelOrderController {
      */
     static boolean sameModelType(TabModel model, Tab tab) {
         return model.isIncognito() == tab.isIncognito();
-    }
-
-    /**
-     * Vivaldi: Determines the index after tabs with the same host name.
-     */
-    private int getIndexAfterRelatedTabs(Tab tab, int currentIndex) {
-        Tab nextTab = mTabModelSelector.getCurrentModel().getTabAt(currentIndex);
-        if (tab != null && nextTab != null) {
-            if (tab.getUrl().getHost().equals(nextTab.getUrl().getHost())) {
-                currentIndex = getIndexAfterRelatedTabs(tab, ++currentIndex);
-            }
-        }
-        return currentIndex;
     }
 }

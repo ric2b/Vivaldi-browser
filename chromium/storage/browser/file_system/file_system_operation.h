@@ -12,6 +12,7 @@
 
 #include "base/callback.h"
 #include "base/component_export.h"
+#include "base/containers/enum_set.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/process/process.h"
@@ -242,23 +243,44 @@ class FileSystemOperation {
   // set to the copied file size.
   using CopyFileProgressCallback = base::RepeatingCallback<void(int64_t size)>;
 
-  // The option for copy or move operation.
-  enum CopyOrMoveOption {
-    // No additional operation.
-    OPTION_NONE,
-
+  // The possible options for copy or move operations. Used as an EnumSet to
+  // allow multiple options to be specified.
+  enum class CopyOrMoveOption {
     // Preserves last modified time if possible. If the operation to update
     // last modified time is not supported on the file system for the
     // destination file, this option would be simply ignored (i.e. Copy would
     // be successfully done without preserving last modified time).
-    OPTION_PRESERVE_LAST_MODIFIED,
+    kPreserveLastModified,
 
-    // Preserve permissions of the destination file. If the operation to update
+    // Preserves permissions of the destination file. If the operation to update
     // permissions is not supported on the file system for the destination file,
     // this option will simply be ignored (i.e. Copy would be successfully done
     // without preserving permissions of the destination file).
-    OPTION_PRESERVE_DESTINATION_PERMISSIONS,
+    kPreserveDestinationPermissions,
+
+    // Forces the copy or move operation to use the cross-filesystem
+    // implementation.
+    kForceCrossFilesystem,
+
+    // Removes copied files that result in an error (potentially a
+    // cancellation), as these files are potentially partial/corrupted.
+    // Directories are not removed recursively, as it can lead to data loss
+    // (e.g. user changing the content of the destination folder during a copy
+    // or a move). Therefore, all successfully copied entries are preserved.
+    // The removal is best-effort: depending on the origin of the error,
+    // removing the destination file can fail.
+    // This option can impact cross-filesystem moves since they are implemented
+    // as copy + delete (only the copy step is impacted), but not
+    // same-filesystem moves where the file paths are just renamed.
+    kRemovePartiallyCopiedFilesOnError,
+
+    kFirst = kPreserveLastModified,
+    kLast = kRemovePartiallyCopiedFilesOnError
   };
+
+  using CopyOrMoveOptionSet = base::EnumSet<CopyOrMoveOption,
+                                            CopyOrMoveOption::kFirst,
+                                            CopyOrMoveOption::kLast>;
 
   // Fields requested for the GetMetadata method. Used as a bitmask.
   enum GetMetadataField {
@@ -318,7 +340,7 @@ class FileSystemOperation {
   //
   virtual void Copy(const FileSystemURL& src_path,
                     const FileSystemURL& dest_path,
-                    CopyOrMoveOption option,
+                    CopyOrMoveOptionSet options,
                     ErrorBehavior error_behavior,
                     const CopyOrMoveProgressCallback& progress_callback,
                     StatusCallback callback) = 0;
@@ -345,7 +367,7 @@ class FileSystemOperation {
   //                         operation.
   virtual void Move(const FileSystemURL& src_path,
                     const FileSystemURL& dest_path,
-                    CopyOrMoveOption option,
+                    CopyOrMoveOptionSet options,
                     ErrorBehavior error_behavior,
                     const CopyOrMoveProgressCallback& progress_callback,
                     StatusCallback callback) = 0;
@@ -499,7 +521,7 @@ class FileSystemOperation {
   //
   virtual void CopyFileLocal(const FileSystemURL& src_url,
                              const FileSystemURL& dest_url,
-                             CopyOrMoveOption option,
+                             CopyOrMoveOptionSet options,
                              const CopyFileProgressCallback& progress_callback,
                              StatusCallback callback) = 0;
 
@@ -520,7 +542,7 @@ class FileSystemOperation {
   //
   virtual void MoveFileLocal(const FileSystemURL& src_url,
                              const FileSystemURL& dest_url,
-                             CopyOrMoveOption option,
+                             CopyOrMoveOptionSet options,
                              StatusCallback callback) = 0;
 
   // Synchronously gets the platform path for the given |url|.

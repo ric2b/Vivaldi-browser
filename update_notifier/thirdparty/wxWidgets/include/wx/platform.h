@@ -16,7 +16,7 @@
 #ifdef __WXMAC_XCODE__
 #    include <unistd.h>
 #    include <TargetConditionals.h>
-#    include <AvailabilityMacros.h>
+#    include <Availability.h>
 #    ifndef MAC_OS_X_VERSION_10_4
 #       define MAC_OS_X_VERSION_10_4 1040
 #    endif
@@ -32,7 +32,41 @@
 #    ifndef MAC_OS_X_VERSION_10_8
 #       define MAC_OS_X_VERSION_10_8 1080
 #    endif
-#    include "wx/osx/config_xcode.h"
+#    ifndef MAC_OS_X_VERSION_10_9
+#       define MAC_OS_X_VERSION_10_9 1090
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_10
+#       define MAC_OS_X_VERSION_10_10 101000
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_11
+#       define MAC_OS_X_VERSION_10_11 101100
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_12
+#       define MAC_OS_X_VERSION_10_12 101200
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_13
+#       define MAC_OS_X_VERSION_10_13 101300
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_14
+#       define MAC_OS_X_VERSION_10_14 101400
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_15
+#       define MAC_OS_X_VERSION_10_15 101500
+#    endif
+#    ifndef MAC_OS_X_VERSION_10_16
+#       define MAC_OS_X_VERSION_10_16 101600
+#    endif
+#    ifndef MAC_OS_VERSION_11_0
+#       define MAC_OS_VERSION_11_0 110000
+#    endif
+#    if __MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_13
+#        ifndef NSAppKitVersionNumber10_10
+#            define NSAppKitVersionNumber10_10 1343
+#        endif
+#        ifndef NSAppKitVersionNumber10_11
+#            define NSAppKitVersionNumber10_11 1404
+#        endif
+#    endif
 #    ifndef __WXOSX__
 #        define __WXOSX__ 1
 #    endif
@@ -48,7 +82,6 @@
     define it ourselves if any of the following macros is defined:
 
     - MSVC _WIN32 (notice that this is also defined under Win64)
-    - Borland __WIN32__
     - Our __WXMSW__ which selects Windows as platform automatically
  */
 #if defined(_WIN32) || defined(__WIN32__) || defined(__WXMSW__)
@@ -59,12 +92,8 @@
 
 #if defined(__WINDOWS__)
     /* Select wxMSW under Windows if no other port is specified. */
-#   if !defined(__WXMSW__) && !defined(__WXMOTIF__) && !defined(__WXGTK__) && !defined(__WXX11__)
+#   if !defined(__WXMSW__) && !defined(__WXMOTIF__) && !defined(__WXGTK__) && !defined(__WXX11__) && !defined(__WXQT__)
 #       define __WXMSW__
-#   endif
-
-#   if !defined(__WINDOWS__)
-#       define __WINDOWS__
 #   endif
 
 #   ifndef _WIN32
@@ -104,66 +133,13 @@
 #   endif
 #endif
 
-#if defined(__WXGTK__) && defined(__WINDOWS__)
+#if (defined(__WXGTK__) || defined(__WXQT__)) && defined(__WINDOWS__)
 
 #   ifdef __WXMSW__
 #       undef __WXMSW__
 #   endif
 
-#endif /* __WXGTK__ && __WINDOWS__ */
-
-/* detect MS SmartPhone */
-#if defined( WIN32_PLATFORM_WFSP )
-#   ifndef __SMARTPHONE__
-#       define __SMARTPHONE__
-#   endif
-#   ifndef __WXWINCE__
-#       define __WXWINCE__
-#   endif
-#endif
-
-/* detect PocketPC */
-#if defined( WIN32_PLATFORM_PSPC )
-#   ifndef __POCKETPC__
-#       define __POCKETPC__
-#   endif
-#   ifndef __WXWINCE__
-#       define __WXWINCE__
-#   endif
-#endif
-
-/* detect Standard WinCE SDK */
-#if defined( WCE_PLATFORM_STANDARDSDK )
-#   ifndef __WINCE_STANDARDSDK__
-#       define __WINCE_STANDARDSDK__
-#   endif
-#   ifndef __WXWINCE__
-#       define __WXWINCE__
-#   endif
-#endif
-
-#if defined(_WIN32_WCE) && !defined(WIN32_PLATFORM_WFSP) && !defined(WIN32_PLATFORM_PSPC)
-#   if (_WIN32_WCE >= 400)
-#       ifndef __WINCE_NET__
-#           define __WINCE_NET__
-#       endif
-#   elif (_WIN32_WCE >= 200)
-#       ifndef __HANDHELDPC__
-#           define __HANDHELDPC__
-#       endif
-#   endif
-#   ifndef __WXWINCE__
-#       define __WXWINCE__
-#   endif
-#endif
-
-#if defined(__WXWINCE__) && defined(_MSC_VER) && (_MSC_VER == 1201)
-    #define __EVC4__
-#endif
-
-#if defined(__POCKETPC__) || defined(__SMARTPHONE__) || defined(__WXGPE__)
-#   define __WXHANDHELD__
-#endif
+#endif /* (__WXGTK__ || __WXQT__) && __WINDOWS__ */
 
 #ifdef __ANDROID__
 #   define __WXANDROID__
@@ -247,71 +223,16 @@
 #endif /* wxUSE_UNICODE */
 
 
-/*
-   test for old versions of Borland C, normally need at least 5.82, Turbo
-   explorer, available for free at http://www.turboexplorer.com/downloads
-*/
-
-
-/*
-    Older versions of Borland C have some compiler bugs that need
-    workarounds. Mostly pertains to the free command line compiler 5.5.1.
-*/
-#if defined(__BORLANDC__) && (__BORLANDC__ <= 0x551)
-    /*
-        The Borland free compiler is unable to handle overloaded enum
-        comparisons under certain conditions e.g. when any class has a
-        conversion ctor for an integral type and there's an overload to
-        compare between an integral type and that class type.
-    */
-#   define wxCOMPILER_NO_OVERLOAD_ON_ENUM
-
-    /*
-        This is needed to overcome bugs in 5.5.1 STL, linking errors will
-        result if it is not defined.
-     */
-#   define _RWSTD_COMPILE_INSTANTIATE
-
-    /*
-        Preprocessor in older Borland compilers have major problems
-        concatenating with ##. Specifically, if the string operands being
-        concatenated have special meaning (e.g. L"str", 123i64 etc)
-        then ## will not concatenate the operands correctly.
-
-        As a workaround, define wxPREPEND* and wxAPPEND* without using
-        wxCONCAT_HELPER.
-    */
-#   define wxCOMPILER_BROKEN_CONCAT_OPER
-#endif /* __BORLANDC__ */
-
-/*
-   OS: first of all, test for MS-DOS platform. We must do this before testing
-       for Unix, because DJGPP compiler defines __unix__ under MS-DOS
- */
-#if defined(__GO32__) || defined(__DJGPP__) || defined(__DOS__)
-#    ifndef __DOS__
-#        define __DOS__
-#    endif
-    /* size_t is the same as unsigned int for Watcom 11 compiler, */
-    /* so define it if it hadn't been done by configure yet */
-#    if !defined(wxSIZE_T_IS_UINT) && !defined(wxSIZE_T_IS_ULONG)
-#        ifdef __WATCOMC__
-#            define wxSIZE_T_IS_UINT
-#        endif
-#        ifdef __DJGPP__
-#            define wxSIZE_T_IS_ULONG
-#        endif
-#    endif
 
 /*
    OS: then test for generic Unix defines, then for particular flavours and
        finally for Unix-like systems
        Mac OS X matches this case (__MACH__), prior Mac OS do not.
  */
-#elif defined(__UNIX__) || defined(__unix) || defined(__unix__) || \
+#if defined(__UNIX__) || defined(__unix) || defined(__unix__) || \
       defined(____SVR4____) || defined(__LINUX__) || defined(__sgi) || \
       defined(__hpux) || defined(__sun) || defined(__SUN__) || defined(_AIX) || \
-      defined(__EMX__) || defined(__VMS) || defined(__BEOS__) || defined(__MACH__)
+      defined(__VMS) || defined(__BEOS__) || defined(__MACH__)
 
 #    define __UNIX_LIKE__
 
@@ -331,11 +252,13 @@
 #       endif
 #    endif  /* SGI */
 
-#    ifdef __EMX__
-#        define OS2EMX_PLAIN_CHAR
-#    endif
 #    if defined(__INNOTEK_LIBC__)
         /* Ensure visibility of strnlen declaration */
+#        define _GNU_SOURCE
+#    endif
+
+#    if defined(__CYGWIN__)
+        /* Ensure visibility of Dl_info and pthread_setconcurrency declarations */
 #        define _GNU_SOURCE
 #    endif
 
@@ -359,38 +282,11 @@
 #        ifndef __DARWIN__
 #            define __DARWIN__ 1
 #        endif
-        /*  NOTE: TARGET_CARBON is actually a 0/1 and must be 1 for OS X */
-#        ifndef TARGET_CARBON
-#            define TARGET_CARBON 1
-#        endif
         /* OS X uses unsigned long size_t for both ILP32 and LP64 modes. */
 #        if !defined(wxSIZE_T_IS_UINT) && !defined(wxSIZE_T_IS_ULONG)
 #            define wxSIZE_T_IS_ULONG
 #        endif
 #    endif
-
-/*
-   OS: OS/2
- */
-#elif defined(__OS2__)
-
-    /* wxOS2 vs. non wxOS2 ports on OS2 platform */
-#    if !defined(__WXMOTIF__) && !defined(__WXGTK__) && !defined(__WXX11__)
-#        ifndef __WXPM__
-#            define __WXPM__
-#        endif
-#    endif
-
-#    if defined(__IBMCPP__)
-#        define __VISAGEAVER__ __IBMCPP__
-#    endif
-
-    /* Place other OS/2 compiler environment defines here */
-#    if defined(__VISAGECPP__)
-        /* VisualAge is the only thing that understands _Optlink */
-#        define LINKAGEMODE _Optlink
-#    endif
-#    define wxSIZE_T_IS_UINT
 
 /*
    OS: Windows
@@ -432,14 +328,8 @@
 #endif
 
 /* Force linking against required libraries under Windows: */
-#ifdef __WXWINCE__
-#   include "wx/msw/wince/libraries.h"
-#elif defined __WINDOWS__
+#if defined __WINDOWS__
 #   include "wx/msw/libraries.h"
-#endif
-
-#if defined(__BORLANDC__) || (defined(__GNUC__) && __GNUC__ < 3)
-#define wxNEEDS_CHARPP
 #endif
 
 /*
@@ -447,10 +337,7 @@
     _UNICODE macros as it includes _mingw.h which relies on them being set.
  */
 #if ( defined( __GNUWIN32__ ) || defined( __MINGW32__ ) || \
-    ( defined( __CYGWIN__ ) && defined( __WINDOWS__ ) ) || \
-      wxCHECK_WATCOM_VERSION(1,0) ) && \
-    !defined(__DOS__) && \
-    !defined(__WXPM__) && \
+    ( defined( __CYGWIN__ ) && defined( __WINDOWS__ ) ) ) && \
     !defined(__WXMOTIF__) && \
     !defined(__WXX11__)
 #    include "wx/msw/gccpriv.h"
@@ -459,6 +346,7 @@
 #    define wxCHECK_W32API_VERSION(maj, min) (0)
 #    undef wxCHECK_MINGW32_VERSION
 #    define wxCHECK_MINGW32_VERSION( major, minor ) (0)
+#    define wxDECL_FOR_MINGW32_ALWAYS(rettype, func, params)
 #    define wxDECL_FOR_STRICT_MINGW32(rettype, func, params)
 #endif
 
@@ -512,10 +400,10 @@
     whatever reason.
 
     The primary symbol remains __WXOSX_XXX__ one, __WXOSX__ exists to allow
-    checking for any OS X port (Carbon and Cocoa) and __WXMAC__ is an old name
+    checking for any OS X port (Cocoa) and __WXMAC__ is an old name
     for it.
  */
-#if defined(__WXOSX_CARBON__) || defined(__WXOSX_COCOA__) || defined(__WXOSX_IPHONE__)
+#if defined(__WXOSX_COCOA__) || defined(__WXOSX_IPHONE__)
 #   ifndef __WXOSX__
 #       define __WXOSX__ 1
 #   endif
@@ -532,8 +420,8 @@
 #           error "incorrect SDK for an iPhone build"
 #       endif
 #   else
-#       if wxUSE_GUI && !(defined(__WXOSX_CARBON__) || defined(__WXOSX_COCOA__))
-#           error "one of __WXOSX_IPHONE__, __WXOSX_CARBON__ or __WXOSX_COCOA__ must be defined for the GUI build"
+#       if wxUSE_GUI && !defined(__WXOSX_COCOA__)
+#           error "one of __WXOSX_IPHONE__ or __WXOSX_COCOA__ must be defined for the GUI build"
 #       endif
 #       if !( defined(TARGET_OS_MAC) && TARGET_OS_MAC )
 #           error "incorrect SDK for a Mac OS X build"
@@ -544,7 +432,7 @@
 
 #ifdef __WXOSX_MAC__
 #    if defined(__MACH__)
-#        include <AvailabilityMacros.h>
+#        include <Availability.h>
 #        ifndef MAC_OS_X_VERSION_10_4
 #           define MAC_OS_X_VERSION_10_4 1040
 #        endif
@@ -560,31 +448,50 @@
 #        ifndef MAC_OS_X_VERSION_10_8
 #           define MAC_OS_X_VERSION_10_8 1080
 #        endif
+#        ifndef MAC_OS_X_VERSION_10_9
+#           define MAC_OS_X_VERSION_10_9 1090
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_10
+#           define MAC_OS_X_VERSION_10_10 101000
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_11
+#           define MAC_OS_X_VERSION_10_11 101100
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_12
+#           define MAC_OS_X_VERSION_10_12 101200
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_13
+#           define MAC_OS_X_VERSION_10_13 101300
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_14
+#           define MAC_OS_X_VERSION_10_14 101400
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_15
+#           define MAC_OS_X_VERSION_10_15 101500
+#        endif
+#        ifndef MAC_OS_X_VERSION_10_16
+#           define MAC_OS_X_VERSION_10_16 101600
+#        endif
+#        ifndef MAC_OS_VERSION_11_0
+#           define MAC_OS_VERSION_11_0 110000
+#        endif
+#        if __MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_13
+#            ifndef NSAppKitVersionNumber10_10
+#                define NSAppKitVersionNumber10_10 1343
+#            endif
+#            ifndef NSAppKitVersionNumber10_11
+#                define NSAppKitVersionNumber10_11 1404
+#            endif
+#        endif
 #    else
 #        error "only mach-o configurations are supported"
 #    endif
 #endif
 
 /*
-    __WXOSX_OR_COCOA__ is a common define to wxOSX (Carbon or Cocoa) and wxCocoa ports under OS X.
-
-    DO NOT use this define in base library code.  Although wxMac has its own
-    private base library (and thus __WXOSX_OR_COCOA__,__WXMAC__ and related defines are
-    valid there), wxCocoa shares its library with other ports like wxGTK and wxX11.
-
-    To keep wx authors from screwing this up, only enable __WXOSX_OR_COCOA__ for wxCocoa when
-    not compiling the base library.  We determine this by first checking if
-    wxUSE_BASE is not defined.  If it is not defined, then we're not buildling
-    the base library, and possibly not building wx at all (but actually building
-    user code that's using wx). If it is defined then we must check to make sure
-    it is not true.  If it is true, we're building base.
-
-    If you want it in the common darwin base library then use __DARWIN__.  You
-    can use any Darwin-available libraries like CoreFoundation but please avoid
-    using OS X libraries like Carbon or CoreServices.
-
+    This is obsolete and kept for backwards compatibility only.
  */
-#if defined(__WXOSX__) || (defined(__WXCOCOA__) && (!defined(wxUSE_BASE) || !wxUSE_BASE))
+#if defined(__WXOSX__)
 #   define __WXOSX_OR_COCOA__ 1
 #endif
 
@@ -596,35 +503,9 @@
 #include "wx/chkconf.h"
 
 
-/*
-   some compilers don't support iostream.h any longer, while some of theme
-   are not updated with <iostream> yet, so override the users setting here
-   in such case.
- */
-#if defined(_MSC_VER) && (_MSC_VER >= 1310)
-#    undef wxUSE_IOSTREAMH
-#    define wxUSE_IOSTREAMH 0
-#elif defined(__DMC__) || defined(__WATCOMC__)
-#    undef wxUSE_IOSTREAMH
-#    define wxUSE_IOSTREAMH 1
-#elif defined(__MINGW32__)
-#    undef wxUSE_IOSTREAMH
-#    define wxUSE_IOSTREAMH 0
-#endif /* compilers with/without iostream.h */
-
-/*
-   old C++ headers (like <iostream.h>) declare classes in the global namespace
-   while the new, standard ones (like <iostream>) do it in std:: namespace,
-   unless it's an old gcc version.
-
-   using this macro allows constuctions like "wxSTD iostream" to work in
-   either case
- */
-#if !wxUSE_IOSTREAMH && (!defined(__GNUC__) || ( __GNUC__ > 2 ) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 95))
-#    define wxSTD std::
-#else
-#    define wxSTD
-#endif
+/* These macros exist only for compatibility, don't use them in the new code */
+#define wxUSE_IOSTREAMH 0
+#define wxSTD std::
 
 /* On OpenVMS with the most recent HP C++ compiler some function (i.e. wscanf)
  * are only available in the std-namespace. (BUG???)
@@ -692,7 +573,11 @@
         Only 4.3 defines __GXX_RTTI by default so its absence is not an
         indication of disabled RTTI with the previous versions.
      */
-#   if wxCHECK_GCC_VERSION(4, 3)
+#   if defined(__clang__)
+#       if !__has_feature(cxx_rtti)
+#           define wxNO_RTTI
+#       endif
+#   elif wxCHECK_GCC_VERSION(4, 3)
 #       ifndef __GXX_RTTI
 #           define wxNO_RTTI
 #       endif

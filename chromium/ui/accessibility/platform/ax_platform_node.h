@@ -45,6 +45,7 @@ class AX_EXPORT AXPlatformNode {
   // Return the AXPlatformNode at the root of the tree for a native window.
   static AXPlatformNode* FromNativeWindow(gfx::NativeWindow native_window);
 
+  virtual ~AXPlatformNode();
   AXPlatformNode(const AXPlatformNode&) = delete;
   AXPlatformNode& operator=(const AXPlatformNode&) = delete;
 
@@ -123,7 +124,15 @@ class AX_EXPORT AXPlatformNode {
 
  protected:
   AXPlatformNode();
-  virtual ~AXPlatformNode();
+
+  // Associates a node delegate object to the platform node.
+  // Keep it protected. Only AXPlatformNode::Create should be calling this.
+  // Note: it would make a nicer design if initialization was integrated into
+  // the platform node constructor, but platform node implementation on Windows
+  // (AXPlatformNodeWin) relies on CComObject::CreateInstance() in order to
+  // create a platform node instance, and it doesn't allow to pass arguments to
+  // the constructor.
+  virtual void Init(AXPlatformNodeDelegate* delegate) = 0;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AtkUtilAuraLinuxTest, KeySnooping);

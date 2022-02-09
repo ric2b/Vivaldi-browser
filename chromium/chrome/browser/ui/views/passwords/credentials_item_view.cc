@@ -8,7 +8,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
@@ -134,7 +133,7 @@ CredentialsItemView::CredentialsItemView(
   if (password_manager_util::GetMatchType(*form) !=
       password_manager_util::GetLoginMatchType::kExact) {
     info_icon_ = AddChildView(std::make_unique<views::TooltipIcon>(
-        base::UTF8ToUTF16(form->url.GetOrigin().spec())));
+        base::UTF8ToUTF16(form->url.DeprecatedGetOriginAsURL().spec())));
   }
 
   if (!upper_text.empty() && !lower_text.empty())

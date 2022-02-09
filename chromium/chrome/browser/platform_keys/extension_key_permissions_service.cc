@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_impl.h"
+#include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_service_impl.h"
 #include "chrome/browser/platform_keys/platform_keys.h"
 #include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "components/policy/core/common/policy_map.h"
@@ -330,12 +330,11 @@ void ExtensionKeyPermissionsService::KeyEntriesFromState(
     const base::Value& state) {
   state_store_entries_.clear();
 
-  const base::ListValue* entries = nullptr;
-  if (!state.GetAsList(&entries)) {
+  if (!state.is_list()) {
     LOG(ERROR) << "Found a state store of wrong type.";
     return;
   }
-  for (const auto& entry : entries->GetList()) {
+  for (const auto& entry : state.GetList()) {
     std::string spki_b64;
     const base::DictionaryValue* dict_entry = nullptr;
     if (entry.GetAsString(&spki_b64)) {

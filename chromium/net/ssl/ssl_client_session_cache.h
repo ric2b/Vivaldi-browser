@@ -12,9 +12,9 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/containers/mru_cache.h"
-#include "base/macros.h"
+#include "base/containers/lru_cache.h"
 #include "base/memory/memory_pressure_monitor.h"
+#include "base/memory/raw_ptr.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_export.h"
@@ -118,9 +118,9 @@ class NET_EXPORT SSLClientSessionCache {
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
-  base::Clock* clock_;
+  raw_ptr<base::Clock> clock_;
   Config config_;
-  base::MRUCache<Key, Entry> cache_;
+  base::LRUCache<Key, Entry> cache_;
   size_t lookups_since_flush_;
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 };

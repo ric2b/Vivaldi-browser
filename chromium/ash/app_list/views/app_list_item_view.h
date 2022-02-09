@@ -35,6 +35,7 @@ class Label;
 
 namespace ash {
 
+class AppsGridContextMenu;
 class AppListConfig;
 class AppListItem;
 class AppListMenuModelAdapter;
@@ -54,6 +55,15 @@ class ASH_EXPORT AppListItemView : public views::Button,
                                    public ui::ImplicitAnimationObserver {
  public:
   METADATA_HEADER(AppListItemView);
+
+  // The types of context where the app list item view is shown.
+  enum class Context {
+    // The item is shown in an AppsGridView.
+    kAppsGridView,
+
+    // The item is shown in the RecentAppsView.
+    kRecentAppsView
+  };
 
   // The parent apps grid (AppsGridView) or a stub. Not named "Delegate" to
   // differentiate it from AppListViewDelegate.
@@ -103,7 +113,8 @@ class ASH_EXPORT AppListItemView : public views::Button,
   AppListItemView(const AppListConfig* app_list_config,
                   GridDelegate* grid_delegate,
                   AppListItem* item,
-                  AppListViewDelegate* view_delegate);
+                  AppListViewDelegate* view_delegate,
+                  Context context);
   AppListItemView(const AppListItemView&) = delete;
   AppListItemView& operator=(const AppListItemView&) = delete;
   ~AppListItemView() override;
@@ -130,6 +141,9 @@ class ASH_EXPORT AppListItemView : public views::Button,
 
   // Sets focus without a11y announcements or focus ring.
   void SilentlyRequestFocus();
+
+  // Ensures that the item view is selected by `grid_delegate_`.
+  void EnsureSelected();
 
   AppListItem* item() const { return item_weak_; }
 
@@ -198,12 +212,26 @@ class ASH_EXPORT AppListItemView : public views::Button,
 
   bool FireTouchDragTimerForTest();
 
+  // Whether the context menu on a non-folder app item view is showing.
+  bool IsShowingAppMenu() const;
+
   bool is_folder() const { return is_folder_; }
 
   bool IsNotificationIndicatorShownForTest() const;
   GridDelegate* grid_delegate_for_test() { return grid_delegate_; }
 
+  AppListMenuModelAdapter* item_menu_model_adapter() const {
+    return item_menu_model_adapter_.get();
+  }
+  AppsGridContextMenu* context_menu_for_folder() const {
+    return context_menu_for_folder_.get();
+  }
+
+  // Sets the callback which will run after the context menu is shown.
+  void SetContextMenuShownCallbackForTest(base::RepeatingClosure closure);
+
  private:
+  friend class AppListItemViewProductivityLauncherTest;
   friend class test::AppsGridViewTest;
   friend class test::AppListMainViewTest;
 
@@ -313,6 +341,7 @@ class ASH_EXPORT AppListItemView : public views::Button,
   void ItemNameChanged() override;
   void ItemBadgeVisibilityChanged() override;
   void ItemBadgeColorChanged() override;
+  void ItemIsNewInstallChanged() override;
   void ItemBeingDestroyed() override;
 
   // ui::ImplicitAnimationObserver:
@@ -351,10 +380,17 @@ class ASH_EXPORT AppListItemView : public views::Button,
   // AppListControllerImpl by another name.
   AppListViewDelegate* const view_delegate_;
 
-  IconImageView* icon_ = nullptr;               // Strongly typed child view.
-  views::Label* title_ = nullptr;               // Strongly typed child view.
+  IconImageView* icon_ = nullptr;  // Strongly typed child view.
+  views::Label* title_ = nullptr;  // Strongly typed child view.
 
-  std::unique_ptr<AppListMenuModelAdapter> context_menu_;
+  // Draws a dot next to the title for newly installed apps.
+  views::View* new_install_dot_ = nullptr;
+
+  // The context menu model adapter used for app item view.
+  std::unique_ptr<AppListMenuModelAdapter> item_menu_model_adapter_;
+
+  // The context menu controller used for folder item view.
+  std::unique_ptr<AppsGridContextMenu> context_menu_for_folder_;
 
   UIState ui_state_ = UI_STATE_NORMAL;
 
@@ -377,11 +413,11 @@ class ASH_EXPORT AppListItemView : public views::Button,
   // The radius of preview circle for non-folder item.
   int preview_circle_radius_ = 0;
 
-  // Whether |context_menu_| was cancelled as the result of a continuous drag
-  // gesture.
+  // Whether `item_menu_model_adapter_` was cancelled as the result of a
+  // continuous drag gesture.
   bool menu_close_initiated_from_drag_ = false;
 
-  // Whether |context_menu_| was shown via key event.
+  // Whether `item_menu_model_adapter_` was shown via key event.
   bool menu_show_initiated_from_key_ = false;
 
   std::u16string tooltip_text_;
@@ -390,9 +426,6 @@ class ASH_EXPORT AppListItemView : public views::Button,
   base::OneShotTimer mouse_drag_timer_;
   // A timer to defer showing drag UI when the app item is touch pressed.
   base::OneShotTimer touch_drag_timer_;
-
-  // The shadow margins added to the app list item title.
-  gfx::Insets title_shadow_margins_;
 
   // The bitmap image for this app list item.
   gfx::ImageSkia icon_image_;
@@ -407,8 +440,14 @@ class ASH_EXPORT AppListItemView : public views::Button,
   // active notification.
   AppNotificationIndicatorView* notification_indicator_ = nullptr;
 
+  // Indicates the context in which this view is shown.
+  const Context context_;
+
   // Helper to trigger icon load.
   absl::optional<AppIconLoadHelper> icon_load_helper_;
+
+  // Called when the context menu is shown.
+  base::RepeatingClosure context_menu_shown_callback_;
 
   base::WeakPtrFactory<AppListItemView> weak_ptr_factory_{this};
 };

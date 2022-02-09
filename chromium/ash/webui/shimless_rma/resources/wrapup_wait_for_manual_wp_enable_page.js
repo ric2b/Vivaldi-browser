@@ -5,21 +5,29 @@
 import './shimless_rma_shared_css.js';
 import './base_page.js';
 
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getShimlessRmaService} from './mojo_interface_provider.js';
 import {HardwareWriteProtectionStateObserverInterface, HardwareWriteProtectionStateObserverReceiver, ShimlessRmaServiceInterface, StateResult} from './shimless_rma_types.js';
-
-// TODO(gavindodd): Update text for i18n
-const openDeviceMessage = 'Open your device and reconnect the battery.';
-const hwwpEnabledMessage = 'HWWP enabled.';
 
 /**
  * @fileoverview
  * 'wrapup-wait-for-manual-wp-enable-page' wait for the manual HWWP enable to be
  * completed.
  */
-export class WrapupWaitForManualWpEnablePageElement extends PolymerElement {
+
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ * @implements {I18nBehaviorInterface}
+ */
+const WrapupWaitForManualWpEnablePageBase =
+    mixinBehaviors([I18nBehavior], PolymerElement);
+
+/** @polymer */
+export class WrapupWaitForManualWpEnablePage extends
+    WrapupWaitForManualWpEnablePageBase {
   static get is() {
     return 'wrapup-wait-for-manual-wp-enable-page';
   }
@@ -65,7 +73,8 @@ export class WrapupWaitForManualWpEnablePageElement extends PolymerElement {
    * @return {string}
    */
   getBodyText_(hwwpEnabled) {
-    return !this.hwwpEnabled_ ? openDeviceMessage : hwwpEnabledMessage;
+    return this.hwwpEnabled_ ? this.i18n('manuallyEnabledWpMessageText') :
+                               this.i18n('manuallyEnableWpInstructionsText');
   }
 
   /**
@@ -84,16 +93,13 @@ export class WrapupWaitForManualWpEnablePageElement extends PolymerElement {
   /** @return {!Promise<!StateResult>} */
   onNextButtonClick() {
     if (this.hwwpEnabled_) {
-      // TODO(crbug.com/1218180): Replace with a state specific function e.g.
-      // WriteProtectManuallyEnabled()
-      return this.shimlessRmaService_.transitionNextState();
+      return this.shimlessRmaService_.writeProtectManuallyEnabled();
     } else {
       return Promise.reject(
           new Error('Hardware Write Protection is not enabled.'));
     }
   }
-};
+}
 
 customElements.define(
-    WrapupWaitForManualWpEnablePageElement.is,
-    WrapupWaitForManualWpEnablePageElement);
+    WrapupWaitForManualWpEnablePage.is, WrapupWaitForManualWpEnablePage);

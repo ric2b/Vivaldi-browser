@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
+#include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/services/app_service/public/cpp/app_capability_access_cache.h"
@@ -27,6 +28,12 @@
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
+// Avoid including this header file directly or referring directly to
+// AppServiceProxyLacros as a type. Instead:
+//  - for forward declarations, use app_service_proxy_forward.h
+//  - for the full header, use app_service_proxy.h, which aliases correctly
+//    based on the platform
+
 class Profile;
 
 namespace web_app {
@@ -37,6 +44,8 @@ namespace apps {
 
 class BrowserAppInstanceForwarder;
 class BrowserAppInstanceTracker;
+
+struct AppLaunchParams;
 
 struct IntentLaunchInfo {
   std::string app_id;
@@ -66,17 +75,30 @@ class AppServiceProxyLacros : public KeyedService,
 
   void ReInitializeForTesting(Profile* profile);
 
+  Profile* profile() const { return profile_; }
+
   apps::AppRegistryCache& AppRegistryCache();
   apps::AppCapabilityAccessCache& AppCapabilityAccessCache();
 
   apps::BrowserAppLauncher* BrowserAppLauncher();
 
-  apps::PreferredAppsList& PreferredApps();
+  apps::PreferredAppsListHandle& PreferredApps();
 
   apps::BrowserAppInstanceTracker* BrowserAppInstanceTracker();
 
   // apps::IconLoader overrides.
-  apps::mojom::IconKeyPtr GetIconKey(const std::string& app_id) override;
+  absl::optional<IconKey> GetIconKey(const std::string& app_id) override;
+  std::unique_ptr<Releaser> LoadIconFromIconKey(
+      AppType app_type,
+      const std::string& app_id,
+      const IconKey& icon_key,
+      IconType icon_type,
+      int32_t size_hint_in_dip,
+      bool allow_placeholder_icon,
+      apps::LoadIconCallback callback) override;
+
+  // TODO(crbug.com/1253250): Will be removed soon. Please use the non mojom
+  // interface.
   std::unique_ptr<IconLoader::Releaser> LoadIconFromIconKey(
       apps::mojom::AppType app_type,
       const std::string& app_id,
@@ -101,26 +123,13 @@ class AppServiceProxyLacros : public KeyedService,
               apps::mojom::WindowInfoPtr window_info = nullptr);
 
   // Launches the app for the given |app_id| with files from |file_paths|.
-  // |event_flags| provides additional context about the action which launches
-  // the app (e.g. a middle click indicating opening a background tab).
-  // |launch_source| is the possible app launch sources, e.g. from Shelf, from
-  // the search box, etc.
+  // DEPRECATED. Prefer passing the files in an Intent through
+  // LaunchAppWithIntent.
+  // TODO(crbug.com/1264164): Remove this method.
   void LaunchAppWithFiles(const std::string& app_id,
                           int32_t event_flags,
                           apps::mojom::LaunchSource launch_source,
                           apps::mojom::FilePathsPtr file_paths);
-
-  // Launches the app for the given |app_id| with files from |file_urls| and
-  // their |mime_types|.
-  // |event_flags| provides additional context about the action which launches
-  // the app (e.g. a middle click indicating opening a background tab).
-  // |launch_source| is the possible app launch sources, e.g. from Shelf, from
-  // the search box, etc.
-  void LaunchAppWithFileUrls(const std::string& app_id,
-                             int32_t event_flags,
-                             apps::mojom::LaunchSource launch_source,
-                             const std::vector<GURL>& file_urls,
-                             const std::vector<std::string>& mime_types);
 
   // Launches an app for the given |app_id|, passing |intent| to the app.
   // |event_flags| provides additional context about the action which launch the
@@ -143,6 +152,11 @@ class AppServiceProxyLacros : public KeyedService,
                         GURL url,
                         apps::mojom::LaunchSource launch_source,
                         apps::mojom::WindowInfoPtr window_info = nullptr);
+
+  // Launches an app for the given |params.app_id|. The |params| can also
+  // contain other param such as launch container, window diposition, etc.
+  void LaunchAppWithParams(AppLaunchParams&& params,
+                           LaunchCallback callback = base::DoNothing());
 
   // Sets |permission| for the app identified by |app_id|.
   void SetPermission(const std::string& app_id,
@@ -277,7 +291,17 @@ class AppServiceProxyLacros : public KeyedService,
     explicit InnerIconLoader(AppServiceProxyLacros* host);
 
     // apps::IconLoader overrides.
-    apps::mojom::IconKeyPtr GetIconKey(const std::string& app_id) override;
+    absl::optional<IconKey> GetIconKey(const std::string& app_id) override;
+    std::unique_ptr<IconLoader::Releaser> LoadIconFromIconKey(
+        AppType app_type,
+        const std::string& app_id,
+        const IconKey& icon_key,
+        IconType icon_type,
+        int32_t size_hint_in_dip,
+        bool allow_placeholder_icon,
+        apps::LoadIconCallback callback) override;
+
+    // TODO(crbug.com/1253250): Will be removed soon.
     std::unique_ptr<IconLoader::Releaser> LoadIconFromIconKey(
         apps::mojom::AppType app_type,
         const std::string& app_id,
@@ -298,8 +322,6 @@ class AppServiceProxyLacros : public KeyedService,
 
   void Initialize();
 
-  void AddAppIconSource(Profile* profile);
-
   // KeyedService overrides:
   void Shutdown() override;
 
@@ -307,9 +329,10 @@ class AppServiceProxyLacros : public KeyedService,
   void OnApps(std::vector<apps::mojom::AppPtr> deltas,
               apps::mojom::AppType app_type,
               bool should_notify_initialized) override;
-
-  apps::mojom::IntentFilterPtr FindBestMatchingFilter(
-      const apps::mojom::IntentPtr& intent);
+  void OnPreferredAppsChanged(
+      apps::mojom::PreferredAppChangesPtr changes) override;
+  void InitializePreferredApps(
+      PreferredAppsList::PreferredApps preferred_apps) override;
 
   apps::AppRegistryCache app_registry_cache_;
   apps::AppCapabilityAccessCache app_capability_access_cache_;
@@ -346,6 +369,10 @@ class AppServiceProxyLacros : public KeyedService,
   int crosapi_app_service_proxy_version_ = 0;
 
   base::WeakPtrFactory<AppServiceProxyLacros> weak_ptr_factory_{this};
+
+ private:
+  // For access to Initialize.
+  friend class AppServiceProxyFactory;
 };
 
 }  // namespace apps

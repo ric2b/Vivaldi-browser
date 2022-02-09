@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {LocalImages} from 'chrome://personalization/trusted/local_images_element.js';
-import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {LocalImages} from 'chrome://personalization/trusted/wallpaper/local_images_element.js';
+
+import {assertEquals, assertTrue} from '../../chai_assert.js';
 import {flushTasks, waitAfterNextRender} from '../../test_util.js';
+
 import {baseSetup, initElement, teardownElement} from './personalization_app_test_utils.js';
-import {TestWallpaperProvider} from './test_mojo_interface_provider.js';
 import {TestPersonalizationStore} from './test_personalization_store.js';
+import {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
 
 export function LocalImagesTest() {
   /** @type {?HTMLElement} */
@@ -168,4 +170,36 @@ export function LocalImagesTest() {
         assertEquals(images[0].getAttribute('aria-selected'), 'false');
         assertEquals(images[1].getAttribute('aria-selected'), 'true');
       });
+
+  test('images have proper aria label when loaded', async () => {
+    personalizationStore.data.local = {
+      images: wallpaperProvider.localImages,
+      data: wallpaperProvider.localImageData,
+    };
+    // Done loading.
+    personalizationStore.data.loading.local = {
+      images: false,
+      data: {'LocalImage0.png': false, 'LocalImage1.png': false},
+    };
+
+    localImagesElement = initElement(LocalImages.is, {hidden: false});
+    await waitAfterNextRender(localImagesElement);
+
+    // iron-list pre-creates some extra DOM elements but marks them as
+    // hidden. Ignore them here to only get visible images.
+    const images = localImagesElement.shadowRoot.querySelectorAll(
+        '.photo-container:not([hidden]) .photo-inner-container');
+
+    assertEquals(2, images.length);
+    // Every image is aria-selected false.
+    assertTrue(Array.from(images).every(
+        image => image.getAttribute('aria-selected') === 'false'));
+    // Every image has aria-label set.
+    assertEquals(
+        images[0].getAttribute('aria-label'),
+        wallpaperProvider.localImages[0].path);
+    assertEquals(
+        images[1].getAttribute('aria-label'),
+        wallpaperProvider.localImages[1].path);
+  });
 }

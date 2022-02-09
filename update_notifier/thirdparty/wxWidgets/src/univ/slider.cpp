@@ -43,9 +43,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_SLIDER
 
@@ -95,9 +92,9 @@ static const wxCoord SLIDER_LABEL_MARGIN = 2;
 // implementation of wxSlider
 // ============================================================================
 
-BEGIN_EVENT_TABLE(wxSlider, wxControl)
+wxBEGIN_EVENT_TABLE(wxSlider, wxControl)
     EVT_SIZE(wxSlider::OnSize)
-END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ----------------------------------------------------------------------------
 // wxSlider creation
@@ -209,20 +206,15 @@ bool wxSlider::ChangeValueTo(int value)
     // value!
     wxCHECK_MSG( IsInRange(value), false, wxT("invalid slider value") );
 
+    // and also generate a command event for compatibility
+    wxCommandEvent cmdevent( wxEVT_SLIDER, GetId() );
+    cmdevent.SetInt( value );
+    cmdevent.SetEventObject( this );
+    GetEventHandler()->ProcessEvent(cmdevent);
+
     m_value = value;
 
     Refresh();
-
-    // generate the events: both a specific scroll event and a command event
-    wxScrollEvent eventScroll(wxEVT_SCROLL_CHANGED, GetId());
-    eventScroll.SetPosition(m_value);
-    eventScroll.SetEventObject( this );
-    (void)GetEventHandler()->ProcessEvent(eventScroll);
-
-    wxCommandEvent event(wxEVT_SLIDER, GetId());
-    event.SetInt(m_value);
-    event.SetEventObject(this);
-    (void)GetEventHandler()->ProcessEvent(event);
 
     return true;
 }
@@ -782,37 +774,33 @@ bool wxSlider::PerformAction(const wxControlAction& action,
     }
     else if ( action == wxACTION_SLIDER_PAGE_CHANGE )
     {
+        scrollEvent = wxEVT_SCROLL_CHANGED;
         value = NormalizeValue(m_value + numArg * GetPageSize());
     }
     else if ( action == wxACTION_SLIDER_LINE_UP )
     {
         scrollEvent = wxEVT_SCROLL_LINEUP;
-        value = NormalizeValue(m_value + +GetLineSize());
+        value = NormalizeValue(m_value + -GetLineSize());
     }
     else if ( action == wxACTION_SLIDER_LINE_DOWN )
     {
         scrollEvent = wxEVT_SCROLL_LINEDOWN;
-        value = NormalizeValue(m_value + -GetLineSize());
+        value = NormalizeValue(m_value + +GetLineSize());
     }
     else if ( action == wxACTION_SLIDER_PAGE_UP )
     {
         scrollEvent = wxEVT_SCROLL_PAGEUP;
-        value = NormalizeValue(m_value + +GetPageSize());
+        value = NormalizeValue(m_value + -GetPageSize());
     }
     else if ( action == wxACTION_SLIDER_PAGE_DOWN )
     {
         scrollEvent = wxEVT_SCROLL_PAGEDOWN;
-        value = NormalizeValue(m_value + -GetPageSize());
+        value = NormalizeValue(m_value + +GetPageSize());
     }
     else if ( action == wxACTION_SLIDER_THUMB_DRAG ||
                 action == wxACTION_SLIDER_THUMB_MOVE )
     {
         scrollEvent = wxEVT_SCROLL_THUMBTRACK;
-
-        // we shouldn't generate a command event about this change but we still
-        // should update our value and the slider appearance
-        valueChanged = false;
-        m_value =
         value = (int)numArg;
         Refresh();
     }
@@ -826,12 +814,11 @@ bool wxSlider::PerformAction(const wxControlAction& action,
         return wxControl::PerformAction(action, numArg, strArg);
     }
 
-    // update wxSlider current value and generate wxCommandEvent, except while
-    // dragging the thumb
+    // update wxSlider current value
     if ( valueChanged )
         ChangeValueTo(value);
 
-    // also generate more precise wxScrollEvent if applicable
+    // generate wxScrollEvent
     if ( scrollEvent != wxEVT_NULL )
     {
         wxScrollEvent event(scrollEvent, GetId());
@@ -1029,12 +1016,12 @@ bool wxStdSliderInputHandler::HandleKey(wxInputConsumer *consumer,
                 action = wxACTION_SLIDER_START;
                 break;
 
-            case WXK_RIGHT:
+            case WXK_LEFT:
             case WXK_UP:
                 action = wxACTION_SLIDER_LINE_UP;
                 break;
 
-            case WXK_LEFT:
+            case WXK_RIGHT:
             case WXK_DOWN:
                 action = wxACTION_SLIDER_LINE_DOWN;
                 break;

@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -45,11 +44,5 @@ class LoginScreenExtensionsStorageCleaner {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the Chrome OS source code
-// migration is finished.
-namespace chromeos {
-using ::ash::LoginScreenExtensionsStorageCleaner;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_LOGIN_SCREEN_EXTENSIONS_STORAGE_CLEANER_H_

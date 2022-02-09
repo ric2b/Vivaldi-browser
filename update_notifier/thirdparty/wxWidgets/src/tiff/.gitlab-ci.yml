@@ -1,0 +1,36 @@
+image: ubuntu:20.04
+
+before_script:
+  - apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq autoconf automake build-essential cmake libtool libjpeg8-dev libjbig-dev liblzma-dev ninja-build zlib1g-dev libdeflate-dev zip wget
+
+stages:
+  - build
+  - pages
+
+autoconf:
+  stage: build
+  script:
+    - sh build/gitlab-ci autoconf
+  after_script:
+    - 'cat autoconf-build/test/test-suite.log'
+
+cmake-makefiles:
+  stage: build
+  script:
+    - sh build/gitlab-ci cmake "Unix Makefiles" Release
+
+cmake-ninja:
+  stage: build
+  script:
+    - sh build/gitlab-ci cmake "Ninja" Debug
+
+pages:
+  stage: pages
+  script:
+    - cp -r html public
+  artifacts:
+    name: $CI_PROJECT_NAME-$CI_JOB_NAME
+    paths:
+    - public
+  only:
+  - master

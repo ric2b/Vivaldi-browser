@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -76,8 +77,8 @@ class MockFrameConnector : public CrossProcessFrameConnector {
   }
 
  private:
-  RenderWidgetHostViewBase* parent_view_;
-  RenderWidgetHostViewBase* root_view_;
+  raw_ptr<RenderWidgetHostViewBase> parent_view_;
+  raw_ptr<RenderWidgetHostViewBase> root_view_;
 };
 
 // Used as a target for the RenderWidgetHostInputEventRouter. We record what
@@ -116,7 +117,7 @@ class TestRenderWidgetHostViewChildFrame
       blink::WebInputEvent::Type::kUndefined;
   uint32_t unique_id_for_last_touch_ack_ = 0;
 
-  ui::Compositor* compositor_;
+  raw_ptr<ui::Compositor> compositor_;
 };
 
 class StubHitTestQuery : public viz::HitTestQuery {
@@ -139,7 +140,7 @@ class StubHitTestQuery : public viz::HitTestQuery {
   }
 
  private:
-  const RenderWidgetHostViewBase* hittest_result_;
+  raw_ptr<const RenderWidgetHostViewBase> hittest_result_;
   const bool query_renderer_;
 };
 
@@ -221,6 +222,12 @@ class MockInputTargetClient : public viz::mojom::InputTargetClient {
 }  // namespace
 
 class RenderWidgetHostInputEventRouterTest : public testing::Test {
+ public:
+  RenderWidgetHostInputEventRouterTest(
+      const RenderWidgetHostInputEventRouterTest&) = delete;
+  RenderWidgetHostInputEventRouterTest& operator=(
+      const RenderWidgetHostInputEventRouterTest&) = delete;
+
  protected:
   RenderWidgetHostInputEventRouterTest() = default;
 
@@ -361,9 +368,6 @@ class RenderWidgetHostInputEventRouterTest : public testing::Test {
   std::unique_ptr<RenderWidgetHostImpl> widget_host_root_;
   std::unique_ptr<MockRootRenderWidgetHostView> view_root_;
   std::unique_ptr<MockInputTargetClient> input_target_client_root_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostInputEventRouterTest);
 };
 
 // Make sure that when a touch scroll crosses out of the area for a
@@ -1250,6 +1254,12 @@ class DelegatedInkPointTest
 
   void SetDeviceScaleFactor(float dsf) {
     aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(dsf);
+
+    // Normally, WebContentsImpl owns a ScreenChangeMonitor that observes
+    // display::DisplayList changes like this and indirectly calls
+    // UpdateScreenInfo via a callback.  Since there's no WebContentsImpl
+    // in this unittest, make this call directly.
+    view_root_->UpdateScreenInfo();
   }
 
   MockCompositor* compositor() { return compositor_.get(); }

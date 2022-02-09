@@ -29,6 +29,12 @@ class LacrosDataMigrationScreenView {
 
   // Shows the contents of the screen.
   virtual void Show() = 0;
+
+  // Updates the progress bar.
+  virtual void SetProgressValue(int progress) = 0;
+
+  // Displays the skip button.
+  virtual void ShowSkipButton() = 0;
 };
 
 class LacrosDataMigrationScreenHandler : public BaseScreenHandler,
@@ -52,6 +58,8 @@ class LacrosDataMigrationScreenHandler : public BaseScreenHandler,
   void Bind(ash::LacrosDataMigrationScreen* screen) override;
   void Unbind() override;
   void Show() override;
+  void SetProgressValue(int progress) override;
+  void ShowSkipButton() override;
 
  private:
   // BaseScreenHandler:

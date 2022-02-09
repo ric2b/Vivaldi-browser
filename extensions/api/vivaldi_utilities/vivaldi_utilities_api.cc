@@ -80,6 +80,7 @@
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
 #include "base/vivaldi_switches.h"
+#include "browser/translate/vivaldi_translate_server_request.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/datasource/vivaldi_image_store.h"
@@ -111,6 +112,8 @@ using content_settings::CookieControlsMode;
 namespace extensions {
 
 namespace {
+constexpr char kMutexNameKey[] = "name";
+constexpr char kMutexReleaseTokenKey[] = "release_token";
 
 ContentSetting vivContentSettingFromString(const std::string& name) {
   ContentSetting setting;
@@ -231,6 +234,53 @@ const base::Value* VivaldiUtilitiesAPI::GetSharedData(const std::string& key) {
   return nullptr;
 }
 
+VivaldiUtilitiesAPI::MutexData::MutexData(int release_token)
+    : release_token(release_token) {}
+VivaldiUtilitiesAPI::MutexData::MutexData(MutexData&&) = default;
+VivaldiUtilitiesAPI::MutexData& VivaldiUtilitiesAPI::MutexData::operator=(
+    MutexData&&) = default;
+VivaldiUtilitiesAPI::MutexData::~MutexData() = default;
+
+bool VivaldiUtilitiesAPI::TakeMutex(const std::string& name,
+                                    bool wait,
+                                    MutexAvailableCallback callback) {
+  // These tokens are just a precaution to prevent accidental release due to
+  // coding errors. They only need to be unique-ish over the lifetime of the
+  // application.
+  static int next_release_token = 1;
+  auto mutex = mutexes_.find(name);
+  if (mutex != mutexes_.end()) {
+    if (!wait)
+      return false;
+    mutex->second.wait_list.emplace(
+        std::make_pair(next_release_token++, std::move(callback)));
+    return false;
+  }
+
+  int release_token = next_release_token++;
+  mutexes_.emplace(name, MutexData(release_token));
+  std::move(callback).Run(release_token);
+  return true;
+}
+
+bool VivaldiUtilitiesAPI::ReleaseMutex(const std::string& name,
+                                       int release_token) {
+  auto mutex = mutexes_.find(name);
+  if (mutex == mutexes_.end() || mutex->second.release_token != release_token)
+    return false;
+
+  if (mutex->second.wait_list.empty()) {
+    mutexes_.erase(mutex);
+    return true;
+  }
+
+  int next_release_token = mutex->second.wait_list.front().first;
+  mutex->second.release_token = next_release_token;
+  std::move(mutex->second.wait_list.front().second).Run(next_release_token);
+  mutex->second.wait_list.pop();
+  return true;
+}
+
 bool VivaldiUtilitiesAPI::SetDialogPostion(int window_id,
                                            const std::string& dialog,
                                            const gfx::Rect& rect,
@@ -296,6 +346,8 @@ void VivaldiUtilitiesAPI::OsReauthCall(
 #elif defined(OS_MAC)
   bool result = password_manager_util_mac::AuthenticateUser(purpose);
   std::move(callback).Run(result);
+#else
+  std::move(callback).Run(true);
 #endif
 }
 
@@ -489,7 +541,6 @@ ExtensionFunction::ResponseAction UtilitiesCanOpenUrlExternallyFunction::Run() {
                            OnDefaultProtocolClientWorkerFinished,
                        this));
     return RespondLater();
-
   } while (false);
 
   return RespondNow(ArgumentList(Results::Create(result)));
@@ -858,6 +909,68 @@ ExtensionFunction::ResponseAction UtilitiesGetSharedDataFunction::Run() {
   const base::Value* value = api->GetSharedData(params->key_value_pair.key);
   return RespondNow(ArgumentList(
       Results::Create(value ? *value : *params->key_value_pair.value.get())));
+}
+
+ExtensionFunction::ResponseAction UtilitiesTakeMutexFunction::Run() {
+  using vivaldi::utilities::TakeMutex::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiUtilitiesAPI* api =
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
+
+  bool wait = params->wait ? *params->wait : true;
+
+  if (api->TakeMutex(
+          params->name, wait,
+          base::BindOnce(&UtilitiesTakeMutexFunction::OnMutexAcquired, this,
+                         params->name)))
+    return AlreadyResponded();
+  if (!wait)
+    return RespondNow(Error("Mutex already held"));
+  return RespondLater();
+}
+
+void UtilitiesTakeMutexFunction::OnMutexAcquired(std::string name,
+                                                 int release_token) {
+  namespace Results = vivaldi::utilities::TakeMutex::Results;
+  base::Value mutex_handle(base::Value::Type::DICTIONARY);
+  mutex_handle.SetStringKey(kMutexNameKey, std::move(name));
+  mutex_handle.SetIntKey(kMutexReleaseTokenKey, release_token);
+  Respond(ArgumentList(Results::Create(std::move(mutex_handle))));
+}
+
+ExtensionFunction::ResponseAction UtilitiesReleaseMutexFunction::Run() {
+  using vivaldi::utilities::ReleaseMutex::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string* name;
+  absl::optional<int> release_token;
+
+  VivaldiUtilitiesAPI* api =
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
+
+  auto is_valid_handle = [&name, &release_token](base::Value* handle) {
+    if (!handle->is_dict())
+      return false;
+    name = handle->FindStringKey(kMutexNameKey);
+    if (!name)
+      return false;
+    release_token = handle->FindIntKey(kMutexReleaseTokenKey);
+    if (!release_token)
+      return false;
+    return true;
+  };
+
+  if (!is_valid_handle(params->handle.get()) ||
+      !api->ReleaseMutex(*name, *release_token)) {
+    return RespondNow(Error("Invalid token"));
+  }
+
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetSystemDateFormatFunction::Run() {
@@ -1703,7 +1816,7 @@ ExtensionFunction::ResponseAction UtilitiesGetGAPIKeyFunction::Run() {
   return RespondNow(
       ArgumentList(Results::Create(VIVALDI_GOOGLE_TASKS_API_KEY)));
 #else
-  return RespondNow(Error("No API key defined"));
+  return RespondNow(Error("No G API key defined"));
 #endif  // VIVALDI_GOOGLE_TASKS_API_KEY
 }
 
@@ -1714,7 +1827,7 @@ ExtensionFunction::ResponseAction UtilitiesGetGOAuthClientIdFunction::Run() {
   return RespondNow(
       ArgumentList(Results::Create(VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID)));
 #else
-  return RespondNow(Error("No client id defined"));
+  return RespondNow(Error("No G client id defined"));
 #endif  // VIVALDI_GOOGLE_OAUTH_API_CLIENT_ID
 }
 
@@ -1726,7 +1839,7 @@ UtilitiesGetGOAuthClientSecretFunction::Run() {
   return RespondNow(
       ArgumentList(Results::Create(VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET)));
 #else
-  return RespondNow(Error("No client secret defined"));
+  return RespondNow(Error("No G client secret defined"));
 #endif  // VIVALDI_GOOGLE_OAUTH_API_CLIENT_SECRET
 }
 
@@ -1737,8 +1850,31 @@ ExtensionFunction::ResponseAction UtilitiesGetMOAuthClientIdFunction::Run() {
   return RespondNow(
       ArgumentList(Results::Create(VIVALDI_MICROSOFT_OAUTH_API_CLIENT_ID)));
 #else
-  return RespondNow(Error("No client id defined"));
+  return RespondNow(Error("No M client id defined"));
 #endif  // VIVALDI_MICROSOFT_OAUTH_API_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetYOAuthClientIdFunction::Run() {
+  namespace Results = vivaldi::utilities::GetYOAuthClientId::Results;
+
+#ifdef VIVALDI_YAHOO_OAUTH_API_CLIENT_ID
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_YAHOO_OAUTH_API_CLIENT_ID)));
+#else
+  return RespondNow(Error("No Y client id defined"));
+#endif  // VIVALDI_YAHOO_OAUTH_API_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetYOAuthClientSecretFunction::Run() {
+  namespace Results = vivaldi::utilities::GetYOAuthClientSecret::Results;
+
+#ifdef VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET)));
+#else
+  return RespondNow(Error("No Y client secret defined"));
+#endif  // VIVALDI_YAHOO_OAUTH_API_CLIENT_SECRET
 }
 
 UtilitiesGetCommandLineValueFunction::~UtilitiesGetCommandLineValueFunction() {}
@@ -1833,6 +1969,63 @@ void UtilitiesOsDecryptFunction::OnDecryptDone(
 
   Respond(
       ArgumentList(vivaldi::utilities::OsCrypt::Results::Create(*decrypted)));
+}
+
+UtilitiesTranslateTextFunction::UtilitiesTranslateTextFunction() {}
+UtilitiesTranslateTextFunction::~UtilitiesTranslateTextFunction() {}
+
+ExtensionFunction::ResponseAction UtilitiesTranslateTextFunction::Run() {
+  using vivaldi::utilities::TranslateText::Params;
+
+  std::unique_ptr<Params> params(Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  request_ = std::make_unique<::vivaldi::VivaldiTranslateServerRequest>(
+      browser_context()->GetWeakPtr(),
+      base::BindOnce(&UtilitiesTranslateTextFunction::OnTranslateFinished,
+                     this));
+
+  request_->StartRequest(params->source_text, params->source_language_code,
+                         params->destination_language_code);
+
+  return RespondLater();
+}
+
+namespace {
+vivaldi::utilities::TranslateError
+ConvertTranslateErrorCodeToAPIErrorCode(::vivaldi::TranslateError error) {
+  switch (error) {
+    case ::vivaldi::TranslateError::kNoError:
+      return vivaldi::utilities::TRANSLATE_ERROR_NO_ERROR;
+    case ::vivaldi::TranslateError::kNetwork:
+      return vivaldi::utilities::TRANSLATE_ERROR_NETWORK;
+    case ::vivaldi::TranslateError::kUnknownLanguage:
+      return vivaldi::utilities::TRANSLATE_ERROR_UNKNOWN_LANGUAGE;
+    case ::vivaldi::TranslateError::kUnsupportedLanguage:
+      return vivaldi::utilities::TRANSLATE_ERROR_UNSUPPORTED_LANGUAGE;
+    case ::vivaldi::TranslateError::kTranslationError:
+      return vivaldi::utilities::TRANSLATE_ERROR_ERROR;
+    case ::vivaldi::TranslateError::kTranslationTimeout:
+      return vivaldi::utilities::TRANSLATE_ERROR_TIMEOUT;
+  }
+}
+}
+
+void UtilitiesTranslateTextFunction::OnTranslateFinished(
+    ::vivaldi::TranslateError error,
+    std::string detected_source_language,
+    std::vector<std::string> sourceText,
+    std::vector<std::string> translatedText) {
+  namespace Results = vivaldi::utilities::TranslateText::Results;
+
+  vivaldi::utilities::TranslateTextResponse result;
+
+  result.detected_source_language = detected_source_language;
+  result.source_text = std::move(sourceText);
+  result.translated_text = std::move(translatedText);
+  result.error = ConvertTranslateErrorCodeToAPIErrorCode(error);
+
+  Respond(ArgumentList(Results::Create(result)));
 }
 
 }  // namespace extensions

@@ -38,6 +38,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
 import org.chromium.base.FeatureList;
+import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
@@ -68,7 +69,6 @@ import org.chromium.ui.modelutil.ListModel;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.DummyUiActivity;
 import org.chromium.ui.test.util.NightModeTestUtils;
-import org.chromium.ui.test.util.ThemedDummyUiActivityTestRule;
 import org.chromium.ui.test.util.ViewUtils;
 
 import java.util.Arrays;
@@ -94,9 +94,8 @@ public class AccessorySheetRenderTest {
 
     // No @Rule since we only need the launching helpers. Adding the rule to the chain breaks with
     // any ParameterizedRunnerDelegate.
-    private ThemedDummyUiActivityTestRule<DummyUiActivity> mActivityTestRule =
-            new ThemedDummyUiActivityTestRule<>(
-                    DummyUiActivity.class, R.style.ColorOverlay_ChromiumAndroid);
+    private BaseActivityTestRule<DummyUiActivity> mActivityTestRule =
+            new BaseActivityTestRule<>(DummyUiActivity.class);
 
     @Rule
     public final ChromeRenderTestRule mRenderTestRule =
@@ -162,7 +161,7 @@ public class AccessorySheetRenderTest {
                 new KeyboardAccessoryData.AccessorySheetData(
                         AccessoryTabType.PASSWORDS, "Passwords", "");
         sheet.getUserInfoList().add(
-                new KeyboardAccessoryData.UserInfo("http://psl.origin.com/", false));
+                new KeyboardAccessoryData.UserInfo("http://psl.origin.com/", true));
         sheet.getUserInfoList().get(0).addField(
                 new UserInfoField("No username", "No username", "", false, null));
         sheet.getUserInfoList().get(0).addField(
@@ -188,7 +187,7 @@ public class AccessorySheetRenderTest {
         final KeyboardAccessoryData.AccessorySheetData sheet =
                 new KeyboardAccessoryData.AccessorySheetData(
                         AccessoryTabType.CREDIT_CARDS, "Payments", "");
-        sheet.getUserInfoList().add(new KeyboardAccessoryData.UserInfo("", false));
+        sheet.getUserInfoList().add(new KeyboardAccessoryData.UserInfo("", true));
         sheet.getUserInfoList().get(0).addField(
                 new UserInfoField("**** 9219", "Card for Todd Tester", "1", false, result -> {}));
         sheet.getUserInfoList().get(0).addField(
@@ -225,7 +224,7 @@ public class AccessorySheetRenderTest {
         final KeyboardAccessoryData.AccessorySheetData sheet =
                 new KeyboardAccessoryData.AccessorySheetData(
                         AccessoryTabType.ADDRESSES, "Addresses", "");
-        sheet.getUserInfoList().add(new KeyboardAccessoryData.UserInfo("", false));
+        sheet.getUserInfoList().add(new KeyboardAccessoryData.UserInfo("", true));
         sheet.getUserInfoList().get(0).addField(
                 new UserInfoField("Todd Tester", "Todd Tester", "", false, item -> {}));
         sheet.getUserInfoList().get(0).addField( // Unused company name field.

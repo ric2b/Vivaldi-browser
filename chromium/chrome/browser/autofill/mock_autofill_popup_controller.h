@@ -14,7 +14,7 @@
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/test/gfx_util.h"
+#include "ui/gfx/test/scoped_default_font_description.h"
 
 namespace autofill {
 
@@ -78,8 +78,12 @@ class MockAutofillPopupController
   MOCK_CONST_METHOD0(GetPopupType, PopupType());
 
   void set_suggestions(const std::vector<int>& ids) {
-    for (const auto& id : ids)
-      suggestions_.push_back(autofill::Suggestion("", "", "", id));
+    for (const auto& id : ids) {
+      // Accessibility requires all focusable AutofillPopupItemView to have
+      // ui::AXNodeData with non-empty names. We specify dummy values and labels
+      // to satisfy this.
+      suggestions_.emplace_back("dummy_value", "dummy_label", "", id);
+    }
   }
 
   void set_suggestions(const std::vector<Suggestion>& suggestions) {

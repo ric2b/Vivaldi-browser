@@ -12,7 +12,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "components/viz/common/resources/resource_format.h"
 #include "gpu/command_buffer/service/shared_image_backing_factory.h"
 #include "gpu/gpu_gles2_export.h"
@@ -24,14 +23,16 @@ class ColorSpace;
 }  // namespace gfx
 
 namespace gpu {
+class DXGISharedHandleManager;
 class SharedImageBacking;
 struct Mailbox;
 
 class GPU_GLES2_EXPORT SharedImageBackingFactoryD3D
     : public SharedImageBackingFactory {
  public:
-  explicit SharedImageBackingFactoryD3D(
-      Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device);
+  SharedImageBackingFactoryD3D(
+      Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
+      scoped_refptr<DXGISharedHandleManager> dxgi_shared_handle_manager);
 
   SharedImageBackingFactoryD3D(const SharedImageBackingFactoryD3D&) = delete;
   SharedImageBackingFactoryD3D& operator=(const SharedImageBackingFactoryD3D&) =
@@ -128,6 +129,8 @@ class GPU_GLES2_EXPORT SharedImageBackingFactoryD3D
 
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
   absl::optional<bool> map_on_default_textures_;
+
+  scoped_refptr<DXGISharedHandleManager> dxgi_shared_handle_manager_;
 };
 
 }  // namespace gpu

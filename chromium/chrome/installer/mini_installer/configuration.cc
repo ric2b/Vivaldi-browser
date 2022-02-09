@@ -16,6 +16,12 @@
 #include "chrome/installer/mini_installer/mini_string.h"
 #include "chrome/installer/mini_installer/regkey.h"
 
+#ifdef VIVALDI_BUILD
+#include "installer/util/vivaldi_install_constants.h"
+
+bool g_vivaldi_has_unpack_switch = false;
+#endif
+
 namespace mini_installer {
 
 namespace {
@@ -88,6 +94,10 @@ bool Configuration::ParseCommandLine(const wchar_t* command_line) {
       has_invalid_switch_ = true;
     else if (0 == ::lstrcmpi(args_[i], L"--chrome-frame"))
       has_invalid_switch_ = true;
+#ifdef VIVALDI_BUILD
+    else if (0 == ::lstrcmpi(args_[i], L"--" VIVALDI_INSTALLER_SWITCH_UNPACK))
+      g_vivaldi_has_unpack_switch = true;
+#endif
   }
 
   if (!is_system_level_)

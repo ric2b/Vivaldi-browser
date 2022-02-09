@@ -13,7 +13,7 @@
 /** @addtogroup group_funcmacro_misc */
 //@{
 
-/** 
+/**
     Elements of this enum specify the possible behaviours of wxBase64Decode
     when an invalid character is encountered.
 */
@@ -56,10 +56,6 @@ size_t wxBase64Encode(char* dst, size_t dstLen,
     a wxString.
 
     There is no error return.
-
-    To allocate the buffer of the correct size, use wxBase64EncodedSize() or
-    call this function with @a dst set to @NULL -- it will then return the
-    necessary buffer size.
 
     @param src
         The input buffer, must not be @NULL.

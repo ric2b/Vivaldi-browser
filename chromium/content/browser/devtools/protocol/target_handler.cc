@@ -25,6 +25,7 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/cors_origin_pattern_setter.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
@@ -115,7 +116,7 @@ static std::string TerminationStatusToString(base::TerminationStatus status) {
       return "crashed";
     case base::TERMINATION_STATUS_STILL_RUNNING:
       return "still running";
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
     // Used for the case when oom-killer kills a process on ChromeOS.
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       return "oom killed";
@@ -159,6 +160,11 @@ class BrowserToPageConnector {
       // TODO(dgozman): handle return value of AttachClient.
       host->AttachClient(this);
     }
+
+    BrowserConnectorHostClient(const BrowserConnectorHostClient&) = delete;
+    BrowserConnectorHostClient& operator=(const BrowserConnectorHostClient&) =
+        delete;
+
     void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                  base::span<const uint8_t> message) override {
       connector_->DispatchProtocolMessage(agent_host, message);
@@ -169,7 +175,6 @@ class BrowserToPageConnector {
 
    private:
     BrowserToPageConnector* connector_;
-    DISALLOW_COPY_AND_ASSIGN(BrowserConnectorHostClient);
   };
 
   BrowserToPageConnector(const std::string& binding_name,
@@ -206,6 +211,9 @@ class BrowserToPageConnector {
     SendProtocolMessageToPage("Runtime.evaluate", std::move(evaluate_params));
     g_browser_to_page_connectors.Get()[page_host_.get()].reset(this);
   }
+
+  BrowserToPageConnector(const BrowserToPageConnector&) = delete;
+  BrowserToPageConnector& operator=(const BrowserToPageConnector&) = delete;
 
  private:
   void SendProtocolMessageToPage(const char* method,
@@ -282,8 +290,6 @@ class BrowserToPageConnector {
   std::unique_ptr<BrowserConnectorHostClient> browser_host_client_;
   std::unique_ptr<BrowserConnectorHostClient> page_host_client_;
   int page_message_id_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserToPageConnector);
 };
 
 }  // namespace
@@ -435,16 +441,15 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
   }
 
   void SetThrottle(Throttle* throttle) { throttle_ = throttle; }
-  void SetServiceWorkerThrottle(
-      scoped_refptr<DevToolsThrottleHandle> service_worker_throttle) {
-    service_worker_throttle_ = service_worker_throttle;
+  void SetWorkerThrottle(
+      scoped_refptr<DevToolsThrottleHandle> worker_throttle) {
+    worker_throttle_ = std::move(worker_throttle);
   }
 
   void ResumeIfThrottled() {
     if (throttle_)
       throttle_->Clear();
-    if (service_worker_throttle_)
-      service_worker_throttle_.reset();
+    worker_throttle_.reset();
   }
 
   void SendMessageToAgentHost(base::span<const uint8_t> message) {
@@ -454,7 +459,7 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
     // method that |message| is JSON.
     DCHECK(!flatten_protocol_);
 
-    if (throttle_ || service_worker_throttle_) {
+    if (throttle_ || worker_throttle_) {
       absl::optional<base::Value> value =
           base::JSONReader::Read(base::StringPiece(
               reinterpret_cast<const char*>(message.data()), message.size()));
@@ -532,6 +537,10 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
     return GetRootClient()->MayWriteLocalFiles();
   }
 
+  bool AllowUnsafeOperations() override {
+    return GetRootClient()->AllowUnsafeOperations();
+  }
+
   content::DevToolsAgentHostClient* GetRootClient() {
     return handler_->root_session_->GetClient();
   }
@@ -542,7 +551,7 @@ class TargetHandler::Session : public DevToolsAgentHostClient {
   bool flatten_protocol_;
   DevToolsSession* devtools_session_ = nullptr;
   Throttle* throttle_ = nullptr;
-  scoped_refptr<DevToolsThrottleHandle> service_worker_throttle_;
+  scoped_refptr<DevToolsThrottleHandle> worker_throttle_;
   // This is needed to identify sessions associated with given
   // AutoAttacher to properly support SetAttachedTargetsOfType()
   // for a TargetHandler that serves as a client to multiple
@@ -640,7 +649,9 @@ std::unique_ptr<NavigationThrottle> TargetHandler::CreateThrottleForNavigation(
       NavigationRequest::From(navigation_handle)->frame_tree_node();
   DCHECK(access_mode_ != AccessMode::kBrowser ||
          !auto_attach_related_targets_.empty() || !frame_tree_node->parent());
-  if (access_mode_ == AccessMode::kBrowser && !frame_tree_node->parent()) {
+  if (frame_tree_node->IsMainFrame() &&
+      (access_mode_ == AccessMode::kBrowser ||
+       frame_tree_node->IsFencedFrameRoot())) {
     DCHECK(auto_attacher == auto_attacher_);
     DevToolsAgentHost* host =
         RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
@@ -1114,6 +1125,7 @@ void TargetHandler::CreateBrowserContext(
     Maybe<bool> in_disposeOnDetach,
     Maybe<String> in_proxyServer,
     Maybe<String> in_proxyBypassList,
+    Maybe<protocol::Array<String>> in_originsToGrantUniversalNetworkAccess,
     std::unique_ptr<CreateBrowserContextCallback> callback) {
   if (access_mode_ != AccessMode::kBrowser) {
     callback->sendFailure(Response::ServerError(kNotAllowedError));
@@ -1137,12 +1149,46 @@ void TargetHandler::CreateBrowserContext(
     }
   }
 
+  // Pre-process universal network access origins before actual context creation
+  // in case we need to bail out with error.
+  std::vector<url::Origin> originsToGrantUniversalNetworkAccess;
+  if (in_originsToGrantUniversalNetworkAccess.isJust()) {
+    for (const auto& origin_str :
+         *in_originsToGrantUniversalNetworkAccess.fromJust()) {
+      GURL url(origin_str);
+      url::Origin origin = url::Origin::Create(url);
+      if (!url.is_valid() || origin.opaque()) {
+        callback->sendFailure(
+            Response::InvalidParams("Invalid origin " + origin_str));
+        return;
+      }
+      originsToGrantUniversalNetworkAccess.push_back(std::move(origin));
+    }
+  }
+
   BrowserContext* context = delegate->CreateBrowserContext();
   if (!context) {
     callback->sendFailure(
         Response::ServerError("Failed to create browser context."));
     pending_proxy_config_.reset();
     return;
+  }
+
+  for (const auto& origin : originsToGrantUniversalNetworkAccess) {
+    std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns;
+    allow_patterns.push_back(network::mojom::CorsOriginPattern::New());
+    allow_patterns.back()->protocol = "http";
+    allow_patterns.back()->priority =
+        network::mojom::CorsOriginAccessMatchPriority::kMaxPriority;
+    allow_patterns.push_back(network::mojom::CorsOriginPattern::New());
+    allow_patterns.back()->protocol = "https";
+    allow_patterns.back()->priority =
+        network::mojom::CorsOriginAccessMatchPriority::kMaxPriority;
+
+    // It's fine to not await the completion here -- this is implicitly
+    // serialized with the actual URLLoaderFactory / URLLoader creation.
+    content::CorsOriginPatternSetter::Set(
+        context, origin, std::move(allow_patterns), {}, base::DoNothing());
   }
 
   if (pending_proxy_config_) {
@@ -1233,15 +1279,17 @@ void TargetHandler::ApplyNetworkContextParamsOverrides(
   }
 }
 
-void TargetHandler::AddServiceWorkerThrottle(
+void TargetHandler::AddWorkerThrottle(
     DevToolsAgentHost* agent_host,
     scoped_refptr<DevToolsThrottleHandle> throttle_handle) {
   if (!agent_host)
     return;
 
   if (auto_attached_sessions_.count(agent_host)) {
-    auto_attached_sessions_[agent_host]->SetServiceWorkerThrottle(
-        std::move(throttle_handle));
+    if (auto_attached_sessions_[agent_host]->IsWaitingForDebuggerOnStart()) {
+      auto_attached_sessions_[agent_host]->SetWorkerThrottle(
+          std::move(throttle_handle));
+    }
   }
 }
 

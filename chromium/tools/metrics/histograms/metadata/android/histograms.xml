@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -99,7 +100,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <variant name=".SendTabToSelf"/>
   <variant name=".SharedHighlighting"/>
   <variant name=".SyncError"/>
+  <variant name=".TailoredSecurityEnabled"/>
   <variant name=".UpdatePassword"/>
+  <variant name=".VrServicesUpgrade"/>
 </variants>
 
 <variants name="ProviderPermissionType">
@@ -156,7 +159,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AdaptiveToolbarButton.SettingsToggle.Changed"
-    enum="BooleanEnabled" expires_after="2022-02-01">
+    enum="BooleanEnabled" expires_after="2022-04-24">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -229,6 +232,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.AutofillAssistant.DependenciesInvalidated"
+    enum="AutofillAssistantDependenciesInvalidated" expires_after="2022-10-27">
+  <owner>fga@google.com</owner>
+  <owner>autofill_assistant+watch@google.com</owner>
+  <summary>
+    Reports when the platform-specific dependencies are invalidated. For
+    example: When the activity is changed on Android.
+  </summary>
+</histogram>
+
 <histogram name="Android.AutofillAssistant.DropOutReason{Intent}"
     enum="AutofillAssistantDropOutReason" expires_after="2022-06-08">
   <owner>selakovic@google.com</owner>
@@ -256,6 +269,19 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.AutofillAssistant.GetClientToken"
+    enum="AutofillAssistantGetClientTokenResult" expires_after="2022-11-19">
+  <owner>sandromaggi@google.com</owner>
+  <owner>autofill_assistant@google.com</owner>
+  <summary>
+    Reports the result of a GetClientToken call to GMS Core. This is recorded
+    every time a call is made. For each call two records are made, one that the
+    call was executed and a second to record it's result status (success or
+    failure). This is done to ensure all calls are properly recorded and none
+    are accidentally dropped.
+  </summary>
+</histogram>
+
 <histogram name="Android.AutofillAssistant.OnboardingFetcher.ResultStatus"
     enum="AutofillAssistantOnboardingFetcherResultStatus"
     expires_after="2022-06-08">
@@ -271,6 +297,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.OnBoarding{Intent}"
     enum="AutofillAssistantOnBoarding" expires_after="2022-06-08">
+  <obsolete>
+    Removed in November 2021.
+  </obsolete>
   <owner>lsuder@chromium.org</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -354,7 +383,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.ExactTaskCreated"
-    enum="BackgroundTaskId" expires_after="2021-12-01">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nator@chromium.org</owner>
   <owner>knollr@chromium.org</owner>
@@ -388,7 +417,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskCreated.WithExpiration"
-    enum="BackgroundTaskId" expires_after="2021-12-01">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nator@chromium.org</owner>
   <owner>knollr@chromium.org</owner>
@@ -399,7 +428,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskCreated.WithoutExpiration"
-    enum="BackgroundTaskId" expires_after="2021-12-01">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nator@chromium.org</owner>
   <owner>knollr@chromium.org</owner>
@@ -410,7 +439,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskExpired"
-    enum="BackgroundTaskId" expires_after="2022-04-24">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nator@chromium.org</owner>
   <owner>knollr@chromium.org</owner>
@@ -421,7 +450,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskLoadedNative"
-    enum="BackgroundTaskId" expires_after="2022-04-17">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nyquist@chromium.org</owner>
   <summary>
@@ -431,7 +460,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskLoadedNative.FullBrowser"
-    enum="BackgroundTaskId" expires_after="2022-04-24">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>mheikal@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <owner>hnakashima@chromium.org</owner>
@@ -442,7 +471,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskLoadedNative.ReducedMode"
-    enum="BackgroundTaskId" expires_after="2022-04-24">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>mheikal@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <owner>hnakashima@chromium.org</owner>
@@ -461,7 +490,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskScheduled.Success"
-    enum="BackgroundTaskId" expires_after="2022-04-17">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nyquist@chromium.org</owner>
   <summary>
@@ -470,19 +499,29 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskStarted"
-    enum="BackgroundTaskId" expires_after="2022-04-03">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nyquist@chromium.org</owner>
   <summary>Records that a specific background task has been started.</summary>
 </histogram>
 
 <histogram name="Android.BackgroundTaskScheduler.TaskStopped"
-    enum="BackgroundTaskId" expires_after="2021-12-01">
+    enum="BackgroundTaskId" expires_after="2022-05-01">
   <owner>fgorski@chromium.org</owner>
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records that a specific background task has been stopped by Background Task
     Scheduler before it was able to complete itself.
+  </summary>
+</histogram>
+
+<histogram name="Android.BiometricAuth.AuthRequester"
+    enum="BiometricAuthRequester" expires_after="2022-04-03">
+  <owner>ioanap@chromium.org</owner>
+  <owner>fhorschig@chromium.org</owner>
+  <summary>
+    Recorded when a UI surface/flow in Chrome on Android chooses to re-auth the
+    user via biometrics. It records that surface/flow which made the request.
   </summary>
 </histogram>
 
@@ -505,6 +544,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Measures time from {type} child process starts to right before main. Only
     recorded on Android N+. Zygote measurements are recorded on Q+.
+
+    Zygote measurements capture the CPU time (thread time) spent to create the
+    app zygote process, before the zygote preload starts. For other processes it
+    measures the time (uptimeMillis) to create the child process service.
   </summary>
   <token key="type">
     <variant name=".All" summary="all (excluding zygote)"/>
@@ -724,8 +767,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram
-    name="Android.DarkTheme.AutoDarkMode.SettingsChangeSource.{NewState}"
+<histogram name="Android.DarkTheme.AutoDarkMode.SettingsChangeSource{NewState}"
     enum="AndroidAutoDarkModeSettingsChangeSource" expires_after="2022-04-01">
   <owner>nemco@google.com</owner>
   <owner>wenyufu@chromium.org</owner>
@@ -795,7 +837,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DarkTheme.ThemeSettingsEntry"
-    enum="AndroidThemeSettingsEntry" expires_after="2022-04-01">
+    enum="AndroidThemeSettingsEntry" expires_after="2022-06-05">
   <owner>nemco@google.com</owner>
   <owner>wenyufu@chromium.org</owner>
   <owner>clank-app-team@google.com</owner>
@@ -1316,6 +1358,19 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.FontLookup.Blink.DLFontsLatencyFailure" units="ms"
     expires_after="2022-06-30">
+  <obsolete>
+    Removed in M98. No longer tracked.
+  </obsolete>
+  <owner>drott@chromium.org</owner>
+  <owner>layout-dev@chromium.org</owner>
+  <summary>
+    This metric was never logged. See
+    Android.FontLookup.Blink.DLFontsLatencyFailure2 instead.
+  </summary>
+</histogram>
+
+<histogram name="Android.FontLookup.Blink.DLFontsLatencyFailure2"
+    units="microseconds" expires_after="2022-06-30">
   <owner>drott@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -1323,12 +1378,26 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     fonts at the time of instantiating the font in the fonts backend in the
     renderer. Includes time for error checking and attempting to create the font
     from the retrieved blob, if there is one. Only records timings for
-    situations in which a font could not be instantiated.
+    situations in which a font could not be instantiated. This is recorded only
+    on devices that support high resolution timers.
   </summary>
 </histogram>
 
 <histogram name="Android.FontLookup.Blink.DLFontsLatencySuccess" units="ms"
     expires_after="2022-06-30">
+  <obsolete>
+    Removed in M98. No longer tracked.
+  </obsolete>
+  <owner>drott@chromium.org</owner>
+  <owner>layout-dev@chromium.org</owner>
+  <summary>
+    This is obsolete in favor of Android.FontLookup.Blink.DLFontsLatencySuccess.
+    This was incorrectly logging both successes and failures.
+  </summary>
+</histogram>
+
+<histogram name="Android.FontLookup.Blink.DLFontsLatencySuccess2"
+    units="microseconds" expires_after="2022-06-30">
   <owner>drott@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -1336,7 +1405,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     fonts at the time of instantiating the font in the fonts backend in the
     renderer. Includes time for error checking and attempting to create the font
     from the retrieved blob, if there is one. Only records timings for
-    situations in which a font was successfully instantiated and returned.
+    situations in which a font was successfully instantiated and returned. This
+    is recorded only on devices that support high resolution timers.
   </summary>
 </histogram>
 
@@ -1355,10 +1425,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.FontLookup.FetchAllFontFiles.Time" units="ms"
+    expires_after="2022-05-01">
+  <owner>twellington@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
+  <summary>
+    Records the time taken to fetch all available font files from the GMS Core
+    Android downloadable font provider.
+  </summary>
+</histogram>
+
 <histogram name="Android.FontLookup.FetchFontName" enum="FetchFontName"
     expires_after="2022-04-24">
-  <owner>chouinard@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records font fetch requests by font name. These results may be used to
     determine whether it remains worthwhile to preload fonts that are available
@@ -1368,8 +1448,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.FontLookup.FetchFontResult" enum="FetchFontResult"
     expires_after="2022-05-01">
-  <owner>chouinard@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records the result of font fetch requests made to the GMS Core Android
     downloadable font provider. The result may be success, or failure with a
@@ -1380,8 +1460,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.FontLookup.GmsFontRequest.Time" units="ms"
     expires_after="2022-05-01">
-  <owner>chouinard@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records the time taken to make a fetchFonts font request to GMS Core via the
     Android downloadable font provider API. This metric may be used to determine
@@ -1392,8 +1472,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.FontLookup.MatchLocalFontByUniqueName.Time" units="ms"
     expires_after="2022-05-01">
-  <owner>chouinard@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records the time taken to respond to a request from the renderer to fetch a
     specific font file from the GMS Core Android downloadable font provider.
@@ -1463,6 +1543,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.IncognitoNotification.FileNotDeleted" enum="Boolean"
+    expires_after="2022-04-10">
+  <owner>roagarwal@chromium.org</owner>
+  <owner>chrome-incognito@google.com</owner>
+  <summary>
+    Records the count of any cases when clicking on the &quot;Close all
+    Incognito tabs&quot; notification may not delete any files which were opened
+    in the Incognito session. True value denotes file was not deleted and false
+    otherwise.
+  </summary>
+</histogram>
+
 <histogram name="Android.Input.EditableContentTypes" enum="EditableContentType"
     expires_after="2022-04-09">
   <owner>alexmitra@chromium.org</owner>
@@ -1489,7 +1581,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.InstantApps.ApiCallDurationWithoutApp" units="ms"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>sbirch@google.com</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -1556,7 +1648,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.InstantApps.ShouldShowBanner" enum="InstantAppsBanner"
-    expires_after="2022-01-31">
+    expires_after="2022-06-05">
   <owner>sbirch@google.com</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -1643,6 +1735,19 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Amount of time spent waiting for a split preload task to finish. This will
     only be recorded if isolated splits are enabled.
+  </summary>
+</histogram>
+
+<histogram name="Android.Jank.AsyncTaskGetOnUiThreadStatus"
+    enum="AsyncTaskStatus" expires_after="2022-05-10">
+  <owner>smaier@chromium.org</owner>
+  <owner>agrieve@chromium.org</owner>
+  <summary>
+    The status of an AsyncTask when get() is called on the UI thread. This is
+    only recorded if the AsyncTask isn't immediately available.
+
+    Seeing the distribution of PENDING vs RUNNING tasks will give us a better
+    idea for how to approach these hangs.
   </summary>
 </histogram>
 
@@ -2159,7 +2264,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.InvalidMatch" enum="MatchResult"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>ender@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
@@ -2650,7 +2755,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.RequestDesktopSite.Changed" enum="SiteLayout"
-    expires_after="2022-04-01">
+    expires_after="2022-06-05">
   <owner>shuyng@google.com</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2774,6 +2879,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.SeccompStatus.Syscall" enum="AndroidSeccompStatus"
     expires_after="M99">
+  <obsolete>
+    Recording code deleted on 2015-04-22.
+  </obsolete>
   <owner>rsesek@chromium.org</owner>
   <summary>
     Reports the level of kernel support for the seccomp-bpf sandbox using the
@@ -2827,6 +2935,147 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     |IncognitoUtils.shouldDestroyIncognitoProfileOnStartup| returns true or
     false.
   </summary>
+</histogram>
+
+<histogram name="Android.StartupTabPreloader.ActivityStartToLoadDecision"
+    units="ms" expires_after="2022-09-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    The time in a cold start between the start of the activity and the
+    triggerpoint for a startup tab being preloaded. Recorded only in startups
+    for which Android.Startup.Cold.TimeToFirstVisibleContent is being tracked.
+  </summary>
+</histogram>
+
+<histogram
+    name="Android.StartupTabPreloader.LoadDecisionToFirstContentfulPaint.{LoadAndMatchResult}"
+    units="ms" expires_after="2022-09-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    The time in a cold start between the triggerpoint for a startup tab being
+    preloaded and Android.Startup.Cold.TimeToFirstContentfulPaint being
+    recorded, recorded in the case where a startup tab preload is determined
+    {LoadAndMatchResult}. In the case where the ElideTabPreloadAtStartup feature
+    is enabled, this metric will be segmented to reflect the state that would
+    have resulted if tab preloading was not disabled by the feature. Recorded
+    only in startups for which Android.Startup.Cold.TimeToFirstVisibleContent is
+    being tracked.
+  </summary>
+  <token key="LoadAndMatchResult">
+    <variant name="LoadAndMatch"
+        summary="to be viable and the preload is a match for the actual
+                 initial load"/>
+    <variant name="LoadAndMismatch"
+        summary="to be viable and the preload is not a match for the actual
+                 initial load"/>
+    <variant name="LoadPreMatch"
+        summary="to be viable and first contentful paint is recorded before
+                 it was determined whether the preload was a match for the
+                 actual initial load. Note that it is not expected that this
+                 case occurs in practice, but it is theoretically possible"/>
+    <variant name="NoLoad" summary="not to be viable"/>
+  </token>
+</histogram>
+
+<histogram
+    name="Android.StartupTabPreloader.LoadDecisionToFirstNavigationCommit.{LoadAndMatchResult}"
+    units="ms" expires_after="2022-09-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    The time in a cold start between the triggerpoint for a startup tab being
+    preloaded and Android.Startup.Cold.TimeToFirstNavigationCommit being
+    recorded, recorded in the case where a startup tab preload is determined
+    {LoadAndMatchResult}. In the case where the ElideTabPreloadAtStartup feature
+    is enabled, this metric will be segmented to reflect the state that would
+    have resulted if tab preloading was not disabled by the feature.
+  </summary>
+  <token key="LoadAndMatchResult">
+    <variant name="LoadAndMatch"
+        summary="to be viable and the preload is a match for the actual
+                 initial load"/>
+    <variant name="LoadAndMismatch"
+        summary="to be viable and the preload is not a match for the actual
+                 initial load"/>
+    <variant name="LoadPreMatch"
+        summary="to be viable and first navigation commit is recorded before
+                 it was determined whether the preload was a match for the
+                 actual initial load. Note that it is not expected that this
+                 case occurs in practice, but it is theoretically possible"/>
+    <variant name="NoLoad" summary="not to be viable"/>
+  </token>
+</histogram>
+
+<histogram
+    name="Android.StartupTabPreloader.LoadDecisionToFirstNavigationStart.{LoadDecision}"
+    units="ms" expires_after="2022-09-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    The time in a cold start between the triggerpoint for a startup tab being
+    preloaded and first navigation start, recorded in the case where a startup
+    tab preload is determined {LoadDecision} viable. In the case where the
+    ElideTabPreloadAtStartup feature is enabled, this metric will be segmented
+    to reflect the state that would have resulted if tab preloading was not
+    disabled by the feature. Recorded only for startups in which
+    Android.Startup.Cold.TimeToFirstNavigationCommit is recorded for ability to
+    compare with that metric and its derived metrics.
+  </summary>
+  <token key="LoadDecision">
+    <variant name="Load" summary="to be"/>
+    <variant name="NoLoad" summary="not to be"/>
+  </token>
+</histogram>
+
+<histogram
+    name="Android.StartupTabPreloader.LoadDecisionToFirstVisibleContent.{LoadAndMatchResult}"
+    units="ms" expires_after="2022-09-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    The time in a cold start between the triggerpoint for a startup tab being
+    preloaded and Android.Startup.Cold.TimeToFirstVisibleContent being recorded,
+    recorded in the case where a startup tab preload is determined
+    {LoadAndMatchResult}. In the case where the ElideTabPreloadAtStartup feature
+    is enabled, this metric will be segmented to reflect the state that would
+    have resulted if tab preloading was not disabled by the feature.
+  </summary>
+  <token key="LoadAndMatchResult">
+    <variant name="LoadAndMatch"
+        summary="to be viable and the preload is a match for the actual
+                 initial load"/>
+    <variant name="LoadAndMismatch"
+        summary="to be viable and the preload is not a match for the actual
+                 initial load"/>
+    <variant name="LoadPreMatch"
+        summary="to be viable and first visible content is recorded before it
+                 was determined whether the preload was a match for the
+                 actual initial load. Note that it is not expected that this
+                 case occurs in practice, but it is theoretically possible"/>
+    <variant name="NoLoad" summary="not to be viable"/>
+  </token>
+</histogram>
+
+<histogram
+    name="Android.StartupTabPreloader.LoadDecisionToMatchDecision.{LoadDecision}"
+    units="ms" expires_after="2022-09-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    The time in a cold start between the triggerpoint for a startup tab being
+    preloaded and the decision being made on whether the preload is a match for
+    the information of the actual initial load that needs to occur, recorded in
+    the case where a startup tab preload is determined {LoadDecision} viable. In
+    the case where the ElideTabPreloadAtStartup feature is enabled, this metric
+    will be segmented to reflect the state that would have resulted if tab
+    preloading was not disabled by the feature.
+  </summary>
+  <token key="LoadDecision">
+    <variant name="Load" summary="to be"/>
+    <variant name="NoLoad" summary="not to be"/>
+  </token>
 </histogram>
 
 <histogram name="Android.StrictMode.OverrideUrlLoadingTime" units="ms"
@@ -3025,6 +3274,30 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>wnwen@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>The number of bytes written for the tab metadata file.</summary>
+</histogram>
+
+<histogram name="Android.TaskScheduling.BootstrapTaskRunnerType"
+    enum="BootstrapTaskRunnerType" expires_after="2022-06-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>scheduler-dev@chromium.org</owner>
+  <summary>
+    Records creation of Java task runners that are created with BOOTSTRAP task
+    type, bucketed by whether they are configured to post at the back or the
+    front of the task queue.
+  </summary>
+</histogram>
+
+<histogram name="Android.TaskScheduling.PreNativeTaskPostType"
+    enum="PreNativeTaskPostType" expires_after="2022-06-01">
+  <owner>blundell@chromium.org</owner>
+  <owner>scheduler-dev@chromium.org</owner>
+  <summary>
+    Records whether Java tasks that are targeted for scheduling pre-native
+    initialization are (a) posted at the back of the Looper's task queue, (b)
+    posted at the front of its task queue, or (c) not posted at all (deferring
+    to native task runner initialization). Emitted at the time of scheduling the
+    task.
+  </summary>
 </histogram>
 
 <histogram name="Android.ThemeColor" enum="Android.ThemeColor"
@@ -3487,6 +3760,29 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.WebView.DarkMode.PageDarkenedAccordingToAppTheme"
+    enum="Boolean" expires_after="2022-06-24">
+  <owner>michaelbai@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records WebView is darkened or not when the prefers-color-scheme is set to
+    dark according to the app theme not FORCE_DARK_AUTO setting. This histogram
+    is recorded on main frame's color scheme inferred for every committed
+    navigation.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.DarkMode.PrefersDarkFromTheme"
+    enum="BooleanYesNo" expires_after="2022-03-24">
+  <owner>michaelbai@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records if WebView shall set prefers-color-scheme to dark according to app's
+    theme after FORCE_DARK_AUTO fails. It is recorded on each main frame
+    navigation entry committed.
+  </summary>
+</histogram>
+
 <histogram name="Android.WebView.DarkMode.PrimaryTextLuminanceVsLightTheme"
     enum="WebViewPrimaryTextLuminanceVsLightTheme" expires_after="2022-01-24">
   <owner>michaelbai@chromium.org</owner>
@@ -3742,7 +4038,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.ForceDarkBehavior"
-    enum="WebViewForceDarkBehavior" expires_after="2021-12-03">
+    enum="WebViewForceDarkBehavior" expires_after="2022-06-03">
   <owner>peter@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3752,7 +4048,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.ForceDarkMode" enum="WebViewForceDarkMode"
-    expires_after="2021-12-03">
+    expires_after="2022-06-03">
   <owner>peter@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -4045,6 +4341,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.PageTimeSpent.{Scheme}" units="ms"
     expires_after="2022-07-01">
+  <obsolete>
+    Removed in October 2021.
+  </obsolete>
   <owner>mvanouwerkerk@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -4073,6 +4372,47 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     <variant name="Other"/>
     <variant name="Sms"/>
     <variant name="Tel"/>
+  </token>
+</histogram>
+
+<histogram name="Android.WebView.PageTimeSpent2.{Scheme}{Party}" units="ms"
+    expires_after="2022-07-01">
+  <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Time spent on a page with a {Scheme} scheme. This is measured from
+    navigation commit to the start of the next navigation. For http and https
+    schemes it is additionally recorded whether it is a first or third party
+    page. This uses an optional key, in this case the value is
+    &quot;{Party}&quot;.
+  </summary>
+  <token key="Scheme">
+    <variant name="App"/>
+    <variant name="Blob"/>
+    <variant name="Chrome"/>
+    <variant name="ChromeNative"/>
+    <variant name="Content"/>
+    <variant name="CustomTab"/>
+    <variant name="Data"/>
+    <variant name="Devtools"/>
+    <variant name="Document"/>
+    <variant name="File"/>
+    <variant name="Filesystem"/>
+    <variant name="Ftp"/>
+    <variant name="Http"/>
+    <variant name="Https"/>
+    <variant name="Inline"/>
+    <variant name="Intent"/>
+    <variant name="Jar"/>
+    <variant name="JavaScript"/>
+    <variant name="Other"/>
+    <variant name="Sms"/>
+    <variant name="Tel"/>
+  </token>
+  <token key="Party">
+    <variant name=""/>
+    <variant name=".FirstParty"/>
+    <variant name=".ThirdParty"/>
   </token>
 </histogram>
 
@@ -4238,7 +4578,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.CreationTime.Stage1.FactoryInit"
-    units="ms" expires_after="2022-04-03">
+    units="ms" expires_after="2022-06-05">
   <owner>changwan@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -4248,7 +4588,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.CreationTime.Stage2.ProviderInit.Cold"
-    units="ms" expires_after="2022-04-03">
+    units="ms" expires_after="2022-06-05">
   <owner>changwan@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -4260,7 +4600,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.CreationTime.Stage2.ProviderInit.Warm"
-    units="ms" expires_after="2022-04-03">
+    units="ms" expires_after="2022-06-05">
   <owner>changwan@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -4400,7 +4740,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Records the global visibility state of WebView in seconds, updated with
     every Metrics upload. The Visible bucket counts total seconds that any
     WebView was visible (the view itself was visible, and was attached to the
-    view hierarchy of a visible window). The NotVisble bucket counts time since
+    view hierarchy of a visible window). The NotVisible bucket counts time since
     WebView initialization for which no WebView was considered visible, or no
     WebView existed. The total of these two buckets reflects the amount of time
     covered by metrics collection.
@@ -4425,8 +4765,38 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.WebView.VisibleScheme.Global" enum="WebViewUrlScheme"
+    expires_after="2022-06-01">
+  <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records the number of seconds any WebView was visible (the view itself was
+    visible, and was attached to the view hierarchy of a visible window) with a
+    particular URL scheme in the primary main frame. Updated with every Metrics
+    upload.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.VisibleScheme.PerWebView"
+    enum="WebViewUrlScheme" expires_after="2022-06-01">
+  <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records the number of seconds each WebView was visible (the view itself was
+    visible, and was attached to the view hierarchy of a visible window) with a
+    particular URL scheme in the primary main frame. Updated with every Metrics
+    upload.
+  </summary>
+</histogram>
+
 <histogram name="Android.WebView.WebViewOpenWebVisible.Global"
     enum="WebViewOpenWebVisibility" expires_after="2022-06-01">
+  <obsolete>
+    Removed in December 2021, use Android.WebView.VisibleScheme.Global instead
+    which breaks down all the visible time spent into more schemes.
+  </obsolete>
   <owner>idries@google.com</owner>
   <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -4443,6 +4813,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.WebViewOpenWebVisible.PerWebView"
     enum="WebViewOpenWebVisibility" expires_after="2022-06-01">
+  <obsolete>
+    Deprecated in December 2021, use Android.WebView.VisibleScheme.PerWebView
+    instead which breaks down all the visible time spent into more schemes.
+  </obsolete>
   <owner>idries@google.com</owner>
   <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -4497,6 +4871,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     feature. When enabled, the feature will show the logo of the default search
     engine in the omnibox. These events record the performance of fetching
     non-Google logos.
+  </summary>
+</histogram>
+
+<histogram name="SingleWebsitePreferences.NavigatedFromToReset"
+    enum="SettingsNavigationSources" expires_after="M104">
+  <owner>peconn@chromium.org</owner>
+  <owner>peter@chromium.org</owner>
+  <summary>
+    Logs which way had the user navigated into settings screens when they press
+    &quot;Clear and Reset&quot; button in settings of a single website.
   </summary>
 </histogram>
 

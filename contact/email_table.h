@@ -10,7 +10,6 @@
 #define CONTACT_EMAIL_TABLE_H_
 
 #include <stddef.h>
-#include "base/macros.h"
 #include "sql/statement.h"
 
 #include "contact/contact_type.h"

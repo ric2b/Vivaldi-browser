@@ -64,6 +64,7 @@ using vivaldi::calendar::SupportedCalendarComponents;
 
 namespace OnIcsFileOpened = vivaldi::calendar::OnIcsFileOpened;
 namespace OnWebcalUrlOpened = vivaldi::calendar::OnWebcalUrlOpened;
+namespace OnMailtoOpened = vivaldi::calendar::OnMailtoOpened;
 
 namespace OnEventCreated = vivaldi::calendar::OnEventCreated;
 namespace OnNotificationChanged = vivaldi::calendar::OnNotificationChanged;
@@ -279,10 +280,6 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->end.reset(new double(MilliSecondsFromTime(event.end)));
   cal_event->all_day.reset(new bool(event.all_day));
   cal_event->is_recurring.reset(new bool(event.is_recurring));
-  cal_event->start_recurring.reset(
-      new double(MilliSecondsFromTime(event.start_recurring)));
-  cal_event->end_recurring.reset(
-      new double(MilliSecondsFromTime(event.end_recurring)));
   cal_event->location.reset(new std::string(base::UTF16ToUTF8(event.location)));
   cal_event->url.reset(new std::string(base::UTF16ToUTF8(event.url)));
   cal_event->etag.reset(new std::string(event.etag));
@@ -316,6 +313,8 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->attachment.reset(
       new std::string(base::UTF16ToUTF8(event.attachment)));
   cal_event->completed.reset(new double(MilliSecondsFromTime(event.completed)));
+  cal_event->sync_pending.reset(new bool(event.sync_pending));
+  cal_event->delete_pending.reset(new bool(event.delete_pending));
   return cal_event;
 }
 void CalendarEventRouter::OnEventCreated(CalendarService* service,
@@ -334,6 +333,11 @@ void CalendarEventRouter::OnIcsFileOpened(std::string path) {
 void CalendarEventRouter::OnWebcalUrlOpened(GURL url) {
   DispatchEvent(profile_, OnWebcalUrlOpened::kEventName,
                 OnWebcalUrlOpened::Create(url.spec()));
+}
+
+void CalendarEventRouter::OnMailtoOpened(GURL mailto) {
+  DispatchEvent(profile_, OnMailtoOpened::kEventName,
+                OnMailtoOpened::Create(mailto.spec()));
 }
 
 void CalendarEventRouter::OnNotificationChanged(
@@ -404,6 +408,7 @@ void CalendarAPI::RegisterInternalHandlers() {
   constexpr base::FilePath::CharType kIcsExtension[] =
       FILE_PATH_LITERAL(".ics");
   constexpr char kWebcalProtocol[] = "webcal";
+  constexpr char kWMailtoProtocol[] = "mailto";
 
   static bool internal_handlers_registered = false;
   if (internal_handlers_registered)
@@ -433,6 +438,19 @@ void CalendarAPI::RegisterInternalHandlers() {
                 vivaldiprefs::kCalendarHandleIcsDownloads))
           return false;
         calendar_api->calendar_event_router_->OnWebcalUrlOpened(url);
+        return true;
+      }));
+
+  ::vivaldi::RegisterProtocolHandler(
+      kWMailtoProtocol, base::BindRepeating([](Profile* profile, GURL mailto) {
+        auto* calendar_api =
+            BrowserContextKeyedAPIFactory<CalendarAPI>::GetIfExists(profile);
+        if (!calendar_api || !calendar_api->calendar_event_router_)
+          return false;
+        if (!profile->GetPrefs()->GetBoolean(
+                vivaldiprefs::kMailMailtoInVivaldi))
+          return false;
+        calendar_api->calendar_event_router_->OnMailtoOpened(mailto);
         return true;
       }));
 }
@@ -617,16 +635,6 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::ISRECURRING;
   }
 
-  if (params->changes.start_recurring.get()) {
-    updatedEvent.start_recurring = GetTime(*params->changes.start_recurring);
-    updatedEvent.updateFields |= calendar::STARTRECURRING;
-  }
-
-  if (params->changes.end_recurring.get()) {
-    updatedEvent.end_recurring = GetTime(*params->changes.end_recurring);
-    updatedEvent.updateFields |= calendar::ENDRECURRING;
-  }
-
   if (params->changes.location.get()) {
     updatedEvent.location = base::UTF8ToUTF16(*params->changes.location);
     updatedEvent.updateFields |= calendar::LOCATION;
@@ -741,6 +749,16 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
   if (params->changes.completed.get()) {
     updatedEvent.completed = GetTime(*params->changes.completed);
     updatedEvent.updateFields |= calendar::COMPLETED;
+  }
+
+  if (params->changes.sync_pending.get()) {
+    updatedEvent.sync_pending = *params->changes.sync_pending;
+    updatedEvent.updateFields |= calendar::SYNC_PENDING;
+  }
+
+  if (params->changes.delete_pending.get()) {
+    updatedEvent.delete_pending = *params->changes.delete_pending;
+    updatedEvent.updateFields |= calendar::DELETE_PENDING;
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());

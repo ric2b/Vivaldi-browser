@@ -9,12 +9,11 @@ std::vector<Value> WalkMetadata(
     const std::vector<std::string>& keys_to_extract,
     const std::vector<std::string>& keys_to_walk,
     const SourceDir& rebase_dir,
-    std::set<const Target*>* targets_walked,
+    TargetSet* targets_walked,
     Err* err) {
   std::vector<Value> result;
   for (const auto* target : targets_to_walk) {
-    auto pair = targets_walked->insert(target);
-    if (pair.second) {
+    if (targets_walked->add(target)) {
       if (!target->GetMetadata(keys_to_extract, keys_to_walk, rebase_dir, false,
                                &result, targets_walked, err))
         return std::vector<Value>();

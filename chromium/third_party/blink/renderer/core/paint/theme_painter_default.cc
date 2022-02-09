@@ -78,7 +78,9 @@ class DirectionFlippingScope {
   STACK_ALLOCATED();
 
  public:
-  DirectionFlippingScope(const LayoutObject&, const PaintInfo&, const IntRect&);
+  DirectionFlippingScope(const LayoutObject&,
+                         const PaintInfo&,
+                         const gfx::Rect&);
   ~DirectionFlippingScope();
 
  private:
@@ -89,13 +91,13 @@ class DirectionFlippingScope {
 DirectionFlippingScope::DirectionFlippingScope(
     const LayoutObject& layout_object,
     const PaintInfo& paint_info,
-    const IntRect& rect)
+    const gfx::Rect& rect)
     : needs_flipping_(!layout_object.StyleRef().IsLeftToRightDirection()),
       paint_info_(paint_info) {
   if (!needs_flipping_)
     return;
   paint_info_.context.Save();
-  paint_info_.context.Translate(2 * rect.X() + rect.Width(), 0);
+  paint_info_.context.Translate(2 * rect.x() + rect.width(), 0);
   paint_info_.context.Scale(-1, 1);
 }
 
@@ -105,50 +107,52 @@ DirectionFlippingScope::~DirectionFlippingScope() {
   paint_info_.context.Restore();
 }
 
-IntRect DeterminateProgressValueRectFor(const LayoutProgress& layout_progress,
-                                        const IntRect& rect) {
-  int dx = rect.Width() * layout_progress.GetPosition();
-  return IntRect(rect.X(), rect.Y(), dx, rect.Height());
+gfx::Rect DeterminateProgressValueRectFor(const LayoutProgress& layout_progress,
+                                          const gfx::Rect& rect) {
+  int dx = rect.width() * layout_progress.GetPosition();
+  return gfx::Rect(rect.x(), rect.y(), dx, rect.height());
 }
 
-IntRect IndeterminateProgressValueRectFor(const LayoutProgress& layout_progress,
-                                          const IntRect& rect) {
+gfx::Rect IndeterminateProgressValueRectFor(
+    const LayoutProgress& layout_progress,
+    const gfx::Rect& rect) {
   // Value comes from default of GTK+.
   static const int kProgressActivityBlocks = 5;
 
-  int value_width = rect.Width() / kProgressActivityBlocks;
-  int movable_width = rect.Width() - value_width;
+  int value_width = rect.width() / kProgressActivityBlocks;
+  int movable_width = rect.width() - value_width;
   if (movable_width <= 0)
-    return IntRect();
+    return gfx::Rect();
 
   double progress = layout_progress.AnimationProgress();
-  if (progress < 0.5)
-    return IntRect(rect.X() + progress * 2 * movable_width, rect.Y(),
-                   value_width, rect.Height());
-  return IntRect(rect.X() + (1.0 - progress) * 2 * movable_width, rect.Y(),
-                 value_width, rect.Height());
+  if (progress < 0.5) {
+    return gfx::Rect(rect.x() + progress * 2 * movable_width, rect.y(),
+                     value_width, rect.height());
+  }
+  return gfx::Rect(rect.x() + (1.0 - progress) * 2 * movable_width, rect.y(),
+                   value_width, rect.height());
 }
 
-IntRect ProgressValueRectFor(const LayoutProgress& layout_progress,
-                             const IntRect& rect) {
+gfx::Rect ProgressValueRectFor(const LayoutProgress& layout_progress,
+                               const gfx::Rect& rect) {
   return layout_progress.IsDeterminate()
              ? DeterminateProgressValueRectFor(layout_progress, rect)
              : IndeterminateProgressValueRectFor(layout_progress, rect);
 }
 
-IntRect ConvertToPaintingRect(const LayoutObject& input_layout_object,
-                              const LayoutObject& part_layout_object,
-                              PhysicalRect part_rect,
-                              const IntRect& local_offset) {
+gfx::Rect ConvertToPaintingRect(const LayoutObject& input_layout_object,
+                                const LayoutObject& part_layout_object,
+                                PhysicalRect part_rect,
+                                const gfx::Rect& local_offset) {
   // Compute an offset between the partLayoutObject and the inputLayoutObject.
   PhysicalOffset offset_from_input_layout_object =
       -part_layout_object.OffsetFromAncestor(&input_layout_object);
   // Move the rect into partLayoutObject's coords.
   part_rect.Move(offset_from_input_layout_object);
   // Account for the local drawing offset.
-  part_rect.Move(PhysicalOffset(local_offset.Location()));
+  part_rect.Move(PhysicalOffset(local_offset.origin()));
 
-  return PixelSnappedIntRect(part_rect);
+  return ToPixelSnappedRect(part_rect);
 }
 
 absl::optional<SkColor> GetAccentColor(const ComputedStyle& style) {
@@ -177,7 +181,7 @@ bool ThemePainterDefault::PaintCheckbox(const Element& element,
                                         const Document&,
                                         const ComputedStyle& style,
                                         const PaintInfo& paint_info,
-                                        const IntRect& rect) {
+                                        const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
   extra_params.button = WebThemeEngine::ButtonExtraParams();
   extra_params.button.checked = IsChecked(element);
@@ -186,7 +190,7 @@ bool ThemePainterDefault::PaintCheckbox(const Element& element,
   float zoom_level = style.EffectiveZoom();
   extra_params.button.zoom = zoom_level;
   GraphicsContextStateSaver state_saver(paint_info.context, false);
-  IntRect unzoomed_rect =
+  gfx::Rect unzoomed_rect =
       ApplyZoomToRect(rect, paint_info, state_saver, zoom_level);
 
   Platform::Current()->ThemeEngine()->Paint(
@@ -200,7 +204,7 @@ bool ThemePainterDefault::PaintRadio(const Element& element,
                                      const Document&,
                                      const ComputedStyle& style,
                                      const PaintInfo& paint_info,
-                                     const IntRect& rect) {
+                                     const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
   extra_params.button = WebThemeEngine::ButtonExtraParams();
   extra_params.button.checked = IsChecked(element);
@@ -208,7 +212,7 @@ bool ThemePainterDefault::PaintRadio(const Element& element,
   float zoom_level = style.EffectiveZoom();
   extra_params.button.zoom = zoom_level;
   GraphicsContextStateSaver state_saver(paint_info.context, false);
-  IntRect unzoomed_rect =
+  gfx::Rect unzoomed_rect =
       ApplyZoomToRect(rect, paint_info, state_saver, zoom_level);
 
   Platform::Current()->ThemeEngine()->Paint(
@@ -222,7 +226,7 @@ bool ThemePainterDefault::PaintButton(const Element& element,
                                       const Document&,
                                       const ComputedStyle& style,
                                       const PaintInfo& paint_info,
-                                      const IntRect& rect) {
+                                      const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
   extra_params.button = WebThemeEngine::ButtonExtraParams();
   extra_params.button.has_border = true;
@@ -243,7 +247,7 @@ bool ThemePainterDefault::PaintButton(const Element& element,
 bool ThemePainterDefault::PaintTextField(const Element& element,
                                          const ComputedStyle& style,
                                          const PaintInfo& paint_info,
-                                         const IntRect& rect) {
+                                         const gfx::Rect& rect) {
   // WebThemeEngine does not handle border rounded corner and background image
   // so return true to draw CSS border and background.
   if (style.HasBorderRadius() || style.HasBackgroundImage())
@@ -274,7 +278,7 @@ bool ThemePainterDefault::PaintMenuList(const Element& element,
                                         const Document& document,
                                         const ComputedStyle& style,
                                         const PaintInfo& paint_info,
-                                        const IntRect& rect) {
+                                        const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
   // Match Chromium Win behaviour of showing all borders if any are shown.
   extra_params.menu_list.has_border = style.HasBorder();
@@ -309,7 +313,7 @@ bool ThemePainterDefault::PaintMenuListButton(const Element& element,
                                               const Document& document,
                                               const ComputedStyle& style,
                                               const PaintInfo& paint_info,
-                                              const IntRect& rect) {
+                                              const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
   extra_params.menu_list.has_border = false;
   extra_params.menu_list.has_border_radius = style.HasBorderRadius();
@@ -327,11 +331,11 @@ bool ThemePainterDefault::PaintMenuListButton(const Element& element,
 void ThemePainterDefault::SetupMenuListArrow(
     const Document& document,
     const ComputedStyle& style,
-    const IntRect& rect,
+    const gfx::Rect& rect,
     WebThemeEngine::ExtraParams& extra_params) {
-  const int left = rect.X() + floorf(style.BorderLeftWidth());
-  const int right = rect.X() + rect.Width() - floorf(style.BorderRightWidth());
-  const int middle = rect.Y() + rect.Height() / 2;
+  const int left = rect.x() + floorf(style.BorderLeftWidth());
+  const int right = rect.x() + rect.width() - floorf(style.BorderRightWidth());
+  const int middle = rect.y() + rect.height() / 2;
 
   extra_params.menu_list.arrow_y = middle;
   float arrow_box_width =
@@ -355,7 +359,7 @@ void ThemePainterDefault::SetupMenuListArrow(
 bool ThemePainterDefault::PaintSliderTrack(const Element& element,
                                            const LayoutObject& layout_object,
                                            const PaintInfo& paint_info,
-                                           const IntRect& rect,
+                                           const gfx::Rect& rect,
                                            const ComputedStyle& style) {
   WebThemeEngine::ExtraParams extra_params;
   extra_params.slider.vertical =
@@ -376,11 +380,11 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
     LayoutBox* thumb = thumb_element ? thumb_element->GetLayoutBox() : nullptr;
     LayoutBox* input_box = input->GetLayoutBox();
     if (thumb) {
-      IntRect thumb_rect = PixelSnappedIntRect(thumb->FrameRect());
-      extra_params.slider.thumb_x = thumb_rect.X() +
+      gfx::Rect thumb_rect = ToPixelSnappedRect(thumb->FrameRect());
+      extra_params.slider.thumb_x = thumb_rect.x() +
                                     input_box->PaddingLeft().ToInt() +
                                     input_box->BorderLeft().ToInt();
-      extra_params.slider.thumb_y = thumb_rect.Y() +
+      extra_params.slider.thumb_y = thumb_rect.y() +
                                     input_box->PaddingTop().ToInt() +
                                     input_box->BorderTop().ToInt();
     }
@@ -396,7 +400,7 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
 bool ThemePainterDefault::PaintSliderThumb(const Element& element,
                                            const ComputedStyle& style,
                                            const PaintInfo& paint_info,
-                                           const IntRect& rect) {
+                                           const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
   extra_params.slider.vertical =
       style.EffectiveAppearance() == kSliderThumbVerticalPart;
@@ -423,7 +427,7 @@ bool ThemePainterDefault::PaintSliderThumb(const Element& element,
 bool ThemePainterDefault::PaintInnerSpinButton(const Element& element,
                                                const ComputedStyle& style,
                                                const PaintInfo& paint_info,
-                                               const IntRect& rect) {
+                                               const gfx::Rect& rect) {
   WebThemeEngine::ExtraParams extra_params;
 
   bool spin_up = false;
@@ -449,20 +453,20 @@ bool ThemePainterDefault::PaintInnerSpinButton(const Element& element,
 bool ThemePainterDefault::PaintProgressBar(const Element& element,
                                            const LayoutObject& layout_object,
                                            const PaintInfo& paint_info,
-                                           const IntRect& rect,
+                                           const gfx::Rect& rect,
                                            const ComputedStyle& style) {
   const auto* layout_progress = DynamicTo<LayoutProgress>(layout_object);
   if (!layout_progress)
     return true;
 
-  IntRect value_rect = ProgressValueRectFor(*layout_progress, rect);
+  gfx::Rect value_rect = ProgressValueRectFor(*layout_progress, rect);
 
   WebThemeEngine::ExtraParams extra_params;
   extra_params.progress_bar.determinate = layout_progress->IsDeterminate();
-  extra_params.progress_bar.value_rect_x = value_rect.X();
-  extra_params.progress_bar.value_rect_y = value_rect.Y();
-  extra_params.progress_bar.value_rect_width = value_rect.Width();
-  extra_params.progress_bar.value_rect_height = value_rect.Height();
+  extra_params.progress_bar.value_rect_x = value_rect.x();
+  extra_params.progress_bar.value_rect_y = value_rect.y();
+  extra_params.progress_bar.value_rect_width = value_rect.width();
+  extra_params.progress_bar.value_rect_height = value_rect.height();
   extra_params.progress_bar.zoom = style.EffectiveZoom();
 
   DirectionFlippingScope scope(layout_object, paint_info, rect);
@@ -476,21 +480,21 @@ bool ThemePainterDefault::PaintProgressBar(const Element& element,
 bool ThemePainterDefault::PaintTextArea(const Element& element,
                                         const ComputedStyle& style,
                                         const PaintInfo& paint_info,
-                                        const IntRect& rect) {
+                                        const gfx::Rect& rect) {
   return PaintTextField(element, style, paint_info, rect);
 }
 
 bool ThemePainterDefault::PaintSearchField(const Element& element,
                                            const ComputedStyle& style,
                                            const PaintInfo& paint_info,
-                                           const IntRect& rect) {
+                                           const gfx::Rect& rect) {
   return PaintTextField(element, style, paint_info, rect);
 }
 
 bool ThemePainterDefault::PaintSearchFieldCancelButton(
     const LayoutObject& cancel_button_object,
     const PaintInfo& paint_info,
-    const IntRect& r) {
+    const gfx::Rect& r) {
   // Get the layoutObject of <input> element.
   Node* input = cancel_button_object.GetNode()->OwnerShadowHost();
   const LayoutObject& base_layout_object = input && input->GetLayoutObject()
@@ -504,7 +508,7 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
   // Make sure the scaled button stays square and will fit in its parent's box.
   LayoutUnit cancel_button_size =
       std::min(input_content_box.size.width,
-               std::min(input_content_box.size.height, LayoutUnit(r.Height())));
+               std::min(input_content_box.size.height, LayoutUnit(r.height())));
   // Calculate cancel button's coordinates relative to the input element.
   // Center the button vertically.  Round up though, so if it has to be one
   // pixel off-center, it will be one pixel closer to the bottom of the field.
@@ -514,7 +518,7 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
       input_content_box.Y() +
           (input_content_box.Height() - cancel_button_size + 1) / 2,
       cancel_button_size, cancel_button_size);
-  IntRect painting_rect = ConvertToPaintingRect(
+  gfx::Rect painting_rect = ConvertToPaintingRect(
       input_layout_box, cancel_button_object, cancel_button_rect, r);
   mojom::blink::ColorScheme color_scheme =
       cancel_button_object.StyleRef().UsedColorScheme();
@@ -568,23 +572,23 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
       Image::kSyncDecode,
       PaintAutoDarkMode(cancel_button_object.StyleRef(),
                         DarkModeFilter::ElementRole::kBackground),
-      FloatRect(painting_rect));
+      gfx::RectF(painting_rect));
   return false;
 }
 
-IntRect ThemePainterDefault::ApplyZoomToRect(
-    const IntRect& rect,
+gfx::Rect ThemePainterDefault::ApplyZoomToRect(
+    const gfx::Rect& rect,
     const PaintInfo& paint_info,
     GraphicsContextStateSaver& state_saver,
     float zoom_level) {
-  IntRect unzoomed_rect = rect;
+  gfx::Rect unzoomed_rect = rect;
   if (zoom_level != 1) {
     state_saver.Save();
-    unzoomed_rect.SetWidth(unzoomed_rect.Width() / zoom_level);
-    unzoomed_rect.SetHeight(unzoomed_rect.Height() / zoom_level);
-    paint_info.context.Translate(unzoomed_rect.X(), unzoomed_rect.Y());
+    unzoomed_rect.set_width(unzoomed_rect.width() / zoom_level);
+    unzoomed_rect.set_height(unzoomed_rect.height() / zoom_level);
+    paint_info.context.Translate(unzoomed_rect.x(), unzoomed_rect.y());
     paint_info.context.Scale(zoom_level, zoom_level);
-    paint_info.context.Translate(-unzoomed_rect.X(), -unzoomed_rect.Y());
+    paint_info.context.Translate(-unzoomed_rect.x(), -unzoomed_rect.y());
   }
 
   return unzoomed_rect;

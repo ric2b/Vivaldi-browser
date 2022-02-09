@@ -37,18 +37,14 @@
 #include "content/shell/browser/shell_plugin_service_filter.h"
 #endif
 
-#if defined(USE_AURA) && defined(USE_X11)
-#include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
-#endif
 #if defined(USE_AURA) && (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 #include "ui/base/ime/init/input_method_initializer.h"
 #endif
 
 namespace content {
 
-WebTestBrowserMainParts::WebTestBrowserMainParts(
-    const MainFunctionParams& parameters)
-    : ShellBrowserMainParts(parameters) {}
+WebTestBrowserMainParts::WebTestBrowserMainParts(MainFunctionParams parameters)
+    : ShellBrowserMainParts(std::move(parameters)) {}
 
 WebTestBrowserMainParts::~WebTestBrowserMainParts() {}
 

@@ -5,6 +5,7 @@
 #include "chromeos/services/libassistant/test_support/fake_assistant_client.h"
 
 #include "base/callback.h"
+#include "base/test/bind.h"
 #include "chromeos/assistant/internal/proto/shared/proto/v2/delegate/event_handler_interface.pb.h"
 #include "chromeos/assistant/internal/test_support/fake_alarm_timer_manager.h"
 #include "chromeos/services/libassistant/grpc/utils/timer_utils.h"
@@ -22,7 +23,7 @@ FakeAssistantClient::FakeAssistantClient(
 FakeAssistantClient::~FakeAssistantClient() = default;
 
 void FakeAssistantClient::StartServices(
-    base::OnceClosure services_ready_callback) {}
+    ServicesStatusObserver* services_status_observer) {}
 
 void FakeAssistantClient::SetChromeOSApiDelegate(
     assistant_client::ChromeOSApiDelegate* delegate) {}
@@ -33,12 +34,6 @@ bool FakeAssistantClient::StartGrpcServices() {
 
 void FakeAssistantClient::AddExperimentIds(
     const std::vector<std::string>& exp_ids) {}
-
-void FakeAssistantClient::SendVoicelessInteraction(
-    const ::assistant::api::Interaction& interaction,
-    const std::string& description,
-    const ::assistant::api::VoicelessOptions& options,
-    base::OnceCallback<void(bool)> on_done) {}
 
 void FakeAssistantClient::AddSpeakerIdEnrollmentEventObserver(
     GrpcServicesObserver<OnSpeakerIdEnrollmentEventRequest>* observer) {}
@@ -58,7 +53,7 @@ void FakeAssistantClient::GetSpeakerIdEnrollmentInfo(
 
 void FakeAssistantClient::ResetAllDataAndShutdown() {}
 
-void FakeAssistantClient::OnDisplayRequest(
+void FakeAssistantClient::SendDisplayRequest(
     const OnDisplayRequestRequest& request) {}
 
 void FakeAssistantClient::AddDisplayEventObserver(
@@ -74,8 +69,21 @@ void FakeAssistantClient::SetExternalPlaybackState(
 void FakeAssistantClient::AddDeviceStateEventObserver(
     GrpcServicesObserver<OnDeviceStateEventRequest>* observer) {}
 
+void FakeAssistantClient::SendVoicelessInteraction(
+    const ::assistant::api::Interaction& interaction,
+    const std::string& description,
+    const ::assistant::api::VoicelessOptions& options,
+    base::OnceCallback<void(bool)> on_done) {}
+
 void FakeAssistantClient::RegisterActionModule(
     assistant_client::ActionModule* action_module) {}
+
+void FakeAssistantClient::SendScreenContextRequest(
+    const std::vector<std::string>& context_protos) {}
+
+void FakeAssistantClient::StartVoiceInteraction() {}
+
+void FakeAssistantClient::StopAssistantInteraction(bool cancel_conversation) {}
 
 void FakeAssistantClient::SetInternalOptions(const std::string& locale,
                                              bool spoken_feedback_enabled) {}
@@ -121,26 +129,24 @@ void FakeAssistantClient::ResumeTimer(const std::string& timer_id) {
   fake_alarm_timer_manager()->ResumeTimer(timer_id);
 }
 
-std::vector<assistant::AssistantTimer> FakeAssistantClient::GetTimers() {
-  return GetAllCurrentTimersFromEvents(
-      fake_alarm_timer_manager()->GetAllEvents());
+void FakeAssistantClient::GetTimers(
+    base::OnceCallback<void(const std::vector<assistant::AssistantTimer>&)>
+        on_done) {
+  return std::move(on_done).Run(GetAllCurrentTimersFromEvents(
+      fake_alarm_timer_manager()->GetAllEvents()));
 }
 
-void FakeAssistantClient::RegisterAlarmTimerEventObserver(
-    base::WeakPtr<
-        GrpcServicesObserver<::assistant::api::OnAlarmTimerEventRequest>>
+void FakeAssistantClient::AddAlarmTimerEventObserver(
+    GrpcServicesObserver<::assistant::api::OnAlarmTimerEventRequest>*
         observer) {
+  timer_observer_ = observer;
+
   fake_alarm_timer_manager()->RegisterRingingStateListener(
-      [observer = observer, this]() {
-        observer->OnGrpcMessage(
-            CreateOnAlarmTimerEventRequestProtoForV1(GetTimers()));
-      });
+      [this]() { GetAndNotifyTimerStatus(); });
 
   fake_alarm_timer_manager()->RegisterAlarmActionListener(
-      [observer = observer,
-       this](assistant_client::AlarmTimerManager::EventActionType ignore) {
-        observer->OnGrpcMessage(
-            CreateOnAlarmTimerEventRequestProtoForV1(GetTimers()));
+      [this](assistant_client::AlarmTimerManager::EventActionType ignore) {
+        GetAndNotifyTimerStatus();
       });
 }
 
@@ -148,6 +154,14 @@ assistant::FakeAlarmTimerManager*
 FakeAssistantClient::fake_alarm_timer_manager() {
   return reinterpret_cast<assistant::FakeAlarmTimerManager*>(
       assistant_manager_internal()->GetAlarmTimerManager());
+}
+
+void FakeAssistantClient::GetAndNotifyTimerStatus() {
+  GetTimers(base::BindLambdaForTesting(
+      [this](const std::vector<assistant::AssistantTimer>& timers) {
+        timer_observer_->OnGrpcMessage(
+            CreateOnAlarmTimerEventRequestProtoForV1(timers));
+      }));
 }
 
 }  // namespace libassistant

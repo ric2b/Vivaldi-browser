@@ -7,12 +7,12 @@
 #include <utility>
 
 #include "base/base_paths.h"
-#include "base/base_paths_fuchsia.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/fuchsia/intl_profile_watcher.h"
 #include "base/path_service.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/main_function_params.h"
 #include "fuchsia/base/init_logging.h"
 #include "fuchsia/engine/browser/web_engine_browser_main.h"
 #include "fuchsia/engine/browser/web_engine_content_browser_client.h"
@@ -44,6 +44,7 @@ void InitializeResources() {
   const std::string locale = ui::ResourceBundle::InitSharedInstanceWithLocale(
       base::i18n::GetConfiguredLocale(), nullptr,
       ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+  ui::SetSupportedResourceScaleFactors({ui::k100Percent});
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       asset_root.Append(kCommonResourcesPakPath), ui::kScaleFactorNone);
   VLOG(1) << "Loaded resources including locale: " << locale;
@@ -111,13 +112,14 @@ void WebEngineMainDelegate::PreSandboxStartup() {
   InitializeResources();
 }
 
-int WebEngineMainDelegate::RunProcess(
+absl::variant<int, content::MainFunctionParams>
+WebEngineMainDelegate::RunProcess(
     const std::string& process_type,
-    const content::MainFunctionParams& main_function_params) {
+    content::MainFunctionParams main_function_params) {
   if (!process_type.empty())
-    return -1;
+    return std::move(main_function_params);
 
-  return WebEngineBrowserMain(main_function_params);
+  return WebEngineBrowserMain(std::move(main_function_params));
 }
 
 content::ContentClient* WebEngineMainDelegate::CreateContentClient() {

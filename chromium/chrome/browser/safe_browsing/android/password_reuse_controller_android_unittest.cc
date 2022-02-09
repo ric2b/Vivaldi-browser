@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
@@ -122,7 +121,9 @@ TEST_F(PasswordReuseControllerAndroidTest, VerifyButtonText) {
   {
     base::test::ScopedFeatureList scoped_feature_list;
     scoped_feature_list.InitWithFeatures(
-        {safe_browsing::kPasswordProtectionForSignedInUsers}, {});
+        {safe_browsing::kPasswordProtectionForSignedInUsers},
+        {safe_browsing::
+             kSafeBrowsingPasswordCheckIntegrationForSavedPasswordsAndroid});
 
     password_type.set_account_type(ReusedPasswordAccountType::SAVED_PASSWORD);
     password_type.set_is_account_syncing(false);

@@ -4,13 +4,13 @@
 
 (async function() {
   TestRunner.addResult(`Verify that tab keeps selected as the persistence binding comes in.\n`);
-  await TestRunner.loadModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
+  await TestRunner.loadLegacyModule('sources'); await TestRunner.loadTestModule('sources_test_runner');
   await TestRunner.loadTestModule('bindings_test_runner');
   await TestRunner.addScriptTag('resources/foo.js');
   await TestRunner.showPanel('sources');
 
   var testMapping = BindingsTestRunner.initializeTestMapping();
-  var fs = new BindingsTestRunner.TestFileSystem('file:///var/www');
+  var fs = new BindingsTestRunner.TestFileSystem('/var/www');
   var fsEntry = BindingsTestRunner.addFooJSFile(fs);
   fs.root.addFile('bar.js', 'window.bar = ()=>\'bar\';');
   await fs.reportCreatedPromise();

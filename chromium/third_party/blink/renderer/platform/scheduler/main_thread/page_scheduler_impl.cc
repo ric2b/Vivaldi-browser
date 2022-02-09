@@ -176,8 +176,7 @@ PageSchedulerImpl::PageSchedulerImpl(
           &agent_group_scheduler.GetMainThreadScheduler())),
       agent_group_scheduler_(agent_group_scheduler),
       page_visibility_(kDefaultPageVisibility),
-      page_visibility_changed_time_(
-          main_thread_scheduler_->GetTickClock()->NowTicks()),
+      page_visibility_changed_time_(main_thread_scheduler_->NowTicks()),
       audio_state_(AudioState::kSilent),
       is_frozen_(false),
       opted_out_from_aggressive_throttling_(false),
@@ -236,13 +235,10 @@ void PageSchedulerImpl::SetPageVisible(bool page_visible) {
   if (page_visibility_ == page_visibility)
     return;
   page_visibility_ = page_visibility;
-  page_visibility_changed_time_ =
-      main_thread_scheduler_->GetTickClock()->NowTicks();
+  page_visibility_changed_time_ = main_thread_scheduler_->NowTicks();
 
   switch (page_visibility_) {
     case PageVisibilityState::kVisible:
-      // Visible pages should not be frozen.
-      SetPageFrozenImpl(false, NotificationPolicy::kDoNotNotifyFrames);
       page_lifecycle_state_tracker_->SetPageLifecycleState(
           PageLifecycleState::kActive);
       break;
@@ -251,14 +247,6 @@ void PageSchedulerImpl::SetPageVisible(bool page_visible) {
           IsBackgrounded() ? PageLifecycleState::kHiddenBackgrounded
                            : PageLifecycleState::kHiddenForegrounded);
       break;
-  }
-
-  if (ShouldFreezePage()) {
-    main_thread_scheduler_->ControlTaskRunner()->PostDelayedTask(
-        FROM_HERE, do_freeze_page_callback_.GetCallback(),
-        freeze_on_network_idle_enabled_
-            ? delay_for_background_and_network_idle_tab_freezing_
-            : delay_for_background_tab_freezing_);
   }
 
   for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_)
@@ -313,7 +301,7 @@ void PageSchedulerImpl::SetPageFrozenImpl(
   } else {
     // The new state may have already been set if unfreezing through the
     // renderer, but that's okay - duplicate state changes won't be recorded.
-    if (page_visibility_ == PageVisibilityState::kVisible) {
+    if (IsPageVisible()) {
       page_lifecycle_state_tracker_->SetPageLifecycleState(
           PageLifecycleState::kActive);
     } else if (IsBackgrounded()) {
@@ -348,7 +336,7 @@ void PageSchedulerImpl::SetPageBackForwardCached(
     TRACE_EVENT_INSTANT("navigation",
                         "PageSchedulerImpl::SetPageBackForwardCached_Store");
     stored_in_back_forward_cache_timestamp_ =
-        main_thread_scheduler_->tick_clock()->NowTicks();
+        main_thread_scheduler_->NowTicks();
 
     // Incorporate a delay of 15 seconds to allow for caching operations to
     // complete before tasks are logged.
@@ -391,7 +379,7 @@ void PageSchedulerImpl::SetIsMainFrameLocal(bool is_local) {
 void PageSchedulerImpl::RegisterFrameSchedulerImpl(
     FrameSchedulerImpl* frame_scheduler) {
   base::sequence_manager::LazyNow lazy_now(
-      main_thread_scheduler_->tick_clock());
+      main_thread_scheduler_->GetTickClock());
 
   MaybeInitializeWakeUpBudgetPools(&lazy_now);
   MaybeInitializeBackgroundCPUTimeBudgetPool(&lazy_now);
@@ -447,14 +435,14 @@ void PageSchedulerImpl::GrantVirtualTimeBudget(
   // This can shift time forwards if there's a pending MaybeAdvanceVirtualTime,
   // so it's important this is called second.
   main_thread_scheduler_->GetVirtualTimeDomain()->SetVirtualTimeFence(
-      main_thread_scheduler_->GetVirtualTimeDomain()->Now() + budget);
+      main_thread_scheduler_->NowTicks() + budget);
 }
 
 void PageSchedulerImpl::AudioStateChanged(bool is_audio_playing) {
   if (is_audio_playing) {
     audio_state_ = AudioState::kAudible;
     on_audio_silent_closure_.Cancel();
-    if (page_visibility_ == PageVisibilityState::kHidden) {
+    if (!IsPageVisible()) {
       page_lifecycle_state_tracker_->SetPageLifecycleState(
           PageLifecycleState::kHiddenForegrounded);
     }
@@ -543,10 +531,18 @@ void PageSchedulerImpl::OnThrottlingStatusUpdated() {
     opted_out_from_aggressive_throttling_ =
         opted_out_from_aggressive_throttling;
     base::sequence_manager::LazyNow lazy_now(
-        main_thread_scheduler_->tick_clock());
+        main_thread_scheduler_->GetTickClock());
     UpdateCPUTimeBudgetPool(&lazy_now);
     UpdateWakeUpBudgetPools(&lazy_now);
   }
+}
+
+void PageSchedulerImpl::OnVirtualTimeEnabled() {
+  if (page_visibility_ == PageVisibilityState::kHidden) {
+    page_lifecycle_state_tracker_->SetPageLifecycleState(
+        PageLifecycleState::kHiddenForegrounded);
+  }
+  UpdatePolicyOnVisibilityChange(NotificationPolicy::kNotifyFrames);
 }
 
 void PageSchedulerImpl::OnTraceLogEnabled() {
@@ -723,9 +719,9 @@ void PageSchedulerImpl::MaybeInitializeWakeUpBudgetPools(
 void PageSchedulerImpl::UpdatePolicyOnVisibilityChange(
     NotificationPolicy notification_policy) {
   base::sequence_manager::LazyNow lazy_now(
-      main_thread_scheduler_->tick_clock());
+      main_thread_scheduler_->GetTickClock());
 
-  if (page_visibility_ == PageVisibilityState::kVisible) {
+  if (IsPageVisible()) {
     is_cpu_time_throttled_ = false;
     do_throttle_cpu_time_callback_.Cancel();
     UpdateCPUTimeBudgetPool(&lazy_now);
@@ -742,6 +738,17 @@ void PageSchedulerImpl::UpdatePolicyOnVisibilityChange(
         FROM_HERE, do_intensively_throttle_wake_ups_callback_.GetCallback(),
         GetIntensiveWakeUpThrottlingGracePeriod());
   }
+
+  if (ShouldFreezePage()) {
+    main_thread_scheduler_->ControlTaskRunner()->PostDelayedTask(
+        FROM_HERE, do_freeze_page_callback_.GetCallback(),
+        freeze_on_network_idle_enabled_
+            ? delay_for_background_and_network_idle_tab_freezing_
+            : delay_for_background_tab_freezing_);
+  } else {
+    SetPageFrozenImpl(false, NotificationPolicy::kDoNotNotifyFrames);
+  }
+
   if (notification_policy == NotificationPolicy::kNotifyFrames)
     NotifyFrames();
 }
@@ -751,7 +758,7 @@ void PageSchedulerImpl::DoThrottleCPUTime() {
   is_cpu_time_throttled_ = true;
 
   base::sequence_manager::LazyNow lazy_now(
-      main_thread_scheduler_->tick_clock());
+      main_thread_scheduler_->GetTickClock());
   UpdateCPUTimeBudgetPool(&lazy_now);
   NotifyFrames();
 }
@@ -761,7 +768,7 @@ void PageSchedulerImpl::DoIntensivelyThrottleWakeUps() {
   are_wake_ups_intensively_throttled_ = true;
 
   base::sequence_manager::LazyNow lazy_now(
-      main_thread_scheduler_->tick_clock());
+      main_thread_scheduler_->GetTickClock());
   UpdateWakeUpBudgetPools(&lazy_now);
   NotifyFrames();
 }
@@ -789,7 +796,7 @@ void PageSchedulerImpl::OnTitleOrFaviconUpdated() {
     // shouldn't be able to observe that the page title or favicon was updated.
     had_recent_title_or_favicon_update_ = true;
     base::sequence_manager::LazyNow lazy_now(
-        main_thread_scheduler_->tick_clock());
+        main_thread_scheduler_->GetTickClock());
     UpdateWakeUpBudgetPools(&lazy_now);
     // Re-enable intensive throttling from a delayed task.
     reset_had_recent_title_or_favicon_update_.Cancel();
@@ -803,7 +810,7 @@ void PageSchedulerImpl::ResetHadRecentTitleOrFaviconUpdate() {
   had_recent_title_or_favicon_update_ = false;
 
   base::sequence_manager::LazyNow lazy_now(
-      main_thread_scheduler_->tick_clock());
+      main_thread_scheduler_->GetTickClock());
   UpdateWakeUpBudgetPools(&lazy_now);
 
   NotifyFrames();
@@ -864,7 +871,12 @@ AgentGroupSchedulerImpl& PageSchedulerImpl::GetAgentGroupScheduler() {
 }
 
 bool PageSchedulerImpl::IsBackgrounded() const {
-  return page_visibility_ == PageVisibilityState::kHidden && !IsAudioPlaying();
+  // When virtual time is enabled, a freezing request would have its timeout
+  // expire immediately when a page is backgrounded, which is undesirable in
+  // headless mode. To prevent that, a page is never considerer backgrounded
+  // when virtual time is enabled.
+  return !IsPageVisible() && !IsAudioPlaying() &&
+         !main_thread_scheduler_->IsVirtualTimeEnabled();
 }
 
 bool PageSchedulerImpl::ShouldFreezePage() const {
@@ -885,8 +897,8 @@ void PageSchedulerImpl::OnLocalMainFrameNetworkAlmostIdle() {
 
   // If delay_for_background_and_network_idle_tab_freezing_ passes after
   // the page is not visible, we should freeze the page.
-  base::TimeDelta passed = main_thread_scheduler_->GetTickClock()->NowTicks() -
-                           page_visibility_changed_time_;
+  base::TimeDelta passed =
+      main_thread_scheduler_->NowTicks() - page_visibility_changed_time_;
   if (passed < delay_for_background_and_network_idle_tab_freezing_)
     return;
 
@@ -899,8 +911,7 @@ void PageSchedulerImpl::DoFreezePage() {
   if (freeze_on_network_idle_enabled_) {
     DCHECK(delegate_);
     base::TimeDelta passed =
-        main_thread_scheduler_->GetTickClock()->NowTicks() -
-        page_visibility_changed_time_;
+        main_thread_scheduler_->NowTicks() - page_visibility_changed_time_;
     // The page will be frozen if:
     // (1) the main frame is remote, or,
     // (2) the local main frame's network is almost idle, or,
@@ -1041,7 +1052,7 @@ void PageSchedulerImpl::MoveTaskQueuesToCorrectWakeUpBudgetPoolAndUpdate() {
   // Update the WakeUpBudgetPools' interval everytime task queues change their
   // attached WakeUpBudgetPools
   base::sequence_manager::LazyNow lazy_now(
-      main_thread_scheduler_->tick_clock());
+      main_thread_scheduler_->GetTickClock());
   UpdateWakeUpBudgetPools(&lazy_now);
 }
 

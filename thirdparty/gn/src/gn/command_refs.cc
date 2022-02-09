@@ -26,7 +26,7 @@ namespace commands {
 
 namespace {
 
-using TargetSet = std::set<const Target*>;
+using TargetSet = TargetSet;
 using TargetVector = std::vector<const Target*>;
 
 // Maps targets to the list of targets that depend on them.
@@ -65,10 +65,7 @@ size_t RecursivePrintTarget(const DepMap& dep_map,
 
   bool print_children = true;
   if (seen_targets) {
-    if (seen_targets->find(target) == seen_targets->end()) {
-      // New target, mark it visited.
-      seen_targets->insert(target);
-    } else {
+    if (!seen_targets->add(target)) {
       // Already seen.
       print_children = false;
       // Only print "..." if something is actually elided, which means that
@@ -112,9 +109,8 @@ void RecursiveCollectChildRefs(const DepMap& dep_map,
 void RecursiveCollectRefs(const DepMap& dep_map,
                           const Target* target,
                           TargetSet* results) {
-  if (results->find(target) != results->end())
+  if (!results->add(target))
     return;  // Already found this target.
-  results->insert(target);
   RecursiveCollectChildRefs(dep_map, target, results);
 }
 

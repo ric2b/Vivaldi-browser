@@ -10,8 +10,8 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "remoting/base/capabilities.h"
@@ -21,6 +21,8 @@
 #include "remoting/host/action_executor.h"
 #include "remoting/host/action_message_handler.h"
 #include "remoting/host/audio_capturer.h"
+#include "remoting/host/base/screen_controls.h"
+#include "remoting/host/base/screen_resolution.h"
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/file_transfer/file_transfer_message_handler.h"
 #include "remoting/host/file_transfer/rtc_log_file_operations.h"
@@ -32,8 +34,6 @@
 #include "remoting/host/remote_open_url/remote_open_url_message_handler.h"
 #include "remoting/host/remote_open_url/url_forwarder_configurator.h"
 #include "remoting/host/remote_open_url/url_forwarder_control_message_handler.h"
-#include "remoting/host/screen_controls.h"
-#include "remoting/host/screen_resolution.h"
 #include "remoting/host/webauthn/remote_webauthn_constants.h"
 #include "remoting/host/webauthn/remote_webauthn_message_handler.h"
 #include "remoting/proto/control.pb.h"
@@ -74,8 +74,9 @@ ClientSession::ClientSession(
       mouse_clamping_filter_(&remote_input_filter_),
       desktop_and_cursor_composer_notifier_(&mouse_clamping_filter_, this),
       disable_input_filter_(&desktop_and_cursor_composer_notifier_),
-      disable_clipboard_filter_(clipboard_echo_filter_.host_filter()),
-      client_clipboard_factory_(clipboard_echo_filter_.client_filter()),
+      host_clipboard_filter_(clipboard_echo_filter_.host_filter()),
+      client_clipboard_filter_(clipboard_echo_filter_.client_filter()),
+      client_clipboard_factory_(&client_clipboard_filter_),
       max_duration_(max_duration),
       pairing_registry_(pairing_registry),
       connection_(std::move(connection)),
@@ -371,7 +372,7 @@ void ClientSession::OnConnectionAuthenticated() {
 
   desktop_display_info_.Reset();
 
-  if (max_duration_ > base::TimeDelta()) {
+  if (max_duration_.is_positive()) {
     max_duration_timer_.Start(
         FROM_HERE, max_duration_,
         base::BindOnce(&ClientSession::DisconnectSession,
@@ -390,8 +391,9 @@ void ClientSession::OnConnectionAuthenticated() {
   options.ApplySessionOptions(session_options);
   // Create the desktop environment. Drop the connection if it could not be
   // created for any reason (for instance the curtain could not initialize).
-  desktop_environment_ =
-      desktop_environment_factory_->Create(weak_factory_.GetWeakPtr(), options);
+  desktop_environment_ = desktop_environment_factory_->Create(
+      client_session_control_weak_factory_.GetWeakPtr(),
+      client_session_events_weak_factory_.GetWeakPtr(), options);
   if (!desktop_environment_) {
     DisconnectSession(protocol::HOST_CONFIGURATION_ERROR);
     return;
@@ -411,11 +413,6 @@ void ClientSession::OnConnectionAuthenticated() {
   host_capabilities_.append(" ");
   host_capabilities_.append(protocol::kWebrtcIceSdpRestartAction);
 
-#if !defined(NDEBUG)
-  host_capabilities_.append(" ");
-  host_capabilities_.append(protocol::kRemoteWebAuthnCapability);
-#endif
-
   // Create the object that controls the screen resolution.
   screen_controls_ = desktop_environment_->CreateScreenControls();
 
@@ -426,8 +423,15 @@ void ClientSession::OnConnectionAuthenticated() {
   connection_->set_input_stub(&disable_input_filter_);
   host_input_filter_.set_input_stub(input_injector_.get());
 
+  if (desktop_environment_options_.clipboard_size().has_value()) {
+    int max_size = desktop_environment_options_.clipboard_size().value();
+
+    client_clipboard_filter_.set_max_size(max_size);
+    host_clipboard_filter_.set_max_size(max_size);
+  }
+
   // Connect the clipboard stubs.
-  connection_->set_clipboard_stub(&disable_clipboard_filter_);
+  connection_->set_clipboard_stub(&host_clipboard_filter_);
   clipboard_echo_filter_.set_host_stub(input_injector_.get());
   clipboard_echo_filter_.set_client_stub(connection_->client_stub());
 }
@@ -511,7 +515,8 @@ void ClientSession::OnConnectionClosed(protocol::ErrorCode error) {
   HOST_LOG << "Client disconnected: " << client_jid_ << "; error = " << error;
 
   // Ignore any further callbacks.
-  weak_factory_.InvalidateWeakPtrs();
+  client_session_control_weak_factory_.InvalidateWeakPtrs();
+  client_session_events_weak_factory_.InvalidateWeakPtrs();
 
   // If the client never authenticated then the session failed.
   if (!is_authenticated_)
@@ -597,7 +602,7 @@ void ClientSession::SetDisableInputs(bool disable_inputs) {
     input_tracker_.ReleaseAll();
 
   disable_input_filter_.set_enabled(!disable_inputs);
-  disable_clipboard_filter_.set_enabled(!disable_inputs);
+  host_clipboard_filter_.set_enabled(!disable_inputs);
 }
 
 uint32_t ClientSession::desktop_session_id() const {
@@ -628,6 +633,37 @@ void ClientSession::OnMouseCursorPosition(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (desktop_and_cursor_composer_)
     desktop_and_cursor_composer_->SetMouseCursorPosition(position);
+}
+
+void ClientSession::BindReceiver(
+    mojo::PendingReceiver<mojom::ChromotingSessionServices> receiver) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  session_services_receivers_.Add(this, std::move(receiver));
+}
+
+void ClientSession::BindWebAuthnProxy(
+    mojo::PendingReceiver<mojom::WebAuthnProxy> receiver) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!remote_webauthn_message_handler_) {
+    LOG(WARNING)
+        << "No WebAuthn message handler is found. Binding request rejected.";
+    return;
+  }
+  remote_webauthn_message_handler_->AddReceiver(std::move(receiver));
+}
+
+void ClientSession::BindRemoteUrlOpener(
+    mojo::PendingReceiver<mojom::RemoteUrlOpener> receiver) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!remote_open_url_message_handler_) {
+    LOG(WARNING) << "No RemoteOpenUrl message handler is found. Binding "
+                 << "request rejected.";
+    return;
+  }
+  remote_open_url_message_handler_->AddReceiver(std::move(receiver));
 }
 
 void ClientSession::RegisterCreateHandlerCallbackForTesting(
@@ -875,6 +911,32 @@ void ClientSession::OnDesktopDisplayChanged(
   connection_->client_stub()->SetVideoLayout(layout);
 }
 
+void ClientSession::OnDesktopAttached(uint32_t session_id) {
+  if (remote_webauthn_message_handler_) {
+    // On Windows, only processes running on an attached desktop session can
+    // bind ChromotingHostServices, so we notify the extension that it might be
+    // able to connect now.
+    remote_webauthn_message_handler_->NotifyWebAuthnStateChange();
+  }
+}
+
+void ClientSession::OnDesktopDetached() {
+  // Clear ChromotingSessionServices receivers and all other receivers brokered
+  // by ChromotingSessionServices, as they are scoped to desktop session that
+  // is being detached.
+  // TODO(yuweih): If we decide to start the IPC server per remote session, then
+  // we may just stop the server here instead, which will automatically
+  // disconnect all ongoing IPCs.
+  session_services_receivers_.Clear();
+  if (remote_webauthn_message_handler_) {
+    remote_webauthn_message_handler_->ClearReceivers();
+    remote_webauthn_message_handler_->NotifyWebAuthnStateChange();
+  }
+  if (remote_open_url_message_handler_) {
+    remote_open_url_message_handler_->ClearReceivers();
+  }
+}
+
 void ClientSession::CreateFileTransferMessageHandler(
     const std::string& channel_name,
     std::unique_ptr<protocol::MessagePipe> pipe) {
@@ -914,7 +976,9 @@ void ClientSession::CreateRemoteOpenUrlMessageHandler(
   // RemoteOpenUrlMessageHandler manages its own lifetime and is tied to the
   // lifetime of |pipe|. Once |pipe| is closed, this instance will be cleaned
   // up.
-  new RemoteOpenUrlMessageHandler(channel_name, std::move(pipe));
+  auto* unowned_handler =
+      new RemoteOpenUrlMessageHandler(channel_name, std::move(pipe));
+  remote_open_url_message_handler_ = unowned_handler->GetWeakPtr();
 }
 
 void ClientSession::CreateUrlForwarderControlMessageHandler(
@@ -934,7 +998,9 @@ void ClientSession::CreateRemoteWebAuthnMessageHandler(
   // RemoteWebAuthnMessageHandler manages its own lifetime and is tied to the
   // lifetime of |pipe|. Once |pipe| is closed, this instance will be cleaned
   // up.
-  new RemoteWebAuthnMessageHandler(channel_name, std::move(pipe));
+  auto* unowned_handler =
+      new RemoteWebAuthnMessageHandler(channel_name, std::move(pipe));
+  remote_webauthn_message_handler_ = unowned_handler->GetWeakPtr();
 }
 
 }  // namespace remoting

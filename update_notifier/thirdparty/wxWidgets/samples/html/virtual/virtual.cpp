@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 // for all others, include the necessary headers (this file is usually all you
 // need because it includes almost all "standard" wxWidgets headers
@@ -42,13 +39,13 @@ class MyVFS : public wxFileSystemHandler
 public:
     MyVFS() : wxFileSystemHandler() {}
 
-    wxFSFile* OpenFile(wxFileSystem& fs, const wxString& location);
-    bool CanOpen(const wxString& location);
+    wxFSFile* OpenFile(wxFileSystem& fs, const wxString& location) wxOVERRIDE;
+    bool CanOpen(const wxString& location) wxOVERRIDE;
 };
 
 bool MyVFS::CanOpen(const wxString& location)
 {
-    return (GetProtocol(location) == wxT("myVFS"));
+    return (GetProtocol(location) == "myVFS");
 }
 
 wxFSFile* MyVFS::OpenFile(wxFileSystem& WXUNUSED(fs), const wxString& location)
@@ -73,7 +70,7 @@ wxFSFile* MyVFS::OpenFile(wxFileSystem& WXUNUSED(fs), const wxString& location)
     //     this won't happen because wxHTML keeps only one "page" file opened at the
     //     time.
     str = new wxMemoryInputStream(buf, strlen(buf));
-    f = new wxFSFile(str, location, wxT("text/html"), wxEmptyString, wxDateTime::Today());
+    f = new wxFSFile(str, location, "text/html", wxEmptyString, wxDateTime::Today());
 
     return f;
 }
@@ -94,7 +91,7 @@ public:
     // this one is called on application startup and is a good place for the app
     // initialization (doing it here and not in the ctor allows to have an error
     // return: if OnInit() returns false, the application terminates)
-    virtual bool OnInit();
+    virtual bool OnInit() wxOVERRIDE;
 };
 
 // Define a new frame type: this is going to be our main frame
@@ -148,7 +145,7 @@ wxEND_EVENT_TABLE()
 // static object for many reasons) and also declares the accessor function
 // wxGetApp() which will return the reference of the right type (i.e. MyApp and
 // not wxApp)
-IMPLEMENT_APP(MyApp)
+wxIMPLEMENT_APP(MyApp);
 
 // ============================================================================
 // implementation
@@ -216,7 +213,7 @@ MyFrame::MyFrame(const wxString& title, const wxPoint& pos, const wxSize& size)
 #if wxUSE_STATUSBAR
     html -> SetRelatedStatusBar(1);
 #endif // wxUSE_STATUSBAR
-    html -> LoadPage(wxT("start.htm"));
+    html -> LoadPage("start.htm");
 }
 
 

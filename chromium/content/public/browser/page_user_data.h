@@ -17,7 +17,7 @@ namespace content {
 // PageUserData is created when a user of an API inherits this class and calls
 // CreateForPage.
 //
-// PageUserData is similar to RenderDocumentHostUserData, but is attached to the
+// PageUserData is similar to DocumentUserData, but is attached to the
 // page (1:1 with main document) instead of any document. Prefer using
 // PageUserData for main-document-only data.
 //
@@ -88,7 +88,7 @@ class PageUserData : public base::SupportsUserData::Data {
 // This macro declares a static variable inside the class that inherits from
 // PageUserData. The address of this static variable is used as
 // the key to store/retrieve an instance of the class.
-#define PAGE_USER_DATA_KEY_DECL() static constexpr int kUserDataKey = 0
+#define PAGE_USER_DATA_KEY_DECL() static const int kUserDataKey = 0
 
 // This macro instantiates the static variable declared by the previous macro.
 // It must live in a .cc file to ensure that there is only one instantiation

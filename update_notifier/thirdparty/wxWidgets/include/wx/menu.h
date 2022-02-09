@@ -275,11 +275,14 @@ public:
     // implementation helpers
     // ----------------------
 
-    // Updates the UI for a menu and all submenus recursively. source is the
-    // object that has the update event handlers defined for it. If NULL, the
-    // menu or associated window will be used.
+    // Updates the UI for a menu and all submenus recursively by generating
+    // wxEVT_UPDATE_UI for all the items.
+    //
+    // Do not use the "source" argument, it allows to override the event
+    // handler to use for these events, but this should never be needed.
     void UpdateUI(wxEvtHandler* source = NULL);
 
+#if wxUSE_MENUBAR
     // get the menu bar this menu is attached to (may be NULL, always NULL for
     // popup menus).  Traverse up the menu hierarchy to find it.
     wxMenuBar *GetMenuBar() const;
@@ -290,6 +293,7 @@ public:
 
     // is the menu attached to a menu bar (or is it a popup one)?
     bool IsAttached() const { return GetMenuBar() != NULL; }
+#endif
 
     // set/get the parent of this menu
     void SetParent(wxMenu *parent) { m_menuParent = parent; }
@@ -308,6 +312,13 @@ public:
     //
     // the checked parameter may have boolean value or -1 for uncheckable items
     bool SendEvent(int itemid, int checked = -1);
+
+    // called to dispatch a wxMenuEvent to the right recipients, menu pointer
+    // can be NULL if we failed to find the associated menu (this happens at
+    // least in wxMSW for the events from the system menus)
+    static
+    bool ProcessMenuEvent(wxMenu* menu, wxMenuEvent& event, wxWindow* win);
+
 
     // compatibility: these functions are deprecated, use the new ones instead
     // -----------------------------------------------------------------------
@@ -388,10 +399,16 @@ protected:
 
     static bool      ms_locked;
 
+
+protected:
+    // Common part of SendEvent() and ProcessMenuEvent(): sends the event to
+    // its intended recipients, returns true if it was processed.
+    static bool DoProcessEvent(wxMenuBase* menu, wxEvent& event, wxWindow* win);
+
     wxDECLARE_NO_COPY_CLASS(wxMenuBase);
 };
 
-#if wxUSE_EXTENDED_RTTI    
+#if wxUSE_EXTENDED_RTTI
 
 // ----------------------------------------------------------------------------
 // XTI accessor
@@ -402,22 +419,22 @@ class WXDLLEXPORT wxMenuInfoHelper : public wxObject
 public:
     wxMenuInfoHelper() { m_menu = NULL; }
     virtual ~wxMenuInfoHelper() { }
-    
+
     bool Create( wxMenu *menu, const wxString &title )
-    { 
-        m_menu = menu; 
-        m_title = title; 
+    {
+        m_menu = menu;
+        m_title = title;
         return true;
     }
-    
+
     wxMenu* GetMenu() const { return m_menu; }
     wxString GetTitle() const { return m_title; }
-    
+
 private:
     wxMenu *m_menu;
     wxString m_title;
-    
-    DECLARE_DYNAMIC_CLASS(wxMenuInfoHelper)
+
+    wxDECLARE_DYNAMIC_CLASS(wxMenuInfoHelper);
 };
 
 WX_DECLARE_EXPORTED_LIST(wxMenuInfoHelper, wxMenuInfoHelperList );
@@ -427,6 +444,8 @@ WX_DECLARE_EXPORTED_LIST(wxMenuInfoHelper, wxMenuInfoHelperList );
 // ----------------------------------------------------------------------------
 // wxMenuBar
 // ----------------------------------------------------------------------------
+
+#if wxUSE_MENUBAR
 
 class WXDLLIMPEXP_CORE wxMenuBarBase : public wxWindow
 {
@@ -528,25 +547,25 @@ public:
     virtual void Detach();
 
     // need to override these ones to avoid virtual function hiding
-    virtual bool Enable(bool enable = true) { return wxWindow::Enable(enable); }
-    virtual void SetLabel(const wxString& s) { wxWindow::SetLabel(s); }
-    virtual wxString GetLabel() const { return wxWindow::GetLabel(); }
+    virtual bool Enable(bool enable = true) wxOVERRIDE { return wxWindow::Enable(enable); }
+    virtual void SetLabel(const wxString& s) wxOVERRIDE { wxWindow::SetLabel(s); }
+    virtual wxString GetLabel() const wxOVERRIDE { return wxWindow::GetLabel(); }
 
     // don't want menu bars to accept the focus by tabbing to them
-    virtual bool AcceptsFocusFromKeyboard() const { return false; }
+    virtual bool AcceptsFocusFromKeyboard() const wxOVERRIDE { return false; }
 
     // update all menu item states in all menus
     virtual void UpdateMenus();
 
-    virtual bool CanBeOutsideClientArea() const { return true; }
+    virtual bool CanBeOutsideClientArea() const wxOVERRIDE { return true; }
 
-#if wxUSE_EXTENDED_RTTI    
+#if wxUSE_EXTENDED_RTTI
     // XTI helpers:
     bool AppendMenuInfo( const wxMenuInfoHelper *info )
     { return Append( info->GetMenu(), info->GetTitle() ); }
     const wxMenuInfoHelperList& GetMenuInfos() const;
 #endif
-    
+
 #if WXWIN_COMPATIBILITY_2_8
     // get or change the label of the menu at given position
     // Deprecated in favour of SetMenuLabel
@@ -559,16 +578,17 @@ protected:
     // the list of all our menus
     wxMenuList m_menus;
 
-#if wxUSE_EXTENDED_RTTI    
+#if wxUSE_EXTENDED_RTTI
     // used by XTI
     wxMenuInfoHelperList m_menuInfos;
 #endif
-    
+
     // the frame we are attached to (may be NULL)
     wxFrame *m_menuBarFrame;
 
     wxDECLARE_NO_COPY_CLASS(wxMenuBarBase);
 };
+#endif
 
 // ----------------------------------------------------------------------------
 // include the real class declaration
@@ -589,10 +609,8 @@ protected:
     #include "wx/gtk1/menu.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/menu.h"
-#elif defined(__WXCOCOA__)
-    #include "wx/cocoa/menu.h"
-#elif defined(__WXPM__)
-    #include "wx/os2/menu.h"
+#elif defined(__WXQT__)
+    #include "wx/qt/menu.h"
 #endif
 #endif // wxUSE_BASE_CLASSES_ONLY/!wxUSE_BASE_CLASSES_ONLY
 

@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -65,13 +64,13 @@ scoped_refptr<const BaseClass> CreateFoo(const std::string& /*instance_type*/,
                                          bool* bad_message) {
   const base::DictionaryValue* dict = nullptr;
   CHECK(value->GetAsDictionary(&dict));
-  int parameter = 0;
-  if (!dict->GetInteger("parameter", &parameter)) {
+  absl::optional<int> parameter = dict->FindIntKey("parameter");
+  if (!parameter) {
     *error = "No parameter";
     *bad_message = true;
     return nullptr;
   }
-  return scoped_refptr<const BaseClass>(new Foo(parameter));
+  return scoped_refptr<const BaseClass>(new Foo(*parameter));
 }
 
 std::unique_ptr<base::DictionaryValue> CreateDictWithParameter(int parameter) {

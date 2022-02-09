@@ -263,6 +263,19 @@ class Target(object):
                                           remote_cmd.COPY_FROM_TARGET,
                                           recursive)
 
+  def GetFileAsString(self, source):
+    """Reads a file on the device and returns it as a string.
+
+    source: The remote file path to read.
+    """
+    cat_proc = self.RunCommandPiped(['cat', source],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT)
+    stdout, _ = cat_proc.communicate()
+    if cat_proc.returncode != 0:
+      raise Exception('Could not read file %s on device.', source)
+    return stdout
+
   def _GetEndpoint(self):
     """Returns a (host, port) tuple for the SSH connection to the target."""
     raise NotImplementedError()
@@ -291,6 +304,7 @@ class Target(object):
       if ssh_proc.wait() == 0:
         logging.info('Connected!')
         self._started = True
+        self._command_runner = runner
         return True
       time.sleep(_ATTACH_RETRY_INTERVAL)
 
@@ -323,7 +337,7 @@ class Target(object):
       # Resolve all packages, to have them pulled into the device/VM cache.
       for package_path in package_paths:
         package_name, package_version = _GetPackageInfo(package_path)
-        logging.info('Resolving %s into cache.', package_name)
+        logging.info('Installing %s...', package_name)
         return_code = self.RunCommand(
             ['pkgctl', 'resolve',
              _GetPackageUri(package_name), '>/dev/null'],

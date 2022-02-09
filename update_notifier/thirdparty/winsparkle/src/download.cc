@@ -142,10 +142,42 @@ void FileDownloader::Connect(const GURL& url, Error& error) {
     }
   }
 
+  bool revocation_connection_error = false;
+
 again:
   if (!HttpSendRequest(request_handle_, nullptr, 0, nullptr, 0)) {
-    // Improve error message for common errors.
     DWORD error_code = GetLastError();
+    if (error_code == ERROR_INTERNET_SEC_CERT_REV_FAILED &&
+        !revocation_connection_error) {
+      // According to
+      // https://docs.microsoft.com/en-us/windows/win32/wininet/wininet-errors
+      // and various hints from the internet this is the error returned when the
+      // certificate revocation server cannot be contacted due to network
+      // problems. When the server was successfully contacted but the
+      // certificate was revoked the error would be
+      // ERROR_INTERNET_SEC_CERT_REVOKED. As the network errors can be caused by
+      // transient problems or by firewalls blocking the revocation checks to
+      // protect privacy, we try to connect again without revocation checks.
+      // This will be similar how the browsers handles this.
+      revocation_connection_error = true;
+      DWORD flags = 0;
+      DWORD flags_size = sizeof(flags);
+      if (!InternetQueryOption(request_handle_, INTERNET_OPTION_SECURITY_FLAGS,
+                               &flags, &flags_size)) {
+        error.set(Error::kNetwork, LastWin32Error("InternetQueryOption"));
+        return;
+      }
+      DCHECK_EQ(flags_size, sizeof(flags));
+      flags |= SECURITY_FLAG_IGNORE_REVOCATION;
+      if (!InternetSetOption(request_handle_, INTERNET_OPTION_SECURITY_FLAGS,
+                             &flags, sizeof(flags))) {
+        error.set(Error::kNetwork, LastWin32Error("InternetSetOption"));
+        return;
+      }
+      goto again;
+    }
+
+    // Improve the error message for common connection errors.
     std::string message;
     switch (error_code) {
       case ERROR_INTERNET_NAME_NOT_RESOLVED:
@@ -157,7 +189,7 @@ again:
         break;
       default:
         message = "Internet connection error " + std::to_string(error_code) +
-                  "for " + url.spec();
+                  " for " + url.spec();
         break;
     }
     error.set(Error::kNetwork, std::move(message));
@@ -191,6 +223,8 @@ again:
   if (http_status >= 400) {
     std::string message("DownloadFile: HTTP error status ");
     message += std::to_string(http_status);
+    message += "\nURL: ";
+    message += url.spec();
     error.set(Error::kNetwork, std::move(message));
     return;
   }

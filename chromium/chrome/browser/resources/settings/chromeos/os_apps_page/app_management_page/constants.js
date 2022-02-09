@@ -9,6 +9,7 @@ import 'chrome://resources/mojo/skia/public/mojom/bitmap.mojom-lite.js';
 import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
 import '/app-management/file_path.mojom-lite.js';
 import '/app-management/image.mojom-lite.js';
+import '/app-management/safe_base_name.mojom-lite.js';
 import '/app-management/types.mojom-lite.js';
 import '/app-management/app_management.mojom-lite.js';
 
@@ -28,30 +29,13 @@ export const PageType = {
   DETAIL: 1,
 };
 
-/**
- * A number representation of a Bool. Permission values should be of this type
- * for permissions with value type PermissionValueType.kBool.
- * @enum {number}
- * @const
- */
-export const Bool = {
-  kFalse: 0,
-  kTrue: 1,
-};
-
 export const AppType = apps.mojom.AppType;
-
-export const PermissionValueType = apps.mojom.PermissionValueType;
-
-export const TriState = apps.mojom.TriState;
 
 export const OptionalBool = apps.mojom.OptionalBool;
 
 export const InstallReason = apps.mojom.InstallReason;
 
 export const WindowMode = apps.mojom.WindowMode;
-
-export const PermissionType = apps.mojom.PermissionType;
 
 // This histogram is also declared and used at chrome/browser/ui/webui/settings/
 // chromeos/app_management/app_management_uma.h.
@@ -108,4 +92,6 @@ export const AppManagementUserAction = {
   ResizeLockTurnedOff: 20,
   PreferredAppTurnedOn: 21,
   PreferredAppTurnedOff: 22,
+  SupportedLinksListShown: 23,
+  OverlappingAppsDialogShown: 24,
 };

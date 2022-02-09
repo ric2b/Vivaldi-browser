@@ -5,6 +5,7 @@
 
 from __future__ import print_function
 
+import copy
 import json
 import subprocess
 import sys
@@ -33,6 +34,10 @@ class HelperMethodUnittest(unittest.TestCase):
       queries._StripPrefixFromBuildId('build1')
     with self.assertRaises(AssertionError):
       queries._StripPrefixFromBuildId('build-1-2')
+
+  def testConvertActualResultToExpectationFileFormatAbort(self):
+    self.assertEqual(
+        queries._ConvertActualResultToExpectationFileFormat('ABORT'), 'Timeout')
 
 
 class QueryGeneratorUnittest(unittest.TestCase):
@@ -127,6 +132,115 @@ class QueryBuilderUnittest(unittest.TestCase):
                           '1234'))
     self.assertEqual(expectation_files, ['foo_expectations'])
 
+  def testValidResultsNoneExpectations(self):
+    """Tests when an implementation uses None for expectation files."""
+    query_results = [
+        {
+            'id':
+            'build-1234',
+            'test_id': ('ninja://chrome/test:telemetry_gpu_integration_test/'
+                        'gpu_tests.pixel_integration_test.'
+                        'PixelIntegrationTest.test_name'),
+            'status':
+            'FAIL',
+            'typ_expectations': [
+                'RetryOnFailure',
+            ],
+            'typ_tags': [
+                'win',
+                'intel',
+            ],
+            'step_name':
+            'step_name',
+        },
+        {
+            'id':
+            'build-1234',
+            'test_id': ('ninja://chrome/test:telemetry_gpu_integration_test/'
+                        'gpu_tests.pixel_integration_test.'
+                        'PixelIntegrationTest.test_name'),
+            'status':
+            'FAIL',
+            'typ_expectations': [
+                'RetryOnFailure',
+            ],
+            'typ_tags': [
+                'win',
+                'nvidia',
+            ],
+            'step_name':
+            'step_name',
+        },
+    ]
+    self._popen_mock.return_value = unittest_utils.FakeProcess(
+        stdout=json.dumps(query_results))
+    with mock.patch.object(
+        self._querier, '_GetRelevantExpectationFilesForQueryResult') as ef_mock:
+      ef_mock.return_value = None
+      results, expectation_files = self._querier.QueryBuilder('builder', 'ci')
+      self.assertEqual(len(results), 2)
+      self.assertIn(
+          data_types.Result('test_name', ['win', 'intel'], 'Failure',
+                            'step_name', '1234'), results)
+      self.assertIn(
+          data_types.Result('test_name', ['win', 'nvidia'], 'Failure',
+                            'step_name', '1234'), results)
+      self.assertIsNone(expectation_files)
+      ef_mock.assert_called_once()
+
+  def testValidResultsMultipleSteps(self):
+    """Tests functionality when results from multiple steps are present."""
+
+    def SideEffect(result):
+      if result['step_name'] == 'a step name':
+        return ['foo_expectations']
+      elif result['step_name'] == 'another step name':
+        return ['bar_expectations']
+      raise RuntimeError('Unknown step %s' % result['step_name'])
+
+    self._relevant_file_mock.side_effect = SideEffect
+    query_results = [
+        {
+            'id': 'build-1234',
+            'test_id': 'ninja://:blink_web_tests/some/test/with.test_name',
+            'status': 'FAIL',
+            'typ_expectations': [
+                'Failure',
+            ],
+            'typ_tags': [
+                'linux',
+                'release',
+            ],
+            'step_name': 'a step name',
+        },
+        {
+            'id': 'build-1234',
+            'test_id': 'ninja://:blink_web_tests/some/test/with.test_name',
+            'status': 'FAIL',
+            'typ_expectations': [
+                'Crash',
+            ],
+            'typ_tags': [
+                'linux',
+                'debug',
+            ],
+            'step_name': 'another step name',
+        },
+    ]
+    self._popen_mock.return_value = unittest_utils.FakeProcess(
+        stdout=json.dumps(query_results))
+    results, expectation_files = self._querier.QueryBuilder('builder', 'ci')
+    self.assertEqual(len(results), 2)
+    self.assertIn(
+        data_types.Result('test_name', ['linux', 'release'], 'Failure',
+                          'a step name', '1234'), results)
+    self.assertIn(
+        data_types.Result('test_name', ['linux', 'debug'], 'Failure',
+                          'another step name', '1234'), results)
+    self.assertEqual(len(expectation_files), 2)
+    self.assertEqual(set(expectation_files),
+                     set(['foo_expectations', 'bar_expectations']))
+
   def testFilterInsertion(self):
     """Tests that test filters are properly inserted into the query."""
     with mock.patch.object(
@@ -201,6 +315,11 @@ class FillExpectationMapForBuildersUnittest(unittest.TestCase):
     self._pool_mock = self._pool_patcher.start()
     self._pool_mock.return_value = unittest_utils.FakePool()
     self.addCleanup(self._pool_patcher.stop)
+    self._filter_patcher = mock.patch.object(self._querier,
+                                             '_FilterOutInactiveBuilders')
+    self._filter_mock = self._filter_patcher.start()
+    self._filter_mock.side_effect = lambda b, _: b
+    self.addCleanup(self._filter_patcher.stop)
 
   def testValidResults(self):
     """Tests functionality when valid results are returned by the query."""
@@ -252,6 +371,67 @@ class FillExpectationMapForBuildersUnittest(unittest.TestCase):
     with self.assertRaises(IndexError):
       self._querier._FillExpectationMapForBuilders(
           data_types.TestExpectationMap(), ['matched_builder'], 'ci')
+
+
+class FilterOutInactiveBuildersUnittest(unittest.TestCase):
+  def setUp(self):
+    self._subprocess_patcher = mock.patch(
+        'unexpected_passes_common.queries.subprocess.Popen')
+    self._subprocess_mock = self._subprocess_patcher.start()
+    self.addCleanup(self._subprocess_patcher.stop)
+
+    self._querier = unittest_utils.CreateGenericQuerier()
+
+  def testAllActiveBuilders(self):
+    """Tests that no builders are removed if no inactive builders are found."""
+    results = [{
+        'builder_name': 'foo_builder',
+    }, {
+        'builder_name': 'bar_builder',
+    }]
+    fake_process = unittest_utils.FakeProcess(stdout=json.dumps(results))
+    self._subprocess_mock.return_value = fake_process
+    initial_builders = [
+        'foo_builder',
+        'bar_builder',
+    ]
+    expected_builders = copy.copy(initial_builders)
+    filtered_builders = self._querier._FilterOutInactiveBuilders(
+        initial_builders, 'ci')
+    self.assertEqual(filtered_builders, expected_builders)
+
+  def testInactiveBuilders(self):
+    """Tests that inactive builders are removed."""
+    results = [{
+        'builder_name': 'foo_builder',
+    }]
+    fake_process = unittest_utils.FakeProcess(stdout=json.dumps(results))
+    self._subprocess_mock.return_value = fake_process
+    initial_builders = [
+        'foo_builder',
+        'bar_builder',
+    ]
+    expected_builders = ['foo_builder']
+    filtered_builders = self._querier._FilterOutInactiveBuilders(
+        initial_builders, 'ci')
+    self.assertEqual(filtered_builders, expected_builders)
+
+  def testByteConversion(self):
+    """Tests that bytes are properly handled if returned."""
+    results = [{
+        'builder_name': 'foo_builder',
+    }]
+    fake_process = unittest_utils.FakeProcess(
+        stdout=json.dumps(results).encode('utf-8'))
+    self._subprocess_mock.return_value = fake_process
+    initial_builders = [
+        'foo_builder',
+        'bar_builder',
+    ]
+    expected_builders = ['foo_builder']
+    filtered_builders = self._querier._FilterOutInactiveBuilders(
+        initial_builders, 'ci')
+    self.assertEqual(filtered_builders, expected_builders)
 
 
 class RunBigQueryCommandsForJsonOutputUnittest(unittest.TestCase):
@@ -340,6 +520,11 @@ class GenerateBigQueryCommandUnittest(unittest.TestCase):
     })
     self.assertIn('--parameter=string::string_value', cmd)
     self.assertIn('--parameter=int:INT64:1', cmd)
+
+  def testBatchMode(self):
+    """Tests that batch mode adds the necessary arg."""
+    cmd = queries._GenerateBigQueryCommand('project', {}, batch=True)
+    self.assertIn('--batch', cmd)
 
 
 if __name__ == '__main__':

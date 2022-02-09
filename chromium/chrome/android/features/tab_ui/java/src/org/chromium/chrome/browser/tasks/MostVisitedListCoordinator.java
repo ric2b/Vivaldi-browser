@@ -203,14 +203,6 @@ class MostVisitedListCoordinator implements TileGroup.Observer {
             return false;
         }
 
-        @Override
-        public void navigateToHelpPage() {
-            // TODO(dgn): Use the standard Help UI rather than a random link to online help?
-            ReturnToChromeExperimentsUtil.handleLoadUrlFromStartSurface(
-                    new LoadUrlParams(NEW_TAB_URL_HELP, PageTransition.AUTO_BOOKMARK),
-                    true /*incognito*/, mParentTabSupplier.get());
-        }
-
         /**
          * Opens the suggestions page without recording metrics.
          *
@@ -226,7 +218,8 @@ class MostVisitedListCoordinator implements TileGroup.Observer {
                 case WindowOpenDisposition.NEW_BACKGROUND_TAB:
                     ReturnToChromeExperimentsUtil.handleLoadUrlFromStartSurface(
                             new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK),
-                            null /*incognito*/, mParentTabSupplier.get());
+                            windowOpenDisposition == WindowOpenDisposition.NEW_BACKGROUND_TAB,
+                            /*incognito=*/null, mParentTabSupplier.get());
                     SuggestionsMetrics.recordTileTapped();
                     break;
                 case WindowOpenDisposition.OFF_THE_RECORD:

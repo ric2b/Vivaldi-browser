@@ -18,11 +18,11 @@ class WXDLLIMPEXP_CORE wxGenericMessageDialog : public wxMessageDialogBase
 public:
     wxGenericMessageDialog(wxWindow *parent,
                            const wxString& message,
-                           const wxString& caption = wxMessageBoxCaptionStr,
+                           const wxString& caption = wxASCII_STR(wxMessageBoxCaptionStr),
                            long style = wxOK|wxCENTRE,
                            const wxPoint& pos = wxDefaultPosition);
 
-    virtual int ShowModal();
+    virtual int ShowModal() wxOVERRIDE;
 
 protected:
     // Creates a message dialog taking any options that have been set after
@@ -48,8 +48,8 @@ private:
     wxPoint m_pos;
     bool m_created;
 
-    DECLARE_EVENT_TABLE()
-    DECLARE_DYNAMIC_CLASS(wxGenericMessageDialog)
+    wxDECLARE_EVENT_TABLE();
+    wxDECLARE_DYNAMIC_CLASS(wxGenericMessageDialog);
 };
 
 #endif // _WX_GENERIC_MSGDLGG_H_

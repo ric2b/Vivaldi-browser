@@ -31,7 +31,7 @@ class RustProjectWriter {
 
  private:
   // This function visits the deps graph of a target in a DFS fashion.
-  static void VisitDeps(const Target* target, std::set<const Target*>* visited);
+  static void VisitDeps(const Target* target, TargetSet* visited);
 };
 
 #endif  // TOOLS_GN_RUST_PROJECT_WRITER_H_

@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.tab.CurrentTabObserver;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -172,7 +173,9 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
         boolean disallowDueToNightMode =
                 !mAllowThemingInNightMode && ColorUtils.inNightMode(tab.getContext());
 
-        return tab.isThemingAllowed() && !mIsTablet && !disallowDueToNightMode
+        return tab.isThemingAllowed() && !mIsTablet
+                // Vivaldi - We allow coloring in Dark theme also.
+                && (BuildConfig.IS_VIVALDI || !disallowDueToNightMode)
                 && !tab.isNativePage() && !tab.isIncognito();
     }
 

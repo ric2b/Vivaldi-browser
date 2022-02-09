@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1991-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -40,6 +39,13 @@
 #include "tiffiop.h"
 #include "tiffio.h"
 
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 #define	streq(a,b)	(strcmp(a,b) == 0)
 #define	CopyField(tag, v) \
     if (TIFFGetField(in, tag, &v)) TIFFSetField(out, tag, v)
@@ -54,6 +60,10 @@ uint32 rowsperstrip = (uint32) -1;
 int process_by_block = 0; /* default is whole image at once */
 int no_alpha = 0;
 int bigtiff_output = 0;
+#define DEFAULT_MAX_MALLOC (256 * 1024 * 1024)
+/* malloc size limit (in bytes)
+ * disabled when set to 0 */
+static tmsize_t maxMalloc = DEFAULT_MAX_MALLOC;
 
 
 static int tiffcvt(TIFF* in, TIFF* out);
@@ -64,11 +74,16 @@ main(int argc, char* argv[])
 {
 	TIFF *in, *out;
 	int c;
+#if !HAVE_DECL_OPTARG
 	extern int optind;
 	extern char *optarg;
+#endif
 
-	while ((c = getopt(argc, argv, "c:r:t:bn8")) != -1)
+	while ((c = getopt(argc, argv, "c:r:t:bn8hM:")) != -1)
 		switch (c) {
+			case 'M':
+				maxMalloc = (tmsize_t)strtoul(optarg, NULL, 0) << 20;
+				break;
 			case 'b':
 				process_by_block = 1;
 				break;
@@ -85,7 +100,7 @@ main(int argc, char* argv[])
 				else if (streq(optarg, "zip"))
 					compression = COMPRESSION_DEFLATE;
 				else
-					usage(-1);
+					usage(EXIT_FAILURE);
 				break;
 
 			case 'r':
@@ -104,17 +119,20 @@ main(int argc, char* argv[])
 				bigtiff_output = 1;
 				break;
 
+			case 'h':
+				usage(EXIT_SUCCESS);
+				/*NOTREACHED*/
 			case '?':
-				usage(0);
+				usage(EXIT_FAILURE);
 				/*NOTREACHED*/
 		}
 
 	if (argc - optind < 2)
-		usage(-1);
+		usage(EXIT_FAILURE);
 
 	out = TIFFOpen(argv[argc-1], bigtiff_output?"w8":"w");
 	if (out == NULL)
-		return (-2);
+		return (EXIT_FAILURE);
 
 	for (; optind < argc-1; optind++) {
 		in = TIFFOpen(argv[optind], "r");
@@ -131,7 +149,7 @@ main(int argc, char* argv[])
 		}
 	}
 	(void) TIFFClose(out);
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
 static int
@@ -144,6 +162,7 @@ cvt_by_tile( TIFF *in, TIFF *out )
     uint32  row, col;
     uint32  *wrk_line;
     int	    ok = 1;
+    uint32  rastersize, wrk_linesize;
 
     TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);
     TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);
@@ -160,7 +179,13 @@ cvt_by_tile( TIFF *in, TIFF *out )
     /*
      * Allocate tile buffer
      */
-    raster = (uint32*)_TIFFmalloc(tile_width * tile_height * sizeof (uint32));
+    rastersize = tile_width * tile_height * sizeof (uint32);
+    if (tile_width != (rastersize / tile_height) / sizeof( uint32))
+    {
+	TIFFError(TIFFFileName(in), "Integer overflow when calculating raster buffer");
+	exit(EXIT_FAILURE);
+    }
+    raster = (uint32*)_TIFFmalloc(rastersize);
     if (raster == 0) {
         TIFFError(TIFFFileName(in), "No space for raster buffer");
         return (0);
@@ -170,7 +195,13 @@ cvt_by_tile( TIFF *in, TIFF *out )
      * Allocate a scanline buffer for swapping during the vertical
      * mirroring pass.
      */
-    wrk_line = (uint32*)_TIFFmalloc(tile_width * sizeof (uint32));
+    wrk_linesize = tile_width * sizeof (uint32);
+    if (tile_width != wrk_linesize / sizeof (uint32))
+    {
+        TIFFError(TIFFFileName(in), "Integer overflow when calculating wrk_line buffer");
+	exit(EXIT_FAILURE);
+    }
+    wrk_line = (uint32*)_TIFFmalloc(wrk_linesize);
     if (!wrk_line) {
         TIFFError(TIFFFileName(in), "No space for raster scanline buffer");
         ok = 0;
@@ -246,6 +277,7 @@ cvt_by_strip( TIFF *in, TIFF *out )
     uint32  row;
     uint32  *wrk_line;
     int	    ok = 1;
+    uint32  rastersize, wrk_linesize;
 
     TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);
     TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);
@@ -260,7 +292,13 @@ cvt_by_strip( TIFF *in, TIFF *out )
     /*
      * Allocate strip buffer
      */
-    raster = (uint32*)_TIFFmalloc(width * rowsperstrip * sizeof (uint32));
+    rastersize = width * rowsperstrip * sizeof (uint32);
+    if (width != (rastersize / rowsperstrip) / sizeof( uint32))
+    {
+	TIFFError(TIFFFileName(in), "Integer overflow when calculating raster buffer");
+	exit(EXIT_FAILURE);
+    }
+    raster = (uint32*)_TIFFmalloc(rastersize);
     if (raster == 0) {
         TIFFError(TIFFFileName(in), "No space for raster buffer");
         return (0);
@@ -270,7 +308,13 @@ cvt_by_strip( TIFF *in, TIFF *out )
      * Allocate a scanline buffer for swapping during the vertical
      * mirroring pass.
      */
-    wrk_line = (uint32*)_TIFFmalloc(width * sizeof (uint32));
+    wrk_linesize = width * sizeof (uint32);
+    if (width != wrk_linesize / sizeof (uint32))
+    {
+        TIFFError(TIFFFileName(in), "Integer overflow when calculating wrk_line buffer");
+	exit(EXIT_FAILURE);
+    }
+    wrk_line = (uint32*)_TIFFmalloc(wrk_linesize);
     if (!wrk_line) {
         TIFFError(TIFFFileName(in), "No space for raster scanline buffer");
         ok = 0;
@@ -366,6 +410,12 @@ cvt_whole_image( TIFF *in, TIFF *out )
         TIFFError(TIFFFileName(in),
 		  "Malformed input file; can't allocate buffer for raster of %lux%lu size",
 		  (unsigned long)width, (unsigned long)height);
+        return 0;
+    }
+    if (maxMalloc != 0 && (tmsize_t)pixel_count * (tmsize_t)sizeof(uint32) > maxMalloc) {
+	TIFFError(TIFFFileName(in),
+		  "Raster size " TIFF_UINT64_FORMAT " over memory limit (" TIFF_UINT64_FORMAT "), try -b option.",
+		  (uint64)pixel_count * sizeof(uint32), (uint64)maxMalloc);
         return 0;
     }
 
@@ -493,6 +543,13 @@ tiffcvt(TIFF* in, TIFF* out)
 	TIFFSetField(out, TIFFTAG_SOFTWARE, TIFFGetVersion());
 	CopyField(TIFFTAG_DOCUMENTNAME, stringv);
 
+	if (maxMalloc != 0 && TIFFStripSize(in) > maxMalloc)
+	{
+		TIFFError(TIFFFileName(in),
+			  "Strip Size " TIFF_UINT64_FORMAT " over memory limit (" TIFF_UINT64_FORMAT ")",
+			  (uint64)TIFFStripSize(in), (uint64)maxMalloc);
+		return 0;
+	}
         if( process_by_block && TIFFIsTiled( in ) )
             return( cvt_by_tile( in, out ) );
         else if( process_by_block )
@@ -501,11 +558,11 @@ tiffcvt(TIFF* in, TIFF* out)
             return( cvt_whole_image( in, out ) );
 }
 
-static char* stuff[] = {
-    "usage: tiff2rgba [-c comp] [-r rows] [-b] [-n] [-8] input... output",
+static const char* stuff[] = {
+    "usage: tiff2rgba [-c comp] [-r rows] [-b] [-n] [-8] [-M size] input... output",
     "where comp is one of the following compression algorithms:",
     " jpeg\t\tJPEG encoding",
-    " zip\t\tLempel-Ziv & Welch encoding",
+    " zip\t\tZip/Deflate encoding",
     " lzw\t\tLempel-Ziv & Welch encoding",
     " packbits\tPackBits encoding",
     " none\t\tno compression",
@@ -514,19 +571,19 @@ static char* stuff[] = {
     " -b (progress by block rather than as a whole image)",
     " -n don't emit alpha component.",
     " -8 write BigTIFF file instead of ClassicTIFF",
+    " -M set the memory allocation limit in MiB. 0 to disable limit",
     NULL
 };
 
 static void
 usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+        fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
+		fprintf(out, "%s\n", stuff[i]);
 	exit(code);
 }
 

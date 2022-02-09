@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
@@ -44,6 +43,9 @@ namespace tracing {
 class TracingServiceTest : public TracingUnitTest {
  public:
   TracingServiceTest() : service_(&perfetto_service_) {}
+
+  TracingServiceTest(const TracingServiceTest&) = delete;
+  TracingServiceTest& operator=(const TracingServiceTest&) = delete;
 
   void SetUp() override {
     TracingUnitTest::SetUp();
@@ -117,8 +119,6 @@ class TracingServiceTest : public TracingUnitTest {
 
   std::unique_ptr<mojo::Receiver<tracing::mojom::TracedProcess>>
       traced_process_receiver_;
-
-  DISALLOW_COPY_AND_ASSIGN(TracingServiceTest);
 };
 
 class TestTracingClient : public mojom::TracingSessionClient {

@@ -62,18 +62,6 @@ public:
                                double scaleX);
 
 
-    // These functions are called by our public methods before and after each
-    // call to DoGetTextExtent(). Derived classes may override them to prepare
-    // for -- possibly several -- subsequent calls to DoGetTextExtent().
-    //
-    // As these calls must be always paired, they're never called directly but
-    // only by our friend MeasuringGuard class.
-    //
-    // NB: They're public only to allow VC6 to compile this code, there doesn't
-    //     seem to be any way to give MeasuringGuard access to them (FIXME-VC6)
-    virtual void BeginMeasuring() { }
-    virtual void EndMeasuring() { }
-
     // This is another method which is only used by MeasuringGuard.
     bool IsUsingDCImpl() const { return m_useDCImpl; }
 
@@ -99,6 +87,16 @@ protected:
     private:
         wxTextMeasureBase& m_tm;
     };
+
+
+    // These functions are called by our public methods before and after each
+    // call to DoGetTextExtent(). Derived classes may override them to prepare
+    // for -- possibly several -- subsequent calls to DoGetTextExtent().
+    //
+    // As these calls must be always paired, they're never called directly but
+    // only by our friend MeasuringGuard class.
+    virtual void BeginMeasuring() { }
+    virtual void EndMeasuring() { }
 
 
     // The main function of this class, to be implemented in platform-specific
@@ -129,6 +127,10 @@ protected:
                            wxCoord *height,
                            wxCoord *descent = NULL,
                            wxCoord *externalLeading = NULL);
+
+    // Get line height: used when the line is empty because CallGetTextExtent()
+    // would just return (0, 0) in this case.
+    int GetEmptyLineHeight();
 
     // Return a valid font: if one was given to us in the ctor, use this one,
     // otherwise use the current font of the associated wxDC or wxWindow.

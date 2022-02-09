@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "gn/args.h"
 #include "gn/label.h"
 #include "gn/scope.h"
@@ -164,7 +163,7 @@ class BuildSettings {
 
   static std::vector<path_mapper> path_map_;
 
-  DISALLOW_ASSIGN(BuildSettings);
+  BuildSettings& operator=(const BuildSettings&) = delete;
 };
 
 #endif  // TOOLS_GN_BUILD_SETTINGS_H_

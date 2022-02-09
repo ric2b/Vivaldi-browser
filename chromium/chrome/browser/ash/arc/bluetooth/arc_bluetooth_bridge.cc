@@ -15,6 +15,9 @@
 #include <string>
 #include <utility>
 
+#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "ash/components/arc/bluetooth/bluetooth_type_converters.h"
+#include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -32,10 +35,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_pairing_dialog.h"
-#include "components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "components/arc/bluetooth/bluetooth_type_converters.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
-#include "components/arc/session/arc_bridge_service.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -1797,13 +1797,16 @@ void ArcBluetoothBridge::WriteGattDescriptor(
       descriptor->GetCharacteristic();
   std::string char_id_str = characteristic->GetIdentifier();
   auto it = notification_session_.find(char_id_str);
-  if (it == notification_session_.end()) {
-    std::move(callback).Run(mojom::BluetoothGattStatus::GATT_FAILURE);
-    return;
+  if (it != notification_session_.end()) {
+    // Stop the previous session while keeping this client registered.
+    it->second.reset();
   }
+  // If notification session does not exist, a write to gatt descriptor will
+  // only enable peer device to notify us, but our clients won't hear the change
+  // events. Though this use case is not typical, we should still allow the API
+  // to succeed since the public API doesn't disallow this
+  // (https://developer.android.com/reference/android/bluetooth/BluetoothGatt#writeDescriptor(android.bluetooth.BluetoothGattDescriptor)).
 
-  // Stop the previous session while keeping this client registered.
-  it->second.reset();
   switch (value->value[0]) {
     case DISABLE_NOTIFICATION_VALUE:
       std::move(callback).Run(mojom::BluetoothGattStatus::GATT_SUCCESS);
@@ -1885,13 +1888,15 @@ void ArcBluetoothBridge::RegisterForGattNotification(
   }
 
   std::string char_id_str = characteristic->GetIdentifier();
-  if (base::Contains(notification_session_, char_id_str)) {
-    // There can be only one notification session per characteristic.
-    std::move(callback).Run(mojom::BluetoothGattStatus::GATT_FAILURE);
-    return;
+  // Create an empty notification session object - which will be fully
+  // instantiated by a future call to WriteGattDescriptor - if one does not yet
+  // exist. Note that the notification session object may have been created as
+  // a result of a previous call to WriteGattDescriptor, which can be left
+  // as-is.
+  if (!base::Contains(notification_session_, char_id_str)) {
+    notification_session_.emplace(char_id_str, nullptr);
   }
 
-  notification_session_.emplace(char_id_str, nullptr);
   std::move(callback).Run(mojom::BluetoothGattStatus::GATT_SUCCESS);
 }
 

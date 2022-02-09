@@ -38,7 +38,7 @@
 #include "third_party/blink/renderer/core/svg/svg_point_tear_off.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/graphics/stroke_data.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 
@@ -115,7 +115,7 @@ bool SVGGeometryElement::isPointInStroke(SVGPointTearOff* point) const {
       PathLengthScaleFactor());
 
   Path path = AsPath();
-  FloatPoint local_point(point->Target()->Value());
+  gfx::PointF local_point = point->Target()->Value();
   if (layout_shape.HasNonScalingStroke()) {
     const AffineTransform transform =
         layout_shape.ComputeNonScalingStrokeTransform();
@@ -185,7 +185,7 @@ SVGPointTearOff* SVGGeometryElement::getPointAtLength(
     if (length > computed_length)
       length = computed_length;
   }
-  FloatPoint point = path.PointAtLength(length);
+  gfx::PointF point = path.PointAtLength(length);
 
   return SVGPointTearOff::CreateDetached(point);
 }

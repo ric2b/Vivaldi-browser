@@ -10,14 +10,14 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/task_runner_util.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
@@ -414,7 +414,7 @@ class ProtocolPerfTest
   std::unique_ptr<SoftwareVideoRenderer> video_renderer_;
   std::unique_ptr<ChromotingClient> client_;
 
-  FakePacketSocketFactory* client_socket_factory_;
+  raw_ptr<FakePacketSocketFactory> client_socket_factory_;
 
   std::unique_ptr<base::RunLoop> connecting_loop_;
   std::unique_ptr<base::RunLoop> waiting_frames_loop_;

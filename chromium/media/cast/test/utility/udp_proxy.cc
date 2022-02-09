@@ -14,7 +14,7 @@
 #include "base/bind.h"
 #include "base/containers/circular_deque.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/rand_util.h"
 #include "base/synchronization/waitable_event.h"
@@ -351,6 +351,9 @@ class InterruptedPoissonProcess::InternalBuffer : public PacketPipe {
   InternalBuffer(base::WeakPtr<InterruptedPoissonProcess> ipp, size_t size)
       : ipp_(ipp), stored_size_(0), stored_limit_(size), clock_(nullptr) {}
 
+  InternalBuffer(const InternalBuffer&) = delete;
+  InternalBuffer& operator=(const InternalBuffer&) = delete;
+
   void Send(std::unique_ptr<Packet> packet) final {
     // Drop if buffer is full.
     if (stored_size_ >= stored_limit_)
@@ -399,10 +402,8 @@ class InterruptedPoissonProcess::InternalBuffer : public PacketPipe {
   const size_t stored_limit_;
   base::circular_deque<std::unique_ptr<Packet>> buffer_;
   base::circular_deque<base::TimeTicks> buffer_time_;
-  const base::TickClock* clock_;
+  raw_ptr<const base::TickClock> clock_;
   base::WeakPtrFactory<InternalBuffer> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(InternalBuffer);
 };
 
 InterruptedPoissonProcess::InterruptedPoissonProcess(
@@ -544,8 +545,8 @@ class PacketSender : public PacketPipe {
   void AppendToPipe(std::unique_ptr<PacketPipe> pipe) final { NOTREACHED(); }
 
  private:
-  UDPProxyImpl* udp_proxy_;
-  const net::IPEndPoint* destination_;  // not owned
+  raw_ptr<UDPProxyImpl> udp_proxy_;
+  raw_ptr<const net::IPEndPoint> destination_;  // not owned
 };
 
 namespace {

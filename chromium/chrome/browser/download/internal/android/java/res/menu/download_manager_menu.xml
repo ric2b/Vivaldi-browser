@@ -44,6 +44,6 @@
             android:icon="@drawable/vivaldi_mobile_trash_24dp"
             android:title="@string/delete"
             app:showAsAction="ifRoom"
-            app:iconTint="@color/vivaldi_light_fg" />
+            app:iconTint="@color/default_icon_color_secondary_tint_list" />
      </group>
 </menu>

@@ -33,11 +33,12 @@ import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer
 
 import {loadTimeData} from '../../i18n_setup.js';
 import {LifetimeBrowserProxyImpl} from '../../lifetime_browser_proxy.js';
-import {Route, RouteObserverBehavior, Router} from '../../router.js';
+import {Route, Router} from '../../router.js';
 import {DeepLinkingBehavior} from '../deep_linking_behavior.m.js';
 import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSearch, recordSettingChange, setUserActionRecorderForTesting} from '../metrics_recorder.m.js';
 import {routes} from '../os_route.m.js';
 import {MainPageBehavior} from '../os_settings_page/main_page_behavior.js';
+import {RouteObserverBehavior} from '../route_observer_behavior.js';
 
 import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, AboutPageUpdateInfo, BrowserChannel, browserChannelToI18nId, ChannelInfo, isTargetChannelMoreStable, RegulatoryInfo, TPMFirmwareUpdateStatusChangedEvent, UpdateStatus, UpdateStatusChangedEvent, VersionInfo} from './about_page_browser_proxy.js';
 
@@ -75,6 +76,17 @@ Polymer({
       type: Boolean,
       value() {
         return loadTimeData.getBoolean('isManaged');
+      },
+    },
+
+    /**
+     * The domain of the organization managing the device.
+     * @private
+     */
+    deviceManager_: {
+      type: String,
+      value() {
+        return loadTimeData.getString('deviceManager');
       },
     },
 
@@ -157,6 +169,12 @@ Polymer({
       }
     },
 
+    /** @protected */
+    showFirmwareUpdatesApp_: {
+      type: Boolean,
+      value: () => loadTimeData.getBoolean('isFirmwareUpdaterAppEnabled'),
+    },
+
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
@@ -211,6 +229,7 @@ Polymer({
         chromeos.settings.mojom.Setting.kReportAnIssue,
         chromeos.settings.mojom.Setting.kTermsOfService,
         chromeos.settings.mojom.Setting.kDiagnostics,
+        chromeos.settings.mojom.Setting.kFirmwareUpdates,
       ]),
     },
   },
@@ -344,6 +363,13 @@ Polymer({
   },
 
   /** @private */
+  onFirmwareUpdatesClick_() {
+    assert(this.showFirmwareUpdatesApp_);
+    this.aboutBrowserProxy_.openFirmwareUpdatesPage();
+    recordSettingChange(chromeos.settings.mojom.Setting.kFirmwareUpdates);
+  },
+
+  /** @private */
   onRelaunchClick_() {
     recordSettingChange();
     LifetimeBrowserProxyImpl.getInstance().relaunch();
@@ -424,7 +450,9 @@ Polymer({
           return this.i18nAdvanced('aboutUpgradeSuccessChannelSwitch');
         }
         if (this.currentUpdateStatusEvent_.rollback) {
-          return this.i18nAdvanced('aboutRollbackSuccess');
+          return this.i18nAdvanced('aboutRollbackSuccess', {
+            substitutions: [this.deviceManager_],
+          });
         }
         return this.i18nAdvanced('aboutUpgradeRelaunch');
       case UpdateStatus.UPDATED:
@@ -444,7 +472,7 @@ Polymer({
         }
         if (this.currentUpdateStatusEvent_.rollback) {
           return this.i18nAdvanced('aboutRollbackInProgress', {
-            substitutions: [progressPercent],
+            substitutions: [this.deviceManager_, progressPercent],
           });
         }
         if (this.currentUpdateStatusEvent_.progress > 0) {
@@ -573,6 +601,7 @@ Polymer({
   onCheckUpdatesClick_() {
     this.onUpdateStatusChanged_({status: UpdateStatus.CHECKING});
     this.aboutBrowserProxy_.requestUpdate();
+    this.$.updateStatusMessageInner.focus();
   },
 
   /**

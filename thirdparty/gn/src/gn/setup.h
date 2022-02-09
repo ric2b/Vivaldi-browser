@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "gn/build_settings.h"
 #include "gn/builder.h"
 #include "gn/label_pattern.h"
@@ -59,9 +58,9 @@ class Setup {
 
   // Same as DoSetup() but used for tests to capture error output.
   bool DoSetupWithErr(const std::string& build_dir,
-               bool force_create,
-               const base::CommandLine& cmdline,
-               Err* err);
+                      bool force_create,
+                      const base::CommandLine& cmdline,
+                      Err* err);
 
   // Runs the load, returning true on success. On failure, prints the error
   // and returns false. This includes both RunPreMessageLoop() and
@@ -208,7 +207,8 @@ class Setup {
   std::vector<Token> args_tokens_;
   std::unique_ptr<ParseNode> args_root_;
 
-  DISALLOW_COPY_AND_ASSIGN(Setup);
+  Setup(const Setup&) = delete;
+  Setup& operator=(const Setup&) = delete;
 };
 
 #endif  // TOOLS_GN_SETUP_H_

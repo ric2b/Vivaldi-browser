@@ -44,12 +44,15 @@
 //   "depfile : "file name for action input dependencies",
 //   "outputs" : [ list of target outputs ],
 //   "arflags", "asmflags", "cflags", "cflags_c",
-//   "clfags_cc", "cflags_objc", "clfags_objcc" : [ list of flags],
+//   "cflags_cc", "cflags_objc", "cflags_objcc",
+//   "rustflags" : [ list of flags],
+//   "rustenv" : [ list of Rust environment variables ],
 //   "defines" : [ list of preprocessor definitions ],
 //   "include_dirs" : [ list of include directories ],
 //   "precompiled_header" : "name of precompiled header file",
 //   "precompiled_source" : "path to precompiled source",
 //   "deps : [ list of target dependencies ],
+//   "gen_deps : [ list of generate dependencies ],
 //   "libs" : [ list of libraries ],
 //   "lib_dirs" : [ list of library directories ]
 //   "metadata" : [ dictionary of target metadata values ]
@@ -95,20 +98,16 @@ std::string FormatSourceDir(const SourceDir& dir) {
   return dir.value();
 }
 
-void RecursiveCollectChildDeps(const Target* target,
-                               std::set<const Target*>* result);
+void RecursiveCollectChildDeps(const Target* target, TargetSet* result);
 
-void RecursiveCollectDeps(const Target* target,
-                          std::set<const Target*>* result) {
-  if (result->find(target) != result->end())
+void RecursiveCollectDeps(const Target* target, TargetSet* result) {
+  if (!result->add(target))
     return;  // Already did this target.
-  result->insert(target);
 
   RecursiveCollectChildDeps(target, result);
 }
 
-void RecursiveCollectChildDeps(const Target* target,
-                               std::set<const Target*>* result) {
+void RecursiveCollectChildDeps(const Target* target, TargetSet* result) {
   for (const auto& pair : target->GetDeps(Target::DEPS_ALL))
     RecursiveCollectDeps(pair.ptr, result);
 }
@@ -491,26 +490,41 @@ class TargetDescBuilder : public BaseDescBuilder {
       FillInBundle(res.get());
 
     if (is_binary_output) {
-#define CONFIG_VALUE_ARRAY_HANDLER(name, type)                    \
-  if (what(#name)) {                                              \
-    ValuePtr ptr = RenderConfigValues<type>(&ConfigValues::name); \
-    if (ptr) {                                                    \
-      res->SetWithoutPathExpansion(#name, std::move(ptr));        \
-    }                                                             \
+#define CONFIG_VALUE_ARRAY_HANDLER(name, type, config)                    \
+  if (what(#name)) {                                                      \
+    ValuePtr ptr = RenderConfigValues<type>(config, &ConfigValues::name); \
+    if (ptr) {                                                            \
+      res->SetWithoutPathExpansion(#name, std::move(ptr));                \
+    }                                                                     \
   }
-      CONFIG_VALUE_ARRAY_HANDLER(arflags, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(asmflags, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(cflags, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(cflags_c, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(cflags_cc, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(cflags_objc, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(cflags_objcc, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(rustflags, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(defines, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(include_dirs, SourceDir)
-      CONFIG_VALUE_ARRAY_HANDLER(inputs, SourceFile)
-      CONFIG_VALUE_ARRAY_HANDLER(ldflags, std::string)
-      CONFIG_VALUE_ARRAY_HANDLER(swiftflags, std::string)
+      CONFIG_VALUE_ARRAY_HANDLER(arflags, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(asmflags, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(cflags, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(cflags_c, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(cflags_cc, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(cflags_objc, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(cflags_objcc, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(rustflags, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(rustenv, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(defines, std::string,
+                                 kRecursiveWriterSkipDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(include_dirs, SourceDir,
+                                 kRecursiveWriterSkipDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(inputs, SourceFile,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(ldflags, std::string,
+                                 kRecursiveWriterKeepDuplicates)
+      CONFIG_VALUE_ARRAY_HANDLER(swiftflags, std::string,
+                                 kRecursiveWriterKeepDuplicates)
 #undef CONFIG_VALUE_ARRAY_HANDLER
 
       // Libs and lib_dirs are handled specially below.
@@ -556,6 +570,9 @@ class TargetDescBuilder : public BaseDescBuilder {
     if (what(variables::kDeps))
       res->SetWithoutPathExpansion(variables::kDeps, RenderDeps());
 
+    if (what(variables::kGenDeps) && !target_->gen_deps().empty())
+      res->SetWithoutPathExpansion(variables::kGenDeps, RenderGenDeps());
+
     // Runtime deps are special, print only when explicitly asked for and not in
     // overview mode.
     if (what_.find("runtime_deps") != what_.end())
@@ -568,7 +585,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     // Libs can be part of any target and get recursively pushed up the chain,
     // so display them regardless of target type.
     if (what(variables::kLibs)) {
-      const OrderedSet<LibFile>& all_libs = target_->all_libs();
+      const UniqueVector<LibFile>& all_libs = target_->all_libs();
       if (!all_libs.empty()) {
         auto libs = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < all_libs.size(); i++)
@@ -578,7 +595,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     }
 
     if (what(variables::kLibDirs)) {
-      const OrderedSet<SourceDir>& all_lib_dirs = target_->all_lib_dirs();
+      const UniqueVector<SourceDir>& all_lib_dirs = target_->all_lib_dirs();
       if (!all_lib_dirs.empty()) {
         auto lib_dirs = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < all_lib_dirs.size(); i++)
@@ -629,7 +646,7 @@ class TargetDescBuilder : public BaseDescBuilder {
   // set is null, all dependencies will be printed.
   void RecursivePrintDeps(base::ListValue* out,
                           const Target* target,
-                          std::set<const Target*>* seen_targets,
+                          TargetSet* seen_targets,
                           int indent_level) {
     // Combine all deps into one sorted list.
     std::vector<LabelTargetPair> sorted_deps;
@@ -646,10 +663,7 @@ class TargetDescBuilder : public BaseDescBuilder {
 
       bool print_children = true;
       if (seen_targets) {
-        if (seen_targets->find(cur_dep) == seen_targets->end()) {
-          // New target, mark it visited.
-          seen_targets->insert(cur_dep);
-        } else {
+        if (!seen_targets->add(cur_dep)) {
           // Already seen.
           print_children = false;
           // Only print "..." if something is actually elided, which means that
@@ -677,7 +691,7 @@ class TargetDescBuilder : public BaseDescBuilder {
         RecursivePrintDeps(res.get(), target_, nullptr, 0);
       } else {
         // Don't recurse into duplicates.
-        std::set<const Target*> seen_targets;
+        TargetSet seen_targets;
         RecursivePrintDeps(res.get(), target_, &seen_targets, 0);
       }
     } else {  // not tree
@@ -685,7 +699,7 @@ class TargetDescBuilder : public BaseDescBuilder {
       // Collect the deps to display.
       if (all_) {
         // Show all dependencies.
-        std::set<const Target*> all_deps;
+        TargetSet all_deps;
         RecursiveCollectChildDeps(target_, &all_deps);
         commands::FilterAndPrintTargetSet(all_deps, res.get());
       } else {
@@ -698,6 +712,18 @@ class TargetDescBuilder : public BaseDescBuilder {
       }
     }
 
+    return std::move(res);
+  }
+
+  ValuePtr RenderGenDeps() {
+    auto res = std::make_unique<base::ListValue>();
+    Label default_tc = target_->settings()->default_toolchain_label();
+    std::vector<std::string> gen_deps;
+    for (const auto& pair : target_->gen_deps())
+      gen_deps.push_back(pair.label.GetUserVisibleName(default_tc));
+    std::sort(gen_deps.begin(), gen_deps.end());
+    for (const auto& dep : gen_deps)
+      res->AppendString(dep);
     return std::move(res);
   }
 
@@ -814,8 +840,10 @@ class TargetDescBuilder : public BaseDescBuilder {
   // attribution.
   // This should match RecursiveTargetConfigToStream in the order it traverses.
   template <class T>
-  ValuePtr RenderConfigValues(const std::vector<T>& (ConfigValues::*getter)()
+  ValuePtr RenderConfigValues(RecursiveWriterConfig writer_config,
+                              const std::vector<T>& (ConfigValues::*getter)()
                                   const) {
+    std::set<T> seen;
     auto res = std::make_unique<base::ListValue>();
     for (ConfigValuesIterator iter(target_); !iter.done(); iter.Next()) {
       const std::vector<T>& vec = (iter.cur().*getter)();
@@ -844,7 +872,24 @@ class TargetDescBuilder : public BaseDescBuilder {
         }
       }
 
+      // If blame is on, then do not de-dup across configs.
+      if (blame_)
+        seen.clear();
+
       for (const T& val : vec) {
+        switch (writer_config) {
+          case kRecursiveWriterKeepDuplicates:
+            break;
+
+          case kRecursiveWriterSkipDuplicates: {
+            if (seen.find(val) != seen.end())
+              continue;
+
+            seen.insert(val);
+            break;
+          }
+        }
+
         ValuePtr rendered = RenderValue(val);
         std::string str;
         // Indent string values in blame mode

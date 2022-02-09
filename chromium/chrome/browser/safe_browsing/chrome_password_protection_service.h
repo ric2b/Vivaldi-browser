@@ -10,6 +10,7 @@
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -26,6 +27,7 @@
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
 #include "components/safe_browsing/content/browser/triggers/trigger_manager.h"
+#include "components/safe_browsing/core/browser/user_population.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sync/protocol/gaia_password_reuse.pb.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
@@ -292,6 +294,9 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
   // Gets |account_info_| based on |profile_|.
   AccountInfo GetAccountInfo() const override;
 
+  // Gets the UserPopulation value for this profile.
+  ChromeUserPopulation::UserPopulation GetUserPopulationPref() const override;
+
   // KeyedService:
   // Called before the actual deletion of the object.
   void Shutdown() override;
@@ -548,9 +553,9 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
       const password_manager::MatchingReusedCredential& reused_credential);
 
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
-  TriggerManager* trigger_manager_;
+  raw_ptr<TriggerManager> trigger_manager_;
   // Profile associated with this instance.
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
   // Current sync password hash.
   std::string sync_password_hash_;
   base::ObserverList<Observer>::Unchecked observer_list_;
@@ -563,7 +568,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
   base::CallbackListSubscription hash_password_manager_subscription_;
 
   // Reference to the current profile's VerdictCacheManager. This is unowned.
-  VerdictCacheManager* cache_manager_;
+  raw_ptr<VerdictCacheManager> cache_manager_;
 
   // Schedules the next time to log the PasswordCaptured event.
   base::OneShotTimer log_password_capture_timer_;
@@ -580,7 +585,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
   bool bypass_probability_for_tests_ = false;
 
   // Can be set for testing.
-  base::Clock* clock_;
+  raw_ptr<base::Clock> clock_;
 
   // Used to inject a different password hash, for testing. It's done as a
   // member callback rather than a virtual function because it's needed in the

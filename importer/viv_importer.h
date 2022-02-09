@@ -19,6 +19,7 @@ struct PasswordForm;
 
 namespace viv_importer {
 void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles);
+void DetectThunderbirdProfiles(std::vector<importer::SourceProfile>* profiles);
 }
 
 class OperaImporter : public Importer {

@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "components/services/app_service/public/cpp/icon_types.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -106,7 +107,7 @@ void LacrosExtensionAppsController::GetMenuModel(
 
 void LacrosExtensionAppsController::LoadIcon(const std::string& app_id,
                                              apps::mojom::IconKeyPtr icon_key,
-                                             apps::mojom::IconType icon_type,
+                                             apps::IconType icon_type,
                                              int32_t size_hint_in_dip,
                                              LoadIconCallback callback) {
   Profile* profile = nullptr;
@@ -122,7 +123,7 @@ void LacrosExtensionAppsController::LoadIcon(const std::string& app_id,
   }
 
   // On failure, we still run the callback, with the zero IconValue.
-  std::move(callback).Run(apps::mojom::IconValue::New());
+  std::move(callback).Run(std::make_unique<apps::IconValue>());
 }
 
 void LacrosExtensionAppsController::OpenNativeSettings(
@@ -181,18 +182,9 @@ void LacrosExtensionAppsController::Launch(
     return;
   }
 
-  apps::mojom::IntentPtr intent = apps::mojom::Intent::New();
-  if (launch_params->intent) {
-    intent = apps_util::ConvertCrosapiToAppServiceIntent(launch_params->intent,
-                                                         profile);
-  }
+  auto params = apps::ConvertCrosapiToLaunchParams(launch_params, profile);
+  params.app_id = extension->id();
 
-  extensions::LaunchContainer launch_container = extensions::GetLaunchContainer(
-      extensions::ExtensionPrefs::Get(profile), extension);
-  auto params = apps::CreateAppLaunchParamsForIntent(
-      extension->id(), ui::EF_NONE,
-      apps::GetAppLaunchSource(launch_params->launch_source),
-      display::kInvalidDisplayId, launch_container, std::move(intent));
   OpenApplication(profile, std::move(params));
 
   // TODO(https://crbug.com/1225848): Store the resulting instance token, which
@@ -223,6 +215,12 @@ void LacrosExtensionAppsController::StopApp(const std::string& app_id) {
            extension->id())) {
     app_window->GetBaseWindow()->Close();
   }
+}
+
+void LacrosExtensionAppsController::SetPermission(
+    const std::string& app_id,
+    apps::mojom::PermissionPtr permission) {
+  NOTIMPLEMENTED();
 }
 
 void LacrosExtensionAppsController::FinishedEnableFlow(

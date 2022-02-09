@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/writable_shared_memory_region.h"
 #include "base/threading/thread_restrictions.h"
@@ -356,7 +357,7 @@ class SynchronousCompositorHost::ScopedSendZeroMemory {
   ~ScopedSendZeroMemory() { host_->SendZeroMemory(); }
 
  private:
-  SynchronousCompositorHost* const host_;
+  const raw_ptr<SynchronousCompositorHost> host_;
 };
 
 struct SynchronousCompositorHost::SharedMemoryWithSize {
@@ -367,8 +368,8 @@ struct SynchronousCompositorHost::SharedMemoryWithSize {
   SharedMemoryWithSize(size_t stride, size_t buffer_size)
       : stride(stride), buffer_size(buffer_size) {}
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(SharedMemoryWithSize);
+  SharedMemoryWithSize(const SharedMemoryWithSize&) = delete;
+  SharedMemoryWithSize& operator=(const SharedMemoryWithSize&) = delete;
 };
 
 bool SynchronousCompositorHost::DemandDrawSw(SkCanvas* canvas,
@@ -531,7 +532,7 @@ void SynchronousCompositorHost::SetMemoryPolicy(size_t bytes_limit) {
 }
 
 void SynchronousCompositorHost::DidChangeRootLayerScrollOffset(
-    const gfx::Vector2dF& root_offset) {
+    const gfx::PointF& root_offset) {
   if (root_scroll_offset_ == root_offset)
     return;
   root_scroll_offset_ = root_offset;

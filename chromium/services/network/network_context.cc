@@ -16,15 +16,16 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/dcheck_is_on.h"
 #include "base/feature_list.h"
+#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -84,7 +85,6 @@
 #include "services/network/network_service.h"
 #include "services/network/network_service_network_delegate.h"
 #include "services/network/network_service_proxy_delegate.h"
-#include "services/network/p2p/socket_manager.h"
 #include "services/network/proxy_config_service_mojo.h"
 #include "services/network/proxy_lookup_request.h"
 #include "services/network/proxy_resolving_socket_factory_mojo.h"
@@ -95,7 +95,7 @@
 #include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom.h"
-#include "services/network/public/mojom/reporting_report.mojom.h"
+#include "services/network/public/mojom/reporting_service.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/resolve_host_request.h"
@@ -129,6 +129,7 @@
 #include "services/network/ct_log_list_distributor.h"
 #include "services/network/expect_ct_reporter.h"
 #include "services/network/sct_auditing/sct_auditing_cache.h"
+#include "services/network/sct_auditing/sct_auditing_handler.h"
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -151,6 +152,10 @@
 #if BUILDFLAG(ENABLE_MDNS)
 #include "services/network/mdns_responder.h"
 #endif  // BUILDFLAG(ENABLE_MDNS)
+
+#if BUILDFLAG(IS_P2P_ENABLED)
+#include "services/network/p2p/socket_manager.h"
+#endif
 
 #if defined(OS_ANDROID)
 #include "base/android/application_status_listener.h"
@@ -367,7 +372,7 @@ void SCTAuditingDelegate::MaybeEnqueueReport(
 bool SCTAuditingDelegate::IsSCTAuditingEnabled() {
   if (!context_)
     return false;
-  return context_->is_sct_auditing_enabled();
+  return context_->sct_auditing_handler()->is_enabled();
 }
 
 // Filters `log_list` for disqualified or Google-operated logs,
@@ -376,17 +381,25 @@ bool SCTAuditingDelegate::IsSCTAuditingEnabled() {
 void GetCTPolicyConfigForCTLogInfo(
     const std::vector<mojom::CTLogInfoPtr>& log_list,
     std::vector<std::pair<std::string, base::TimeDelta>>* disqualified_logs,
-    std::vector<std::string>* operated_by_google_logs) {
+    std::vector<std::string>* operated_by_google_logs,
+    std::map<std::string, certificate_transparency::OperatorHistoryEntry>*
+        operator_history) {
   for (const auto& log : log_list) {
+    std::string log_id = crypto::SHA256HashString(log->public_key);
     if (log->operated_by_google || log->disqualified_at) {
-      std::string log_id = crypto::SHA256HashString(log->public_key);
       if (log->operated_by_google)
         operated_by_google_logs->push_back(log_id);
       if (log->disqualified_at) {
-        disqualified_logs->emplace_back(std::move(log_id),
-                                        log->disqualified_at.value());
+        disqualified_logs->emplace_back(log_id, log->disqualified_at.value());
       }
     }
+    certificate_transparency::OperatorHistoryEntry entry;
+    entry.current_operator_ = log->current_operator;
+    for (const auto& previous_operator : log->previous_operators) {
+      entry.previous_operators_.emplace_back(previous_operator->name,
+                                             previous_operator->end_time);
+    }
+    (*operator_history)[log_id] = entry;
   }
 
   std::sort(std::begin(*operated_by_google_logs),
@@ -443,7 +456,9 @@ NetworkContext::NetworkContext(
           std::make_unique<NetworkContextApplicationStatusListener>()),
 #endif
       receiver_(this, std::move(receiver)),
-      cors_preflight_controller_(network_service) {
+      cors_preflight_controller_(network_service),
+      cors_non_wildcard_request_headers_support_(base::FeatureList::IsEnabled(
+          features::kCorsNonWildcardRequestHeadersSupport)) {
 #if defined(OS_WIN) && DCHECK_IS_ON()
   if (params_->file_paths) {
     DCHECK(params_->win_permissions_set)
@@ -500,7 +515,7 @@ NetworkContext::NetworkContext(
 #if BUILDFLAG(IS_CT_SUPPORTED)
   if (params_->ct_policy)
     SetCTPolicy(std::move(params_->ct_policy));
-  SetSCTAuditingEnabled(params_->enable_sct_auditing);
+  sct_auditing_handler()->SetEnabled(params_->enable_sct_auditing);
 #endif
 
 #if defined(OS_ANDROID)
@@ -1065,12 +1080,27 @@ void NetworkContext::AddReportingApiObserver(
     for (const auto* service_report : service_reports) {
       reporting_api_observers_.Get(id)->OnReportAdded(*service_report);
     }
+
+    base::flat_map<url::Origin, std::vector<net::ReportingEndpoint>>
+        endpoints_by_origin = url_request_context()
+                                  ->reporting_service()
+                                  ->GetV1ReportingEndpointsByOrigin();
+    for (auto const& origin_and_endpoints : endpoints_by_origin) {
+      OnEndpointsUpdatedForOrigin(origin_and_endpoints.second);
+    }
   }
 }
 
 void NetworkContext::OnReportAdded(const net::ReportingReport* service_report) {
   for (const auto& observer : reporting_api_observers_) {
     observer->OnReportAdded(*service_report);
+  }
+}
+
+void NetworkContext::OnEndpointsUpdatedForOrigin(
+    const std::vector<net::ReportingEndpoint>& endpoints) {
+  for (const auto& observer : reporting_api_observers_) {
+    observer->OnEndpointsUpdatedForOrigin(endpoints);
   }
 }
 
@@ -1373,15 +1403,15 @@ void NetworkContext::MaybeEnqueueSCTReport(
     const net::X509Certificate* validated_certificate_chain,
     const net::SignedCertificateTimestampAndStatusList&
         signed_certificate_timestamps) {
-  if (!this->is_sct_auditing_enabled())
+  if (!sct_auditing_handler()->is_enabled())
     return;
   network_service()->sct_auditing_cache()->MaybeEnqueueReport(
-      host_port_pair, validated_certificate_chain,
+      this, host_port_pair, validated_certificate_chain,
       signed_certificate_timestamps);
 }
 
 void NetworkContext::SetSCTAuditingEnabled(bool enabled) {
-  is_sct_auditing_enabled_ = enabled;
+  sct_auditing_handler()->SetEnabled(enabled);
 }
 
 void NetworkContext::OnCTLogListUpdated(
@@ -1391,11 +1421,14 @@ void NetworkContext::OnCTLogListUpdated(
     return;
   std::vector<std::pair<std::string, base::TimeDelta>> disqualified_logs;
   std::vector<std::string> operated_by_google_logs;
+  std::map<std::string, certificate_transparency::OperatorHistoryEntry>
+      log_operator_history;
   GetCTPolicyConfigForCTLogInfo(log_list, &disqualified_logs,
-                                &operated_by_google_logs);
-  ct_policy_enforcer_->UpdateCTLogList(update_time,
-                                       std::move(disqualified_logs),
-                                       std::move(operated_by_google_logs));
+                                &operated_by_google_logs,
+                                &log_operator_history);
+  ct_policy_enforcer_->UpdateCTLogList(
+      update_time, std::move(disqualified_logs),
+      std::move(operated_by_google_logs), std::move(log_operator_history));
 }
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
@@ -1833,6 +1866,7 @@ void NetworkContext::PreconnectSockets(
       base::saturated_cast<int32_t>(num_streams), request_info);
 }
 
+#if BUILDFLAG(IS_P2P_ENABLED)
 void NetworkContext::CreateP2PSocketManager(
     const net::NetworkIsolationKey& network_isolation_key,
     mojo::PendingRemote<mojom::P2PTrustedSocketManagerClient> client,
@@ -1848,6 +1882,7 @@ void NetworkContext::CreateP2PSocketManager(
           url_request_context_);
   socket_managers_[socket_manager.get()] = std::move(socket_manager);
 }
+#endif  // BUILDFLAG(IS_P2P_ENABLED)
 
 void NetworkContext::CreateMdnsResponder(
     mojo::PendingReceiver<mojom::MdnsResponder> responder_receiver) {
@@ -1924,12 +1959,23 @@ void NetworkContext::AddAuthCacheEntry(
           ->GetSession()
           ->http_auth_cache();
   http_auth_cache->Add(
-      challenge.challenger.GetURL(),
+      // TODO(https://crbug.com/): Convert AuthCredentials::challenger field to
+      // a SchemeHostPort.
+      challenge.challenger.GetTupleOrPrecursorTupleIfOpaque(),
       challenge.is_proxy ? net::HttpAuth::AUTH_PROXY
                          : net::HttpAuth::AUTH_SERVER,
       challenge.realm, net::HttpAuth::StringToScheme(challenge.scheme),
       network_isolation_key, challenge.challenge, credentials, challenge.path);
   std::move(callback).Run();
+}
+
+void NetworkContext::SetCorsNonWildcardRequestHeadersSupport(bool value) {
+  if (!base::FeatureList::IsEnabled(
+          features::kCorsNonWildcardRequestHeadersSupport)) {
+    return;
+  }
+  cors_non_wildcard_request_headers_support_ =
+      cors::NonWildcardRequestHeadersSupport(value);
 }
 
 void NetworkContext::LookupServerBasicAuthCredentials(
@@ -1940,9 +1986,9 @@ void NetworkContext::LookupServerBasicAuthCredentials(
       url_request_context_->http_transaction_factory()
           ->GetSession()
           ->http_auth_cache();
-  net::HttpAuthCache::Entry* entry =
-      http_auth_cache->LookupByPath(url.GetOrigin(), net::HttpAuth::AUTH_SERVER,
-                                    network_isolation_key, url.path());
+  net::HttpAuthCache::Entry* entry = http_auth_cache->LookupByPath(
+      url::SchemeHostPort(url), net::HttpAuth::AUTH_SERVER,
+      network_isolation_key, url.path());
   if (entry && entry->scheme() == net::HttpAuth::AUTH_SCHEME_BASIC)
     std::move(callback).Run(entry->credentials());
   else
@@ -1969,8 +2015,9 @@ void NetworkContext::LookupProxyAuthCredentials(
   // lossy conversion, shouldn't do this.
   const char* scheme =
       proxy_server.is_secure_http_like() ? "https://" : "http://";
-  GURL proxy_url(scheme + proxy_server.host_port_pair().ToString());
-  if (!proxy_url.is_valid()) {
+  url::SchemeHostPort scheme_host_port(
+      GURL(scheme + proxy_server.host_port_pair().ToString()));
+  if (!scheme_host_port.IsValid()) {
     std::move(callback).Run(absl::nullopt);
     return;
   }
@@ -1978,8 +2025,8 @@ void NetworkContext::LookupProxyAuthCredentials(
   //  Unlike server credentials, proxy credentials are not keyed on
   //  NetworkIsolationKey.
   net::HttpAuthCache::Entry* entry =
-      http_auth_cache->Lookup(proxy_url, net::HttpAuth::AUTH_PROXY, realm,
-                              net_scheme, net::NetworkIsolationKey());
+      http_auth_cache->Lookup(scheme_host_port, net::HttpAuth::AUTH_PROXY,
+                              realm, net_scheme, net::NetworkIsolationKey());
   if (entry)
     std::move(callback).Run(entry->credentials());
   else
@@ -2097,12 +2144,16 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
   if (params_->enforce_chrome_ct_policy) {
     std::vector<std::pair<std::string, base::TimeDelta>> disqualified_logs;
     std::vector<std::string> operated_by_google_logs;
+    std::map<std::string, certificate_transparency::OperatorHistoryEntry>
+        log_operator_history;
     GetCTPolicyConfigForCTLogInfo(network_service_->log_list(),
-                                  &disqualified_logs, &operated_by_google_logs);
+                                  &disqualified_logs, &operated_by_google_logs,
+                                  &log_operator_history);
     auto ct_policy_enforcer =
         std::make_unique<certificate_transparency::ChromeCTPolicyEnforcer>(
             network_service_->ct_log_list_update_time(),
-            std::move(disqualified_logs), std::move(operated_by_google_logs));
+            std::move(disqualified_logs), std::move(operated_by_google_logs),
+            std::move(log_operator_history));
     ct_policy_enforcer_ = ct_policy_enforcer.get();
     builder.set_ct_policy_enforcer(std::move(ct_policy_enforcer));
   }
@@ -2190,6 +2241,12 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     builder.SetMojoProxyResolverFactory(
         std::move(params_->proxy_resolver_factory));
   }
+
+#if defined(OS_WIN)
+  if (params_->windows_system_proxy_resolver) {
+    // TODO(https://crbug.com/1032820): Connect to proxy_resolver_win service.
+  }
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (params_->dhcp_wpad_url_client) {
@@ -2556,11 +2613,13 @@ GURL NetworkContext::GetHSTSRedirect(const GURL& original_url) {
   return original_url.ReplaceComponents(replacements);
 }
 
+#if BUILDFLAG(IS_P2P_ENABLED)
 void NetworkContext::DestroySocketManager(P2PSocketManager* socket_manager) {
   auto iter = socket_managers_.find(socket_manager);
   DCHECK(iter != socket_managers_.end());
   socket_managers_.erase(iter);
 }
+#endif  // BUILDFLAG(IS_P2P_ENABLED)
 
 void NetworkContext::CanUploadDomainReliability(
     const GURL& origin,

@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/label.h"
 #include "gn/label_ptr.h"
 #include "gn/substitution_list.h"
@@ -40,7 +39,8 @@ class GeneralTool : public Tool {
   const GeneralTool* AsGeneral() const override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(GeneralTool);
+  GeneralTool(const GeneralTool&) = delete;
+  GeneralTool& operator=(const GeneralTool&) = delete;
 };
 
 #endif  // TOOLS_GN_GENERAL_TOOL_H_

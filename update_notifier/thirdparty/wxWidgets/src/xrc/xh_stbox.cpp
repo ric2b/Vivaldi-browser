@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_XRC && wxUSE_STATBOX
 
@@ -22,7 +19,7 @@
     #include "wx/statbox.h"
 #endif
 
-IMPLEMENT_DYNAMIC_CLASS(wxStaticBoxXmlHandler, wxXmlResourceHandler)
+wxIMPLEMENT_DYNAMIC_CLASS(wxStaticBoxXmlHandler, wxXmlResourceHandler);
 
 wxStaticBoxXmlHandler::wxStaticBoxXmlHandler()
                       :wxXmlResourceHandler()

@@ -6,6 +6,7 @@
 
 #include "ui/vivaldi_browser_window.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -86,6 +87,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/devtools/devtools_connector.h"
 //#include "ui/gfx/geometry/rect.h"
+#include "ui/display/screen.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/vivaldi_location_bar.h"
 #include "ui/vivaldi_native_app_window_views.h"
@@ -171,9 +173,7 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
     Browser* browser,
     content::RenderFrameHost* creator_frame,
     const GURL& app_url) {
-  // NOTE(andre@vivaldi.com) : We cannot use incognito profiles for the
-  // webcontents in the ui if we are doing portals.
-  Profile* profile = browser->profile()->GetOriginalProfile();
+  Profile* profile = browser->profile();
   scoped_refptr<content::SiteInstance> site_instance =
       content::SiteInstance::CreateForURL(profile, app_url);
 
@@ -278,8 +278,12 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
     std::unique_ptr<Browser> browser) {
   DCHECK(browser);
 
+  gfx::Size display_size =
+      display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
+
   VivaldiBrowserWindowParams params;
-  params.minimum_size = gfx::Size(500, 300);
+  params.minimum_size = gfx::Size(std::min(500, display_size.width()),
+                                  std::min(300, display_size.height()));
   params.native_decorations = browser->profile()->GetPrefs()->GetBoolean(
       vivaldiprefs::kWindowsUseNativeDecoration);
   chrome::GetSavedWindowBoundsAndShowState(
@@ -389,7 +393,7 @@ void VivaldiBrowserWindow::CreateWebContents(
   // base::Unretained() is safe as this owns the timer.
   show_delay_timeout_ = std::make_unique<base::OneShotTimer>();
   show_delay_timeout_->Start(
-      FROM_HERE, base::TimeDelta::FromMilliseconds(5000),
+      FROM_HERE, base::Milliseconds(5000),
       base::BindOnce(&VivaldiBrowserWindow::ForceShow, base::Unretained(this)));
 
   GURL resource_url = extension_->GetResourceURL(params.resource_relative_url);
@@ -823,6 +827,7 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
           nullptr, anchor_rect, GetNativeWindow(), web_contents, url,
+          base::DoNothing(),
           // Use a simple lambda for the callback. We do not do anything there.
           base::BindOnce([](views::Widget::ClosedReason closed_reason,
                             bool reload_prompt) {}));
@@ -1198,6 +1203,10 @@ bool VivaldiBrowserWindow::DoBrowserControlsShrinkRendererSize(
 }
 
 ui::NativeTheme* VivaldiBrowserWindow::GetNativeTheme() {
+  return nullptr;
+}
+
+const ui::ColorProvider* VivaldiBrowserWindow::GetColorProvider() const {
   return nullptr;
 }
 

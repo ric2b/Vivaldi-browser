@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/threading/thread.h"
 #include "chromeos/services/libassistant/grpc/async_service_driver.h"
 #include "third_party/grpc/src/include/grpcpp/completion_queue.h"
@@ -46,7 +45,10 @@ class ServicesInitializerBase {
   void ScanCQInternal();
 
   std::unique_ptr<grpc::ServerCompletionQueue> cq_;
-  std::vector<std::unique_ptr<AsyncServiceDriver>> service_drivers_;
+
+  // Drivers are owned by the subclass that creates them, e.g.
+  // `GrpcServicesInitializer`.
+  std::vector<AsyncServiceDriver*> service_drivers_;
 
   // Use a dedicated thread to poll completion queue. Will also responsible
   // for cleaning up the tags returned by calling cq_->Next() after they are

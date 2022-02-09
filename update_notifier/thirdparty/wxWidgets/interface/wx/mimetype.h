@@ -10,11 +10,11 @@
 
     This class allows the application to retrieve information about all known
     MIME types from a system-specific location and the filename extensions to the
-    MIME types and vice versa. 
-    
+    MIME types and vice versa.
+
     MIME stands for "Multipurpose Internet Mail Extensions" and was originally
     used in mail protocols. It's standardized by several RFCs.
-    
+
     Under Windows, the MIME type information is queried from registry.
     Under Linux and Unix, it is queried from the XDG data directories.
 
@@ -23,7 +23,7 @@
     The application should not construct its own manager: it should use the
     object pointer ::wxTheMimeTypesManager.
     The functions GetFileTypeFromMimeType() and GetFileTypeFromExtension()
-    return a wxFileType object which may be further queried for file description, 
+    return a wxFileType object which may be further queried for file description,
     icon and other attributes.
 
     @section mimetypemanager_helpers Helper functions
@@ -92,7 +92,7 @@ public:
         @a wildcard is '*'. Note that the '*' wildcard is not allowed in
         @a mimeType itself.
 
-        The comparison don by this function is case insensitive so it is not
+        The comparison done by this function is case insensitive so it is not
         necessary to convert the strings to the same case before calling it.
     */
     static bool IsOfType(const wxString& mimeType, const wxString& wildcard);
@@ -376,6 +376,22 @@ public:
     bool GetPrintCommand(wxString* command,
                          const MessageParameters& params) const;
 
+
+    /**
+        The returned string is the command to be executed in order to
+        open/print/edit the file of the given type.
+
+        If the string is empty, the lookup for the @a verb failed.
+
+        The name of the file is retrieved from the MessageParameters class.
+
+        @see wxExecute()
+
+        @since 3.1.1
+    */
+    wxString GetExpandedCommand(const wxString& verb,
+                                const wxFileType::MessageParameters& params) const;
+
     /**
        Returns the number of commands for this mime type, and fills the verbs
        and commands arrays with the command information.
@@ -429,9 +445,9 @@ public:
                    const wxString& description,
                    const wxString& extension,
                    ...);
-    
+
     /**
-       Constuctor using an array of string elements corresponding to the
+       Constructor using an array of string elements corresponding to the
        parameters of the ctor above in the same order.
     */
     wxFileTypeInfo(const wxArrayString& sArray);
@@ -481,7 +497,7 @@ public:
        Get the MIME type
     */
     const wxString& GetMimeType() const;
-    
+
     /**
        Get the open command
     */
@@ -491,17 +507,17 @@ public:
        Get the print command
     */
     const wxString& GetPrintCommand() const;
-    
+
     /**
        Get the short description (only used under Win32 so far)
     */
     const wxString& GetShortDesc() const;
-    
+
     /**
        Get the long, user visible description
     */
     const wxString& GetDescription() const;
-    
+
     /**
        Get the array of all extensions
     */
@@ -511,7 +527,7 @@ public:
        Get the number of extensions.
     */
     size_t GetExtensionsCount() const;
-    
+
     /**
        Get the icon filename
     */

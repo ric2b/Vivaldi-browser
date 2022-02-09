@@ -16,12 +16,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "components/sync/engine/loopback_server/persistent_bookmark_entity.h"
@@ -923,9 +923,9 @@ bool LoopbackServer::LoadStateFromFile() {
 
   // Ensures local sync file can be opened, read, and is not being written to.
   // Also makes sure file will not be written to during serialization.
-  base::File state_file(persistent_file_, base::File::FLAG_OPEN |
-                                              base::File::FLAG_READ |
-                                              base::File::FLAG_EXCLUSIVE_WRITE);
+  base::File state_file(persistent_file_,
+                        base::File::FLAG_OPEN | base::File::FLAG_READ |
+                            base::File::FLAG_WIN_EXCLUSIVE_WRITE);
   base::File::Error state_file_error = state_file.error_details();
 
   if (state_file_error != base::File::FILE_OK) {

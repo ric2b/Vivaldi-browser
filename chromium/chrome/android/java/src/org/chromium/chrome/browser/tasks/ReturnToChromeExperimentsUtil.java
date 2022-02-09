@@ -17,7 +17,6 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
-import org.chromium.base.StrictModeContext;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
@@ -27,7 +26,6 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeInactivityTracker;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -43,13 +41,13 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
 import org.chromium.components.optimization_guide.proto.ModelsProto.OptimizationTarget;
 import org.chromium.components.segmentation_platform.SegmentationPlatformService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -60,7 +58,6 @@ import org.chromium.ui.base.PageTransition;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.List;
 
 /**
  * This is a utility class for managing experiments related to returning to Chrome.
@@ -71,6 +68,9 @@ public final class ReturnToChromeExperimentsUtil {
     @VisibleForTesting
     public static final long INVALID_DECISION_TIMESTAMP = -1L;
     public static final long MILLISECONDS_PER_DAY = TimeUtils.SECONDS_PER_DAY * 1000;
+    @VisibleForTesting
+    public static final String LAST_VISITED_TAB_IS_SRP_WHEN_OVERVIEW_IS_SHOWN_AT_LAUNCH_UMA =
+            "Startup.Android.LastVisitedTabIsSRPWhenOverviewShownAtLaunch";
 
     private static final String START_SEGMENTATION_PLATFORM_KEY = "chrome_start_android";
 
@@ -237,9 +237,23 @@ public final class ReturnToChromeExperimentsUtil {
      */
     public static Tab handleLoadUrlFromStartSurface(
             LoadUrlParams params, @Nullable Boolean incognito, @Nullable Tab parentTab) {
+        return handleLoadUrlFromStartSurface(params, false, incognito, parentTab);
+    }
+
+    /**
+     * Check if we should handle the navigation. If so, create a new tab and load the URL.
+     *
+     * @param params The LoadUrlParams to load.
+     * @param isBackground Whether to load the URL in a new tab in the background.
+     * @param incognito Whether to load URL in an incognito Tab.
+     * @param parentTab  The parent tab used to create a new tab if needed.
+     * @return Current tab created if we have handled the navigation, null otherwise.
+     */
+    public static Tab handleLoadUrlFromStartSurface(LoadUrlParams params, boolean isBackground,
+            @Nullable Boolean incognito, @Nullable Tab parentTab) {
         try (TraceEvent e = TraceEvent.scoped("StartSurface.LoadUrl")) {
-            return handleLoadUrlWithPostDataFromStartSurface(
-                    params, null, null, incognito, parentTab, false, false, null, null);
+            return handleLoadUrlWithPostDataFromStartSurface(params, null, null, isBackground,
+                    incognito, parentTab, false, false, null, null);
         }
     }
 
@@ -259,7 +273,8 @@ public final class ReturnToChromeExperimentsUtil {
             @PageTransition int transition, @Nullable Boolean incognito, @Nullable Tab parentTab,
             TabModel currentTabModel, @Nullable Runnable emptyTabCloseCallback) {
         LoadUrlParams params = new LoadUrlParams(url, transition);
-        handleLoadUrlWithPostDataFromStartSurface(params, null, null, incognito, parentTab,
+        handleLoadUrlWithPostDataFromStartSurface(params, null, null, /*isBackground=*/false,
+                incognito, parentTab,
                 /*focusOnOmnibox*/ true, /*skipOverviewCheck*/ true, currentTabModel,
                 emptyTabCloseCallback);
     }
@@ -280,8 +295,8 @@ public final class ReturnToChromeExperimentsUtil {
     public static boolean handleLoadUrlWithPostDataFromStartSurface(LoadUrlParams params,
             @Nullable String postDataType, @Nullable byte[] postData, @Nullable Boolean incognito,
             @Nullable Tab parentTab) {
-        return handleLoadUrlWithPostDataFromStartSurface(params, postDataType, postData, incognito,
-                       parentTab, false, false, null, null)
+        return handleLoadUrlWithPostDataFromStartSurface(params, postDataType, postData, false,
+                       incognito, parentTab, false, false, null, null)
                 != null;
     }
 
@@ -293,6 +308,7 @@ public final class ReturnToChromeExperimentsUtil {
      * @param postDataType   postData type.
      * @param postData       POST data to include in the tab URL's request body, ex. bitmap when
      *         image search.
+     * @param isBackground Whether to load the URL in a new tab in the background.
      * @param incognito Whether to load URL in an incognito Tab. If null, the current tab model will
      *         be used.
      * @param parentTab  The parent tab used to create a new tab if needed.
@@ -304,9 +320,10 @@ public final class ReturnToChromeExperimentsUtil {
      * @return Current tab created if we have handled the navigation, null otherwise.
      */
     private static Tab handleLoadUrlWithPostDataFromStartSurface(LoadUrlParams params,
-            @Nullable String postDataType, @Nullable byte[] postData, @Nullable Boolean incognito,
-            @Nullable Tab parentTab, boolean focusOnOmnibox, boolean skipOverviewCheck,
-            @Nullable TabModel currentTabModel, @Nullable Runnable emptyTabCloseCallback) {
+            @Nullable String postDataType, @Nullable byte[] postData, boolean isBackground,
+            @Nullable Boolean incognito, @Nullable Tab parentTab, boolean focusOnOmnibox,
+            boolean skipOverviewCheck, @Nullable TabModel currentTabModel,
+            @Nullable Runnable emptyTabCloseCallback) {
         String url = params.getUrl();
         ChromeActivity chromeActivity =
                 getActivityPresentingOverviewWithOmnibox(url, skipOverviewCheck);
@@ -326,10 +343,18 @@ public final class ReturnToChromeExperimentsUtil {
         }
 
         Tab newTab = chromeActivity.getTabCreator(incognitoParam)
-                             .createNewTab(params, TabLaunchType.FROM_START_SURFACE, parentTab);
+                             .createNewTab(params,
+                                     isBackground ? TabLaunchType.FROM_LONGPRESS_BACKGROUND
+                                                  : TabLaunchType.FROM_START_SURFACE,
+                                     parentTab);
+        if (isBackground) {
+            StartSurfaceUserData.setOpenedFromStart(newTab);
+        }
+
         if (focusOnOmnibox && newTab != null) {
             // This observer lives for as long as the user is focused in the Omnibox. It stops
-            // observing once the focus is cleared, e.g, Tab navigates or user taps the back button.
+            // observing once the focus is cleared, e.g, Tab navigates or user taps the back
+            // button.
             new TabStateObserver(newTab, currentTabModel,
                     chromeActivity.getToolbarManager().getOmniboxStub(), emptyTabCloseCallback,
                     chromeActivity.getActivityTabProvider());
@@ -445,22 +470,17 @@ public final class ReturnToChromeExperimentsUtil {
     }
 
     /**
-     *
-     * @param context The activity context.
      * @param tabModelSelector The tab model selector.
      * @return the total tab count, and works before native initialization.
      */
-    public static int getTotalTabCount(Context context, TabModelSelector tabModelSelector) {
-        if ((CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
-                    || CachedFeatureFlags.isEnabled(
-                            ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP))
-                && !tabModelSelector.isTabStateInitialized()) {
-            List<PseudoTab> allTabs;
-            try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-                allTabs = PseudoTab.getAllPseudoTabsFromStateFile(context);
-            }
-            return allTabs != null ? allTabs.size() : 0;
+    public static int getTotalTabCount(TabModelSelector tabModelSelector) {
+        if (!tabModelSelector.isTabStateInitialized()) {
+            return SharedPreferencesManager.getInstance().readInt(
+                           ChromePreferenceKeys.REGULAR_TAB_COUNT)
+                    + SharedPreferencesManager.getInstance().readInt(
+                            ChromePreferenceKeys.INCOGNITO_TAB_COUNT);
         }
+
         return tabModelSelector.getTotalTabCount();
     }
 
@@ -489,7 +509,7 @@ public final class ReturnToChromeExperimentsUtil {
         }
         if (ReturnToChromeExperimentsUtil.isStartSurfaceEnabled(context)
                 && IntentUtils.isMainIntentFromLauncher(intent)
-                && ReturnToChromeExperimentsUtil.getTotalTabCount(context, tabModelSelector) <= 0) {
+                && ReturnToChromeExperimentsUtil.getTotalTabCount(tabModelSelector) <= 0) {
             // Handle initial tab creation.
             return true;
         }
@@ -862,6 +882,17 @@ public final class ReturnToChromeExperimentsUtil {
      */
     public static void onMVTileOpened() {
         onUIClicked(ChromePreferenceKeys.TAP_MV_TILES_COUNT);
+    }
+
+    /**
+     * Record whether the last visited tab shown in the single tab switcher or carousel tab switcher
+     * is a search result page or not. This should be called when Start surface is shown at startup.
+     */
+    public static void recordLastVisitedTabIsSRPWhenOverviewIsShownAtLaunch() {
+        RecordHistogram.recordBooleanHistogram(
+                LAST_VISITED_TAB_IS_SRP_WHEN_OVERVIEW_IS_SHOWN_AT_LAUNCH_UMA,
+                UrlUtilitiesJni.get().isGoogleSearchUrl(
+                        StartSurfaceUserData.getInstance().getLastVisitedTabAtStartupUrl()));
     }
 
     @VisibleForTesting

@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -147,11 +148,6 @@ PasswordForm MakeSavedPassword(base::StringPiece signon_realm,
   form.password_value = std::u16string(password);
   form.username_element = std::u16string(username_element);
   form.in_store = PasswordForm::Store::kProfileStore;
-  // TODO(crbug.com/1223022): Once all places that operate changes on forms
-  // via UpdateLogin properly set |password_issues|, setting them to an empty
-  // map should be part of the default constructor.
-  form.password_issues =
-      base::flat_map<InsecureType, password_manager::InsecurityMetadata>();
   return form;
 }
 
@@ -179,11 +175,6 @@ PasswordForm MakeSavedAndroidPassword(
   form.app_display_name = std::string(app_display_name);
   form.affiliated_web_realm = std::string(affiliated_web_realm);
   form.password_value = std::u16string(password);
-  // TODO(crbug.com/1223022): Once all places that operate changes on forms
-  // via UpdateLogin properly set |password_issues|, setting them to an empty
-  // map should be part of the default constructor.
-  form.password_issues =
-      base::flat_map<InsecureType, password_manager::InsecurityMetadata>();
   return form;
 }
 
@@ -259,11 +250,11 @@ class PasswordCheckDelegateTest : public ::testing::Test {
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   signin::IdentityTestEnvironment identity_test_env_;
   TestingProfile profile_;
-  EventRouter* event_router_ = CreateAndUseEventRouter(&profile_);
-  PasswordsPrivateEventRouter* password_router_ =
+  raw_ptr<EventRouter> event_router_ = CreateAndUseEventRouter(&profile_);
+  raw_ptr<PasswordsPrivateEventRouter> password_router_ =
       CreateAndUsePasswordsPrivateEventRouter(&profile_);
   TestEventRouterObserver event_router_observer_{event_router_};
-  BulkLeakCheckService* bulk_leak_check_service_ =
+  raw_ptr<BulkLeakCheckService> bulk_leak_check_service_ =
       CreateAndUseBulkLeakCheckService(identity_test_env_.identity_manager(),
                                        &profile_);
   scoped_refptr<TestPasswordStore> store_ =

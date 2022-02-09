@@ -363,7 +363,7 @@ NGInkOverflow::Type NGInkOverflow::SetSvgTextInkOverflow(
     const NGTextFragmentPaintInfo& text_info,
     const ComputedStyle& style,
     const Font& scaled_font,
-    const FloatRect& rect,
+    const gfx::RectF& rect,
     float scaling_factor,
     float length_adjust_scale,
     const AffineTransform& transform,
@@ -374,20 +374,20 @@ NGInkOverflow::Type NGInkOverflow::SetSvgTextInkOverflow(
   // Font::TextInkBounds().
   PhysicalSize item_size =
       style.IsHorizontalWritingMode()
-          ? PhysicalSize(LayoutUnit(rect.Width() / length_adjust_scale),
-                         LayoutUnit(rect.Height()))
-          : PhysicalSize(LayoutUnit(rect.Width()),
-                         LayoutUnit(rect.Height() / length_adjust_scale));
+          ? PhysicalSize(LayoutUnit(rect.width() / length_adjust_scale),
+                         LayoutUnit(rect.height()))
+          : PhysicalSize(LayoutUnit(rect.width()),
+                         LayoutUnit(rect.height() / length_adjust_scale));
   absl::optional<PhysicalRect> ink_overflow =
       ComputeTextInkOverflow(text_info, style, scaled_font, item_size);
   const bool needs_transform =
       scaling_factor != 1.0f || !transform.IsIdentity();
-  PhysicalSize unscaled_size = PhysicalSize::FromFloatSizeRound(rect.Size());
+  PhysicalSize unscaled_size = PhysicalSize::FromSizeFRound(rect.size());
   unscaled_size.Scale(1.0f / scaling_factor);
   if (!ink_overflow) {
     if (needs_transform) {
-      FloatRect transformed_rect = transform.MapRect(rect);
-      transformed_rect.Move(-rect.X(), -rect.Y());
+      gfx::RectF transformed_rect = transform.MapRect(rect);
+      transformed_rect.Offset(-rect.x(), -rect.y());
       transformed_rect.Scale(1 / scaling_factor);
       *ink_overflow_out = PhysicalRect::EnclosingRect(transformed_rect);
       ink_overflow_out->ExpandEdgesToPixelBoundaries();
@@ -408,10 +408,10 @@ NGInkOverflow::Type NGInkOverflow::SetSvgTextInkOverflow(
         LayoutUnit(ink_overflow->Height() * length_adjust_scale));
   }
   if (needs_transform) {
-    FloatRect transformed_rect = FloatRect(*ink_overflow);
-    transformed_rect.Move(rect.X(), rect.Y());
+    gfx::RectF transformed_rect(*ink_overflow);
+    transformed_rect.Offset(rect.x(), rect.y());
     transformed_rect = transform.MapRect(transformed_rect);
-    transformed_rect.Move(-rect.X(), -rect.Y());
+    transformed_rect.Offset(-rect.x(), -rect.y());
     transformed_rect.Scale(1 / scaling_factor);
     *ink_overflow_out = PhysicalRect::EnclosingRect(transformed_rect);
     ink_overflow_out->ExpandEdgesToPixelBoundaries();
@@ -429,7 +429,7 @@ absl::optional<PhysicalRect> NGInkOverflow::ComputeTextInkOverflow(
     const Font& scaled_font,
     const PhysicalSize& size) {
   // Glyph bounds is in logical coordinate, origin at the alphabetic baseline.
-  const FloatRect text_ink_bounds = scaled_font.TextInkBounds(text_info);
+  const gfx::RectF text_ink_bounds = scaled_font.TextInkBounds(text_info);
   LayoutRect ink_overflow = EnclosingLayoutRect(text_ink_bounds);
 
   // Make the origin at the logical top of this fragment.
@@ -513,9 +513,15 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
   // Use a zero offset because all offsets
   // are applied to the ink overflow after it has been computed.
   PhysicalOffset offset;
-  TextDecorationInfo decoration_info(offset, ink_overflow.Width(),
-                                     style.GetFontBaseline(), style,
-                                     scaled_font, absl::nullopt, nullptr);
+  // Ideally we should pass MinimumThickness1(false) if this function is
+  // called for NGFragmentItem::kSvgText. However it requires to add arguments
+  // to some functions.
+  // We pass MinimumTHickness1(true) even for kSvgText.  it's acceptable
+  // because it just makes the resultant ink overflow slightly larger.
+  const MinimumThickness1 kMinimumThicknessIsOne(true);
+  TextDecorationInfo decoration_info(
+      offset, ink_overflow.Width(), style.GetFontBaseline(), style, scaled_font,
+      absl::nullopt, nullptr, kMinimumThicknessIsOne);
   NGTextDecorationOffset decoration_offset(decoration_info.Style(), style,
                                            nullptr);
   const Vector<AppliedTextDecoration>& decorations =
@@ -530,15 +536,15 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
     underline_position = ResolvedUnderlinePosition::kUnder;
   }
 
-  FloatRect accumulated_bound;
+  gfx::RectF accumulated_bound;
   for (wtf_size_t applied_decoration_index = 0;
        applied_decoration_index < decorations.size();
        ++applied_decoration_index) {
     const AppliedTextDecoration& decoration =
         decorations[applied_decoration_index];
-    TextDecoration lines = decoration.Lines();
-    bool has_underline = EnumHasFlags(lines, TextDecoration::kUnderline);
-    bool has_overline = EnumHasFlags(lines, TextDecoration::kOverline);
+    TextDecorationLine lines = decoration.Lines();
+    bool has_underline = EnumHasFlags(lines, TextDecorationLine::kUnderline);
+    bool has_overline = EnumHasFlags(lines, TextDecorationLine::kOverline);
     if (flip_underline_and_overline)
       std::swap(has_underline, has_overline);
 
@@ -555,11 +561,9 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
           decoration_offset.ComputeUnderlineOffset(
               underline_position, decoration_info.Style().ComputedFontSize(),
               decoration_info.FontData(), line_offset, resolved_thickness);
-      decoration_info.SetPerLineData(
-          TextDecoration::kUnderline, paint_underline_offset,
-          TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness), 1);
-      accumulated_bound.Unite(
-          decoration_info.BoundsForLine(TextDecoration::kUnderline));
+      decoration_info.SetLineData(TextDecorationLine::kUnderline,
+                                  paint_underline_offset);
+      accumulated_bound.Union(decoration_info.Bounds());
     }
     if (has_overline) {
       // Don't apply text-underline-offset to overline.
@@ -573,30 +577,19 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
           decoration_offset.ComputeUnderlineOffsetForUnder(
               line_offset, decoration_info.Style().ComputedFontSize(),
               decoration_info.FontData(), resolved_thickness, position);
-      decoration_info.SetPerLineData(
-          TextDecoration::kOverline, paint_overline_offset,
-          -TextDecorationInfo::DoubleOffsetFromThickness(resolved_thickness),
-          1);
-      accumulated_bound.Unite(
-          decoration_info.BoundsForLine(TextDecoration::kOverline));
+      decoration_info.SetLineData(TextDecorationLine::kOverline,
+                                  paint_overline_offset);
+      accumulated_bound.Union(decoration_info.Bounds());
     }
-    if (EnumHasFlags(lines, TextDecoration::kLineThrough)) {
+    if (EnumHasFlags(lines, TextDecorationLine::kLineThrough)) {
       // For increased line thickness, the line-through decoration needs to grow
       // in both directions from its origin, subtract half the thickness to keep
       // it centered at the same origin.
       const float line_through_offset =
           2 * decoration_info.Baseline() / 3 - resolved_thickness / 2;
-      // Floor double_offset in order to avoid double-line gap to appear
-      // of different size depending on position where the double line
-      // is drawn because of rounding downstream in
-      // GraphicsContext::DrawLineForText.
-      decoration_info.SetPerLineData(
-          TextDecoration::kLineThrough, line_through_offset,
-          floorf(TextDecorationInfo::DoubleOffsetFromThickness(
-              resolved_thickness)),
-          0);
-      accumulated_bound.Unite(
-          decoration_info.BoundsForLine(TextDecoration::kLineThrough));
+      decoration_info.SetLineData(TextDecorationLine::kLineThrough,
+                                  line_through_offset);
+      accumulated_bound.Union(decoration_info.Bounds());
     }
   }
   return EnclosingLayoutRect(accumulated_bound);

@@ -7,15 +7,17 @@
 
 #include <limits>
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "base/files/file_path.h"
-#endif
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_util.h"
 #include "media/base/pipeline_status.h"
 #include "media/filters/chunk_demuxer.h"
 #include "testing/gmock/include/gmock/gmock.h"
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "base/files/file_path.h"
+#endif
 
 namespace media {
 
@@ -130,7 +132,7 @@ class TestMediaSource {
   base::FilePath file_path_;
 #endif
   std::string mimetype_;
-  ChunkDemuxer* chunk_demuxer_;
+  raw_ptr<ChunkDemuxer> chunk_demuxer_;
   std::unique_ptr<Demuxer> owned_chunk_demuxer_;
   PipelineStatusCB demuxer_failure_cb_;
   Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb_;

@@ -8,14 +8,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/logging.h"
-#include "base/macros.h"
-#include "base/task/post_task.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part_chromeos.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/device_identity/device_identity_provider.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
@@ -33,34 +27,11 @@
 #include "components/invalidation/public/invalidator_state.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/user_manager/user.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace policy {
 
 namespace {
-
-// Currently InvalidationService sends TRANSIENT_INVALIDATION_ERROR in case if
-// topic failing to register, but at the same time InvalidationService has retry
-// logic. In case if retry is successful and all the topic succeeded to
-// register, InvalidationService sends INVALIDATION_ENABLED. So
-// InvalidationServiceObserver should give InvalidationService a chance to
-// reregister topic, and after some time if INVALIDATION_ENABLED is not being
-// received, manually check with delayed task. If after
-// |kCheckInvalidatorStateDelay|, InvalidationService is still in
-// TRANSIENT_INVALIDATION_ERROR state, disconnect from it and try to reregister
-// all the topics.
-constexpr base::TimeDelta kCheckInvalidatorStateDelay = base::Minutes(3);
-
-// After reregistering all the topics |kTransientErrorDisconnectLimit| number of
-// times, when InvalidationService is failing due to
-// TRANSIENT_INVALIDATION_ERROR, stop disconnecting, and let registered topics
-// to keep being registered and failing topics to keep being failed. This is the
-// best effort behaviour. If |kTransientErrorDisconnectLimit| is too high, at
-// some point Firebase Cloud Message will start throttling register request for
-// this client.
-constexpr int kTransientErrorDisconnectLimit = 3;
 
 invalidation::ProfileInvalidationProvider* GetInvalidationProvider(
     Profile* profile) {
@@ -84,7 +55,6 @@ class AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver
   ~InvalidationServiceObserver() override;
 
   invalidation::InvalidationService* GetInvalidationService();
-  void CheckInvalidatorState();
   bool IsServiceConnected() const;
 
   // public invalidation::InvalidationHandler:
@@ -95,13 +65,9 @@ class AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver
 
  private:
   AffiliatedInvalidationServiceProviderImpl* parent_;
-  invalidation::InvalidationService* invalidation_service_;
+  invalidation::InvalidationService* const invalidation_service_;
   bool is_service_connected_;
   bool is_observer_ready_;
-  base::OneShotTimer transient_error_retry_timer_;
-
-  // The number of times TRANSIENT_INVALIDATION_ERROR should cause disconnect.
-  int transient_error_disconnect_limit_ = kTransientErrorDisconnectLimit;
 };
 
 AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
@@ -112,6 +78,7 @@ AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
       invalidation_service_(invalidation_service),
       is_service_connected_(false),
       is_observer_ready_(false) {
+  DCHECK(invalidation_service_);
   invalidation_service_->RegisterInvalidationHandler(this);
   is_service_connected_ = invalidation_service->GetInvalidatorState() ==
                           invalidation::INVALIDATIONS_ENABLED;
@@ -135,70 +102,21 @@ bool AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
 }
 
 void AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
-    CheckInvalidatorState() {
-  // Treat TRANSIENT_INVALIDATION_ERROR as an error, and disconnect the service
-  // if connected.
-  DCHECK(is_observer_ready_);
-  DCHECK(invalidation_service_);
-  DCHECK(parent_);
-
-  invalidation::InvalidatorState state =
-      invalidation_service_->GetInvalidatorState();
-  bool is_service_connected = (state == invalidation::INVALIDATIONS_ENABLED);
-
-  if (is_service_connected_ == is_service_connected)
-    return;
-
-  if (state == invalidation::TRANSIENT_INVALIDATION_ERROR) {
-    // Do not cause disconnect if the number of disconnections caused by
-    // TRANSIENT_INVALIDATION_ERROR is more than the limit.
-    if (!transient_error_disconnect_limit_)
-      return;
-    --transient_error_disconnect_limit_;
-  }
-
-  is_service_connected_ = is_service_connected;
-  if (is_service_connected_)
-    parent_->OnInvalidationServiceConnected(invalidation_service_);
-  else
-    parent_->OnInvalidationServiceDisconnected(invalidation_service_);
-}
-
-void AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
     OnInvalidatorStateChange(invalidation::InvalidatorState state) {
   if (!is_observer_ready_)
     return;
 
-  // TODO(crbug/1007287): Handle 3 different states of
-  // AffiliatedInvalidationServiceProvider properly.
-  if (is_service_connected_) {
-    // If service is connected, do NOT notify parent in case:
-    //   * state == INVALIDATIONS_ENABLED
-    //   * state == TRANSIENT_INVALIDATION_ERROR, hopefully will be resolved by
-    //     InvalidationService, if not InvalidationService should notify again
-    //     with another more severe state.
-    bool should_notify = (state != invalidation::INVALIDATIONS_ENABLED &&
-                          state != invalidation::TRANSIENT_INVALIDATION_ERROR);
+  const bool new_is_service_connected =
+      (state == invalidation::INVALIDATIONS_ENABLED);
 
-    if (should_notify) {
-      is_service_connected_ = false;
-      parent_->OnInvalidationServiceDisconnected(invalidation_service_);
-    } else if (state == invalidation::TRANSIENT_INVALIDATION_ERROR) {
-      transient_error_retry_timer_.Stop();
-      transient_error_retry_timer_.Start(
-          FROM_HERE, kCheckInvalidatorStateDelay,
-          base::BindOnce(&AffiliatedInvalidationServiceProviderImpl::
-                             InvalidationServiceObserver::CheckInvalidatorState,
-                         base::Unretained(this)));
-    }
+  if (is_service_connected_ == new_is_service_connected)
+    return;
+
+  is_service_connected_ = new_is_service_connected;
+  if (is_service_connected_) {
+    parent_->OnInvalidationServiceConnected(invalidation_service_);
   } else {
-    // If service is disconnected, ONLY notify parent in case:
-    //   * state == INVALIDATIONS_ENABLED
-    bool should_notify = (state == invalidation::INVALIDATIONS_ENABLED);
-    if (should_notify) {
-      is_service_connected_ = true;
-      parent_->OnInvalidationServiceConnected(invalidation_service_);
-    }
+    parent_->OnInvalidationServiceDisconnected(invalidation_service_);
   }
 }
 
@@ -213,7 +131,9 @@ std::string AffiliatedInvalidationServiceProviderImpl::
 
 AffiliatedInvalidationServiceProviderImpl::
     AffiliatedInvalidationServiceProviderImpl()
-    : invalidation_service_(nullptr), consumer_count_(0), is_shut_down_(false) {
+    : current_invalidation_service_(nullptr),
+      consumer_count_(0),
+      is_shut_down_(false) {
   // The AffiliatedInvalidationServiceProviderImpl should be created before any
   // user Profiles.
   DCHECK(g_browser_process->profile_manager()->GetLoadedProfiles().empty());
@@ -271,8 +191,8 @@ void AffiliatedInvalidationServiceProviderImpl::RegisterConsumer(
   consumers_.AddObserver(consumer);
   ++consumer_count_;
 
-  if (invalidation_service_)
-    consumer->OnInvalidationServiceSet(invalidation_service_);
+  if (current_invalidation_service_)
+    consumer->OnInvalidationServiceSet(current_invalidation_service_);
   else if (consumer_count_ == 1)
     FindConnectedInvalidationService();
 }
@@ -285,8 +205,8 @@ void AffiliatedInvalidationServiceProviderImpl::UnregisterConsumer(
   consumers_.RemoveObserver(consumer);
   --consumer_count_;
 
-  if (invalidation_service_ && consumer_count_ == 0) {
-    invalidation_service_ = nullptr;
+  if (current_invalidation_service_ && consumer_count_ == 0) {
+    current_invalidation_service_ = nullptr;
     DestroyDeviceInvalidationService();
   }
 }
@@ -298,11 +218,11 @@ void AffiliatedInvalidationServiceProviderImpl::Shutdown() {
   profile_invalidation_service_observers_.clear();
   device_invalidation_service_observer_.reset();
 
-  if (invalidation_service_) {
-    invalidation_service_ = nullptr;
+  if (current_invalidation_service_) {
+    current_invalidation_service_ = nullptr;
     // Explicitly notify consumers that the invalidation service they were using
     // is no longer available.
-    SetInvalidationService(nullptr);
+    SetCurrentInvalidationService(nullptr);
   }
 
   DestroyDeviceInvalidationService();
@@ -332,11 +252,11 @@ void AffiliatedInvalidationServiceProviderImpl::OnInvalidationServiceConnected(
   }
 
   // Make the invalidation service that just connected available to consumers.
-  invalidation_service_ = nullptr;
-  SetInvalidationService(invalidation_service);
+  current_invalidation_service_ = nullptr;
+  SetCurrentInvalidationService(invalidation_service);
 
-  if (invalidation_service_ && device_invalidation_service_ &&
-      invalidation_service_ != device_invalidation_service_.get()) {
+  if (current_invalidation_service_ && device_invalidation_service_ &&
+      current_invalidation_service_ != device_invalidation_service_.get()) {
     // If a different invalidation service is being made available to consumers
     // now, destroy the device-global one.
     DestroyDeviceInvalidationService();
@@ -348,7 +268,7 @@ void AffiliatedInvalidationServiceProviderImpl::
         invalidation::InvalidationService* invalidation_service) {
   DCHECK(!is_shut_down_);
 
-  if (invalidation_service != invalidation_service_) {
+  if (invalidation_service != current_invalidation_service_) {
     // If the invalidation service which disconnected was not being made
     // available to consumers, return.
     return;
@@ -357,7 +277,7 @@ void AffiliatedInvalidationServiceProviderImpl::
   // The invalidation service which disconnected was being made available to
   // consumers. Stop making it available.
   DCHECK(consumer_count_);
-  invalidation_service_ = nullptr;
+  current_invalidation_service_ = nullptr;
 
   // Try to make another invalidation service available to consumers.
   FindConnectedInvalidationService();
@@ -365,13 +285,13 @@ void AffiliatedInvalidationServiceProviderImpl::
   // If no other connected invalidation service was found, explicitly notify
   // consumers that the invalidation service they were using is no longer
   // available.
-  if (!invalidation_service_)
-    SetInvalidationService(nullptr);
+  if (!current_invalidation_service_)
+    SetCurrentInvalidationService(nullptr);
 }
 
 void AffiliatedInvalidationServiceProviderImpl::
     FindConnectedInvalidationService() {
-  DCHECK(!invalidation_service_);
+  DCHECK(!current_invalidation_service_);
   DCHECK(consumer_count_);
   DCHECK(!is_shut_down_);
 
@@ -380,7 +300,7 @@ void AffiliatedInvalidationServiceProviderImpl::
       // If a connected invalidation service belonging to an affiliated
       // logged-in user is found, make it available to consumers.
       DestroyDeviceInvalidationService();
-      SetInvalidationService(observer->GetInvalidationService());
+      SetCurrentInvalidationService(observer->GetInvalidationService());
       return;
     }
   }
@@ -402,12 +322,12 @@ void AffiliatedInvalidationServiceProviderImpl::
   }
 }
 
-void AffiliatedInvalidationServiceProviderImpl::SetInvalidationService(
+void AffiliatedInvalidationServiceProviderImpl::SetCurrentInvalidationService(
     invalidation::InvalidationService* invalidation_service) {
-  DCHECK(!invalidation_service_);
-  invalidation_service_ = invalidation_service;
+  DCHECK(!current_invalidation_service_);
+  current_invalidation_service_ = invalidation_service;
   for (auto& observer : consumers_)
-    observer.OnInvalidationServiceSet(invalidation_service_);
+    observer.OnInvalidationServiceSet(current_invalidation_service_);
 }
 
 void AffiliatedInvalidationServiceProviderImpl::

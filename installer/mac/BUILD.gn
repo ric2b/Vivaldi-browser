@@ -82,7 +82,7 @@ command_bash("build_dmg") {
     command,
     eula,
     icns,
-    "//vivaldi/thirdparty/create_dmg/support/dmg-license.py",
+    "//vivaldi/thirdparty/create_dmg/support/eula-resources-template.xml",
     "//vivaldi/thirdparty/create_dmg/support/template.applescript",
   ]
 

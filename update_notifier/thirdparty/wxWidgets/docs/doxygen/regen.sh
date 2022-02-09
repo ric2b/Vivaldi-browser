@@ -6,19 +6,19 @@
 # readable.
 #
 # Usage:
-#    ./regen.sh [html|chm|xml|latex|all]
+#    ./regen.sh [html|chm|xml|latex|docset|all]
 #
 # Pass "x" to regen only the X output format and "all" to regen them all.
-# If no arguments are passed all formats are regenerated
-# (just like passing "all").
+# If no arguments are passed, HTML is regenerated (just like passing "html").
 #
 
 
-# remember current folder and then cd to the docs/doxygen one
+# cd to the directory this script is in
 me=$(basename $0)
 path=${0%%/$me}        # path from which the script has been launched
-current=$(pwd)
-cd $path
+cd "$path"
+SCRIPTS_DIR="$(pwd)/scripts"
+
 if [[ -z "$WXWIDGETS" ]]; then
     # Notice the use of -P to ensure we get the canonical path even if there
     # are symlinks in the current path. This is important because Doxygen
@@ -59,48 +59,49 @@ mkdir -p out/html/generic
 cp images/generic/*png out/html/generic
 
 # Defaults for settings controlled by this script
-export GENERATE_DOCSET="NO";
-export GENERATE_HTML="NO";
-export GENERATE_HTMLHELP="NO";
-export GENERATE_LATEX="NO";
-export GENERATE_QHP="NO";
-export GENERATE_XML="NO";
-export SEARCHENGINE="NO";
-export SERVER_BASED_SEARCH="NO";
+export GENERATE_DOCSET="NO"
+export GENERATE_HTML="NO"
+export GENERATE_HTMLHELP="NO"
+export GENERATE_LATEX="NO"
+export GENERATE_QHP="NO"
+export GENERATE_XML="NO"
+export SEARCHENGINE="NO"
+export SERVER_BASED_SEARCH="NO"
 
 # Which format should we generate during this run?
 case "$1" in
     all) # All *main* formats, not all formats, here for backwards compat.
-        export GENERATE_HTML="YES";
-        export GENERATE_HTMLHELP="YES";
-        export GENERATE_XML="YES";
+        export GENERATE_HTML="YES"
+        export GENERATE_HTMLHELP="YES"
+        export GENERATE_XML="YES"
         ;;
     chm)
-        export GENERATE_HTML="YES";
-        export GENERATE_HTMLHELP="YES";
+        export GENERATE_HTML="YES"
+        export GENERATE_HTMLHELP="YES"
         ;;
     docset)
-        export GENERATE_DOCSET="YES";
-        export GENERATE_HTML="YES";
+        export GENERATE_DOCSET="YES"
+        export GENERATE_HTML="YES"
+        export GENERATE_TAGFILE="$path/out/wxWidgets.tag"
         ;;
     latex)
-        export GENERATE_LATEX="YES";
+        export GENERATE_LATEX="YES"
         ;;
     php) # HTML, but with PHP Search Engine
-        export GENERATE_HTML="YES";
-        export SEARCHENGINE="YES";
-        export SERVER_BASED_SEARCH="YES";
+        export GENERATE_HTML="YES"
+        export SEARCHENGINE="YES"
+        export SERVER_BASED_SEARCH="YES"
         ;;
     qch)
-        export GENERATE_HTML="YES";
-        export GENERATE_QHP="YES";
+        export GENERATE_HTML="YES"
+        export GENERATE_QHP="YES"
         ;;
     xml)
-        export GENERATE_XML="YES";
+        export GENERATE_XML="YES"
         ;;
     *) # Default to HTML only
-        export GENERATE_HTML="YES";
-        export SEARCHENGINE="YES";
+        export GENERATE_HTML="YES"
+        export SEARCHENGINE="YES"
         ;;
 esac
 
@@ -162,36 +163,59 @@ if [[ "$1" = "qch" ]]; then
 fi
 
 if [[ "$1" = "docset" ]]; then
-    BASENAME="wxWidgets-3.0"    # was org.wxwidgets.doxygen.docset.wx30
+    BASENAME="wxWidgets-3.1"    # was org.wxwidgets.doxygen.docset.wx30
     DOCSETNAME="$BASENAME.docset"
     ATOM="$BASENAME.atom"
-    ATOMDIR="http://docs.wxwidgets.org/docsets"
+    ATOMDIR="https://docs.wxwidgets.org/docsets"
     XAR="$BASENAME.xar"
-    XARDIR="http://docs.wxwidgets.org/docsets"
-    XCODE_INSTALL=`xcode-select -print-path`
-    
+    XARDIR="https://docs.wxwidgets.org/docsets"
+
+    # See if xcode is installed
+    if [ -x "$(command -v xcode-select)" ]; then
+        XCODE_INSTALL=`xcode-select -print-path`
+    fi
+
     cd out/html
     DESTINATIONDIR=`pwd`/../docset
-    
+
     mkdir -p $DESTINATIONDIR
     rm -rf $DESTINATIONDIR/$DOCSETNAME
     rm -f $DESTINATIONDIR/$XAR
-    
+
     make DOCSET_NAME=$DESTINATIONDIR/$DOCSETNAME
-    
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info CFBundleVersion 1.3
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info CFBundleShortVersionString 1.3
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info CFBundleName "wxWidgets 3.0"
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetFeedURL $ATOMDIR/$ATOM
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetFallbackURL http://docs.wxwidgets.org
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetDescription "API reference and conceptual documentation for wxWidgets 3.0"
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info NSHumanReadableCopyright "Copyright 1992-2014 wxWidgets team, Portions 1996 Artificial Intelligence Applications Institute"
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info isJavaScriptEnabled true
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info dashIndexFilePath index.html
-    defaults write $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetPlatformFamily wx
 
-    $XCODE_INSTALL/usr/bin/docsetutil package -atom $DESTINATIONDIR/$ATOM -download-url $XARDIR/$XAR -output $DESTINATIONDIR/$XAR $DESTINATIONDIR/$DOCSETNAME
+    # Choose which plist modification utility to use
+    if [ -x "$(command -v defaults)" ]; then
+        PLIST_WRITE_CMD="defaults write"
+    else
+        PLIST_WRITE_CMD="python $SCRIPTS_DIR/write_info_tag.py"
+    fi
 
+    # Modify the Info.plist file
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info CFBundleVersion 1.3
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info CFBundleShortVersionString 1.3
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info CFBundleName "wxWidgets 3.1"
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetFeedURL $ATOMDIR/$ATOM
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetFallbackURL https://docs.wxwidgets.org
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetDescription "API reference and conceptual documentation for wxWidgets 3.0"
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info NSHumanReadableCopyright "Copyright 1992-2021 wxWidgets team, Portions 1996 Artificial Intelligence Applications Institute"
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info isJavaScriptEnabled true
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info dashIndexFilePath index.html
+    $PLIST_WRITE_CMD $DESTINATIONDIR/$DOCSETNAME/Contents/Info DocSetPlatformFamily wx
+
+    echo "Creating docset database"
+    if ! [ -z "$XCODE_INSTALL" ]; then
+        # Use xcode to create the docset if it is installed
+        $XCODE_INSTALL/usr/bin/docsetutil package -atom $DESTINATIONDIR/$ATOM -download-url $XARDIR/$XAR -output $DESTINATIONDIR/$XAR $DESTINATIONDIR/$DOCSETNAME
+    else
+        # Use doxytag2zealdb to create the database
+        # This requires the python package doxytag2zealdb installed
+        python -m doxytag2zealdb --tag $DESTINATIONDIR/../wxWidgets.tag --db $DESTINATIONDIR/$DOCSETNAME/Contents/Resources/docSet.dsidx --include-parent-scopes --include-function-signatures
+    fi
+
+    # Copy the icon
+    cp $SCRIPTS_DIR/../../../art/wxwin16x16.png $DESTINATIONDIR/$DOCSETNAME/icon.png
+    cp $SCRIPTS_DIR/../../../art/wxwin32x32.png $DESTINATIONDIR/$DOCSETNAME/icon@2x.png
     cd ../..
 fi
 
@@ -201,8 +225,4 @@ fi
 currpath=`pwd`/
 interfacepath=`cd ../../interface && pwd`/
 cat doxygen.log | sed -e "s|$currpath||g" -e "s|$interfacepath||g" > temp
-cat temp > doxygen.log
-rm temp
-
-# return to the original folder from which this script was launched
-cd $current
+mv temp doxygen.log

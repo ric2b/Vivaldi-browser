@@ -142,6 +142,9 @@ update_target("//content/public/browser:browser_sources") {
       "//vivaldi/browser/vivaldi_runtime_feature.cc",
       "//vivaldi/browser/vivaldi_runtime_feature.h",
     ]
+    deps += [
+      "//vivaldi/components/datasource:dataurl",
+    ]
   }
 }
 
@@ -155,7 +158,8 @@ if (!is_android) {
   if (vivaldi_build_tests) {
     update_target("//chrome/test:unit_tests") {
       sources += [
-        "//vivaldi/browser/stats_reporter_unittest.cc"
+        "//vivaldi/browser/stats_reporter_unittest.cc",
+        "//vivaldi/browser/translate/vivaldi_translate_server_request_unittests.cc"
       ]
       if (is_win) {
         sources -= [ "../browser/upgrade_detector/registry_monitor_unittest.cc" ]

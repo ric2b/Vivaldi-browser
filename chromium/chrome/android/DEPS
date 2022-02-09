@@ -22,6 +22,7 @@ include_rules = [
   "+components/browser_ui/photo_picker/android",
   "+components/browser_ui/share/android",
   "+components/browser_ui/site_settings/android",
+  "+components/browser_ui/styles/android",
   "+components/browser_ui/util/android",
   "+components/browser_ui/webshare/android",
   "+components/browser_ui/widget/android",
@@ -90,6 +91,9 @@ specific_include_rules = {
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "AutofillAssistantFacade\.java": [
+    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
+  ],
+  "AssistantDependenciesChrome\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "ManualFillingMediator\.java": [

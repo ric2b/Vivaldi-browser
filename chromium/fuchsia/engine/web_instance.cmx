@@ -19,6 +19,7 @@
       "fuchsia.legacymetrics.MetricsRecorder",
       "fuchsia.logger.LogSink",
       "fuchsia.media.Audio",
+      "fuchsia.media.AudioDeviceEnumerator",
       "fuchsia.media.ProfileProvider",
       "fuchsia.media.SessionAudioConsumerFactory",
       "fuchsia.media.drm.PlayReady",
@@ -31,6 +32,8 @@
       "fuchsia.process.Launcher",
       "fuchsia.settings.Display",
       "fuchsia.sysmem.Allocator",
+      "fuchsia.ui.composition.Allocator",
+      "fuchsia.ui.composition.Flatland",
       "fuchsia.ui.input3.Keyboard",
       "fuchsia.ui.scenic.Scenic",
       "fuchsia.vulkan.loader.Loader"

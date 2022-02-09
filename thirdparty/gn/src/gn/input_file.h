@@ -9,7 +9,6 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "gn/source_dir.h"
 #include "gn/source_file.h"
 
@@ -59,7 +58,8 @@ class InputFile {
   bool contents_loaded_ = false;
   std::string contents_;
 
-  DISALLOW_COPY_AND_ASSIGN(InputFile);
+  InputFile(const InputFile&) = delete;
+  InputFile& operator=(const InputFile&) = delete;
 };
 
 #endif  // TOOLS_GN_INPUT_FILE_H_

@@ -12,6 +12,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/containers/contains.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_bound.h"
@@ -158,15 +159,24 @@ testing::AssertionResult SharedInfoEqual(
   return testing::AssertionSuccess();
 }
 
-AggregatableReportRequest CreateExampleRequest() {
+std::vector<url::Origin> GetExampleProcessingOrigins() {
+  return {url::Origin::Create(GURL("https://a.example")),
+          url::Origin::Create(GURL("https://b.example"))};
+}
+
+AggregatableReportRequest CreateExampleRequest(
+    AggregationServicePayloadContents::ProcessingType processing_type) {
+  return CreateExampleRequest(processing_type, GetExampleProcessingOrigins());
+}
+
+AggregatableReportRequest CreateExampleRequest(
+    AggregationServicePayloadContents::ProcessingType processing_type,
+    std::vector<url::Origin> processing_origins) {
   return AggregatableReportRequest::Create(
-             {url::Origin::Create(GURL("https://a.example")),
-              url::Origin::Create(GURL("https://b.example"))},
+             std::move(processing_origins),
              AggregationServicePayloadContents(
-                 AggregationServicePayloadContents::Operation::
-                     kCountValueHistogram,
-                 /*bucket=*/123, /*value=*/456,
-                 AggregationServicePayloadContents::ProcessingType::kTwoParty,
+                 AggregationServicePayloadContents::Operation::kHistogram,
+                 /*bucket=*/123, /*value=*/456, processing_type,
                  url::Origin::Create(GURL("https://reporting.example"))),
              AggregatableReportSharedInfo(
                  /*scheduled_report_time=*/base::Time::Now(),
@@ -202,7 +212,8 @@ TestHpkeKey GenerateKey(std::string key_id) {
       /*out_len=*/&public_key_len, /*max_out=*/public_key.size()));
   EXPECT_EQ(public_key.size(), public_key_len);
 
-  TestHpkeKey hpke_key{{}, PublicKey(key_id, public_key)};
+  TestHpkeKey hpke_key{
+      {}, PublicKey(key_id, public_key), base::Base64Encode(public_key)};
   EVP_HPKE_KEY_copy(&hpke_key.full_hpke_key, key.get());
 
   return hpke_key;
@@ -210,7 +221,7 @@ TestHpkeKey GenerateKey(std::string key_id) {
 
 }  // namespace aggregation_service
 
-TestAggregatableReportManager::TestAggregatableReportManager(
+TestAggregationServiceStorageContext::TestAggregationServiceStorageContext(
     const base::Clock* clock)
     : storage_(base::SequenceBound<AggregationServiceStorageSql>(
           base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()}),
@@ -218,15 +229,16 @@ TestAggregatableReportManager::TestAggregatableReportManager(
           /*path_to_database=*/base::FilePath(),
           clock)) {}
 
-TestAggregatableReportManager::~TestAggregatableReportManager() = default;
+TestAggregationServiceStorageContext::~TestAggregationServiceStorageContext() =
+    default;
 
 const base::SequenceBound<content::AggregationServiceKeyStorage>&
-TestAggregatableReportManager::GetKeyStorage() {
+TestAggregationServiceStorageContext::GetKeyStorage() {
   return storage_;
 }
 
 TestAggregationServiceKeyFetcher::TestAggregationServiceKeyFetcher()
-    : AggregationServiceKeyFetcher(/*manager=*/nullptr,
+    : AggregationServiceKeyFetcher(/*storage_context=*/nullptr,
                                    /*network_fetcher=*/nullptr) {}
 
 TestAggregationServiceKeyFetcher::~TestAggregationServiceKeyFetcher() = default;
@@ -288,8 +300,8 @@ std::ostream& operator<<(
     std::ostream& out,
     const AggregationServicePayloadContents::Operation& operation) {
   switch (operation) {
-    case AggregationServicePayloadContents::Operation::kCountValueHistogram:
-      return out << "kCountValueHistogram";
+    case AggregationServicePayloadContents::Operation::kHistogram:
+      return out << "kHistogram";
   }
 }
 
@@ -299,6 +311,8 @@ std::ostream& operator<<(
   switch (processing_type) {
     case AggregationServicePayloadContents::ProcessingType::kTwoParty:
       return out << "kTwoParty";
+    case AggregationServicePayloadContents::ProcessingType::kSingleServer:
+      return out << "kSingleServer";
   }
 }
 

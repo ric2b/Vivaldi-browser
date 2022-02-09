@@ -58,9 +58,9 @@ static void wxTextWindowGainFocusProc(Widget w, XtPointer clientData, XmAnyCallb
 static void wxTextWindowLoseFocusProc(Widget w, XtPointer clientData, XmAnyCallbackStruct *cbs);
 static void wxTextWindowActivateProc(Widget w, XtPointer clientData, XmAnyCallbackStruct *ptr);
 
-    BEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
-        EVT_DROP_FILES(wxTextCtrl::OnDropFiles)
-        EVT_CHAR(wxTextCtrl::OnChar)
+wxBEGIN_EVENT_TABLE(wxTextCtrl, wxTextCtrlBase)
+    EVT_DROP_FILES(wxTextCtrl::OnDropFiles)
+    EVT_CHAR(wxTextCtrl::OnChar)
 
     EVT_MENU(wxID_CUT, wxTextCtrl::OnCut)
     EVT_MENU(wxID_COPY, wxTextCtrl::OnCopy)
@@ -74,7 +74,7 @@ static void wxTextWindowActivateProc(Widget w, XtPointer clientData, XmAnyCallba
     EVT_UPDATE_UI(wxID_UNDO, wxTextCtrl::OnUpdateUndo)
     EVT_UPDATE_UI(wxID_REDO, wxTextCtrl::OnUpdateRedo)
 
-    END_EVENT_TABLE()
+wxEND_EVENT_TABLE()
 
 // ============================================================================
 // implementation
@@ -341,13 +341,13 @@ wxString wxTextCtrl::GetLineText(long lineNo) const
         for (i = 0; currentLine != lineNo && s[i]; i++ )
             if (s[i] == '\n')
                 currentLine++;
-            // Now get the text
-            int j;
-            for (j = 0; s[i] && s[i] != '\n'; i++, j++ )
-                buf += s[i];
+        // Now get the text
+        int j;
+        for (j = 0; s[i] && s[i] != '\n'; i++, j++ )
+            buf += s[i];
 
-            XtFree(s);
-            return buf;
+        XtFree(s);
+        return buf;
     }
     else
         return wxEmptyString;

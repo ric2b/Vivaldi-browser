@@ -14,16 +14,13 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_COMMANDLINKBUTTON
 
 #include "wx/commandlinkbutton.h"
 #include "wx/artprov.h"
 
-wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxCommandLinkButton, wxButton, "wx/commandlinkbutton.h")
+wxIMPLEMENT_DYNAMIC_CLASS_XTI(wxCommandLinkButton, wxButton, "wx/commandlinkbutton.h");
 
 wxDEFINE_FLAGS( wxCommandLinkButtonStyle )
 wxBEGIN_FLAGS( wxCommandLinkButtonStyle )

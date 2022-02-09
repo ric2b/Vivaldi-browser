@@ -10,10 +10,8 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/supports_user_data.h"
-#include "content/common/content_export.h"
 
 namespace content {
 
@@ -46,6 +44,10 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&,
       const base::android::JavaParamRef<jobject>& jcallback) const;
+
+  base::android::ScopedJavaLocalRef<jobjectArray> GetAllRenderFrameHosts(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&) const;
 
   bool IsFeatureEnabled(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>&,
@@ -102,7 +104,7 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
   RenderFrameHostImpl* render_frame_host() const { return render_frame_host_; }
 
  private:
-  RenderFrameHostImpl* const render_frame_host_;
+  const raw_ptr<RenderFrameHostImpl> render_frame_host_;
   JavaObjectWeakGlobalRef obj_;
 };
 

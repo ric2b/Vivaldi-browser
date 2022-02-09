@@ -16,8 +16,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
-#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
+#include "base/memory/raw_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "media/base/byte_queue.h"
@@ -41,7 +41,13 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
  public:
   using BufferQueue = base::circular_deque<scoped_refptr<StreamParserBuffer>>;
 
+  ChunkDemuxerStream() = delete;
+
   ChunkDemuxerStream(Type type, MediaTrack::Id media_track_id);
+
+  ChunkDemuxerStream(const ChunkDemuxerStream&) = delete;
+  ChunkDemuxerStream& operator=(const ChunkDemuxerStream&) = delete;
+
   ~ChunkDemuxerStream() override;
 
   // ChunkDemuxerStream control methods.
@@ -188,8 +194,6 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   State state_ GUARDED_BY(lock_);
   ReadCB read_cb_ GUARDED_BY(lock_);
   bool is_enabled_ GUARDED_BY(lock_);
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(ChunkDemuxerStream);
 };
 
 // Demuxer implementation that allows chunks of media data to be passed
@@ -509,13 +513,13 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   State state_;
   bool cancel_next_seek_;
 
-  DemuxerHost* host_;
+  raw_ptr<DemuxerHost> host_;
   base::OnceClosure open_cb_;
   const base::RepeatingClosure progress_cb_;
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
 
   // MediaLog for reporting messages and properties to debug content and engine.
-  MediaLog* media_log_;
+  raw_ptr<MediaLog> media_log_;
 
   PipelineStatusCallback init_cb_;
   // Callback to execute upon seek completion.

@@ -12,7 +12,7 @@
 @tableofcontents
 
 Typically combining the existing @ref group_class_ctrl controls in wxDialogs
-and wxFrames is sufficient to fullfill any GUI design. Using the wxWidgets
+and wxFrames is sufficient to fulfill any GUI design. Using the wxWidgets
 standard controls makes your GUI looks native on all ports and is obviously
 easier and faster.
 
@@ -34,7 +34,7 @@ disadvantage is that it the widget will look the same on all platforms, and
 thus it may not integrate well with the native look and feel.
 
 The second method is to build it directly upon the native toolkits of the
-platforms you want to support (e.g. GTK+, Carbon and GDI). In this way you'll
+platforms you want to support (e.g. GTK+, Cocoa and GDI). In this way you'll
 get a @b native widget. This method in fact has the advantage of a native look
 and feel but requires different implementations and thus more work.
 

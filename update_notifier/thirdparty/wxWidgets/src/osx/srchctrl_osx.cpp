@@ -10,9 +10,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_SEARCHCTRL
 
@@ -26,10 +23,10 @@
 
 #include "wx/osx/private.h"
 
-BEGIN_EVENT_TABLE(wxSearchCtrl, wxSearchCtrlBase)
-END_EVENT_TABLE()
+wxBEGIN_EVENT_TABLE(wxSearchCtrl, wxSearchCtrlBase)
+wxEND_EVENT_TABLE()
 
-IMPLEMENT_DYNAMIC_CLASS(wxSearchCtrl, wxSearchCtrlBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxSearchCtrl, wxSearchCtrlBase);
 
 
 #endif // wxUSE_NATIVE_SEARCH_CONTROL
@@ -62,7 +59,9 @@ wxSearchCtrl::wxSearchCtrl(wxWindow *parent, wxWindowID id,
 
 void wxSearchCtrl::Init()
 {
+#if wxUSE_MENUS
     m_menu = 0;
+#endif
 }
 
 wxSearchWidgetImpl* wxSearchCtrl::GetSearchPeer() const
@@ -72,7 +71,9 @@ wxSearchWidgetImpl* wxSearchCtrl::GetSearchPeer() const
 
 wxSearchCtrl::~wxSearchCtrl()
 {
+#if wxUSE_MENUS
     delete m_menu;
+#endif
 }
 
 wxSize wxSearchCtrl::DoGetBestSize() const
@@ -85,6 +86,7 @@ wxSize wxSearchCtrl::DoGetBestSize() const
     return size;
 }
 
+#if wxUSE_MENUS
 
 // search control specific interfaces
 // wxSearchCtrl owns menu after this call
@@ -116,6 +118,16 @@ wxMenu* wxSearchCtrl::GetMenu()
 {
     return m_menu;
 }
+
+void wxSearchCtrl::OSXAfterMenuEvent()
+{
+    // The menu is used as a template for creating the actual menu shown by the
+    // control, so update this template with the latest menu state after a menu
+    // command as the state of check/radio items could have changed after it.
+    GetSearchPeer()->SetSearchMenu( m_menu );
+}
+
+#endif  // wxUSE_MENUS
 
 void wxSearchCtrl::ShowSearchButton( bool show )
 {
@@ -202,7 +214,7 @@ bool wxSearchCtrl::Create(wxWindow *parent, wxWindowID id,
 
 bool wxSearchCtrl::HandleSearchFieldSearchHit()
 {
-    wxCommandEvent event(wxEVT_SEARCHCTRL_SEARCH_BTN, m_windowId );
+    wxCommandEvent event(wxEVT_SEARCH, m_windowId );
     event.SetEventObject(this);
 
     // provide the string to search for directly in the event, this is more
@@ -214,7 +226,7 @@ bool wxSearchCtrl::HandleSearchFieldSearchHit()
 
 bool wxSearchCtrl::HandleSearchFieldCancelHit()
 {
-    wxCommandEvent event(wxEVT_SEARCHCTRL_CANCEL_BTN, m_windowId );
+    wxCommandEvent event(wxEVT_SEARCH_CANCEL, m_windowId );
     event.SetEventObject(this);
     return ProcessCommand(event);
 }

@@ -441,9 +441,6 @@
     <message name="IDS_PAGE_INFO_STATE_TEXT_FONT_ACCESS_ASK" desc="The Page Info permission subpage and the main page info page contain a label which shows the state of the site permission. This is the text shown if the fonts permission is in the ask state and the site can prompt the user to ask if they allow the site to use fonts installed on your device.">
       Can ask to use fonts installed on your device
     </message>
-    <message name="IDS_PAGE_INFO_STATE_TEXT_FILE_HANDLING_ASK" desc="The Page Info permission subpage and the main page info page contain a label which shows the state of the site permission. This is the text shown if the file handling permission is in the ask state and the site can prompt the user to ask if they allow the site to open types of files.">
-      Can ask to open types of files
-    </message>
     <message name="IDS_PAGE_INFO_STATE_TEXT_SERIAL_ASK" desc="The Page Info permission subpage and the main page info page contain a label which shows the state of the site permission. This is the text shown if the serial permission is in the ask state and the site can prompt the user to ask if they allow the site to connect to serial ports.">
       Can ask to connect to serial ports
     </message>
@@ -692,5 +689,16 @@
   </message>
   <message name="IDS_PAGE_INFO_RESET_PERMISSIONS" desc="The label of the button to reset permissions for a site.">
     {NUM_PERMISSIONS, plural, =1 {Reset permission} other {Reset permissions}}
+  </message>
+
+  <!-- About this site strings -->
+  <message name="IDS_PAGE_INFO_ABOUT_THIS_SITE_HEADER" desc="The header label of the 'About this site' subpage in Page Info bubble.">
+    About this site
+  </message>
+  <message name="IDS_PAGE_INFO_ABOUT_THIS_SITE_TOOLTIP" desc="The tooltip of the button that opens 'About this site' subpage in Page Info bubble.">
+    Show information about this site
+  </message>
+  <message name="IDS_PAGE_INFO_ABOUT_THIS_SITE_SUBPAGE_FROM_LABEL" desc="The label containing the source of the description in the 'About this site' subpage in Page Info bubble.">
+    From <ph name="SOURCE_NAME">$1<ex>Wikipedia</ex></ph>
   </message>
 </grit-part>

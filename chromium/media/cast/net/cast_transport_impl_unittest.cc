@@ -12,8 +12,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/values.h"
 #include "media/base/fake_single_thread_task_runner.h"
@@ -34,11 +34,12 @@ class StubRtcpObserver : public RtcpObserver {
  public:
   StubRtcpObserver() = default;
 
+  StubRtcpObserver(const StubRtcpObserver&) = delete;
+  StubRtcpObserver& operator=(const StubRtcpObserver&) = delete;
+
   void OnReceivedCastMessage(const RtcpCastMessage& cast_message) final {}
   void OnReceivedRtt(base::TimeDelta round_trip_time) final {}
   void OnReceivedPli() final {}
-
-  DISALLOW_COPY_AND_ASSIGN(StubRtcpObserver);
 };
 
 }  // namespace
@@ -46,6 +47,9 @@ class StubRtcpObserver : public RtcpObserver {
 class FakePacketSender : public PacketTransport {
  public:
   FakePacketSender() : paused_(false), packets_sent_(0), bytes_sent_(0) {}
+
+  FakePacketSender(const FakePacketSender&) = delete;
+  FakePacketSender& operator=(const FakePacketSender&) = delete;
 
   bool SendPacket(PacketRef packet, base::OnceClosure cb) final {
     if (paused_) {
@@ -80,8 +84,6 @@ class FakePacketSender : public PacketTransport {
   PacketRef stored_packet_;
   int packets_sent_;
   int64_t bytes_sent_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakePacketSender);
 };
 
 class CastTransportImplTest : public ::testing::Test {
@@ -121,7 +123,7 @@ class CastTransportImplTest : public ::testing::Test {
   base::SimpleTestTickClock testing_clock_;
   scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   std::unique_ptr<CastTransportImpl> transport_sender_;
-  FakePacketSender* transport_;  // Owned by CastTransport.
+  raw_ptr<FakePacketSender> transport_;  // Owned by CastTransport.
   int num_times_logging_callback_called_;
 };
 
@@ -133,6 +135,9 @@ class TransportClient : public CastTransport::Client {
       CastTransportImplTest* cast_transport_sender_impl_test)
       : cast_transport_sender_impl_test_(cast_transport_sender_impl_test) {}
 
+  TransportClient(const TransportClient&) = delete;
+  TransportClient& operator=(const TransportClient&) = delete;
+
   void OnStatusChanged(CastTransportStatus status) final {}
   void OnLoggingEventsReceived(
       std::unique_ptr<std::vector<FrameEvent>> frame_events,
@@ -143,9 +148,7 @@ class TransportClient : public CastTransport::Client {
   void ProcessRtpPacket(std::unique_ptr<Packet> packet) final {}
 
  private:
-  CastTransportImplTest* const cast_transport_sender_impl_test_;
-
-  DISALLOW_COPY_AND_ASSIGN(TransportClient);
+  const raw_ptr<CastTransportImplTest> cast_transport_sender_impl_test_;
 };
 
 }  // namespace
@@ -154,8 +157,8 @@ void CastTransportImplTest::InitWithoutLogging() {
   transport_ = new FakePacketSender();
   transport_sender_ = std::make_unique<CastTransportImpl>(
       &testing_clock_, base::TimeDelta(),
-      std::make_unique<TransportClient>(nullptr), base::WrapUnique(transport_),
-      task_runner_);
+      std::make_unique<TransportClient>(nullptr),
+      base::WrapUnique(transport_.get()), task_runner_);
   task_runner_->RunTasks();
 }
 
@@ -168,8 +171,8 @@ void CastTransportImplTest::InitWithOptions() {
   transport_ = new FakePacketSender();
   transport_sender_ = std::make_unique<CastTransportImpl>(
       &testing_clock_, base::TimeDelta(),
-      std::make_unique<TransportClient>(nullptr), base::WrapUnique(transport_),
-      task_runner_);
+      std::make_unique<TransportClient>(nullptr),
+      base::WrapUnique(transport_.get()), task_runner_);
   transport_sender_->SetOptions(*options);
   task_runner_->RunTasks();
 }
@@ -178,8 +181,8 @@ void CastTransportImplTest::InitWithLogging() {
   transport_ = new FakePacketSender();
   transport_sender_ = std::make_unique<CastTransportImpl>(
       &testing_clock_, base::Milliseconds(10),
-      std::make_unique<TransportClient>(this), base::WrapUnique(transport_),
-      task_runner_);
+      std::make_unique<TransportClient>(this),
+      base::WrapUnique(transport_.get()), task_runner_);
   task_runner_->RunTasks();
 }
 

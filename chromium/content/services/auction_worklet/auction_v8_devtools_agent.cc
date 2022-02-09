@@ -11,7 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/debug_command_queue.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -23,9 +23,11 @@ AuctionV8DevToolsAgent::ContextGroupInfo::~ContextGroupInfo() = default;
 
 AuctionV8DevToolsAgent::AuctionV8DevToolsAgent(
     AuctionV8Helper* v8_helper,
+    DebugCommandQueue* debug_command_queue,
     scoped_refptr<base::SequencedTaskRunner> io_session_receiver_sequence)
     : v8_helper_(v8_helper),
-      io_session_receiver_sequence_(std::move(io_session_receiver_sequence)) {}
+      io_session_receiver_sequence_(std::move(io_session_receiver_sequence)),
+      debug_command_queue_(debug_command_queue) {}
 
 AuctionV8DevToolsAgent::~AuctionV8DevToolsAgent() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
@@ -38,6 +40,20 @@ void AuctionV8DevToolsAgent::Connect(
     int context_group_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
   receivers_.Add(this, std::move(agent), context_group_id);
+}
+
+void AuctionV8DevToolsAgent::MaybeTriggerInstrumentationBreakpoint(
+    int context_group_id,
+    const std::string& name) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+
+  auto it = context_groups_.find(context_group_id);
+  if (it == context_groups_.end())
+    return;  // No sessions, so no breakpoints.
+
+  for (AuctionV8DevToolsSession* session : it->second.sessions) {
+    session->MaybeTriggerInstrumentationBreakpoint(name);
+  }
 }
 
 void AuctionV8DevToolsAgent::DestroySessions() {
@@ -64,15 +80,12 @@ void AuctionV8DevToolsAgent::AttachDevToolsSession(
           // `sessions_` guarantees `session_impl` won't outlast `this`.
           base::Unretained(this));
   auto session_impl = std::make_unique<AuctionV8DevToolsSession>(
-      v8_helper_, context_group_info.command_queue, context_group_id,
-      session_id, client_expects_binary_responses, std::move(host),
+      v8_helper_, debug_command_queue_, context_group_id, session_id,
+      client_expects_binary_responses, std::move(host),
       io_session_receiver_sequence_, std::move(io_session_receiver),
       std::move(session_destroyed));
-  sessions_.Add(std::move(session_impl), std::move(session_receiver));
-
-  // Keep track of sessions for given worklet, to help cleanup its
-  // DebugCommandQueue.
   context_group_info.sessions.insert(session_impl.get());
+  sessions_.Add(std::move(session_impl), std::move(session_receiver));
 }
 
 void AuctionV8DevToolsAgent::InspectElement(const ::gfx::Point& point) {
@@ -90,22 +103,27 @@ void AuctionV8DevToolsAgent::ReportChildWorkers(
 
 void AuctionV8DevToolsAgent::runMessageLoopOnPause(int context_group_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
-  DCHECK(!paused_context_group_queue_);
+  DCHECK(!paused_);
 
   auto it = context_groups_.find(context_group_id);
   DCHECK(it != context_groups_.end());
+  DCHECK(!it->second.sessions.empty());
+  AuctionV8DevToolsSession* session = *it->second.sessions.begin();
 
-  paused_context_group_queue_ = it->second.command_queue;
   v8_helper_->PauseTimeoutTimer();
-  paused_context_group_queue_->PauseForDebuggerAndRunCommands();
+  paused_ = true;
+  base::OnceClosure abort_callback = session->MakeAbortPauseCallback();
+  debug_command_queue_->PauseForDebuggerAndRunCommands(
+      context_group_id, std::move(abort_callback));
+  DCHECK(paused_);
   v8_helper_->ResumeTimeoutTimer();
-  paused_context_group_queue_ = nullptr;
+  paused_ = false;
 }
 
 void AuctionV8DevToolsAgent::quitMessageLoopOnPause() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
-  DCHECK(paused_context_group_queue_);
-  paused_context_group_queue_->QuitPauseForDebugger();
+  DCHECK(paused_);
+  debug_command_queue_->QuitPauseForDebugger();
 }
 
 void AuctionV8DevToolsAgent::runIfWaitingForDebugger(int context_group_id) {
@@ -119,13 +137,8 @@ void AuctionV8DevToolsAgent::SessionDestroyed(
   auto it = context_groups_.find(session->context_group_id());
   DCHECK(it != context_groups_.end());
   it->second.sessions.erase(session);
-  if (it->second.sessions.empty()) {
-    // TODO(morlovich): This currently can't happen since we can't see
-    // SessionDestroyed when paused, but the scenario of navigating away when
-    // paused may be a trouble spot.
-    DCHECK_NE(it->second.command_queue, paused_context_group_queue_);
+  if (it->second.sessions.empty())
     context_groups_.erase(it);
-  }
 }
 
 }  // namespace auction_worklet

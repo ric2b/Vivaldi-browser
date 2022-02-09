@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/public/browser/shared_worker_instance.h"
@@ -30,6 +29,10 @@ class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   SharedWorkerDevToolsAgentHost(
       SharedWorkerHost* worker_host,
       const base::UnguessableToken& devtools_worker_token);
+
+  SharedWorkerDevToolsAgentHost(const SharedWorkerDevToolsAgentHost&) = delete;
+  SharedWorkerDevToolsAgentHost& operator=(
+      const SharedWorkerDevToolsAgentHost&) = delete;
 
   // DevToolsAgentHost override.
   BrowserContext* GetBrowserContext() override;
@@ -77,8 +80,6 @@ class SharedWorkerDevToolsAgentHost : public DevToolsAgentHostImpl {
   SharedWorkerHost* worker_host_;
   base::UnguessableToken devtools_worker_token_;
   SharedWorkerInstance instance_;
-
-  DISALLOW_COPY_AND_ASSIGN(SharedWorkerDevToolsAgentHost);
 };
 
 }  // namespace content

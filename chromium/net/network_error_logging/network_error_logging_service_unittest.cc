@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
@@ -219,9 +218,9 @@ class NetworkErrorLoggingServiceTest : public ::testing::TestWithParam<bool> {
 void ExpectDictDoubleValue(double expected_value,
                            const base::DictionaryValue& value,
                            const std::string& key) {
-  double double_value = 0.0;
-  EXPECT_TRUE(value.GetDouble(key, &double_value)) << key;
-  EXPECT_DOUBLE_EQ(expected_value, double_value) << key;
+  absl::optional<double> double_value = value.FindDoubleKey(key);
+  ASSERT_TRUE(double_value) << key;
+  EXPECT_DOUBLE_EQ(expected_value, *double_value) << key;
 }
 
 TEST_P(NetworkErrorLoggingServiceTest, CreateService) {

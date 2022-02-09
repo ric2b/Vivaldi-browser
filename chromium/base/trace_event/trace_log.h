@@ -16,10 +16,9 @@
 
 #include "base/containers/stack.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time_override.h"
 #include "base/trace_event/category_registry.h"
@@ -194,6 +193,21 @@ class BASE_EXPORT TraceLog :
   void RemoveAsyncEnabledStateObserver(AsyncEnabledStateObserver* listener);
   bool HasAsyncEnabledStateObserver(AsyncEnabledStateObserver* listener) const;
 
+  // Observers that are notified when incremental state is cleared. This only
+  // happens when tracing using the perfetto backend.
+  class BASE_EXPORT IncrementalStateObserver {
+   public:
+    virtual ~IncrementalStateObserver() = default;
+
+    // Called just after the tracing system has cleared incremental state, while
+    // a tracing session is active.
+    virtual void OnIncrementalStateCleared() = 0;
+  };
+  // Adds an observer. Cannot be called from within the observer callback.
+  void AddIncrementalStateObserver(IncrementalStateObserver* listener);
+  // Removes an observer. Cannot be called from within the observer callback.
+  void RemoveIncrementalStateObserver(IncrementalStateObserver* listener);
+
   TraceLogStatus GetStatus() const;
   bool BufferIsFull() const;
 
@@ -364,6 +378,11 @@ class BASE_EXPORT TraceLog :
     return process_name_;
   }
 
+  std::unordered_map<int, std::string> process_labels() const {
+    AutoLock lock(lock_);
+    return process_labels_;
+  }
+
   uint64_t MangleEventId(uint64_t id);
 
   // Exposed for unittesting:
@@ -439,6 +458,9 @@ class BASE_EXPORT TraceLog :
   void OnStart(const perfetto::DataSourceBase::StartArgs&) override;
   void OnStop(const perfetto::DataSourceBase::StopArgs&) override;
 #endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+
+  // Called by the perfetto backend just after incremental state was cleared.
+  void OnIncrementalStateCleared();
 
  private:
   typedef unsigned int InternalTraceOptions;
@@ -574,6 +596,8 @@ class BASE_EXPORT TraceLog :
   // added to |enabled_state_observers_|.
   std::vector<std::unique_ptr<EnabledStateObserver>>
       owned_enabled_state_observer_copy_ GUARDED_BY(observers_lock_);
+  std::vector<IncrementalStateObserver*> incremental_state_observers_
+      GUARDED_BY(observers_lock_);
 
   std::string process_name_;
   std::unordered_map<int, std::string> process_labels_;

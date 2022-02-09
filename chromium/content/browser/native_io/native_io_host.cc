@@ -16,11 +16,11 @@
 #include "base/files/file_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/task_runner.h"
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "content/browser/native_io/native_io_file_host.h"
@@ -102,7 +102,7 @@ std::pair<base::File, int64_t> DoOpenFile(const base::FilePath& root_path,
   // SHARE_DELETE allows the browser to delete files even if a compromised
   // renderer refuses to close its file handles.
   int open_flags = base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_READ |
-                   base::File::FLAG_WRITE | base::File::FLAG_SHARE_DELETE;
+                   base::File::FLAG_WRITE | base::File::FLAG_WIN_SHARE_DELETE;
   base::File file(GetNativeIOFilePath(root_path, name), open_flags);
 
   int64_t file_length = file.IsValid() ? file.GetLength() : 0;

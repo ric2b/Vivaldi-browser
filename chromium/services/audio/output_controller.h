@@ -14,8 +14,6 @@
 #include "base/atomic_ref_count.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
-#include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -23,7 +21,6 @@
 #include "build/build_config.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
-#include "media/audio/audio_source_diverter.h"
 #include "media/base/audio_power_monitor.h"
 #include "services/audio/loopback_group_member.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -61,8 +58,7 @@ namespace audio {
 class OutputStreamActivityMonitor;
 
 class OutputController : public media::AudioOutputStream::AudioSourceCallback,
-                         public LoopbackGroupMember,
-                         public media::AudioManager::AudioDeviceListener {
+                         public LoopbackGroupMember {
  public:
   // An event handler that receives events from the OutputController. The
   // following methods are called on the audio manager thread.
@@ -112,15 +108,30 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
     kError,
   };
 
+  // OutputController guarantees that |on_device_change_callback| will
+  // synchronously close the stream received in
+  // ManagedDeviceOutputStreamCreateCallback.
+  using ManagedDeviceOutputStreamCreateCallback =
+      base::RepeatingCallback<media::AudioOutputStream*(
+          const std::string&,
+          const media::AudioParameters&,
+          base::OnceClosure on_device_change_callback)>;
+
   // |audio_manager| and |handler| must outlive OutputController.  The
   // |output_device_id| can be either empty (default device) or specify a
   // specific hardware device for audio output.
+  // If |managed_device_output_stream_create_callback| is provided, it will be
+  // used to create a device stream under control; otherwise the stream will be
+  // created using |audio_manager|.
   OutputController(media::AudioManager* audio_manager,
                    EventHandler* handler,
                    OutputStreamActivityMonitor* activity_monitor,
                    const media::AudioParameters& params,
                    const std::string& output_device_id,
-                   SyncReader* sync_reader);
+                   SyncReader* sync_reader,
+                   ManagedDeviceOutputStreamCreateCallback
+                       managed_device_output_stream_create_callback =
+                           ManagedDeviceOutputStreamCreateCallback());
 
   OutputController(const OutputController&) = delete;
   OutputController& operator=(const OutputController&) = delete;
@@ -174,11 +185,6 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
   void StopSnooping(Snooper* snooper) override;
   void StartMuting() override;
   void StopMuting() override;
-
-  // AudioDeviceListener implementation.  When called OutputController will
-  // shutdown the existing |stream_|, create a new stream, and then transition
-  // back to an equivalent state prior to being called.
-  void OnDeviceChange() override;
 
   // Accessor for AudioPowerMonitor::ReadCurrentPowerAndClip().  See comments in
   // audio_power_monitor.h for usage.  This may be called on any thread.
@@ -279,8 +285,18 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
   // change.
   void ToggleLocalOutput();
 
+  // When called, OutputController will shutdown the existing |stream_|, create
+  // a new stream, and then transition back to an equivalent state prior to
+  // being called.
+  void ProcessDeviceChange();
+
   media::AudioManager* const audio_manager_;
   const media::AudioParameters params_;
+
+  // Callback to create a device output stream; if not specified -
+  // |audio_manager_| will be used to create a device output stream.
+  ManagedDeviceOutputStreamCreateCallback
+      managed_device_output_stream_create_callback_;
 
   // This object (OC) is owned by an OutputStream (OS) object which is an
   // EventHandler. |handler_| is set at construction by the OS (using this).
@@ -332,11 +348,6 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
   // and destroyed when a stream stops. Also reset every time there is a stream
   // being created due to device changes.
   absl::optional<ErrorStatisticsTracker> stats_tracker_;
-
-  // WeakPtrFactory+WeakPtr that is used to post tasks that are canceled when a
-  // stream is closed.
-  base::WeakPtr<OutputController> weak_this_for_stream_;
-  base::WeakPtrFactory<OutputController> weak_factory_for_stream_{this};
 };
 
 }  // namespace audio

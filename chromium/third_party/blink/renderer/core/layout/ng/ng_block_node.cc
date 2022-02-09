@@ -304,9 +304,8 @@ bool CanUseCachedIntrinsicInlineSizes(const NGConstraintSpace& constraint_space,
                                  style.PaddingEnd().IsPercentOrCalc()))
     return false;
 
-  if (!style.AspectRatio().IsAuto() &&
-      (style.LogicalMinHeight().IsPercentOrCalc() ||
-       style.LogicalMaxHeight().IsPercentOrCalc()))
+  if (node.HasAspectRatio() && (style.LogicalMinHeight().IsPercentOrCalc() ||
+                                style.LogicalMaxHeight().IsPercentOrCalc()))
     return false;
 
   if (node.IsNGTableCell() && To<LayoutNGTableCell>(node.GetLayoutBox())
@@ -894,7 +893,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
   // block constraints.
   if (can_use_cached_intrinsic_inline_sizes &&
       !box_->IntrinsicLogicalWidthsChildDependsOnBlockConstraints()) {
-    MinMaxSizes sizes = box_->IsTable() && !box_->IsLayoutNGMixin()
+    MinMaxSizes sizes = box_->IsTable() && !box_->IsLayoutNGObject()
                             ? box_->PreferredLogicalWidths()
                             : box_->IntrinsicLogicalWidths(type);
     bool depends_on_block_constraints =
@@ -918,7 +917,7 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
       initial_block_size == box_->IntrinsicLogicalWidthsInitialBlockSize() &&
       !UseParentPercentageResolutionBlockSizeForChildren()) {
     DCHECK(box_->IntrinsicLogicalWidthsChildDependsOnBlockConstraints());
-    MinMaxSizes sizes = box_->IsTable() && !box_->IsLayoutNGMixin()
+    MinMaxSizes sizes = box_->IsTable() && !box_->IsLayoutNGObject()
                             ? box_->PreferredLogicalWidths()
                             : box_->IntrinsicLogicalWidths(type);
     return MinMaxSizesResult(sizes, self_depends_on_block_constraints);
@@ -1077,11 +1076,19 @@ bool NGBlockNode::CanUseNewLayout(const LayoutBox& box) {
   DCHECK(RuntimeEnabledFeatures::LayoutNGEnabled());
   if (box.ForceLegacyLayout())
     return false;
-  return box.IsLayoutNGMixin() || box.IsLayoutReplaced();
+  return box.IsLayoutNGObject() || box.IsLayoutReplaced();
 }
 
 bool NGBlockNode::CanUseNewLayout() const {
   return CanUseNewLayout(*box_);
+}
+
+LayoutUnit NGBlockNode::EmptyLineBlockSize(
+    const NGBlockBreakToken* incoming_break_token) const {
+  // Only return a line-height for the first fragment.
+  if (IsResumingLayout(incoming_break_token))
+    return LayoutUnit();
+  return box_->LogicalHeightForEmptyLine();
 }
 
 String NGBlockNode::ToString() const {
@@ -1595,10 +1602,8 @@ LogicalSize NGBlockNode::GetAspectRatio() const {
     IntrinsicSizingInfo legacy_sizing_info;
     To<LayoutReplaced>(box_.Get())
         ->ComputeIntrinsicSizingInfo(legacy_sizing_info);
-    if (!legacy_sizing_info.aspect_ratio.IsEmpty()) {
-      return LogicalSize::AspectRatioFromFloatSize(
-          legacy_sizing_info.aspect_ratio);
-    }
+    if (!legacy_sizing_info.aspect_ratio.IsEmpty())
+      return LogicalSize::AspectRatioFromSizeF(legacy_sizing_info.aspect_ratio);
   }
   if (ratio.GetType() == EAspectRatioType::kAutoAndRatio)
     return Style().LogicalAspectRatio();
@@ -1685,12 +1690,16 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::RunLegacyLayout(
   DCHECK(!constraint_space.HasBlockFragmentation() ||
          box_->GetNGPaginationBreakability() == LayoutBox::kForbidBreaks);
 
+  scoped_refptr<const NGLayoutResult> old_layout_result =
+      box_->GetCachedLayoutResult();
+  scoped_refptr<const NGLayoutResult> old_measure_result =
+      box_->GetCachedMeasureResult();
+
   scoped_refptr<const NGLayoutResult> layout_result =
-      constraint_space.CacheSlot() == NGCacheSlot::kMeasure
-          ? box_->GetCachedMeasureResult()
-          : box_->GetCachedLayoutResult();
+      constraint_space.CacheSlot() == NGCacheSlot::kMeasure ? old_measure_result
+                                                            : old_layout_result;
   if (constraint_space.CacheSlot() == NGCacheSlot::kLayout && !layout_result)
-    layout_result = box_->GetCachedMeasureResult();
+    layout_result = old_measure_result;
 
   if (UNLIKELY(DevtoolsReadonlyLayoutScope::InDevtoolsLayout())) {
     DCHECK(layout_result);
@@ -1714,7 +1723,7 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::RunLegacyLayout(
 
     // Using |LayoutObject::LayoutIfNeeded| save us a little bit of overhead,
     // compared to |LayoutObject::ForceLayout|.
-    DCHECK(!box_->IsLayoutNGMixin());
+    DCHECK(!box_->IsLayoutNGObject());
     bool needed_layout = box_->NeedsLayout();
     if (box_->NeedsLayout() && !needs_force_relayout)
       box_->LayoutIfNeeded();
@@ -1767,6 +1776,15 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::RunLegacyLayout(
     // When side effects are disabled, it's not possible to disable side effects
     // completely for legacy, but at least keep the fragment tree unaffected.
     if (!NGDisableSideEffectsScope::IsDisabled()) {
+      // Legacy layout clears both layout and measure results, in
+      // LayoutBox::UpdateAfterLayout(), because that code has no way of knowing
+      // whether the legacy object is laid out by an NG container or not. We
+      // will now store the new layout result, either the measure result or the
+      // actual layout result, depending on the cache slot selected. Make sure
+      // that we leave the *other* result untouched, by first canceling what
+      // UpdateAfterLayout() did.
+      box_->RestoreLegacyLayoutResults(old_measure_result, old_layout_result);
+
       box_->SetCachedLayoutResult(layout_result);
 
       // If |SetCachedLayoutResult| did not update cached |LayoutResult|,

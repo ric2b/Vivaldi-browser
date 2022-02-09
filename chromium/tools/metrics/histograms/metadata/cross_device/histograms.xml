@@ -11,10 +11,11 @@ along with a detailed description for each histogram.
 For best practices on writing histogram descriptions, see
 https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
 
-Please send CLs to chromium-metrics-reviews@google.com rather than to specific
-individuals. These CLs will be automatically reassigned to a reviewer within
-about 5 minutes. This approach helps the metrics team to load-balance incoming
-reviews. Googlers can read more about this at go/gwsq-gerrit.
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
 -->
 
 <histogram-configuration>
@@ -73,8 +74,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>better-together-dev@google.com</owner>
   <summary>
     Indicates the feature state of the Messages feature. This metric is emitted
-    to at the creation of the user session (when the user logs in), and when
-    feature state updates occur.
+    to at the creation of the user session (when the user logs in), when any
+    multi-device feature state changes, and every 30 minutes.
   </summary>
 </histogram>
 
@@ -154,7 +155,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="CryptAuth.ClientAppMetadataInstanceIdTokenFetch.Result"
     enum="InstanceIDResult" expires_after="2022-08-23">
-  <owner>khorimoto@chromium.org</owner>
+  <owner>nohle@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Indicates the result of fetching an InstanceId token during the construction
@@ -164,7 +165,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="CryptAuth.ClientAppMetadataInstanceIdTokenFetch.Retries"
     units="retries" expires_after="2022-08-23">
-  <owner>khorimoto@chromium.org</owner>
   <owner>nohle@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1120,7 +1120,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="EasyUnlock.AuthEvent.SignIn" enum="EasyUnlockAuthEvent"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1367,7 +1367,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="InstantTethering.ConnectionToHostResult.SuccessRate.Background"
     enum="InstantTethering_ConnectionToHostResult_SuccessRate"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1445,7 +1445,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InstantTethering.KeepAliveTickle.Result" enum="BooleanSuccess"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1460,8 +1460,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>better-together-dev@google.com</owner>
   <summary>
     Indicates the feature state of the Instant Tethering feature. This metric is
-    emitted to at the creation of the user session (when the user logs in), and
-    when feature state updates occur.
+    emitted to at the creation of the user session (when the user logs in), when
+    any multi-device feature state changes, and every 30 minutes.
   </summary>
 </histogram>
 
@@ -1498,7 +1498,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="InstantTethering.Performance.ConnectToHotspotDuration"
-    units="ms" expires_after="2022-04-03">
+    units="ms" expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1576,7 +1576,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="MultiDevice.BetterTogetherSuite.DoesMultiDeviceSetupClientExist"
-    enum="BooleanSuccess" expires_after="2022-02-13">
+    enum="BooleanSuccess" expires_after="2022-04-24">
+  <obsolete>
+    Deprecated as of 10/26/2021.
+  </obsolete>
   <owner>julietlevesque@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1596,12 +1599,12 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Indicates the feature state of the Better Together Suite feature. This
     metric is emitted to at the creation of the user session (when the user logs
-    in), and when feature state updates occur.
+    in), when any multi-device feature state changes, and every 30 minutes.
   </summary>
 </histogram>
 
 <histogram name="MultiDevice.DeviceSyncService.FindEligibleDevices.Result"
-    enum="BooleanSuccess" expires_after="2022-02-13">
+    enum="BooleanSuccess" expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>Result of trying to find eligible devices.</summary>
@@ -1610,7 +1613,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="MultiDevice.DeviceSyncService.FindEligibleDevices.Result.FailureReason"
     enum="MultiDevice_DeviceSyncService_DeviceSyncRequestFailureReason"
-    expires_after="2021-12-12">
+    expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1621,7 +1624,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MultiDevice.DeviceSyncService.ForceEnrollmentNow.Result"
     enum="MultiDevice_DeviceSyncService_ForceCryptAuthOperationResult"
-    expires_after="2022-02-02">
+    expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>Result for when ForceEnrollmentNow is called.</summary>
@@ -1629,7 +1632,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MultiDevice.DeviceSyncService.ForceSyncNow.Result"
     enum="MultiDevice_DeviceSyncService_ForceCryptAuthOperationResult"
-    expires_after="2022-05-01">
+    expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>Result for when ForceSyncNow is called.</summary>
@@ -1637,7 +1640,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="MultiDevice.DeviceSyncService.SetSoftwareFeatureState.Disable.FailedFeature"
-    enum="MultiDevice_DeviceSyncService_Features" expires_after="2021-12-12">
+    enum="MultiDevice_DeviceSyncService_Features" expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1647,14 +1650,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="MultiDevice.DeviceSyncService.SetSoftwareFeatureState.Enable.FailedFeature"
-    enum="MultiDevice_DeviceSyncService_Features" expires_after="2021-12-12">
+    enum="MultiDevice_DeviceSyncService_Features" expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>Breaks down which features failed when attempted to enable.</summary>
 </histogram>
 
 <histogram name="MultiDevice.DeviceSyncService.SetSoftwareFeatureState.Result"
-    enum="BooleanSuccess" expires_after="2022-03-20">
+    enum="BooleanSuccess" expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>Result of enabling and disabling features for devices.</summary>
@@ -1663,7 +1666,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="MultiDevice.DeviceSyncService.SetSoftwareFeatureState.Result.FailureReason"
     enum="MultiDevice_DeviceSyncService_DeviceSyncRequestFailureReason"
-    expires_after="2021-12-12">
+    expires_after="2022-06-01">
   <owner>danlee@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -1817,8 +1820,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MultiDevice.SecureChannel.Nearby.ConnectionMedium"
-    enum="SecureChannelNearbyConnectionMedium" expires_after="2022-04-03">
-  <owner>khorimoto@chromium.org</owner>
+    enum="SecureChannelNearbyConnectionMedium" expires_after="2022-06-05">
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Measures the connection medium used by Nearby Connections requested by
@@ -1832,8 +1835,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MultiDevice.SecureChannel.Nearby.ConnectionResult"
     enum="MultiDeviceNearbyConnectionsInitiatorResult"
-    expires_after="2021-11-30">
-  <owner>khorimoto@chromium.org</owner>
+    expires_after="2022-10-18">
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Emitted the result of attempting to establish a connection when the Nearby
@@ -1844,7 +1847,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MultiDevice.SecureChannel.Nearby.DisconnectionReason"
     enum="MultiDeviceNearbyDisconnectionReason" expires_after="2022-05-01">
-  <owner>khorimoto@chromium.org</owner>
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Tracks reasons why a Nearby Connection established via SecureChannel ends up
@@ -1859,7 +1862,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MultiDevice.SecureChannel.Nearby.EffectiveConnectionResult"
     enum="BooleanSuccess" expires_after="2022-04-03">
-  <owner>khorimoto@chromium.org</owner>
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Measures the effective success rate for Nearby Connections attempts via
@@ -1873,9 +1876,31 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MultiDevice.SecureChannel.Nearby.FileAction"
+    enum="MultiDeviceNearbyFileAction" expires_after="2022-11-15">
+  <owner>jasonsun@google.com</owner>
+  <owner>better-together-dev@google.com</owner>
+  <summary>
+    Measures the reception of SecureChannel file payload transfers via the
+    Nearby Connections library. Emitted when the Nearby Connections library
+    receives an incoming file transfer.
+  </summary>
+</histogram>
+
+<histogram name="MultiDevice.SecureChannel.Nearby.FileTransferResult"
+    enum="MultiDeviceNearbyFileTransferResult" expires_after="2022-11-15">
+  <owner>jasonsun@google.com</owner>
+  <owner>better-together-dev@google.com</owner>
+  <summary>
+    Measures the completion of SecureChannel file payload transfers via the
+    Nearby Connections library. Emitted when a file tranfer has been completed
+    successfully, with failure, or canceled.
+  </summary>
+</histogram>
+
 <histogram name="MultiDevice.SecureChannel.Nearby.MessageAction"
     enum="MultiDeviceNearbyMessageAction" expires_after="2022-05-01">
-  <owner>khorimoto@chromium.org</owner>
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Measures the completion of SecureChannel messages transfers via the Nearby
@@ -1885,8 +1910,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MultiDevice.SecureChannel.Nearby.OperationResult.{Function}"
-    enum="NearbyConnectionsStatus" expires_after="2022-01-01">
-  <owner>khorimoto@chromium.org</owner>
+    enum="NearbyConnectionsStatus" expires_after="2023-01-01">
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Records the result of invoking Nearby Connection's {Function} API function
@@ -1898,6 +1923,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     <variant name="AcceptConnection"/>
     <variant name="DisconnectFromEndpoint"/>
     <variant name="InjectEndpoint"/>
+    <variant name="RegisterPayloadFiles"/>
     <variant name="RequestConnection"/>
     <variant name="SendPayload"/>
     <variant name="StartDiscovery"/>
@@ -1906,8 +1932,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MultiDevice.SecureChannel.Nearby.SendMessageResult"
-    enum="BooleanSuccess" expires_after="2022-04-03">
-  <owner>khorimoto@chromium.org</owner>
+    enum="BooleanSuccess" expires_after="2022-06-05">
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Measures the success rate of sending a SecureChannel message via the Nearby
@@ -1917,8 +1943,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MultiDevice.SecureChannel.Nearby.WebRtcUpgradeDuration"
-    units="ms" expires_after="2021-11-30">
-  <owner>khorimoto@chromium.org</owner>
+    units="ms" expires_after="2022-10-18">
+  <owner>hansenmichael@google.com</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
     Measures the amount of time taken between when a connection is accepted over
@@ -1948,8 +1974,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>better-together-dev@google.com</owner>
   <summary>
     Breaks down percentages of host statuses. This metric is emitted to at the
-    creation of the user session (when the user logs in), and when host status
-    updates occur.
+    creation of the user session (when the user logs in), when host status
+    updates occur, and every 30 minutes.
   </summary>
 </histogram>
 
@@ -2147,7 +2173,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SmartLock.AuthResult.Unlock" enum="BooleanSuccess"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -2213,7 +2239,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SmartLock.FindAndConnectToHostResult.Unlock"
-    enum="SmartLockFindAndConnectToHostResult" expires_after="2022-04-03">
+    enum="SmartLockFindAndConnectToHostResult" expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -2244,7 +2270,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SmartLock.GetRemoteStatus.Unlock" enum="BooleanSuccess"
-    expires_after="2022-04-03">
+    expires_after="2022-06-05">
   <owner>hansberry@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
@@ -2270,8 +2296,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>better-together-dev@google.com</owner>
   <summary>
     Indicates the feature state of the SmartLock feature. This metric is emitted
-    to at the creation of the user session (when the user logs in), and when
-    feature state updates occur.
+    to at the creation of the user session (when the user logs in), when any
+    multi-device feature state changes, and every 30 minutes.
   </summary>
 </histogram>
 
@@ -2300,7 +2326,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="SmartLock.Performance.ShowLockScreenToShowFirstStatusToUserDuration.Unlock"
-    units="ms" expires_after="2022-04-03">
+    units="ms" expires_after="2022-06-05">
 <!-- Name completed by histogram_suffixes name="SmartLockStatusTypes" -->
 
   <owner>hansberry@chromium.org</owner>
@@ -2324,7 +2350,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="SmartLock.Performance.StartScanToReceiveFirstRemoteStatusDuration.Unlock"
-    units="ms" expires_after="2022-04-03">
+    units="ms" expires_after="2022-06-05">
 <!-- Name completed by histogram_suffixes name="SmartLockStatusTypes" -->
 
   <owner>hansberry@chromium.org</owner>
@@ -2374,8 +2400,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>better-together-dev@google.com</owner>
   <summary>
     Indicates the feature state of the Wifi Sync V2 feature. This metric is
-    emitted to at the creation of the user session (when the user logs in), and
-    when feature state updates occur.
+    emitted to at the creation of the user session (when the user logs in), when
+    any multi-device feature state changes, and every 30 minutes.
   </summary>
 </histogram>
 

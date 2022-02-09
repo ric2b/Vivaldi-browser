@@ -16,6 +16,7 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/unified_consent/pref_names.h"
 #include "ios/chrome/browser/application_context.h"
+#import "ios/chrome/browser/commerce/price_alert_util.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
@@ -56,6 +57,8 @@ namespace {
 
 NSString* const kBetterSearchAndBrowsingItemAccessibilityID =
     @"betterSearchAndBrowsingItem_switch";
+NSString* const kTrackPricesOnTabsItemAccessibilityID =
+    @"trackPricesOnTabsItem_switch";
 
 // List of sections.
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
@@ -65,8 +68,8 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 // List of items. For implementation details in
 // GoogleServicesSettingsViewController, two SyncSwitchItem items should not
 // share the same type. The cell UISwitch tag is used to save the item type, and
-// when the user taps on the switch, this tag is used to retreive the item based
-// on the type.
+// when the user taps on the switch, this tag is used to retrieve the item
+// based on the type.
 typedef NS_ENUM(NSInteger, ItemType) {
   AllowChromeSigninItemType = kItemTypeEnumZero,
   AutocompleteSearchesAndURLsItemType,
@@ -77,7 +80,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ImproveChromeManagedItemType,
   BetterSearchAndBrowsingItemType,
   BetterSearchAndBrowsingManagedItemType,
-  ItemTypePasswordLeakCheckSwitch,
+  PasswordLeakCheckSwitchItemType,
+  TrackPricesOnTabsItemType,
 };
 
 // TODO(crbug.com/1244632): Use the Authentication Service sign-in status API
@@ -97,6 +101,21 @@ bool IsSigninControllableByUser() {
   }
   NOTREACHED();
   return true;
+}
+
+bool GetStatusForSigninPolicy() {
+  BrowserSigninMode policy_mode = static_cast<BrowserSigninMode>(
+      GetApplicationContext()->GetLocalState()->GetInteger(
+          prefs::kBrowserSigninPolicy));
+  switch (policy_mode) {
+    case BrowserSigninMode::kEnabled:
+    case BrowserSigninMode::kForced:
+      return true;
+    case BrowserSigninMode::kDisabled:
+      return false;
+  }
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace
@@ -135,7 +154,7 @@ bool IsSigninControllableByUser() {
 // The observable boolean that binds to the password leak check settings
 // state.
 @property(nonatomic, strong, readonly)
-    PrefBackedBoolean* passwordLeakCheckEnabled;
+    PrefBackedBoolean* passwordLeakCheckPreference;
 // The item related to the switch for the automatic password leak detection
 // setting.
 @property(nonatomic, strong, null_resettable)
@@ -154,6 +173,11 @@ bool IsSigninControllableByUser() {
 
 // Account manager service to retrieve Chrome identities.
 @property(nonatomic, assign) ChromeAccountManagerService* accountManagerService;
+
+// Preference value for displaying price drop annotations on Tabs for shopping
+// URLs in the Tab Switching UI as price drops are identified.
+@property(nonatomic, strong, readonly)
+    PrefBackedBoolean* trackPricesOnTabsPreference;
 
 @end
 
@@ -187,16 +211,20 @@ bool IsSigninControllableByUser() {
         initWithPrefService:localPrefService
                    prefName:metrics::prefs::kMetricsReportingEnabled];
     _sendDataUsagePreference.observer = self;
-    _passwordLeakCheckEnabled = [[PrefBackedBoolean alloc]
+    _passwordLeakCheckPreference = [[PrefBackedBoolean alloc]
         initWithPrefService:userPrefService
                    prefName:password_manager::prefs::
                                 kPasswordLeakDetectionEnabled];
-    _passwordLeakCheckEnabled.observer = self;
+    _passwordLeakCheckPreference.observer = self;
     _anonymizedDataCollectionPreference = [[PrefBackedBoolean alloc]
         initWithPrefService:userPrefService
                    prefName:unified_consent::prefs::
                                 kUrlKeyedAnonymizedDataCollectionEnabled];
     _anonymizedDataCollectionPreference.observer = self;
+    _trackPricesOnTabsPreference = [[PrefBackedBoolean alloc]
+        initWithPrefService:userPrefService
+                   prefName:prefs::kTrackPricesOnTabsEnabled];
+    _trackPricesOnTabsPreference.observer = self;
     _accountManagerService = accountManagerService;
   }
   return self;
@@ -220,7 +248,8 @@ bool IsSigninControllableByUser() {
                          IDS_IOS_GOOGLE_SERVICES_SETTINGS_ALLOW_SIGNIN_TEXT
                    detailStringID:
                        IDS_IOS_GOOGLE_SERVICES_SETTINGS_ALLOW_SIGNIN_DETAIL
-                           status:NO];
+                           status:GetStatusForSigninPolicy()
+                     controllable:IsSigninControllableByUser()];
 }
 
 #pragma mark - Load non personalized section
@@ -293,8 +322,12 @@ bool IsSigninControllableByUser() {
                 ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                 : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
         break;
-      case ItemTypePasswordLeakCheckSwitch:
+      case PasswordLeakCheckSwitchItemType:
         [self updateLeakCheckItem];
+        break;
+      case TrackPricesOnTabsItemType:
+        base::mac::ObjCCast<SyncSwitchItem>(item).on =
+            self.trackPricesOnTabsPreference.value;
         break;
     }
   }
@@ -330,7 +363,8 @@ bool IsSigninControllableByUser() {
                              IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTOCOMPLETE_SEARCHES_AND_URLS_TEXT
                        detailStringID:
                            IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTOCOMPLETE_SEARCHES_AND_URLS_DETAIL
-                               status:self.autocompleteSearchPreference.value];
+                               status:self.autocompleteSearchPreference.value
+                         controllable:self.autocompleteSearchPreference.value];
       [items addObject:autocompleteItem];
     } else {
       SyncSwitchItem* autocompleteItem = [self
@@ -350,7 +384,8 @@ bool IsSigninControllableByUser() {
                              IDS_IOS_GOOGLE_SERVICES_SETTINGS_SAFE_BROWSING_TEXT
                        detailStringID:
                            IDS_IOS_GOOGLE_SERVICES_SETTINGS_SAFE_BROWSING_DETAIL
-                               status:self.safeBrowsingPreference.value];
+                               status:self.safeBrowsingPreference.value
+                         controllable:self.safeBrowsingPreference.value];
       [items addObject:safeBrowsingManagedItem];
     } else {
       SyncSwitchItem* safeBrowsingItem = [self
@@ -373,7 +408,8 @@ bool IsSigninControllableByUser() {
                              IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_TEXT
                        detailStringID:
                            IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_DETAIL
-                               status:self.sendDataUsagePreference];
+                               status:self.sendDataUsagePreference
+                         controllable:self.sendDataUsagePreference];
       [items addObject:improveChromeItem];
     } else {
       SyncSwitchItem* improveChromeItem = [self
@@ -393,7 +429,8 @@ bool IsSigninControllableByUser() {
                              IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_TEXT
                        detailStringID:
                            IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_DETAIL
-                               status:self.anonymizedDataCollectionPreference];
+                               status:self.anonymizedDataCollectionPreference
+                         controllable:self.anonymizedDataCollectionPreference];
       betterSearchAndBrowsingItem.accessibilityIdentifier =
           kBetterSearchAndBrowsingItemAccessibilityID;
       [items addObject:betterSearchAndBrowsingItem];
@@ -409,6 +446,29 @@ bool IsSigninControllableByUser() {
           kBetterSearchAndBrowsingItemAccessibilityID;
       [items addObject:betterSearchAndBrowsingItem];
     }
+    if (IsPriceAlertsWithOptOutEnabled()) {
+      if (self.userPrefService->IsManagedPreference(
+              prefs::kTrackPricesOnTabsEnabled)) {
+        TableViewInfoButtonItem* trackPricesOnTabsItem = [self
+            TableViewInfoButtonItemType:TrackPricesOnTabsItemType
+                           textStringID:IDS_IOS_TRACK_PRICES_ON_TABS
+                         detailStringID:IDS_IOS_TRACK_PRICES_ON_TABS_DESCRIPTION
+                                 status:self.trackPricesOnTabsPreference
+                           controllable:self.trackPricesOnTabsPreference];
+        trackPricesOnTabsItem.accessibilityIdentifier =
+            kTrackPricesOnTabsItemAccessibilityID;
+        [items addObject:trackPricesOnTabsItem];
+      } else {
+        SyncSwitchItem* trackPricesOnTabsItem = [self
+            switchItemWithItemType:TrackPricesOnTabsItemType
+                      textStringID:IDS_IOS_TRACK_PRICES_ON_TABS
+                    detailStringID:IDS_IOS_TRACK_PRICES_ON_TABS_DESCRIPTION
+                          dataType:0];
+        trackPricesOnTabsItem.accessibilityIdentifier =
+            kTrackPricesOnTabsItemAccessibilityID;
+        [items addObject:trackPricesOnTabsItem];
+      }
+    }
 
     _nonPersonalizedItems = items;
   }
@@ -418,13 +478,13 @@ bool IsSigninControllableByUser() {
 - (SettingsSwitchItem*)passwordLeakCheckItem {
   if (!_passwordLeakCheckItem) {
     SettingsSwitchItem* passwordLeakCheckItem = [[SettingsSwitchItem alloc]
-        initWithType:ItemTypePasswordLeakCheckSwitch];
+        initWithType:PasswordLeakCheckSwitchItemType];
     passwordLeakCheckItem.text =
         l10n_util::GetNSString(IDS_IOS_LEAK_CHECK_SWITCH);
     passwordLeakCheckItem.on = [self passwordLeakCheckItemOnState];
     passwordLeakCheckItem.accessibilityIdentifier =
         kPasswordLeakCheckItemAccessibilityIdentifier;
-    passwordLeakCheckItem.enabled = self.hasPrimaryIdentity;
+    passwordLeakCheckItem.enabled = [self isPasswordLeakCheckEnabled];
     _passwordLeakCheckItem = passwordLeakCheckItem;
   }
   return _passwordLeakCheckItem;
@@ -449,7 +509,8 @@ bool IsSigninControllableByUser() {
 - (TableViewInfoButtonItem*)TableViewInfoButtonItemType:(NSInteger)itemType
                                            textStringID:(int)textStringID
                                          detailStringID:(int)detailStringID
-                                                 status:(BOOL)status {
+                                                 status:(BOOL)status
+                                           controllable:(BOOL)controllable {
   TableViewInfoButtonItem* managedItem =
       [[TableViewInfoButtonItem alloc] initWithType:itemType];
   managedItem.text = GetNSString(textStringID);
@@ -458,28 +519,45 @@ bool IsSigninControllableByUser() {
                                   : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
   if (!status) {
     managedItem.tintColor = [UIColor colorNamed:kGrey300Color];
-    managedItem.textColor = [UIColor colorNamed:kTextSecondaryColor];
+  }
+
+  // When there is no knob (not controllable), then set the color opacity to
+  // 40%.
+  if (!controllable) {
+    managedItem.textColor =
+        [[UIColor colorNamed:kTextPrimaryColor] colorWithAlphaComponent:0.4f];
+    managedItem.detailTextColor =
+        [[UIColor colorNamed:kTextSecondaryColor] colorWithAlphaComponent:0.4f];
   }
   managedItem.accessibilityHint =
       l10n_util::GetNSString(IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT);
   return managedItem;
 }
 
+// Returns a boolean indicating whether leak detection feature is enabled.
+- (BOOL)isPasswordLeakCheckEnabled {
+  return self.hasPrimaryIdentity ||
+         base::FeatureList::IsEnabled(
+             password_manager::features::kLeakDetectionUnauthenticated);
+}
+
 // Returns a boolean indicating if the switch should appear as "On" or "Off"
 // based on the sync preference and the sign in status.
 - (BOOL)passwordLeakCheckItemOnState {
   return self.safeBrowsingPreference.value &&
-         self.passwordLeakCheckEnabled.value && self.hasPrimaryIdentity;
+         self.passwordLeakCheckPreference.value &&
+         [self isPasswordLeakCheckEnabled];
 }
 
 // Updates the detail text and on state of the leak check item based on the
 // state.
 - (void)updateLeakCheckItem {
   self.passwordLeakCheckItem.enabled =
-      self.hasPrimaryIdentity && self.safeBrowsingPreference.value;
+      self.safeBrowsingPreference.value && [self isPasswordLeakCheckEnabled];
   self.passwordLeakCheckItem.on = [self passwordLeakCheckItemOnState];
 
-  if (!self.hasPrimaryIdentity && self.passwordLeakCheckEnabled.value) {
+  if (self.passwordLeakCheckPreference.value &&
+      ![self isPasswordLeakCheckEnabled]) {
     // If the user is signed out and the sync preference is enabled, this
     // informs that it will be turned on on sign in.
     self.passwordLeakCheckItem.detailText =
@@ -504,6 +582,10 @@ bool IsSigninControllableByUser() {
   _accountManagerServiceObserver.reset(
       new ChromeAccountManagerServiceObserverBridge(
           self, self.accountManagerService));
+}
+
+- (BOOL)isAllowChromeSigninItem:(int)type {
+  return type == AllowChromeSigninItemType;
 }
 
 #pragma mark - GoogleServicesSettingsServiceDelegate
@@ -551,11 +633,14 @@ bool IsSigninControllableByUser() {
     case BetterSearchAndBrowsingItemType:
       self.anonymizedDataCollectionPreference.value = value;
       break;
-    case ItemTypePasswordLeakCheckSwitch:
+    case PasswordLeakCheckSwitchItemType:
       // Update the pref.
-      self.passwordLeakCheckEnabled.value = value;
+      self.passwordLeakCheckPreference.value = value;
       // Update the item.
       [self updateLeakCheckItem];
+      break;
+    case TrackPricesOnTabsItemType:
+      self.trackPricesOnTabsPreference.value = value;
       break;
     case AutocompleteSearchesAndURLsManagedItemType:
     case SafeBrowsingManagedItemType:

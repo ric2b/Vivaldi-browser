@@ -10,6 +10,7 @@
 #include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/trace_event/typed_macros.h"
 #include "components/guest_view/browser/guest_view_base.h"
@@ -32,6 +33,9 @@
 #include "extensions/common/trace_util.h"
 #include "extensions/common/user_script.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/content/vivaldi_tab_check.h"
+
 using perfetto::protos::pbzero::ChromeTrackEvent;
 
 namespace extensions {
@@ -48,7 +52,7 @@ namespace {
 //    content::ChildProcessSecurityPolicy.
 // 2. This robustly handles initial empty documents (see the *InitialEmptyDoc*
 //    tests in //content_script_tracker_browsertest.cc) and isn't impacted
-//    by ReadyToCommit races associated with RenderDocumentHostUserData.
+//    by ReadyToCommit races associated with DocumentUserData.
 // For more information see:
 // https://docs.google.com/document/d/1MFprp2ss2r9RNamJ7Jxva1bvRZvec3rzGceDGoJ6vW0/edit#
 class RenderProcessHostUserData : public base::SupportsUserData::Data {
@@ -167,7 +171,15 @@ class RenderFrameHostAdapter
     return std::make_unique<RenderFrameHostAdapter>(parent_or_opener);
   }
 
-  GURL GetUrl() const override { return frame_->GetLastCommittedURL(); }
+  GURL GetUrl() const override {
+    if (frame_->GetLastCommittedURL().is_empty()) {
+      // It's possible for URL to be empty when `frame_` is on the initial empty
+      // document. TODO(https://crbug.com/1197308): Consider making  `frame_`'s
+      // document's URL about:blank instead of empty in that case.
+      return GURL(url::kAboutBlankURL);
+    }
+    return frame_->GetLastCommittedURL();
+  }
 
   url::Origin GetOrigin() const override {
     return frame_->GetLastCommittedOrigin();
@@ -190,7 +202,7 @@ class RenderFrameHostAdapter
   uintptr_t GetId() const override { return frame_->GetRoutingID(); }
 
  private:
-  content::RenderFrameHost* const frame_;
+  const raw_ptr<content::RenderFrameHost> frame_;
 };
 
 // This function approximates ScriptContext::GetEffectiveDocumentURLForInjection
@@ -311,6 +323,16 @@ bool DoContentScriptsMatch(const Extension& extension,
 
   auto* guest = guest_view::GuestViewBase::FromWebContents(
       content::WebContents::FromRenderFrameHost(frame));
+
+  // NOTE(andre@vivaldi.com) : A check in IsValidMessagingSource() would fail if
+  // the content-script was appearing without being registered first. This is
+  // only done for non-guest content, which will ofcourse fail in Vivaldi. Was
+  // VB-85805.
+  if (VivaldiTabCheck::IsVivaldiTab(
+          content::WebContents::FromRenderFrameHost(frame))) {
+    guest = nullptr;
+  }
+
   if (guest) {
     // Return true if `extension` is an owner of `guest` and it registered
     // content scripts using the `webview.addContentScripts` API.
@@ -341,6 +363,26 @@ bool DoContentScriptsMatch(const Extension& extension,
         return true;
       }
     }
+
+    if(vivaldi::IsVivaldiApp(owner_site_url.host_piece())) {
+      // In case we have an extension with content-script injection into all
+      // frames we need to register the extension as
+      // ExtensionMessageFilter::OnOpenChannelToExtension is called for all
+      // frames, for all extensions.
+      const UserScriptList& manifest_scripts =
+          ContentScriptsInfo::GetContentScripts(&extension);
+      if (DoContentScriptsMatch(manifest_scripts, frame, url)) {
+        TRACE_EVENT_INSTANT(
+            "extensions",
+            "ContentScriptTracker/"
+            "DoesContentScriptMatch=true(vivaldi-guest,manifest)",
+            ChromeTrackEvent::kRenderProcessHost, process,
+            ChromeTrackEvent::kChromeExtensionId,
+            ExtensionIdForTracing(extension.id()));
+        return true;
+      }
+    }
+
   }
 
   if (!guest || PermissionsData::CanExecuteScriptEverywhere(

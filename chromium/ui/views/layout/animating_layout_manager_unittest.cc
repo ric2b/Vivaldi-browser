@@ -5,10 +5,13 @@
 #include "ui/views/layout/animating_layout_manager.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -25,6 +28,11 @@
 namespace views {
 
 namespace {
+
+// This should probably be a definition on AnimationTestApi.
+using RenderModeLock = std::result_of<decltype (
+    &gfx::AnimationTestApi::SetRichAnimationRenderMode)(
+    gfx::Animation::RichAnimationRenderMode)>::type;
 
 constexpr gfx::Size kChildViewSize{10, 10};
 
@@ -131,7 +139,15 @@ class AnimationEventLogger : public AnimatingLayoutManager::Observer {
 // the animations can be directly controlled via gfx::AnimationContainerTestApi.
 class AnimatingLayoutManagerTest : public testing::Test {
  public:
+  explicit AnimatingLayoutManagerTest(bool enable_animations = true)
+      : enable_animations_(enable_animations) {}
+
   void SetUp() override {
+    render_mode_lock_ = gfx::AnimationTestApi::SetRichAnimationRenderMode(
+        enable_animations_
+            ? gfx::Animation::RichAnimationRenderMode::FORCE_ENABLED
+            : gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
+
     // Don't use a unique_ptr because derived classes may want to own this view.
     view_ = new View();
     for (int i = 0; i < 3; ++i) {
@@ -164,7 +180,10 @@ class AnimatingLayoutManagerTest : public testing::Test {
                  {children_[2], true, {10, 100, 10, 10}}}};
   }
 
-  void TearDown() override { DestroyView(); }
+  void TearDown() override {
+    DestroyView();
+    render_mode_lock_.reset();
+  }
 
   const View* view() const { return view_; }
   View* view() { return view_; }
@@ -229,13 +248,15 @@ class AnimatingLayoutManagerTest : public testing::Test {
   static const FlexSpecification kFlex;
 
  private:
+  const bool enable_animations_;
   ProposedLayout layout1_;
   ProposedLayout layout2_;
-  View* view_;
+  raw_ptr<View> view_;
   std::vector<TestView*> children_;
-  AnimatingLayoutManager* animating_layout_manager_ = nullptr;
+  raw_ptr<AnimatingLayoutManager> animating_layout_manager_ = nullptr;
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<gfx::AnimationContainerTestApi> container_test_api_;
+  RenderModeLock render_mode_lock_;
 };
 
 const FlexSpecification AnimatingLayoutManagerTest::kDropOut =
@@ -2573,6 +2594,7 @@ TEST_F(AnimatingLayoutManagerTest, PostOrQueueAction_MayPostImmediately) {
   base::RunLoop loop2;
   bool action1_called = false;
   bool action2_called = false;
+  bool action3_called = false;
 
   // Since the layout is not animating yet, this action posts immediately.
   EXPECT_FALSE(layout()->is_animating());
@@ -2613,6 +2635,19 @@ TEST_F(AnimatingLayoutManagerTest, PostOrQueueAction_MayPostImmediately) {
   EXPECT_FALSE(layout()->is_animating());
   RunCurrentTasks();
   EXPECT_TRUE(action2_called);
+
+  // Test that callbacks are not posted between a layout reset and the
+  // subsequent call to Layout(), but are posted at the end of the Layout()
+  // call.
+  test_layout->SetLayout(layout1());
+  layout()->ResetLayout();
+  layout()->PostOrQueueAction(
+      base::BindOnce([](bool* var) { *var = true; }, &action3_called));
+  RunCurrentTasks();
+  EXPECT_FALSE(action3_called);
+  SizeAndLayout();
+  RunCurrentTasks();
+  EXPECT_TRUE(action3_called);
 }
 
 TEST_F(AnimatingLayoutManagerTest, ZOrder_UnchangedWhenNotAnimating) {
@@ -2807,6 +2842,195 @@ TEST_F(AnimatingLayoutManagerTest, ConstrainedSpace_SubsequentAnimation) {
   EXPECT_FALSE(layout()->is_animating());
 }
 
+// Test which explores an Animating Layout Manager's behavior in an
+// environment where rich animation is not allowed.
+class AnimatingLayoutManagerNoAnimationsTest
+    : public AnimatingLayoutManagerTest {
+ public:
+  AnimatingLayoutManagerNoAnimationsTest()
+      : AnimatingLayoutManagerTest(false) {}
+
+ protected:
+  void UseFixedLayout(const views::ProposedLayout& proposed_layout) {
+    TestLayoutManager* const test_layout =
+        layout()->target_layout_manager()
+            ? static_cast<TestLayoutManager*>(layout()->target_layout_manager())
+            : layout()->SetTargetLayoutManager(
+                  std::make_unique<TestLayoutManager>());
+    test_layout->SetLayout(proposed_layout);
+  }
+
+  FlexLayout* UseFlexLayout() {
+    return layout()->SetTargetLayoutManager(std::make_unique<FlexLayout>());
+  }
+
+  static const std::vector<
+      std::pair<AnimatingLayoutManager::FadeInOutMode, const char*>>
+      kFadeModes;
+};
+
+const std::vector<std::pair<AnimatingLayoutManager::FadeInOutMode, const char*>>
+    AnimatingLayoutManagerNoAnimationsTest::kFadeModes = {
+        {AnimatingLayoutManager::FadeInOutMode::kHide, "Hide"},
+        {AnimatingLayoutManager::FadeInOutMode::kScaleFromZero, "Scale"},
+        {AnimatingLayoutManager::FadeInOutMode::kSlideFromTrailingEdge,
+         "Slide"},
+};
+
+TEST_F(AnimatingLayoutManagerNoAnimationsTest, ResetNoAnimation) {
+  UseFixedLayout(layout1());
+  layout()->SetBoundsAnimationMode(
+      AnimatingLayoutManager::BoundsAnimationMode::kAnimateBothAxes);
+
+  SizeAndLayout();
+  EXPECT_FALSE(layout()->is_animating());
+  EXPECT_EQ(layout1().host_size, view()->size());
+  EnsureLayout(layout1());
+}
+
+TEST_F(AnimatingLayoutManagerNoAnimationsTest, ChangeLayoutNoAnimation) {
+  UseFixedLayout(layout1());
+  layout()->SetBoundsAnimationMode(
+      AnimatingLayoutManager::BoundsAnimationMode::kAnimateBothAxes);
+
+  SizeAndLayout();
+  UseFixedLayout(layout2());
+  view()->InvalidateLayout();
+  EXPECT_FALSE(layout()->is_animating());
+  SizeAndLayout();
+  EXPECT_FALSE(layout()->is_animating());
+  EXPECT_EQ(layout2().host_size, view()->size());
+  EnsureLayout(layout2());
+}
+
+TEST_F(AnimatingLayoutManagerNoAnimationsTest, HideShowViewNoAnimation) {
+  layout()->SetBoundsAnimationMode(
+      AnimatingLayoutManager::BoundsAnimationMode::kAnimateBothAxes);
+  UseFlexLayout()
+      ->SetOrientation(LayoutOrientation::kHorizontal)
+      .SetCollapseMargins(true)
+      .SetDefault(kMarginsKey, gfx::Insets(5));
+  const ProposedLayout expected_layout{
+      {50, 20},
+      {{child(0), true, {{5, 5}, kChildViewSize}},
+       {child(1), true, {{20, 5}, kChildViewSize}},
+       {child(2), true, {{35, 5}, kChildViewSize}}}};
+  SizeAndLayout();
+  EXPECT_FALSE(layout()->is_animating());
+  EnsureLayout(expected_layout);
+
+  for (const auto& fade_mode : kFadeModes) {
+    layout()->SetDefaultFadeMode(fade_mode.first);
+
+    child(0)->SetVisible(false);
+    EXPECT_FALSE(layout()->is_animating());
+    view()->InvalidateLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    SizeAndLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    const ProposedLayout expected_layout2 = {
+        {35, 20},
+        {{child(0), false},
+         {child(1), true, {{5, 5}, kChildViewSize}},
+         {child(2), true, {{20, 5}, kChildViewSize}}}};
+    EnsureLayout(expected_layout2, fade_mode.second);
+
+    child(0)->SetVisible(true);
+    EXPECT_FALSE(layout()->is_animating());
+    view()->InvalidateLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    SizeAndLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    EnsureLayout(expected_layout, fade_mode.second);
+  }
+}
+
+TEST_F(AnimatingLayoutManagerNoAnimationsTest, FadeViewInOutNoAnimation) {
+  layout()->SetBoundsAnimationMode(
+      AnimatingLayoutManager::BoundsAnimationMode::kAnimateBothAxes);
+  UseFlexLayout()
+      ->SetOrientation(LayoutOrientation::kHorizontal)
+      .SetCollapseMargins(true)
+      .SetDefault(kMarginsKey, gfx::Insets(5));
+  const ProposedLayout expected_layout{
+      {50, 20},
+      {{child(0), true, {{5, 5}, kChildViewSize}},
+       {child(1), true, {{20, 5}, kChildViewSize}},
+       {child(2), true, {{35, 5}, kChildViewSize}}}};
+  SizeAndLayout();
+  EXPECT_FALSE(layout()->is_animating());
+  EnsureLayout(expected_layout);
+
+  for (const auto& fade_mode : kFadeModes) {
+    layout()->SetDefaultFadeMode(fade_mode.first);
+
+    layout()->FadeOut(child(0));
+    EXPECT_FALSE(layout()->is_animating());
+    view()->InvalidateLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    SizeAndLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    const ProposedLayout expected_layout2 = {
+        {35, 20},
+        {{child(0), false},
+         {child(1), true, {{5, 5}, kChildViewSize}},
+         {child(2), true, {{20, 5}, kChildViewSize}}}};
+    EnsureLayout(expected_layout2, fade_mode.second);
+
+    layout()->FadeIn(child(0));
+    EXPECT_FALSE(layout()->is_animating());
+    view()->InvalidateLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    SizeAndLayout();
+    EXPECT_FALSE(layout()->is_animating());
+    EnsureLayout(expected_layout, fade_mode.second);
+  }
+}
+
+TEST_F(AnimatingLayoutManagerNoAnimationsTest, ActionsPostedAfterLayout) {
+  UseFixedLayout(layout1());
+  layout()->SetBoundsAnimationMode(
+      AnimatingLayoutManager::BoundsAnimationMode::kAnimateBothAxes);
+  SizeAndLayout();
+
+  bool cb1 = false;
+  bool cb2 = false;
+  bool cb3 = false;
+  bool cb4 = false;
+
+  // We're in a non-animating, not-waiting-for layout state, so an action
+  // should post immediately.
+  layout()->PostOrQueueAction(
+      base::BindLambdaForTesting([&]() { cb1 = true; }));
+  RunCurrentTasks();
+  EXPECT_TRUE(cb1);
+
+  // Changing the layout puts us in a state where we're awaiting an actual call
+  // to Layout(), so actions will not post yet.
+  UseFixedLayout(layout2());
+  layout()->PostOrQueueAction(
+      base::BindLambdaForTesting([&]() { cb2 = true; }));
+  view()->InvalidateLayout();
+  layout()->PostOrQueueAction(
+      base::BindLambdaForTesting([&]() { cb3 = true; }));
+  RunCurrentTasks();
+  EXPECT_FALSE(cb2);
+  EXPECT_FALSE(cb3);
+
+  // Layout() will post the pending actions.
+  SizeAndLayout();
+  RunCurrentTasks();
+  EXPECT_TRUE(cb2);
+  EXPECT_TRUE(cb3);
+
+  // Now that we've laid out and there are no additional changes, we are free
+  // to post immediately again.
+  layout()->PostOrQueueAction(
+      base::BindLambdaForTesting([&]() { cb4 = true; }));
+  RunCurrentTasks();
+  EXPECT_TRUE(cb4);
+}
+
 namespace {
 
 constexpr base::TimeDelta kMinimumAnimationTime = base::Milliseconds(50);
@@ -2909,7 +3133,7 @@ class AnimationWatcher : public AnimatingLayoutManager::Observer {
   }
 
  private:
-  AnimatingLayoutManager* const layout_manager_;
+  const raw_ptr<AnimatingLayoutManager> layout_manager_;
   base::ScopedObservation<AnimatingLayoutManager,
                           AnimatingLayoutManager::Observer>
       observation_{this};
@@ -2953,7 +3177,7 @@ class AnimatingLayoutManagerAvailableSizeTest
   ImmediateLayoutManager* root_layout() { return root_layout_; }
 
  private:
-  ImmediateLayoutManager* root_layout_;
+  raw_ptr<ImmediateLayoutManager> root_layout_;
 };
 
 TEST_F(AnimatingLayoutManagerAvailableSizeTest, AvailableSize_LimitsExpansion) {
@@ -3968,7 +4192,7 @@ class AnimatingLayoutManagerFlexRuleTest : public AnimatingLayoutManagerTest {
   static const FlexSpecification kScaleToMinimumSnapToZero;
 
  private:
-  FlexLayout* flex_layout_;
+  raw_ptr<FlexLayout> flex_layout_;
   FlexRule flex_rule_;
 };
 
@@ -4146,9 +4370,9 @@ class AnimatingLayoutManagerInFlexLayoutTest
   TestView* other_view() { return other_view_; }
 
  private:
-  FlexLayout* root_layout_;
-  FlexLayout* target_layout_;
-  TestView* other_view_;
+  raw_ptr<FlexLayout> root_layout_;
+  raw_ptr<FlexLayout> target_layout_;
+  raw_ptr<TestView> other_view_;
 };
 
 TEST_F(AnimatingLayoutManagerInFlexLayoutTest, NoAnimation) {
@@ -4812,6 +5036,8 @@ TEST_F(AnimatingLayoutManagerRealtimeTest,
 class AnimatingLayoutManagerSequenceTest : public ViewsTestBase {
  public:
   void SetUp() override {
+    render_mode_lock_ = gfx::AnimationTestApi::SetRichAnimationRenderMode(
+        gfx::Animation::RichAnimationRenderMode::FORCE_ENABLED);
     ViewsTestBase::SetUp();
     widget_.reset(new Widget());
     auto params = CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -4831,6 +5057,7 @@ class AnimatingLayoutManagerSequenceTest : public ViewsTestBase {
     // Do before rest of tear down.
     widget_.reset();
     ViewsTestBase::TearDown();
+    render_mode_lock_.reset();
   }
 
   void ConfigureLayoutView() {
@@ -4883,13 +5110,14 @@ class AnimatingLayoutManagerSequenceTest : public ViewsTestBase {
 
   using WidgetAutoclosePtr = std::unique_ptr<Widget, WidgetCloser>;
 
-  AnimatingLayoutManager* layout_manager_ = nullptr;
-  View* child_view_ = nullptr;
-  View* parent_view_ = nullptr;
-  View* layout_view_ = nullptr;
+  raw_ptr<AnimatingLayoutManager> layout_manager_ = nullptr;
+  raw_ptr<View> child_view_ = nullptr;
+  raw_ptr<View> parent_view_ = nullptr;
+  raw_ptr<View> layout_view_ = nullptr;
   std::unique_ptr<View> parent_view_ptr_;
   std::unique_ptr<View> layout_view_ptr_;
   WidgetAutoclosePtr widget_;
+  RenderModeLock render_mode_lock_;
 };
 
 TEST_F(AnimatingLayoutManagerSequenceTest,

@@ -15,12 +15,13 @@
 namespace base {
 
 // Return a C++ string given printf-like input.
-std::string StringPrintf(_Printf_format_string_ const char* format, ...)
-    PRINTF_FORMAT(1, 2) WARN_UNUSED_RESULT;
+[[nodiscard]] std::string StringPrintf(
+    _Printf_format_string_ const char* format,
+    ...) PRINTF_FORMAT(1, 2);
 
 // Return a C++ string given vprintf-like input.
-std::string StringPrintV(const char* format, va_list ap)
-    PRINTF_FORMAT(1, 0) WARN_UNUSED_RESULT;
+[[nodiscard]] std::string StringPrintV(const char* format, va_list ap)
+    PRINTF_FORMAT(1, 0);
 
 // Store result into a supplied string and return it.
 const std::string& SStringPrintf(std::string* dst,

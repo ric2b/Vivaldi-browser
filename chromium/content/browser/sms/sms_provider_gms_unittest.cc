@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "content/browser/sms/webotp_service.h"
 
 #include <string>
@@ -52,6 +53,10 @@ class MockObserver : public SmsProvider::Observer {
 // It creates and injects a fake sms retriver client to trigger various actions
 // for testing purposes.
 class SmsProviderGmsBaseTest : public RenderViewHostTestHarness {
+ public:
+  SmsProviderGmsBaseTest(const SmsProviderGmsBaseTest&) = delete;
+  SmsProviderGmsBaseTest& operator=(const SmsProviderGmsBaseTest&) = delete;
+
  protected:
   SmsProviderGmsBaseTest() = default;
   virtual ~SmsProviderGmsBaseTest() override = default;
@@ -147,9 +152,7 @@ class SmsProviderGmsBaseTest : public RenderViewHostTestHarness {
   NiceMock<MockObserver> observer_;
   base::android::ScopedJavaGlobalRef<jobject> j_fake_sms_retriever_client_;
   base::test::ScopedFeatureList feature_list_;
-  ui::WindowAndroid* test_window_;
-
-  DISALLOW_COPY_AND_ASSIGN(SmsProviderGmsBaseTest);
+  raw_ptr<ui::WindowAndroid> test_window_;
 };
 
 class SmsProviderGmsTest : public ::testing::WithParamInterface<std::string>,

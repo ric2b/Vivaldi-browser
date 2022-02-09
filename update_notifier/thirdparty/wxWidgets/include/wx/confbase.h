@@ -51,10 +51,8 @@ class WXDLLIMPEXP_FWD_BASE wxArrayString;
 
 // not all compilers can deal with template Read/Write() methods, define this
 // symbol if the template functions are available
-#if (!defined(__VISUALC__) || __VISUALC__ > 1200) && \
-    !defined( __VMS ) && \
-    !(defined(__HP_aCC) && defined(__hppa)) && \
-    !defined (__DMC__)
+#if !defined( __VMS ) && \
+    !(defined(__HP_aCC) && defined(__hppa))
     #define wxHAS_CONFIG_TEMPLATE_RW
 #endif
 
@@ -188,6 +186,15 @@ public:
   bool Read(const wxString& key, bool* val) const;
   bool Read(const wxString& key, bool* val, bool defVal) const;
 
+    // read a 64-bit number when long is 32 bits
+#ifdef wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+  bool Read(const wxString& key, wxLongLong_t *pl) const;
+  bool Read(const wxString& key, wxLongLong_t *pl, wxLongLong_t defVal) const;
+#endif // wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+
+  bool Read(const wxString& key, size_t* val) const;
+  bool Read(const wxString& key, size_t* val, size_t defVal) const;
+
 #if wxUSE_BASE64
     // read a binary data block
   bool Read(const wxString& key, wxMemoryBuffer* data) const
@@ -213,7 +220,7 @@ public:
       if ( !found )
       {
           if (IsRecordingDefaults())
-              ((wxConfigBase *)this)->Write(key, defVal);
+              const_cast<wxConfigBase*>(this)->Write(key, defVal);
           *value = defVal;
       }
       return found;
@@ -227,13 +234,18 @@ public:
 
   // we have to provide a separate version for C strings as otherwise the
   // template Read() would be used
+#ifndef wxNO_IMPLICIT_WXSTRING_ENCODING
   wxString Read(const wxString& key, const char* defVal) const
     { return Read(key, wxString(defVal)); }
+#endif
   wxString Read(const wxString& key, const wchar_t* defVal) const
     { return Read(key, wxString(defVal)); }
 
   long ReadLong(const wxString& key, long defVal) const
     { long l; (void)Read(key, &l, defVal); return l; }
+
+  wxLongLong_t ReadLongLong(const wxString& key, wxLongLong_t defVal) const
+    { wxLongLong_t ll; (void)Read(key, &ll, defVal); return ll; }
 
   double ReadDouble(const wxString& key, double defVal) const
     { double d; (void)Read(key, &d, defVal); return d; }
@@ -270,10 +282,12 @@ public:
 
   // we have to provide a separate version for C strings as otherwise they
   // would be converted to bool and not to wxString as expected!
+#ifndef wxNO_IMPLICIT_WXSTRING_ENCODING
   bool Write(const wxString& key, const char *value)
     { return Write(key, wxString(value)); }
   bool Write(const wxString& key, const unsigned char *value)
     { return Write(key, wxString(value)); }
+#endif
   bool Write(const wxString& key, const wchar_t *value)
     { return Write(key, wxString(value)); }
 
@@ -302,11 +316,19 @@ public:
   bool Write(const wxString& key, unsigned long value)
     { return DoWriteLong(key, value); }
 
-  bool Write(const wxString& key, float value)
-    { return DoWriteDouble(key, value); }
+#ifdef wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+  bool Write(const wxString& key, wxLongLong_t value)
+    { return DoWriteLongLong(key, value); }
 
-  // Causes ambiguities in VC++ 6 and OpenVMS (at least)
-#if ( (!defined(__VISUALC__) || __VISUALC__ > 1200) && !defined( __VMS ) && !defined (__DMC__))
+  bool Write(const wxString& key, wxULongLong_t value)
+    { return DoWriteLongLong(key, value); }
+#endif // wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+
+  bool Write(const wxString& key, float value)
+    { return DoWriteDouble(key, double(value)); }
+
+  // Causes ambiguities in under OpenVMS
+#if !defined( __VMS )
   // for other types, use wxToString()
   template <typename T>
   bool Write(const wxString& key, T const& value)
@@ -372,6 +394,9 @@ protected:
   // do read/write the values of different types
   virtual bool DoReadString(const wxString& key, wxString *pStr) const = 0;
   virtual bool DoReadLong(const wxString& key, long *pl) const = 0;
+#ifdef wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+  virtual bool DoReadLongLong(const wxString& key, wxLongLong_t *pll) const;
+#endif // wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
   virtual bool DoReadDouble(const wxString& key, double* val) const;
   virtual bool DoReadBool(const wxString& key, bool* val) const;
 #if wxUSE_BASE64
@@ -380,6 +405,9 @@ protected:
 
   virtual bool DoWriteString(const wxString& key, const wxString& value) = 0;
   virtual bool DoWriteLong(const wxString& key, long value) = 0;
+#ifdef wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
+  virtual bool DoWriteLongLong(const wxString& key, wxLongLong_t value);
+#endif // wxHAS_LONG_LONG_T_DIFFERENT_FROM_LONG
   virtual bool DoWriteDouble(const wxString& key, double value);
   virtual bool DoWriteBool(const wxString& key, bool value);
 #if wxUSE_BASE64
@@ -403,7 +431,7 @@ private:
   // Style flag
   long              m_style;
 
-  DECLARE_ABSTRACT_CLASS(wxConfigBase)
+  wxDECLARE_ABSTRACT_CLASS(wxConfigBase);
 };
 
 // a handy little class which changes current path to the path of given entry

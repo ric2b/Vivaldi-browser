@@ -125,7 +125,7 @@ void NotificationIconTrayItemView::OnThemeChanged() {
 NotificationIconsController::NotificationIconsController(
     UnifiedSystemTray* tray)
     : tray_(tray) {
-  system_tray_model_observation_.Observe(tray_->model());
+  system_tray_model_observation_.Observe(tray_->model().get());
   message_center::MessageCenter::Get()->AddObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
 }
@@ -242,7 +242,7 @@ void NotificationIconsController::UpdateNotificationIcons() {
 
   auto it = tray_items_.begin();
   for (message_center::Notification* notification :
-       message_center_utils::GetSortedVisibleNotifications()) {
+       message_center_utils::GetSortedNotificationsWithOwnView()) {
     if (it == tray_items_.end())
       break;
     if (ShouldShowNotification(notification)) {

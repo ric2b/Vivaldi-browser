@@ -7,15 +7,17 @@ tedchoc@chromium.org
 # For build configuration things and simple changes.
 thakis@chromium.org
 
-per-file arc_strings.grdp=file://components/arc/OWNERS
+per-file arc_strings.grdp=file://ash/components/arc/OWNERS
 per-file android_system_error_page_strings.grdp=file://components/android_system_error_page/OWNERS
 per-file autofill_assistant_strings.grdp=file://components/autofill_assistant/OWNERS
 per-file autofill_payments_strings.grdp=file://components/autofill/core/browser/payments/OWNERS
 per-file autofill_strings.grdp=file://components/autofill/OWNERS
 per-file bookmark_bar_strings.grdp=file://components/bookmarks/OWNERS
 per-file browsing_data_strings.grdp=file://components/browsing_data/OWNERS
+per-file content_creation_strings.grdp=file://components/content_creation/OWNERS
 per-file crash_strings.grdp=file://components/crash/OWNERS
 per-file dom_distiller_strings.grdp=file://components/dom_distiller/OWNERS
+per-file enterprise_strings.grdp=file://components/enterprise/OWNERS
 per-file error_page_strings.grdp=file://components/error_page/OWNERS
 per-file fullscreen_control_strings.grdp=file://components/fullscreen_control/OWNERS
 per-file heavy_ad_intervention_strings.grdp=file://components/heavy_ad_intervention/OWNERS
@@ -28,6 +30,7 @@ per-file media_message_center_strings.grdp=file://components/media_message_cente
 per-file new_or_sad_tab_strings.grdp=file://chrome/browser/ui/webui/ntp/OWNERS
 per-file new_or_sad_tab_strings.grdp=file://chrome/browser/resources/ntp4/OWNERS
 per-file ntp_snippets_strings.grdp=file://components/ntp_snippets/OWNERS
+per-file omnibox_pedal_ui_strings.grdp=file://components/omnibox/OWNERS
 per-file omnibox_strings.grdp=file://components/omnibox/OWNERS
 per-file page_info_strings.grdp=file://chrome/browser/ui/page_info/OWNERS
 per-file paint_preview_strings.grdp=file://components/paint_preview/OWNERS
@@ -41,7 +44,6 @@ per-file printing_component_strings.grdp=file://components/printing/OWNERS
 per-file privacy_sandbox_strings.grdp=file://components/privacy_sandbox/OWNERS
 per-file reset_password_strings.grdp=file://components/safe_browsing/OWNERS
 per-file security_interstitials_strings.grdp=file://components/security_interstitials/OWNERS
-per-file security_state_strings.grdp=file://components/security_state/OWNERS
 per-file send_tab_to_self_strings.grdp=file://components/send_tab_to_self/OWNERS
 per-file site_settings_strings.grdp=file://components/browser_ui/site_settings/OWNERS
 per-file site_settings_strings.grdp=file://chrome/browser/resources/settings/site_settings/OWNERS

@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/time/time.h"
 #include "jingle/glue/utils.h"
@@ -429,7 +428,7 @@ rtc::AsyncPacketSocket* ChromiumPacketSocketFactory::CreateUdpSocket(
   return result.release();
 }
 
-rtc::AsyncPacketSocket* ChromiumPacketSocketFactory::CreateServerTcpSocket(
+rtc::AsyncListenSocket* ChromiumPacketSocketFactory::CreateServerTcpSocket(
     const rtc::SocketAddress& local_address,
     uint16_t min_port,
     uint16_t max_port,

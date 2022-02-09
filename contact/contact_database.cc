@@ -18,6 +18,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/ignore_result.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -30,7 +31,7 @@
 #include "sql/transaction.h"
 
 #if defined(OS_MAC)
-#include "base/mac/mac_util.h"
+#include "base/mac/backup_util.h"
 #endif
 
 namespace contact {
@@ -93,7 +94,7 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
 
 #if defined(OS_MAC)
   // Exclude the contact file from backups.
-  base::mac::SetFileBackupExclusion(contact_db_name);
+  base::mac::SetBackupExclusion(contact_db_name);
 #endif
 
   // Prime the cache.

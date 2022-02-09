@@ -8,7 +8,6 @@
 #include <string>
 
 #include "ash/public/mojom/cros_display_config.mojom.h"
-#include "base/macros.h"
 #include "chrome/browser/ash/language_preferences.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
@@ -20,11 +19,9 @@
 class ContentTracingManager;
 class PrefRegistrySimple;
 
-namespace ash {
-namespace input_method {
-class InputMethodSyncer;
-}  // namespace input_method
-}  // namespace ash
+namespace chromeos {
+class User;
+}
 
 namespace sync_preferences {
 class PrefServiceSyncable;
@@ -34,9 +31,11 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
 
-namespace chromeos {
+namespace ash {
 
-class User;
+namespace input_method {
+class InputMethodSyncer;
+}
 
 // The Preferences class handles Chrome OS preferences. When the class
 // is first initialized, it will initialize the OS settings to what's stored in
@@ -151,6 +150,8 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   BooleanPrefMember pointing_stick_acceleration_;
   BooleanPrefMember touchpad_acceleration_;
   BooleanPrefMember touchpad_scroll_acceleration_;
+  BooleanPrefMember touchpad_haptic_feedback_;
+  IntegerPrefMember touchpad_haptic_click_sensitivity_;
   FilePathPrefMember download_default_directory_;
 
   StringListPrefMember allowed_languages_;
@@ -182,11 +183,11 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   // Input Methods state for this user.
   scoped_refptr<input_method::InputMethodManager::State> ime_state_;
 
-  std::unique_ptr<ash::input_method::InputMethodSyncer> input_method_syncer_;
+  std::unique_ptr<input_method::InputMethodSyncer> input_method_syncer_;
 
-  mojo::Remote<ash::mojom::CrosDisplayConfigController> cros_display_config_;
+  mojo::Remote<mojom::CrosDisplayConfigController> cros_display_config_;
 };
 
-}  // namespace chromeos
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_ASH_PREFERENCES_H_

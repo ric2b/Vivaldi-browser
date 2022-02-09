@@ -24,6 +24,13 @@ class WXDLLIMPEXP_FWD_CORE wxMenu;
 class WXDLLIMPEXP_FWD_BASE wxConfigBase;
 class WXDLLIMPEXP_FWD_BASE wxFileName;
 
+enum wxFileHistoryMenuPathStyle
+{
+    wxFH_PATH_SHOW_IF_DIFFERENT,
+    wxFH_PATH_SHOW_NEVER,
+    wxFH_PATH_SHOW_ALWAYS
+};
+
 // ----------------------------------------------------------------------------
 // File history management
 // ----------------------------------------------------------------------------
@@ -60,22 +67,26 @@ public:
     void SetBaseId(wxWindowID baseId) { m_idBase = baseId; }
     wxWindowID GetBaseId() const { return m_idBase; }
 
-#if WXWIN_COMPATIBILITY_2_6
-    // deprecated, use GetCount() instead
-    wxDEPRECATED( size_t GetNoHistoryFiles() const );
-#endif // WXWIN_COMPATIBILITY_2_6
+    void SetMenuPathStyle(wxFileHistoryMenuPathStyle style);
+    wxFileHistoryMenuPathStyle GetMenuPathStyle() const { return m_menuPathStyle; }
 
 protected:
     // Last n files
-    wxArrayString     m_fileHistory;
+    wxArrayString              m_fileHistory;
 
     // Menus to maintain (may need several for an MDI app)
-    wxList            m_fileMenus;
+    wxList                      m_fileMenus;
 
     // Max files to maintain
-    size_t            m_fileMaxFiles;
+    size_t                      m_fileMaxFiles;
+
+    // Style of the paths in the menu labels
+    wxFileHistoryMenuPathStyle m_menuPathStyle;
 
 private:
+    void DoRefreshLabels();
+
+
     // The ID of the first history menu item (Doesn't have to be wxID_FILE1)
     wxWindowID m_idBase;
 
@@ -83,16 +94,11 @@ private:
     // this to ensure the same normalization is used everywhere.
     static wxString NormalizeFileName(const wxFileName& filename);
 
+    // Remove any existing entries from the associated menus.
+    void RemoveExistingHistory();
+
     wxDECLARE_NO_COPY_CLASS(wxFileHistoryBase);
 };
-
-#if WXWIN_COMPATIBILITY_2_6
-inline size_t wxFileHistoryBase::GetNoHistoryFiles() const
-{
-    return m_fileHistory.GetCount();
-}
-#endif // WXWIN_COMPATIBILITY_2_6
-
 
 #if defined(__WXGTK20__)
     #include "wx/gtk/filehistory.h"
@@ -104,7 +110,7 @@ inline size_t wxFileHistoryBase::GetNoHistoryFiles() const
         wxFileHistory(size_t maxFiles = 9, wxWindowID idBase = wxID_FILE1)
             : wxFileHistoryBase(maxFiles, idBase) {}
 
-        DECLARE_DYNAMIC_CLASS(wxFileHistory)
+        wxDECLARE_DYNAMIC_CLASS(wxFileHistory);
     };
 #endif
 

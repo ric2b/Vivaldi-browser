@@ -39,9 +39,10 @@ scoped_refptr<StaticBitmapImage> MakeAccelerated(
     return source;
 
   auto paint_image = source->PaintImageForCurrentFrame();
+  auto image_info = paint_image.GetSkImageInfo().makeWH(
+      source->Size().width(), source->Size().height());
   auto provider = CanvasResourceProvider::CreateSharedImageProvider(
-      source->Size(), cc::PaintFlags::FilterQuality::kLow,
-      CanvasResourceParams(paint_image.GetSkImageInfo()),
+      image_info, cc::PaintFlags::FilterQuality::kLow,
       CanvasResourceProvider::ShouldInitialize::kNo, context_provider_wrapper,
       RasterMode::kGPU, source->IsOriginTopLeft(),
       gpu::SHARED_IMAGE_USAGE_DISPLAY);
@@ -106,8 +107,8 @@ void ImageLayerBridge::SetImage(scoped_refptr<StaticBitmapImage> image) {
   has_presented_since_last_set_image_ = false;
 }
 
-void ImageLayerBridge::SetUV(const FloatPoint& left_top,
-                             const FloatPoint& right_bottom) {
+void ImageLayerBridge::SetUV(const gfx::PointF& left_top,
+                             const gfx::PointF& right_bottom) {
   if (disposed_)
     return;
 

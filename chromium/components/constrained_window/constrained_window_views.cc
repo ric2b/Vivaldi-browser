@@ -3,12 +3,12 @@
 // found in the LICENSE file.
 
 #include "components/constrained_window/constrained_window_views.h"
+#include "base/memory/raw_ptr.h"
 
 #include <algorithm>
 #include <memory>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "components/constrained_window/constrained_window_views_client.h"
@@ -17,6 +17,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -86,8 +87,8 @@ class WidgetModalDialogHostObserverViews : public views::WidgetObserver,
   }
 
  private:
-  ModalDialogHost* host_;
-  views::Widget* target_widget_;
+  raw_ptr<ModalDialogHost> host_;
+  raw_ptr<views::Widget> target_widget_;
   const char* const native_window_property_;
 };
 
@@ -198,13 +199,23 @@ views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
   // so this is just to avoid the crasher from VB-4437.
   web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
-  CHECK(manager);
+  LOG_IF(FATAL, !manager) << "CreateWebModalDialogViews without a manager"
+                          << ", scheme="
+                          << web_contents->GetLastCommittedURL().scheme_piece()
+                          << ", host="
+                          << web_contents->GetLastCommittedURL().host_piece();
   return views::DialogDelegate::CreateDialogWidget(
       dialog, nullptr,
       manager->delegate() ?
       manager->delegate()->GetWebContentsModalDialogHost()->GetHostView() 
                : nullptr);
   // Vivaldi end
+}
+
+views::Widget* CreateBrowserModalDialogViews(
+    std::unique_ptr<views::DialogDelegate> dialog,
+    gfx::NativeWindow parent) {
+  return CreateBrowserModalDialogViews(dialog.release(), parent);
 }
 
 views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
@@ -239,6 +250,15 @@ views::Widget* CreateBrowserModalDialogViews(views::DialogDelegate* dialog,
     dialog_host_observer->OnPositionRequiresUpdate();
   }
   return widget;
+}
+
+void ShowBrowserModal(std::unique_ptr<ui::DialogModel> dialog_model,
+                      gfx::NativeWindow parent) {
+  auto dialog = views::BubbleDialogModelHost::CreateModal(
+      std::move(dialog_model), ui::MODAL_TYPE_WINDOW);
+  dialog->SetOwnedByWidget(true);
+  constrained_window::CreateBrowserModalDialogViews(std::move(dialog), parent)
+      ->Show();
 }
 
 }  // namespace constrained_window

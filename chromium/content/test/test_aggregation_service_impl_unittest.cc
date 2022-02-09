@@ -8,11 +8,14 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "content/browser/aggregation_service/aggregation_service_test_utils.h"
 #include "content/browser/aggregation_service/public_key.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -23,40 +26,47 @@ class TestAggregationServiceImplTest : public testing::Test {
  public:
   TestAggregationServiceImplTest()
       : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME),
-        impl_(std::make_unique<TestAggregationServiceImpl>(
-            task_environment_.GetMockClock())) {}
+        service_impl_(std::make_unique<TestAggregationServiceImpl>(
+            task_environment_.GetMockClock(),
+            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+                &test_url_loader_factory_))) {}
+
+ private:
+  base::test::TaskEnvironment task_environment_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
 
  protected:
-  base::test::TaskEnvironment task_environment_;
-  std::unique_ptr<TestAggregationServiceImpl> impl_;
+  std::unique_ptr<TestAggregationServiceImpl> service_impl_;
 };
 
 TEST_F(TestAggregationServiceImplTest, SetPublicKeys) {
-  std::string json_string = R"(
-        {
-            "version" : "",
-            "keys" : [
+  aggregation_service::TestHpkeKey generated_key =
+      aggregation_service::GenerateKey("abcd");
+
+  std::string json_string = base::ReplaceStringPlaceholders(
+      R"({
+            "version": "",
+            "keys": [
                 {
-                    "id" : "abcd",
-                    "key" : "ABCD1234"
+                   "id": "abcd",
+                   "key": "$1"
                 }
             ]
-        }
-    )";
+         })",
+      {generated_key.base64_encoded_public_key}, /*offsets=*/nullptr);
 
   url::Origin origin = url::Origin::Create(GURL("https://a.com"));
 
-  impl_->SetPublicKeys(origin, json_string,
-                       base::BindLambdaForTesting([&](bool succeeded) {
-                         EXPECT_TRUE(succeeded);
-                       }));
+  service_impl_->SetPublicKeys(origin, json_string,
+                               base::BindLambdaForTesting([&](bool succeeded) {
+                                 EXPECT_TRUE(succeeded);
+                               }));
 
   base::RunLoop run_loop;
-  impl_->GetPublicKeys(
+  service_impl_->GetPublicKeys(
       origin, base::BindLambdaForTesting([&](std::vector<PublicKey> keys) {
         EXPECT_TRUE(content::aggregation_service::PublicKeysEqual(
-            {content::PublicKey(/*id=*/"abcd", /*key=*/kABCD1234AsBytes)},
-            keys));
+            {generated_key.public_key}, keys));
         run_loop.Quit();
       }));
   run_loop.Run();

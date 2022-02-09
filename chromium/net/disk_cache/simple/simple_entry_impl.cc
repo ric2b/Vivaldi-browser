@@ -16,9 +16,10 @@
 #include "base/check_op.h"
 #include "base/cxx17_backports.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#include "base/task_runner.h"
-#include "base/task_runner_util.h"
+#include "base/task/task_runner.h"
+#include "base/task/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
@@ -117,7 +118,7 @@ class SimpleEntryImpl::ScopedOperationRunner {
   }
 
  private:
-  SimpleEntryImpl* const entry_;
+  const raw_ptr<SimpleEntryImpl> entry_;
 };
 
 SimpleEntryImpl::ActiveEntryProxy::~ActiveEntryProxy() = default;

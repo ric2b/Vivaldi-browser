@@ -12,6 +12,7 @@
 #include "base/containers/flat_set.h"
 #include "base/cpu.h"
 #include "base/files/file_util.h"
+#include "base/ignore_result.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -20,10 +21,12 @@
 #include "build/chromeos_buildflags.h"
 #include "components/content_capture/common/content_capture_features.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "components/translate/core/common/translate_util.h"
 #include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/main_function_params.h"
 #include "content/public/common/url_constants.h"
 #include "media/base/media_switches.h"
 #include "services/network/public/cpp/features.h"
@@ -183,6 +186,8 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
     blink::features::kPortals,
     // TODO(crbug.com/1144912): Support BackForwardCache on WebLayer.
     ::features::kBackForwardCache,
+    // TODO(crbug.com/1247836): Enable TFLite/Optimization Guide on WebLayer.
+    translate::kTFLiteLanguageDetectionEnabled,
 
 #if defined(OS_ANDROID)
     // TODO(crbug.com/1131016): Support Picture in Picture API on WebLayer.
@@ -294,17 +299,18 @@ void ContentMainDelegateImpl::PostEarlyInitialization(bool is_running_tests) {
   browser_client_->CreateFeatureListAndFieldTrials();
 }
 
-int ContentMainDelegateImpl::RunProcess(
+absl::variant<int, content::MainFunctionParams>
+ContentMainDelegateImpl::RunProcess(
     const std::string& process_type,
-    const content::MainFunctionParams& main_function_params) {
+    content::MainFunctionParams main_function_params) {
   // For non-browser process, return and have the caller run the main loop.
   if (!process_type.empty())
-    return -1;
+    return std::move(main_function_params);
 
 #if !defined(OS_ANDROID)
-  // On non-Android, we can return -1 and have the caller run BrowserMain()
-  // normally.
-  return -1;
+  // On non-Android, we can return |main_function_params| back and have the
+  // caller run BrowserMain() normally.
+  return std::move(main_function_params);
 #else
   // On Android, we defer to the system message loop when the stack unwinds.
   // So here we only create (and leak) a BrowserMainRunner. The shutdown
@@ -314,7 +320,8 @@ int ContentMainDelegateImpl::RunProcess(
   // In browser tests, the |main_function_params| contains a |ui_task| which
   // will execute the testing. The task will be executed synchronously inside
   // Initialize() so we don't depend on the BrowserMainRunner being Run().
-  int initialize_exit_code = main_runner->Initialize(main_function_params);
+  int initialize_exit_code =
+      main_runner->Initialize(std::move(main_function_params));
   DCHECK_LT(initialize_exit_code, 0)
       << "BrowserMainRunner::Initialize failed in MainDelegate";
   ignore_result(main_runner.release());

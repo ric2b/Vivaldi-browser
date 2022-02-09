@@ -7,14 +7,17 @@
 
 class SkBitmap;
 
+namespace gfx {
+class Rect;
+}
+
 namespace blink {
-class IntRect;
 class LocalFrame;
 }  // namespace blink
 
 CORE_EXPORT bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
                                      bool full_page,
-                                     const blink::IntRect& rect,
+                                     const gfx::Rect& rect,
                                      SkBitmap* bitmap);
 
 #endif  // RENDERER_BLINK_VIVALDI_SNAPSHOT_PAGE_H_

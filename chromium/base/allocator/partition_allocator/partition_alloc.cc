@@ -13,7 +13,6 @@
 #include "base/allocator/partition_allocator/memory_reclaimer.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
-#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_alloc_hooks.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
@@ -94,7 +93,8 @@ void PartitionAllocator<thread_safe>::init(PartitionOptions opts) {
       << "Cannot use a thread cache when PartitionAlloc is malloc().";
 #endif
   partition_root_.Init(opts);
-  partition_root_.ConfigureLazyCommit();
+  partition_root_.ConfigureLazyCommit(opts.lazy_commit ==
+                                      PartitionOptions::LazyCommit::kEnabled);
   PartitionAllocMemoryReclaimer::Instance()->RegisterPartition(
       &partition_root_);
 }
@@ -107,11 +107,12 @@ template void PartitionAllocator<internal::NotThreadSafe>::init(
 
 #if (DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)) && \
     BUILDFLAG(USE_BACKUP_REF_PTR)
+// TODO(bartekn): void* -> uintptr_t
 void CheckThatSlotOffsetIsZero(void* ptr) {
   // Add kPartitionPastAllocationAdjustment, because
   // PartitionAllocGetSlotStartInBRPPool will subtract it.
   PA_CHECK(PartitionAllocGetSlotStartInBRPPool(
-               reinterpret_cast<char*>(ptr) +
+               reinterpret_cast<uintptr_t>(ptr) +
                kPartitionPastAllocationAdjustment) == ptr);
 }
 #endif

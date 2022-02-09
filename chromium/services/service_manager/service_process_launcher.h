@@ -7,13 +7,12 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "sandbox/policy/sandbox_type.h"
+#include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
 #include "services/service_manager/service_process_launcher_delegate.h"
 
@@ -51,7 +50,7 @@ class ServiceProcessLauncher {
   // |Start()| was called) when the child has been started (or failed to start).
   mojo::PendingRemote<mojom::Service> Start(
       const Identity& target,
-      sandbox::policy::SandboxType sandbox_type,
+      sandbox::mojom::Sandbox sandbox_type,
       ProcessReadyCallback callback);
 
   // Exposed publicly for use in tests. Creates a new Service pipe, passing the

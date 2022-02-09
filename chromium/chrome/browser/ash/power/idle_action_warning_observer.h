@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_ASH_POWER_IDLE_ACTION_WARNING_OBSERVER_H_
 #define CHROME_BROWSER_ASH_POWER_IDLE_ACTION_WARNING_OBSERVER_H_
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -45,10 +43,5 @@ class IdleActionWarningObserver : public PowerManagerClient::Observer,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-using ::ash::IdleActionWarningObserver;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_POWER_IDLE_ACTION_WARNING_OBSERVER_H_

@@ -9,6 +9,7 @@
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/json/values_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -22,6 +23,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/account_id/account_id.h"
+#include "components/enterprise/browser/reporting/report_type.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
@@ -42,7 +44,7 @@ namespace em = enterprise_management;
 namespace enterprise_reporting {
 namespace {
 
-constexpr char kProfile[] = "Profile";
+constexpr char kProfile[] = "Default";
 constexpr char16_t kProfile16[] = u"Profile";
 constexpr char kIdleProfile[] = "IdleProfile";
 constexpr char16_t kIdleProfile16[] = u"IdleProfile";
@@ -175,7 +177,7 @@ class ProfileReportGeneratorTest : public ::testing::Test {
  private:
   content::BrowserTaskEnvironment task_environment_;
   TestingProfileManager profile_manager_;
-  TestingProfile* profile_;
+  raw_ptr<TestingProfile> profile_;
 
   std::unique_ptr<NiceMock<policy::MockPolicyService>> policy_service_;
   policy::PolicyMap policy_map_;
@@ -209,6 +211,31 @@ TEST_F(ProfileReportGeneratorTest, SignedInProfile) {
   EXPECT_EQ(expected_info.email, report->chrome_signed_in_user().email());
   EXPECT_EQ(expected_info.gaia,
             report->chrome_signed_in_user().obfuscated_gaia_id());
+}
+
+TEST_F(ProfileReportGeneratorTest, ProfileIdObfuscate) {
+  auto report = generator_.MaybeGenerate(profile()->GetPath(),
+                                         profile()->GetProfileUserName(),
+                                         ReportType::kProfileReport);
+  ASSERT_TRUE(report);
+  EXPECT_EQ(profile()->GetProfileUserName(), report->name());
+  EXPECT_NE(profile()->GetPath().AsUTF8Unsafe(), report->id());
+  EXPECT_TRUE(report->is_detail_available());
+
+  auto report2 = generator_.MaybeGenerate(profile()->GetPath(),
+                                          profile()->GetProfileUserName(),
+                                          ReportType::kProfileReport);
+  // Profile id is obfuscated with `kProfileReport` type, but the obfuscated
+  // result is consistent.
+  EXPECT_EQ(report->id(), report2->id());
+
+  TestingProfile* another_profile =
+      profile_manager()->CreateTestingProfile("another_profile");
+  auto report3 = generator_.MaybeGenerate(another_profile->GetPath(),
+                                          another_profile->GetProfileUserName(),
+                                          ReportType::kProfileReport);
+  // Different profiles' id will be different even after obfuscation.
+  EXPECT_NE(report->id(), report3->id());
 }
 
 #if !defined(OS_ANDROID)
@@ -319,80 +346,6 @@ TEST_F(ProfileReportGeneratorTest, TooManyRequests) {
               report2->extension_requests(id).id());
 }
 
-TEST_F(ProfileReportGeneratorTest, ExtensionRequestOnlyReport) {
-  profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kCloudExtensionRequestEnabled,
-      std::make_unique<base::Value>(true));
-  std::vector<std::string> ids = {kExtensionId};
-  SetExtensionToPendingList(ids);
-
-  IdentityTestEnvironmentProfileAdaptor identity_test_env_adaptor(profile());
-  auto expected_info =
-      identity_test_env_adaptor.identity_test_env()->SetPrimaryAccount(
-          "test@mail.com", signin::ConsentLevel::kSync);
-
-  auto report = generator_.MaybeGenerate(profile()->GetPath(),
-                                         profile()->GetProfileUserName(),
-                                         ReportType::kExtensionRequest);
-
-  // Extension request and profile id are included. Profile name and sign in
-  // users info are included on CrOS only.
-  EXPECT_TRUE(report);
-  EXPECT_EQ(profile()->GetPath().AsUTF8Unsafe(), report->id());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  EXPECT_EQ(profile()->GetProfileUserName(), report->name());
-  EXPECT_TRUE(report->has_chrome_signed_in_user());
-#else
-  EXPECT_FALSE(report->has_name());
-  EXPECT_FALSE(report->has_chrome_signed_in_user());
-#endif
-  ASSERT_EQ(1, report->extension_requests_size());
-  EXPECT_EQ(kExtensionId, report->extension_requests(0).id());
-  EXPECT_EQ(kFakeTime, report->extension_requests(0).request_timestamp());
-
-  // Policies and extensions info should not be added.
-  EXPECT_EQ(0, report->chrome_policies_size());
-  EXPECT_EQ(0, report->extensions_size());
-  EXPECT_EQ(0, report->policy_fetched_timestamps_size());
-  EXPECT_TRUE(report->is_detail_available());
-}
-
-TEST_F(ProfileReportGeneratorTest, ExtensionRequestOnlyReportWithoutPolicy) {
-  profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kCloudExtensionRequestEnabled,
-      std::make_unique<base::Value>(false));
-  IdentityTestEnvironmentProfileAdaptor identity_test_env_adaptor(profile());
-  auto expected_info =
-      identity_test_env_adaptor.identity_test_env()->SetPrimaryAccount(
-          "test@mail.com", signin::ConsentLevel::kSync);
-
-  auto report = generator_.MaybeGenerate(profile()->GetPath(),
-                                         profile()->GetProfileUserName(),
-                                         ReportType::kExtensionRequest);
-  EXPECT_TRUE(report);
-  EXPECT_EQ(0, report->extension_requests_size());
-}
-
-TEST_F(ProfileReportGeneratorTest,
-       ExtensionRequestOnlyReportWithoutAnyRequest) {
-  profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kCloudExtensionRequestEnabled,
-      std::make_unique<base::Value>(true));
-  std::vector<std::string> ids;
-  SetExtensionToPendingList(ids);
-
-  IdentityTestEnvironmentProfileAdaptor identity_test_env_adaptor(profile());
-  auto expected_info =
-      identity_test_env_adaptor.identity_test_env()->SetPrimaryAccount(
-          "test@mail.com", signin::ConsentLevel::kSync);
-
-  auto report = generator_.MaybeGenerate(profile()->GetPath(),
-                                         profile()->GetProfileUserName(),
-                                         ReportType::kExtensionRequest);
-
-  EXPECT_TRUE(report);
-  EXPECT_EQ(0, report->extension_requests_size());
-}
 #endif  // !defined(OS_ANDROID)
 
 }  // namespace enterprise_reporting

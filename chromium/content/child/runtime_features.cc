@@ -25,6 +25,7 @@
 #include "device/gamepad/public/cpp/gamepad_features.h"
 #include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
+#include "net/base/features.h"
 #include "services/device/public/cpp/device_features.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
@@ -293,7 +294,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableSkipTouchEventFilter, blink::features::kSkipTouchEventFilter},
     {wf::EnableSubresourceWebBundles, features::kSubresourceWebBundles},
     {wf::EnableTextFragmentAnchor, blink::features::kTextFragmentAnchor},
-    {wf::EnableTransformInterop, blink::features::kTransformInterop},
+    {wf::EnableCSSSelectorFragmentAnchor,
+     blink::features::kCssSelectorFragmentAnchor},
     {wf::EnableBackfaceVisibilityInterop,
      blink::features::kBackfaceVisibilityInterop},
     {wf::EnableUserActivationSameOriginVisibility,
@@ -301,7 +303,11 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableVideoPlaybackQuality, features::kVideoPlaybackQuality},
     {wf::EnableVideoWakeLockOptimisationHiddenMuted,
      media::kWakeLockOptimisationHiddenMuted},
-    {wf::EnableWebID, features::kWebID},
+    {wf::EnableWebBluetoothGetDevices,
+     features::kWebBluetoothNewPermissionsBackend, kSetOnlyIfOverridden},
+    {wf::EnableWebBluetoothWatchAdvertisements,
+     features::kWebBluetoothNewPermissionsBackend, kSetOnlyIfOverridden},
+    {wf::EnableWebID, features::kFedCm},
 #if defined(OS_ANDROID)
     {wf::EnableWebNfc, features::kWebNfc, kSetOnlyIfOverridden},
 #endif
@@ -319,7 +325,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableWebXRLightEstimation, device::features::kWebXrIncubations},
     {wf::EnableWebXRPlaneDetection, device::features::kWebXrIncubations},
     {wf::EnableWebXRViewportScale, device::features::kWebXrIncubations},
-    {wf::EnableWheelEventRegions, features::kWheelEventRegions},
     {wf::EnableRemoveMobileViewportDoubleTap,
      features::kRemoveMobileViewportDoubleTap},
   };
@@ -333,16 +338,15 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
   const RuntimeFeatureToChromiumFeatureMap<const char*>
       runtimeFeatureNameToChromiumFeatureMapping[] = {
           {"AdInterestGroupAPI", blink::features::kAdInterestGroupAPI},
+          {"AdInterestGroupAPIRestrictedPolicyByDefault",
+           blink::features::kAdInterestGroupAPIRestrictedPolicyByDefault},
           {"AllowContentInitiatedDataUrlNavigations",
            features::kAllowContentInitiatedDataUrlNavigations},
           {"AutofillShadowDOM", blink::features::kAutofillShadowDOM},
           {"AndroidDownloadableFontsMatching",
            features::kAndroidDownloadableFontsMatching},
-          {"BlockCredentialedSubresources",
-           features::kBlockCredentialedSubresources},
           {"COLRV1Fonts", blink::features::kCOLRV1Fonts},
           {"CSSContainerQueries", blink::features::kCSSContainerQueries},
-          {"CompositeAfterPaint", blink::features::kCompositeAfterPaint},
           {"ComputePressure", blink::features::kComputePressure,
            kSetOnlyIfOverridden},
           {"DesktopPWAsSubApps", blink::features::kDesktopPWAsSubApps},
@@ -351,8 +355,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           // the feature is in stable with no issues.
           {"DialogFocusNewSpecBehavior",
            blink::features::kDialogFocusNewSpecBehavior},
-          {"FeaturePolicyForClientHints",
-           features::kFeaturePolicyForClientHints},
           {"EditingNG", blink::features::kEditingNG},
           {"FileHandling", blink::features::kFileHandlingAPI},
           {"Fledge", blink::features::kFledge},
@@ -363,11 +365,12 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            blink::features::kForceSynchronousHTMLParsing},
           {"InterestCohortFeaturePolicy",
            blink::features::kInterestCohortFeaturePolicy},
+          {"LateFormNewlineNormalization",
+           blink::features::kLateFormNewlineNormalization},
           {"LayoutNG", blink::features::kLayoutNG},
           {"LegacyWindowsDWriteFontFallback",
            features::kLegacyWindowsDWriteFontFallback},
           {"ManagedConfiguration", blink::features::kManagedConfiguration},
-          {"NavigatorPluginsFixed", blink::features::kNavigatorPluginsFixed},
           // TODO(crbug.com/920069): Remove OffsetParentNewSpecBehavior after
           // the feature is in stable with no issues.
           {"OffsetParentNewSpecBehavior",
@@ -375,6 +378,7 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"OriginPolicy", features::kOriginPolicy},
           {"OriginIsolationHeader", features::kOriginIsolationHeader},
           {"Parakeet", blink::features::kParakeet},
+          {"PartitionedCookies", net::features::kPartitionedCookies},
           {"PrefersColorSchemeClientHintHeader",
            blink::features::kPrefersColorSchemeClientHintHeader},
           {"SanitizerAPI", blink::features::kSanitizerAPI},
@@ -388,16 +392,30 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"UserAgentClientHint", blink::features::kUserAgentClientHint},
           {"ViewportHeightClientHintHeader",
            blink::features::kViewportHeightClientHintHeader},
+          {"WebAppDarkMode", blink::features::kWebAppEnableDarkMode},
+          {"WebAppHandleLinks", blink::features::kWebAppEnableHandleLinks},
           {"WebAppLaunchHandler", blink::features::kWebAppEnableLaunchHandler},
           {"WebAppLinkCapturing", blink::features::kWebAppEnableLinkCapturing},
           {"WebAppTabStrip", features::kDesktopPWAsTabStrip},
+          {"WebAppTranslations", blink::features::kWebAppEnableTranslations},
           {"WebAppWindowControlsOverlay",
            features::kWebAppWindowControlsOverlay},
-          {"WebAuthAuthenticatorAttachment",
-           features::kWebAuthAuthenticatorAttachment},
           {"WebAuthenticationConditionalUI", features::kWebAuthConditionalUI},
+          {"WindowOpenNewPopupBehavior",
+           blink::features::kWindowOpenNewPopupBehavior},
           {"SyncLoadDataUrlFonts", blink::features::kSyncLoadDataUrlFonts},
           {"CSSCascadeLayers", blink::features::kCSSCascadeLayers},
+          // TODO(crbug.com/1185950): Remove this flag when the feature is fully
+          // launched and released to stable with no issues.
+          {"AutoExpandDetailsElement",
+           blink::features::kAutoExpandDetailsElement},
+          {"UserAgentClientHintFullVersionList",
+           blink::features::kUserAgentClientHintFullVersionList},
+          {"ClientHintsMetaHTTPEquivAcceptCH",
+           blink::features::kClientHintsMetaHTTPEquivAcceptCH},
+          {"ClientHintsMetaNameAcceptCH",
+           blink::features::kClientHintsMetaNameAcceptCH},
+          {"UserAgentReduction", blink::features::kReduceUserAgent},
       };
   for (const auto& mapping : runtimeFeatureNameToChromiumFeatureMapping) {
     SetRuntimeFeatureFromChromiumFeature(
@@ -559,22 +577,6 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
 
   if (base::FeatureList::IsEnabled(features::kDirectSockets))
     WebRuntimeFeatures::EnableDirectSockets(true);
-
-  if (base::FeatureList::IsEnabled(
-          blink::features::kAppCacheRequireOriginTrial)) {
-    // The kAppCacheRequireOriginTrial is a flag that controls whether or not
-    // the renderer AppCache api and backend is gated by an origin trial.  If
-    // on, then AppCache is disabled but can be re-enabled by the origin trial.
-    // The origin trial will not turn on the feature if the base::Feature
-    // AppCache is disabled.
-    WebRuntimeFeatures::EnableFeatureFromString("AppCache", false);
-  } else {
-    // If the origin trial is not required, then the kAppCache feature /
-    // about:flag is a disable-only kill switch to allow developers to test
-    // their application with AppCache fully disabled.
-    if (!base::FeatureList::IsEnabled(blink::features::kAppCache))
-      WebRuntimeFeatures::EnableFeatureFromString("AppCache", false);
-  }
 
   if (base::FeatureList::IsEnabled(network::features::kTrustTokens)) {
     // See https://bit.ly/configuring-trust-tokens.

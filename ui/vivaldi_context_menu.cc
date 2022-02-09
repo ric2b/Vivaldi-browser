@@ -23,11 +23,6 @@ views::Widget* VivaldiMenu::GetTopLevelWidgetFromWebContents(
       GetActiveNativeViewFromWebContents(web_contents));
 }
 
-RenderViewContextMenuBase::ToolkitDelegate*
-VivaldiContextMenu::GetToolkitDelegate() {
-  return nullptr;
-}
-
 bool VivaldiContextMenu::HasDarkTextColor() {
   return true;
 }

@@ -8,6 +8,7 @@
 
 import("//build/config/chromeos/args.gni")
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/devtools.gni")
 import("//build/config/gclient_args.gni")
 import("//build/config/rts.gni")
 import("//build_overrides/build.gni")
@@ -22,6 +23,7 @@ declare_args() {
 
 if (is_android) {
   import("//build/config/android/config.gni")
+  import("//build/config/android/create_unwind_table.gni")
   import("//build/config/android/extract_unwind_tables.gni")
   import("//build/config/android/rules.gni")
   import("//build/config/sanitizers/sanitizers.gni")
@@ -197,9 +199,16 @@ template("test") {
       if (defined(invoker.add_unwind_tables_in_apk) &&
           invoker.add_unwind_tables_in_apk) {
         _unwind_table_asset_name = "${target_name}_unwind_assets"
-        unwind_table_asset(_unwind_table_asset_name) {
-          library_target = _library_target
-          deps = [ ":$_library_target" ]
+        if (use_android_unwinder_v2) {
+          unwind_table_asset_v2(_unwind_table_asset_name) {
+            library_target = _library_target
+            deps = [ ":$_library_target" ]
+          }
+        } else {
+          unwind_table_asset(_unwind_table_asset_name) {
+            library_target = _library_target
+            deps = [ ":$_library_target" ]
+          }
         }
       }
 
@@ -390,47 +399,63 @@ template("test") {
     # Define the package target that will bundle the test and additional
     # components and their data.
     fuchsia_package(_pkg_target) {
-      forward_variables_from(invoker, [ "excluded_files" ])
+      forward_variables_from(invoker,
+                             [
+                               "excluded_files",
+                               "excluded_dirs",
+                             ])
       package_name = _output_name
       deps = _test_component_targets
+
+      if (!defined(excluded_dirs)) {
+        excluded_dirs = []
+      }
+      excluded_dirs += [ devtools_root_location ]
     }
 
     # |target_name| refers to the package-runner rule, so that building
     # "base_unittests" will build not only the executable, component, and
     # package, but also the script required to run them.
-    fuchsia_package_runner(target_name) {
-      is_test_exe = true
+    fuchsia_test_runner(target_name) {
       forward_variables_from(invoker,
                              [
-                               "use_run_test_component",
-                               "use_test_server",
+                               "data",
+                               "data_deps",
                                "package_deps",
-                               "visibility",
+                               "use_test_server",
                              ])
-      runner_script = "//build/fuchsia/test_runner.py"
-      package = ":$_pkg_target"
-      package_name_override = _output_name
 
-      if (tests_have_location_tags) {
-        data = [ "//testing/location_tags.json" ]
+      is_test_exe = true
+      package = ":$_pkg_target"
+      package_name = _output_name
+
+      if (!defined(deps)) {
+        deps = []
       }
-      data_deps = [ "//testing/buildbot/filters:fuchsia_filters" ]
+      if (defined(invoker.deps)) {
+        deps += invoker.deps
+      }
+
+      if (!defined(data)) {
+        data = []
+      }
+      if (tests_have_location_tags) {
+        data += [ "//testing/location_tags.json" ]
+      }
+
+      if (!defined(data_deps)) {
+        data_deps = []
+      }
+      data_deps += [ "//testing/buildbot/filters:fuchsia_filters" ]
 
       if (use_rts) {
-        data_deps += [ ":${invoker.target_name}__rts_filters" ]
+        data_deps += [ ":${target_name}__rts_filters" ]
       }
     }
 
     executable(_exec_target) {
       forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
       output_name = _exec_target
-
-      if (use_rts) {
-        if (!defined(data_deps)) {
-          data_deps = []
-        }
-        data_deps += [ ":${invoker.target_name}__rts_filters" ]
-      }
     }
   } else if (is_ios) {
     assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
@@ -516,6 +541,7 @@ template("test") {
 
       if (ios_use_shared_bundle_id_for_test_apps) {
         bundle_identifier = "$ios_app_bundle_id_prefix.gtest.unittests"
+        not_needed([ "_output_name" ])
       } else {
         bundle_identifier = "$ios_app_bundle_id_prefix.gtest." +
                             string_replace(_output_name, "_", "-")
@@ -837,9 +863,6 @@ template("script_test") {
     if (defined(invoker.run_under_python2) && invoker.run_under_python2) {
       use_vpython3 = false
       data += [ "//.vpython" ]
-    } else {
-      use_vpython3 = true
-      data += [ "//.vpython3" ]
     }
 
     if (defined(invoker.data)) {

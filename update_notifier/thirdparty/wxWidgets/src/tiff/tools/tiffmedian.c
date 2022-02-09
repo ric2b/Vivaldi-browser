@@ -1,4 +1,3 @@
-
 /*
  * Apply median cut on an image.
  *
@@ -55,6 +54,13 @@
 
 #include "tiffio.h"
 
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 #define	MAX_CMAP_SIZE	256
 
 #define	streq(a,b)	(strcmp(a,b) == 0)
@@ -107,7 +113,7 @@ static	void quant(TIFF*, TIFF*);
 static	void quant_fsdither(TIFF*, TIFF*);
 static	Colorbox* largest_box(void);
 
-static	void usage(void);
+static	void usage(int);
 static	int processCompressOptions(char*);
 
 #define	CopyField(tag, v) \
@@ -122,15 +128,17 @@ main(int argc, char* argv[])
 	float floatv;
 	uint32 longv;
 	int c;
+#if !HAVE_DECL_OPTARG
 	extern int optind;
 	extern char* optarg;
+#endif
 
 	num_colors = MAX_CMAP_SIZE;
-	while ((c = getopt(argc, argv, "c:C:r:f")) != -1)
+	while ((c = getopt(argc, argv, "c:C:r:fh")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
 			if (!processCompressOptions(optarg))
-				usage();
+				usage(EXIT_FAILURE);
 			break;
 		case 'C':		/* set colormap size */
 			num_colors = atoi(optarg);
@@ -138,7 +146,7 @@ main(int argc, char* argv[])
 				fprintf(stderr,
 				   "-c: colormap too big, max %d\n",
 				   MAX_CMAP_SIZE);
-				usage();
+				usage(EXIT_FAILURE);
 			}
 			break;
 		case 'f':		/* dither */
@@ -147,15 +155,18 @@ main(int argc, char* argv[])
 		case 'r':		/* rows/strip */
 			rowsperstrip = atoi(optarg);
 			break;
+		case 'h':
+			usage(EXIT_SUCCESS);
+			/*NOTREACHED*/
 		case '?':
-			usage();
+			usage(EXIT_FAILURE);
 			/*NOTREACHED*/
 		}
 	if (argc - optind != 2)
-		usage();
+		usage(EXIT_FAILURE);
 	in = TIFFOpen(argv[optind], "r");
 	if (in == NULL)
-		return (-1);
+		return (EXIT_FAILURE);
 	TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &imagewidth);
 	TIFFGetField(in, TIFFTAG_IMAGELENGTH, &imagelength);
 	TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);
@@ -163,18 +174,18 @@ main(int argc, char* argv[])
 	if (bitspersample != 8 && bitspersample != 16) {
 		fprintf(stderr, "%s: Image must have at least 8-bits/sample\n",
 		    argv[optind]);
-		return (-3);
+		return (EXIT_FAILURE);
 	}
 	if (!TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &photometric) ||
 	    photometric != PHOTOMETRIC_RGB || samplesperpixel < 3) {
 		fprintf(stderr, "%s: Image must have RGB data\n", argv[optind]);
-		return (-4);
+		return (EXIT_FAILURE);
 	}
 	TIFFGetField(in, TIFFTAG_PLANARCONFIG, &config);
 	if (config != PLANARCONFIG_CONTIG) {
 		fprintf(stderr, "%s: Can only handle contiguous data packing\n",
 		    argv[optind]);
-		return (-5);
+		return (EXIT_FAILURE);
 	}
 
 	/*
@@ -244,7 +255,7 @@ main(int argc, char* argv[])
 	 */
 	out = TIFFOpen(argv[optind+1], "w");
 	if (out == NULL)
-		return (-2);
+		return (EXIT_FAILURE);
 
 	CopyField(TIFFTAG_SUBFILETYPE, longv);
 	CopyField(TIFFTAG_IMAGEWIDTH, longv);
@@ -289,7 +300,7 @@ main(int argc, char* argv[])
 	}
 	TIFFSetField(out, TIFFTAG_COLORMAP, rm, gm, bm);
 	(void) TIFFClose(out);
-	return (0);
+	return (EXIT_SUCCESS);
 }
 
 static int
@@ -332,16 +343,15 @@ NULL
 };
 
 static void
-usage(void)
+usage(int code)
 {
-	char buf[BUFSIZ];
 	int i;
+	FILE * out = (code == EXIT_SUCCESS) ? stdout : stderr;
 
-	setbuf(stderr, buf);
-        fprintf(stderr, "%s\n\n", TIFFGetVersion());
+        fprintf(out, "%s\n\n", TIFFGetVersion());
 	for (i = 0; stuff[i] != NULL; i++)
-		fprintf(stderr, "%s\n", stuff[i]);
-	exit(-1);
+		fprintf(out, "%s\n", stuff[i]);
+	exit(code);
 }
 
 static void
@@ -355,7 +365,7 @@ get_histogram(TIFF* in, Colorbox* box)
 	inputline = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(in));
 	if (inputline == NULL) {
 		fprintf(stderr, "No space for scanline buffer\n");
-		exit(-1);
+		exit(EXIT_FAILURE);
 	}
 	box->rmin = box->gmin = box->bmin = 999;
 	box->rmax = box->gmax = box->bmax = -1;
@@ -370,9 +380,15 @@ get_histogram(TIFF* in, Colorbox* box)
 			break;
 		inptr = inputline;
 		for (j = imagewidth; j-- > 0;) {
-			red = *inptr++ >> COLOR_SHIFT;
-			green = *inptr++ >> COLOR_SHIFT;
-			blue = *inptr++ >> COLOR_SHIFT;
+			red = (*inptr++) & 0xff >> COLOR_SHIFT;
+			green = (*inptr++) & 0xff >> COLOR_SHIFT;
+			blue = (*inptr++) & 0xff >> COLOR_SHIFT;
+                        if ((red | green | blue) >= B_LEN) {
+                                fprintf(stderr,
+                                        "Logic error. "
+                                        "Histogram array overflow!\n");
+                                exit(EXIT_FAILURE);
+                        }
 			if (red < box->rmin)
 				box->rmin = red;
 		        if (red > box->rmax)
@@ -778,24 +794,28 @@ quant(TIFF* in, TIFF* out)
 
 #define	SWAP(type,a,b)	{ type p; p = a; a = b; b = p; }
 
-#define	GetInputLine(tif, row, bad)				\
-	if (TIFFReadScanline(tif, inputline, row, 0) <= 0)	\
-		bad;						\
-	inptr = inputline;					\
-	nextptr = nextline;					\
-	for (j = 0; j < imagewidth; ++j) {			\
-		*nextptr++ = *inptr++;				\
-		*nextptr++ = *inptr++;				\
-		*nextptr++ = *inptr++;				\
-	}
+#define	GetInputLine(tif, row, bad)                                     \
+        do {                                                            \
+                if (TIFFReadScanline(tif, inputline, row, 0) <= 0)	\
+                        bad;						\
+                inptr = inputline;					\
+                nextptr = nextline;					\
+                for (j = 0; j < imagewidth; ++j) {			\
+                        *nextptr++ = *inptr++;				\
+                        *nextptr++ = *inptr++;				\
+                        *nextptr++ = *inptr++;				\
+                }                                                       \
+        } while (0);
 #define	GetComponent(raw, cshift, c)				\
-	cshift = raw;						\
-	if (cshift < 0)						\
-		cshift = 0;					\
-	else if (cshift >= MAX_COLOR)				\
-		cshift = MAX_COLOR-1;				\
-	c = cshift;						\
-	cshift >>= COLOR_SHIFT;
+        do {                                                    \
+                cshift = raw;                                   \
+                if (cshift < 0)                                 \
+                        cshift = 0;                             \
+                else if (cshift >= MAX_COLOR)                   \
+                        cshift = MAX_COLOR-1;                   \
+                c = cshift;                                     \
+                cshift >>= COLOR_SHIFT;                         \
+        } while (0);
 
 static void
 quant_fsdither(TIFF* in, TIFF* out)

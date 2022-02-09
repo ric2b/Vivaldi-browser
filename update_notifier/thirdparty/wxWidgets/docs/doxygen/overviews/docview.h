@@ -86,7 +86,7 @@ use Wx ':docview';   # import constants (optional)
 @endcode
 @endWxPerlOnly
 
-@see @ref group_class_docview, 
+@see @ref group_class_docview,
 
 
 
@@ -114,9 +114,9 @@ wxDocument class, you need to derive a new class and override at least the
 member functions SaveObject and LoadObject. SaveObject and LoadObject will be
 called by the framework when the document needs to be saved or loaded.
 
-Use the macros wxDECLARE_DYNAMIC_CLASS and wxIMPLEMENT_DYNAMIC_CLASS in order to
-allow the framework to create document objects on demand. When you create a
-wxDocTemplate object on application initialization, you should pass
+Use the macros wxDECLARE_DYNAMIC_CLASS and wxIMPLEMENT_DYNAMIC_CLASS in order
+to allow the framework to create document objects on demand. When you create
+a wxDocTemplate object on application initialization, you should pass
 CLASSINFO(YourDocumentClass) to the wxDocTemplate constructor so that it knows
 how to create an instance of this class.
 
@@ -139,8 +139,8 @@ To use the abstract wxView class, you need to derive a new class and override
 at least the member functions OnCreate, OnDraw, OnUpdate and OnClose. You will
 probably want to respond to menu commands from the frame containing the view.
 
-Use the macros wxDECLARE_DYNAMIC_CLASS and wxIMPLEMENT_DYNAMIC_CLASS in order to
-allow the framework to create view objects on demand. When you create a
+Use the macros wxDECLARE_DYNAMIC_CLASS and wxIMPLEMENT_DYNAMIC_CLASS in order
+to allow the framework to create view objects on demand. When you create a
 wxDocTemplate object on application initialization, you should pass
 CLASSINFO(YourViewClass) to the wxDocTemplate constructor so that it knows how
 to create an instance of this class.

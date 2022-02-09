@@ -7,9 +7,11 @@
 
 #include <string>
 
-namespace content {
+#include "base/time/time.h"
+#include "content/public/browser/prerender_trigger_type.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
-class RenderFrameHostImpl;
+namespace content {
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -25,7 +27,12 @@ enum class PrerenderCancelledInterface {
 
 void RecordPrerenderCancelledInterface(const std::string& interface_name);
 
-void RecordPrerenderTriggered(RenderFrameHostImpl& initiator_render_frame_host);
+void RecordPrerenderTriggered(ukm::SourceId ukm_id);
+
+void RecordPrerenderActivationTime(
+    base::TimeDelta delta,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
 
 }  // namespace content
 

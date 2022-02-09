@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -25,8 +26,8 @@
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_reuse_manager.h"
+#include "components/password_manager/core/browser/password_store_built_in_backend.h"
 #include "components/password_manager/core/browser/password_store_factory_util.h"
-#include "components/password_manager/core/browser/password_store_impl.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
@@ -82,7 +83,7 @@ class UnsyncedCredentialsDeletionNotifierImpl
   base::WeakPtr<UnsyncedCredentialsDeletionNotifier> GetWeakPtr() override;
 
  private:
-  Profile* const profile_;
+  const raw_ptr<Profile> profile_;
   base::WeakPtrFactory<UnsyncedCredentialsDeletionNotifier> weak_ptr_factory_{
       this};
 };
@@ -174,17 +175,18 @@ AccountPasswordStoreFactory::BuildServiceInstanceFor(
   scoped_refptr<password_manager::PasswordStore> ps =
 #if defined(OS_ANDROID)
       new password_manager::PasswordStore(
-          std::make_unique<password_manager::PasswordStoreImpl>(
+          std::make_unique<password_manager::PasswordStoreBuiltInBackend>(
               std::move(login_db)));
 #else
       new password_manager::PasswordStore(
-          std::make_unique<password_manager::PasswordStoreImpl>(
+          std::make_unique<password_manager::PasswordStoreBuiltInBackend>(
               std::move(login_db),
               std::make_unique<UnsyncedCredentialsDeletionNotifierImpl>(
                   profile)));
 #endif
 
   if (!ps->Init(profile->GetPrefs(),
+                /*affiliated_match_helper=*/nullptr,
                 base::BindRepeating(&SyncEnabledOrDisabled, profile))) {
     // TODO(crbug.com/479725): Remove the LOG once this error is visible in the
     // UI.

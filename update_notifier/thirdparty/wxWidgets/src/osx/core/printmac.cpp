@@ -13,9 +13,6 @@
 
 #if wxUSE_PRINTING_ARCHITECTURE
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/utils.h"
@@ -36,6 +33,15 @@
 #include "wx/osx/printdlg.h"
 
 #include <stdlib.h>
+
+// Helper function to get the printer "name": actually we use its unique ID
+// instead of the human-readable name which is not guaranteed to be unique.
+static wxString MacGetPrinterName(PMPrinter printer)
+{
+    CFStringRef printerId = PMPrinterGetID(printer);
+    CFRetain(printerId);
+    return wxCFStringRef(printerId).AsString();
+}
 
 //
 // move to print_osx.cpp
@@ -83,7 +89,7 @@ static PMResolution *GetSupportedResolutions(PMPrinter printer, UInt32 *count)
 
 
 
-IMPLEMENT_DYNAMIC_CLASS(wxOSXPrintData, wxPrintNativeDataBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxOSXPrintData, wxPrintNativeDataBase);
 
 bool wxOSXPrintData::IsOk() const
 {
@@ -113,25 +119,20 @@ void wxOSXPrintData::UpdateToPMState()
 void wxOSXPrintData::TransferPrinterNameFrom( const wxPrintData &data )
 {
     CFArrayRef printerList;
-    CFIndex index, count;
-    CFStringRef name;
 
     if (PMServerCreatePrinterList(kPMServerLocal, &printerList) == noErr)
     {
+        CFIndex index, count;
         PMPrinter printer = NULL;
         count = CFArrayGetCount(printerList);
         for (index = 0; index < count; index++)
         {
-            printer = (PMPrinter)CFArrayGetValueAtIndex(printerList, index);
+            printer = static_cast<PMPrinter>(const_cast<void*>(CFArrayGetValueAtIndex(printerList, index)));
             if ((data.GetPrinterName().empty()) && (PMPrinterIsDefault(printer)))
                 break;
-            else
-            {
-                name = PMPrinterGetName(printer);
-                CFRetain(name);
-                if (data.GetPrinterName() == wxCFStringRef(name).AsString())
-                    break;
-            }
+
+            if (data.GetPrinterName() == MacGetPrinterName(printer))
+                break;
         }
         if (index < count)
             PMSessionSetCurrentPMPrinter(m_macPrintSession, printer);
@@ -180,7 +181,7 @@ void wxOSXPrintData::TransferPaperInfoFrom( const wxPrintData &data )
                 CFIndex top = CFArrayGetCount(paperlist);
                 for ( CFIndex i = 0 ; i < top ; ++ i )
                 {
-                    PMPaper paper = (PMPaper) CFArrayGetValueAtIndex( paperlist, i );
+                    PMPaper paper = static_cast<PMPaper>(const_cast<void*>(CFArrayGetValueAtIndex(paperlist, i)));
                     PMPaperGetHeight(paper, &height);
                     PMPaperGetWidth(paper, &width);
                     if ( fabs( width - papersize.x ) < 5 &&
@@ -301,17 +302,12 @@ bool wxOSXPrintData::TransferFrom( const wxPrintData &data )
 
 void wxOSXPrintData::TransferPrinterNameTo( wxPrintData &data )
 {
-    CFStringRef name;
     PMPrinter printer ;
     PMSessionGetCurrentPrinter( m_macPrintSession, &printer );
     if (PMPrinterIsDefault(printer))
         data.SetPrinterName(wxEmptyString);
     else
-    {
-        name = PMPrinterGetName(printer);
-        CFRetain(name);
-        data.SetPrinterName(wxCFStringRef(name).AsString());
-    }
+        data.SetPrinterName(MacGetPrinterName(printer));
 }
 
 void wxOSXPrintData::TransferPaperInfoTo( wxPrintData &data )
@@ -400,7 +396,7 @@ void wxOSXPrintData::TransferResolutionTo( wxPrintData &data )
             UInt32 i;
             for (i = 0; i < resCount; i++)
             {
-                if ((resolutions[i].hRes == res.hRes) && (resolutions[i].vRes = res.vRes))
+                if (resolutions[i].hRes == res.hRes && resolutions[i].vRes == res.vRes)
                     break;
             }
             if (i < resCount)
@@ -422,7 +418,7 @@ bool wxOSXPrintData::TransferTo( wxPrintData &data )
     return true ;
 }
 
-void wxOSXPrintData::TransferFrom( wxPageSetupDialogData *WXUNUSED(data) )
+void wxOSXPrintData::TransferFrom( const wxPageSetupDialogData *WXUNUSED(data) )
 {
     // should we setup the page rect here ?
     // since MacOS sometimes has two same paper rects with different
@@ -502,7 +498,7 @@ void wxOSXPrintData::TransferTo( wxPrintDialogData* data )
     }
 }
 
-void wxOSXPrintData::TransferFrom( wxPrintDialogData* data )
+void wxOSXPrintData::TransferFrom( const wxPrintDialogData* data )
 {
     // Respect the value of m_printAllPages
     if ( data->GetAllPages() )
@@ -525,8 +521,6 @@ wxPrintNativeDataBase* wxOSXCreatePrintData()
 {
 #if wxOSX_USE_COCOA
     return new wxOSXCocoaPrintData();
-#elif wxOSX_USE_CARBON
-    return new wxOSXCarbonPrintData();
 #else
     return NULL;
 #endif
@@ -536,14 +530,14 @@ wxPrintNativeDataBase* wxOSXCreatePrintData()
 * Printer
 */
 
-IMPLEMENT_DYNAMIC_CLASS(wxMacPrinter, wxPrinterBase)
+wxIMPLEMENT_DYNAMIC_CLASS(wxMacPrinter, wxPrinterBase);
 
 wxMacPrinter::wxMacPrinter(wxPrintDialogData *data):
 wxPrinterBase(data)
 {
 }
 
-wxMacPrinter::~wxMacPrinter(void)
+wxMacPrinter::~wxMacPrinter()
 {
 }
 
@@ -587,9 +581,6 @@ bool wxMacPrinter::Print(wxWindow *parent, wxPrintout *printout, bool prompt)
         return false;
     }
 
-    // on the mac we have always pixels as addressing mode with 72 dpi
-    printout->SetPPIScreen(72, 72);
-
     PMResolution res;
     PMPrinter printer;
     wxOSXPrintData* nativeData = (wxOSXPrintData*)
@@ -610,15 +601,7 @@ bool wxMacPrinter::Print(wxWindow *parent, wxPrintout *printout, bool prompt)
     printout->SetPPIPrinter(int(res.hRes), int(res.vRes));
 
     // Set printout parameters
-    printout->SetDC(dc);
-
-    int w, h;
-    dc->GetSize(&w, &h);
-    printout->SetPageSizePixels((int)w, (int)h);
-    printout->SetPaperRectPixels(dc->GetPaperRect());
-    wxCoord mw, mh;
-    dc->GetSizeMM(&mw, &mh);
-    printout->SetPageSizeMM((int)mw, (int)mh);
+    printout->SetUp(*dc);
 
     // Create an abort window
     wxBeginBusyCursor();
@@ -732,7 +715,7 @@ bool wxMacPrinter::Setup(wxWindow *WXUNUSED(parent))
 * Print preview
 */
 
-IMPLEMENT_CLASS(wxMacPrintPreview, wxPrintPreviewBase)
+wxIMPLEMENT_CLASS(wxMacPrintPreview, wxPrintPreviewBase);
 
 wxMacPrintPreview::wxMacPrintPreview(wxPrintout *printout,
                                      wxPrintout *printoutForPrinting,
@@ -748,7 +731,7 @@ wxPrintPreviewBase(printout, printoutForPrinting, data)
     DetermineScaling();
 }
 
-wxMacPrintPreview::~wxMacPrintPreview(void)
+wxMacPrintPreview::~wxMacPrintPreview()
 {
 }
 
@@ -761,15 +744,14 @@ bool wxMacPrintPreview::Print(bool interactive)
     return printer.Print(m_previewFrame, m_printPrintout, interactive);
 }
 
-void wxMacPrintPreview::DetermineScaling(void)
+void wxMacPrintPreview::DetermineScaling()
 {
     int screenWidth , screenHeight ;
     wxDisplaySize( &screenWidth , &screenHeight ) ;
 
-    wxSize ppiScreen( 72 , 72 ) ;
+    wxSize ppiScreen = wxGetDisplayPPI();
     wxSize ppiPrinter( 72 , 72 ) ;
 
-    // Note that with Leopard, screen dpi=72 is no longer a given
     m_previewPrintout->SetPPIScreen( ppiScreen.x , ppiScreen.y ) ;
 
     wxCoord w , h ;
@@ -811,36 +793,5 @@ void wxMacPrintPreview::DetermineScaling(void)
 //
 // end of print_osx.cpp
 //
-
-#if wxOSX_USE_CARBON
-
-IMPLEMENT_DYNAMIC_CLASS(wxOSXCarbonPrintData, wxOSXPrintData)
-
-wxOSXCarbonPrintData::wxOSXCarbonPrintData()
-{
-    if ( PMCreateSession( &m_macPrintSession ) == noErr )
-    {
-        if ( PMCreatePageFormat(&m_macPageFormat) == noErr )
-        {
-            PMSessionDefaultPageFormat(m_macPrintSession,
-                    m_macPageFormat);
-            PMGetPageFormatPaper(m_macPageFormat, &m_macPaper);
-        }
-
-        if ( PMCreatePrintSettings(&m_macPrintSettings) == noErr )
-        {
-            PMSessionDefaultPrintSettings(m_macPrintSession,
-                m_macPrintSettings);
-        }
-    }
-}
-
-wxOSXCarbonPrintData::~wxOSXCarbonPrintData()
-{
-    (void)PMRelease(m_macPageFormat);
-    (void)PMRelease(m_macPrintSettings);
-    (void)PMRelease(m_macPrintSession);
-}
-#endif
 
 #endif

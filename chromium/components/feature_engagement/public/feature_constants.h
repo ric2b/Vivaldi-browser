@@ -10,20 +10,30 @@
 
 namespace feature_engagement {
 
+// A feature for enabling automatic snooze mode for In-Product Help (IPH). When
+// this flag is enabled, we don't show snooze button/UI on the IPH, but on
+// dismiss we will implicitly snooze it until the snooze limit count is reached.
+extern const base::Feature kEnableAutomaticSnooze;
+
 // A feature for enabling a demonstration mode for In-Product Help (IPH).
 extern const base::Feature kIPHDemoMode;
 
 // A feature for enabling a snooze mode for In-Product Help (IPH).
 extern const base::Feature kIPHSnooze;
 
+// A feature for enabling In-Product Help (IPH) to use client side
+// configuration. When this flag is enabled, finch config will be ignored for
+// all IPHs.
+extern const base::Feature kUseClientConfigIPH;
+
 // A feature to ensure all arrays can contain at least one feature.
 extern const base::Feature kIPHDummyFeature;
 
 #if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS) || defined(OS_FUCHSIA)
+extern const base::Feature kIPHDesktopSharedHighlightingFeature;
 extern const base::Feature kIPHDesktopTabGroupsNewGroupFeature;
-extern const base::Feature kIPHFocusModeFeature;
-extern const base::Feature kIPHGlobalMediaControlsFeature;
+extern const base::Feature kIPHFocusHelpBubbleScreenReaderPromoFeature;
 extern const base::Feature kIPHGMCCastStartStopFeature;
 extern const base::Feature kIPHLiveCaptionFeature;
 extern const base::Feature kIPHPasswordsAccountStorageFeature;
@@ -55,6 +65,7 @@ extern const base::Feature kIPHAddToHomescreenMessageFeature;
 extern const base::Feature kIPHAddToHomescreenTextBubbleFeature;
 extern const base::Feature kIPHAutoDarkOptOutFeature;
 extern const base::Feature kIPHAutoDarkUserEducationMessageFeature;
+extern const base::Feature kIPHAutoDarkUserEducationMessageOptInFeature;
 extern const base::Feature kIPHDataSaverDetailFeature;
 extern const base::Feature kIPHDataSaverMilestonePromoFeature;
 extern const base::Feature kIPHDataSaverPreviewFeature;
@@ -75,6 +86,16 @@ extern const base::Feature kIPHDownloadSettingsFeature;
 extern const base::Feature kIPHDownloadInfoBarDownloadContinuingFeature;
 extern const base::Feature kIPHDownloadInfoBarDownloadsAreFasterFeature;
 extern const base::Feature kIPHEphemeralTabFeature;
+extern const base::Feature
+    kIPHFeatureNotificationGuideDefaultBrowserNotificationShownFeature;
+extern const base::Feature
+    kIPHFeatureNotificationGuideSignInNotificationShownFeature;
+extern const base::Feature
+    kIPHFeatureNotificationGuideIncognitoTabNotificationShownFeature;
+extern const base::Feature
+    kIPHFeatureNotificationGuideNTPSuggestionCardNotificationShownFeature;
+extern const base::Feature
+    kIPHFeatureNotificationGuideVoiceSearchNotificationShownFeature;
 extern const base::Feature kIPHFeedCardMenuFeature;
 extern const base::Feature kIPHHomePageButtonFeature;
 extern const base::Feature kIPHHomepageTileFeature;
@@ -97,6 +118,8 @@ extern const base::Feature kIPHReadLaterContextMenuFeature;
 extern const base::Feature kIPHReadLaterAppMenuBookmarkThisPageFeature;
 extern const base::Feature kIPHReadLaterAppMenuBookmarksFeature;
 extern const base::Feature kIPHReadLaterBottomSheetFeature;
+extern const base::Feature kIPHShoppingListMenuItemFeature;
+extern const base::Feature kIPHShoppingListSaveFlowFeature;
 extern const base::Feature kIPHTabGroupsQuicklyComparePagesFeature;
 extern const base::Feature kIPHTabGroupsTapToSeeAnotherTabFeature;
 extern const base::Feature kIPHTabGroupsYourTabsAreTogetherFeature;

@@ -10,9 +10,11 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/ignore_result.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "content/app/mojo/mojo_init.h"
@@ -40,6 +42,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/escape.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
@@ -194,7 +197,7 @@ class FakeWebURLLoader : public blink::WebURLLoader {
       freezable_task_runner_handle_;
   std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
       unfreezable_task_runner_handle_;
-  blink::WebURLLoaderClient* async_client_ = nullptr;
+  raw_ptr<blink::WebURLLoaderClient> async_client_ = nullptr;
 
   base::WeakPtrFactory<FakeWebURLLoader> weak_factory_{this};
 };
@@ -472,7 +475,7 @@ void RenderViewTest::SetUp() {
 #endif
   command_line_ =
       std::make_unique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
-  params_ = std::make_unique<MainFunctionParams>(*command_line_);
+  params_ = std::make_unique<MainFunctionParams>(command_line_.get());
   platform_ = std::make_unique<RendererMainPlatformDelegate>(*params_);
   platform_->PlatformInitialize();
 
@@ -543,7 +546,7 @@ void RenderViewTest::SetUp() {
   RenderFrameWasShownWaiter waiter(RenderFrame::FromWebFrame(
       view->GetWebView()->MainFrame()->ToWebLocalFrame()));
   render_widget_host_->widget_remote_for_testing()->WasShown(
-      {} /* record_tab_switch_time_request */, false /* was_evicted=*/,
+      false /* was_evicted=*/,
       blink::mojom::RecordContentToVisibleTimeRequestPtr());
   waiter.Wait();
 
@@ -626,8 +629,7 @@ void RenderViewTest::SendNativeKeyEvent(
 
 void RenderViewTest::SendInputEvent(const blink::WebInputEvent& input_event) {
   GetWebFrameWidget()->ProcessInputEventSynchronouslyForTesting(
-      blink::WebCoalescedInputEvent(input_event, ui::LatencyInfo()),
-      base::DoNothing());
+      blink::WebCoalescedInputEvent(input_event, ui::LatencyInfo()));
 }
 
 void RenderViewTest::SendWebKeyboardEvent(
@@ -708,12 +710,10 @@ void RenderViewTest::SimulatePointClick(const gfx::Point& point) {
   mouse_event.SetPositionInWidget(point.x(), point.y());
   mouse_event.click_count = 1;
   GetWebFrameWidget()->ProcessInputEventSynchronouslyForTesting(
-      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      base::DoNothing());
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()));
   mouse_event.SetType(WebInputEvent::Type::kMouseUp);
   GetWebFrameWidget()->ProcessInputEventSynchronouslyForTesting(
-      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      base::DoNothing());
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()));
 }
 
 bool RenderViewTest::SimulateElementRightClick(const std::string& element_id) {
@@ -731,12 +731,10 @@ void RenderViewTest::SimulatePointRightClick(const gfx::Point& point) {
   mouse_event.SetPositionInWidget(point.x(), point.y());
   mouse_event.click_count = 1;
   GetWebFrameWidget()->ProcessInputEventSynchronouslyForTesting(
-      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      base::DoNothing());
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()));
   mouse_event.SetType(WebInputEvent::Type::kMouseUp);
   GetWebFrameWidget()->ProcessInputEventSynchronouslyForTesting(
-      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
-      base::DoNothing());
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()));
 }
 
 void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
@@ -748,8 +746,7 @@ void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
   gesture_event.data.tap.width = rect.width();
   gesture_event.data.tap.height = rect.height();
   GetWebFrameWidget()->ProcessInputEventSynchronouslyForTesting(
-      blink::WebCoalescedInputEvent(gesture_event, ui::LatencyInfo()),
-      base::DoNothing());
+      blink::WebCoalescedInputEvent(gesture_event, ui::LatencyInfo()));
 }
 
 void RenderViewTest::SetFocused(const blink::WebElement& element) {
@@ -775,7 +772,8 @@ void RenderViewTest::Reload(const GURL& url) {
       false /* has_text_fragment_token */,
       network::mojom::CSPDisposition::CHECK, std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */,
-      base::TimeTicks() /* input_start */);
+      base::TimeTicks() /* input_start */,
+      network::mojom::RequestDestination::kDocument);
   auto commit_params = blink::CreateCommitNavigationParams();
   commit_params->sandbox_flags = network::mojom::WebSandboxFlags::kNone;
   TestRenderFrame* frame = static_cast<TestRenderFrame*>(GetMainRenderFrame());
@@ -911,7 +909,8 @@ void RenderViewTest::GoToOffset(int offset,
       false /* has_text_fragment_token */,
       network::mojom::CSPDisposition::CHECK, std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */,
-      base::TimeTicks() /* input_start */);
+      base::TimeTicks() /* input_start */,
+      network::mojom::RequestDestination::kDocument);
   auto commit_params = blink::CreateCommitNavigationParams();
   commit_params->page_state = state.ToEncodedData();
   commit_params->nav_entry_id = pending_offset + 1;

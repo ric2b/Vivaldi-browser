@@ -15,9 +15,9 @@
 #include "wx/icon.h"
 
 // private helper class:
-class WXDLLIMPEXP_FWD_ADV wxTaskBarIconWindow;
+class WXDLLIMPEXP_FWD_CORE wxTaskBarIconWindow;
 
-class WXDLLIMPEXP_ADV wxTaskBarIcon : public wxTaskBarIconBase
+class WXDLLIMPEXP_CORE wxTaskBarIcon : public wxTaskBarIconBase
 {
 public:
     wxTaskBarIcon(wxTaskBarIconType iconType = wxTBI_DEFAULT_TYPE);
@@ -28,9 +28,9 @@ public:
     bool IsIconInstalled() const { return m_iconAdded; }
 
     // Operations
-    bool SetIcon(const wxIcon& icon, const wxString& tooltip = wxEmptyString);
-    bool RemoveIcon(void);
-    bool PopupMenu(wxMenu *menu);
+    bool SetIcon(const wxIcon& icon, const wxString& tooltip = wxEmptyString) wxOVERRIDE;
+    bool RemoveIcon() wxOVERRIDE;
+    bool PopupMenu(wxMenu *menu) wxOVERRIDE;
 
     // MSW-specific class methods
 
@@ -49,7 +49,8 @@ public:
     bool ShowBalloon(const wxString& title,
                      const wxString& text,
                      unsigned msec = 0,
-                     int flags = 0);
+                     int flags = 0,
+                     const wxIcon& icon = wxNullIcon);
 #endif // wxUSE_TASKBARICON_BALLOONS
 
 protected:
@@ -64,7 +65,21 @@ protected:
     wxIcon               m_icon;
     wxString             m_strTooltip;
 
-    DECLARE_DYNAMIC_CLASS_NO_COPY(wxTaskBarIcon)
+private:
+    enum Operation
+    {
+        Operation_Add,
+        Operation_Modify,
+        Operation_TryBoth
+    };
+
+    // Implementation of the public SetIcon() which may also be used when we
+    // don't know if we should add a new icon or modify the existing one.
+    bool DoSetIcon(const wxIcon& icon,
+                   const wxString& tooltip,
+                   Operation operation);
+
+    wxDECLARE_DYNAMIC_CLASS_NO_COPY(wxTaskBarIcon);
 };
 
 #endif // _WX_TASKBAR_H_

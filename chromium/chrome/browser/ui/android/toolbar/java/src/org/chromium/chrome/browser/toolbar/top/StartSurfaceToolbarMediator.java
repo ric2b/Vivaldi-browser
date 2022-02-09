@@ -19,9 +19,10 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.INCOGNITO_SWITCHER_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.INCOGNITO_TAB_COUNT_PROVIDER;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.INCOGNITO_TAB_MODEL_SELECTOR;
-import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IN_START_SURFACE_MODE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.IS_VISIBLE;
+import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_CONTENT_DESCRIPTION;
+import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_IMAGE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_BUTTON_HIGHLIGHT;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_CLICK_HANDLER;
@@ -32,7 +33,7 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.TAB_SWITCHER_BUTTON_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.TRANSLATION_Y;
 
-import android.os.Handler;
+import android.graphics.Bitmap;
 import android.view.View;
 import android.view.View.OnClickListener;
 
@@ -43,10 +44,8 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.BooleanSupplier;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.layouts.LayoutStateProvider;
-import org.chromium.chrome.browser.layouts.LayoutType;
-import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
+import org.chromium.chrome.browser.tabmodel.IncognitoTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
@@ -58,7 +57,6 @@ import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
-import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** The mediator implements interacts between the views and the caller. */
@@ -71,18 +69,17 @@ class StartSurfaceToolbarMediator {
     private final boolean mIsTabGroupsAndroidContinuationEnabled;
     private final UserEducationHelper mUserEducationHelper;
     private final BooleanSupplier mIsIncognitoModeEnabledSupplier;
+    private final MenuButtonCoordinator mMenuButtonCoordinator;
+    private final TabModelSelectorObserver mTabModelSelectorObserver;
+    private final IncognitoTabModelObserver mIncognitoTabModelObserver;
 
     private TabModelSelector mTabModelSelector;
     private TabCountProvider mTabCountProvider;
-    private TemplateUrlServiceObserver mTemplateUrlObserver;
-    private TabModelSelectorObserver mTabModelSelectorObserver;
-    private LayoutStateProvider mLayoutStateProvider;
-    private LayoutStateProvider.LayoutStateObserver mLayoutStateObserver;
-    private MenuButtonCoordinator mMenuButtonCoordinator;
+
     @StartSurfaceState
     private int mStartSurfaceState;
     private boolean mIsAnimationEnabled;
-    private boolean mIsGoogleSearchEngine;
+    private boolean mDefaultSearchEngineHasLogo;
     private boolean mShouldShowStartSurfaceAsHomepage;
     private boolean mHomepageEnabled;
 
@@ -147,32 +144,39 @@ class StartSurfaceToolbarMediator {
         }
         mShouldShowTabSwitcherButtonOnHomepage = shouldShowTabSwitcherButtonOnHomepage;
         mIsAnimationEnabled = isAnimationEnabled;
-    }
 
-    void onNativeLibraryReady() {
-        assert mTemplateUrlObserver == null;
-
-        mTemplateUrlObserver = new TemplateUrlServiceObserver() {
+        mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
-            public void onTemplateURLServiceChanged() {
-                updateLogoVisibility(TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle());
+            public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
+                mPropertyModel.set(IS_INCOGNITO, mTabModelSelector.isIncognitoSelected());
+                updateIdentityDisc(mIdentityDiscButtonSupplier.get());
+            }
+
+            @Override
+            public void onTabStateInitialized() {
+                maybeInitializeIncognitoToggle();
             }
         };
 
-        TemplateUrlServiceFactory.get().addObserver(mTemplateUrlObserver);
-        mIsGoogleSearchEngine = TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle();
-        updateLogoVisibility(TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle());
+        mIncognitoTabModelObserver = new IncognitoTabModelObserver() {
+            @Override
+            public void wasFirstTabCreated() {
+                updateIncognitoToggleTabVisibility();
+            }
+
+            @Override
+            public void didBecomeEmpty() {
+                updateIncognitoToggleTabVisibility();
+            }
+        };
     }
 
     void destroy() {
-        if (mTemplateUrlObserver != null) {
-            TemplateUrlServiceFactory.get().removeObserver(mTemplateUrlObserver);
-        }
-        if (mTabModelSelectorObserver != null) {
+        if (mTabModelSelector != null && mTabModelSelectorObserver != null) {
             mTabModelSelector.removeObserver(mTabModelSelectorObserver);
         }
-        if (mLayoutStateObserver != null) {
-            mLayoutStateProvider.removeObserver(mLayoutStateObserver);
+        if (mTabModelSelector != null && mIncognitoTabModelObserver != null) {
+            mTabModelSelector.removeIncognitoTabModelObserver(mIncognitoTabModelObserver);
         }
         if (mCallbackController != null) {
             mCallbackController.destroy();
@@ -184,13 +188,15 @@ class StartSurfaceToolbarMediator {
             @StartSurfaceState int newState, boolean shouldShowStartSurfaceToolbar) {
         updateShowAnimation(newState, shouldShowStartSurfaceToolbar);
         mStartSurfaceState = newState;
-        updateLogoVisibility(mIsGoogleSearchEngine);
+        updateLogoVisibility();
         updateTabSwitcherButtonVisibility();
         updateIncognitoToggleTabVisibility();
         updateNewTabViewVisibility();
         updateHomeButtonVisibility();
         updateIdentityDisc(mIdentityDiscButtonSupplier.get());
+        updateAppMenuUpdateBadgeSuppression();
         setStartSurfaceToolbarVisibility(shouldShowStartSurfaceToolbar);
+        updateButtonsClickable(shouldShowStartSurfaceToolbar);
         updateTranslationY(mNonIncognitoHomepageTranslationY);
     }
 
@@ -259,29 +265,12 @@ class StartSurfaceToolbarMediator {
     void setTabModelSelector(TabModelSelector selector) {
         mTabModelSelector = selector;
 
-        if (mTabModelSelectorObserver == null) {
-            mTabModelSelectorObserver = new TabModelSelectorObserver() {
-                @Override
-                public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                    mPropertyModel.set(IS_INCOGNITO, mTabModelSelector.isIncognitoSelected());
-                    updateIdentityDisc(mIdentityDiscButtonSupplier.get());
-                    updateIncognitoToggleTabVisibility();
-                    // New tab view text is only visible when incognito toggle layout is not shown.
-                    updateNewTabViewTextVisibility();
-                }
-
-                @Override
-                public void onTabStateInitialized() {
-                    maybeInitializeIncognitoToggle();
-                }
-            };
-        }
-        if (mTabModelSelector.isTabStateInitialized()) {
-            maybeInitializeIncognitoToggle();
-        }
+        if (mTabModelSelector.isTabStateInitialized()) maybeInitializeIncognitoToggle();
         mPropertyModel.set(IS_INCOGNITO, mTabModelSelector.isIncognitoSelected());
         updateIdentityDisc(mIdentityDiscButtonSupplier.get());
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
+
+        mTabModelSelector.addIncognitoTabModelObserver(mIncognitoTabModelObserver);
     }
 
     private void maybeInitializeIncognitoToggle() {
@@ -296,30 +285,18 @@ class StartSurfaceToolbarMediator {
         if (mStartSurfaceState != StartSurfaceState.SHOWN_TABSWITCHER
                 && mStartSurfaceState != StartSurfaceState.SHOWING_TABSWITCHER) {
             mPropertyModel.set(INCOGNITO_SWITCHER_VISIBLE, false);
+            updateNewTabViewTextVisibility();
             return;
         }
 
-        if (mHideIncognitoSwitchWhenNoTabs) {
-            mPropertyModel.set(INCOGNITO_SWITCHER_VISIBLE, hasIncognitoTabs());
-        } else {
-            mPropertyModel.set(INCOGNITO_SWITCHER_VISIBLE, true);
-        }
+        mPropertyModel.set(
+                INCOGNITO_SWITCHER_VISIBLE, !mHideIncognitoSwitchWhenNoTabs || hasIncognitoTabs());
+        updateNewTabViewTextVisibility();
     }
 
-    // TODO(crbug.com/1042997): share with TabSwitcherModeTTPhone.
     private boolean hasIncognitoTabs() {
         if (mTabModelSelector == null) return false;
-
-        // Check if there is no incognito tab, or all the incognito tabs are being closed.
-        TabModel incognitoTabModel = mTabModelSelector.getModel(true);
-        for (int i = 0; i < incognitoTabModel.getCount(); i++) {
-            if (!incognitoTabModel.getTabAt(i).isClosing()) return true;
-        }
-        return false;
-    }
-
-    void setStartSurfaceMode(boolean inStartSurfaceMode) {
-        mPropertyModel.set(IN_START_SURFACE_MODE, inStartSurfaceMode);
+        return mTabModelSelector.getModel(true).getCount() != 0;
     }
 
     void setStartSurfaceToolbarVisibility(boolean shouldShowStartSurfaceToolbar) {
@@ -335,45 +312,6 @@ class StartSurfaceToolbarMediator {
         updateNewTabViewVisibility();
     }
 
-    void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
-        assert layoutStateProvider != null;
-        assert mLayoutStateProvider == null : "the mLayoutStateProvider should set at most once.";
-
-        mLayoutStateProvider = layoutStateProvider;
-        mLayoutStateObserver = new LayoutStateProvider.LayoutStateObserver() {
-            @Override
-            public void onStartedShowing(@LayoutType int layoutType, boolean showToolbar) {
-                if (layoutType == LayoutType.TAB_SWITCHER) {
-                    updateIncognitoToggleTabVisibility();
-                }
-            }
-            @Override
-            public void onFinishedShowing(@LayoutType int layoutType) {
-                if (layoutType == LayoutType.TAB_SWITCHER) {
-                    mPropertyModel.set(BUTTONS_CLICKABLE, true);
-                    mMenuButtonCoordinator.setClickable(true);
-                }
-            }
-            @Override
-            public void onStartedHiding(
-                    @LayoutType int layoutType, boolean showToolbar, boolean delayAnimation) {
-                if (layoutType == LayoutType.TAB_SWITCHER) {
-                    mPropertyModel.set(BUTTONS_CLICKABLE, false);
-                    mMenuButtonCoordinator.setClickable(false);
-                }
-            }
-        };
-
-        if (mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER)) {
-            new Handler().post(() -> {
-                mLayoutStateObserver.onStartedShowing(LayoutType.TAB_SWITCHER, true);
-                mLayoutStateObserver.onFinishedShowing(LayoutType.TAB_SWITCHER);
-            });
-        }
-
-        mLayoutStateProvider.addObserver(mLayoutStateObserver);
-    }
-
     /**
      * @param highlight If the new tab button should be highlighted.
      */
@@ -385,10 +323,22 @@ class StartSurfaceToolbarMediator {
         mHomeButtonView = homeButtonView;
     }
 
-    private void updateLogoVisibility(boolean isGoogleSearchEngine) {
-        mIsGoogleSearchEngine = isGoogleSearchEngine;
-        boolean shouldShowLogo =
-                mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE && mIsGoogleSearchEngine;
+    /**
+     * This method should be called when there is a possibility that logo image became available or
+     * was changed.
+     * @param logoImage The logo image in bitmap format.
+     * @param contentDescription The accessibility text describing the logo.
+     */
+    void onLogoImageAvailable(Bitmap logoImage, String contentDescription) {
+        mDefaultSearchEngineHasLogo = logoImage != null;
+        updateLogoVisibility();
+        mPropertyModel.set(LOGO_IMAGE, logoImage);
+        mPropertyModel.set(LOGO_CONTENT_DESCRIPTION, contentDescription);
+    }
+
+    private void updateLogoVisibility() {
+        boolean shouldShowLogo = mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE
+                && mDefaultSearchEngineHasLogo;
         mPropertyModel.set(LOGO_IS_VISIBLE, shouldShowLogo);
     }
 
@@ -434,8 +384,13 @@ class StartSurfaceToolbarMediator {
         // Show new tab view text view when new tab view is at start and incognito switch
         // is hidden.
         mPropertyModel.set(NEW_TAB_VIEW_TEXT_IS_VISIBLE,
-                mPropertyModel.get(NEW_TAB_VIEW_AT_START) && mHideIncognitoSwitchWhenNoTabs
-                        && !hasIncognitoTabs());
+                mPropertyModel.get(NEW_TAB_VIEW_AT_START)
+                        && !mPropertyModel.get(INCOGNITO_SWITCHER_VISIBLE));
+    }
+
+    private void updateButtonsClickable(boolean isClickable) {
+        mPropertyModel.set(BUTTONS_CLICKABLE, isClickable);
+        mMenuButtonCoordinator.setClickable(isClickable);
     }
 
     private void updateHomeButtonVisibility() {
@@ -467,6 +422,11 @@ class StartSurfaceToolbarMediator {
         mPropertyModel.set(TAB_SWITCHER_BUTTON_IS_VISIBLE, shouldShow);
         // If tab switcher button is visible, we should move identity disc to the left.
         mPropertyModel.set(IDENTITY_DISC_AT_START, shouldShow);
+    }
+
+    private void updateAppMenuUpdateBadgeSuppression() {
+        mMenuButtonCoordinator.setAppMenuUpdateBadgeSuppressed(
+                mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER);
     }
 
     private void updateTranslationY(float transY) {
@@ -523,10 +483,5 @@ class StartSurfaceToolbarMediator {
     void setStartSurfaceHomeButtonIPHControllerForTesting(
             StartSurfaceHomeButtonIPHController startSurfaceHomeButtonIPHController) {
         mStartSurfaceHomeButtonIPHController = startSurfaceHomeButtonIPHController;
-    }
-
-    @VisibleForTesting
-    void setHomeButtonViewForTesting(View homeButtonView) {
-        mHomeButtonView = homeButtonView;
     }
 }

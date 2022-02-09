@@ -527,6 +527,7 @@ void OpenXrApiWrapper::CreateSharedMailboxes(
 
     gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle;
     gpu_memory_buffer_handle.dxgi_handle.Set(shared_handle);
+    gpu_memory_buffer_handle.dxgi_token = gfx::DXGIHandleToken();
     gpu_memory_buffer_handle.type = gfx::DXGI_SHARED_HANDLE;
 
     std::unique_ptr<gpu::GpuMemoryBufferImplDXGI> gpu_memory_buffer =
@@ -624,7 +625,7 @@ XrResult OpenXrApiWrapper::BeginFrame(
 
   const SwapChainInfo& swap_chain_info =
       color_swapchain_images_[color_swapchain_image_index];
-  *texture = swap_chain_info.d3d11_texture;
+  *texture = swap_chain_info.d3d11_texture.get();
   *mailbox_holder = swap_chain_info.mailbox_holder;
 
   return XR_SUCCESS;

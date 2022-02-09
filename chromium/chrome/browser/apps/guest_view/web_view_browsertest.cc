@@ -14,13 +14,14 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_timeouts.h"
@@ -54,6 +55,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -88,6 +90,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/content_mock_cert_verifier.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/fake_speech_recognition_manager.h"
 #include "content/public/test/find_test_utils.h"
@@ -107,7 +110,9 @@
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_embedder.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/process_map.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_urls.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/identifiability_metrics.h"
@@ -123,6 +128,7 @@
 #include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/switches.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/display/display_switches.h"
@@ -233,7 +239,8 @@ class EmbedderWebContentsObserver : public content::WebContentsObserver {
       delete;
 
   // WebContentsObserver.
-  void RenderProcessGone(base::TerminationStatus status) override {
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override {
     terminated_ = true;
     if (message_loop_runner_.get())
       message_loop_runner_->Quit();
@@ -366,7 +373,7 @@ class LeftMouseClick {
   }
 
   // Unowned pointer.
-  content::WebContents* web_contents_;
+  raw_ptr<content::WebContents> web_contents_;
 
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 
@@ -499,7 +506,7 @@ class MockDownloadWebContentsDelegate : public content::WebContentsDelegate {
   }
 
  private:
-  content::WebContentsDelegate* orig_delegate_;
+  raw_ptr<content::WebContentsDelegate> orig_delegate_;
   bool waiting_for_decision_ = false;
   bool expect_allow_ = false;
   bool decision_made_ = false;
@@ -548,7 +555,8 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose-gc");
+    command_line->AppendSwitchASCII(blink::switches::kJavaScriptFlags,
+                                    "--expose-gc");
 
     extensions::PlatformAppBrowserTest::SetUpCommandLine(command_line);
   }
@@ -897,8 +905,8 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
 
   TestGuestViewManagerFactory factory_;
   // Note that these are only set if you launch app using LoadAppWithGuest().
-  content::WebContents* guest_web_contents_;
-  content::WebContents* embedder_web_contents_;
+  raw_ptr<content::WebContents> guest_web_contents_;
+  raw_ptr<content::WebContents> embedder_web_contents_;
 };
 
 // The following test suites are created to group tests based on specific
@@ -1842,6 +1850,14 @@ IN_PROC_BROWSER_TEST_F(WebViewNewWindowTest,
       content::CollectAllRenderFrameHosts(embedder_main_frame),
       testing::UnorderedElementsAre(embedder_main_frame, other_guest_main_frame,
                                     unattached_guest_main_frame));
+
+  // In either case, GetParentOrOuterDocument does not escape GuestViews.
+  EXPECT_EQ(nullptr, other_guest_main_frame->GetParentOrOuterDocument());
+  EXPECT_EQ(nullptr, unattached_guest_main_frame->GetParentOrOuterDocument());
+  EXPECT_EQ(other_guest_main_frame,
+            other_guest_main_frame->GetOutermostMainFrame());
+  EXPECT_EQ(unattached_guest_main_frame,
+            unattached_guest_main_frame->GetOutermostMainFrame());
 }
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestContentLoadEvent) {
@@ -2635,7 +2651,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuInspectElement) {
   ASSERT_TRUE(guest_web_contents);
 
   content::ContextMenuParams params;
-  TestRenderViewContextMenu menu(guest_web_contents->GetMainFrame(), params);
+  TestRenderViewContextMenu menu(*guest_web_contents->GetMainFrame(), params);
   menu.Init();
 
   // Expect "Inspect" to be shown as we are running webview in a chrome app.
@@ -3176,7 +3192,7 @@ class DownloadManagerWaiter : public content::DownloadManager::Observer {
  private:
   base::OnceClosure quit_closure_;
   bool initialized_;
-  content::DownloadManager* download_manager_;
+  raw_ptr<content::DownloadManager> download_manager_;
 };
 
 }  // namespace
@@ -3924,7 +3940,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTestWithUnseasonedOverride,
   // Open a context menu for the MimeHandlerViewGuest. Since the <webview> can
   // navigate back, the Back item should be enabled.
   content::ContextMenuParams params;
-  TestRenderViewContextMenu menu(mime_handler_view_contents->GetMainFrame(),
+  TestRenderViewContextMenu menu(*mime_handler_view_contents->GetMainFrame(),
                                  params);
   menu.Init();
   ASSERT_TRUE(menu.IsCommandIdEnabled(IDC_BACK));
@@ -3997,7 +4013,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ReloadWebviewAccessibleResource) {
   ASSERT_TRUE(web_view_contents);
 
   GURL embedder_url(embedder_contents->GetLastCommittedURL());
-  GURL webview_url(embedder_url.GetOrigin().spec() + "assets/foo.html");
+  GURL webview_url(embedder_url.DeprecatedGetOriginAsURL().spec() +
+                   "assets/foo.html");
 
   EXPECT_EQ(webview_url, web_view_contents->GetLastCommittedURL());
 }
@@ -4015,7 +4032,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, BlobInWebviewAccessibleResource) {
   ASSERT_TRUE(web_view_contents);
 
   GURL embedder_url(embedder_contents->GetLastCommittedURL());
-  GURL webview_url(embedder_url.GetOrigin().spec() + "assets/foo.html");
+  GURL webview_url(embedder_url.DeprecatedGetOriginAsURL().spec() +
+                   "assets/foo.html");
 
   EXPECT_EQ(webview_url, web_view_contents->GetLastCommittedURL());
 
@@ -4046,7 +4064,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, LoadWebviewInaccessibleResource) {
   // Check that the webview stays at the first page that it loaded (foo.html),
   // and does not commit inaccessible.html.
   GURL embedder_url(embedder_contents->GetLastCommittedURL());
-  GURL foo_url(embedder_url.GetOrigin().spec() + "assets/foo.html");
+  GURL foo_url(embedder_url.DeprecatedGetOriginAsURL().spec() +
+               "assets/foo.html");
 
   EXPECT_EQ(foo_url, web_view_contents->GetLastCommittedURL());
 }
@@ -4349,7 +4368,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest, TestGuestWheelScrollsBubble) {
   embedder_rect.set_x(0);
   embedder_rect.set_y(0);
 
-  gfx::Vector2dF default_offset;
+  gfx::PointF default_offset;
   embedder_frame_observer.WaitForScrollOffset(default_offset);
 
   // Send scroll gesture to embedder & verify.
@@ -4363,7 +4382,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest, TestGuestWheelScrollsBubble) {
         embedder_rect.x() + embedder_rect.width() / 2,
         (embedder_rect.y() + guest_rect.y()) / 2);
 
-    gfx::Vector2dF expected_offset(0.f, scroll_magnitude);
+    gfx::PointF expected_offset(0.f, scroll_magnitude);
 
     content::SimulateMouseEvent(embedder_contents,
                                 blink::WebInputEvent::Type::kMouseMove,
@@ -4419,7 +4438,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
   content::RenderWidgetHostView* guest_host_view =
       guest_contents->GetRenderWidgetHostView();
 
-  gfx::Vector2dF default_offset;
+  gfx::PointF default_offset;
   guest_frame_observer.WaitForScrollOffset(default_offset);
   embedder_frame_observer.WaitForScrollOffset(default_offset);
 
@@ -4524,7 +4543,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTouchTest,
   embedder_rect.set_x(0);
   embedder_rect.set_y(0);
 
-  gfx::Vector2dF default_offset;
+  gfx::PointF default_offset;
   embedder_frame_observer.WaitForScrollOffset(default_offset);
 
   // Send scroll gesture to embedder & verify.
@@ -4536,7 +4555,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTouchTest,
         embedder_rect.x() + embedder_rect.width() / 2,
         (embedder_rect.y() + guest_rect.y()) / 2);
 
-    gfx::Vector2dF expected_offset(0.f, gesture_distance);
+    gfx::PointF expected_offset(0.f, gesture_distance);
 
     content::SimulateGestureScrollSequence(
         embedder_contents, embedder_scroll_location,
@@ -4594,10 +4613,7 @@ class ChromeSignInWebViewTest : public WebViewTest {
   }
 };
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || defined(OS_MAC) || \
-    defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_WIN)
 // This verifies the fix for http://crbug.com/667708.
 IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
                        ClosingChromeSignInShouldNotCrash) {
@@ -5030,4 +5046,85 @@ IN_PROC_BROWSER_TEST_F(WebViewPPAPITest, Shim_TestPlugin) {
 
 IN_PROC_BROWSER_TEST_F(WebViewPPAPITest, Shim_TestPluginLoadPermission) {
   TestHelper("testPluginLoadPermission", "web_view/shim", NO_TEST_SERVER);
+}
+
+// Helper class to set up a fake Chrome Web Store URL which can be loaded in
+// tests.
+class WebstoreWebViewTest : public WebViewTest {
+ public:
+  WebstoreWebViewTest() : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
+
+  WebstoreWebViewTest(const WebstoreWebViewTest&) = delete;
+  WebstoreWebViewTest& operator=(const WebstoreWebViewTest&) = delete;
+
+  ~WebstoreWebViewTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    https_server_.ServeFilesFromSourceDirectory("chrome/test/data");
+    ASSERT_TRUE(https_server_.InitializeAndListen());
+
+    // Override the webstore URL.
+    command_line->AppendSwitchASCII(
+        ::switches::kAppsGalleryURL,
+        https_server()->GetURL("chrome.foo.com", "/frame_tree").spec());
+    mock_cert_verifier_.SetUpCommandLine(command_line);
+    WebViewTest::SetUpCommandLine(command_line);
+  }
+
+  void SetUpOnMainThread() override {
+    https_server_.StartAcceptingConnections();
+    mock_cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
+    WebViewTest::SetUpOnMainThread();
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    WebViewTest::SetUpInProcessBrowserTestFixture();
+    mock_cert_verifier_.SetUpInProcessBrowserTestFixture();
+  }
+
+  void TearDownInProcessBrowserTestFixture() override {
+    WebViewTest::TearDownInProcessBrowserTestFixture();
+    mock_cert_verifier_.TearDownInProcessBrowserTestFixture();
+  }
+
+  net::EmbeddedTestServer* https_server() { return &https_server_; }
+
+ private:
+  net::EmbeddedTestServer https_server_;
+  content::ContentMockCertVerifier mock_cert_verifier_;
+};
+
+// Ensure that an attempt to load Chrome Web Store in a <webview> is blocked
+// and does not result in a renderer kill.  See https://crbug.com/1197674.
+IN_PROC_BROWSER_TEST_F(WebstoreWebViewTest, NoRendererKillWithChromeWebStore) {
+  LoadAppWithGuest("web_view/simple");
+  content::WebContents* guest = GetGuestWebContents();
+  ASSERT_TRUE(guest);
+
+  // Navigate <webview> to a Chrome Web Store URL.  This should result in an
+  // error and shouldn't lead to a renderer kill.
+  const GURL webstore_url =
+      https_server()->GetURL("chrome.foo.com", "/frame_tree/simple.htm");
+  content::TestNavigationObserver error_observer(
+      guest, content::MessageLoopRunner::QuitMode::IMMEDIATE,
+      /*ignore_uncommitted_navigations=*/false);
+  EXPECT_TRUE(
+      ExecuteScript(guest, "location.href = '" + webstore_url.spec() + "';"));
+  error_observer.Wait();
+  EXPECT_FALSE(error_observer.last_navigation_succeeded());
+  EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
+
+  content::RenderFrameHost* guest_rfh = guest->GetMainFrame();
+  EXPECT_TRUE(guest_rfh->IsRenderFrameLive());
+
+  // Double-check that after the attempted navigation the <webview> is not
+  // considered an extension process and does not have privileged webstore
+  // APIs.
+  auto* process_map = extensions::ProcessMap::Get(guest->GetBrowserContext());
+  EXPECT_FALSE(process_map->Contains(guest_rfh->GetProcess()->GetID()));
+  EXPECT_TRUE(
+      process_map->GetExtensionsInProcess(guest_rfh->GetProcess()->GetID())
+          .empty());
+  EXPECT_EQ(false, content::EvalJs(guest, "!!chrome.webstorePrivate"));
+  EXPECT_EQ(false, content::EvalJs(guest, "!!chrome.dashboardPrivate"));
 }

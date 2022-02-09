@@ -44,7 +44,7 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   ~VivaldiContextMenuViews() override;
   VivaldiContextMenuViews(content::WebContents* web_contents,
                           ui::SimpleMenuModel* menu_model,
-                          const gfx::Rect& rect);
+                          const gfx::Rect& rect, VivaldiRenderViewContextMenu* context_menu);
   VivaldiContextMenuViews(const VivaldiContextMenuViews&) = delete;
   VivaldiContextMenuViews& operator=(const VivaldiContextMenuViews&) = delete;
 
@@ -53,7 +53,6 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
-  RenderViewContextMenuBase::ToolkitDelegate* GetToolkitDelegate() override;
   bool HasDarkTextColor() override;
 
  private:
@@ -62,10 +61,11 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
                  ui::MenuSourceType type);
 
   std::unique_ptr<ToolkitDelegateViews> toolkit_delegate_;
-  content::WebContents* web_contents_;
-  ui::SimpleMenuModel* menu_model_;
-  views::MenuItemView* menu_view_;  // owned by toolkit_delegate_
+  content::WebContents* web_contents_ = nullptr;
+  ui::SimpleMenuModel* menu_model_ = nullptr;
+  views::MenuItemView* menu_view_ = nullptr;  // owned by toolkit_delegate_
   gfx::Rect rect_;
+  VivaldiRenderViewContextMenu* context_menu_ = nullptr;
 };
 
 }  // namespace vivaldi

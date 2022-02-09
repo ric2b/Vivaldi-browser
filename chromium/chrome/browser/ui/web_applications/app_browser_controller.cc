@@ -290,7 +290,8 @@ void AppBrowserController::DidStartNavigation(
 
 void AppBrowserController::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame())
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument())
     return;
 
   // Reset the draggable regions so they are not cached on navigation.
@@ -346,6 +347,11 @@ std::u16string AppBrowserController::GetTitle() const {
   content::NavigationEntry* entry =
       web_contents->GetController().GetVisibleEntry();
   return entry ? entry->GetTitle() : std::u16string();
+}
+
+std::string AppBrowserController::GetTitleForMediaControls() const {
+  // Only return the app name if we're a System Web App.
+  return system_app() ? base::UTF16ToUTF8(GetAppShortName()) : std::string();
 }
 
 void AppBrowserController::OnTabStripModelChanged(

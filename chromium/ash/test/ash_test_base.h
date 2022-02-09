@@ -17,7 +17,6 @@
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_types.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "base/traits_bag.h"
@@ -77,6 +76,10 @@ class TestSystemTrayClient;
 class UnifiedSystemTray;
 class WorkAreaInsets;
 
+// Base class for most tests in //ash. Constructs ash::Shell and all its
+// dependencies. Provides a user login session (use NoSessionAshTestBase for
+// tests that start at the login screen or need unusual user types). Sets
+// animation durations to zero via AshTestHelper/AuraTestHelper.
 class AshTestBase : public testing::Test {
  public:
   // Constructs an AshTestBase with |traits| being forwarded to its

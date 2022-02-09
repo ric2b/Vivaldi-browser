@@ -11,9 +11,8 @@
 #include "base/compiler_specific.h"
 #include "base/component_export.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
-#include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chromeos/dbus/cryptohome/UserDataAuth.pb.h"
 #include "chromeos/login/auth/auth_attempt_state.h"
 #include "chromeos/login/auth/authenticator.h"
@@ -104,8 +103,11 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) CryptohomeAuthenticator
                           std::unique_ptr<SafeModeDelegate> safe_mode_delegate,
                           AuthStatusConsumer* consumer);
 
+  CryptohomeAuthenticator(const CryptohomeAuthenticator&) = delete;
+  CryptohomeAuthenticator& operator=(const CryptohomeAuthenticator&) = delete;
+
   // Authenticator overrides.
-  void CompleteLogin(const UserContext& user_context) override;
+  void CompleteLogin(std::unique_ptr<UserContext> user_context) override;
 
   // Given |user_context|, this method attempts to authenticate to your
   // Chrome OS device. As soon as we have successfully mounted the encrypted
@@ -113,7 +115,7 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) CryptohomeAuthenticator
   // with the username.
   // Upon failure to login consumer_->OnAuthFailure() is called
   // with an error message.
-  void AuthenticateToLogin(const UserContext& user_context) override;
+  void AuthenticateToLogin(std::unique_ptr<UserContext> user_context) override;
 
   // Initiates incognito ("browse without signing in") login.
   // Mounts tmpfs and notifies consumer on the success/failure.
@@ -258,8 +260,6 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) CryptohomeAuthenticator
   // When |remove_user_data_on_failure_| is set, we delay calling
   // consumer_->OnAuthFailure() until we removed the user cryptohome.
   AuthFailure delayed_login_failure_;
-
-  DISALLOW_COPY_AND_ASSIGN(CryptohomeAuthenticator);
 };
 
 }  // namespace chromeos

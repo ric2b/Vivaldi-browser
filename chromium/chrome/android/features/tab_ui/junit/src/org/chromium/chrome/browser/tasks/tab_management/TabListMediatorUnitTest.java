@@ -86,6 +86,9 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FeatureList;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.test.ShadowRecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.build.BuildConfig;
@@ -100,6 +103,8 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge.OptimizationGuideCallback;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeJni;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.MockTab;
@@ -157,13 +162,14 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 /**
  * Tests for {@link TabListMediator}.
  */
 @SuppressWarnings(
         {"ArraysAsListWithZeroOrOneArgument", "ResultOfMethodCallIgnored", "ConstantConditions"})
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, shadows = {ShadowRecordHistogram.class})
 // clang-format off
 @Features.EnableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
 @Features.DisableFeatures({
@@ -1117,7 +1123,7 @@ public class TabListMediatorUnitTest {
      * Set flags and initialize for verifying price drop behavior
      */
     private void prepareForPriceDrop() {
-        PriceTrackingUtilities.ENABLE_PRICE_TRACKING.setForTesting(true);
+        setPriceTrackingEnabledForTesting(true);
         PriceTrackingUtilities.setIsSignedInAndSyncEnabledForTesting(true);
         PersistedTabDataConfiguration.setUseTestConfig(true);
         initAndAssertAllProperties();
@@ -2270,7 +2276,7 @@ public class TabListMediatorUnitTest {
     // TODO(crbug.com/1177036): the assertThat in fetch callback is never reached.
     @Test
     public void testPriceTrackingProperty() {
-        PriceTrackingUtilities.ENABLE_PRICE_TRACKING.setForTesting(true);
+        setPriceTrackingEnabledForTesting(true);
         for (boolean signedInAndSyncEnabled : new boolean[] {false, true}) {
             for (boolean priceTrackingEnabled : new boolean[] {false, true}) {
                 for (boolean incognito : new boolean[] {false, true}) {
@@ -2626,7 +2632,7 @@ public class TabListMediatorUnitTest {
                 .getSpanSize(anyInt());
         mMediator.updateLayout();
         assertThat(mModel.lastIndexForMessageItemFromType(PRICE_MESSAGE), equalTo(1));
-        PriceTrackingUtilities.ENABLE_PRICE_TRACKING.setForTesting(true);
+        setPriceTrackingEnabledForTesting(true);
         PriceTrackingUtilities.setIsSignedInAndSyncEnabledForTesting(true);
         PriceTrackingUtilities.SHARED_PREFERENCES_MANAGER.writeBoolean(
                 PriceTrackingUtilities.PRICE_WELCOME_MESSAGE_CARD, true);
@@ -2701,7 +2707,7 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void testListObserver_OnItemRangeInserted() {
-        PriceTrackingUtilities.ENABLE_PRICE_TRACKING.setForTesting(true);
+        setPriceTrackingEnabledForTesting(true);
         mMediator = new TabListMediator(mActivity, mModel, TabListMode.GRID, mTabModelSelector,
                 mTabContentManager::getTabThumbnailWithCallback, mTitleProvider,
                 mTabListFaviconProvider, true, null, null, null, null, getClass().getSimpleName(),
@@ -2719,7 +2725,7 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void testListObserver_OnItemRangeRemoved() {
-        PriceTrackingUtilities.ENABLE_PRICE_TRACKING.setForTesting(true);
+        setPriceTrackingEnabledForTesting(true);
         mMediator = new TabListMediator(mActivity, mModel, TabListMode.GRID, mTabModelSelector,
                 mTabContentManager::getTabThumbnailWithCallback, mTitleProvider,
                 mTabListFaviconProvider, true, null, null, null, null, getClass().getSimpleName(),
@@ -2976,6 +2982,35 @@ public class TabListMediatorUnitTest {
         TabUiFeatureUtilities.ENABLE_LAUNCH_POLISH.setForTesting(false);
     }
 
+    @Test
+    public void testRecordPriceAnnotationsEnabledMetrics() {
+        ShadowRecordHistogram.reset();
+        setPriceTrackingEnabledForTesting(true);
+        PriceTrackingUtilities.setIsSignedInAndSyncEnabledForTesting(true);
+        mMediator.setActionOnAllRelatedTabsForTesting(true);
+        String histogramName = "Commerce.PriceDrop.AnnotationsEnabled";
+
+        SharedPreferencesManager preferencesManager = SharedPreferencesManager.getInstance();
+        long presetTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
+        preferencesManager.writeLong(
+                ChromePreferenceKeys.PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
+                presetTime);
+        mMediator.recordPriceAnnotationsEnabledMetrics();
+        assertThat(RecordHistogram.getHistogramTotalCountForTesting(histogramName), equalTo(1));
+        long updatedTime = preferencesManager.readLong(
+                ChromePreferenceKeys.PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
+                presetTime);
+        assertNotEquals(presetTime, updatedTime);
+
+        // This metrics should only be recorded once within one day.
+        mMediator.recordPriceAnnotationsEnabledMetrics();
+        assertThat(RecordHistogram.getHistogramTotalCountForTesting(histogramName), equalTo(1));
+        assertEquals(updatedTime,
+                preferencesManager.readLong(
+                        ChromePreferenceKeys.PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
+                        -1));
+    }
+
     private void setUpCloseButtonDescriptionString(boolean isGroup) {
         if (isGroup) {
             doAnswer(invocation -> {
@@ -3208,12 +3243,20 @@ public class TabListMediatorUnitTest {
 
     private void prepareTestMaybeShowPriceWelcomeMessage() {
         initAndAssertAllProperties();
-        PriceTrackingUtilities.ENABLE_PRICE_TRACKING.setForTesting(true);
+        setPriceTrackingEnabledForTesting(true);
         PriceTrackingUtilities.setIsSignedInAndSyncEnabledForTesting(true);
         PriceTrackingUtilities.SHARED_PREFERENCES_MANAGER.writeBoolean(
                 PriceTrackingUtilities.PRICE_WELCOME_MESSAGE_CARD, true);
         mPriceDrop = new PriceDrop("1", "2");
         mPriceTabData = new PriceTabData(TAB1_ID, mPriceDrop);
         doReturn(mPriceDrop).when(mShoppingPersistedTabData).getPriceDrop();
+    }
+
+    private static void setPriceTrackingEnabledForTesting(boolean value) {
+        FeatureList.TestValues testValues = new FeatureList.TestValues();
+        testValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
+        testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
+                PriceTrackingUtilities.PRICE_TRACKING_PARAM, String.valueOf(value));
+        FeatureList.setTestValues(testValues);
     }
 }

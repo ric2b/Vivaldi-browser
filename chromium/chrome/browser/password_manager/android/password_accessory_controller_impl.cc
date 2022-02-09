@@ -64,7 +64,7 @@ using password_manager::UiCredential;
 using BlocklistedStatus =
     password_manager::OriginCredentialStore::BlocklistedStatus;
 using FillingSource = ManualFillingController::FillingSource;
-using IsPslMatch = autofill::UserInfo::IsPslMatch;
+using IsExactMatch = autofill::UserInfo::IsExactMatch;
 
 namespace {
 
@@ -72,8 +72,10 @@ autofill::UserInfo TranslateCredentials(bool current_field_is_password,
                                         const url::Origin& frame_origin,
                                         const UiCredential& credential) {
   DCHECK(!credential.origin().opaque());
-  UserInfo user_info(credential.origin().Serialize(),
-                     credential.is_public_suffix_match());
+  UserInfo user_info(
+      credential.origin().Serialize(),
+      IsExactMatch(!credential.is_public_suffix_match().value() &&
+                   !credential.is_affiliation_based_match().value()));
 
   std::u16string username = GetDisplayUsername(credential);
   user_info.add_field(
@@ -128,7 +130,7 @@ PasswordAccessoryControllerImpl::GetSheetData() const {
   // Prevent crashing by returning a nullopt if no field was focused yet or if
   // the frame was (possibly temporarily) unfocused. This signals to the caller
   // that no sheet is available right now.
-  if (web_contents_->GetFocusedFrame() == nullptr)
+  if (GetWebContents().GetFocusedFrame() == nullptr)
     return absl::nullopt;
   if (!last_focused_field_info_)
     return absl::nullopt;
@@ -317,7 +319,7 @@ void PasswordAccessoryControllerImpl::OnOptionSelected(
   }
   if (selected_action == autofill::AccessoryAction::MANAGE_PASSWORDS) {
     password_manager_launcher::ShowPasswordSettings(
-        web_contents_,
+        &GetWebContents(),
         password_manager::ManagePasswordsReferrer::kPasswordsAccessorySheet);
     return;
   }
@@ -360,7 +362,7 @@ void PasswordAccessoryControllerImpl::RefreshSuggestionsForField(
   // Prevent crashing by not acting at all if frame became unfocused at any
   // point. The next time a focus event happens, this will be called again and
   // ensure we show correct data.
-  if (web_contents_->GetFocusedFrame() == nullptr)
+  if (GetWebContents().GetFocusedFrame() == nullptr)
     return;
   url::Origin origin = GetFocusedFrameOrigin();
   if (origin.opaque())
@@ -401,7 +403,7 @@ void PasswordAccessoryControllerImpl::RefreshSuggestionsForField(
 void PasswordAccessoryControllerImpl::OnGenerationRequested(
     autofill::password_generation::PasswordGenerationType type) {
   PasswordGenerationController* pwd_generation_controller =
-      PasswordGenerationController::GetIfExisting(web_contents_);
+      PasswordGenerationController::GetIfExisting(&GetWebContents());
 
   DCHECK(pwd_generation_controller);
   pwd_generation_controller->OnGenerationRequested(type);
@@ -421,7 +423,8 @@ PasswordAccessoryControllerImpl::PasswordAccessoryControllerImpl(
     base::WeakPtr<ManualFillingController> mf_controller,
     password_manager::PasswordManagerClient* password_client,
     PasswordDriverSupplierForFocusedFrame driver_supplier)
-    : web_contents_(web_contents),
+    : content::WebContentsUserData<PasswordAccessoryControllerImpl>(
+          *web_contents),
       credential_cache_(credential_cache),
       mf_controller_(std::move(mf_controller)),
       password_client_(password_client),
@@ -481,18 +484,18 @@ bool PasswordAccessoryControllerImpl::ShouldShowRecoveryToggle(
 base::WeakPtr<ManualFillingController>
 PasswordAccessoryControllerImpl::GetManualFillingController() {
   if (!mf_controller_)
-    mf_controller_ = ManualFillingController::GetOrCreate(web_contents_);
+    mf_controller_ = ManualFillingController::GetOrCreate(&GetWebContents());
   DCHECK(mf_controller_);
   return mf_controller_;
 }
 
 url::Origin PasswordAccessoryControllerImpl::GetFocusedFrameOrigin() const {
-  if (web_contents_->GetFocusedFrame() == nullptr) {
+  if (GetWebContents().GetFocusedFrame() == nullptr) {
     LOG(DFATAL) << "Tried to get retrieve origin without focused "
                    "frame.";
     return url::Origin();  // Nonce!
   }
-  return web_contents_->GetFocusedFrame()->GetLastCommittedOrigin();
+  return GetWebContents().GetFocusedFrame()->GetLastCommittedOrigin();
 }
 
 void PasswordAccessoryControllerImpl::ShowAllPasswords() {
@@ -501,6 +504,13 @@ void PasswordAccessoryControllerImpl::ShowAllPasswords() {
     return;
   }
 
+  // AllPasswordsBottomSheetController assumes that the focused frame has a live
+  // RenderFrame so that it can use the password manager driver.
+  // TODO(https://crbug.com/1286779): Investigate if focused frame really needs
+  // to return RenderFrameHosts with non-live RenderFrames.
+  if (!GetWebContents().GetFocusedFrame()->IsRenderFrameLive())
+    return;
+
   // We can use |base::Unretained| safely because at the time of calling
   // |AllPasswordsSheetDismissed| we are sure that this controller is alive as
   // it owns |AllPasswordsBottomSheetController| from which the method is
@@ -508,7 +518,7 @@ void PasswordAccessoryControllerImpl::ShowAllPasswords() {
   // TODO(crbug.com/1104132): Update the controller with the last focused field.
   all_passords_bottom_sheet_controller_ =
       std::make_unique<AllPasswordsBottomSheetController>(
-          web_contents_, password_client_->GetProfilePasswordStore(),
+          &GetWebContents(), password_client_->GetProfilePasswordStore(),
           base::BindOnce(
               &PasswordAccessoryControllerImpl::AllPasswordsSheetDismissed,
               base::Unretained(this)),
@@ -524,7 +534,9 @@ bool PasswordAccessoryControllerImpl::ShouldTriggerBiometricReauth(
 
   scoped_refptr<device_reauth::BiometricAuthenticator> authenticator =
       password_client_->GetBiometricAuthenticator();
-  return password_manager_util::CanUseBiometricAuth(authenticator.get());
+  return password_manager_util::CanUseBiometricAuth(
+      authenticator.get(),
+      device_reauth::BiometricAuthRequester::kFallbackSheet);
 }
 
 void PasswordAccessoryControllerImpl::OnReauthCompleted(
@@ -545,7 +557,7 @@ void PasswordAccessoryControllerImpl::FillSelection(
     return;  // Never fill across different origins!
   }
   password_manager::PasswordManagerDriver* driver =
-      driver_supplier_.Run(web_contents_);
+      driver_supplier_.Run(&GetWebContents());
   if (!driver)
     return;
   driver->FillIntoFocusedField(selection.is_obfuscated(),
@@ -561,11 +573,20 @@ bool PasswordAccessoryControllerImpl::IsSecureSite() const {
     return security_level_for_testing_ == security_state::SECURE;
   }
 
-  SecurityStateTabHelper::CreateForWebContents(web_contents_);
+  SecurityStateTabHelper::CreateForWebContents(&GetWebContents());
   SecurityStateTabHelper* helper =
-      SecurityStateTabHelper::FromWebContents(web_contents_);
+      SecurityStateTabHelper::FromWebContents(&GetWebContents());
 
   return helper && helper->GetSecurityLevel() == security_state::SECURE;
+}
+
+content::WebContents& PasswordAccessoryControllerImpl::GetWebContents() const {
+  // While a const_cast is not ideal. The Autofill API uses const in various
+  // spots and the content public API doesn't have const accessors. So the const
+  // cast is the lesser of two evils.
+  return const_cast<content::WebContents&>(
+      content::WebContentsUserData<
+          PasswordAccessoryControllerImpl>::GetWebContents());
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PasswordAccessoryControllerImpl);

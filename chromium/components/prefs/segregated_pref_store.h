@@ -12,7 +12,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "components/prefs/persistent_pref_store.h"
@@ -76,7 +76,6 @@ class COMPONENTS_PREFS_EXPORT SegregatedPrefStore : public PersistentPrefStore {
       base::OnceClosure reply_callback = base::OnceClosure(),
       base::OnceClosure synchronous_done_callback =
           base::OnceClosure()) override;
-  void CommitPendingWriteSynchronously() override;
   void SchedulePendingLossyWrites() override;
   void ClearMutableValues() override;
   void OnStoreDeletionFromDisk() override;
@@ -103,7 +102,7 @@ class COMPONENTS_PREFS_EXPORT SegregatedPrefStore : public PersistentPrefStore {
     bool initialization_succeeded() const { return initialization_succeeded_; }
 
    private:
-    SegregatedPrefStore* const outer_;
+    const raw_ptr<SegregatedPrefStore> outer_;
     bool initialization_succeeded_ = false;
   };
 

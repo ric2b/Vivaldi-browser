@@ -51,7 +51,7 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
         mTabIconDarkColor = AppCompatResources.getColorStateList(
                 getContext(), R.color.default_icon_color_tint_list);
         mTabIconSelectedDarkColor = AppCompatResources.getColorStateList(
-                getContext(), R.color.default_control_color_active);
+                getContext(), R.color.default_icon_color_accent1_tint_list);
         mTabIconLightColor =
                 AppCompatResources.getColorStateList(getContext(), R.color.white_alpha_70);
         mIncognitoSelectedColor = AppCompatResources.getColorStateList(
@@ -99,14 +99,18 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
             public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
                 setStateBasedOnModel();
             }
+
+            @Override
+            public void onTabStateInitialized() {
+                updateTabSwitcherDrawableCount();
+            }
         };
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
         setStateBasedOnModel();
 
-        assert mTabModelSelector.isTabStateInitialized();
-        mTabSwitcherDrawable.updateForTabCount(
-                mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false).getCount(),
-                false);
+        if (mTabModelSelector.isTabStateInitialized()) {
+            updateTabSwitcherDrawableCount();
+        }
     }
 
     public void setTabCountProvider(TabCountProvider tabCountProvider) {
@@ -177,5 +181,11 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
                 ? R.string.accessibility_tab_switcher_incognito_stack_selected
                 : R.string.accessibility_tab_switcher_standard_stack_selected;
         announceForAccessibility(getResources().getString(stackAnnouncementId));
+    }
+
+    private void updateTabSwitcherDrawableCount() {
+        mTabSwitcherDrawable.updateForTabCount(
+                mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false).getCount(),
+                false);
     }
 }

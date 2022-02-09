@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_handler_registration_utils_win.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/install_static/install_util.h"
@@ -116,8 +118,8 @@ class WebAppProtocolHandlerRegistrationWinTest : public testing::Test {
     base::RunLoop run_loop;
     RegisterProtocolHandlersWithOs(
         app_id, app_name, profile, {handler1_info, handler2_info},
-        base::BindLambdaForTesting([&](bool success) {
-          EXPECT_TRUE(success);
+        base::BindLambdaForTesting([&](Result result) {
+          EXPECT_EQ(Result::kOk, result);
           run_loop.Quit();
         }));
     run_loop.Run();
@@ -162,7 +164,7 @@ class WebAppProtocolHandlerRegistrationWinTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_{
       content::BrowserTaskEnvironment::IO_MAINLOOP};
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
-  TestingProfile* profile_;
+  raw_ptr<TestingProfile> profile_;
 };
 
 TEST_F(WebAppProtocolHandlerRegistrationWinTest,
@@ -255,8 +257,8 @@ TEST_F(WebAppProtocolHandlerRegistrationWinTest,
 
   base::RunLoop run_loop;
   UnregisterProtocolHandlersWithOs(
-      kApp1Id, GetProfile(), base::BindLambdaForTesting([&](bool success) {
-        EXPECT_TRUE(success);
+      kApp1Id, GetProfile(), base::BindLambdaForTesting([&](Result result) {
+        EXPECT_EQ(Result::kOk, result);
         run_loop.Quit();
       }));
   run_loop.Run();
@@ -303,8 +305,8 @@ TEST_F(WebAppProtocolHandlerRegistrationWinTest,
 
   base::RunLoop run_loop;
   UnregisterProtocolHandlersWithOs(
-      kApp1Id, GetProfile(), base::BindLambdaForTesting([&](bool success) {
-        EXPECT_TRUE(success);
+      kApp1Id, GetProfile(), base::BindLambdaForTesting([&](Result result) {
+        EXPECT_EQ(Result::kOk, result);
         run_loop.Quit();
       }));
   run_loop.Run();

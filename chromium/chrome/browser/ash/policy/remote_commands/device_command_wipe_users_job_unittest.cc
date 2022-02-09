@@ -11,9 +11,8 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/policy/remote_commands/device_commands_factory_ash.h"
@@ -76,7 +75,8 @@ std::unique_ptr<policy::RemoteCommandJob> CreateWipeUsersJob(
   // Create the job and validate.
   auto job = std::make_unique<policy::DeviceCommandWipeUsersJob>(service);
 
-  EXPECT_TRUE(job->Init(base::TimeTicks::Now(), command_proto, nullptr));
+  EXPECT_TRUE(job->Init(base::TimeTicks::Now(), command_proto,
+                        enterprise_management::SignedData()));
   EXPECT_EQ(kUniqueID, job->unique_id());
   EXPECT_EQ(policy::RemoteCommandJob::NOT_STARTED, job->status());
 

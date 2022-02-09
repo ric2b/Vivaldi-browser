@@ -15,7 +15,6 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "components/exo/buffer.h"
 #include "components/exo/keyboard_delegate.h"
@@ -496,34 +495,6 @@ TEST_F(KeyboardTest, OnKeyboardKey_NotSendKeyIfConsumedByIme) {
   EXPECT_CALL(observer, OnKeyboardKey(testing::_, ui::DomCode::US_A, false));
   generator.ReleaseKey(ui::VKEY_A, 0);
   testing::Mock::VerifyAndClearExpectations(&observer);
-
-  // Any key event should be sent to a client if the focused window is marked as
-  // ImeBlocking.
-  WMHelper::GetInstance()->SetImeBlocked(surface->window()->GetToplevelWindow(),
-                                         true);
-  {
-    testing::InSequence s;
-    EXPECT_CALL(observer, OnKeyboardKey(testing::_, ui::DomCode::US_B, true));
-    EXPECT_CALL(*delegate_ptr,
-                OnKeyboardKey(testing::_, ui::DomCode::US_B, true));
-  }
-  seat.set_physical_code_for_currently_processing_event_for_testing(
-      ui::DomCode::US_B);
-  generator.PressKey(ui::VKEY_B, 0);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-  testing::Mock::VerifyAndClearExpectations(delegate_ptr);
-
-  {
-    testing::InSequence s;
-    EXPECT_CALL(observer, OnKeyboardKey(testing::_, ui::DomCode::US_B, false));
-    EXPECT_CALL(*delegate_ptr,
-                OnKeyboardKey(testing::_, ui::DomCode::US_B, false));
-  }
-  generator.ReleaseKey(ui::VKEY_B, 0);
-  WMHelper::GetInstance()->SetImeBlocked(surface->window()->GetToplevelWindow(),
-                                         false);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-  testing::Mock::VerifyAndClearExpectations(delegate_ptr);
 
   // Any key event should be sent to a client if a key event skips IME.
   surface->window()->SetProperty(aura::client::kSkipImeProcessing, true);

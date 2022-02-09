@@ -8,7 +8,10 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom-shared.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
@@ -246,6 +249,31 @@ void PopulateTpmInfo(std::string* log, const TelemetryInfoPtr& info) {
   base::StrAppend(log, {"\n"});
 }
 
+void PopulateGraphicsInfo(std::string* log, const TelemetryInfoPtr& info) {
+  if (info->graphics_result.is_null() || info->graphics_result->is_error()) {
+    DVLOG(1) << "GraphicsResult not found in croshealthd response";
+    return;
+  }
+  const healthd::GraphicsInfoPtr& graphics_info =
+      info->graphics_result->get_graphics_info();
+
+  base::StrAppend(log, {"graphics_info:"});
+  const healthd::GLESInfoPtr& gles_info = graphics_info->gles_info;
+  AddIndentedLogEntry(log, "gl_version", gles_info->version);
+  AddIndentedLogEntry(log, "gl_shading_version", gles_info->shading_version);
+  AddIndentedLogEntry(log, "gl_vendor", gles_info->vendor);
+  AddIndentedLogEntry(log, "gl_renderer", gles_info->renderer);
+  AddIndentedLogEntry(log, "gl_extensions",
+                      base::JoinString(gles_info->extensions, ", "));
+
+  base::StrAppend(log, {"\n"});
+}
+
+std::string FetchTouchpadLibraryName() {
+  return ash::cros_healthd::ServiceConnection::GetInstance()
+      ->FetchTouchpadLibraryName();
+}
+
 }  // namespace
 
 RevenLogSource::RevenLogSource() : SystemLogsSource("Reven") {
@@ -258,8 +286,9 @@ RevenLogSource::~RevenLogSource() = default;
 void RevenLogSource::Fetch(SysLogsSourceCallback callback) {
   probe_service_->ProbeTelemetryInfo(
       {ProbeCategories::kBluetooth, ProbeCategories::kBus,
-       ProbeCategories::kCpu, ProbeCategories::kMemory,
-       ProbeCategories::kSystem2, ProbeCategories::kTpm},
+       ProbeCategories::kCpu, ProbeCategories::kGraphics,
+       ProbeCategories::kMemory, ProbeCategories::kSystem2,
+       ProbeCategories::kTpm},
       base::BindOnce(&RevenLogSource::OnTelemetryInfoProbeResponse,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -267,8 +296,6 @@ void RevenLogSource::Fetch(SysLogsSourceCallback callback) {
 void RevenLogSource::OnTelemetryInfoProbeResponse(
     SysLogsSourceCallback callback,
     TelemetryInfoPtr info_ptr) {
-  auto response = std::make_unique<SystemLogsResponse>();
-
   std::string log_val;
 
   if (info_ptr.is_null()) {
@@ -280,10 +307,25 @@ void RevenLogSource::OnTelemetryInfoProbeResponse(
     PopulateMemoryInfo(&log_val, info_ptr);
     PopulateBusDevicesInfo(&log_val, info_ptr);
     PopulateTpmInfo(&log_val, info_ptr);
+    PopulateGraphicsInfo(&log_val, info_ptr);
   }
 
-  response->emplace(kRevenLogKey, log_val);
-  std::move(callback).Run(std::move(response));
+  base::OnceCallback<void(const std::string&)> reply_cb = base::BindOnce(
+      [](SysLogsSourceCallback callback, const std::string& log_val,
+         const std::string& touchpad_lib_name) {
+        std::string log_final = log_val;
+        AddLogEntry(&log_final, "touchpad_stack", touchpad_lib_name);
+
+        auto response = std::make_unique<SystemLogsResponse>();
+        response->emplace(kRevenLogKey, std::move(log_final));
+
+        std::move(callback).Run(std::move(response));
+      },
+      std::move(callback), log_val);
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&FetchTouchpadLibraryName), std::move(reply_cb));
 }
 
 }  // namespace system_logs

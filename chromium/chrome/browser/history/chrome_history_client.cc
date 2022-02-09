@@ -47,8 +47,7 @@ void ChromeHistoryClient::Shutdown() {
 }
 
 bool ChromeHistoryClient::CanAddURL(const GURL& url) {
-  return CanAddURLToHistory(url)
-    && url.GetOrigin() != GURL(vivaldi::kVivaldiAppURLDomain);
+  return CanAddURLToHistory(url) && url.host() != vivaldi::kVivaldiAppId;
 }
 
 void ChromeHistoryClient::NotifyProfileError(sql::InitStatus init_status,

@@ -58,7 +58,7 @@ CGRect wxOSXGetFrameForControl( wxWindowMac* window , const wxPoint& pos , const
 }
 
 
-@interface wxUIView(PossibleMethods)
+@interface UIView(PossibleMethods)
 - (void)setTitle:(NSString *)title forState:(UIControlState)state;
 
 - (void)drawRect: (CGRect) rect;
@@ -70,6 +70,9 @@ CGRect wxOSXGetFrameForControl( wxWindowMac* window , const wxPoint& pos , const
 
 - (BOOL) becomeFirstResponder;
 - (BOOL) resignFirstResponder;
+
+- (BOOL)isEnabled;
+- (void)setEnabled:(BOOL)flag;
 @end
 
 //
@@ -147,7 +150,8 @@ void SetupMouseEvent( wxMouseEvent &wxevent , NSSet* touches, UIEvent * nsEvent 
             switch ( button )
             {
                 case 0 :
-                    wxevent.SetEventType( clickCount > 1 ? wxEVT_LEFT_DCLICK : wxEVT_LEFT_DOWN )  ;
+                    wxevent.SetEventType( clickCount > 1 ? wxEVT_LEFT_DCLICK : wxEVT_LEFT_DOWN );
+                    wxevent.SetLeftDown(true);
                     break ;
 
                 default:
@@ -159,7 +163,8 @@ void SetupMouseEvent( wxMouseEvent &wxevent , NSSet* touches, UIEvent * nsEvent 
             switch ( button )
             {
                 case 0 :
-                    wxevent.SetEventType( wxEVT_LEFT_UP )  ;
+                    wxevent.SetEventType( wxEVT_LEFT_UP );
+                    wxevent.SetLeftDown(false);
                     break ;
 
                 default:
@@ -168,7 +173,8 @@ void SetupMouseEvent( wxMouseEvent &wxevent , NSSet* touches, UIEvent * nsEvent 
             break ;
 
         case UITouchPhaseMoved :
-            wxevent.SetEventType( wxEVT_MOTION ) ;
+            wxevent.SetEventType( wxEVT_MOTION );
+            wxevent.SetLeftDown(true);
             break;
         default :
             break ;
@@ -188,67 +194,6 @@ void SetupMouseEvent( wxMouseEvent &wxevent , NSSet* touches, UIEvent * nsEvent 
 }
 
 @end // wxUIView
-
-/*
-- (void)drawRect: (CGRect) rect
-{
-    wxWidgetIPhoneImpl* impl = (wxWidgetIPhoneImpl* ) wxWidgetImpl::FindFromWXWidget( self );
-    if ( impl )
-    {
-        CGContextRef context = (CGContextRef) UIGraphicsGetCurrentContext();
-        CGContextSaveGState( context );
-        // draw background
-
-        CGContextSetFillColorWithColor( context, impl->GetWXPeer()->GetBackgroundColour().GetCGColor());
-        CGContextFillRect(context, rect );
-
-        impl->GetWXPeer()->MacSetCGContextRef( context );
-
-        impl->GetWXPeer()->GetUpdateRegion() =
-            wxRegion(rect.origin.x,rect.origin.y,rect.size.width,rect.size.height) ;
-
-        wxPaintEvent event;
-        event.SetTimestamp(0); //  todo
-        event.SetEventObject(impl->GetWXPeer());
-        impl->GetWXPeer()->HandleWindowEvent(event);
-
-        CGContextRestoreGState( context );
-    }
-
-}
-
-- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
-{
-    [self handleTouchEvent:touches withEvent:event];
-}
-
-- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event
-{
-    [self handleTouchEvent:touches withEvent:event];
-}
-
-- (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event
-{
-    [self handleTouchEvent:touches withEvent:event];
-}
-
--(void)handleTouchEvent:(NSSet *)touches withEvent:(UIEvent *)event
-{
-    wxWidgetIPhoneImpl* impl = (wxWidgetIPhoneImpl* ) wxWidgetImpl::FindFromWXWidget( self );
-    CGPoint clickLocation;
-    UITouch *touch = [touches anyObject];
-    clickLocation = [touch locationInView:self];
-
-    wxMouseEvent wxevent(wxEVT_LEFT_DOWN);
-    SetupMouseEvent( wxevent , touches, event ) ;
-    wxevent.m_x = clickLocation.x;
-    wxevent.m_y = clickLocation.y;
-    wxevent.SetEventObject( impl->GetWXPeer() ) ;
-    wxevent.SetId( impl->GetWXPeer()->GetId() ) ;
-    impl->GetWXPeer()->HandleWindowEvent(wxevent);
-}
-
-*/
 
 void wxOSX_touchEvent(UIView* self, SEL _cmd, NSSet* touches, UIEvent *event )
 {
@@ -326,10 +271,10 @@ void wxOSXIPhoneClassAddWXMethods(Class c)
 
 @end
 
-IMPLEMENT_DYNAMIC_CLASS( wxWidgetIPhoneImpl , wxWidgetImpl )
+wxIMPLEMENT_DYNAMIC_CLASS(wxWidgetIPhoneImpl , wxWidgetImpl);
 
-wxWidgetIPhoneImpl::wxWidgetIPhoneImpl( wxWindowMac* peer , WXWidget w, bool isRootControl, bool isUserPane ) :
-    wxWidgetImpl( peer, isRootControl, isUserPane ), m_osxView(w)
+wxWidgetIPhoneImpl::wxWidgetIPhoneImpl( wxWindowMac* peer , WXWidget w, int flags ) :
+    wxWidgetImpl( peer, flags ), m_osxView(w)
 {
 }
 
@@ -473,7 +418,12 @@ void  wxWidgetImpl::Convert( wxPoint *pt , wxWidgetImpl *from , wxWidgetImpl *to
 
 void wxWidgetIPhoneImpl::SetBackgroundColour( const wxColour &col )
 {
-    m_osxView.backgroundColor = [[UIColor alloc] initWithCGColor:col.GetCGColor()];
+    m_osxView.backgroundColor = [UIColor colorWithCGColor:col.GetCGColor()];
+}
+
+void wxWidgetIPhoneImpl::SetForegroundColour( const wxColour &col )
+{
+    // TODO: use textColor if available?
 }
 
 bool wxWidgetIPhoneImpl::SetBackgroundStyle(wxBackgroundStyle style) 
@@ -616,7 +566,7 @@ double wxWidgetIPhoneImpl::GetContentScaleFactor() const
         return 1.0;
 }
 
-void wxWidgetIPhoneImpl::SetFont( const wxFont & font , const wxColour& foreground , long windowStyle, bool ignoreBlack )
+void wxWidgetIPhoneImpl::SetFont(const wxFont & font)
 {
 }
 
@@ -636,10 +586,6 @@ void wxWidgetIPhoneImpl::InstallEventHandler( WXWidget control )
 void wxWidgetIPhoneImpl::DoNotifyFocusEvent(bool receivedFocus, wxWidgetImpl* otherWindow)
 {
     wxWindow* thisWindow = GetWXPeer();
-    if ( thisWindow->MacGetTopLevelWindow() && NeedsFocusRect() )
-    {
-        thisWindow->MacInvalidateBorders();
-    }
 
     if ( receivedFocus )
     {
@@ -710,29 +656,34 @@ bool wxWidgetIPhoneImpl::resignFirstResponder(WXWidget slf, void *_cmd)
 
 void wxWidgetIPhoneImpl::drawRect(CGRect* rect, WXWidget slf, void *WXUNUSED(_cmd))
 {
-    CGContextRef context = (CGContextRef) UIGraphicsGetCurrentContext();
-    CGContextSaveGState( context );
-    // draw background
-/*
-    CGContextSetFillColorWithColor( context, GetWXPeer()->GetBackgroundColour().GetCGColor());
-    CGContextFillRect(context, *rect );
-*/
-    GetWXPeer()->MacSetCGContextRef( context );
-
-    GetWXPeer()->GetUpdateRegion() =
-        wxRegion(rect->origin.x,rect->origin.y,rect->size.width,rect->size.height) ;
-
     wxRegion updateRgn( wxFromNSRect( slf, *rect ) );
 
     wxWindow* wxpeer = GetWXPeer();
     wxpeer->GetUpdateRegion() = updateRgn;
+
+    // note that context may be NULL in certain views
+    CGContextRef context = (CGContextRef) UIGraphicsGetCurrentContext();
+    if ( context != NULL )
+    {
+        CGContextSaveGState( context );
+    // draw background
+/*
+        CGContextSetFillColorWithColor( context, GetWXPeer()->GetBackgroundColour().GetCGColor());
+        CGContextFillRect(context, *rect );
+*/
+    }
+        GetWXPeer()->MacSetCGContextRef( context );
+
     wxpeer->MacSetCGContextRef( context );
 
     bool handled = wxpeer->MacDoRedraw( 0 );
 
-    CGContextRestoreGState( context );
+    if ( context != NULL )
+    {
+        CGContextRestoreGState( context );
+        CGContextSaveGState( context );
+    }
 
-    CGContextSaveGState( context );
     if ( !handled )
     {
         // call super
@@ -741,14 +692,21 @@ void wxWidgetIPhoneImpl::drawRect(CGRect* rect, WXWidget slf, void *WXUNUSED(_cm
         if ( superimpl != wxOSX_drawRect )
         {
             superimpl(slf, _cmd, *rect);
-            CGContextRestoreGState( context );
-            CGContextSaveGState( context );
+            if ( context != NULL )
+            {
+                CGContextRestoreGState( context );
+                CGContextSaveGState( context );
+            }
         }
     }
-    wxpeer->MacPaintChildrenBorders();
-    wxpeer->MacSetCGContextRef( NULL );
 
-    CGContextRestoreGState( context );
+    if ( context != NULL )
+    {
+        wxpeer->MacPaintChildrenBorders();
+        CGContextRestoreGState( context );
+    }
+    
+    wxpeer->MacSetCGContextRef( NULL );
 }
 
 void wxWidgetIPhoneImpl::touchEvent(NSSet* touches, UIEvent *event, WXWidget slf, void *WXUNUSED(_cmd))
@@ -815,7 +773,7 @@ wxWidgetImpl* wxWidgetImpl::CreateUserPane( wxWindowMac* wxpeer, wxWindowMac* WX
     sv.clipsToBounds = YES;
     sv.contentMode =  UIViewContentModeRedraw;
     sv.clearsContextBeforeDrawing = NO;
-    wxWidgetIPhoneImpl* c = new wxWidgetIPhoneImpl( wxpeer, v, false, true );
+    wxWidgetIPhoneImpl* c = new wxWidgetIPhoneImpl( wxpeer, v, Widget_IsUserPane );
     return c;
 }
 

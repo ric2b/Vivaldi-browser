@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
@@ -30,6 +29,9 @@ class MockPacketReceiver final : public UdpTransportReceiver {
  public:
   MockPacketReceiver(const base::RepeatingClosure& callback)
       : packet_callback_(callback) {}
+
+  MockPacketReceiver(const MockPacketReceiver&) = delete;
+  MockPacketReceiver& operator=(const MockPacketReceiver&) = delete;
 
   bool ReceivedPacket(std::unique_ptr<Packet> packet) {
     packet_ = std::move(packet);
@@ -54,8 +56,6 @@ class MockPacketReceiver final : public UdpTransportReceiver {
  private:
   base::RepeatingClosure packet_callback_;
   std::unique_ptr<Packet> packet_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockPacketReceiver);
 };
 
 void SendPacket(UdpTransportImpl* transport, Packet packet) {

@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/guid.h"
 #include "base/time/time.h"
 #include "base/types/strong_alias.h"
 #include "content/browser/attribution_reporting/storable_source.h"
@@ -28,10 +29,11 @@ struct CONTENT_EXPORT AttributionReport {
 
   // The conversion_id may not be set for a conversion report.
   AttributionReport(StorableSource impression,
-                    uint64_t conversion_data,
+                    uint64_t trigger_data,
                     base::Time conversion_time,
                     base::Time report_time,
                     int64_t priority,
+                    base::GUID external_report_id,
                     absl::optional<Id> conversion_id);
   AttributionReport(const AttributionReport& other);
   AttributionReport& operator=(const AttributionReport& other);
@@ -48,9 +50,9 @@ struct CONTENT_EXPORT AttributionReport {
   // Impression associated with this conversion report.
   StorableSource impression;
 
-  // Data provided at reporting time by the reporting origin. Depending on the
-  // source type, this contains the associated data in the trigger redirect.
-  uint64_t conversion_data;
+  // Data provided at trigger time by the attribution destination. Depending on
+  // the source type, this contains the associated data in the trigger redirect.
+  uint64_t trigger_data;
 
   // The time the conversion occurred.
   base::Time conversion_time;
@@ -61,6 +63,10 @@ struct CONTENT_EXPORT AttributionReport {
   // Priority specified in conversion redirect.
   int64_t priority;
 
+  // External report ID for deduplicating reports received by the reporting
+  // origin.
+  base::GUID external_report_id;
+
   // Id assigned by storage to uniquely identify a completed conversion. If
   // null, an ID has not been assigned yet.
   absl::optional<Id> conversion_id;
@@ -69,7 +75,7 @@ struct CONTENT_EXPORT AttributionReport {
   int failed_send_attempts = 0;
 
   // When adding new members, the corresponding `operator==()` definition in
-  // `conversion_test_utils.h` should also be updated.
+  // `attribution_test_utils.h` should also be updated.
 };
 
 }  // namespace content

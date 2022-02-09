@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/ignore_result.h"
 #include "content/browser/loader/navigation_early_hints_manager.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
 #include "content/browser/navigation_subresource_loader_params.h"
@@ -73,7 +74,7 @@ void TestNavigationURLLoader::SimulateErrorWithStatus(
 }
 
 void TestNavigationURLLoader::SimulateEarlyHintsPreloadLinkHeaderReceived() {
-  was_early_hints_preload_link_header_received_ = true;
+  was_resource_hints_received_ = true;
 }
 
 void TestNavigationURLLoader::CallOnRequestRedirected(
@@ -103,8 +104,7 @@ void TestNavigationURLLoader::CallOnResponseStarted(
           url_loader_client_remote.InitWithNewPipeAndPassReceiver());
 
   NavigationURLLoaderDelegate::EarlyHints early_hints;
-  early_hints.was_preload_link_header_received =
-      was_early_hints_preload_link_header_received_;
+  early_hints.was_resource_hints_received = was_resource_hints_received_;
 
   delegate_->OnResponseStarted(
       std::move(url_loader_client_endpoints), std::move(response_head),

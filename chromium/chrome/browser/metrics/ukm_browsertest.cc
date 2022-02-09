@@ -62,7 +62,6 @@
 #include "url/url_constants.h"
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/signin/identity_browser_test_base.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -371,9 +370,7 @@ class UkmConsentParamBrowserTest : public UkmBrowserTestBase,
   }
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
-#if defined(OS_CHROMEOS)
-    IdentityBrowserTestBase::CreatedBrowserMainParts(parts);
-#endif  // defined(OS_CHROMEOS)
+    InProcessBrowserTest::CreatedBrowserMainParts(parts);
     // IsMetricsReportingEnabled() in non-official builds always returns false.
     // Enable the official build checks so that this test can work in both
     // official and non-official builds.
@@ -1156,16 +1153,15 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTestWithSyncTransport,
   ukm::UkmTestHelper ukm_test_helper(GetUkmService());
   MetricsConsentOverride metrics_consent(true);
 
-  // Signing in (without making the account Chrome's primary one or explicitly
-  // setting up Sync) causes the Sync machinery to start up in standalone
-  // transport mode.
+  // Signing in (without granting sync consent or explicitly setting up Sync)
+  // should trigger starting the Sync machinery in standalone transport mode.
   Profile* profile = ProfileManager::GetActiveUserProfile();
   std::unique_ptr<SyncServiceImplHarness> harness =
       test::InitializeProfileForSync(profile, GetFakeServer()->AsWeakPtr());
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(profile);
 
-  secondary_account_helper::SignInSecondaryAccount(
+  secondary_account_helper::SignInUnconsentedAccount(
       profile, &test_url_loader_factory_, "secondary_user@email.com");
   ASSERT_NE(syncer::SyncService::TransportState::DISABLED,
             sync_service->GetTransportState());
@@ -1448,7 +1444,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, DebugUiRenders) {
   PlatformBrowser browser = CreatePlatformBrowser(profile);
 
   ukm::UkmService* ukm_service(GetUkmService());
-  EXPECT_TRUE(ukm_service->IsSamplingEnabled());
+  EXPECT_TRUE(ukm_service->IsSamplingConfigured());
 
   // chrome://ukm
   const GURL debug_url(content::GetWebUIURLString(content::kChromeUIUkmHost));

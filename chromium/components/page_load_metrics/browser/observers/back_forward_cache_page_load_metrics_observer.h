@@ -9,6 +9,9 @@
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 
 class BackForwardCachePageLoadMetricsObserverTest;
+namespace base {
+class TickClock;
+}
 
 namespace internal {
 
@@ -90,6 +93,8 @@ class BackForwardCachePageLoadMetricsObserver
   void OnRestoreFromBackForwardCache(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       content::NavigationHandle* navigation_handle) override;
+  page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+  ShouldObserveMimeType(const std::string& mime_type) const override;
   void OnFirstPaintAfterBackForwardCacheRestoreInPage(
       const page_load_metrics::mojom::BackForwardCacheTiming& timing,
       size_t index) override;
@@ -128,6 +133,7 @@ class BackForwardCachePageLoadMetricsObserver
   // back forward cache at least once.
   // Does nothing if the page has never been restored.
   void MaybeRecordForegroundDurationAfterBackForwardCacheRestore(
+      const base::TickClock* clock,
       bool app_entering_background) const;
 
   // Records a page end reason when the page is navigated away from or closed,
@@ -160,10 +166,20 @@ class BackForwardCachePageLoadMetricsObserver
   // back-forward cache.
   bool was_hidden_ = false;
 
-  // The layout shift score. These are recorded when the page is navigated away.
-  // These serve as "deliminators" between back-forward cache navigations.
-  absl::optional<double> last_main_frame_layout_shift_score_;
-  absl::optional<double> last_layout_shift_score_;
+  // Whether the current set of page metrics (CLS, LCP, etc) have already been
+  // logged due to the page being backgrounded. Used to avoid double-logging
+  // these metrics. This value gets re-set to false if the page is restored
+  // from the BFCache.
+  bool page_metrics_logged_due_to_backgrounding_ = false;
+
+  // TODO(crbug.com/1265307): Remove this when removing the DCHECK for lack of
+  // page end metrics logging from the back forward page load metrics observer.
+  bool logged_page_end_metrics_ = false;
+
+  // The layout shift score. These are updated whenever the page is restored
+  // from the back-forward cache.
+  absl::optional<double> restored_main_frame_layout_shift_score_;
+  absl::optional<double> restored_layout_shift_score_;
 
   // IDs for the navigations when the page is restored from the back-forward
   // cache.

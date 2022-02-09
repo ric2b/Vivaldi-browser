@@ -19,9 +19,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/dialog.h"
 #include "wx/modalhook.h"
@@ -41,10 +38,6 @@
 #include "wx/msw/private.h"
 #include "wx/evtloop.h"
 #include "wx/scopedptr.h"
-
-#if defined(__SMARTPHONE__) && defined(__WXWINCE__)
-    #include "wx/msw/wince/resources.h"
-#endif // __SMARTPHONE__ && __WXWINCE__
 
 // ----------------------------------------------------------------------------
 // wxWin macros
@@ -89,12 +82,7 @@ void wxDialog::Init()
 {
     m_isShown = false;
     m_modalData = NULL;
-#if wxUSE_TOOLBAR && defined(__POCKETPC__)
-    m_dialogToolBar = NULL;
-#endif
-#if wxUSE_DIALOG_SIZEGRIP
     m_hGripper = 0;
-#endif // wxUSE_DIALOG_SIZEGRIP
 }
 
 bool wxDialog::Create(wxWindow *parent,
@@ -116,22 +104,12 @@ bool wxDialog::Create(wxWindow *parent,
     if ( !m_hasFont )
         SetFont(wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
 
-#if defined(__SMARTPHONE__) && defined(__WXWINCE__)
-    SetLeftMenu(wxID_OK, _("OK"));
-#endif
-#if wxUSE_TOOLBAR && defined(__POCKETPC__)
-    CreateToolBar();
-#endif
-
-#if wxUSE_DIALOG_SIZEGRIP
     if ( HasFlag(wxRESIZE_BORDER) )
     {
         CreateGripper();
 
-        Connect(wxEVT_CREATE,
-                wxWindowCreateEventHandler(wxDialog::OnWindowCreate));
+        Bind(wxEVT_CREATE, &wxDialog::OnWindowCreate, this);
     }
-#endif // wxUSE_DIALOG_SIZEGRIP
 
     return true;
 }
@@ -141,9 +119,7 @@ wxDialog::~wxDialog()
     // this will also reenable all the other windows for a modal dialog
     Show(false);
 
-#if wxUSE_DIALOG_SIZEGRIP
     DestroyGripper();
-#endif // wxUSE_DIALOG_SIZEGRIP
 }
 
 // ----------------------------------------------------------------------------
@@ -201,17 +177,17 @@ int wxDialog::ShowModal()
 
     wxASSERT_MSG( !IsModal(), wxT("ShowModal() can't be called twice") );
 
+    wxDialogModalDataTiedPtr modalData(&m_modalData,
+                                       new wxDialogModalData(this));
+
     Show();
 
     // EndModal may have been called from InitDialog handler (called from
     // inside Show()) and hidden the dialog back again
     if ( IsShown() )
-    {
-        // enter and run the modal loop
-        wxDialogModalDataTiedPtr modalData(&m_modalData,
-                                           new wxDialogModalData(this));
         modalData->RunLoop();
-    }
+    else
+        m_modalData->ExitLoop();
 
     return GetReturnCode();
 }
@@ -228,8 +204,6 @@ void wxDialog::EndModal(int retCode)
 // ----------------------------------------------------------------------------
 // wxDialog gripper handling
 // ----------------------------------------------------------------------------
-
-#if wxUSE_DIALOG_SIZEGRIP
 
 void wxDialog::SetWindowStyleFlag(long style)
 {
@@ -319,48 +293,9 @@ void wxDialog::OnWindowCreate(wxWindowCreateEvent& event)
     event.Skip();
 }
 
-#endif // wxUSE_DIALOG_SIZEGRIP
-
 // ----------------------------------------------------------------------------
 // wxWin event handlers
 // ----------------------------------------------------------------------------
-
-#ifdef __POCKETPC__
-// Responds to the OK button in a PocketPC titlebar. This
-// can be overridden, or you can change the id used for
-// sending the event, by calling SetAffirmativeId.
-bool wxDialog::DoOK()
-{
-    const int idOk = GetAffirmativeId();
-    if ( EmulateButtonClickIfPresent(idOk) )
-        return true;
-
-    wxCommandEvent event(wxEVT_BUTTON, GetAffirmativeId());
-    event.SetEventObject(this);
-
-    return HandleWindowEvent(event);
-}
-#endif // __POCKETPC__
-
-#if wxUSE_TOOLBAR && defined(__POCKETPC__)
-// create main toolbar by calling OnCreateToolBar()
-wxToolBar* wxDialog::CreateToolBar(long style, wxWindowID winid, const wxString& name)
-{
-    m_dialogToolBar = OnCreateToolBar(style, winid, name);
-
-    return m_dialogToolBar;
-}
-
-// return a new toolbar
-wxToolBar *wxDialog::OnCreateToolBar(long style,
-                                       wxWindowID winid,
-                                       const wxString& name)
-{
-    return new wxToolMenuBar(this, winid,
-                         wxDefaultPosition, wxDefaultSize,
-                         style, name);
-}
-#endif
 
 // ---------------------------------------------------------------------------
 // dialog Windows messages processing
@@ -373,28 +308,6 @@ WXLRESULT wxDialog::MSWWindowProc(WXUINT message, WXWPARAM wParam, WXLPARAM lPar
 
     switch ( message )
     {
-#ifdef __WXWINCE__
-        // react to pressing the OK button in the title
-        case WM_COMMAND:
-        {
-            switch ( LOWORD(wParam) )
-            {
-#ifdef __POCKETPC__
-                case IDOK:
-                    processed = DoOK();
-                    if (!processed)
-                        processed = !Close();
-#endif
-#ifdef __SMARTPHONE__
-                case IDM_LEFT:
-                case IDM_RIGHT:
-                    processed = HandleCommand( LOWORD(wParam) , 0 , NULL );
-                    break;
-#endif // __SMARTPHONE__
-            }
-            break;
-        }
-#endif
         case WM_CLOSE:
             // if we can't close, tell the system that we processed the
             // message - otherwise it would close us
@@ -402,20 +315,25 @@ WXLRESULT wxDialog::MSWWindowProc(WXUINT message, WXWPARAM wParam, WXLPARAM lPar
             break;
 
         case WM_SIZE:
-#if wxUSE_DIALOG_SIZEGRIP
-            if ( m_hGripper )
+            switch ( wParam )
             {
-                switch ( wParam )
-                {
-                    case SIZE_MAXIMIZED:
-                        ShowGripper(false);
-                        break;
+                case SIZE_MINIMIZED:
+                    m_showCmd = SW_MINIMIZE;
+                    break;
 
-                    case SIZE_RESTORED:
-                        ShowGripper(true);
-                }
+                case SIZE_MAXIMIZED:
+                    wxFALLTHROUGH;
+
+                case SIZE_RESTORED:
+                    if ( m_hGripper )
+                        ShowGripper( wParam == SIZE_RESTORED );
+
+                    if ( m_showCmd == SW_MINIMIZE )
+                        (void)SendIconizeEvent(false);
+                    m_showCmd = SW_RESTORE;
+
+                    break;
             }
-#endif // wxUSE_DIALOG_SIZEGRIP
 
             // the Windows dialogs unfortunately are not meant to be resizable
             // at all and their standard class doesn't include CS_[VH]REDRAW

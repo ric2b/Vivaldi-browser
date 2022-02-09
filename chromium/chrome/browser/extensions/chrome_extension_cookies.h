@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/scoped_observation.h"
@@ -121,9 +121,10 @@ class ChromeExtensionCookies
   ~ChromeExtensionCookies() override;
 
   // content_settings::Observer:
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsTypeSet content_type_set) override;
 
   // content_settings::CookieSettings::Observer:
   void OnThirdPartyCookieBlockingChanged(
@@ -132,7 +133,7 @@ class ChromeExtensionCookies
   // KeyedService:
   void Shutdown() override;
 
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
 
   // Lives on the IO thread, null after Shutdown().
   std::unique_ptr<IOData> io_data_;

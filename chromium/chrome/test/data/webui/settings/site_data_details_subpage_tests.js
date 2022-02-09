@@ -6,10 +6,10 @@
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {cookieInfo, LocalDataBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
 import {MetricsBrowserProxyImpl, PrivacyElementInteractions, Router,routes} from 'chrome://settings/settings.js';
-import {TestLocalDataBrowserProxy} from 'chrome://test/settings/test_local_data_browser_proxy.js';
 
-import {flushTasks} from '../test_util.js';
+import {flushTasks} from 'chrome://webui-test/test_util.js';
 
+import {TestLocalDataBrowserProxy} from './test_local_data_browser_proxy.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 
 // clang-format on
@@ -45,6 +45,12 @@ suite('SiteDataDetailsSubpage', function() {
   const site = 'foo.com';
 
   setup(function() {
+    const routes = Router.getInstance().getRoutes();
+    routes.SITE_SETTINGS_SITE_DATA = routes.COOKIES.createChild('/siteData');
+    routes.SITE_SETTINGS_DATA_DETAILS =
+        routes.SITE_SETTINGS_SITE_DATA.createChild('/cookies/detail');
+    Router.resetInstanceForTesting(new Router(routes));
+
     browserProxy = new TestLocalDataBrowserProxy();
     browserProxy.setCookieDetails([cookieDetails]);
     LocalDataBrowserProxyImpl.setInstance(browserProxy);

@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "chromeos/components/multidevice/remote_device.h"
 #include "chromeos/components/multidevice/remote_device_cache.h"
 #include "chromeos/components/multidevice/remote_device_ref.h"
@@ -43,6 +42,10 @@ class MultiDeviceSetupClientImpl : public MultiDeviceSetupClient,
    private:
     static Factory* test_factory_;
   };
+
+  MultiDeviceSetupClientImpl(const MultiDeviceSetupClientImpl&) = delete;
+  MultiDeviceSetupClientImpl& operator=(const MultiDeviceSetupClientImpl&) =
+      delete;
 
   ~MultiDeviceSetupClientImpl() override;
 
@@ -103,8 +106,6 @@ class MultiDeviceSetupClientImpl : public MultiDeviceSetupClient,
 
   HostStatusWithDevice host_status_with_device_;
   FeatureStatesMap feature_states_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(MultiDeviceSetupClientImpl);
 };
 
 }  // namespace multidevice_setup

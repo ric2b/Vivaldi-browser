@@ -54,9 +54,9 @@ MATCHER_P(EqualsProto,
   return true;
 }
 
-// Helper function composes JSON represented as base::Value from Sequencing
+// Helper function composes JSON represented as base::Value from Sequence
 // information in request.
-base::Value ValueFromSucceededSequencingInfo(
+base::Value ValueFromSucceededSequenceInfo(
     const absl::optional<base::Value> request,
     bool force_confirm_flag) {
   EXPECT_TRUE(request.has_value());
@@ -69,11 +69,7 @@ base::Value ValueFromSucceededSequencingInfo(
   EXPECT_NE(encrypted_record_list, nullptr);
   EXPECT_FALSE(encrypted_record_list->GetList().empty());
 
-  // Retrieve and process sequencing information
-  const base::Value* unsigned_seq_info =
-      encrypted_record_list->GetList().rbegin()->FindDictKey(
-          "sequencingInformation");
-  EXPECT_NE(unsigned_seq_info, nullptr);
+  // Retrieve and process sequence information
   const base::Value* seq_info =
       encrypted_record_list->GetList().rbegin()->FindDictKey(
           "sequenceInformation");
@@ -127,23 +123,23 @@ class TestEncryptedReportingServiceProvider
                 },
                 base::Unretained(cloud_policy_client)),
             /*upload_client_builder_cb=*/
-            base::BindRepeating(
-                [](policy::CloudPolicyClient* client,
-                   ReportSuccessfulUploadCallback report_successful_upload_cb,
-                   EncryptionKeyAttachedCallback encrypted_key_cb,
-                   ::reporting::UploadClient::CreatedCallback
-                       update_upload_client_cb) {
-                  ::reporting::FakeUploadClient::Create(
-                      client, report_successful_upload_cb, encrypted_key_cb,
-                      std::move(update_upload_client_cb));
-                }))) {}
+            base::BindRepeating([](policy::CloudPolicyClient* client,
+                                   ::reporting::UploadClient::CreatedCallback
+                                       update_upload_client_cb) {
+              ::reporting::FakeUploadClient::Create(
+                  client, std::move(update_upload_client_cb));
+            }))) {}
+  TestEncryptedReportingServiceProvider(
+      const TestEncryptedReportingServiceProvider& other) = delete;
+  TestEncryptedReportingServiceProvider& operator=(
+      const TestEncryptedReportingServiceProvider& other) = delete;
 };
 
 class EncryptedReportingServiceProviderTest : public ::testing::Test {
  public:
   MOCK_METHOD(void,
               ReportSuccessfulUpload,
-              (reporting::SequencingInformation, bool),
+              (reporting::SequenceInformation, bool),
               ());
   MOCK_METHOD(void,
               EncryptionKeyCallback,
@@ -155,6 +151,7 @@ class EncryptedReportingServiceProviderTest : public ::testing::Test {
     MissiveClient::InitializeFake();
     cloud_policy_client_.SetDMToken(
         policy::DMToken::CreateValidTokenForTesting("FAKE_DM_TOKEN").value());
+
     auto successful_upload_cb = base::BindRepeating(
         &EncryptedReportingServiceProviderTest::ReportSuccessfulUpload,
         base::Unretained(this));
@@ -162,15 +159,14 @@ class EncryptedReportingServiceProviderTest : public ::testing::Test {
         &EncryptedReportingServiceProviderTest::EncryptionKeyCallback,
         base::Unretained(this));
     service_provider_ = std::make_unique<TestEncryptedReportingServiceProvider>(
-        &cloud_policy_client_, std::move(successful_upload_cb),
-        std::move(encryption_key_cb));
+        &cloud_policy_client_, successful_upload_cb, encryption_key_cb);
 
     record_.set_encrypted_wrapped_record("TEST_DATA");
 
-    auto* sequencing_information = record_.mutable_sequencing_information();
-    sequencing_information->set_sequencing_id(42);
-    sequencing_information->set_generation_id(1701);
-    sequencing_information->set_priority(reporting::Priority::SLOW_BATCH);
+    auto* sequence_information = record_.mutable_sequence_information();
+    sequence_information->set_sequencing_id(42);
+    sequence_information->set_generation_id(1701);
+    sequence_information->set_priority(reporting::Priority::SLOW_BATCH);
   }
 
   void TearDown() override {
@@ -224,15 +220,14 @@ class EncryptedReportingServiceProviderTest : public ::testing::Test {
 TEST_F(EncryptedReportingServiceProviderTest, SuccessfullyUploadsRecord) {
   SetupForRequestUploadEncryptedRecord();
   EXPECT_CALL(*this, ReportSuccessfulUpload(
-                         EqualsProto(record_.sequencing_information()), _))
+                         EqualsProto(record_.sequence_information()), _))
       .Times(1);
   EXPECT_CALL(cloud_policy_client_, UploadEncryptedReport(_, _, _))
       .WillOnce(WithArgs<0, 2>(
           Invoke([](base::Value request,
                     policy::CloudPolicyClient::ResponseCallback response_cb) {
             std::move(response_cb)
-                .Run(ValueFromSucceededSequencingInfo(std::move(request),
-                                                      false));
+                .Run(ValueFromSucceededSequenceInfo(std::move(request), false));
           })));
 
   reporting::UploadEncryptedRecordRequest request;

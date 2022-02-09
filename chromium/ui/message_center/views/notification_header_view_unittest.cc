@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -50,7 +51,7 @@ class NotificationHeaderViewTest : public views::ViewsTestBase {
 
     notification_header_view_ =
         new NotificationHeaderView(views::Button::PressedCallback());
-    container->AddChildView(notification_header_view_);
+    container->AddChildView(notification_header_view_.get());
 
     widget_.Show();
   }
@@ -79,7 +80,7 @@ class NotificationHeaderViewTest : public views::ViewsTestBase {
   }
 
  protected:
-  NotificationHeaderView* notification_header_view_ = nullptr;
+  raw_ptr<NotificationHeaderView> notification_header_view_ = nullptr;
 
  private:
   views::Widget widget_;
@@ -216,14 +217,16 @@ TEST_F(NotificationHeaderViewTest, DefaultFocusBehavior) {
             notification_header_view_->GetFocusBehavior());
 }
 
-TEST_F(NotificationHeaderViewTest, AppIconAndExpandButtonCreation) {
-  // Make sure that app icon and expand button is not created if used for an ash
-  // notification.
+TEST_F(NotificationHeaderViewTest, AppIconAndExpandButtonNotVisible) {
+  // Make sure that app icon and expand button are not visible if used for an
+  // ash notification.
   auto notification_header_view = std::make_unique<NotificationHeaderView>(
-      views::Button::PressedCallback(), /*for_ash_notification=*/true);
+      views::Button::PressedCallback());
+  notification_header_view->SetIsInAshNotificationView(true);
 
-  EXPECT_FALSE(notification_header_view->app_icon_view_for_testing());
-  EXPECT_FALSE(notification_header_view->expand_button());
+  EXPECT_FALSE(
+      notification_header_view->app_icon_view_for_testing()->GetVisible());
+  EXPECT_FALSE(notification_header_view->expand_button()->GetVisible());
 }
 
 TEST_F(NotificationHeaderViewTest, MetadataTest) {

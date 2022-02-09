@@ -30,9 +30,12 @@ namespace media {
 // Destroy() upon destruction.
 class MojoVideoEncodeAccelerator : public VideoEncodeAccelerator {
  public:
-  MojoVideoEncodeAccelerator(
-      mojo::PendingRemote<mojom::VideoEncodeAccelerator> vea,
-      const SupportedProfiles& supported_profiles);
+  explicit MojoVideoEncodeAccelerator(
+      mojo::PendingRemote<mojom::VideoEncodeAccelerator> vea);
+
+  MojoVideoEncodeAccelerator(const MojoVideoEncodeAccelerator&) = delete;
+  MojoVideoEncodeAccelerator& operator=(const MojoVideoEncodeAccelerator&) =
+      delete;
 
   // VideoEncodeAccelerator implementation.
   SupportedProfiles GetSupportedProfiles() override;
@@ -56,11 +59,7 @@ class MojoVideoEncodeAccelerator : public VideoEncodeAccelerator {
   // Constructed during Initialize().
   std::unique_ptr<mojom::VideoEncodeAcceleratorClient> vea_client_;
 
-  const SupportedProfiles supported_profiles_;
-
   SEQUENCE_CHECKER(sequence_checker_);
-
-  DISALLOW_COPY_AND_ASSIGN(MojoVideoEncodeAccelerator);
 };
 
 }  // namespace media

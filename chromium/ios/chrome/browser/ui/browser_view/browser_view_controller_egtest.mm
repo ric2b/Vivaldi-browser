@@ -5,6 +5,7 @@
 #include <map>
 
 #include "base/feature_list.h"
+#include "base/ignore_result.h"
 #import "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
@@ -52,8 +53,7 @@
                                                             block:^BOOL {
                                                               return NO;
                                                             }];
-    BOOL success = [myCondition waitWithTimeout:0.05];
-    success = NO;
+    ignore_result([myCondition waitWithTimeout:0.05]);
 
     [ChromeEarlGrey openNewTab];
   }  // End of the sync disabler scope.

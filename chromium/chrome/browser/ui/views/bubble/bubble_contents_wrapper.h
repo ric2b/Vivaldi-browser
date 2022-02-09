@@ -48,7 +48,6 @@ class BubbleContentsWrapper : public content::WebContentsDelegate,
 
   BubbleContentsWrapper(content::BrowserContext* browser_context,
                         int task_manager_string_id,
-                        bool enable_extension_apis,
                         bool webui_resizes_host,
                         bool esc_closes_ui);
   ~BubbleContentsWrapper() override;
@@ -62,13 +61,14 @@ class BubbleContentsWrapper : public content::WebContentsDelegate,
   bool HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
-  bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
+  bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
                          const content::ContextMenuParams& params) override;
 
   // content::WebContentsObserver:
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
 
   // MojoBubbleWebUIController::Embedder:
   void CloseUI() override;
@@ -108,12 +108,10 @@ class BubbleContentsWrapperT : public BubbleContentsWrapper {
   BubbleContentsWrapperT(const GURL& webui_url,
                          content::BrowserContext* browser_context,
                          int task_manager_string_id,
-                         bool enable_extension_apis = false,
                          bool webui_resizes_host = true,
                          bool esc_closes_ui = true)
       : BubbleContentsWrapper(browser_context,
                               task_manager_string_id,
-                              enable_extension_apis,
                               webui_resizes_host,
                               esc_closes_ui),
         webui_url_(webui_url) {}

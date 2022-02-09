@@ -21,7 +21,6 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
@@ -72,6 +71,7 @@
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
 #include "ui/base/ui_base_features.h"
@@ -81,6 +81,10 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/latency/latency_info.h"
+
+#if !defined(OS_ANDROID)
+#include "components/metrics/stability_metrics_helper.h"
+#endif
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
@@ -97,8 +101,8 @@
 #include "ui/ozone/public/ozone_switches.h"
 #endif
 
-#if defined(USE_X11)
-#include "ui/gfx/x/x11_switches.h"  // nogncheck
+#if defined(OS_LINUX)
+#include "ui/gfx/switches.h"
 #endif
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -204,7 +208,7 @@ GpuTerminationStatus ConvertToGpuTerminationStatus(
       return GpuTerminationStatus::PROCESS_CRASHED;
     case base::TERMINATION_STATUS_STILL_RUNNING:
       return GpuTerminationStatus::STILL_RUNNING;
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       return GpuTerminationStatus::PROCESS_WAS_KILLED_BY_OOM;
 #endif
@@ -232,10 +236,7 @@ static const char* const kSwitchNames[] = {
     sandbox::policy::switches::kGpuSandboxFailuresFatal,
     sandbox::policy::switches::kDisableGpuSandbox,
     sandbox::policy::switches::kNoSandbox,
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_ASH) && \
-    !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
     switches::kDisableDevShmUsage,
 #endif
 #if defined(OS_WIN)
@@ -296,7 +297,7 @@ static const char* const kSwitchNames[] = {
     switches::kOzoneDumpFile,
     switches::kDisableBufferBWCompression,
 #endif
-#if defined(USE_X11)
+#if defined(OS_LINUX)
     switches::kX11Display,
     switches::kNoXshm,
 #endif
@@ -351,11 +352,9 @@ void OnGpuProcessHostDestroyedOnUI(int host_id, const std::string& message) {
   GpuDataManagerImpl::GetInstance()->AddLogMessage(logging::LOG_ERROR,
                                                    "GpuProcessHost", message);
 #if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform()) {
-    ui::OzonePlatform::GetInstance()
-        ->GetGpuPlatformSupportHost()
-        ->OnChannelDestroyed(host_id);
-  }
+  ui::OzonePlatform::GetInstance()
+      ->GetGpuPlatformSupportHost()
+      ->OnChannelDestroyed(host_id);
 #endif
 }
 
@@ -476,12 +475,12 @@ class GpuSandboxedProcessLauncherDelegate
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
-  sandbox::policy::SandboxType GetSandboxType() override {
+  sandbox::mojom::Sandbox GetSandboxType() override {
     if (cmd_line_.HasSwitch(sandbox::policy::switches::kDisableGpuSandbox)) {
       DVLOG(1) << "GPU sandbox is disabled";
-      return sandbox::policy::SandboxType::kNoSandbox;
+      return sandbox::mojom::Sandbox::kNoSandbox;
     }
-    return sandbox::policy::SandboxType::kGpu;
+    return sandbox::mojom::Sandbox::kGpu;
   }
 
  private:
@@ -530,7 +529,7 @@ void RecordAppContainerStatus(int error_code, bool crashed_before) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!crashed_before &&
       sandbox::policy::SandboxWin::IsAppContainerEnabledForSandbox(
-          *command_line, sandbox::policy::SandboxType::kGpu)) {
+          *command_line, sandbox::mojom::Sandbox::kGpu)) {
     base::UmaHistogramSparse("GPU.AppContainer.Status", error_code);
   }
 }
@@ -788,6 +787,18 @@ GpuProcessHost::~GpuProcessHost() {
       UMA_HISTOGRAM_ENUMERATION("GPU.GPUProcessTerminationStatus2",
                                 ConvertToGpuTerminationStatus(info.status),
                                 GpuTerminationStatus::MAX_ENUM);
+#if !defined(OS_ANDROID)
+      if (info.status != base::TERMINATION_STATUS_NORMAL_TERMINATION &&
+          info.status != base::TERMINATION_STATUS_STILL_RUNNING) {
+        // Add a sample to Stability.Counts2's GPU crash bucket.
+        //
+        // On Android Chrome and Android WebLayer, GPU crashes are logged via
+        // ContentStabilityMetricsProvider::OnCrashDumpProcessed() and
+        // StabilityMetricsHelper::IncreaseGpuCrashCount().
+        metrics::StabilityMetricsHelper::RecordStabilityEvent(
+            metrics::StabilityEventType::kGpuCrash);
+      }
+#endif  // !defined(OS_ANDROID)
 
       if (info.status == base::TERMINATION_STATUS_NORMAL_TERMINATION ||
           info.status == base::TERMINATION_STATUS_ABNORMAL_TERMINATION ||
@@ -829,12 +840,12 @@ GpuProcessHost::~GpuProcessHost() {
       case base::TERMINATION_STATUS_STILL_RUNNING:
         message += "hasn't exited yet.";
         break;
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_CHROMEOS)
       case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
         message += "was killed due to out of memory.";
         unexpected_exit = true;
         break;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // defined(OS_CHROMEOS)
 #if defined(OS_ANDROID)
       case base::TERMINATION_STATUS_OOM_PROTECTED:
         message += "was protected from out of memory kill.";
@@ -1155,7 +1166,6 @@ bool GpuProcessHost::LaunchGpuProcess() {
 
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
 
-  BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line.get());
   BrowserChildProcessHostImpl::CopyTraceStartupFlags(cmd_line.get());
 
 #if defined(OS_WIN)

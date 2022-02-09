@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "base/cxx17_backports.h"
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -98,9 +99,8 @@ class GestureDetector::TimeoutGestureHandler {
   }
 
   void StartTimeout(TimeoutEvent event) {
-    timeout_timers_[event].Start(FROM_HERE,
-                                 timeout_delays_[event],
-                                 gesture_detector_,
+    timeout_timers_[event].Start(FROM_HERE, timeout_delays_[event],
+                                 gesture_detector_.get(),
                                  timeout_callbacks_[event]);
   }
 
@@ -118,7 +118,7 @@ class GestureDetector::TimeoutGestureHandler {
  private:
   typedef void (GestureDetector::*ReceiverMethod)();
 
-  GestureDetector* const gesture_detector_;
+  const raw_ptr<GestureDetector> gesture_detector_;
   base::OneShotTimer timeout_timers_[TIMEOUT_EVENT_COUNT];
   ReceiverMethod timeout_callbacks_[TIMEOUT_EVENT_COUNT];
   base::TimeDelta timeout_delays_[TIMEOUT_EVENT_COUNT];
@@ -287,7 +287,7 @@ bool GestureDetector::OnTouchEvent(const MotionEvent& ev,
           handled |= double_tap_listener_->OnDoubleTapEvent(ev);
         } else {
           // This is a first tap.
-          DCHECK(double_tap_timeout_ > base::TimeDelta());
+          DCHECK(double_tap_timeout_.is_positive());
           timeout_handler_->StartTimeout(TAP);
         }
       } else {

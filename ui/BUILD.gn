@@ -53,6 +53,8 @@ static_library("ui") {
       "views/vivaldi_pin_shortcut.h",
       "vivaldi_document_loader.cc",
       "vivaldi_document_loader.h",
+      "vivaldi_rootdocument_handler.cc",
+      "vivaldi_rootdocument_handler.h",
     ]
     deps += [
       "//chrome/browser/extensions:extensions",

@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
 #include "components/exo/surface.h"
@@ -123,6 +122,10 @@ class SurfaceTreeHost : public SurfaceDelegate,
   // viz::ContextLostObserver:
   void OnContextLost() override;
 
+  void set_client_submits_surfaces_in_pixel_coordinates(bool enabled) {
+    client_submits_surfaces_in_pixel_coordinates_ = enabled;
+  }
+
  protected:
   void UpdateDisplayOnTree();
 
@@ -137,6 +140,10 @@ class SurfaceTreeHost : public SurfaceDelegate,
   // Update the host window's size to cover sufaces that must be visible and
   // not clipped.
   virtual void UpdateHostWindowBounds();
+
+  bool client_submits_surfaces_in_pixel_coordinates() const {
+    return client_submits_surfaces_in_pixel_coordinates_;
+  }
 
  private:
   viz::CompositorFrame PrepareToSubmitCompositorFrame();
@@ -171,6 +178,8 @@ class SurfaceTreeHost : public SurfaceDelegate,
   display::ScopedDisplayObserver display_observer_{this};
 
   int64_t display_id_ = display::kInvalidDisplayId;
+
+  bool client_submits_surfaces_in_pixel_coordinates_ = false;
 
   base::WeakPtrFactory<SurfaceTreeHost> weak_ptr_factory_{this};
 };

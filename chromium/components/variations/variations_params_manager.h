@@ -10,7 +10,6 @@
 #include <set>
 #include <string>
 
-#include "base/macros.h"
 #include "base/test/scoped_field_trial_list_resetter.h"
 
 namespace base {
@@ -84,7 +83,7 @@ class VariationParamsManager {
   //
   // This static method is useful in situations where using
   // VariationParamsManager directly would have resulted in initializing
-  // FieldTrialList twice (once from ChromeBrowserMainParts::SetupFieldTrials
+  // FieldTrialList twice (once from ChromeBrowserMainParts::SetUpFieldTrials
   // and once from VariationParamsManager).
   static void AppendVariationParams(
       const std::string& trial_name,

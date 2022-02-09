@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/test/task_environment.h"
@@ -74,6 +73,9 @@ class WebmMuxerTest : public TestWithParam<TestParams> {
     EXPECT_FALSE(webm_muxer_->delegate_->Seekable());
   }
 
+  WebmMuxerTest(const WebmMuxerTest&) = delete;
+  WebmMuxerTest& operator=(const WebmMuxerTest&) = delete;
+
   MOCK_METHOD(void, WriteCallback, (base::StringPiece));
 
   void SaveEncodedDataLen(const base::StringPiece& encoded_data) {
@@ -112,9 +114,6 @@ class WebmMuxerTest : public TestWithParam<TestParams> {
 
   size_t last_encoded_length_ = 0;
   int64_t accumulated_position_ = 0;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebmMuxerTest);
 };
 
 // Checks that the WriteCallback is called with appropriate params when

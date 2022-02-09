@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
@@ -78,10 +77,5 @@ class PowerMetricsReporter : public PowerManagerClient::Observer {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-using ::ash::PowerMetricsReporter;
-}  // namespace chromeos
 
 #endif  // CHROME_BROWSER_ASH_POWER_POWER_METRICS_REPORTER_H_

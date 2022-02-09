@@ -14,8 +14,8 @@ import {isMac, isWindows} from 'chrome://resources/js/cr.m.js';
 import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
 import {hasKeyModifiers} from 'chrome://resources/js/util.m.js';
-import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
-import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {CloudPrintInterface, CloudPrintInterfaceErrorEventDetail, CloudPrintInterfaceEventType} from '../cloud_print_interface.js';
 import {CloudPrintInterfaceImpl} from '../cloud_print_interface_impl.js';
@@ -37,7 +37,7 @@ import {NativeLayerCros, NativeLayerCrosImpl} from '../native_layer_cros.js';
 
 import {DestinationState} from './destination_settings.js';
 import {PreviewAreaState, PrintPreviewPreviewAreaElement} from './preview_area.js';
-import {SettingsMixin, SettingsMixinInterface} from './settings_mixin.js';
+import {SettingsMixin} from './settings_mixin.js';
 import {PrintPreviewSidebarElement} from './sidebar.js';
 
 export interface PrintPreviewAppElement {
@@ -51,8 +51,7 @@ export interface PrintPreviewAppElement {
 }
 
 const PrintPreviewAppElementBase =
-    mixinBehaviors([WebUIListenerBehavior], SettingsMixin(PolymerElement)) as
-    {new (): PolymerElement & WebUIListenerBehavior & SettingsMixinInterface};
+    WebUIListenerMixin(SettingsMixin(PolymerElement));
 
 export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   static get is() {
@@ -211,7 +210,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     // Escape key closes the topmost dialog that is currently open within
     // Print Preview. If no such dialog exists, then the Print Preview dialog
     // itself is closed.
-    if (e.code === 'Escape' && !hasKeyModifiers(e)) {
+    if (e.key === 'Escape' && !hasKeyModifiers(e)) {
       // Don't close the Print Preview dialog if there is a child dialog open.
       if (this.openDialogs_.length !== 0) {
         // Manually cancel the dialog, since we call preventDefault() to prevent
@@ -240,7 +239,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
 
     // On Mac, Cmd+Period should close the print dialog.
-    if (isMac && e.code === 'Period' && e.metaKey) {
+    if (isMac && e.key === '.' && e.metaKey) {
       this.close_();
       e.preventDefault();
       return;
@@ -248,7 +247,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
 
     // Ctrl + Shift + p / Mac equivalent. Doesn't apply on Chrome OS.
     // <if expr="not chromeos and not lacros">
-    if (e.code === 'KeyP') {
+    if (e.key === 'p') {
       if ((isMac && e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey) ||
           (!isMac && e.shiftKey && e.ctrlKey && !e.altKey && !e.metaKey)) {
         // Don't use system dialog if the link isn't available.
@@ -268,7 +267,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
     // </if>
 
-    if ((e.code === 'Enter' || e.code === 'NumpadEnter') &&
+    if ((e.key === 'Enter' || e.key === 'NumpadEnter') &&
         this.state === State.READY && this.openDialogs_.length === 0) {
       const activeElementTag = (e.composedPath()[0] as HTMLElement).tagName;
       if (['CR-BUTTON', 'BUTTON', 'SELECT', 'A', 'CR-CHECKBOX'].includes(
@@ -644,6 +643,12 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
 
   private close_() {
     this.$.state.transitTo(State.CLOSING);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'print-preview-app': PrintPreviewAppElement;
   }
 }
 

@@ -52,14 +52,24 @@ public class CastWebContentsActivityTest {
     @Implements(Activity.class)
     public static class ExtendedShadowActivity extends ShadowActivity {
         private boolean mTurnScreenOn;
+        private boolean mShowWhenLocked;
 
         public boolean getTurnScreenOn() {
             return mTurnScreenOn;
         }
 
+        public boolean getShowWhenLocked() {
+            return mShowWhenLocked;
+        }
+
         @Implementation
         public void setTurnScreenOn(boolean turnScreenOn) {
             mTurnScreenOn = turnScreenOn;
+        }
+
+        @Implementation
+        public void setShowWhenLocked(boolean showWhenLocked) {
+            mShowWhenLocked = showWhenLocked;
         }
     }
 
@@ -70,7 +80,7 @@ public class CastWebContentsActivityTest {
 
     private static Intent defaultIntentForCastWebContentsActivity(WebContents webContents) {
         return CastWebContentsIntentUtils.requestStartCastActivity(
-                RuntimeEnvironment.application, webContents, true, false, true, true, "0");
+                RuntimeEnvironment.application, webContents, true, false, true, "0");
     }
 
     @Before
@@ -114,7 +124,7 @@ public class CastWebContentsActivityTest {
         CastWebContentsSurfaceHelper surfaceHelper = mock(CastWebContentsSurfaceHelper.class);
         WebContents newWebContents = mock(WebContents.class);
         Intent intent = CastWebContentsIntentUtils.requestStartCastActivity(
-                RuntimeEnvironment.application, newWebContents, true, false, true, true, null);
+                RuntimeEnvironment.application, newWebContents, true, false, true, null);
         intent.removeExtra(CastWebContentsIntentUtils.INTENT_EXTRA_URI);
         mActivity.setSurfaceHelperForTesting(surfaceHelper);
         mActivityLifecycle.create();
@@ -127,7 +137,7 @@ public class CastWebContentsActivityTest {
     public void testDropsIntentWithoutWebContents() {
         CastWebContentsSurfaceHelper surfaceHelper = mock(CastWebContentsSurfaceHelper.class);
         Intent intent = CastWebContentsIntentUtils.requestStartCastActivity(
-                RuntimeEnvironment.application, null, true, false, true, true, "1");
+                RuntimeEnvironment.application, null, true, false, true, "1");
         mActivity.setSurfaceHelperForTesting(surfaceHelper);
         mActivityLifecycle.create();
         reset(surfaceHelper);
@@ -140,7 +150,7 @@ public class CastWebContentsActivityTest {
         CastWebContentsSurfaceHelper surfaceHelper = mock(CastWebContentsSurfaceHelper.class);
         WebContents newWebContents = mock(WebContents.class);
         Intent intent = CastWebContentsIntentUtils.requestStartCastActivity(
-                RuntimeEnvironment.application, newWebContents, true, false, true, true, "2");
+                RuntimeEnvironment.application, newWebContents, true, false, true, "2");
         mActivity.setSurfaceHelperForTesting(surfaceHelper);
         mActivityLifecycle.create();
         reset(surfaceHelper);
@@ -167,22 +177,23 @@ public class CastWebContentsActivityTest {
     @Config(shadows = {ExtendedShadowActivity.class})
     public void testTurnsScreenOnIfTurnOnScreen() {
         mActivityLifecycle = Robolectric.buildActivity(CastWebContentsActivity.class,
-                CastWebContentsIntentUtils.requestStartCastActivity(RuntimeEnvironment.application,
-                        mWebContents, true, false, true, true, "0"));
+                CastWebContentsIntentUtils.requestStartCastActivity(
+                        RuntimeEnvironment.application, mWebContents, true, false, true, "0"));
         mActivity = mActivityLifecycle.get();
         mActivity.testingModeForTesting();
         ExtendedShadowActivity shadowActivity = (ExtendedShadowActivity) Shadow.extract(mActivity);
         mActivityLifecycle.create();
 
         Assert.assertTrue(shadowActivity.getTurnScreenOn());
+        Assert.assertTrue(shadowActivity.getShowWhenLocked());
     }
 
     @Test
     @Config(sdk = {Build.VERSION_CODES.O})
     public void testTurnsScreenOnIfTurnOnScreen_AndroidO() {
         mActivityLifecycle = Robolectric.buildActivity(CastWebContentsActivity.class,
-                CastWebContentsIntentUtils.requestStartCastActivity(RuntimeEnvironment.application,
-                        mWebContents, true, false, true, true, "0"));
+                CastWebContentsIntentUtils.requestStartCastActivity(
+                        RuntimeEnvironment.application, mWebContents, true, false, true, "0"));
         mActivity = mActivityLifecycle.get();
         mActivity.testingModeForTesting();
         mActivityLifecycle.create();
@@ -195,22 +206,23 @@ public class CastWebContentsActivityTest {
     @Config(shadows = {ExtendedShadowActivity.class})
     public void testDoesNotTurnScreenOnIfNotTurnOnScreen() {
         mActivityLifecycle = Robolectric.buildActivity(CastWebContentsActivity.class,
-                CastWebContentsIntentUtils.requestStartCastActivity(RuntimeEnvironment.application,
-                        mWebContents, true, false, false, true, "0"));
+                CastWebContentsIntentUtils.requestStartCastActivity(
+                        RuntimeEnvironment.application, mWebContents, true, false, false, "0"));
         mActivity = mActivityLifecycle.get();
         mActivity.testingModeForTesting();
         ExtendedShadowActivity shadowActivity = (ExtendedShadowActivity) Shadow.extract(mActivity);
         mActivityLifecycle.create();
 
         Assert.assertFalse(shadowActivity.getTurnScreenOn());
+        Assert.assertFalse(shadowActivity.getShowWhenLocked());
     }
 
     @Test
     @Config(sdk = {Build.VERSION_CODES.O})
     public void testDoesNotTurnScreenOnIfNotTurnOnScreen_AndroidO() {
         mActivityLifecycle = Robolectric.buildActivity(CastWebContentsActivity.class,
-                CastWebContentsIntentUtils.requestStartCastActivity(RuntimeEnvironment.application,
-                        mWebContents, true, false, true, true, "0"));
+                CastWebContentsIntentUtils.requestStartCastActivity(
+                        RuntimeEnvironment.application, mWebContents, true, false, true, "0"));
         mActivity = mActivityLifecycle.get();
         mActivity.testingModeForTesting();
         mActivityLifecycle.create();
@@ -219,12 +231,8 @@ public class CastWebContentsActivityTest {
                                   .getFlag(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON));
     }
 
-    @Test
-    public void testSetsKeepScreenOnFlag() {
-        mActivityLifecycle.create();
-        Assert.assertTrue(Shadows.shadowOf(mActivity.getWindow())
-                                  .getFlag(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
-    }
+    // TODO(guohuideng): Add unit test for PiP when the Robolectric in internal codebase is
+    // ready.
 
     @Test
     public void testStopDoesNotCauseFinish() {

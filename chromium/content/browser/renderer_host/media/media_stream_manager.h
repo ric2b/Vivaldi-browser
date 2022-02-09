@@ -35,11 +35,11 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/power_monitor/power_observer.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/current_thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture_handle_manager.h"
@@ -304,6 +304,7 @@ class CONTENT_EXPORT MediaStreamManager
   // base::PowerThermalObserver overrides.
   void OnThermalStateChange(
       base::PowerThermalObserver::DeviceThermalState new_state) override;
+  void OnSpeedLimitChange(int new_limit) override;
 
   // Called by the tests to specify a factory for creating
   // FakeMediaStreamUIProxys to be used for generated streams.
@@ -653,7 +654,7 @@ class CONTENT_EXPORT MediaStreamManager
   const base::TimeDelta conditional_focus_window_;
 #endif
 
-  media::AudioSystem* const audio_system_;  // not owned
+  const raw_ptr<media::AudioSystem> audio_system_;  // not owned
   scoped_refptr<AudioInputDeviceManager> audio_input_device_manager_;
   scoped_refptr<VideoCaptureManager> video_capture_manager_;
 

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "cc/benchmarks/micro_benchmark.h"
 
 namespace base {
@@ -20,7 +21,7 @@ class Value;
 namespace cc {
 
 class LayerTreeHost;
-class LayerTreeHostImpl;
+
 class CC_EXPORT MicroBenchmarkController {
  public:
   explicit MicroBenchmarkController(LayerTreeHost* host);
@@ -38,13 +39,13 @@ class CC_EXPORT MicroBenchmarkController {
   // Returns true if the message was successfully delivered and handled.
   bool SendMessage(int id, base::Value message);
 
-  void ScheduleImplBenchmarks(LayerTreeHostImpl* host_impl);
+  std::vector<std::unique_ptr<MicroBenchmarkImpl>> CreateImplBenchmarks() const;
 
  private:
   void CleanUpFinishedBenchmarks();
   int GetNextIdAndIncrement();
 
-  LayerTreeHost* host_;
+  raw_ptr<LayerTreeHost> host_;
   std::vector<std::unique_ptr<MicroBenchmark>> benchmarks_;
   static int next_id_;
   scoped_refptr<base::SingleThreadTaskRunner> main_controller_task_runner_;

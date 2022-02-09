@@ -5,13 +5,21 @@
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {FakeShimlessRmaService} from 'chrome://shimless-rma/fake_shimless_rma_service.js';
 import {setShimlessRmaServiceForTesting} from 'chrome://shimless-rma/mojo_interface_provider.js';
-import {WrapupRestockPageElement} from 'chrome://shimless-rma/wrapup_restock_page.js';
+import {ShimlessRma} from 'chrome://shimless-rma/shimless_rma.js';
+import {WrapupRestockPage} from 'chrome://shimless-rma/wrapup_restock_page.js';
 
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
-import {flushTasks} from '../../test_util.m.js';
+import {flushTasks} from '../../test_util.js';
 
 export function wrapupRestockPageTest() {
-  /** @type {?WrapupRestockPageElement} */
+  /**
+   * ShimlessRma is needed to handle the 'transition-state' event used by
+   * the shutdown button.
+   * @type {?ShimlessRma}
+   */
+  let shimless_rma_component = null;
+
+  /** @type {?WrapupRestockPage} */
   let component = null;
 
   /** @type {?FakeShimlessRmaService} */
@@ -29,6 +37,8 @@ export function wrapupRestockPageTest() {
   teardown(() => {
     component.remove();
     component = null;
+    shimless_rma_component.remove();
+    shimless_rma_component = null;
     service.reset();
   });
 
@@ -38,7 +48,12 @@ export function wrapupRestockPageTest() {
   function initializeRestockPage() {
     assertFalse(!!component);
 
-    component = /** @type {!WrapupRestockPageElement} */ (
+    shimless_rma_component =
+        /** @type {!ShimlessRma} */ (document.createElement('shimless-rma'));
+    assertTrue(!!shimless_rma_component);
+    document.body.appendChild(shimless_rma_component);
+
+    component = /** @type {!WrapupRestockPage} */ (
         document.createElement('wrapup-restock-page'));
     assertTrue(!!component);
     document.body.appendChild(component);

@@ -5,7 +5,6 @@
 
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/profiles/profile_observer.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/common/extension.h"
@@ -19,6 +18,7 @@ class VivaldiDocumentLoader : protected content::WebContentsDelegate,
   VivaldiDocumentLoader(Profile* profile,
                         const extensions::Extension* extension);
   ~VivaldiDocumentLoader() override;
+
 
  private:
   // content::WebContentsDelegate overrides.

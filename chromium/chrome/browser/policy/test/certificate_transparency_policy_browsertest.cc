@@ -13,16 +13,40 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/test/browser_test.h"
 #include "net/base/hash_value.h"
 #include "net/cert/x509_util.h"
+#include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/mojom/network_service_test.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::BrowserThread;
 
 namespace policy {
+
+void SetRequireCTForTesting(bool required) {
+  if (content::IsOutOfProcessNetworkService()) {
+    mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
+    content::GetNetworkService()->BindTestInterface(
+        network_service_test.BindNewPipeAndPassReceiver());
+    network::mojom::NetworkServiceTest::RequireCT required_ct =
+        required ? network::mojom::NetworkServiceTest::RequireCT::REQUIRE
+                 : network::mojom::NetworkServiceTest::RequireCT::DEFAULT;
+
+    mojo::ScopedAllowSyncCallForTesting allow_sync_call;
+    network_service_test->SetRequireCT(required_ct);
+    return;
+  }
+
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&net::TransportSecurityState::SetRequireCTForTesting,
+                     required));
+}
 
 class CertificateTransparencyPolicyTest : public PolicyTest {
  public:
@@ -69,7 +93,7 @@ IN_PROC_BROWSER_TEST_F(CertificateTransparencyPolicyTest,
                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                std::move(disabled_urls), nullptr);
   UpdateProviderPolicy(policies);
-  FlushBlacklistPolicy();
+  FlushBlocklistPolicy();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_ok.GetURL("/simple.html")));
@@ -142,7 +166,7 @@ IN_PROC_BROWSER_TEST_F(CertificateTransparencyPolicyTest,
                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                std::move(disabled_spkis), nullptr);
   UpdateProviderPolicy(policies);
-  FlushBlacklistPolicy();
+  FlushBlocklistPolicy();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_ok.GetURL("/simple.html")));

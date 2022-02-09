@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/toolbar/chrome_labs_item_view.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -107,7 +108,7 @@ class LabsComboboxModel : public ui::ComboboxModel {
 
  private:
   const LabInfo& lab_;
-  const flags_ui::FeatureEntry* feature_entry_;
+  raw_ptr<const flags_ui::FeatureEntry> feature_entry_;
   int default_index_;
 };
 
@@ -255,9 +256,8 @@ bool ChromeLabsItemView::ShouldShowNewBadge(Profile* profile,
 
   base::DictionaryValue* new_badge_prefs = update.Get();
 
-  DCHECK(new_badge_prefs->HasKey(lab.internal_name));
-  int start_day;
-  new_badge_prefs->GetInteger(lab.internal_name, &start_day);
+  DCHECK(new_badge_prefs->FindIntKey(lab.internal_name));
+  int start_day = *new_badge_prefs->FindIntKey(lab.internal_name);
   if (start_day == chrome_labs_prefs::kChromeLabsNewExperimentPrefValue) {
     // Set the dictionary value of this experiment to the number of days since
     // epoch (1970-01-01). This value is the first day the user sees the new

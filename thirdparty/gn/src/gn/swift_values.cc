@@ -14,35 +14,46 @@ SwiftValues::SwiftValues() = default;
 
 SwiftValues::~SwiftValues() = default;
 
-bool SwiftValues::OnTargetResolved(const Target* target, Err* err) {
-  if (!FillModuleOuputFile(target, err))
+// static
+bool SwiftValues::OnTargetResolved(Target* target, Err* err) {
+  if (!FillModuleOutputFile(target, err))
     return false;
 
   FillModuleDependencies(target);
   return true;
 }
 
-void SwiftValues::FillModuleDependencies(const Target* target) {
+// static
+void SwiftValues::FillModuleDependencies(Target* target) {
   for (const auto& pair : target->GetDeps(Target::DEPS_LINKED)) {
+    if (!pair.ptr->has_swift_values())
+      continue;
+
     if (pair.ptr->toolchain() == target->toolchain() ||
         pair.ptr->toolchain()->propagates_configs()) {
-      modules_.Append(pair.ptr->swift_values().public_modules().begin(),
-                      pair.ptr->swift_values().public_modules().end());
+      target->swift_values().modules_.Append(
+          pair.ptr->swift_values().public_modules().begin(),
+          pair.ptr->swift_values().public_modules().end());
     }
   }
 
   for (const auto& pair : target->public_deps()) {
+    if (!pair.ptr->has_swift_values())
+      continue;
+
     if (pair.ptr->toolchain() == target->toolchain() ||
         pair.ptr->toolchain()->propagates_configs())
-      public_modules_.Append(pair.ptr->swift_values().public_modules().begin(),
-                             pair.ptr->swift_values().public_modules().end());
+      target->swift_values().public_modules_.Append(
+          pair.ptr->swift_values().public_modules().begin(),
+          pair.ptr->swift_values().public_modules().end());
   }
 
-  if (builds_module())
-    public_modules_.push_back(target);
+  if (target->swift_values().builds_module())
+    target->swift_values().public_modules_.push_back(target);
 }
 
-bool SwiftValues::FillModuleOuputFile(const Target* target, Err* err) {
+// static
+bool SwiftValues::FillModuleOutputFile(Target* target, Err* err) {
   if (!target->IsBinary() || !target->source_types_used().SwiftSourceUsed())
     return true;
 
@@ -56,15 +67,16 @@ bool SwiftValues::FillModuleOuputFile(const Target* target, Err* err) {
 
   const SourceFile module_output_file_as_source =
       module_output_file.AsSourceFile(target->settings()->build_settings());
-  if (module_output_file_as_source.type() != SourceFile::SOURCE_SWIFTMODULE) {
+  if (!module_output_file_as_source.IsSwiftModuleType()) {
     *err = Err(tool->defined_from(), "Incorrect outputs for tool",
                "The first output of tool " + std::string(tool->name()) +
                    " must be a .swiftmodule file.");
     return false;
   }
 
-  module_output_file_ = std::move(module_output_file);
-  module_output_dir_ = module_output_file_as_source.GetDir();
+  SwiftValues& swift_values = target->swift_values();
+  swift_values.module_output_file_ = std::move(module_output_file);
+  swift_values.module_output_dir_ = module_output_file_as_source.GetDir();
 
   return true;
 }

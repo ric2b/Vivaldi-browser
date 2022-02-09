@@ -13,11 +13,6 @@ specified by the --skip-existing flag, the script checks what HTML report files
 have already been uploaded to the GCS bucket, then works on generating the
 remaining desired files.
 
-Size files are fetched by streaming them from the source bucket, then the
-html_report module handles creating a report file to diff two size files.
-Reports are saved to a local directory, and once all reports are created they
-can be uploaded to the destination bucket.
-
 Reports can be uploaded automatically with the --sync flag. Otherwise, they can
 be uploaded at a later point.
 """
@@ -87,6 +82,10 @@ _DESIRED_VERSIONS = [
     '92.0.4515.70',
     '93.0.4577.37',
     '94.0.4606.6',
+    '94.0.4606.85',
+    '95.0.4638.7',
+    '96.0.4664.6',
+    '97.0.4692.9',
 ]
 
 
@@ -232,7 +231,7 @@ def main():
 
     if args.sync:
       subprocess.check_call(
-          [_GSUTIL, '-m', 'rsync', '-J', '-r', staging_dir, _PUSH_URL])
+          [_GSUTIL, '-m', 'rsync', '-r', staging_dir, _PUSH_URL])
       milestones_json = _PUSH_URL + 'milestones.json'
       # The main index.html page has no authentication code, so make .json file
       # world-readable.

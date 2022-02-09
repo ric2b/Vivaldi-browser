@@ -24,8 +24,8 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/document_resource_coordinator.h"
@@ -396,11 +396,11 @@ void MeasureMemoryController::MeasurementComplete(
       isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
   MemoryMeasurement* result = ConvertResult(measurement);
   v8::Local<v8::Promise::Resolver> promise_resolver =
-      promise_resolver_.NewLocal(isolate_);
+      promise_resolver_.Get(isolate_);
   v8::MaybeLocal<v8::Value> v8_result =
       ToV8Traits<MemoryMeasurement>::ToV8(script_state, result);
   promise_resolver->Resolve(context, v8_result.ToLocalChecked()).ToChecked();
-  promise_resolver_.Clear();
+  promise_resolver_.Reset();
   RecordWebMemoryUkm(context, measurement);
 }
 

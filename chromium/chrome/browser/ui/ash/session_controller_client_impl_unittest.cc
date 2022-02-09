@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "ash/components/login/session/session_termination_manager.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/bind.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,7 +28,6 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/login/login_state/login_state.h"
-#include "chromeos/login/session/session_termination_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -50,7 +49,7 @@ constexpr char kUserGaiaId[] = "0123456789";
 std::unique_ptr<KeyedService> CreateTestPolicyCertService(
     content::BrowserContext* context) {
   return policy::PolicyCertService::CreateForTesting(
-      kUser, user_manager::UserManager::Get());
+      Profile::FromBrowserContext(context));
 }
 
 // A user manager that does not set profiles as loaded and notifies observers
@@ -201,7 +200,7 @@ class SessionControllerClientImplTest : public testing::Test {
   std::unique_ptr<TestingProfileManager> profile_manager_;
   std::unique_ptr<AssistantBrowserDelegateImpl> assistant_delegate_;
   session_manager::SessionManager session_manager_;
-  chromeos::SessionTerminationManager session_termination_manager_;
+  ash::SessionTerminationManager session_termination_manager_;
 
  protected:
   std::unique_ptr<crosapi::FakeBrowserManager> browser_manager_;
@@ -317,7 +316,7 @@ TEST_F(SessionControllerClientImplTest,
 // policy-provided trust anchors.
 TEST_F(SessionControllerClientImplTest,
        MultiProfileAllowedWithPolicyCertificates) {
-  InitForMultiProfile();
+  TestingProfile* user_profile = InitForMultiProfile();
   user_manager()->AddUser(
       AccountId::FromUserEmailGaiaId("bb@b.b", "4444444444"));
 
@@ -326,8 +325,13 @@ TEST_F(SessionControllerClientImplTest,
   user_manager()->LoginUser(account_id);
   EXPECT_EQ(ash::AddUserSessionPolicy::ALLOWED,
             SessionControllerClientImpl::GetAddUserSessionPolicy());
-  policy::PolicyCertServiceFactory::SetUsedPolicyCertificates(
-      account_id.GetUserEmail());
+
+  ASSERT_TRUE(
+      policy::PolicyCertServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+          user_profile, base::BindRepeating(&CreateTestPolicyCertService)));
+  policy::PolicyCertServiceFactory::GetForProfile(user_profile)
+      ->SetUsedPolicyCertificates();
+
   EXPECT_EQ(ash::AddUserSessionPolicy::ALLOWED,
             SessionControllerClientImpl::GetAddUserSessionPolicy());
 

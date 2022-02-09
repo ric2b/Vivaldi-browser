@@ -5,7 +5,6 @@
 #ifndef TOOLS_GN_TEST_WITH_SCHEDULER_H_
 #define TOOLS_GN_TEST_WITH_SCHEDULER_H_
 
-#include "base/macros.h"
 #include "gn/scheduler.h"
 #include "util/msg_loop.h"
 #include "util/test/test.h"
@@ -21,7 +20,8 @@ class TestWithScheduler : public testing::Test {
   MsgLoop run_loop_;
   Scheduler scheduler_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestWithScheduler);
+  TestWithScheduler(const TestWithScheduler&) = delete;
+  TestWithScheduler& operator=(const TestWithScheduler&) = delete;
 };
 
 #endif  // TOOLS_GN_TEST_WITH_SCHEDULER_H_

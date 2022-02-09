@@ -6,7 +6,6 @@
 #define TOOLS_GN_SETTINGS_H_
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "gn/import_manager.h"
 #include "gn/output_file.h"
 #include "gn/scope.h"
@@ -110,7 +109,8 @@ class Settings {
 
   bool greedy_target_generation_ = false;
 
-  DISALLOW_COPY_AND_ASSIGN(Settings);
+  Settings(const Settings&) = delete;
+  Settings& operator=(const Settings&) = delete;
 };
 
 #endif  // TOOLS_GN_SETTINGS_H_

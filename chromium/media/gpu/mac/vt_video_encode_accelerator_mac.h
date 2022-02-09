@@ -11,7 +11,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/bitrate.h"
@@ -32,8 +32,6 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
 
   VTVideoEncodeAccelerator(const VTVideoEncodeAccelerator&) = delete;
   VTVideoEncodeAccelerator& operator=(const VTVideoEncodeAccelerator&) = delete;
-
-  ~VTVideoEncodeAccelerator() override;
 
   // VideoEncodeAccelerator implementation.
   VideoEncodeAccelerator::SupportedProfiles GetSupportedProfiles() override;
@@ -56,6 +54,8 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   // Holds output buffers coming from the client ready to be filled.
   struct BitstreamBufferRef;
 
+  ~VTVideoEncodeAccelerator() override;
+
   // Encoding tasks to be run on |encoder_thread_|.
   void EncodeTask(scoped_refptr<VideoFrame> frame, bool force_keyframe);
   void UseOutputBitstreamBufferTask(
@@ -64,8 +64,9 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
                                            uint32_t framerate);
   void DestroyTask();
 
-  // Helper function to set bitrate.
-  void SetAdjustedBitrate(int32_t bitrate);
+  // Helper functions to set bitrate.
+  void SetAdjustedConstantBitrate(int32_t bitrate);
+  void SetVariableBitrate(const Bitrate& bitrate);
 
   // Helper function to notify the client of an error on |client_task_runner_|.
   void NotifyError(VideoEncodeAccelerator::Error error);
@@ -108,12 +109,18 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   base::ScopedCFTypeRef<VTCompressionSessionRef> compression_session_;
 
   gfx::Size input_visible_size_;
-  size_t bitstream_buffer_size_;
-  int32_t frame_rate_;
-  media::Bitrate bitrate_;
-  int32_t target_bitrate_;
-  int32_t encoder_set_bitrate_;
+  size_t bitstream_buffer_size_ = 0;
+  int32_t frame_rate_ = 0;
   VideoCodecProfile h264_profile_;
+
+  media::Bitrate bitrate_;
+
+  // Bitrate adjuster is used only for constant bitrate mode. In variable
+  // bitrate mode no adjustments are needed.
+  // Bitrate adjuster used to fix VideoToolbox's inconsistent bitrate issues.
+  webrtc::BitrateAdjuster bitrate_adjuster_;
+  int32_t target_bitrate_ = 0;       // User for CBR only
+  int32_t encoder_set_bitrate_ = 0;  // User for CBR only
 
   // If True, the encoder fails initialization if setting of session's property
   // kVTCompressionPropertyKey_MaxFrameDelayCount returns an error.
@@ -121,9 +128,6 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   // have larger latency on low resolutions, and it's bad for RTC.
   // Context: https://crbug.com/1195177 https://crbug.com/webrtc/7304
   bool require_low_delay_ = true;
-
-  // Bitrate adjuster used to fix VideoToolbox's inconsistent bitrate issues.
-  webrtc::BitrateAdjuster bitrate_adjuster_;
 
   // Bitstream buffers ready to be used to return encoded output as a FIFO.
   base::circular_deque<std::unique_ptr<BitstreamBufferRef>>
@@ -133,7 +137,8 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   base::circular_deque<std::unique_ptr<EncodeOutput>> encoder_output_queue_;
 
   // Our original calling task runner for the child thread.
-  const scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
+  const scoped_refptr<base::SequencedTaskRunner> client_task_runner_;
+  SEQUENCE_CHECKER(client_sequence_checker_);
 
   // To expose client callbacks from VideoEncodeAccelerator.
   // NOTE: all calls to this object *MUST* be executed on
@@ -141,13 +146,8 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   base::WeakPtr<Client> client_;
   std::unique_ptr<base::WeakPtrFactory<Client>> client_ptr_factory_;
 
-  // Thread checker to enforce that this object is used on a specific thread.
-  // It is pinned on |client_task_runner_| thread.
-  base::ThreadChecker thread_checker_;
-
   // This thread services tasks posted from the VEA API entry points by the
   // GPU child thread and CompressionCallback() posted from device thread.
-  base::Thread encoder_thread_;
   scoped_refptr<base::SingleThreadTaskRunner> encoder_thread_task_runner_;
 
   // Tracking information for ensuring flushes aren't completed until all

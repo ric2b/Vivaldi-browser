@@ -18,3 +18,45 @@ TEST(SourceFile, Normalize) {
   EXPECT_TRUE(b_str.empty());  // Should have been swapped in.
   EXPECT_EQ("//bar.cc", b.value());
 }
+
+TEST(SourceFile, GetType) {
+  static const struct {
+    std::string_view path;
+    SourceFile::Type type;
+  } kData[] = {
+      {"", SourceFile::SOURCE_UNKNOWN},
+      {"a.c", SourceFile::SOURCE_C},
+      {"a.cc", SourceFile::SOURCE_CPP},
+      {"a.cpp", SourceFile::SOURCE_CPP},
+      {"a.cxx", SourceFile::SOURCE_CPP},
+      {"a.c++", SourceFile::SOURCE_CPP},
+      {"foo.h", SourceFile::SOURCE_H},
+      {"foo.hh", SourceFile::SOURCE_H},
+      {"foo.hpp", SourceFile::SOURCE_H},
+      {"foo.inc", SourceFile::SOURCE_H},
+      {"foo.inl", SourceFile::SOURCE_H},
+      {"foo.ipp", SourceFile::SOURCE_H},
+      {"foo.m", SourceFile::SOURCE_M},
+      {"foo.mm", SourceFile::SOURCE_MM},
+      {"foo.o", SourceFile::SOURCE_O},
+      {"foo.obj", SourceFile::SOURCE_O},
+      {"foo.S", SourceFile::SOURCE_S},
+      {"foo.s", SourceFile::SOURCE_S},
+      {"foo.asm", SourceFile::SOURCE_S},
+      {"foo.go", SourceFile::SOURCE_GO},
+      {"foo.rc", SourceFile::SOURCE_RC},
+      {"foo.rs", SourceFile::SOURCE_RS},
+      {"foo.def", SourceFile::SOURCE_DEF},
+      {"foo.swift", SourceFile::SOURCE_SWIFT},
+      {"foo.swiftmodule", SourceFile::SOURCE_SWIFTMODULE},
+      {"foo.modulemap", SourceFile::SOURCE_MODULEMAP},
+
+      // A few degenerate cases
+      {"foo.obj/a", SourceFile::SOURCE_UNKNOWN},
+      {"foo.cppp", SourceFile::SOURCE_UNKNOWN},
+      {"cpp", SourceFile::SOURCE_UNKNOWN},
+  };
+  for (const auto& data : kData) {
+    EXPECT_EQ(data.type, SourceFile(data.path).GetType());
+  }
+}

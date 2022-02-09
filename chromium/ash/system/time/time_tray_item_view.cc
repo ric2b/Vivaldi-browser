@@ -12,21 +12,25 @@
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/time/time_view.h"
 #include "ash/system/tray/tray_utils.h"
+#include "base/memory/scoped_refptr.h"
 #include "ui/views/border.h"
 
 namespace ash {
 
 namespace tray {
 
-TimeTrayItemView::TimeTrayItemView(Shelf* shelf, UnifiedSystemTrayModel* model)
+TimeTrayItemView::TimeTrayItemView(
+    Shelf* shelf,
+    scoped_refptr<UnifiedSystemTrayModel> model,
+    absl::optional<TimeView::OnTimeViewActionPerformedCallback> callback)
     : TrayItemView(shelf), model_(model), session_observer_(this) {
-  system_tray_model_observation_.Observe(model_);
+  system_tray_model_observation_.Observe(model_.get());
 
   TimeView::ClockLayout clock_layout =
       shelf->IsHorizontalAlignment() ? TimeView::ClockLayout::HORIZONTAL_CLOCK
                                      : TimeView::ClockLayout::VERTICAL_CLOCK;
-  time_view_ =
-      new TimeView(clock_layout, Shell::Get()->system_tray_model()->clock());
+  time_view_ = new TimeView(
+      clock_layout, Shell::Get()->system_tray_model()->clock(), callback);
 
   AddChildView(time_view_);
 
@@ -53,8 +57,8 @@ void TimeTrayItemView::OnSessionStateChanged(
 
 void TimeTrayItemView::OnSystemTrayButtonSizeChanged(
     UnifiedSystemTrayModel::SystemTrayButtonSize system_tray_size) {
-  time_view_->SetShowDateWhenHorizontal(
-      features::IsShowDateInTrayButtonEnabled() &&
+  time_view_->SetShowDate(
+      features::IsCalendarViewEnabled() &&
       system_tray_size == UnifiedSystemTrayModel::SystemTrayButtonSize::kLarge);
 }
 

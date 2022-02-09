@@ -33,6 +33,7 @@ extern const char kVivaldiMini[];
 extern const char kVivaldiRegisterStandalone[];
 extern const char kVivaldiSilent[];
 extern const char kVivaldiStandalone[];
+extern const char kVivaldiUnpack[];
 extern const char kVivaldiUpdate[];
 
 // Vivaldi installer switches and environment for debugging not supported in
@@ -44,5 +45,9 @@ extern const wchar_t kUninstallSurveyUrl[];
 
 }  // namespace constants
 }  // namespace vivaldi
+
+// Switches duplicated as macros to use from mini_installer
+#define VIVALDI_INSTALLER_SWITCH_MINI "vivaldi-mini"
+#define VIVALDI_INSTALLER_SWITCH_UNPACK "vivaldi-unpack"
 
 #endif  // INSTALLER_UTIL_VIVALDI_INSTALL_UTIL_H_

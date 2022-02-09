@@ -9,10 +9,8 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/time/time.h"
-#include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "chromecast/browser/cast_web_service.h"
-#include "chromecast/browser/cast_web_view_factory.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/filename_util.h"
@@ -27,7 +25,7 @@ GURL GetStartupURL() {
   const base::CommandLine::StringVector& args = command_line->GetArgs();
 
   if (args.empty())
-    return GURL("http://www.google.com/");
+    return GURL();
 
   GURL url(args[0]);
   if (url.is_valid() && url.has_scheme())
@@ -39,14 +37,9 @@ GURL GetStartupURL() {
 
 }  // namespace
 
-CastServiceSimple::CastServiceSimple(content::BrowserContext* browser_context,
-                                     CastWindowManager* window_manager)
-    : web_view_factory_(std::make_unique<CastWebViewFactory>(browser_context)),
-      web_service_(std::make_unique<CastWebService>(browser_context,
-                                                    web_view_factory_.get(),
-                                                    window_manager)) {
-  shell::CastBrowserProcess::GetInstance()->SetWebViewFactory(
-      web_view_factory_.get());
+CastServiceSimple::CastServiceSimple(CastWebService* web_service)
+    : web_service_(web_service) {
+  DCHECK(web_service_);
 }
 
 CastServiceSimple::~CastServiceSimple() {
@@ -64,16 +57,15 @@ void CastServiceSimple::StartInternal() {
     return;
   }
 
-  CastWebView::CreateParams create_params;
-  create_params.delegate = weak_factory_.GetWeakPtr();
-  create_params.window_delegate = weak_factory_.GetWeakPtr();
+  if (startup_url_.is_empty()) {
+    return;
+  }
 
   ::chromecast::mojom::CastWebViewParamsPtr params =
       ::chromecast::mojom::CastWebViewParams::New();
   params->enabled_for_dev = true;
 
-  cast_web_view_ =
-      web_service_->CreateWebViewInternal(create_params, std::move(params));
+  cast_web_view_ = web_service_->CreateWebViewInternal(std::move(params));
   cast_web_view_->cast_web_contents()->LoadUrl(startup_url_);
   cast_web_view_->window()->GrantScreenAccess();
   cast_web_view_->window()->CreateWindow(
@@ -87,20 +79,6 @@ void CastServiceSimple::StopInternal() {
   }
   cast_web_view_.reset();
 }
-
-void CastServiceSimple::OnWindowDestroyed() {}
-
-bool CastServiceSimple::CanHandleGesture(GestureType gesture_type) {
-  return false;
-}
-
-void CastServiceSimple::ConsumeGesture(
-    GestureType gesture_type,
-    GestureHandledCallback handled_callback) {
-  std::move(handled_callback).Run(false);
-}
-
-void CastServiceSimple::OnVisibilityChange(VisibilityType visibility_type) {}
 
 }  // namespace shell
 }  // namespace chromecast

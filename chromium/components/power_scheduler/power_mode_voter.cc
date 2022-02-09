@@ -44,8 +44,6 @@ constexpr base::TimeDelta PowerModeVoter::kAnimationTimeout;
 // static
 constexpr base::TimeDelta PowerModeVoter::kVideoTimeout;
 // static
-constexpr base::TimeDelta PowerModeVoter::kSoftwareDrawTimeout;
-// static
 constexpr base::TimeDelta PowerModeVoter::kLoadingTimeout;
 // static
 constexpr base::TimeDelta PowerModeVoter::kStuckLoadingTimeout;
@@ -169,9 +167,6 @@ void FrameProductionPowerModeVoter::OnFrameProduced(
   in_nop_animation_ = false;
   last_frame_produced_timestamp_ = now;
   voter_->VoteFor(vote);
-
-  if (!needs_begin_frames_)
-    voter_->ResetVoteAfterTimeout(PowerModeVoter::kAnimationTimeout);
 }
 
 void FrameProductionPowerModeVoter::OnFrameSkipped(bool frame_completed,

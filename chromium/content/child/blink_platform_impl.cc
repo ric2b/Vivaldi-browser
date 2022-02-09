@@ -12,18 +12,19 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
@@ -32,9 +33,7 @@
 #include "build/build_config.h"
 #include "content/app/resources/grit/content_resources.h"
 #include "content/child/child_thread_impl.h"
-#include "content/common/appcache_interfaces.h"
 #include "content/common/child_process.mojom.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -97,7 +96,7 @@ class NestedMessageLoopRunnerImpl
   }
 
  private:
-  base::RunLoop* run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> run_loop_ = nullptr;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };
@@ -117,6 +116,11 @@ class ThreadSafeBrowserInterfaceBrokerProxyImpl
   ThreadSafeBrowserInterfaceBrokerProxyImpl()
       : process_host_(GetChildProcessHost()) {}
 
+  ThreadSafeBrowserInterfaceBrokerProxyImpl(
+      const ThreadSafeBrowserInterfaceBrokerProxyImpl&) = delete;
+  ThreadSafeBrowserInterfaceBrokerProxyImpl& operator=(
+      const ThreadSafeBrowserInterfaceBrokerProxyImpl&) = delete;
+
   // blink::ThreadSafeBrowserInterfaceBrokerProxy implementation:
   void GetInterfaceImpl(mojo::GenericPendingReceiver receiver) override {
     if (process_host_)
@@ -127,8 +131,6 @@ class ThreadSafeBrowserInterfaceBrokerProxyImpl
   ~ThreadSafeBrowserInterfaceBrokerProxyImpl() override = default;
 
   const mojo::SharedRemote<mojom::ChildProcessHost> process_host_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThreadSafeBrowserInterfaceBrokerProxyImpl);
 };
 
 }  // namespace
@@ -217,10 +219,6 @@ blink::WebCrypto* BlinkPlatformImpl::Crypto() {
 blink::ThreadSafeBrowserInterfaceBrokerProxy*
 BlinkPlatformImpl::GetBrowserInterfaceBroker() {
   return browser_interface_broker_proxy_.get();
-}
-
-bool BlinkPlatformImpl::IsURLSupportedForAppCache(const blink::WebURL& url) {
-  return IsSchemeSupportedForAppCache(url);
 }
 
 bool BlinkPlatformImpl::IsURLSavableForSavableResource(

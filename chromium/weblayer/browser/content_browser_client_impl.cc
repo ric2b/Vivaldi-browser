@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -137,7 +136,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ui/base/resource/resource_bundle_android.h"
-#include "weblayer/browser/android/metrics/weblayer_metrics_navigation_throttle.h"
 #include "weblayer/browser/android/metrics/weblayer_metrics_service_client.h"
 #include "weblayer/browser/android_descriptors.h"
 #include "weblayer/browser/bluetooth/weblayer_bluetooth_delegate_impl_client.h"
@@ -309,12 +307,12 @@ ContentBrowserClientImpl::~ContentBrowserClientImpl() = default;
 
 std::unique_ptr<content::BrowserMainParts>
 ContentBrowserClientImpl::CreateBrowserMainParts(
-    const content::MainFunctionParams& parameters) {
+    content::MainFunctionParams parameters) {
   // This should be called after CreateFeatureListAndFieldTrials(), which
   // creates |local_state_|.
   DCHECK(local_state_);
   std::unique_ptr<BrowserMainPartsImpl> browser_main_parts =
-      std::make_unique<BrowserMainPartsImpl>(params_, parameters,
+      std::make_unique<BrowserMainPartsImpl>(params_, std::move(parameters),
                                              std::move(local_state_));
 
   return browser_main_parts;
@@ -327,16 +325,6 @@ std::string ContentBrowserClientImpl::GetApplicationLocale() {
 std::string ContentBrowserClientImpl::GetAcceptLangs(
     content::BrowserContext* context) {
   return i18n::GetAcceptLangs();
-}
-
-bool ContentBrowserClientImpl::AllowAppCache(
-    const GURL& manifest_url,
-    const net::SiteForCookies& site_for_cookies,
-    const absl::optional<url::Origin>& top_frame_origin,
-    content::BrowserContext* context) {
-  return embedder_support::AllowAppCache(
-      manifest_url, site_for_cookies, top_frame_origin,
-      CookieSettingsFactory::GetForBrowserContext(context).get());
 }
 
 content::AllowServiceWorkerResult ContentBrowserClientImpl::AllowServiceWorker(
@@ -637,7 +625,7 @@ void ContentBrowserClientImpl::OverridePageVisibilityState(
       NoStatePrefetchManagerFactory::GetForBrowserContext(
           web_contents->GetBrowserContext());
   if (no_state_prefetch_manager &&
-      no_state_prefetch_manager->IsWebContentsPrerendering(web_contents)) {
+      no_state_prefetch_manager->IsWebContentsPrefetching(web_contents)) {
     *visibility_state = content::PageVisibilityState::kHiddenButPainting;
   }
 }
@@ -783,15 +771,16 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
     navigation_controller =
         static_cast<NavigationControllerImpl*>(tab->GetNavigationController());
   }
+
+  NavigationImpl* navigation_impl = nullptr;
+  if (navigation_controller) {
+    navigation_impl =
+        navigation_controller->GetNavigationImplFromHandle(handle);
+  }
+
   if (handle->IsInMainFrame()) {
     NavigationUIDataImpl* navigation_ui_data =
         static_cast<NavigationUIDataImpl*>(handle->GetNavigationUIData());
-
-    NavigationImpl* navigation_impl = nullptr;
-    if (navigation_controller) {
-      navigation_impl =
-          navigation_controller->GetNavigationImplFromHandle(handle);
-    }
 
     if ((!navigation_ui_data ||
          !navigation_ui_data->disable_network_error_auto_reload()) &&
@@ -803,11 +792,6 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
       if (auto_reload_throttle)
         throttles.push_back(std::move(auto_reload_throttle));
     }
-
-#if defined(OS_ANDROID)
-    throttles.push_back(
-        std::make_unique<WebLayerMetricsNavigationThrottle>(handle));
-#endif
 
     // MetricsNavigationThrottle requires that it runs before
     // NavigationThrottles that may delay or cancel navigations, so only
@@ -852,14 +836,15 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
   }
 
 #if defined(OS_ANDROID)
-  if (handle->IsInMainFrame()) {
-    if (base::FeatureList::IsEnabled(features::kWebLayerSafeBrowsing) &&
-        IsSafebrowsingSupported()) {
-      throttles.push_back(
-          GetSafeBrowsingService()->CreateSafeBrowsingNavigationThrottle(
-              handle));
-    }
+  if (IsSafebrowsingSupported()) {
+    std::unique_ptr<content::NavigationThrottle> safe_browsing_throttle =
+        GetSafeBrowsingService()->MaybeCreateSafeBrowsingNavigationThrottleFor(
+            handle);
+    if (safe_browsing_throttle)
+      throttles.push_back(std::move(safe_browsing_throttle));
+  }
 
+  if (!navigation_impl || !navigation_impl->disable_intent_processing()) {
     std::unique_ptr<content::NavigationThrottle> intercept_navigation_throttle =
         navigation_interception::InterceptNavigationDelegate::
             MaybeCreateThrottleFor(
@@ -1153,7 +1138,7 @@ ContentBrowserClientImpl::CreateLoginDelegate(
     const net::AuthChallengeInfo& auth_info,
     content::WebContents* web_contents,
     const content::GlobalRequestID& request_id,
-    bool is_main_frame,
+    bool is_request_for_primary_main_frame,
     const GURL& url,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
@@ -1223,8 +1208,7 @@ bool ContentBrowserClientImpl::IsClipboardPasteAllowed(
 
   const GURL& url = render_frame_host->GetLastCommittedOrigin().GetURL();
   content::BrowserContext* browser_context =
-      content::WebContents::FromRenderFrameHost(render_frame_host)
-          ->GetBrowserContext();
+      render_frame_host->GetBrowserContext();
   DCHECK(browser_context);
 
   content::PermissionController* permission_controller =
@@ -1240,6 +1224,11 @@ bool ContentBrowserClientImpl::IsClipboardPasteAllowed(
     return false;
   }
 
+  return true;
+}
+
+bool ContentBrowserClientImpl::ShouldPreconnectNavigation(
+    content::BrowserContext* browser_context) {
   return true;
 }
 

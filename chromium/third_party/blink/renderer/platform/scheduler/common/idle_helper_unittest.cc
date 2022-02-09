@@ -9,11 +9,11 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/task/sequence_manager/sequence_manager.h"
 #include "base/task/sequence_manager/task_queue.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
 #include "base/task/sequence_manager/time_domain.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -656,9 +656,7 @@ TEST_F(IdleHelperTest, TestLongIdlePeriodPaused) {
   // There shouldn't be any delayed tasks posted by the idle helper when paused.
   base::sequence_manager::LazyNow lazy_now_1(
       test_task_runner_->GetMockTickClock());
-  EXPECT_TRUE(scheduler_helper_->real_time_domain()
-                  ->GetNextDelayedTaskTime(&lazy_now_1)
-                  .is_max());
+  EXPECT_FALSE(scheduler_helper_->GetNextWakeUp());
 
   // Posting a task should transition us to the an active state.
   g_max_idle_task_reposts = 2;
@@ -680,9 +678,7 @@ TEST_F(IdleHelperTest, TestLongIdlePeriodPaused) {
   CheckIdlePeriodStateIs("in_long_idle_period_paused");
   base::sequence_manager::LazyNow lazy_now_2(
       test_task_runner_->GetMockTickClock());
-  EXPECT_TRUE(scheduler_helper_->real_time_domain()
-                  ->GetNextDelayedTaskTime(&lazy_now_2)
-                  .is_max());
+  EXPECT_FALSE(scheduler_helper_->GetNextWakeUp());
 
   idle_helper_->EndIdlePeriod();
   CheckIdlePeriodStateIs("not_in_idle_period");

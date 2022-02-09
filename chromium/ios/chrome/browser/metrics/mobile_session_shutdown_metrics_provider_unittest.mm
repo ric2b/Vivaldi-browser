@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -90,9 +89,7 @@ class MobileSessionShutdownMetricsProviderTest
   void InitializeMetrics() {
     metrics_state_ = metrics::MetricsStateManager::Create(
         &local_state_, new metrics::TestEnabledStateProvider(false, false),
-        std::wstring(), base::FilePath(), metrics::StartupVisibility::kUnknown,
-        metrics::MetricsStateManager::StoreClientInfoCallback(),
-        metrics::MetricsStateManager::LoadClientInfoCallback());
+        std::wstring(), base::FilePath());
     metrics_state_->InstantiateFieldTrialList();
     metrics_service_.reset(new metrics::MetricsService(
         metrics_state_.get(), &metrics_client_, &local_state_));

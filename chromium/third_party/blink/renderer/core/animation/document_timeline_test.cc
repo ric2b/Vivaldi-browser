@@ -45,7 +45,8 @@
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_timeline.h"
-#include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 // NaN has the special property that NaN != NaN.
@@ -98,7 +99,7 @@ class TestDocumentTimeline : public DocumentTimeline {
 class AnimationDocumentTimelineTest : public PageTestBase {
  protected:
   void SetUp() override {
-    PageTestBase::SetUp(IntSize());
+    PageTestBase::SetUp(gfx::Size());
     document = &GetDocument();
     GetAnimationClock().ResetTimeForTesting();
     GetAnimationClock().SetAllowedToDynamicallyUpdateTime(false);
@@ -144,7 +145,7 @@ class AnimationDocumentTimelineTest : public PageTestBase {
 class AnimationDocumentTimelineRealTimeTest : public PageTestBase {
  protected:
   void SetUp() override {
-    PageTestBase::SetUp(IntSize());
+    PageTestBase::SetUp(gfx::Size());
     document = &GetDocument();
     timeline = document->Timeline();
     GetAnimationClock().SetAllowedToDynamicallyUpdateTime(false);
@@ -361,7 +362,7 @@ TEST_F(AnimationDocumentTimelineTest, PlaybackRateFastWithOriginTime) {
 }
 
 TEST_F(AnimationDocumentTimelineTest, PauseForTesting) {
-  AnimationTimeDelta seek_time = AnimationTimeDelta::FromSecondsD(1);
+  AnimationTimeDelta seek_time = ANIMATION_TIME_DELTA_FROM_SECONDS(1);
   timing.fill_mode = Timing::FillMode::FORWARDS;
   auto* anim1 = MakeGarbageCollected<KeyframeEffect>(
       element.Get(), CreateEmptyEffectModel(), timing);
@@ -380,8 +381,8 @@ TEST_F(AnimationDocumentTimelineTest, PauseForTesting) {
 }
 
 TEST_F(AnimationDocumentTimelineTest, DelayBeforeAnimationStart) {
-  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(2);
-  timing.start_delay = AnimationTimeDelta::FromSecondsD(5);
+  timing.iteration_duration = ANIMATION_TIME_DELTA_FROM_SECONDS(2);
+  timing.start_delay = ANIMATION_TIME_DELTA_FROM_SECONDS(5);
 
   auto* keyframe_effect = MakeGarbageCollected<KeyframeEffect>(
       element.Get(), CreateEmptyEffectModel(), timing);
@@ -416,8 +417,8 @@ TEST_F(AnimationDocumentTimelineTest, UseAnimationAfterTimelineDeref) {
 }
 
 TEST_F(AnimationDocumentTimelineTest, PlayAfterDocumentDeref) {
-  timing.iteration_duration = AnimationTimeDelta::FromSecondsD(2);
-  timing.start_delay = AnimationTimeDelta::FromSecondsD(5);
+  timing.iteration_duration = ANIMATION_TIME_DELTA_FROM_SECONDS(2);
+  timing.start_delay = ANIMATION_TIME_DELTA_FROM_SECONDS(5);
 
   DocumentTimeline* timeline = &document->Timeline();
   document = nullptr;

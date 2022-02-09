@@ -11,9 +11,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-  #pragma hdrstop
-#endif
 
 #if wxUSE_STREAMS
 
@@ -35,13 +32,21 @@ wxTextInputStream::wxTextInputStream(wxInputStream &s,
                                      const wxMBConv& conv)
   : m_input(s), m_separators(sep), m_conv(conv.Clone())
 {
-    memset((void*)m_lastBytes, 0, 10);
+    m_validBegin =
+    m_validEnd = 0;
+
+#if SIZEOF_WCHAR_T == 2
+    m_lastWChar = 0;
+#endif // SIZEOF_WCHAR_T == 2
 }
 #else
 wxTextInputStream::wxTextInputStream(wxInputStream &s, const wxString &sep)
   : m_input(s), m_separators(sep)
 {
-    memset((void*)m_lastBytes, 0, 10);
+    m_validBegin =
+    m_validEnd = 0;
+
+    m_lastBytes[0] = 0;
 }
 #endif
 
@@ -54,25 +59,59 @@ wxTextInputStream::~wxTextInputStream()
 
 void wxTextInputStream::UngetLast()
 {
-    size_t byteCount = 0;
-    while(m_lastBytes[byteCount]) // pseudo ANSI strlen (even for Unicode!)
-        byteCount++;
-    m_input.Ungetch(m_lastBytes, byteCount);
-    memset((void*)m_lastBytes, 0, 10);
+    if ( m_validEnd )
+    {
+        m_input.Ungetch(m_lastBytes, m_validEnd);
+
+        m_validBegin =
+        m_validEnd = 0;
+    }
 }
 
-wxChar wxTextInputStream::NextChar()
+wxChar wxTextInputStream::GetChar()
 {
 #if wxUSE_UNICODE
-    wxChar wbuf[2];
-    memset((void*)m_lastBytes, 0, 10);
-    for(size_t inlen = 0; inlen < 9; inlen++)
+#if SIZEOF_WCHAR_T == 2
+    // Return the already raed character remaining from the last call to this
+    // function, if any.
+    if ( m_lastWChar )
     {
-        // actually read the next character
-        m_lastBytes[inlen] = m_input.GetC();
+        const wxChar wc = m_lastWChar;
+        m_lastWChar = 0;
+        return wc;
+    }
+#endif // SIZEOF_WCHAR_T
 
-        if(m_input.LastRead() <= 0)
-            return wxEOT;
+    // If we have any non-decoded bytes left from the last call, shift them to
+    // be at the beginning of the buffer.
+    if ( m_validBegin < m_validEnd )
+    {
+        m_validEnd -= m_validBegin;
+        memmove(m_lastBytes, m_lastBytes + m_validBegin, m_validEnd);
+    }
+    else // All bytes were already decoded and consumed.
+    {
+        m_validEnd = 0;
+    }
+
+    // We may need to decode up to 6 characters if we have input starting with
+    // 2 null bytes (like in UTF-32BE BOM), and then 3 bytes that look like
+    // the start of UTF-8 sequence, as decoding it will only succeed when
+    // 6 bytes are read -- and will yield 6 wide characters.
+    wxChar wbuf[6];
+    for(size_t inlen = 0; inlen < sizeof(m_lastBytes); inlen++)
+    {
+        if ( inlen >= m_validEnd )
+        {
+            // actually read the next character
+            m_lastBytes[inlen] = m_input.GetC();
+
+            if (m_input.LastRead() == 0)
+                return 0;
+
+            m_validEnd++;
+        }
+        //else: Retry decoding what we already have in the buffer.
 
         switch ( m_conv->ToWChar(wbuf, WXSIZEOF(wbuf), m_lastBytes, inlen + 1) )
         {
@@ -88,27 +127,58 @@ wxChar wxTextInputStream::NextChar()
                 break;
 
             default:
-                // if we couldn't decode a single character during the last
-                // loop iteration we shouldn't be able to decode 2 or more of
-                // them with an extra single byte, something fishy is going on
-                wxFAIL_MSG("unexpected decoding result");
-                // fall through nevertheless and return at least something
+                // If we couldn't decode a single character during the last
+                // loop iteration, but decoded more than one of them with just
+                // one extra byte, the only explanation is that we were using a
+                // wxConvAuto conversion recognizing the initial BOM and that
+                // it couldn't detect the presence or absence of BOM so far,
+                // but now finally has enough data to see that there is none, or
+                // it was trying to decode the data as UTF-8 sequence, but now
+                // recognized that it's not valid UTF-8 and switched to fallback.
+                // We don't know how long is the first character or if it's decoded
+                // as 1 or 2 wchar_t characters, so we need to start with 1 byte again.
+                inlen = static_cast<size_t>(-1);
+                break;
+
+#if SIZEOF_WCHAR_T == 2
+            case 2:
+                // When wchar_t uses UTF-16, we could have decoded a single
+                // Unicode code point as 2 wchar_t characters and there is
+                // nothing else to do here but to return the first one now and
+                // remember the second one for the next call, as there is no
+                // way to fit both of them into a single wxChar in this case.
+                m_lastWChar = wbuf[1];
+                wxFALLTHROUGH;
+#endif // SIZEOF_WCHAR_T == 2
 
             case 1:
+                m_validBegin = inlen + 1;
+
                 // we finally decoded a character
                 return wbuf[0];
         }
     }
 
-    // there should be no encoding which requires more than nine bytes for one
-    // character so something must be wrong with our conversion but we have no
-    // way to signal it from here
-    return wxEOT;
+    // There should be no encoding which requires more than 10 bytes to decode
+    // at least one character (the most actually seems to be 7: 3 for the
+    // initial BOM, which is ignored, and 4 for the longest possible encoding
+    // of a Unicode character in UTF-8), so something must be wrong with our
+    // conversion but we have no way to signal it from here and just return 0
+    // as if we reached the end of the stream.
+    m_validBegin = 0;
+    m_validEnd = sizeof(m_lastBytes);
+
+    return 0;
 #else
     m_lastBytes[0] = m_input.GetC();
 
     if(m_input.LastRead() <= 0)
-        return wxEOT;
+    {
+        m_validEnd = 0;
+        return 0;
+    }
+
+    m_validEnd = 1;
 
     return m_lastBytes[0];
 #endif
@@ -119,8 +189,9 @@ wxChar wxTextInputStream::NextNonSeparators()
 {
     for (;;)
     {
-        wxChar c = NextChar();
-        if (c == wxEOT) return (wxChar) 0;
+        wxChar c = GetChar();
+        if (!c)
+            return c;
 
         if (c != wxT('\n') &&
             c != wxT('\r') &&
@@ -136,14 +207,29 @@ bool wxTextInputStream::EatEOL(const wxChar &c)
 
     if (c == wxT('\r')) // eat on both Mac and DOS
     {
-        wxChar c2 = NextChar();
-        if(c2 == wxEOT) return true; // end of stream reached, had enough :-)
+        wxChar c2 = GetChar();
+        if (!c2) return true; // end of stream reached, had enough :-)
 
         if (c2 != wxT('\n')) UngetLast(); // Don't eat on Mac
         return true;
     }
 
     return false;
+}
+
+wxUint64 wxTextInputStream::Read64(int base)
+{
+    wxASSERT_MSG( !base || (base > 1 && base <= 36), wxT("invalid base") );
+    if(!m_input) return 0;
+
+    wxString word = ReadWord();
+    if(word.empty())
+        return 0;
+
+    wxUint64 res;
+    if(!word.ToULongLong(&res, base))
+        return 0;
+    return res;
 }
 
 wxUint32 wxTextInputStream::Read32(int base)
@@ -165,6 +251,21 @@ wxUint16 wxTextInputStream::Read16(int base)
 wxUint8 wxTextInputStream::Read8(int base)
 {
     return (wxUint8)Read32(base);
+}
+
+wxInt64 wxTextInputStream::Read64S(int base)
+{
+    wxASSERT_MSG( !base || (base > 1 && base <= 36), wxT("invalid base") );
+    if(!m_input) return 0;
+
+    wxString word = ReadWord();
+    if(word.empty())
+        return 0;
+
+    wxInt64 res;
+    if(!word.ToLongLong(&res, base))
+        return 0;
+    return res;
 }
 
 wxInt32 wxTextInputStream::Read32S(int base)
@@ -197,24 +298,27 @@ double wxTextInputStream::ReadDouble()
     return wxStrtod(word.c_str(), 0);
 }
 
-#if WXWIN_COMPATIBILITY_2_6
-
-wxString wxTextInputStream::ReadString()
-{
-    return ReadLine();
-}
-
-#endif // WXWIN_COMPATIBILITY_2_6
-
 wxString wxTextInputStream::ReadLine()
 {
     wxString line;
 
-    while ( !m_input.Eof() )
+    for ( ;; )
     {
-        wxChar c = NextChar();
-        if(c == wxEOT)
+        wxChar c = GetChar();
+        if ( m_input.Eof() )
             break;
+
+        if (!c)
+        {
+            // If we failed to get a character and the stream is not at EOF, it
+            // can only mean that decoding the stream contents using our
+            // conversion object failed. In this case, we must signal an error
+            // at the stream level, as otherwise the code using this function
+            // would never know that something went wrong and would continue
+            // calling it again and again, resulting in an infinite loop.
+            m_input.Reset(wxSTREAM_READ_ERROR);
+            break;
+        }
 
         if (EatEOL(c))
             break;
@@ -240,8 +344,8 @@ wxString wxTextInputStream::ReadWord()
 
     while ( !m_input.Eof() )
     {
-        c = NextChar();
-        if(c == wxEOT)
+        c = GetChar();
+        if (!c)
             break;
 
         if (m_separators.Find(c) >= 0)
@@ -265,7 +369,7 @@ wxTextInputStream& wxTextInputStream::operator>>(wxString& word)
 wxTextInputStream& wxTextInputStream::operator>>(char& c)
 {
     c = m_input.GetC();
-    if(m_input.LastRead() <= 0) c = 0;
+    if (m_input.LastRead() == 0) c = 0;
 
     if (EatEOL(c))
         c = '\n';
@@ -286,13 +390,19 @@ wxTextInputStream& wxTextInputStream::operator>>(wchar_t& wc)
 
 wxTextInputStream& wxTextInputStream::operator>>(wxInt16& i)
 {
-    i = (wxInt16)Read16();
+    i = Read16S();
     return *this;
 }
 
 wxTextInputStream& wxTextInputStream::operator>>(wxInt32& i)
 {
-    i = (wxInt32)Read32();
+    i = Read32S();
+    return *this;
+}
+
+wxTextInputStream& wxTextInputStream::operator>>(wxInt64& i)
+{
+    i = Read64S();
     return *this;
 }
 
@@ -305,6 +415,12 @@ wxTextInputStream& wxTextInputStream::operator>>(wxUint16& i)
 wxTextInputStream& wxTextInputStream::operator>>(wxUint32& i)
 {
     i = Read32();
+    return *this;
+}
+
+wxTextInputStream& wxTextInputStream::operator>>(wxUint64& i)
+{
+    i = Read64();
     return *this;
 }
 
@@ -335,12 +451,16 @@ wxTextOutputStream::wxTextOutputStream(wxOutputStream& s, wxEOL mode)
     m_mode = mode;
     if (m_mode == wxEOL_NATIVE)
     {
-#if defined(__WINDOWS__) || defined(__WXPM__)
+#if defined(__WINDOWS__)
         m_mode = wxEOL_DOS;
 #else
         m_mode = wxEOL_UNIX;
 #endif
     }
+
+#if wxUSE_UNICODE && SIZEOF_WCHAR_T == 2
+    m_lastWChar = 0;
+#endif // SIZEOF_WCHAR_T == 2
 }
 
 wxTextOutputStream::~wxTextOutputStream()
@@ -355,12 +475,17 @@ void wxTextOutputStream::SetMode(wxEOL mode)
     m_mode = mode;
     if (m_mode == wxEOL_NATIVE)
     {
-#if defined(__WINDOWS__) || defined(__WXPM__)
+#if defined(__WINDOWS__)
         m_mode = wxEOL_DOS;
 #else
         m_mode = wxEOL_UNIX;
 #endif
     }
+}
+
+void wxTextOutputStream::Write64(wxUint64 i)
+{
+    WriteString(wxString::Format("%" wxLongLongFmtSpec "u", i));
 }
 
 void wxTextOutputStream::Write32(wxUint32 i)
@@ -419,7 +544,7 @@ void wxTextOutputStream::WriteString(const wxString& string)
 
                 default:
                     wxFAIL_MSG( wxT("unknown EOL mode in wxTextOutputStream") );
-                    // fall through
+                    wxFALLTHROUGH;
 
                 case wxEOL_UNIX:
                     // don't treat '\n' specially
@@ -442,7 +567,66 @@ void wxTextOutputStream::WriteString(const wxString& string)
 wxTextOutputStream& wxTextOutputStream::PutChar(wxChar c)
 {
 #if wxUSE_UNICODE
+#if SIZEOF_WCHAR_T == 2
+    wxCharBuffer buffer;
+    size_t len;
+    if ( m_lastWChar )
+    {
+        wxChar buf[2];
+        buf[0] = m_lastWChar;
+        buf[1] = c;
+        buffer = m_conv->cWC2MB(buf, WXSIZEOF(buf), &len);
+        m_lastWChar = 0;
+    }
+    else
+    {
+        buffer = m_conv->cWC2MB(&c, 1, &len);
+    }
+
+    if ( !len )
+    {
+        // Conversion failed, possibly because we have the first half of a
+        // surrogate character, so just store it and write it out when the
+        // second half is written to the stream too later.
+        //
+        // Notice that if we already had had a valid m_lastWChar, it is simply
+        // discarded here which is very bad, but there is no way to signal an
+        // error from here and this is not worse than the old code behaviour.
+        m_lastWChar = c;
+    }
+    else
+    {
+        for ( size_t n = 0; n < len; n++ )
+        {
+            const char c2 = buffer[n];
+            if ( c2 == '\n' )
+            {
+                switch ( m_mode )
+                {
+                    case wxEOL_DOS:
+                        m_output.Write("\r\n", 2);
+                        continue;
+
+                    case wxEOL_MAC:
+                        m_output.Write("\r", 1);
+                        continue;
+
+                    default:
+                        wxFAIL_MSG( wxT("unknown EOL mode in wxTextOutputStream") );
+                        wxFALLTHROUGH;
+
+                    case wxEOL_UNIX:
+                        // don't treat '\n' specially
+                        ;
+                }
+            }
+
+            m_output.Write(&c2, 1);
+        }
+    }
+#else // SIZEOF_WCHAR_T == 4
     WriteString( wxString(&c, *m_conv, 1) );
+#endif // SIZEOF_WCHAR_T == 2 or 4
 #else
     WriteString( wxString(&c, wxConvLocal, 1) );
 #endif
@@ -479,7 +663,7 @@ wxTextOutputStream& wxTextOutputStream::operator<<(char c)
 
 wxTextOutputStream& wxTextOutputStream::operator<<(wchar_t wc)
 {
-    WriteString( wxString(&wc, *m_conv, 1) );
+    PutChar(wc);
 
     return *this;
 }
@@ -488,49 +672,55 @@ wxTextOutputStream& wxTextOutputStream::operator<<(wchar_t wc)
 
 wxTextOutputStream& wxTextOutputStream::operator<<(wxInt16 c)
 {
-    wxString str;
-    str.Printf(wxT("%d"), (signed int)c);
-    WriteString(str);
+    Write(c);
 
     return *this;
 }
 
 wxTextOutputStream& wxTextOutputStream::operator<<(wxInt32 c)
 {
-    wxString str;
-    str.Printf(wxT("%ld"), (signed long)c);
-    WriteString(str);
+    Write(c);
+
+    return *this;
+}
+
+wxTextOutputStream& wxTextOutputStream::operator<<(wxInt64 c)
+{
+    Write(c);
 
     return *this;
 }
 
 wxTextOutputStream& wxTextOutputStream::operator<<(wxUint16 c)
 {
-    wxString str;
-    str.Printf(wxT("%u"), (unsigned int)c);
-    WriteString(str);
+    Write(c);
 
     return *this;
 }
 
 wxTextOutputStream& wxTextOutputStream::operator<<(wxUint32 c)
 {
-    wxString str;
-    str.Printf(wxT("%lu"), (unsigned long)c);
-    WriteString(str);
+    Write(c);
+
+    return *this;
+}
+
+wxTextOutputStream& wxTextOutputStream::operator<<(wxUint64 c)
+{
+    Write(c);
 
     return *this;
 }
 
 wxTextOutputStream &wxTextOutputStream::operator<<(double f)
 {
-    WriteDouble(f);
+    Write(f);
     return *this;
 }
 
 wxTextOutputStream& wxTextOutputStream::operator<<(float f)
 {
-    WriteDouble((double)f);
+    Write(f);
     return *this;
 }
 

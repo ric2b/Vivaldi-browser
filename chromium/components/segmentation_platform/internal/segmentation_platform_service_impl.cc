@@ -8,8 +8,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
@@ -24,6 +26,7 @@
 #include "components/segmentation_platform/internal/execution/feature_aggregator_impl.h"
 #include "components/segmentation_platform/internal/execution/model_execution_manager.h"
 #include "components/segmentation_platform/internal/execution/model_execution_manager_factory.h"
+#include "components/segmentation_platform/internal/platform_options.h"
 #include "components/segmentation_platform/internal/proto/model_prediction.pb.h"
 #include "components/segmentation_platform/internal/proto/signal.pb.h"
 #include "components/segmentation_platform/internal/proto/signal_storage_config.pb.h"
@@ -85,11 +88,12 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
     PrefService* pref_service,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     base::Clock* clock,
-    std::vector<std::unique_ptr<Config>> config)
+    std::vector<std::unique_ptr<Config>> configs)
     : model_provider_(model_provider),
       task_runner_(task_runner),
       clock_(clock),
-      configs_(std::move(config)) {
+      platform_options_(PlatformOptions::CreateDefault()),
+      configs_(std::move(configs)) {
   // Construct databases.
   segment_info_database_ =
       std::make_unique<SegmentInfoDatabase>(std::move(segment_db));
@@ -99,6 +103,8 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
       std::move(signal_storage_config_db), clock);
   segmentation_result_prefs_ =
       std::make_unique<SegmentationResultPrefs>(pref_service);
+  proxy_ =
+      std::make_unique<ServiceProxyImpl>(this, segment_info_database_.get());
 
   // Construct signal processors.
   user_action_signal_handler_ =
@@ -113,7 +119,8 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
     segment_selectors_[config->segmentation_key] =
         std::make_unique<SegmentSelectorImpl>(
             segment_info_database_.get(), signal_storage_config_.get(),
-            segmentation_result_prefs_.get(), config.get(), clock);
+            segmentation_result_prefs_.get(), config.get(), clock,
+            platform_options_);
   }
 
   for (const auto& config : configs_) {
@@ -146,6 +153,7 @@ SegmentationPlatformServiceImpl::~SegmentationPlatformServiceImpl() = default;
 void SegmentationPlatformServiceImpl::GetSelectedSegment(
     const std::string& segmentation_key,
     SegmentSelectionCallback callback) {
+  CHECK(segment_selectors_.find(segmentation_key) != segment_selectors_.end());
   auto& selector = segment_selectors_.at(segmentation_key);
   selector->GetSelectedSegment(std::move(callback));
 }
@@ -153,6 +161,10 @@ void SegmentationPlatformServiceImpl::GetSelectedSegment(
 void SegmentationPlatformServiceImpl::EnableMetrics(
     bool signal_collection_allowed) {
   signal_filter_processor_->EnableMetrics(signal_collection_allowed);
+}
+
+ServiceProxy* SegmentationPlatformServiceImpl::GetServiceProxy() {
+  return proxy_.get();
 }
 
 void SegmentationPlatformServiceImpl::OnSegmentInfoDatabaseInitialized(
@@ -187,6 +199,8 @@ void SegmentationPlatformServiceImpl::MaybeRunPostInitializationRoutines() {
   bool init_success = segment_info_database_initialized_ &&
                       signal_database_initialized_ &&
                       signal_storage_config_initialized_;
+
+  OnServiceStatusChanged();
   if (!init_success)
     return;
 
@@ -203,7 +217,8 @@ void SegmentationPlatformServiceImpl::MaybeRunPostInitializationRoutines() {
     observers.push_back(key_and_selector.second.get());
   model_execution_scheduler_ = std::make_unique<ModelExecutionSchedulerImpl>(
       std::move(observers), segment_info_database_.get(),
-      signal_storage_config_.get(), model_execution_manager_.get(), clock_);
+      signal_storage_config_.get(), model_execution_manager_.get(),
+      all_segment_ids_, clock_, platform_options_);
 
   signal_filter_processor_->OnSignalListUpdated();
   model_execution_scheduler_->RequestModelExecutionForEligibleSegments(
@@ -232,6 +247,22 @@ void SegmentationPlatformServiceImpl::OnSegmentationModelUpdated(
 
 void SegmentationPlatformServiceImpl::OnExecuteDatabaseMaintenanceTasks() {
   database_maintenance_->ExecuteMaintenanceTasks();
+}
+
+void SegmentationPlatformServiceImpl::OnServiceStatusChanged() {
+  int status = static_cast<int>(ServiceStatus::kUninitialized);
+  if (IsInitializationFinished()) {
+    if (segment_info_database_initialized_)
+      status |= static_cast<int>(ServiceStatus::kSegmentationInfoDbInitialized);
+    if (signal_database_initialized_)
+      status |= static_cast<int>(ServiceStatus::kSignalDbInitialized);
+    if (signal_storage_config_initialized_) {
+      status |=
+          static_cast<int>(ServiceStatus::kSignalStorageConfigInitialized);
+    }
+  }
+
+  proxy_->OnServiceStatusChanged(IsInitializationFinished(), status);
 }
 
 // static

@@ -6,7 +6,8 @@
 
 #include "base/containers/contains.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
+#include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/printing/print_job.h"
@@ -30,9 +31,10 @@ class BackgroundPrintingManager::Observer
   Observer(BackgroundPrintingManager* manager, WebContents* web_contents);
 
  private:
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
 
-  BackgroundPrintingManager* manager_;
+  raw_ptr<BackgroundPrintingManager> manager_;
 };
 
 BackgroundPrintingManager::Observer::Observer(
@@ -41,7 +43,7 @@ BackgroundPrintingManager::Observer::Observer(
       manager_(manager) {
 }
 
-void BackgroundPrintingManager::Observer::RenderProcessGone(
+void BackgroundPrintingManager::Observer::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
   manager_->DeletePreviewContents(web_contents());
 }

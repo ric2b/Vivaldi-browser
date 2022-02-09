@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_UNACCELERATED_STATIC_BITMAP_IMAGE_H_
 
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
@@ -33,8 +33,8 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
 
   void Draw(cc::PaintCanvas*,
             const cc::PaintFlags&,
-            const FloatRect& dst_rect,
-            const FloatRect& src_rect,
+            const gfx::RectF& dst_rect,
+            const gfx::RectF& src_rect,
             const ImageDrawOptions&) override;
 
   PaintImage PaintImageForCurrentFrame() override;
@@ -49,7 +49,7 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
   UnacceleratedStaticBitmapImage(sk_sp<SkImage>, ImageOrientation);
   UnacceleratedStaticBitmapImage(PaintImage, ImageOrientation);
 
-  IntSize SizeInternal() const override;
+  gfx::Size SizeInternal() const override;
 
   PaintImage paint_image_;
   THREAD_CHECKER(thread_checker_);

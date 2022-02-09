@@ -238,6 +238,7 @@ bool Builder::TargetDefined(BuilderRecord* record, Err* err) {
       !AddDeps(record, target->configs().vector(), err) ||
       !AddDeps(record, target->all_dependent_configs(), err) ||
       !AddDeps(record, target->public_configs(), err) ||
+      !AddGenDeps(record, target->gen_deps(), err) ||
       !AddActionValuesDep(record, target->action_values(), err) ||
       !AddToolchainDep(record, target, err))
     return false;
@@ -409,6 +410,19 @@ bool Builder::AddDeps(BuilderRecord* record,
   return true;
 }
 
+bool Builder::AddGenDeps(BuilderRecord* record,
+                         const LabelTargetVector& targets,
+                         Err* err) {
+  for (const auto& target : targets) {
+    BuilderRecord* dep_record = GetOrCreateRecordOfType(
+        target.label, target.origin, BuilderRecord::ITEM_TARGET, err);
+    if (!dep_record)
+      return false;
+    record->AddGenDep(dep_record);
+  }
+  return true;
+}
+
 bool Builder::AddActionValuesDep(BuilderRecord* record,
                                  const ActionValues& action_values,
                                  Err* err) {
@@ -440,6 +454,9 @@ bool Builder::AddToolchainDep(BuilderRecord* record,
 
 void Builder::RecursiveSetShouldGenerate(BuilderRecord* record, bool force) {
   if (!record->should_generate()) {
+    // This function can encounter cycles because gen_deps aren't a DAG. Setting
+    // the should_generate flag before iterating avoids infinite recursion in
+    // that case.
     record->set_should_generate(true);
 
     // This may have caused the item to go into "resolved and generated" state.

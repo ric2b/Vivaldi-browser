@@ -73,6 +73,7 @@ class TestBrowserWindow : public BrowserWindow {
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) const override;
   ui::NativeTheme* GetNativeTheme() override;
+  const ui::ColorProvider* GetColorProvider() const override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override;
   StatusBubble* GetStatusBubble() override;
@@ -122,7 +123,6 @@ class TestBrowserWindow : public BrowserWindow {
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
   void FocusInactivePopupForAccessibility() override {}
-  void FocusHelpBubble() override {}
   void RotatePaneFocus(bool forwards) override {}
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
@@ -227,6 +227,12 @@ class TestBrowserWindow : public BrowserWindow {
 
   void CreateTabSearchBubble() override {}
   void CloseTabSearchBubble() override {}
+
+#if BUILDFLAG(ENABLE_SIDE_SEARCH)
+  bool IsSideSearchPanelVisible() const override;
+  void MaybeRestoreSideSearchStatePerWindow(
+      const std::map<std::string, std::string>& extra_data) override;
+#endif
 
   FeaturePromoController* GetFeaturePromoController() override;
 

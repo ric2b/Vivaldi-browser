@@ -29,7 +29,6 @@
 #include "components/invalidation/impl/fcm_invalidation_service.h"
 #include "components/invalidation/impl/fcm_network_handler.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
-#include "components/policy/core/common/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
@@ -55,6 +54,12 @@
 #include "chrome/browser/policy/browser_dm_token_storage_win.h"
 #include "chrome/install_static/install_util.h"
 #endif  // defined(OS_WIN)
+
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+#include "chrome/browser/enterprise/connectors/device_trust/device_trust_features.h"
+#include "chrome/browser/enterprise/connectors/device_trust/key_management/browser/device_trust_key_manager_impl.h"
+#include "chrome/browser/enterprise/connectors/device_trust/key_management/browser/key_rotation_launcher.h"
+#endif  // defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
 
 #if defined(OS_FUCHSIA)
 #include "chrome/browser/policy/browser_dm_token_storage_fuchsia.h"
@@ -236,10 +241,21 @@ ChromeBrowserCloudManagementControllerDesktop::CreateClientDataDelegate() {
   return std::make_unique<ClientDataDelegateDesktop>();
 }
 
-void ChromeBrowserCloudManagementControllerDesktop::StartInvalidations() {
-  DCHECK(
-      base::FeatureList::IsEnabled(policy::features::kCBCMPolicyInvalidations));
+std::unique_ptr<enterprise_connectors::DeviceTrustKeyManager>
+ChromeBrowserCloudManagementControllerDesktop::CreateDeviceTrustKeyManager() {
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+  if (enterprise_connectors::IsDeviceTrustConnectorFeatureEnabled()) {
+    auto key_rotation_launcher =
+        enterprise_connectors::KeyRotationLauncher::Create(
+            BrowserDMTokenStorage::Get(), GetDeviceManagementService());
+    return std::make_unique<enterprise_connectors::DeviceTrustKeyManagerImpl>(
+        std::move(key_rotation_launcher));
+  }
+#endif  // defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+  return nullptr;
+}
 
+void ChromeBrowserCloudManagementControllerDesktop::StartInvalidations() {
   if (invalidation_service_) {
     NOTREACHED() << "Trying to start an invalidation service when there's "
                     "already one. Please see crbug.com/1186159.";
@@ -275,21 +291,19 @@ void ChromeBrowserCloudManagementControllerDesktop::StartInvalidations() {
       0 /* highest_handled_invalidation_version */);
   policy_invalidator_->Initialize(invalidation_service_.get());
 
-  if (base::FeatureList::IsEnabled(policy::features::kCBCMRemoteCommands)) {
-    g_browser_process->browser_policy_connector()
-        ->machine_level_user_cloud_policy_manager()
-        ->core()
-        ->StartRemoteCommandsService(
-            std::make_unique<enterprise_commands::CBCMRemoteCommandsFactory>(),
-            PolicyInvalidationScope::kCBCM);
+  g_browser_process->browser_policy_connector()
+      ->machine_level_user_cloud_policy_manager()
+      ->core()
+      ->StartRemoteCommandsService(
+          std::make_unique<enterprise_commands::CBCMRemoteCommandsFactory>(),
+          PolicyInvalidationScope::kCBCM);
 
-    commands_invalidator_ = std::make_unique<RemoteCommandsInvalidatorImpl>(
-        g_browser_process->browser_policy_connector()
-            ->machine_level_user_cloud_policy_manager()
-            ->core(),
-        base::DefaultClock::GetInstance(), PolicyInvalidationScope::kCBCM);
-    commands_invalidator_->Initialize(invalidation_service_.get());
-  }
+  commands_invalidator_ = std::make_unique<RemoteCommandsInvalidatorImpl>(
+      g_browser_process->browser_policy_connector()
+          ->machine_level_user_cloud_policy_manager()
+          ->core(),
+      base::DefaultClock::GetInstance(), PolicyInvalidationScope::kCBCM);
+  commands_invalidator_->Initialize(invalidation_service_.get());
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>

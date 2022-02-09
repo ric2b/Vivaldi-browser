@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "chrome/browser/safe_browsing/services_delegate.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 
@@ -47,10 +46,11 @@ class ServicesDelegateDesktop : public ServicesDelegate {
   DownloadProtectionService* GetDownloadService() override;
 
   void StartOnIOThread(
-      scoped_refptr<network::SharedURLLoaderFactory> sb_url_loader_factory,
       scoped_refptr<network::SharedURLLoaderFactory> browser_url_loader_factory,
       const V4ProtocolConfig& v4_config) override;
   void StopOnIOThread(bool shutdown) override;
+
+  void OnProfileWillBeDestroyed(Profile* profile) override;
 
   // Reports the current extended reporting level. Note that this is an
   // estimation and may not always be correct. It is possible that the

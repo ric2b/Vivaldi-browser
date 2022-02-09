@@ -5,6 +5,7 @@
 #include "content/browser/xr/metrics/session_metrics_helper.h"
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "content/browser/xr/metrics/session_timer.h"
 #include "content/browser/xr/metrics/webxr_session_tracker.h"
@@ -30,18 +31,21 @@ constexpr base::TimeDelta kMaximumHeadsetSessionGap(base::Seconds(0));
 // Handles the lifetime of the helper which is attached to a WebContents.
 class SessionMetricsHelperData : public base::SupportsUserData::Data {
  public:
+  SessionMetricsHelperData() = delete;
+
   explicit SessionMetricsHelperData(
       SessionMetricsHelper* session_metrics_helper)
       : session_metrics_helper_(session_metrics_helper) {}
+
+  SessionMetricsHelperData(const SessionMetricsHelperData&) = delete;
+  SessionMetricsHelperData& operator=(const SessionMetricsHelperData&) = delete;
 
   ~SessionMetricsHelperData() override { delete session_metrics_helper_; }
 
   SessionMetricsHelper* get() const { return session_metrics_helper_; }
 
  private:
-  SessionMetricsHelper* session_metrics_helper_;
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(SessionMetricsHelperData);
+  raw_ptr<SessionMetricsHelper> session_metrics_helper_;
 };
 
 // Helper method to log out both the mode and the initially requested features

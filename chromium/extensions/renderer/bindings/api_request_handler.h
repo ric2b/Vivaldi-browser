@@ -10,7 +10,6 @@
 #include <set>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/values.h"
 #include "extensions/renderer/bindings/api_binding_types.h"
 #include "extensions/renderer/bindings/api_last_error.h"
@@ -44,6 +43,18 @@ class APIRequestHandler {
     std::unique_ptr<base::Value> arguments_list;
   };
 
+  // Details about a newly-added request to provide as a return to callers.
+  // Contains the id of the request and if this is a promise based request, the
+  // associated promise.
+  struct RequestDetails {
+    RequestDetails(int request_id, v8::Local<v8::Promise> promise);
+    ~RequestDetails();
+    RequestDetails(const RequestDetails& other);
+
+    const int request_id;
+    v8::Local<v8::Promise> promise;
+  };
+
   using SendRequestMethod =
       base::RepeatingCallback<void(std::unique_ptr<Request>,
                                    v8::Local<v8::Context>)>;
@@ -71,10 +82,12 @@ class APIRequestHandler {
   // Adds a pending request for the request handler to manage (and complete via
   // CompleteRequest). This is used by renderer-side implementations that
   // shouldn't be dispatched to the browser in the normal flow, but means other
-  // classes don't have to worry about context invalidation.
+  // classes don't have to worry about context invalidation. Returns the details
+  // of the newly-added request.
   // Note: Unlike StartRequest(), this will not track user gesture state.
-  int AddPendingRequest(v8::Local<v8::Context> context,
-                        v8::Local<v8::Function> callback);
+  RequestDetails AddPendingRequest(v8::Local<v8::Context> context,
+                                   binding::AsyncResponseType async_type,
+                                   v8::Local<v8::Function> callback);
 
   // Responds to the request with the given |request_id|, calling the callback
   // with the given |response| arguments.
@@ -129,6 +142,17 @@ class APIRequestHandler {
 
   // Returns the next request ID to be used.
   int GetNextRequestId();
+
+  // Creates and returns an AsyncResultHandler for a request if the request
+  // requires an asynchronous response, otherwise returns null. Also populates
+  // |promise_out| with the associated promise if this is a promise based
+  // request.
+  std::unique_ptr<AsyncResultHandler> GetAsyncResultHandler(
+      v8::Local<v8::Context> context,
+      binding::AsyncResponseType async_type,
+      v8::Local<v8::Function> callback,
+      v8::Local<v8::Function> custom_callback,
+      v8::Local<v8::Promise>* promise_out);
 
   // Common implementation for completing a request.
   void CompleteRequestImpl(int request_id,

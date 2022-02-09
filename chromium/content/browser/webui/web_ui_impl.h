@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "content/common/content_export.h"
 #include "content/common/web_ui.mojom.h"
 #include "content/public/browser/web_ui.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -53,10 +53,10 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   void RenderFrameDeleted();
 
   // Called right after AllowBindings is notified to a RenderFrame.
-  void SetupMojoConnection();
+  void SetUpMojoConnection();
 
   // Called when a RenderFrame is deleted for a WebUI (i.e. a renderer crash).
-  void InvalidateMojoConnection();
+  void TearDownMojoConnection();
 
   // Add a property to the WebUI binding object.
   void SetProperty(const std::string& name, const std::string& value);
@@ -141,10 +141,10 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   std::vector<std::string> requestable_schemes_;
 
   // RenderFrameHost associated with |this|.
-  RenderFrameHostImpl* frame_host_;
+  raw_ptr<RenderFrameHostImpl> frame_host_;
 
   // Non-owning pointer to the WebContentsImpl this WebUI is associated with.
-  WebContentsImpl* web_contents_;
+  raw_ptr<WebContentsImpl> web_contents_;
 
   // The WebUIMessageHandlers we own.
   std::vector<std::unique_ptr<WebUIMessageHandler>> handlers_;

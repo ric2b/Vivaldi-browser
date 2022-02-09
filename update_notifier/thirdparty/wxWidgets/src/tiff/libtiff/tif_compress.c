@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 1988-1997 Sam Leffler
  * Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -81,10 +80,10 @@ TIFFNoDecode(TIFF* tif, const char* method)
 		TIFFErrorExt(tif->tif_clientdata, tif->tif_name,
 			     "Compression scheme %u %s decoding is not implemented",
 			     tif->tif_dir.td_compression, method);
-	return (-1);
+	return (0);
 }
 
-int
+static int
 _TIFFNoFixupTags(TIFF* tif)
 {
 	(void) tif;
@@ -226,7 +225,7 @@ TIFFUnRegisterCODEC(TIFFCodec* c)
 	codec_t* cd;
 	codec_t** pcd;
 
-	for (pcd = &registeredCODECS; (cd = *pcd); pcd = &cd->next)
+	for (pcd = &registeredCODECS; (cd = *pcd) != NULL; pcd = &cd->next)
 		if (cd->info == c) {
 			*pcd = cd->next;
 			_TIFFfree(cd);
@@ -265,7 +264,7 @@ TIFFGetConfiguredCODECs()
 			return NULL;
 		}
 		codecs = new_codecs;
-		_TIFFmemcpy(codecs + i - 1, cd, sizeof(TIFFCodec));
+		_TIFFmemcpy(codecs + i - 1, cd->info, sizeof(TIFFCodec));
 		i++;
 	}
 	for (c = _TIFFBuiltinCODECS; c->name; c++) {

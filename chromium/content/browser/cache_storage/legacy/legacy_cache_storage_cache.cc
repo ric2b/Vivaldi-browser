@@ -18,7 +18,6 @@
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/guid.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -214,7 +213,11 @@ void ReadMetadataDidReadMetadata(disk_cache::Entry* entry,
 
 bool VaryMatches(const blink::FetchAPIRequestHeadersMap& request,
                  const blink::FetchAPIRequestHeadersMap& cached_request,
+                 network::mojom::FetchResponseType response_type,
                  const ResponseHeaderMap& response) {
+  if (response_type == network::mojom::FetchResponseType::kOpaque)
+    return true;
+
   auto vary_iter = std::find_if(
       response.begin(), response.end(),
       [](const ResponseHeaderMap::value_type& pair) -> bool {
@@ -314,8 +317,10 @@ bool FindDuplicateOperations(
       // entries once we need to perform the VaryMatches() call in both
       // directions.
       if (VaryMatches(outer_op->request->headers, inner_op->request->headers,
+                      inner_op->response->response_type,
                       inner_op->response->headers) ||
           VaryMatches(outer_op->request->headers, inner_op->request->headers,
+                      outer_op->response->response_type,
                       outer_op->response->headers)) {
         duplicate_url_list_out->push_back(inner_op->request->url.spec());
         break;
@@ -530,6 +535,9 @@ struct LegacyCacheStorageCache::QueryCacheContext {
         query_types(query_types),
         matches(std::make_unique<QueryCacheResults>()) {}
 
+  QueryCacheContext(const QueryCacheContext&) = delete;
+  QueryCacheContext& operator=(const QueryCacheContext&) = delete;
+
   ~QueryCacheContext() = default;
 
   // Input to QueryCache
@@ -544,9 +552,6 @@ struct LegacyCacheStorageCache::QueryCacheContext {
 
   // Output of QueryCache
   std::unique_ptr<std::vector<QueryCacheResult>> matches;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(QueryCacheContext);
 };
 
 struct LegacyCacheStorageCache::BatchInfo {
@@ -1275,7 +1280,8 @@ void LegacyCacheStorageCache::QueryCacheDidReadMetadata(
       (!query_cache_context->options ||
        !query_cache_context->options->ignore_vary) &&
       !VaryMatches(query_cache_context->request->headers,
-                   match->request->headers, match->response->headers)) {
+                   match->request->headers, match->response->response_type,
+                   match->response->headers)) {
     query_cache_context->matches->pop_back();
     QueryCacheOpenNextEntry(std::move(query_cache_context));
     return;

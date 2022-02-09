@@ -15,8 +15,12 @@
 
 #if wxUSE_RIBBON
 
+class WXDLLIMPEXP_FWD_CORE wxImageList;
+
 #include "wx/ribbon/control.h"
 #include "wx/ribbon/page.h"
+
+#include "wx/vector.h"
 
 enum wxRibbonBarOption
 {
@@ -59,13 +63,7 @@ public:
         , m_page(page)
     {
     }
-#ifndef SWIG
-    wxRibbonBarEvent(const wxRibbonBarEvent& c) : wxNotifyEvent(c)
-    {
-        m_page = c.m_page;
-    }
-#endif
-    wxEvent *Clone() const { return new wxRibbonBarEvent(*this); }
+    wxEvent *Clone() const wxOVERRIDE { return new wxRibbonBarEvent(*this); }
 
     wxRibbonPage* GetPage() {return m_page;}
     void SetPage(wxRibbonPage* page) {m_page = page;}
@@ -75,7 +73,7 @@ protected:
 
 #ifndef SWIG
 private:
-    DECLARE_DYNAMIC_CLASS_NO_ASSIGN(wxRibbonBarEvent)
+    wxDECLARE_DYNAMIC_CLASS_NO_ASSIGN(wxRibbonBarEvent);
 #endif
 };
 
@@ -119,7 +117,7 @@ public:
 
     void SetTabCtrlMargins(int left, int right);
 
-    void SetArtProvider(wxRibbonArtProvider* art);
+    void SetArtProvider(wxRibbonArtProvider* art) wxOVERRIDE;
 
     bool SetActivePage(size_t page);
     bool SetActivePage(wxRibbonPage* page);
@@ -140,15 +138,17 @@ public:
     void AddPageHighlight(size_t page, bool highlight = true);
     void RemovePageHighlight(size_t page) { AddPageHighlight(page, false); }
 
+    void ShowPanels(wxRibbonDisplayMode mode);
     void ShowPanels(bool show = true);
-    void HidePanels() { ShowPanels(false); }
+    void HidePanels() { ShowPanels(wxRIBBON_BAR_MINIMIZED); }
     bool ArePanelsShown() const { return m_arePanelsShown; }
+    wxRibbonDisplayMode GetDisplayMode() const { return m_ribbon_state; }
 
-    virtual bool HasMultiplePages() const { return true; }
+    virtual bool HasMultiplePages() const wxOVERRIDE { return true; }
 
-    void SetWindowStyleFlag(long style);
-    long GetWindowStyleFlag() const;
-    virtual bool Realize();
+    void SetWindowStyleFlag(long style) wxOVERRIDE;
+    long GetWindowStyleFlag() const wxOVERRIDE;
+    virtual bool Realize() wxOVERRIDE;
 
     // Implementation only.
     bool IsToggleButtonHovered() const { return m_toggle_button_hovered; }
@@ -156,11 +156,15 @@ public:
 
     void HideIfExpanded();
 
+    // Return the image list containing images of the given size, creating it
+    // if necessary.
+    wxImageList* GetButtonImageList(wxSize size);
+
 protected:
     friend class wxRibbonPage;
 
-    virtual wxSize DoGetBestSize() const;
-    wxBorder GetDefaultBorder() const { return wxBORDER_NONE; }
+    virtual wxSize DoGetBestSize() const wxOVERRIDE;
+    wxBorder GetDefaultBorder() const wxOVERRIDE { return wxBORDER_NONE; }
     wxRibbonPageTabInfo* HitTestTabs(wxPoint position, int* index = NULL);
     void HitTestRibbonButton(const wxRect& rect, const wxPoint& position, bool &hover_flag);
 
@@ -212,9 +216,11 @@ protected:
 
     wxRibbonDisplayMode m_ribbon_state;
 
+    wxVector<wxImageList*> m_image_lists;
+
 #ifndef SWIG
-    DECLARE_CLASS(wxRibbonBar)
-    DECLARE_EVENT_TABLE()
+    wxDECLARE_CLASS(wxRibbonBar);
+    wxDECLARE_EVENT_TABLE();
 #endif
 };
 

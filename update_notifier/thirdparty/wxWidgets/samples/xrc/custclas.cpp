@@ -13,9 +13,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 // For all others, include the necessary headers (this file is usually all you
 // need because it includes almost all "standard" wxWidgets headers)
@@ -56,7 +53,7 @@ enum {
 // wxWidgets macro: implement dynamic class
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS( MyResizableListCtrl, wxListCtrl )
+wxIMPLEMENT_DYNAMIC_CLASS( MyResizableListCtrl, wxListCtrl );
 
 //-----------------------------------------------------------------------------
 // Event table: connect the events to the handler functions to process them
@@ -142,7 +139,7 @@ void MyResizableListCtrl::SetColumnWidths()
 
     // This is just a debug message in case you want to watch the
     // events scroll by as you resize.
-    wxLogDebug( wxT("Successfully set column widths") );
+    wxLogDebug( "Successfully set column widths" );
 }
 
 

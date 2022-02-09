@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SESSIONS_CORE_TAB_RESTORE_SERVICE_CLIENT_H_
 #define COMPONENTS_SESSIONS_CORE_TAB_RESTORE_SERVICE_CLIENT_H_
 
+#include <map>
 #include <memory>
 
 #include "base/callback.h"
@@ -51,7 +52,8 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,
       const std::string& workspace,
-      const std::string& user_title);
+      const std::string& user_title,
+      const std::map<std::string, std::string>& extra_data);
   // NOTE(andre@vivaldi.com) : We added ext_data to be able to restore a browser
   // window with the saved ext_data.
   virtual LiveTabContext* CreateLiveTabContext(
@@ -60,6 +62,7 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
     ui::WindowShowState show_state,
     const std::string& workspace,
     const std::string& user_title,
+    const std::map<std::string, std::string>& extra_data,
     const std::string& ext_data);
 
   // Returns the LiveTabContext instance that is associated with
@@ -103,7 +106,7 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
 
   // Vivaldi
   virtual const std::map<base::FilePath, bool>* GetPageActionOverridesForTab(
-      LiveTab* tab) = 0;
+      LiveTab* tab);
 };
 
 }  // namespace sessions

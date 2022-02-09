@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -158,7 +158,8 @@ class NoStatePrefetchContents : public content::WebContentsObserver,
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
-  void RenderProcessGone(base::TerminationStatus status) override;
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
 
   // Checks that a URL may be prerendered, for one of the many redirections. If
   // the URL can not be prerendered - for example, it's an ftp URL - |this| will
@@ -258,7 +259,7 @@ class NoStatePrefetchContents : public content::WebContentsObserver,
   base::ObserverList<Observer>::Unchecked observer_list_;
 
   // The prefetch manager owning this object.
-  NoStatePrefetchManager* no_state_prefetch_manager_;
+  raw_ptr<NoStatePrefetchManager> no_state_prefetch_manager_;
 
   // The delegate that content embedders use to override this class's logic.
   std::unique_ptr<NoStatePrefetchContentsDelegate> delegate_;
@@ -274,7 +275,7 @@ class NoStatePrefetchContents : public content::WebContentsObserver,
   const absl::optional<url::Origin> initiator_origin_;
 
   // The browser context being used
-  content::BrowserContext* browser_context_;
+  raw_ptr<content::BrowserContext> browser_context_;
 
   // A vector of URLs that this prerendered page matches against.
   // This array can contain more than element as a result of redirects,

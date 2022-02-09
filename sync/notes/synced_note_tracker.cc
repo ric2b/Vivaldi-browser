@@ -127,7 +127,10 @@ std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new SyncedNoteTracker(
       std::move(model_type_state), /*notes_reuploaded=*/false,
-      /*last_sync_time=*/base::Time::Now()));
+      /*last_sync_time=*/base::Time::Now(),
+      /*num_ignored_updates_due_to_missing_parent=*/absl::optional<int64_t>(0),
+      /*max_version_among_ignored_updates_due_to_missing_parent=*/
+      absl::nullopt));
 }
 
 // static
@@ -152,9 +155,26 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
       model_metadata.notes_hierarchy_fields_reuploaded() &&
       base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarks);
 
+  absl::optional<int64_t> num_ignored_updates_due_to_missing_parent;
+  if (model_metadata.has_num_ignored_updates_due_to_missing_parent()) {
+    num_ignored_updates_due_to_missing_parent =
+        model_metadata.num_ignored_updates_due_to_missing_parent();
+  }
+
+  absl::optional<int64_t>
+      max_version_among_ignored_updates_due_to_missing_parent;
+  if (model_metadata
+          .has_max_version_among_ignored_updates_due_to_missing_parent()) {
+    max_version_among_ignored_updates_due_to_missing_parent =
+        model_metadata
+            .max_version_among_ignored_updates_due_to_missing_parent();
+  }
+
   // base::WrapUnique() used because the constructor is private.
   auto tracker = base::WrapUnique(new SyncedNoteTracker(
-      model_metadata.model_type_state(), notes_reuploaded, last_sync_time));
+      model_metadata.model_type_state(), notes_reuploaded, last_sync_time,
+      num_ignored_updates_due_to_missing_parent,
+      max_version_among_ignored_updates_due_to_missing_parent));
 
   bool is_not_corrupted = tracker->InitEntitiesFromModelAndMetadata(
       model, std::move(model_metadata));
@@ -182,6 +202,11 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::GetEntityForClientTagHash(
     const syncer::ClientTagHash& client_tag_hash) const {
   auto it = client_tag_hash_to_entities_map_.find(client_tag_hash);
   return it != client_tag_hash_to_entities_map_.end() ? it->second : nullptr;
+}
+
+const SyncedNoteTracker::Entity* SyncedNoteTracker::GetEntityForGUID(
+    const base::GUID& guid) const {
+  return GetEntityForClientTagHash(GetClientTagHashFromGUID(guid));
 }
 
 SyncedNoteTracker::Entity* SyncedNoteTracker::AsMutableEntity(
@@ -332,6 +357,16 @@ sync_pb::NotesModelMetadata SyncedNoteTracker::BuildNoteModelMetadata() const {
   model_metadata.set_notes_hierarchy_fields_reuploaded(notes_reuploaded_);
   model_metadata.set_last_sync_time(syncer::TimeToProtoTime(last_sync_time_));
 
+  if (num_ignored_updates_due_to_missing_parent_.has_value()) {
+    model_metadata.set_num_ignored_updates_due_to_missing_parent(
+        *num_ignored_updates_due_to_missing_parent_);
+  }
+
+  if (max_version_among_ignored_updates_due_to_missing_parent_.has_value()) {
+    model_metadata.set_max_version_among_ignored_updates_due_to_missing_parent(
+        *max_version_among_ignored_updates_due_to_missing_parent_);
+  }
+
   for (const std::pair<const std::string, std::unique_ptr<Entity>>& pair :
        sync_id_to_entities_map_) {
     DCHECK(pair.second) << " for ID " << pair.first;
@@ -415,12 +450,20 @@ SyncedNoteTracker::GetEntitiesWithLocalChanges(size_t max_entries) const {
   return ordered_local_changes;
 }
 
-SyncedNoteTracker::SyncedNoteTracker(sync_pb::ModelTypeState model_type_state,
-                                     bool notes_reuploaded,
-                                     base::Time last_sync_time)
+SyncedNoteTracker::SyncedNoteTracker(
+    sync_pb::ModelTypeState model_type_state,
+    bool notes_reuploaded,
+    base::Time last_sync_time,
+    absl::optional<int64_t> num_ignored_updates_due_to_missing_parent,
+    absl::optional<int64_t>
+        max_version_among_ignored_updates_due_to_missing_parent)
     : model_type_state_(std::move(model_type_state)),
       notes_reuploaded_(notes_reuploaded),
-      last_sync_time_(last_sync_time) {}
+      last_sync_time_(last_sync_time),
+      num_ignored_updates_due_to_missing_parent_(
+          num_ignored_updates_due_to_missing_parent),
+      max_version_among_ignored_updates_due_to_missing_parent_(
+          max_version_among_ignored_updates_due_to_missing_parent) {}
 
 bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     const vivaldi::NotesModel* model,
@@ -620,6 +663,32 @@ bool SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
 bool SyncedNoteTracker::note_client_tags_in_protocol_enabled() const {
   return base::FeatureList::IsEnabled(
       switches::kSyncUseClientTagForBookmarkCommits);
+}
+
+void SyncedNoteTracker::RecordIgnoredServerUpdateDueToMissingParent(
+    int64_t server_version) {
+  if (num_ignored_updates_due_to_missing_parent_.has_value()) {
+    ++(*num_ignored_updates_due_to_missing_parent_);
+  }
+
+  if (max_version_among_ignored_updates_due_to_missing_parent_.has_value()) {
+    *max_version_among_ignored_updates_due_to_missing_parent_ =
+        std::max(*max_version_among_ignored_updates_due_to_missing_parent_,
+                 server_version);
+  } else {
+    max_version_among_ignored_updates_due_to_missing_parent_ = server_version;
+  }
+}
+
+absl::optional<int64_t>
+SyncedNoteTracker::GetNumIgnoredUpdatesDueToMissingParentForTest() const {
+  return num_ignored_updates_due_to_missing_parent_;
+}
+
+absl::optional<int64_t>
+SyncedNoteTracker::GetMaxVersionAmongIgnoredUpdatesDueToMissingParentForTest()
+    const {
+  return max_version_among_ignored_updates_due_to_missing_parent_;
 }
 
 void SyncedNoteTracker::TraverseAndAppend(

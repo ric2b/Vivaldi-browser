@@ -11,13 +11,13 @@
 
 #include "wx/gtk/dcscreen.h"
 
-#include <gtk/gtk.h>
+#include "wx/gtk/private/wrapgtk.h"
 
 //-----------------------------------------------------------------------------
 // wxScreenDCImpl
 //-----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxScreenDCImpl, wxWindowDCImpl)
+wxIMPLEMENT_ABSTRACT_CLASS(wxScreenDCImpl, wxWindowDCImpl);
 
 wxScreenDCImpl::wxScreenDCImpl( wxScreenDC *owner )
   : wxWindowDCImpl( owner )
@@ -50,8 +50,6 @@ void wxScreenDCImpl::Init()
 
 wxScreenDCImpl::~wxScreenDCImpl()
 {
-    g_object_unref(m_context);
-
     gdk_gc_set_subwindow( m_penGC, GDK_CLIP_BY_CHILDREN );
     gdk_gc_set_subwindow( m_brushGC, GDK_CLIP_BY_CHILDREN );
     gdk_gc_set_subwindow( m_textGC, GDK_CLIP_BY_CHILDREN );

@@ -37,7 +37,9 @@ namespace extensions {
 
 ChromeExtensionWebContentsObserver::ChromeExtensionWebContentsObserver(
     content::WebContents* web_contents)
-    : ExtensionWebContentsObserver(web_contents) {}
+    : ExtensionWebContentsObserver(web_contents),
+      content::WebContentsUserData<ChromeExtensionWebContentsObserver>(
+          *web_contents) {}
 
 ChromeExtensionWebContentsObserver::~ChromeExtensionWebContentsObserver() {}
 
@@ -112,8 +114,6 @@ void ChromeExtensionWebContentsObserver::RenderFrameCreated(
         process_id, url::Origin::Create(GURL(vivaldi::kVivaldiUIDataHost)));
     policy->GrantRequestOrigin(
         process_id, url::Origin::Create(GURL(chrome::kChromeUIFaviconHost)));
-    policy->GrantRequestOrigin(
-        process_id, url::Origin::Create(GURL(chrome::kChromeUIThumbnailHost)));
     policy->GrantRequestOrigin(
       process_id, url::Origin::Create(GURL(chrome::kChromeUIThemeHost)));
   }

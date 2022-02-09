@@ -18,9 +18,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #include "wx/wrapsizer.h"
 #include "wx/vector.h"
@@ -67,7 +64,7 @@ private:
 // wxWrapSizer implementation
 // ============================================================================
 
-IMPLEMENT_DYNAMIC_CLASS(wxWrapSizer, wxBoxSizer)
+wxIMPLEMENT_DYNAMIC_CLASS(wxWrapSizer, wxBoxSizer);
 
 wxWrapSizer::wxWrapSizer(int orient, int flags)
            : wxBoxSizer(orient),
@@ -92,8 +89,8 @@ void wxWrapSizer::ClearRows()
 {
     // all elements of the row sizers are also elements of this one (we
     // directly add pointers to elements of our own m_children list to the row
-    // sizers in RecalcSizes()), so we need to detach them from the row sizer
-    // to avoid double deletion
+    // sizers in RepositionChildren()), so we need to detach them from the row
+    // sizer to avoid double deletion
     wxSizerItemList& rows = m_rows.GetChildren();
     for ( wxSizerItemList::iterator i = rows.begin(),
                                   end = rows.end();
@@ -141,8 +138,8 @@ bool wxWrapSizer::InformFirstDirection(int direction,
     // Store the values for later use
     m_availSize = size;
     m_availableOtherDir = availableOtherDir +
-                            (direction == wxHORIZONTAL ? m_minSize.y
-                                                       : m_minSize.x);
+                            (direction == wxHORIZONTAL ? m_calculatedMinSize.y
+                                                       : m_calculatedMinSize.x);
     m_dirInform = direction;
     m_lastUsed = false;
     return true;
@@ -208,7 +205,7 @@ wxSize wxWrapSizer::CalcMin()
         }
     }
 
-    return m_minSize;
+    return m_calculatedMinSize;
 }
 
 void wxWrapSizer::CalcMinFittingSize(const wxSize& szBoundary)
@@ -220,7 +217,7 @@ void wxWrapSizer::CalcMinFittingSize(const wxSize& szBoundary)
     if ( m_minSizeMinor < SizeInMinorDir(m_size) &&
             m_maxSizeMajor < SizeInMajorDir(m_size) )
     {
-        m_minSize = sizeMin;
+        m_calculatedMinSize = sizeMin;
     }
     else
     {
@@ -231,9 +228,9 @@ void wxWrapSizer::CalcMinFittingSize(const wxSize& szBoundary)
             // We try to present a lower min value by removing an item in
             // the major direction (and preserving current minor min size).
             CalcMinFromMajor(m_maxSizeMajor - m_minItemMajor);
-            if ( m_minSize.x <= szBoundary.x && m_minSize.y <= szBoundary.y )
+            if ( m_calculatedMinSize.x <= szBoundary.x && m_calculatedMinSize.y <= szBoundary.y )
             {
-                SizeInMinorDir(m_minSize) = SizeInMinorDir(sizeMin);
+                SizeInMinorDir(m_calculatedMinSize) = SizeInMinorDir(sizeMin);
                 done = true;
             }
         }
@@ -241,7 +238,7 @@ void wxWrapSizer::CalcMinFittingSize(const wxSize& szBoundary)
         if ( !done )
         {
             // If failed finding little smaller area, go back to what we had
-            m_minSize = sizeMin;
+            m_calculatedMinSize = sizeMin;
         }
     }
 }
@@ -269,7 +266,7 @@ void wxWrapSizer::CalcMaxSingleItemSize()
     // This is, of course, not our real minimal size but if we return more
     // than this it would be impossible to shrink us to one row/column so
     // we have to pretend that this is all we need for now.
-    m_minSize = SizeFromMajorMinor(maxMajor, maxMinor);
+    m_calculatedMinSize = SizeFromMajorMinor(maxMajor, maxMinor);
 }
 
 void wxWrapSizer::CalcMinFromMajor(int totMajor)
@@ -325,7 +322,7 @@ void wxWrapSizer::CalcMinFromMajor(int totMajor)
     if ( rowTotalMajor > maxTotalMajor )
         maxTotalMajor = rowTotalMajor;
 
-    m_minSize = SizeFromMajorMinor(maxTotalMajor, minorSum);
+    m_calculatedMinSize = SizeFromMajorMinor(maxTotalMajor, minorSum);
 }
 
 // Helper struct for CalcMinFromMinor
@@ -370,7 +367,7 @@ void wxWrapSizer::CalcMinFromMinor(int totMinor)
     // The trivial case
     if ( !itemCount || totMajor==0 || maxMinor==0 )
     {
-        m_minSize = wxSize(0,0);
+        m_calculatedMinSize = wxSize(0,0);
         return;
     }
 
@@ -379,7 +376,7 @@ void wxWrapSizer::CalcMinFromMinor(int totMinor)
     if ( nrLines<=1 )
     {
         // Another simple case, everything fits on one line
-        m_minSize = SizeFromMajorMinor(totMajor,maxMinor);
+        m_calculatedMinSize = SizeFromMajorMinor(totMajor,maxMinor);
         return;
     }
 
@@ -465,11 +462,15 @@ void wxWrapSizer::CalcMinFromMinor(int totMinor)
 
         // No spill over?
         if ( !tailSize )
+        {
+            // Add minor size of the last line
+            sumMinor += maxMinor;
             break;
+        }
     }
 
     // Now have min size in the opposite direction
-    m_minSize = SizeFromMajorMinor(lineSize,sumMinor);
+    m_calculatedMinSize = SizeFromMajorMinor(lineSize,sumMinor);
 }
 
 void wxWrapSizer::FinishRow(size_t n,
@@ -485,7 +486,7 @@ void wxWrapSizer::FinishRow(size_t n,
     AdjustLastRowItemProp(n, itemLast);
 }
 
-void wxWrapSizer::RecalcSizes()
+void wxWrapSizer::RepositionChildren(const wxSize& WXUNUSED(minSize))
 {
     // First restore any proportions we may have changed and remove the old rows
     ClearRows();
@@ -565,19 +566,29 @@ void wxWrapSizer::RecalcSizes()
                 sizer->Add(itemSpace);
             }
 
+            // We must pretend that any window item is not part of this sizer,
+            // otherwise adding it to another one would trigger an assert due
+            // to a conflict with the current containing sizer.
+            wxWindow * const win = item->GetWindow();
+            if ( win )
+                win->SetContainingSizer(NULL);
+
             // Notice that we reuse a pointer to our own sizer item here, so we
             // must remember to remove it by calling ClearRows() to avoid
             // double deletion later
             sizer->Add(item);
 
+            // If item is a window, it now has a pointer to the child sizer,
+            // which is wrong. Set it to point to us.
+            if ( win )
+            {
+                win->SetContainingSizer(NULL);
+                win->SetContainingSizer(this);
+            }
+
             itemLast = item;
             itemSpace = NULL;
         }
-
-        // If item is a window, it now has a pointer to the child sizer,
-        // which is wrong. Set it to point to us.
-        if ( wxWindow *win = item->GetWindow() )
-            win->SetContainingSizer(this);
     }
 
     FinishRow(nRow, rowTotalMajor, maxRowMinor, itemLast);

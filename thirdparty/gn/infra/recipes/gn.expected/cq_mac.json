@@ -52,7 +52,6 @@
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
     "name": "git.rev-parse",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -92,6 +91,8 @@
       "[START_DIR]/cipd",
       "-ensure-file",
       "infra/ninja/${platform} version:1.8.2\nfuchsia/third_party/clang/${platform} integration",
+      "-max-threads",
+      "0",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -123,6 +124,8 @@
       "[CACHE]/macos_sdk",
       "-ensure-file",
       "infra/tools/mac_toolchain/${platform} git_revision:e9b1fe29fe21a1cd36428c43ea2aba244bd31280",
+      "-max-threads",
+      "0",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -176,7 +179,6 @@
       "--show-sdk-path"
     ],
     "name": "debug.xcrun sdk-path",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_LOG_LINE@raw_io.output[sdk-path]@/some/xcode/path@@@",
@@ -195,7 +197,6 @@
       "-"
     ],
     "name": "debug.xcrun toolchain",
-    "stderr": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_LOG_LINE@raw_io.output[toolchain]@[CACHE]/macos_sdk/XCode.app/include/c++/v1@@@",
@@ -275,7 +276,6 @@
       "--show-sdk-path"
     ],
     "name": "release.xcrun sdk-path",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_LOG_LINE@raw_io.output[sdk-path]@/some/xcode/path@@@",
@@ -294,7 +294,6 @@
       "-"
     ],
     "name": "release.xcrun toolchain",
-    "stderr": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_LOG_LINE@raw_io.output[toolchain]@[CACHE]/macos_sdk/XCode.app/include/c++/v1@@@",
@@ -371,7 +370,6 @@
       "--show-sdk-path"
     ],
     "name": "release.xcrun sdk-path (2)",
-    "stdout": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_LOG_LINE@raw_io.output[sdk-path]@/some/xcode/path@@@",
@@ -390,7 +388,6 @@
       "-"
     ],
     "name": "release.xcrun toolchain (2)",
-    "stderr": "/path/to/tmp/",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@",
       "@@@STEP_LOG_LINE@raw_io.output[toolchain]@[CACHE]/macos_sdk/XCode.app/include/c++/v1@@@",
@@ -454,7 +451,6 @@
     "name": "reset XCode"
   },
   {
-    "jsonResult": null,
     "name": "$result"
   }
 ]

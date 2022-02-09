@@ -262,7 +262,7 @@ void VivaldiUIWebContentsDelegate::RenderViewHostChanged(
   window_->views()->OnViewWasResized();
 }
 
-void VivaldiUIWebContentsDelegate::RenderProcessGone(
+void VivaldiUIWebContentsDelegate::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
   if (status !=
           base::TerminationStatus::TERMINATION_STATUS_NORMAL_TERMINATION &&

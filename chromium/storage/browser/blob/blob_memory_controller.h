@@ -18,12 +18,11 @@
 #include "base/callback_forward.h"
 #include "base/callback_helpers.h"
 #include "base/component_export.h"
-#include "base/containers/mru_cache.h"
+#include "base/containers/lru_cache.h"
 #include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -121,6 +120,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) BlobMemoryController {
   // We enable file paging if |file_runner| isn't a nullptr.
   BlobMemoryController(const base::FilePath& storage_directory,
                        scoped_refptr<base::TaskRunner> file_runner);
+
+  BlobMemoryController(const BlobMemoryController&) = delete;
+  BlobMemoryController& operator=(const BlobMemoryController&) = delete;
+
   ~BlobMemoryController();
 
   // Disables file paging. This cancels all pending file creations and paging
@@ -312,7 +315,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) BlobMemoryController {
 
   // Lifetime of the ShareableBlobDataItem objects is handled externally in the
   // BlobStorageContext class.
-  base::MRUCache<uint64_t, ShareableBlobDataItem*> populated_memory_items_;
+  base::LRUCache<uint64_t, ShareableBlobDataItem*> populated_memory_items_;
   size_t populated_memory_items_bytes_ = 0;
   // We need to keep track of items currently being paged to disk so that if
   // another blob successfully grabs a ref, we can prevent it from adding the
@@ -322,8 +325,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) BlobMemoryController {
   base::MemoryPressureListener memory_pressure_listener_;
 
   base::WeakPtrFactory<BlobMemoryController> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BlobMemoryController);
 };
 }  // namespace storage
 #endif  // STORAGE_BROWSER_BLOB_BLOB_MEMORY_CONTROLLER_H_

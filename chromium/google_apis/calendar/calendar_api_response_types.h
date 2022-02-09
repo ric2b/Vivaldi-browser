@@ -14,7 +14,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "url/gurl.h"
@@ -57,8 +56,8 @@ class DateTime {
 class CalendarEvent {
  public:
   CalendarEvent();
-  CalendarEvent(const CalendarEvent&) = delete;
-  CalendarEvent& operator=(const CalendarEvent&) = delete;
+  CalendarEvent(const CalendarEvent&);
+  CalendarEvent& operator=(const CalendarEvent&);
   ~CalendarEvent();
 
   // Registers the mapping between JSON field names and the members in this
@@ -94,6 +93,9 @@ class CalendarEvent {
 
   const DateTime& end_time() const { return end_time_; }
   void set_end_time(const DateTime& end_time) { end_time_ = end_time; }
+
+  // Return the approximate size of this event, in bytes.
+  int GetApproximateSizeInBytes() const;
 
  private:
   std::string id_;
@@ -141,6 +143,8 @@ class EventList {
   std::vector<std::unique_ptr<CalendarEvent>>* mutable_items() {
     return &items_;
   }
+
+  void InjectItemForTesting(std::unique_ptr<CalendarEvent> item);
 
  private:
   std::string time_zone_;

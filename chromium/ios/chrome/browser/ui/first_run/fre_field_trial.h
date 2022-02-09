@@ -10,11 +10,65 @@
 class PrefRegistrySimple;
 class PrefService;
 
+enum class SigninSyncScreenUIIdentitySwitcherPosition : int {
+  kTop,
+  kBottom,
+};
+
+enum class SigninSyncScreenUIStringSet : int {
+  kOld,
+  kNew,
+};
+
 namespace base {
 class FeatureList;
 }  // namespace base
 
+// Indicates if the FRE default browser promo variant "Wait 14 days after FRE
+// default browser promo" is enabled.
+extern const char kFREDefaultPromoTestingDefaultDelayParam[];
+
+// Indicates if the FRE default browser promo variant "FRE default browser
+// promo only" is enabled.
+extern const char kFREDefaultPromoTestingOnlyParam[];
+
+// Indicates if the FRE default browser promo variant "Wait 3 days after FRE
+// default promo" is enabled.
+extern const char kFREDefaultPromoTestingShortDelayParam[];
+
+// Indicates which option of the identity position to use for the FRE UI (TOP or
+// BOTTOM).
+extern const char kFREUIIdentitySwitcherPositionParam[];
+
+// Indicates which option of the sign-in & sync strings set to use for the FRE
+// UI (OLD or NEW).
+extern const char kFREUIStringsSetParam[];
+
 namespace fre_field_trial {
+
+// Returns true if the user is in the group that will show the default browser
+// screen in first run (FRE) with activate a short cooldown of other default
+// browser promos.
+bool IsInFirstRunDefaultBrowserAndSmallDelayBeforeOtherPromosGroup();
+
+// Returns true if the user is in the group that will show the default browser
+// screen in first run (FRE) and activate cooldown of other default browser
+// promos.
+bool IsInFirstRunDefaultBrowserAndDefaultDelayBeforeOtherPromosGroup();
+
+// Returns true if the user is in the group that will show the default browser
+// screen in first run (FRE) only.
+bool IsInDefaultBrowserPromoAtFirstRunOnlyGroup();
+
+// Returns true if the default browser screen in FRE is enabled.
+bool IsFREDefaultBrowserScreenEnabled();
+
+// Returns the UI option for the sign-in & sync screen identity position.
+SigninSyncScreenUIIdentitySwitcherPosition
+GetSigninSyncScreenUIIdentitySwitcherPosition();
+
+// Returns the UI option for the sign-in & sync screen strings set.
+SigninSyncScreenUIStringSet GetSigninSyncScreenUIStringSet();
 
 // Registers the local state pref used to manage grouping for this field trial.
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry);

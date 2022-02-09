@@ -32,7 +32,7 @@ Arguments
       Filename to read, relative to the build file.
 
   input_conversion
-      Controls how the file is read and parsed. See "gn help io_conversion".
+      Controls how the file is read and parsed. See `gn help io_conversion`.
 
 Example
 

@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_DEVTOOLS_DEVTOOLS_WINDOW_TESTING_H_
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -27,6 +26,10 @@ class DevToolsWindowTesting {
   virtual ~DevToolsWindowTesting();
 
   // The following methods block until DevToolsWindow is completely loaded.
+  static DevToolsWindow* OpenDevToolsWindowSync(
+      content::WebContents* inspected_web_contents,
+      Profile* profile,
+      bool is_docked);
   static DevToolsWindow* OpenDevToolsWindowSync(
       content::WebContents* inspected_web_contents,
       bool is_docked);

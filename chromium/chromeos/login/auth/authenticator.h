@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chromeos/login/auth/auth_status_consumer.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
@@ -29,14 +28,18 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) Authenticator
  public:
   explicit Authenticator(AuthStatusConsumer* consumer);
 
+  Authenticator(const Authenticator&) = delete;
+  Authenticator& operator=(const Authenticator&) = delete;
+
   // Given externally authenticated username and password (part of
   // |user_context|), this method attempts to complete authentication process.
-  virtual void CompleteLogin(const UserContext& user_context) = 0;
+  virtual void CompleteLogin(std::unique_ptr<UserContext> user_context) = 0;
 
   // Given a user credentials in |user_context|,
   // this method attempts to authenticate to login.
   // Must be called on the UI thread.
-  virtual void AuthenticateToLogin(const UserContext& user_context) = 0;
+  virtual void AuthenticateToLogin(
+      std::unique_ptr<UserContext> user_context) = 0;
 
   // Initiates incognito ("browse without signing in") login.
   virtual void LoginOffTheRecord() = 0;
@@ -88,8 +91,6 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) Authenticator
 
  private:
   friend class base::RefCountedThreadSafe<Authenticator>;
-
-  DISALLOW_COPY_AND_ASSIGN(Authenticator);
 };
 
 }  // namespace chromeos

@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/idl_types_base.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/heap_traits.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -24,7 +25,7 @@ class ScriptPromise;
 class ScriptValue;
 
 // The type names below are named as "IDL" prefix + Web IDL type name.
-// https://heycam.github.io/webidl/#dfn-type-name
+// https://webidl.spec.whatwg.org/#dfn-type-name
 
 // any
 struct IDLAny final : public IDLBaseHelper<ScriptValue> {};

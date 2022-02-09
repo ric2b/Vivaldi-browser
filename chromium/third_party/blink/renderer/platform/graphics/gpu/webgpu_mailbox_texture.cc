@@ -6,6 +6,7 @@
 
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 
@@ -34,13 +35,14 @@ scoped_refptr<WebGPUMailboxTexture> WebGPUMailboxTexture::FromStaticBitmapImage(
     return nullptr;
 
   // Keep the same config as source image.
-  const CanvasResourceParams params(
-      color_space, color_type,
-      image->IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType);
+  SkImageInfo info = SkImageInfo::Make(
+      image->Size().width(), image->Size().height(), color_type,
+      image->IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType,
+      CanvasColorSpaceToSkColorSpace(color_space));
 
   // Get a recyclable resource for producing WebGPU-compatible shared images.
   std::unique_ptr<RecyclableCanvasResource> recyclable_canvas_resource =
-      dawn_control_client->GetOrCreateCanvasResource(image->Size(), params,
+      dawn_control_client->GetOrCreateCanvasResource(info,
                                                      image->IsOriginTopLeft());
 
   // Fallback to unstable intermediate resource copy path.
@@ -51,7 +53,7 @@ scoped_refptr<WebGPUMailboxTexture> WebGPUMailboxTexture::FromStaticBitmapImage(
     return base::AdoptRef(new WebGPUMailboxTexture(
         std::move(dawn_control_client), device, usage,
         image->GetMailboxHolder().mailbox, image->GetMailboxHolder().sync_token,
-        std::move(finished_access_callback),
+        gpu::webgpu::WEBGPU_MAILBOX_NONE, std::move(finished_access_callback),
         /*recyclable_canvas_resource=*/nullptr));
   }
 
@@ -84,8 +86,25 @@ scoped_refptr<WebGPUMailboxTexture> WebGPUMailboxTexture::FromCanvasResource(
   gpu::SyncToken sync_token = canvas_resource->GetSyncToken();
   return base::AdoptRef(new WebGPUMailboxTexture(
       std::move(dawn_control_client), device, usage, mailbox, sync_token,
+      gpu::webgpu::WEBGPU_MAILBOX_NONE,
       base::OnceCallback<void(const gpu::SyncToken&)>(),
       std::move(recyclable_canvas_resource)));
+}
+
+// static
+scoped_refptr<WebGPUMailboxTexture> WebGPUMailboxTexture::FromExistingMailbox(
+    scoped_refptr<DawnControlClientHolder> dawn_control_client,
+    WGPUDevice device,
+    WGPUTextureUsage usage,
+    const gpu::Mailbox& mailbox,
+    const gpu::SyncToken& sync_token,
+    gpu::webgpu::MailboxFlags mailbox_flags) {
+  DCHECK(dawn_control_client->GetContextProviderWeakPtr());
+
+  return base::AdoptRef(new WebGPUMailboxTexture(
+      std::move(dawn_control_client), device, usage, mailbox, sync_token,
+      mailbox_flags, base::OnceCallback<void(const gpu::SyncToken&)>(),
+      nullptr));
 }
 
 WebGPUMailboxTexture::WebGPUMailboxTexture(
@@ -94,6 +113,7 @@ WebGPUMailboxTexture::WebGPUMailboxTexture(
     WGPUTextureUsage usage,
     const gpu::Mailbox& mailbox,
     const gpu::SyncToken& sync_token,
+    gpu::webgpu::MailboxFlags mailbox_flags,
     base::OnceCallback<void(const gpu::SyncToken&)> destroy_callback,
     std::unique_ptr<RecyclableCanvasResource> recyclable_canvas_resource)
     : dawn_control_client_(std::move(dawn_control_client)),
@@ -124,6 +144,7 @@ WebGPUMailboxTexture::WebGPUMailboxTexture(
   // representation.
   webgpu->AssociateMailbox(reservation.deviceId, reservation.deviceGeneration,
                            wire_texture_id_, wire_texture_generation_, usage,
+                           mailbox_flags,
                            reinterpret_cast<const GLbyte*>(&mailbox));
 }
 

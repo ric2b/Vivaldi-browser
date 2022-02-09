@@ -40,10 +40,10 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
-#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/strings/grit/components_strings.h"
@@ -144,8 +144,8 @@ bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
 void ParseConfigurationArguments(const base::ListValue* args,
                                  SyncConfigInfo* config,
                                  const base::Value** callback_id) {
-  std::string json;
-  if (args->Get(0, callback_id) && args->GetString(1, &json) && !json.empty())
+  const std::string& json = args->GetList()[1].GetString();
+  if ((*callback_id = &args->GetList()[0]) && !json.empty())
     CHECK(GetConfiguration(json, config));
   else
     NOTREACHED();
@@ -263,15 +263,17 @@ void PeopleHandler::RegisterMessages() {
                                          base::Unretained(this)));
 #else
   web_ui()->RegisterDeprecatedMessageCallback(
+      "SyncSetupStartSignIn",
+      base::BindRepeating(&PeopleHandler::HandleStartSignin,
+                          base::Unretained(this)));
+#endif
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  web_ui()->RegisterDeprecatedMessageCallback(
       "SyncSetupSignout", base::BindRepeating(&PeopleHandler::HandleSignout,
                                               base::Unretained(this)));
   web_ui()->RegisterDeprecatedMessageCallback(
       "SyncSetupPauseSync", base::BindRepeating(&PeopleHandler::HandlePauseSync,
                                                 base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
-      "SyncSetupStartSignIn",
-      base::BindRepeating(&PeopleHandler::HandleStartSignin,
-                          base::Unretained(this)));
 #endif
   web_ui()->RegisterDeprecatedMessageCallback(
       "SyncSetupGetStoredAccounts",
@@ -325,6 +327,7 @@ void PeopleHandler::DisplayGaiaLogin(signin_metrics::AccessPoint access_point) {
 
 void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
     signin_metrics::AccessPoint access_point) {
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
   if (!browser)
@@ -356,8 +359,12 @@ void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
     browser->window()->ShowAvatarBubbleFromAvatarButton(
         BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN, access_point, false);
   }
-}
+#else
+  // TODO(https://crbug.com/1260291): Add support for Lacros.
+  NOTIMPLEMENTED();
 #endif
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 void PeopleHandler::OnDidClosePage(const base::ListValue* args) {
   // Don't mark setup as complete if "didAbort" is true, or if authentication
@@ -414,10 +421,9 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
 void PeopleHandler::HandleGetStoredAccounts(const base::ListValue* args) {
   AllowJavascript();
   CHECK_EQ(1U, args->GetList().size());
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
+  const base::Value& callback_id = args->GetList()[0];
 
-  ResolveJavascriptCallback(*callback_id, GetStoredAccountsList());
+  ResolveJavascriptCallback(callback_id, GetStoredAccountsList());
 }
 
 void PeopleHandler::OnExtendedAccountInfoUpdated(const AccountInfo& info) {
@@ -457,22 +463,20 @@ base::Value PeopleHandler::GetStoredAccountsList() {
 void PeopleHandler::HandleStartSyncingWithEmail(const base::ListValue* args) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_));
-  const base::Value* email;
-  const base::Value* is_default_promo_account;
-  CHECK(args->Get(0, &email));
-  CHECK(args->Get(1, &is_default_promo_account));
+  const base::Value& email = args->GetList()[0];
+  const base::Value& is_default_promo_account = args->GetList()[1];
 
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
 
   AccountInfo maybe_account =
       IdentityManagerFactory::GetForProfile(profile_)
-          ->FindExtendedAccountInfoByEmailAddress(email->GetString());
+          ->FindExtendedAccountInfoByEmailAddress(email.GetString());
 
   signin_ui_util::EnableSyncFromMultiAccountPromo(
       browser, maybe_account,
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
-      is_default_promo_account->GetBool());
+      is_default_promo_account.GetBool());
 #else
   // TODO(jamescook): Enable sync on non-DICE platforms (e.g. Chrome OS).
   NOTIMPLEMENTED();
@@ -612,10 +616,13 @@ void PeopleHandler::HandleStartSignin(const base::ListValue* args) {
 
   DisplayGaiaLogin(signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
 }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 void PeopleHandler::HandleSignout(const base::ListValue* args) {
   bool delete_profile = false;
-  args->GetBoolean(0, &delete_profile);
+  if (args->GetList()[0].is_bool())
+    delete_profile = args->GetList()[0].GetBool();
   base::FilePath profile_path = profile_->GetPath();
 
   if (!signin_util::IsUserSignoutAllowedForProfile(profile_)) {
@@ -669,7 +676,7 @@ void PeopleHandler::HandlePauseSync(const base::ListValue* args) {
       ->InvalidateRefreshTokenForPrimaryAccount(
           signin_metrics::SourceForRefreshTokenOperation::kSettings_PauseSync);
 }
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 void PeopleHandler::HandleStartKeyRetrieval(const base::ListValue* args) {
   Browser* browser =
@@ -685,10 +692,9 @@ void PeopleHandler::HandleGetSyncStatus(const base::ListValue* args) {
   AllowJavascript();
 
   CHECK_EQ(1U, args->GetList().size());
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
+  const base::Value& callback_id = args->GetList()[0];
 
-  ResolveJavascriptCallback(*callback_id, *GetSyncStatusDictionary());
+  ResolveJavascriptCallback(callback_id, *GetSyncStatusDictionary());
 }
 
 void PeopleHandler::HandleSyncPrefsDispatch(const base::ListValue* args) {
@@ -731,7 +737,9 @@ void PeopleHandler::CloseSyncSetup() {
         if (sync_service) {
           DVLOG(1) << "Sync setup aborted by user action";
           sync_service->StopAndClear();
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+// ChromeOS platforms don't support signing out.
+// TODO(https://crbug.com/1217645): Add signout support to Lacros.
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
           // Sign out the user on desktop Chrome if they click cancel during
           // initial setup.
           if (!sync_service->GetUserSettings()->IsFirstSetupComplete()) {
@@ -839,7 +847,7 @@ std::unique_ptr<base::DictionaryValue> PeopleHandler::GetSyncStatusDictionary()
     return sync_status;
   }
 
-  sync_status->SetBoolean("supervisedUser", profile_->IsSupervised());
+  sync_status->SetBoolean("supervisedUser", profile_->IsChild());
   sync_status->SetBoolean("childUser", profile_->IsChild());
 
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);

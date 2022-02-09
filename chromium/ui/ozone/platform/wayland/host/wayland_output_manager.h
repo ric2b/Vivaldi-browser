@@ -10,7 +10,6 @@
 #include <memory>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/ozone/platform/wayland/host/wayland_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_screen.h"
@@ -55,7 +54,7 @@ class WaylandOutputManager : public WaylandOutput::Delegate {
   // WaylandOutput::Delegate:
   void OnOutputHandleMetrics(uint32_t output_id,
                              const gfx::Rect& new_bounds,
-                             int32_t scale_factor,
+                             float scale_factor,
                              int32_t transform) override;
 
   using OutputList = base::flat_map<uint32_t, std::unique_ptr<WaylandOutput>>;

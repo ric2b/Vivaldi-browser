@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_metrics.h"
 #include "build/chromeos_buildflags.h"
@@ -157,7 +158,8 @@ class TabLifecycleUnitExternalImpl : public TabLifecycleUnitExternal {
   void SetIsDiscarded() override { tab_lifecycle_unit_->SetIsDiscarded(); }
 
  private:
-  TabLifecycleUnitSource::TabLifecycleUnit* tab_lifecycle_unit_ = nullptr;
+  raw_ptr<TabLifecycleUnitSource::TabLifecycleUnit> tab_lifecycle_unit_ =
+      nullptr;
 };
 
 TabLifecycleUnitSource::TabLifecycleUnit::TabLifecycleUnit(
@@ -550,8 +552,8 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
     // behaviour when the Chromium guys fixes the below TODO
     content::RenderFrameHostManager* rfh_manager =
         static_cast<content::WebContentsImpl*>(old_contents)
-            ->GetFrameTree()
-            ->root()
+            ->GetPrimaryFrameTree()
+            .root()
             ->render_manager();
 
     if (rfh_manager->IsMainFrameForInnerDelegate()) {

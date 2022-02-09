@@ -13,8 +13,8 @@
 #include "base/cxx17_backports.h"
 #include "base/location.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
-#include "base/task_runner.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
@@ -51,6 +51,9 @@ class FakeTaskRunner : public base::TaskRunner {
   // |delays|: Vector to which the dalays seen by the task runner are saved.
   explicit FakeTaskRunner(std::vector<int64_t>* delays) : delays_(delays) {}
 
+  FakeTaskRunner(const FakeTaskRunner&) = delete;
+  FakeTaskRunner& operator=(const FakeTaskRunner&) = delete;
+
   // base::TaskRunner overrides:
   bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
@@ -66,8 +69,6 @@ class FakeTaskRunner : public base::TaskRunner {
  private:
   // The vector of delays.
   std::vector<int64_t>* delays_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeTaskRunner);
 };
 
 // Implementation of CryptohomePkcs11Client used in these tests.
@@ -229,6 +230,7 @@ class UserTPMTokenInfoGetterTest : public testing::Test {
     tpm_token_info_getter_ = chromeos::TPMTokenInfoGetter::CreateForUserToken(
         account_id_, cryptohome_client_.get(),
         scoped_refptr<base::TaskRunner>(new FakeTaskRunner(&delays_)));
+    tpm_token_info_getter_->set_nss_slots_software_fallback_for_testing(false);
   }
 
  protected:
@@ -304,15 +306,52 @@ TEST_F(SystemTPMTokenInfoGetterTest, TPMNotEnabled) {
   EXPECT_EQ(std::vector<int64_t>(), delays_);
 }
 
-TEST_F(SystemTPMTokenInfoGetterTest, TPMNotEnabledSystemSlotFallbackEnabled) {
+TEST_F(SystemTPMTokenInfoGetterTest, TPMNotOwnedSystemSlotFallbackEnabled) {
   chromeos::TpmManagerClient::Get()
       ->GetTestInterface()
       ->mutable_nonsensitive_status_reply()
       ->set_is_enabled(false);
+  chromeos::TpmManagerClient::Get()
+      ->GetTestInterface()
+      ->mutable_nonsensitive_status_reply()
+      ->set_is_owned(false);
 
   bool completed = false;
   absl::optional<TpmTokenInfo> result;
-  tpm_token_info_getter_->SetSystemSlotSoftwareFallback(true);
+  tpm_token_info_getter_->set_nss_slots_software_fallback_for_testing(true);
+  tpm_token_info_getter_->Start(
+      base::BindOnce(&OnTpmTokenInfoGetterCompleted, &completed, &result));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(completed);
+
+  TpmTokenInfo fake_token_info;
+  fake_token_info.set_label("TOKEN_1");
+  fake_token_info.set_user_pin("2222");
+  fake_token_info.set_slot(1);
+  cryptohome_client_->SetTpmTokenInfo(fake_token_info);
+
+  EXPECT_TRUE(completed);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ("TOKEN_1", result->label());
+  EXPECT_EQ("2222", result->user_pin());
+  EXPECT_EQ(1, result->slot());
+
+  EXPECT_EQ(std::vector<int64_t>(), delays_);
+}
+
+TEST_F(SystemTPMTokenInfoGetterTest, TPMOwnedSystemSlotFallbackEnabled) {
+  chromeos::TpmManagerClient::Get()
+      ->GetTestInterface()
+      ->mutable_nonsensitive_status_reply()
+      ->set_is_enabled(true);
+  chromeos::TpmManagerClient::Get()
+      ->GetTestInterface()
+      ->mutable_nonsensitive_status_reply()
+      ->set_is_owned(true);
+
+  bool completed = false;
+  absl::optional<TpmTokenInfo> result;
+  tpm_token_info_getter_->set_nss_slots_software_fallback_for_testing(true);
   tpm_token_info_getter_->Start(
       base::BindOnce(&OnTpmTokenInfoGetterCompleted, &completed, &result));
   base::RunLoop().RunUntilIdle();

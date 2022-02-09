@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "components/zucchini/disassembler.h"
 #include "components/zucchini/image_utils.h"
 #include "components/zucchini/type_dex.h"
@@ -24,6 +25,7 @@ namespace zucchini {
 
 class DisassemblerDex : public Disassembler {
  public:
+  static constexpr uint16_t kVersion = 1;
   // Pools follow canonical order.
   enum ReferencePool : uint8_t {
     kStringId,
@@ -260,7 +262,7 @@ class DisassemblerDex : public Disassembler {
 
   bool ParseHeader();
 
-  const dex::HeaderItem* header_ = nullptr;
+  raw_ptr<const dex::HeaderItem> header_ = nullptr;
   int dex_version_ = 0;
   MapItemMap map_item_map_ = {};
   dex::MapItem string_map_item_ = {};

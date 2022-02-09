@@ -639,6 +639,8 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"mobileNetworkScanningLabel", IDS_MOBILE_NETWORK_SCANNING_MESSAGE},
       {"networkAllowDataRoaming",
        IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING},
+      {"networkAllowDataRoamingRequired",
+       IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING_REQUIRED},
       {"networkAllowDataRoamingEnabledHome",
        IDS_SETTINGS_SETTINGS_NETWORK_ALLOW_DATA_ROAMING_ENABLED_HOME},
       {"networkAllowDataRoamingEnabledRoaming",
@@ -822,9 +824,10 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   cellular_setup::AddNonStringLoadTimeData(html_source);
   cellular_setup::AddLocalizedStrings(html_source);
 
-  html_source->AddBoolean("allowPerNetworkRoaming",
-                          base::FeatureList::IsEnabled(
-                              ash::features::kCellularAllowPerNetworkRoaming));
+  html_source->AddBoolean(
+      "bypassConnectivityCheck",
+      base::FeatureList::IsEnabled(
+          ash::features::kCellularBypassESimInstallationConnectivityCheck));
   html_source->AddBoolean("showTechnologyBadge",
                           !ash::features::IsSeparateNetworkIconsEnabled());
   html_source->AddBoolean(

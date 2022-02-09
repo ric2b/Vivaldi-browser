@@ -7,8 +7,6 @@
 
 #include <vector>
 
-#include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "content/common/content_export.h"
@@ -22,6 +20,9 @@ class CONTENT_EXPORT CdmRegistryImpl : public CdmRegistry {
  public:
   // Returns the CdmRegistryImpl singleton.
   static CdmRegistryImpl* GetInstance();
+
+  CdmRegistryImpl(const CdmRegistryImpl&) = delete;
+  CdmRegistryImpl& operator=(const CdmRegistryImpl&) = delete;
 
   // CdmRegistry implementation.
   void Init() override;
@@ -62,8 +63,6 @@ class CONTENT_EXPORT CdmRegistryImpl : public CdmRegistry {
 
   base::Lock lock_;
   std::vector<CdmInfo> cdms_ GUARDED_BY(lock_);
-
-  DISALLOW_COPY_AND_ASSIGN(CdmRegistryImpl);
 };
 
 }  // namespace content

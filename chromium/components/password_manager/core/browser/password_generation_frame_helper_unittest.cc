@@ -14,9 +14,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/proto/password_requirements.pb.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -107,11 +107,11 @@ class FakePasswordRequirementsSpecFetcher
   ~FakePasswordRequirementsSpecFetcher() override = default;
 
   void Fetch(GURL origin, FetchCallback callback) override {
-    if (origin.GetOrigin().host_piece().find(kNoServerResponse) !=
-        std::string::npos) {
+    if (origin.DeprecatedGetOriginAsURL().host_piece().find(
+            kNoServerResponse) != std::string::npos) {
       std::move(callback).Run(PasswordRequirementsSpec());
-    } else if (origin.GetOrigin().host_piece().find(kHasServerResponse) !=
-               std::string::npos) {
+    } else if (origin.DeprecatedGetOriginAsURL().host_piece().find(
+                   kHasServerResponse) != std::string::npos) {
       std::move(callback).Run(GetDomainWideRequirements());
     } else {
       NOTREACHED();
@@ -130,7 +130,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
         driver_(this),
         password_requirements_service_(
             std::make_unique<FakePasswordRequirementsSpecFetcher>()) {
-    store_->Init(prefs_.get());
+    store_->Init(prefs_.get(), /*affiliated_match_helper=*/nullptr);
   }
 
   ~MockPasswordManagerClient() override { store_->ShutdownOnUIThread(); }
@@ -325,7 +325,7 @@ TEST_F(PasswordGenerationFrameHelperTest, ProcessPasswordRequirements) {
         response_string, forms, autofill::test::GetEncodedSignatures(forms),
         /*form_interactions_ukm_logger=*/nullptr, /*log_manager=*/nullptr);
 
-    GetGenerationHelper()->PrefetchSpec(origin.GetOrigin());
+    GetGenerationHelper()->PrefetchSpec(origin.DeprecatedGetOriginAsURL());
 
     // Processs the password requirements with expected side effects of
     // either storing the requirements from the AutofillQueryResponseContents)

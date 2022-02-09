@@ -11,15 +11,15 @@
 #include <string>
 #include <vector>
 
-#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/blocklist.h"
+#include "chrome/browser/extensions/corrupted_extension_reinstaller.h"
 #include "chrome/browser/extensions/extension_allowlist.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/forced_extensions/force_installed_metrics.h"
@@ -89,11 +89,12 @@ class ExtensionServiceInterface
   // Gets the object managing the set of pending extensions.
   virtual PendingExtensionManager* pending_extension_manager() = 0;
 
+  // Gets the object managing reinstalls of the corrupted extensions.
+  virtual CorruptedExtensionReinstaller* corrupted_extension_reinstaller() = 0;
+
   // Installs an update with the contents from |extension_path|. Returns true if
   // the install can be started. Sets |out_crx_installer| to the installer if
   // one was started.
-  // TODO(aa): This method can be removed. ExtensionUpdater could use
-  // CrxInstaller directly instead.
   virtual bool UpdateExtension(const CRXFileInfo& file,
                                bool file_ownership_passed,
                                CrxInstaller** out_crx_installer) = 0;
@@ -189,6 +190,7 @@ class ExtensionService : public ExtensionServiceInterface,
   // ExtensionServiceInterface implementation.
   //
   PendingExtensionManager* pending_extension_manager() override;
+  CorruptedExtensionReinstaller* corrupted_extension_reinstaller() override;
   bool UpdateExtension(const CRXFileInfo& file,
                        bool file_ownership_passed,
                        CrxInstaller** out_crx_installer) override;
@@ -273,14 +275,26 @@ class ExtensionService : public ExtensionServiceInterface,
   // whether to remove greylist disabled reason. Called when a greylisted
   // state is removed from the Safe Browsing blocklist or Omaha blocklist. Also
   // clears all acknowledged states if the greylist disabled reason is removed.
-  void ClearGreylistedAcknowledgedStateAndMaybeReenable(
-      const std::string& extension_id);
+  void OnGreylistStateRemoved(const std::string& extension_id);
 
   // Takes acknowledged blocklist states into account and decides whether to
   // disable the greylisted extension. Called when a new greylisted state is
   // added to the Safe Browsing blocklist or Omaha blocklist.
-  void MaybeDisableGreylistedExtension(const std::string& extension_id,
-                                       BitMapBlocklistState new_state);
+  void OnGreylistStateAdded(const std::string& extension_id,
+                            BitMapBlocklistState new_state);
+
+  // Takes Safe Browsing and Omaha malware blocklist states into account and
+  // decides whether to remove the extension from the blocklist and reload it.
+  // Called when a blocklisted extension is removed from the Safe Browsing
+  // malware blocklist or Omaha malware blocklist. Also clears the acknowledged
+  // state if the extension is reloaded.
+  void OnBlocklistStateRemoved(const std::string& extension_id);
+
+  // Takes acknowledged malware blocklist state into account and decides whether
+  // to add the extension to the blocklist and unload it. Called when the
+  // extension is added to the Safe Browsing malware blocklist or the Omaha
+  // malware blocklist.
+  void OnBlocklistStateAdded(const std::string& extension_id);
 
   // Removes the disable reason and enable the extension if there are no disable
   // reasons left and is not blocked for another reason.
@@ -562,14 +576,6 @@ class ExtensionService : public ExtensionServiceInterface,
   // Helper method to determine if an extension can be blocked.
   bool CanBlockExtension(const Extension* extension) const;
 
-  // Handles the malware Omaha attribute for remotely disabled extensions.
-  // TODO(crbug.com/1193695): Move this function to OmahaAttributesHandler.
-  void HandleMalwareOmahaAttribute(const std::string& extension_id,
-                                   const base::Value& attributes);
-
-  // Enables an extension that was only previously disabled remotely.
-  void MaybeEnableRemotelyDisabledExtension(const std::string& extension_id);
-
   // Helper to determine if installing an extensions should proceed immediately,
   // or if we should delay the install until further notice, or if the install
   // should be aborted. A pending install is delayed or aborted when any of the
@@ -585,11 +591,6 @@ class ExtensionService : public ExtensionServiceInterface,
   // Manages the blocklisted extensions, intended as callback from
   // Blocklist::GetBlocklistedIDs.
   void ManageBlocklist(const Blocklist::BlocklistStateMap& blocklisted_ids);
-
-  // Add extensions in |blocklisted| to blocklisted_extensions, remove
-  // extensions that are neither in |blocklisted|, nor in |unchanged|.
-  void UpdateBlocklistedExtensions(const ExtensionIdSet& to_blocklist,
-                                   const ExtensionIdSet& unchanged);
 
   // Used only by test code.
   void UnloadAllExtensionsInternal();
@@ -621,19 +622,19 @@ class ExtensionService : public ExtensionServiceInterface,
       const std::string& extension_id,
       const absl::optional<CrxInstallError>& error);
 
-  const base::CommandLine* command_line_ = nullptr;
+  raw_ptr<const base::CommandLine> command_line_ = nullptr;
 
   // The normal profile associated with this ExtensionService.
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
 
   // The ExtensionSystem for the profile above.
-  ExtensionSystem* system_ = nullptr;
+  raw_ptr<ExtensionSystem> system_ = nullptr;
 
   // Preferences for the owning profile.
-  ExtensionPrefs* extension_prefs_ = nullptr;
+  raw_ptr<ExtensionPrefs> extension_prefs_ = nullptr;
 
   // Blocklist for the owning profile.
-  Blocklist* blocklist_ = nullptr;
+  raw_ptr<Blocklist> blocklist_ = nullptr;
 
   ExtensionAllowlist allowlist_;
 
@@ -642,7 +643,7 @@ class ExtensionService : public ExtensionServiceInterface,
   OmahaAttributesHandler omaha_attributes_handler_;
 
   // Sets of enabled/disabled/terminated/blocklisted extensions. Not owned.
-  ExtensionRegistry* registry_ = nullptr;
+  raw_ptr<ExtensionRegistry> registry_ = nullptr;
 
   // Set of allowlisted enabled extensions loaded from the
   // --disable-extensions-except command line flag.
@@ -663,7 +664,7 @@ class ExtensionService : public ExtensionServiceInterface,
   bool extensions_enabled_ = true;
 
   // Signaled when all extensions are loaded.
-  base::OneShotEvent* const ready_;
+  const raw_ptr<base::OneShotEvent> ready_;
 
   // Our extension updater, if updates are turned on.
   std::unique_ptr<ExtensionUpdater> updater_;
@@ -729,6 +730,9 @@ class ExtensionService : public ExtensionServiceInterface,
   // Reports force-installed extension metrics to UMA.
   ForceInstalledMetrics force_installed_metrics_;
 
+  // Schedules downloads/reinstalls of the corrupted extensions.
+  CorruptedExtensionReinstaller corrupted_extension_reinstaller_;
+
   base::ScopedObservation<ProfileManager, ProfileManagerObserver>
       profile_manager_observation_{this};
 
@@ -783,6 +787,10 @@ class ExtensionService : public ExtensionServiceInterface,
                            DisableExtensionWhenSwitchingBetweenGreylistStates);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingVerdictHandlerUnitTest,
                            AcknowledgedStateBackFilled);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingVerdictHandlerUnitTest,
+                           ExtensionUninstalledWhenBlocklisted);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingVerdictHandlerUnitTest,
+                           ExtensionUninstalledWhenBlocklistFetching);
   friend class ::BlocklistedExtensionSyncServiceTest;
   friend class SafeBrowsingVerdictHandlerUnitTest;
   friend class BlocklistStatesInteractionUnitTest;

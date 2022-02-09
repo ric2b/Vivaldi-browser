@@ -26,7 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_FRAME_CARET_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EDITING_FRAME_CARET_H_
 
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
@@ -67,7 +67,7 @@ class CORE_EXPORT FrameCaret final : public GarbageCollected<FrameCaret> {
   void StopCaretBlinkTimer();
   void StartBlinkCaret();
   void SetCaretEnabled(bool);
-  IntRect AbsoluteCaretBounds() const;
+  gfx::Rect AbsoluteCaretBounds() const;
 
   // Paint invalidation methods delegating to DisplayItemClient.
   void LayoutBlockWillBeDestroyed(const LayoutBlock&);

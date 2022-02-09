@@ -73,10 +73,9 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
                                        bool check_private_deps,
                                        bool consider_object_files,
                                        bool check_data_deps,
-                                       std::set<const Target*>* seen_targets) {
-  if (seen_targets->find(target) != seen_targets->end())
+                                       TargetSet* seen_targets) {
+  if (!seen_targets->add(target))
     return false;  // Already checked this one and it's not found.
-  seen_targets->insert(target);
 
   // Assume that we have relatively few generated inputs so brute-force
   // searching here is OK. If this becomes a bottleneck, consider storing
@@ -156,14 +155,13 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
 bool RecursiveCheckAssertNoDeps(const Target* target,
                                 bool check_this,
                                 const std::vector<LabelPattern>& assert_no,
-                                std::set<const Target*>* visited,
+                                TargetSet* visited,
                                 std::string* failure_path_str,
                                 const LabelPattern** failure_pattern) {
   static const char kIndentPath[] = "  ";
 
-  if (visited->find(target) != visited->end())
+  if (!visited->add(target))
     return true;  // Already checked this target.
-  visited->insert(target);
 
   if (check_this) {
     // Check this target against the given list of patterns.
@@ -262,6 +260,13 @@ Which targets are built
   required (directly or transitively) to build a target in the default
   toolchain.
 
+  Some targets might be associated but without a formal build dependency (for
+  example, related tools or optional variants). A target that is marked as
+  "generated" can propagate its generated state to an associated target using
+  "gen_deps". This will make the referenced dependency have Ninja rules
+  generated in the same cases the source target has but without a build-time
+  dependency and even in non-default toolchains.
+
   See also "gn help ninja_rules".
 
 Dependencies
@@ -284,6 +289,116 @@ Target::Target(const Settings* settings,
     : Item(settings, label, build_dependency_files) {}
 
 Target::~Target() = default;
+
+// A technical note on accessors defined below: Using a static global
+// constant is much faster at runtime than using a static local one.
+//
+// In other words:
+//
+//   static const Foo kEmptyFoo;
+//
+//   const Foo& Target::foo() const {
+//     return foo_ ? *foo_ : kEmptyFoo;
+//   }
+//
+// Is considerably faster than:
+//
+//   const Foo& Target::foo() const {
+//     if (foo_) {
+//       return *foo_;
+//     } else {
+//       static const Foo kEmptyFoo;
+//       return kEmptyFoo;
+//     }
+//   }
+//
+// Because the latter requires relatively expensive atomic operations
+// in the second branch.
+//
+
+static const BundleData kEmptyBundleData;
+
+const BundleData& Target::bundle_data() const {
+  return bundle_data_ ? *bundle_data_ : kEmptyBundleData;
+}
+
+BundleData& Target::bundle_data() {
+  if (!bundle_data_)
+    bundle_data_ = std::make_unique<BundleData>();
+  return *bundle_data_;
+}
+
+static ConfigValues kEmptyConfigValues;
+
+const ConfigValues& Target::config_values() const {
+  return config_values_ ? *config_values_ : kEmptyConfigValues;
+}
+
+ConfigValues& Target::config_values() {
+  if (!config_values_)
+    config_values_ = std::make_unique<ConfigValues>();
+  return *config_values_;
+}
+
+static const ActionValues kEmptyActionValues;
+
+const ActionValues& Target::action_values() const {
+  return action_values_ ? *action_values_ : kEmptyActionValues;
+}
+
+ActionValues& Target::action_values() {
+  if (!action_values_)
+    action_values_ = std::make_unique<ActionValues>();
+  return *action_values_;
+}
+
+static const RustValues kEmptyRustValues;
+
+const RustValues& Target::rust_values() const {
+  return rust_values_ ? *rust_values_ : kEmptyRustValues;
+}
+
+RustValues& Target::rust_values() {
+  if (!rust_values_)
+    rust_values_ = std::make_unique<RustValues>();
+  return *rust_values_;
+}
+
+static const SwiftValues kEmptySwiftValues;
+
+const SwiftValues& Target::swift_values() const {
+  return swift_values_ ? *swift_values_ : kEmptySwiftValues;
+}
+
+SwiftValues& Target::swift_values() {
+  if (!swift_values_)
+    swift_values_ = std::make_unique<SwiftValues>();
+  return *swift_values_;
+}
+
+static const Metadata kEmptyMetadata;
+
+const Metadata& Target::metadata() const {
+  return metadata_ ? *metadata_ : kEmptyMetadata;
+}
+
+Metadata& Target::metadata() {
+  if (!metadata_)
+    metadata_ = std::make_unique<Metadata>();
+  return *metadata_;
+}
+
+static const Target::GeneratedFile kEmptyGeneratedFile;
+
+const Target::GeneratedFile& Target::generated_file() const {
+  return generated_file_ ? *generated_file_ : kEmptyGeneratedFile;
+}
+
+Target::GeneratedFile& Target::generated_file() {
+  if (!generated_file_)
+    generated_file_ = std::make_unique<Target::GeneratedFile>();
+  return *generated_file_;
+}
 
 // static
 const char* Target::GetStringForOutputType(OutputType type) {
@@ -338,15 +453,15 @@ bool Target::OnResolved(Err* err) {
   ScopedTrace trace(TraceItem::TRACE_ON_RESOLVED, label());
   trace.SetToolchain(settings()->toolchain_label());
 
-  // Check visibility for just this target's own configs, before dependents are
-  // added.
-  if (!CheckConfigVisibility(err))
-    return false;
-
   // Copy this target's own dependent and public configs to the list of configs
   // applying to it.
   configs_.Append(all_dependent_configs_.begin(), all_dependent_configs_.end());
   MergePublicConfigsFrom(this, &configs_);
+
+  // Check visibility for just this target's own configs, before dependents are
+  // added, but after public_configs and all_dependent_configs are merged.
+  if (!CheckConfigVisibility(err))
+    return false;
 
   // Copy public configs from all dependencies into the list of configs
   // applying to this target (configs_).
@@ -374,13 +489,13 @@ bool Target::OnResolved(Err* err) {
   // order (local ones first, then the dependency's).
   for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
     const ConfigValues& cur = iter.cur();
-    all_lib_dirs_.append(cur.lib_dirs().begin(), cur.lib_dirs().end());
-    all_libs_.append(cur.libs().begin(), cur.libs().end());
+    all_lib_dirs_.Append(cur.lib_dirs().begin(), cur.lib_dirs().end());
+    all_libs_.Append(cur.libs().begin(), cur.libs().end());
 
-    all_framework_dirs_.append(cur.framework_dirs().begin(),
+    all_framework_dirs_.Append(cur.framework_dirs().begin(),
                                cur.framework_dirs().end());
-    all_frameworks_.append(cur.frameworks().begin(), cur.frameworks().end());
-    all_weak_frameworks_.append(cur.weak_frameworks().begin(),
+    all_frameworks_.Append(cur.frameworks().begin(), cur.frameworks().end());
+    all_weak_frameworks_.Append(cur.weak_frameworks().begin(),
                                 cur.weak_frameworks().end());
   }
 
@@ -393,7 +508,7 @@ bool Target::OnResolved(Err* err) {
   if (!FillOutputFiles(err))
     return false;
 
-  if (!swift_values_.OnTargetResolved(this, err))
+  if (!SwiftValues::OnTargetResolved(this, err))
     return false;
 
   if (!CheckSourceSetLanguages(err))
@@ -589,7 +704,7 @@ bool Target::GetOutputFilesForSource(const SourceFile& source,
     // All binary targets do a tool lookup.
     DCHECK(IsBinary());
 
-    SourceFile::Type file_type = source.type();
+    const SourceFile::Type file_type = source.GetType();
     if (file_type == SourceFile::SOURCE_UNKNOWN)
       return false;
     if (file_type == SourceFile::SOURCE_O) {
@@ -643,12 +758,8 @@ void Target::PullDependentTargetConfigs() {
 void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
   // Direct dependent libraries.
   if (dep->output_type() == STATIC_LIBRARY ||
-      dep->output_type() == SHARED_LIBRARY) {
-    inherited_libraries_.Append(dep, is_public);
-    rust_values().transitive_libs().Append(dep, is_public);
-  }
-
-  if (dep->output_type() == RUST_LIBRARY ||
+      dep->output_type() == SHARED_LIBRARY ||
+      dep->output_type() == RUST_LIBRARY ||
       dep->output_type() == RUST_PROC_MACRO ||
       dep->output_type() == SOURCE_SET ||
       (dep->output_type() == CREATE_BUNDLE &&
@@ -656,26 +767,40 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     inherited_libraries_.Append(dep, is_public);
   }
 
-  if (dep->output_type() == RUST_LIBRARY) {
-    rust_values().transitive_libs().Append(dep, is_public);
-    rust_values().transitive_libs().AppendInherited(
-        dep->rust_values().transitive_libs(), is_public);
+  if (dep->output_type() == STATIC_LIBRARY ||
+      dep->output_type() == SHARED_LIBRARY ||
+      dep->output_type() == RUST_LIBRARY) {
+    rust_transitive_libs_.Append(dep, is_public);
+
+    // Propagate public dependent libraries.
+    for (const auto& transitive :
+         dep->rust_transitive_libs_.GetOrderedAndPublicFlag()) {
+      if (transitive.second) {
+        rust_transitive_libs_.Append(transitive.first, is_public);
+      }
+    }
+  }
+
+  // Rust libraries (those meant for consumption by another Rust target) are
+  // handled the same way, whether static or dynamic.
+  if (dep->output_type() == RUST_LIBRARY ||
+      RustValues::InferredCrateType(dep) == RustValues::CRATE_DYLIB) {
+    rust_transitive_libs_.AppendInherited(dep->rust_transitive_libs_,
+                                          is_public);
 
     // If there is a transitive dependency that is not a rust library, place it
     // in the normal location
     for (const auto& inherited :
-         rust_values().transitive_libs().GetOrderedAndPublicFlag()) {
-      if (!(inherited.first->output_type() == RUST_LIBRARY ||
-            inherited.first->output_type() == RUST_PROC_MACRO)) {
-        inherited_libraries_.Append(inherited.first,
-                                    is_public && inherited.second);
+         rust_transitive_libs_.GetOrderedAndPublicFlag()) {
+      if (!RustValues::IsRustLibrary(inherited.first)) {
+        inherited_libraries_.Append(inherited.first, inherited.second);
       }
     }
   } else if (dep->output_type() == RUST_PROC_MACRO) {
     // We will need to specify the path to find a procedural macro,
     // but have no need to specify the paths to find its dependencies
     // as the procedural macro is now a complete .so.
-    rust_values().transitive_libs().Append(dep, is_public);
+    rust_transitive_libs_.Append(dep, is_public);
   } else if (dep->output_type() == SHARED_LIBRARY) {
     // Shared library dependendencies are inherited across public shared
     // library boundaries.
@@ -695,15 +820,16 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
     //
     // Static libraries and source sets aren't inherited across shared
     // library boundaries because they will be linked into the shared
-    // library.
+    // library. Rust dylib deps are handled above and transitive deps are
+    // resolved by the compiler.
     inherited_libraries_.AppendPublicSharedLibraries(dep->inherited_libraries(),
                                                      is_public);
   } else if (!dep->IsFinal()) {
     // The current target isn't linked, so propagate linked deps and
     // libraries up the dependency tree.
     inherited_libraries_.AppendInherited(dep->inherited_libraries(), is_public);
-    rust_values().transitive_libs().AppendInherited(
-        dep->rust_values().transitive_libs(), is_public);
+    rust_transitive_libs_.AppendInherited(dep->rust_transitive_libs_,
+                                          is_public);
   } else if (dep->complete_static_lib()) {
     // Inherit only final targets through _complete_ static libraries.
     //
@@ -722,12 +848,12 @@ void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
 
   // Library settings are always inherited across static library boundaries.
   if (!dep->IsFinal() || dep->output_type() == STATIC_LIBRARY) {
-    all_lib_dirs_.append(dep->all_lib_dirs());
-    all_libs_.append(dep->all_libs());
+    all_lib_dirs_.Append(dep->all_lib_dirs());
+    all_libs_.Append(dep->all_libs());
 
-    all_framework_dirs_.append(dep->all_framework_dirs());
-    all_frameworks_.append(dep->all_frameworks());
-    all_weak_frameworks_.append(dep->all_weak_frameworks());
+    all_framework_dirs_.Append(dep->all_framework_dirs());
+    all_frameworks_.Append(dep->all_frameworks());
+    all_weak_frameworks_.Append(dep->all_weak_frameworks());
   }
 }
 
@@ -774,15 +900,19 @@ void Target::PullRecursiveBundleData() {
       continue;
 
     // Direct dependency on a bundle_data target.
-    if (pair.ptr->output_type() == BUNDLE_DATA)
-      bundle_data_.AddBundleData(pair.ptr);
+    if (pair.ptr->output_type() == BUNDLE_DATA) {
+      bundle_data().AddBundleData(pair.ptr);
+    }
 
     // Recursive bundle_data informations from all dependencies.
-    for (auto* target : pair.ptr->bundle_data().bundle_deps())
-      bundle_data_.AddBundleData(target);
+    if (pair.ptr->has_bundle_data()) {
+      for (auto* target : pair.ptr->bundle_data().bundle_deps())
+        bundle_data().AddBundleData(target);
+    }
   }
 
-  bundle_data_.OnTargetResolved(this);
+  if (has_bundle_data())
+    bundle_data().OnTargetResolved(this);
 }
 
 bool Target::FillOutputFiles(Err* err) {
@@ -799,10 +929,12 @@ bool Target::FillOutputFiles(Err* err) {
     case GENERATED_FILE: {
       // These don't get linked to and use stamps which should be the first
       // entry in the outputs. These stamps are named
-      // "<target_out_dir>/<targetname>.stamp".
+      // "<target_out_dir>/<targetname>.stamp". Setting "output_name" does not
+      // affect the stamp file name: it is always based on the original target
+      // name.
       dependency_output_file_ =
           GetBuildDirForTargetAsOutputFile(this, BuildDirType::OBJ);
-      dependency_output_file_.value().append(GetComputedOutputName());
+      dependency_output_file_.value().append(label().name());
       dependency_output_file_.value().append(".stamp");
       break;
     }
@@ -878,7 +1010,8 @@ bool Target::FillOutputFiles(Err* err) {
 
   // Count anything generated from bundle_data dependencies.
   if (output_type_ == CREATE_BUNDLE) {
-    if (!bundle_data_.GetOutputFiles(settings(), this, &computed_outputs_, err))
+    if (!bundle_data().GetOutputFiles(settings(), this, &computed_outputs_,
+                                      err))
       return false;
   }
 
@@ -897,10 +1030,13 @@ bool Target::FillOutputFiles(Err* err) {
   }
 
   // Also count anything the target has declared to be an output.
-  std::vector<SourceFile> outputs_as_sources;
-  action_values_.GetOutputsAsSourceFiles(this, &outputs_as_sources);
-  for (const SourceFile& out : outputs_as_sources)
-    computed_outputs_.push_back(OutputFile(settings()->build_settings(), out));
+  if (action_values_.get()) {
+    std::vector<SourceFile> outputs_as_sources;
+    action_values_->GetOutputsAsSourceFiles(this, &outputs_as_sources);
+    for (const SourceFile& out : outputs_as_sources)
+      computed_outputs_.push_back(
+          OutputFile(settings()->build_settings(), out));
+  }
 
   return true;
 }
@@ -917,8 +1053,10 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
   // places must match.
 
   // Track where the current settings came from for issuing errors.
+  bool has_precompiled_headers =
+      config_values_.get() && config_values_->has_precompiled_headers();
   const Label* pch_header_settings_from = NULL;
-  if (config_values_.has_precompiled_headers())
+  if (has_precompiled_headers)
     pch_header_settings_from = &label();
 
   for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
@@ -930,10 +1068,10 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
     if (!cur.has_precompiled_headers())
       continue;  // This one has no precompiled header info, skip.
 
-    if (config_values_.has_precompiled_headers()) {
+    if (has_precompiled_headers) {
       // Already have a precompiled header values, the settings must match.
-      if (config_values_.precompiled_header() != cur.precompiled_header() ||
-          config_values_.precompiled_source() != cur.precompiled_source()) {
+      if (config_values_->precompiled_header() != cur.precompiled_header() ||
+          config_values_->precompiled_source() != cur.precompiled_source()) {
         *err = Err(
             defined_from(), "Precompiled header setting conflict.",
             "The target " + label().GetUserVisibleName(false) +
@@ -942,8 +1080,8 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
                 "\n"
                 "From " +
                 pch_header_settings_from->GetUserVisibleName(false) +
-                "\n  header: " + config_values_.precompiled_header() +
-                "\n  source: " + config_values_.precompiled_source().value() +
+                "\n  header: " + config_values_->precompiled_header() +
+                "\n  source: " + config_values_->precompiled_source().value() +
                 "\n\n"
                 "From " +
                 config->label().GetUserVisibleName(false) +
@@ -954,8 +1092,8 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
     } else {
       // Have settings from a config, apply them to ourselves.
       pch_header_settings_from = &config->label();
-      config_values_.set_precompiled_header(cur.precompiled_header());
-      config_values_.set_precompiled_source(cur.precompiled_source());
+      config_values().set_precompiled_header(cur.precompiled_header());
+      config_values().set_precompiled_source(cur.precompiled_source());
     }
   }
 
@@ -1011,7 +1149,7 @@ bool Target::CheckAssertNoDeps(Err* err) const {
   if (assert_no_deps_.empty())
     return true;
 
-  std::set<const Target*> visited;
+  TargetSet visited;
   std::string failure_path_str;
   const LabelPattern* failure_pattern = nullptr;
 
@@ -1053,7 +1191,7 @@ void Target::CheckSourceGenerated(const SourceFile& source) const {
   // the list of files written by the GN build itself (often response files)
   // can be filtered out of this list.
   OutputFile out_file(settings()->build_settings(), source);
-  std::set<const Target*> seen_targets;
+  TargetSet seen_targets;
   bool check_data_deps = false;
   bool consider_object_files = false;
   if (!EnsureFileIsGeneratedByDependency(this, out_file, true,
@@ -1079,7 +1217,7 @@ bool Target::GetMetadata(const std::vector<std::string>& keys_to_extract,
                          const SourceDir& rebase_dir,
                          bool deps_only,
                          std::vector<Value>* result,
-                         std::set<const Target*>* targets_walked,
+                         TargetSet* targets_walked,
                          Err* err) const {
   std::vector<Value> next_walk_keys;
   std::vector<Value> current_result;
@@ -1092,9 +1230,12 @@ bool Target::GetMetadata(const std::vector<std::string>& keys_to_extract,
     next_walk_keys.push_back(Value(nullptr, ""));
   } else {
     // Otherwise, we walk this target and collect the appropriate data.
-    if (!metadata_.WalkStep(settings()->build_settings(), keys_to_extract,
-                            keys_to_walk, rebase_dir, &next_walk_keys,
-                            &current_result, err))
+    // NOTE: Always call WalkStep() even when have_metadata() is false,
+    // because WalkStep() will append to 'next_walk_keys' in this case.
+    // See https://crbug.com/1273069.
+    if (!metadata().WalkStep(settings()->build_settings(), keys_to_extract,
+                             keys_to_walk, rebase_dir, &next_walk_keys,
+                             &current_result, err))
       return false;
   }
 
@@ -1112,8 +1253,7 @@ bool Target::GetMetadata(const std::vector<std::string>& keys_to_extract,
     if (next.string_value().empty()) {
       for (const auto& dep : all_deps) {
         // If we haven't walked this dep yet, go down into it.
-        auto pair = targets_walked->insert(dep.ptr);
-        if (pair.second) {
+        if (targets_walked->add(dep.ptr)) {
           if (!dep.ptr->GetMetadata(keys_to_extract, keys_to_walk, rebase_dir,
                                     false, result, targets_walked, err))
             return false;
@@ -1141,8 +1281,7 @@ bool Target::GetMetadata(const std::vector<std::string>& keys_to_extract,
       // Match against the label with the toolchain.
       if (dep.label.GetUserVisibleName(true) == canonicalize_next_label) {
         // If we haven't walked this dep yet, go down into it.
-        auto pair = targets_walked->insert(dep.ptr);
-        if (pair.second) {
+        if (targets_walked->add(dep.ptr)) {
           if (!dep.ptr->GetMetadata(keys_to_extract, keys_to_walk, rebase_dir,
                                     false, result, targets_walked, err))
             return false;

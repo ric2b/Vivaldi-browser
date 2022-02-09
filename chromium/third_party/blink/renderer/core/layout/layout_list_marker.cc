@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/core/css/counter_style.h"
 #include "third_party/blink/renderer/core/html/html_li_element.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_block_flow.h"
-#include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/paint/list_marker_painter.h"
@@ -79,7 +78,7 @@ LayoutSize LayoutListMarker::ImageBulletSize() const {
   // marker box.
   float bullet_width = font_data->GetFontMetrics().Ascent() / 2.0f;
   return RoundedLayoutSize(image_->ImageSize(
-      StyleRef().EffectiveZoom(), FloatSize(bullet_width, bullet_width),
+      StyleRef().EffectiveZoom(), gfx::SizeF(bullet_width, bullet_width),
       LayoutObject::ShouldRespectImageOrientation(this)));
 }
 
@@ -130,7 +129,6 @@ void LayoutListMarker::Paint(const PaintInfo& paint_info) const {
 void LayoutListMarker::UpdateLayout() {
   NOT_DESTROYED();
   DCHECK(NeedsLayout());
-  LayoutAnalyzer::Scope analyzer(*this);
 
   LayoutUnit block_offset = LogicalTop();
   const LayoutListItem* list_item = ListItem();

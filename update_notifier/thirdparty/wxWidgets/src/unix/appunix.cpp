@@ -9,9 +9,6 @@
 
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
@@ -53,7 +50,7 @@ public:
                                     );
     }
 
-    virtual void OnReadWaiting()
+    virtual void OnReadWaiting() wxOVERRIDE
     {
         // The base class wxWakeUpPipe::OnReadWaiting() needs to be called in order
         // to read the data out of the wake up pipe and clear it for next time.

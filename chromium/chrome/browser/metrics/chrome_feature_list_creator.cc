@@ -63,7 +63,7 @@ void ChromeFeatureListCreator::CreateFeatureList() {
   ConvertFlagsToSwitches();
   CreateMetricsServices();
   SetupInitialPrefs();
-  SetupFieldTrials();
+  SetUpFieldTrials();
 }
 
 void ChromeFeatureListCreator::SetApplicationLocale(const std::string& locale) {
@@ -171,13 +171,18 @@ void ChromeFeatureListCreator::ConvertFlagsToSwitches() {
                                       flags_ui::kAddSentinels);
 }
 
-void ChromeFeatureListCreator::SetupFieldTrials() {
+void ChromeFeatureListCreator::SetUpFieldTrials() {
   browser_field_trials_ =
       std::make_unique<ChromeBrowserFieldTrials>(local_state_.get());
 
   metrics_services_manager_->InstantiateFieldTrialList(
       cc::switches::kEnableGpuBenchmarking);
   auto feature_list = std::make_unique<base::FeatureList>();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // On Chrome OS, the platform needs to be able to access the
+  // FeatureList::Accessor. On other platforms, this API should not be used.
+  cros_feature_list_accessor_ = feature_list->ConstructAccessor();
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Associate parameters chosen in about:flags and create trial/group for them.
   flags_ui::PrefServiceFlagsStorage flags_storage(local_state_.get());
@@ -187,7 +192,7 @@ void ChromeFeatureListCreator::SetupFieldTrials() {
 
   variations::VariationsService* variations_service =
       metrics_services_manager_->GetVariationsService();
-  variations_service->SetupFieldTrials(
+  variations_service->SetUpFieldTrials(
       variation_ids,
       content::GetSwitchDependentFeatureOverrides(
           *base::CommandLine::ForCurrentProcess()),

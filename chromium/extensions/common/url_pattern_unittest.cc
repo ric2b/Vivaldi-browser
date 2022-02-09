@@ -26,7 +26,8 @@ static const int kAllSchemes =
     URLPattern::SCHEME_CHROMEUI | URLPattern::SCHEME_EXTENSION |
     URLPattern::SCHEME_FILESYSTEM | URLPattern::SCHEME_WS |
     URLPattern::SCHEME_VIVALDIUI |
-    URLPattern::SCHEME_WSS | URLPattern::SCHEME_DATA | URLPattern::SCHEME_URN;
+    URLPattern::SCHEME_WSS | URLPattern::SCHEME_DATA | URLPattern::SCHEME_URN |
+    URLPattern::SCHEME_UUID_IN_PACKAGE;
 
 TEST(ExtensionURLPatternTest, ParseInvalid) {
   const struct {
@@ -641,7 +642,7 @@ TEST(ExtensionURLPatternTest, ConvertToExplicitSchemes) {
       URLPattern::SCHEME_FTP,
       "http://google.com/monkey").ConvertToExplicitSchemes());
 
-  ASSERT_EQ(11u+1, all_urls.size());
+  ASSERT_EQ(12u+1, all_urls.size());
   ASSERT_EQ(2u, all_schemes.size());
   ASSERT_EQ(1u, monkey.size());
 
@@ -656,6 +657,7 @@ TEST(ExtensionURLPatternTest, ConvertToExplicitSchemes) {
   EXPECT_EQ("wss://*/*", all_urls[8].GetAsString());
   EXPECT_EQ("data:/*", all_urls[9].GetAsString());
   EXPECT_EQ("urn:/*", all_urls[10].GetAsString());
+  EXPECT_EQ("uuid-in-package:/*", all_urls[11].GetAsString());
 
   EXPECT_EQ("http://google.com/foo", all_schemes[0].GetAsString());
   EXPECT_EQ("https://google.com/foo", all_schemes[1].GetAsString());

@@ -16,9 +16,6 @@
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if !wxUSE_DOC_VIEW_ARCHITECTURE
     #error You must set wxUSE_DOC_VIEW_ARCHITECTURE to 1 in setup.h!
@@ -29,7 +26,7 @@
 #endif
 
 #if wxUSE_STD_IOSTREAM
-    #include "wx/ioswrap.h"
+    #include <iostream>
 #else
     #include "wx/txtstrm.h"
 #endif
@@ -42,7 +39,7 @@
 // DrawingDocument implementation
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(DrawingDocument, wxDocument)
+wxIMPLEMENT_DYNAMIC_CLASS(DrawingDocument, wxDocument);
 
 DocumentOstream& DrawingDocument::SaveObject(DocumentOstream& ostream)
 {
@@ -184,7 +181,7 @@ DocumentIstream& DoodleSegment::LoadObject(DocumentIstream& istream)
 // wxTextDocument: wxDocument and wxTextCtrl married
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_CLASS(wxTextDocument, wxDocument)
+wxIMPLEMENT_CLASS(wxTextDocument, wxDocument);
 
 bool wxTextDocument::OnCreate(const wxString& path, long flags)
 {
@@ -193,13 +190,7 @@ bool wxTextDocument::OnCreate(const wxString& path, long flags)
 
     // subscribe to changes in the text control to update the document state
     // when it's modified
-    GetTextCtrl()->Connect
-    (
-        wxEVT_TEXT,
-        wxCommandEventHandler(wxTextDocument::OnTextChange),
-        NULL,
-        this
-    );
+    GetTextCtrl()->Bind(wxEVT_TEXT, &wxTextDocument::OnTextChange, this);
 
     return true;
 }
@@ -250,7 +241,7 @@ void wxTextDocument::OnTextChange(wxCommandEvent& event)
 // TextEditDocument implementation
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(TextEditDocument, wxDocument)
+wxIMPLEMENT_DYNAMIC_CLASS(TextEditDocument, wxDocument);
 
 wxTextCtrl* TextEditDocument::GetTextCtrl() const
 {
@@ -262,7 +253,7 @@ wxTextCtrl* TextEditDocument::GetTextCtrl() const
 // ImageDocument and ImageDetailsDocument implementation
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(ImageDocument, wxDocument)
+wxIMPLEMENT_DYNAMIC_CLASS(ImageDocument, wxDocument);
 
 bool ImageDocument::DoOpenDocument(const wxString& file)
 {

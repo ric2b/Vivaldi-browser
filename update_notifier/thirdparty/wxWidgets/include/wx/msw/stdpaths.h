@@ -4,12 +4,14 @@
 // Author:      Vadim Zeitlin
 // Modified by:
 // Created:     2004-10-19
-// Copyright:   (c) 2004 Vadim Zeitlin <vadim@wxwindows.org>
+// Copyright:   (c) 2004 Vadim Zeitlin <vadim@wxwidgets.org>
 // Licence:     wxWindows licence
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifndef _WX_MSW_STDPATHS_H_
 #define _WX_MSW_STDPATHS_H_
+
+struct _GUID;
 
 // ----------------------------------------------------------------------------
 // wxStandardPaths
@@ -19,14 +21,17 @@ class WXDLLIMPEXP_BASE wxStandardPaths : public wxStandardPathsBase
 {
 public:
     // implement base class pure virtuals
-    virtual wxString GetExecutablePath() const;
-    virtual wxString GetConfigDir() const;
-    virtual wxString GetUserConfigDir() const;
-    virtual wxString GetDataDir() const;
-    virtual wxString GetUserDataDir() const;
-    virtual wxString GetUserLocalDataDir() const;
-    virtual wxString GetPluginsDir() const;
-    virtual wxString GetDocumentsDir() const;
+    virtual wxString GetExecutablePath() const wxOVERRIDE;
+    virtual wxString GetConfigDir() const wxOVERRIDE;
+    virtual wxString GetUserConfigDir() const wxOVERRIDE;
+    virtual wxString GetDataDir() const wxOVERRIDE;
+    virtual wxString GetUserDataDir() const wxOVERRIDE;
+    virtual wxString GetUserLocalDataDir() const wxOVERRIDE;
+    virtual wxString GetPluginsDir() const wxOVERRIDE;
+    virtual wxString GetUserDir(Dir userDir) const wxOVERRIDE;
+    virtual wxString MakeConfigFileName(const wxString& basename,
+                                        ConfigFileConv conv = ConfigFileConv_Ext
+                                        ) const wxOVERRIDE;
 
 
     // MSW-specific methods
@@ -72,6 +77,8 @@ protected:
     // get the path corresponding to the given standard CSIDL_XXX constant
     static wxString DoGetDirectory(int csidl);
 
+    static wxString DoGetKnownFolder(const _GUID& rfid);
+
     // return the directory of the application itself
     wxString GetAppDir() const;
 
@@ -88,8 +95,8 @@ protected:
 class WXDLLIMPEXP_BASE wxStandardPathsWin16 : public wxStandardPaths
 {
 public:
-    virtual wxString GetConfigDir() const;
-    virtual wxString GetUserConfigDir() const;
+    virtual wxString GetConfigDir() const wxOVERRIDE;
+    virtual wxString GetUserConfigDir() const wxOVERRIDE;
 };
 
 #endif // _WX_MSW_STDPATHS_H_

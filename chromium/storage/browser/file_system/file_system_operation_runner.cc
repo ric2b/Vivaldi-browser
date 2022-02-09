@@ -13,7 +13,6 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/url_request/url_request_context.h"
@@ -92,7 +91,7 @@ OperationID FileSystemOperationRunner::CreateDirectory(
 OperationID FileSystemOperationRunner::Copy(
     const FileSystemURL& src_url,
     const FileSystemURL& dest_url,
-    CopyOrMoveOption option,
+    CopyOrMoveOptionSet options,
     ErrorBehavior error_behavior,
     const CopyOrMoveProgressCallback& progress_callback,
     StatusCallback callback) {
@@ -109,7 +108,7 @@ OperationID FileSystemOperationRunner::Copy(
   PrepareForWrite(id, dest_url);
   PrepareForRead(id, src_url);
   operation_raw->Copy(
-      src_url, dest_url, option, error_behavior,
+      src_url, dest_url, options, error_behavior,
       progress_callback.is_null()
           ? CopyOrMoveProgressCallback()
           : base::BindRepeating(&FileSystemOperationRunner::OnCopyProgress,
@@ -122,7 +121,7 @@ OperationID FileSystemOperationRunner::Copy(
 OperationID FileSystemOperationRunner::Move(
     const FileSystemURL& src_url,
     const FileSystemURL& dest_url,
-    CopyOrMoveOption option,
+    CopyOrMoveOptionSet options,
     ErrorBehavior error_behavior,
     const CopyOrMoveProgressCallback& progress_callback,
     StatusCallback callback) {
@@ -139,7 +138,7 @@ OperationID FileSystemOperationRunner::Move(
   PrepareForWrite(id, dest_url);
   PrepareForWrite(id, src_url);
   operation_raw->Move(
-      src_url, dest_url, option, error_behavior,
+      src_url, dest_url, options, error_behavior,
       progress_callback.is_null()
           ? CopyOrMoveProgressCallback()
           : base::BindRepeating(&FileSystemOperationRunner::OnCopyProgress,
@@ -400,7 +399,7 @@ OperationID FileSystemOperationRunner::OpenFile(const FileSystemURL& url,
   if (file_flags &
       (base::File::FLAG_CREATE | base::File::FLAG_OPEN_ALWAYS |
        base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_OPEN_TRUNCATED |
-       base::File::FLAG_WRITE | base::File::FLAG_EXCLUSIVE_WRITE |
+       base::File::FLAG_WRITE | base::File::FLAG_WIN_EXCLUSIVE_WRITE |
        base::File::FLAG_DELETE_ON_CLOSE | base::File::FLAG_WRITE_ATTRIBUTES)) {
     PrepareForWrite(id, url);
   } else {
@@ -498,7 +497,7 @@ OperationID FileSystemOperationRunner::RemoveDirectory(
 OperationID FileSystemOperationRunner::CopyFileLocal(
     const FileSystemURL& src_url,
     const FileSystemURL& dest_url,
-    CopyOrMoveOption option,
+    CopyOrMoveOptionSet options,
     const CopyFileProgressCallback& progress_callback,
     StatusCallback callback) {
   base::File::Error error = base::File::FILE_OK;
@@ -514,7 +513,7 @@ OperationID FileSystemOperationRunner::CopyFileLocal(
   PrepareForRead(id, src_url);
   PrepareForWrite(id, dest_url);
   operation_raw->CopyFileLocal(
-      src_url, dest_url, option, progress_callback,
+      src_url, dest_url, options, progress_callback,
       base::BindOnce(&FileSystemOperationRunner::DidFinish, weak_ptr_, id,
                      std::move(callback)));
   return id;
@@ -523,7 +522,7 @@ OperationID FileSystemOperationRunner::CopyFileLocal(
 OperationID FileSystemOperationRunner::MoveFileLocal(
     const FileSystemURL& src_url,
     const FileSystemURL& dest_url,
-    CopyOrMoveOption option,
+    CopyOrMoveOptionSet options,
     StatusCallback callback) {
   base::File::Error error = base::File::FILE_OK;
   std::unique_ptr<FileSystemOperation> operation =
@@ -538,7 +537,7 @@ OperationID FileSystemOperationRunner::MoveFileLocal(
   PrepareForWrite(id, src_url);
   PrepareForWrite(id, dest_url);
   operation_raw->MoveFileLocal(
-      src_url, dest_url, option,
+      src_url, dest_url, options,
       base::BindOnce(&FileSystemOperationRunner::DidFinish, weak_ptr_, id,
                      std::move(callback)));
   return id;
@@ -567,7 +566,7 @@ void FileSystemOperationRunner::DidFinish(const OperationID id,
   // Calling the callback or deleting the |operations_| entry in
   // |FinishOperation| may release the FileSystemContext which owns this runner,
   // so take a reference to keep both alive until the end of this call.
-  scoped_refptr<FileSystemContext> context(file_system_context_);
+  scoped_refptr<FileSystemContext> context(file_system_context_.get());
 
   if (is_beginning_operation_) {
     finished_operations_.insert(id);
@@ -588,7 +587,7 @@ void FileSystemOperationRunner::DidGetMetadata(
   // Calling the callback or deleting the |operations_| entry in
   // |FinishOperation| may release the FileSystemContext which owns this runner,
   // so take a reference to keep both alive until the end of this call.
-  scoped_refptr<FileSystemContext> context(file_system_context_);
+  scoped_refptr<FileSystemContext> context(file_system_context_.get());
 
   if (is_beginning_operation_) {
     finished_operations_.insert(id);
@@ -611,7 +610,7 @@ void FileSystemOperationRunner::DidReadDirectory(
   // Calling the callback or deleting the |operations_| entry in
   // |FinishOperation| may release the FileSystemContext which owns this runner,
   // so take a reference to keep both alive until the end of this call.
-  scoped_refptr<FileSystemContext> context(file_system_context_);
+  scoped_refptr<FileSystemContext> context(file_system_context_.get());
 
   if (is_beginning_operation_) {
     finished_operations_.insert(id);
@@ -634,7 +633,7 @@ void FileSystemOperationRunner::DidWrite(const OperationID id,
   // Calling the callback or deleting the |operations_| entry in
   // |FinishOperation| may release the FileSystemContext which owns this runner,
   // so take a reference to keep both alive until the end of this call.
-  scoped_refptr<FileSystemContext> context(file_system_context_);
+  scoped_refptr<FileSystemContext> context(file_system_context_.get());
 
   if (is_beginning_operation_) {
     finished_operations_.insert(id);
@@ -657,7 +656,7 @@ void FileSystemOperationRunner::DidOpenFile(
   // Calling the callback or deleting the |operations_| entry in
   // |FinishOperation| may release the FileSystemContext which owns this runner,
   // so take a reference to keep both alive until the end of this call.
-  scoped_refptr<FileSystemContext> context(file_system_context_);
+  scoped_refptr<FileSystemContext> context(file_system_context_.get());
 
   if (is_beginning_operation_) {
     finished_operations_.insert(id);
@@ -682,7 +681,7 @@ void FileSystemOperationRunner::DidCreateSnapshot(
   // Calling the callback or deleting the |operations_| entry in
   // |FinishOperation| may release the FileSystemContext which owns this runner,
   // so take a reference to keep both alive until the end of this call.
-  scoped_refptr<FileSystemContext> context(file_system_context_);
+  scoped_refptr<FileSystemContext> context(file_system_context_.get());
 
   if (is_beginning_operation_) {
     finished_operations_.insert(id);

@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
 
 #include <memory>
+
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -56,9 +57,12 @@
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
+#include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
+#include "third_party/blink/renderer/core/html/fenced_frame/document_fenced_frames.h"
+#include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
@@ -2472,23 +2476,41 @@ protocol::Response InspectorDOMAgent::getFrameOwner(
     const String& frame_id,
     int* backend_node_id,
     protocol::Maybe<int>* node_id) {
-  Frame* frame = inspected_frames_->Root();
-  for (; frame; frame = frame->Tree().TraverseNext(inspected_frames_->Root())) {
-    if (IdentifiersFactory::FrameId(frame) == frame_id)
+  Frame* found_frame = nullptr;
+  for (Frame* frame = inspected_frames_->Root(); frame;
+       frame = frame->Tree().TraverseNext(inspected_frames_->Root())) {
+    if (IdentifiersFactory::FrameId(frame) == frame_id) {
+      found_frame = frame;
       break;
+    }
+
+    if (IsA<LocalFrame>(frame)) {
+      for (HTMLFencedFrameElement* ff :
+           DocumentFencedFrames::From(*(To<LocalFrame>(frame)->GetDocument()))
+               .GetFencedFrames()) {
+        Frame* ff_frame = ff->ContentFrame();
+        if (ff_frame && IdentifiersFactory::FrameId(ff_frame) == frame_id) {
+          found_frame = ff_frame;
+          break;
+        }
+      }
+    }
   }
-  if (!frame) {
+
+  if (!found_frame) {
     for (PortalContents* portal :
          DocumentPortals::From(*inspected_frames_->Root()->GetDocument())
              .GetPortals()) {
-      frame = portal->GetFrame();
-      if (IdentifiersFactory::FrameId(frame) == frame_id)
+      Frame* portal_frame = portal->GetFrame();
+      if (IdentifiersFactory::FrameId(portal_frame) == frame_id) {
+        found_frame = portal_frame;
         break;
+      }
     }
   }
-  if (!frame)
+  if (!found_frame)
     return Response::ServerError("Frame with the given id was not found.");
-  auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(frame->Owner());
+  auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(found_frame->Owner());
   if (!frame_owner) {
     return Response::ServerError(
         "Frame with the given id does not belong to the target.");

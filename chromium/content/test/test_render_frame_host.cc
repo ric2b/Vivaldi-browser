@@ -32,6 +32,7 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/parsed_headers.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
@@ -68,7 +69,8 @@ TestRenderFrameHost::TestRenderFrameHost(
     int32_t routing_id,
     mojo::PendingAssociatedRemote<mojom::Frame> frame_remote,
     const blink::LocalFrameToken& frame_token,
-    RenderFrameHostImpl::LifecycleStateImpl lifecycle_state)
+    RenderFrameHostImpl::LifecycleStateImpl lifecycle_state,
+    scoped_refptr<BrowsingContextState> browsing_context_state)
     : RenderFrameHostImpl(site_instance,
                           render_view_host,
                           delegate,
@@ -77,14 +79,21 @@ TestRenderFrameHost::TestRenderFrameHost(
                           routing_id,
                           std::move(frame_remote),
                           frame_token,
-                          /*renderer_initiated_creation=*/false,
-                          lifecycle_state),
+                          /*renderer_initiated_creation_of_main_frame=*/false,
+                          lifecycle_state,
+                          browsing_context_state),
       child_creation_observer_(
           WebContents::FromRenderViewHost(render_view_host.get())),
       simulate_history_list_was_cleared_(false),
       last_commit_was_error_page_(false) {}
 
 TestRenderFrameHost::~TestRenderFrameHost() = default;
+
+void TestRenderFrameHost::FlushLocalFrameMessages() {
+  // Force creation of `local_frame_`.
+  GetAssociatedLocalFrame();
+  local_frame_.FlushForTesting();
+}
 
 TestRenderViewHost* TestRenderFrameHost::GetRenderViewHost() {
   return static_cast<TestRenderViewHost*>(
@@ -193,7 +202,8 @@ void TestRenderFrameHost::SimulateRedirect(const GURL& new_url) {
 void TestRenderFrameHost::SimulateBeforeUnloadCompleted(bool proceed) {
   base::TimeTicks now = base::TimeTicks::Now();
   ProcessBeforeUnloadCompleted(
-      proceed, false /* treat_as_final_completion_callback */, now, now);
+      proceed, /* treat_as_final_completion_callback= */ false, now, now,
+      /*for_legacy=*/false);
 }
 
 void TestRenderFrameHost::SimulateUnloadACK() {
@@ -311,7 +321,6 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           std::string() /* headers */, net::LOAD_NORMAL,
           false /* skip_service_worker */,
           blink::mojom::RequestContextType::HYPERLINK,
-          network::mojom::RequestDestination::kDocument,
           blink::mojom::MixedContentContextType::kBlockable,
           false /* is_form_submission */,
           false /* was_initiated_by_link_click */,
@@ -332,6 +341,8 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
   common_params->navigation_type =
       blink::mojom::NavigationType::DIFFERENT_DOCUMENT;
   common_params->has_user_gesture = has_user_gesture;
+  common_params->request_destination =
+      network::mojom::RequestDestination::kDocument;
 
   mojo::PendingAssociatedRemote<mojom::NavigationClient>
       navigation_client_remote;
@@ -542,11 +553,8 @@ TestRenderFrameHost::BuildDidCommitParams(bool did_create_new_entry,
     params->should_replace_current_entry |= (GetLastCommittedURL() == url);
   } else {
     params->should_replace_current_entry |=
-        (!is_main_frame() &&
-         frame_tree_node()
-             ->is_on_initial_empty_document_or_subsequent_empty_documents());
+        (!is_main_frame() && frame_tree_node()->is_on_initial_empty_document());
   }
-  params->gesture = NavigationGestureUser;
   params->contents_mime_type = "text/html";
   params->method = "GET";
   params->http_status_code = response_code;

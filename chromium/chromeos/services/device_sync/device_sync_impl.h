@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
@@ -101,6 +100,9 @@ class DeviceSyncImpl : public DeviceSyncBase,
    private:
     static Factory* custom_factory_instance_;
   };
+
+  DeviceSyncImpl(const DeviceSyncImpl&) = delete;
+  DeviceSyncImpl& operator=(const DeviceSyncImpl&) = delete;
 
   ~DeviceSyncImpl() override;
 
@@ -322,8 +324,6 @@ class DeviceSyncImpl : public DeviceSyncBase,
       cryptauth_device_activity_getter_;
 
   base::WeakPtrFactory<DeviceSyncImpl> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(DeviceSyncImpl);
 };
 
 }  // namespace device_sync

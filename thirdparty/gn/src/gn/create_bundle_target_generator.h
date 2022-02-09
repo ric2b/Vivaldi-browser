@@ -7,7 +7,6 @@
 
 #include <string_view>
 
-#include "base/macros.h"
 #include "gn/target_generator.h"
 
 class SourceDir;
@@ -42,7 +41,9 @@ class CreateBundleTargetGenerator : public TargetGenerator {
   bool FillBundleDepsFilter();
   bool FillXcassetCompilerFlags();
 
-  DISALLOW_COPY_AND_ASSIGN(CreateBundleTargetGenerator);
+  CreateBundleTargetGenerator(const CreateBundleTargetGenerator&) = delete;
+  CreateBundleTargetGenerator& operator=(const CreateBundleTargetGenerator&) =
+      delete;
 };
 
 #endif  // TOOLS_GN_CREATE_BUNDLE_TARGET_GENERATOR_H_

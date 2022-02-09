@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -57,6 +56,11 @@ class CONTENT_EXPORT DevToolsBackgroundServicesContextImpl
   DevToolsBackgroundServicesContextImpl(
       BrowserContext* browser_context,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context);
+
+  DevToolsBackgroundServicesContextImpl(
+      const DevToolsBackgroundServicesContextImpl&) = delete;
+  DevToolsBackgroundServicesContextImpl& operator=(
+      const DevToolsBackgroundServicesContextImpl&) = delete;
 
   void AddObserver(EventObserver* observer);
   void RemoveObserver(const EventObserver* observer);
@@ -123,8 +127,6 @@ class CONTENT_EXPORT DevToolsBackgroundServicesContextImpl
 
   base::WeakPtrFactory<DevToolsBackgroundServicesContextImpl> weak_ptr_factory_{
       this};
-
-  DISALLOW_COPY_AND_ASSIGN(DevToolsBackgroundServicesContextImpl);
 };
 
 }  // namespace content

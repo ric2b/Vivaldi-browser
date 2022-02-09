@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/time/time.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom.h"
@@ -157,6 +156,11 @@ class FakeCrosHealthdService final
       override;
   void AddAudioObserver(
       mojo::PendingRemote<mojom::CrosHealthdAudioObserver> observer) override;
+  void AddThunderboltObserver(
+      mojo::PendingRemote<mojom::CrosHealthdThunderboltObserver> observer)
+      override;
+  void AddUsbObserver(
+      mojo::PendingRemote<mojom::CrosHealthdUsbObserver> observer) override;
 
   // CrosHealthdProbeService overrides:
   void ProbeTelemetryInfo(
@@ -239,6 +243,15 @@ class FakeCrosHealthdService final
   // Calls the audio event OnUnderrun for all registered audio observers.
   void EmitAudioUnderrunEventForTesting();
 
+  // Calls the audio event OnSevereUnderrun for all registered audio observers.
+  void EmitAudioSevereUnderrunEventForTesting();
+
+  // Calls the Thunderbolt event OnAdd on all registered Thunderbolt observers.
+  void EmitThunderboltAddEventForTesting();
+
+  // Calls the USB event OnAdd on all registered USB observers.
+  void EmitUsbAddEventForTesting();
+
   // Calls the network event OnConnectionStateChangedEvent on all registered
   // network observers.
   void EmitConnectionStateChangedEventForTesting(
@@ -307,6 +320,10 @@ class FakeCrosHealthdService final
       network_observers_;
   // Collection of registered audio observers.
   mojo::RemoteSet<mojom::CrosHealthdAudioObserver> audio_observers_;
+  // Collection of registered Thunderbolt observers.
+  mojo::RemoteSet<mojom::CrosHealthdThunderboltObserver> thunderbolt_observers_;
+  // Collection of registered USB observers.
+  mojo::RemoteSet<mojom::CrosHealthdUsbObserver> usb_observers_;
 
   // Contains the most recent params passed to `GetRoutineUpdate`, if it has
   // been called.

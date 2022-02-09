@@ -15,7 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
@@ -119,7 +119,7 @@ void MaybePrintResourceId(uint16_t resource_id) {
 class ScopedFileWriter {
  public:
   // Constructor takes a |path| parameter and tries to open the file.
-  // Call valid() to check if the operation was succesful.
+  // Call valid() to check if the operation was successful.
   explicit ScopedFileWriter(const base::FilePath& path)
       : valid_(true), file_(base::OpenFile(path, "wb")) {
     if (!file_) {
@@ -134,7 +134,7 @@ class ScopedFileWriter {
   // Destructor.
   ~ScopedFileWriter() { Close(); }
 
-  // Return true if the last i/o operation was succesful.
+  // Return true if the last i/o operation was successful.
   bool valid() const { return valid_; }
 
   // Try to write |data_size| bytes from |data| into the file, if a previous
@@ -161,7 +161,8 @@ class ScopedFileWriter {
 
  private:
   bool valid_ = false;
-  FILE* file_ = nullptr;  // base::ScopedFILE doesn't check errors on close.
+  raw_ptr<FILE> file_ =
+      nullptr;  // base::ScopedFILE doesn't check errors on close.
 };
 
 bool MmapHasGzipHeader(const base::MemoryMappedFile* mmap) {
@@ -286,8 +287,8 @@ bool DataPack::LoadFromPath(const base::FilePath& path) {
   // Open the file for reading; allowing other consumers to also open it for
   // reading and deleting. Do not allow others to write to it.
   base::File data_file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
-                                 base::File::FLAG_EXCLUSIVE_WRITE |
-                                 base::File::FLAG_SHARE_DELETE);
+                                 base::File::FLAG_WIN_EXCLUSIVE_WRITE |
+                                 base::File::FLAG_WIN_SHARE_DELETE);
   if (!data_file.IsValid()) {
     DLOG(ERROR) << "Failed to open datapack with base::File::Error "
                 << data_file.error_details();

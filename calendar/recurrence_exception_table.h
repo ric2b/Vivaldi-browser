@@ -11,7 +11,6 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
 #include "calendar/event_type.h"
 #include "calendar/recurrence_exception_type.h"
 #include "sql/statement.h"

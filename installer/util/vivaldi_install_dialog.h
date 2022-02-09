@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/util_constants.h"
 
@@ -53,14 +52,6 @@ class VivaldiInstallDialog {
     INSTALL_DLG_INSTALL = 1,  // The user clicked the install button.
   };
 
-  enum Scaling {
-    DPI_NORMAL,  // 100%
-    DPI_MEDIUM,  // 125%
-    DPI_LARGE,   // 150%
-    DPI_XL,      // 200%
-    DPI_XXL      // 250%
-  };
-
   VivaldiInstallDialog(HINSTANCE instance, VivaldiInstallUIOptions options);
   virtual ~VivaldiInstallDialog();
   VivaldiInstallDialog(const VivaldiInstallDialog&) = delete;
@@ -90,17 +81,12 @@ class VivaldiInstallDialog {
   void EnableAndShowControl(int id, bool show);
   void ShowControl(int id, bool show);
 
-  void InitBkgnd();
-  void InitCtlBrushes();
+  void UpdateSize();
   void ClearAll();
-  void Resize();
   void Center();
 
   BOOL OnEraseBkgnd(HDC hdc);
   HBRUSH OnCtlColor(HWND hwnd_ctl, HDC hdc);
-
-  HBRUSH CreateDIBrush(int x, int y, int cx, int cy);
-  HBRUSH GetCtlBrush(int id_dlg_item);
 
   static INT_PTR CALLBACK DlgProc(HWND hdlg,
                                   UINT msg,
@@ -122,17 +108,14 @@ class VivaldiInstallDialog {
   bool is_upgrade_ = false;
   bool dialog_ended_ = false;
   bool advanced_mode_ = false;
-  HWND hdlg_ = NULL;
-  HINSTANCE instance_ = NULL;
+  HWND hdlg_ = nullptr;
+  HINSTANCE instance_ = nullptr;
   DlgResult dlg_result_ = INSTALL_DLG_ERROR;
-  Scaling dpi_scale_ = DPI_NORMAL;
-  HBITMAP hbitmap_bkgnd_ = NULL;
-  HBITMAP back_bmp_ = NULL;
-  LPVOID back_bits_ = NULL;
-  LONG back_bmp_width_ = 0;
-  LONG back_bmp_height_ = 0;
-  std::vector<std::pair<int, HBRUSH>> brushes_;
-  std::vector<HGLOBAL> dibs_;
+  HBITMAP back_bmp_ = nullptr;
+  int background_bitmap_width_ = 0;
+  int background_bitmap_height_ = 0;
+  int window_client_width_ = 0;
+  int window_client_height_ = 0;
   bool changed_language_ = false;
 
   static VivaldiInstallDialog* this_;

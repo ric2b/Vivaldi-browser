@@ -10,7 +10,6 @@
 #include "base/base64url.h"
 #include "base/bind.h"
 #include "base/containers/contains.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
@@ -18,6 +17,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/safe_browsing/core/common/utils.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -343,8 +343,7 @@ void V4GetHashProtocolManager::GetFullHashes(
                        &resource_request->headers);
 
   resource_request->load_flags = net::LOAD_DISABLE_CACHE;
-  if (base::FeatureList::IsEnabled(kSafeBrowsingRemoveCookies))
-    resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   std::unique_ptr<network::SimpleURLLoader> owned_loader =
       network::SimpleURLLoader::Create(std::move(resource_request),
                                        traffic_annotation);
@@ -369,7 +368,8 @@ void V4GetHashProtocolManager::GetFullHashesWithApis(
   DCHECK(url.SchemeIs(url::kHttpScheme) || url.SchemeIs(url::kHttpsScheme));
 
   std::vector<FullHash> full_hashes;
-  V4ProtocolManagerUtil::UrlToFullHashes(url.GetOrigin(), &full_hashes);
+  V4ProtocolManagerUtil::UrlToFullHashes(url.DeprecatedGetOriginAsURL(),
+                                         &full_hashes);
 
   FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
   for (const FullHash& full_hash : full_hashes) {
@@ -795,8 +795,8 @@ void V4GetHashProtocolManager::OnURLLoaderCompleteInternal(
     const std::string& data) {
   auto it = pending_hash_requests_.find(url_loader);
   DCHECK(it != pending_hash_requests_.end()) << "Request not found";
-  V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
-      "SafeBrowsing.V4GetHash.Network.Result", net_error, response_code);
+  RecordHttpResponseOrErrorCode("SafeBrowsing.V4GetHash.Network.Result",
+                                net_error, response_code);
 
   std::vector<FullHashInfo> full_hash_infos;
   Time negative_cache_expire;

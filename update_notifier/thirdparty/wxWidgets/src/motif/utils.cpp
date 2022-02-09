@@ -176,13 +176,17 @@ void wxBell()
     XBell (wxGlobalDisplay(), 0);
 }
 
-wxPortId wxGUIAppTraits::GetToolkitVersion(int *verMaj, int *verMin) const
+wxPortId wxGUIAppTraits::GetToolkitVersion(int *verMaj,
+                                           int *verMin,
+                                           int *verMicro) const
 {
     // XmVERSION and XmREVISION are defined in Xm/Xm.h
     if ( verMaj )
         *verMaj = XmVERSION;
     if ( verMin )
         *verMin = XmREVISION;
+    if ( verMicro )
+        *verMicro = 0;
 
     return wxPORT_MOTIF;
 }
@@ -219,41 +223,6 @@ void wxGetMousePosition( int* x, int* y )
     *x = xev.x_root;
     *y = xev.y_root;
 #endif
-}
-
-// Return true if we have a colour display
-bool wxColourDisplay()
-{
-    return wxDisplayDepth() > 1;
-}
-
-// Returns depth of screen
-int wxDisplayDepth()
-{
-    Display *dpy = wxGlobalDisplay();
-
-    return DefaultDepth (dpy, DefaultScreen (dpy));
-}
-
-// Get size of display
-void wxDisplaySize(int *width, int *height)
-{
-    Display *dpy = wxGlobalDisplay();
-
-    if ( width )
-        *width = DisplayWidth (dpy, DefaultScreen (dpy));
-    if ( height )
-        *height = DisplayHeight (dpy, DefaultScreen (dpy));
-}
-
-void wxDisplaySizeMM(int *width, int *height)
-{
-    Display *dpy = wxGlobalDisplay();
-
-    if ( width )
-        *width = DisplayWidthMM(dpy, DefaultScreen (dpy));
-    if ( height )
-        *height = DisplayHeightMM(dpy, DefaultScreen (dpy));
 }
 
 // Configurable display in wxX11 and wxMotif
@@ -660,7 +629,7 @@ wxBitmap wxCreateMaskedBitmap(const wxBitmap& bitmap, const wxColour& colour)
     srcDC.SelectObjectAsSource(bitmap);
     destDC.SelectObject(newBitmap);
 
-    wxBrush brush(colour, wxSOLID);
+    wxBrush brush(colour, wxBRUSHSTYLE_SOLID);
     destDC.SetBackground(brush);
     destDC.Clear();
     destDC.Blit(0, 0, bitmap.GetWidth(), bitmap.GetHeight(),

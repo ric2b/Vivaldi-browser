@@ -12,9 +12,6 @@
 
 #include "testprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
@@ -38,6 +35,8 @@ private:
         CPPUNIT_TEST( GetString );
         CPPUNIT_TEST( LastDelimiter );
         CPPUNIT_TEST( StrtokCompat );
+        CPPUNIT_TEST( CopyObj );
+        CPPUNIT_TEST( AssignObj );
     CPPUNIT_TEST_SUITE_END();
 
     void GetCount();
@@ -45,8 +44,10 @@ private:
     void GetString();
     void LastDelimiter();
     void StrtokCompat();
+    void CopyObj();
+    void AssignObj();
 
-    DECLARE_NO_COPY_CLASS(TokenizerTestCase)
+    wxDECLARE_NO_COPY_CLASS(TokenizerTestCase);
 };
 
 // register in the unnamed registry so that these tests are run by default
@@ -268,4 +269,45 @@ void TokenizerTestCase::StrtokCompat()
     }
 }
 
+void TokenizerTestCase::CopyObj()
+{
+    // Test copy ctor
+    wxStringTokenizer tkzSrc(wxT("first:second:third:fourth"), wxT(":"));
+    while ( tkzSrc.HasMoreTokens() )
+    {
+        wxString tokenSrc = tkzSrc.GetNextToken();
+        wxStringTokenizer tkz = tkzSrc;
 
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetPosition(), tkz.GetPosition() );
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetString(), tkz.GetString() );
+
+        // Change the state of both objects and compare again...
+        tokenSrc = tkzSrc.GetNextToken();
+        wxString token = tkz.GetNextToken();
+
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetPosition(), tkz.GetPosition() );
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetString(), tkz.GetString() );
+    }
+}
+
+void TokenizerTestCase::AssignObj()
+{
+    // Test assignment
+    wxStringTokenizer tkzSrc(wxT("first:second:third:fourth"), wxT(":"));
+    wxStringTokenizer tkz;
+    while ( tkzSrc.HasMoreTokens() )
+    {
+        wxString tokenSrc = tkzSrc.GetNextToken();
+        tkz = tkzSrc;
+
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetPosition(), tkz.GetPosition() );
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetString(), tkz.GetString() );
+
+        // Change the state of both objects and compare again...
+        tokenSrc = tkzSrc.GetNextToken();
+        wxString token = tkz.GetNextToken();
+
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetPosition(), tkz.GetPosition() );
+        CPPUNIT_ASSERT_EQUAL( tkzSrc.GetString(), tkz.GetString() );
+    }
+}

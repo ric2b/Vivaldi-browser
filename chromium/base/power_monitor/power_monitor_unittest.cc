@@ -4,7 +4,6 @@
 
 #include "base/power_monitor/power_monitor.h"
 
-#include "base/macros.h"
 #include "base/test/power_monitor_test.h"
 #include "base/test/task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -85,6 +84,14 @@ TEST_F(PowerMonitorTest, PowerNotifications) {
   // Repeated indications the device is off battery power should be suppressed.
   source().GeneratePowerStateEvent(false);
   EXPECT_EQ(observers[0].power_state_changes(), 2);
+
+  // Send speed limit change notifications.
+  source().GenerateSpeedLimitEvent(666);
+  EXPECT_EQ(observers[0].speed_limit_changes(), 1);
+  EXPECT_EQ(observers[0].last_speed_limit(), 666);
+  source().GenerateSpeedLimitEvent(777);
+  EXPECT_EQ(observers[0].speed_limit_changes(), 2);
+  EXPECT_EQ(observers[0].last_speed_limit(), 777);
 
   EXPECT_EQ(observers[0].thermal_state_changes(), 0);
 

@@ -22,7 +22,6 @@ import {LocalDataBrowserProxy, LocalDataBrowserProxyImpl} from './local_data_bro
 
 
 const categoryLabels: {[key: string]: string} = {
-  app_cache: loadTimeData.getString('cookieAppCache'),
   cache_storage: loadTimeData.getString('cookieCacheStorage'),
   database: loadTimeData.getString('cookieDatabaseStorage'),
   file_system: loadTimeData.getString('cookieFileSystem'),
@@ -162,6 +161,12 @@ class SiteDataDetailsSubpageElement extends SiteDataDetailsSubpageElementBase {
     MetricsBrowserProxyImpl.getInstance().recordSettingsPageHistogram(
         PrivacyElementInteractions.COOKIE_DETAILS_REMOVE_ALL);
     this.browserProxy_.removeSite(this.site_);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'site-data-details-subpage': SiteDataDetailsSubpageElement;
   }
 }
 

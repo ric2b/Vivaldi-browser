@@ -13,7 +13,6 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
@@ -84,7 +83,8 @@ class TestPermissionContext : public PermissionContextBase {
   ContentSetting GetContentSettingFromMap(const GURL& url_a,
                                           const GURL& url_b) {
     auto* map = PermissionsClient::Get()->GetSettingsMap(browser_context());
-    return map->GetContentSetting(url_a.GetOrigin(), url_b.GetOrigin(),
+    return map->GetContentSetting(url_a.DeprecatedGetOriginAsURL(),
+                                  url_b.DeprecatedGetOriginAsURL(),
                                   content_settings_type());
   }
 
@@ -606,7 +606,8 @@ class PermissionContextBaseTests : public content::RenderViewHostTestHarness {
               permission_context.GetContentSettingFromMap(url, url));
 
     // Try to reset permission.
-    permission_context.ResetPermission(url.GetOrigin(), url.GetOrigin());
+    permission_context.ResetPermission(url.DeprecatedGetOriginAsURL(),
+                                       url.DeprecatedGetOriginAsURL());
     ContentSetting setting_after_reset =
         permission_context.GetContentSettingFromMap(url, url);
     ContentSetting default_setting =
@@ -771,7 +772,13 @@ TEST_F(PermissionContextBaseTests, TestDismissUntilBlocked) {
 }
 
 // Test setting a custom number of dismissals before block via variations.
-TEST_F(PermissionContextBaseTests, TestDismissVariations) {
+// TODO(crbug.com/1278842): Fix flaky test on Linux TSan.
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_TestDismissVariations DISABLED_TestDismissVariations
+#else
+#define MAYBE_TestDismissVariations TestDismissVariations
+#endif
+TEST_F(PermissionContextBaseTests, MAYBE_TestDismissVariations) {
   TestVariationBlockOnSeveralDismissals_TestContent();
 }
 
@@ -802,7 +809,13 @@ TEST_F(PermissionContextBaseTests, TestGrantAndRevoke) {
 }
 
 // Tests the global kill switch by enabling/disabling the Field Trials.
-TEST_F(PermissionContextBaseTests, TestGlobalKillSwitch) {
+// TODO(crbug.com/1278842): Fix flaky test on Linux TSan.
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_TestGlobalKillSwitch DISABLED_TestGlobalKillSwitch
+#else
+#define MAYBE_TestGlobalKillSwitch TestGlobalKillSwitch
+#endif
+TEST_F(PermissionContextBaseTests, MAYBE_TestGlobalKillSwitch) {
   TestGlobalPermissionsKillSwitch(ContentSettingsType::GEOLOCATION);
   TestGlobalPermissionsKillSwitch(ContentSettingsType::NOTIFICATIONS);
   TestGlobalPermissionsKillSwitch(ContentSettingsType::MIDI_SYSEX);

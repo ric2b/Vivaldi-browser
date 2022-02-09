@@ -6,7 +6,6 @@
 #define ASH_COMPONENTS_POWER_DARK_RESUME_CONTROLLER_H_
 
 #include "base/component_export.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
@@ -135,12 +134,5 @@ class COMPONENT_EXPORT(ASH_POWER) DarkResumeController
 
 }  // namespace system
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
-namespace chromeos {
-namespace system {
-using ::ash::system::DarkResumeController;
-}  // namespace system
-}  // namespace chromeos
 
 #endif  // ASH_COMPONENTS_POWER_DARK_RESUME_CONTROLLER_H_

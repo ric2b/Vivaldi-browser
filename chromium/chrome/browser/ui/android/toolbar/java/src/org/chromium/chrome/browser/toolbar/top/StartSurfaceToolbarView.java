@@ -10,7 +10,9 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
@@ -21,6 +23,7 @@ import android.view.ViewStub;
 import android.view.animation.BaseInterpolator;
 import android.view.animation.Interpolator;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 
@@ -64,7 +67,7 @@ class StartSurfaceToolbarView extends RelativeLayout {
     private boolean mIsNewTabButtonAtStart;
     private boolean mShouldShowNewTabViewText;
     private HomeButton mHomeButton;
-    private View mLogo;
+    private ImageView mLogo;
     private View mTabSwitcherButtonView;
 
     @Nullable
@@ -77,8 +80,6 @@ class StartSurfaceToolbarView extends RelativeLayout {
     private Rect mLogoRect = new Rect();
     private Rect mViewRect = new Rect();
 
-    private boolean mShouldShow;
-    private boolean mInStartSurfaceMode;
     private boolean mShowTransitionAnimations;
     private AnimatorSet mLayoutChangeAnimatorSet;
 
@@ -169,6 +170,22 @@ class StartSurfaceToolbarView extends RelativeLayout {
     void setLogoVisibility(boolean isVisible) {
         mIsLogoVisible = isVisible;
         if (!mShowTransitionAnimations) mLogo.setVisibility(getVisibility(isVisible));
+    }
+
+    /**
+     * Set the logo image.
+     * @param logoImage The logo image in bitmap format.
+     */
+    void setLogoImage(Bitmap logoImage) {
+        mLogo.setImageDrawable(new BitmapDrawable(getResources(), logoImage));
+    }
+
+    /**
+     * @param logoContentDescription The content description of the logo.
+     */
+    void setLogoContentDescription(String logoContentDescription) {
+        mLogo.setFocusable(logoContentDescription != null);
+        mLogo.setContentDescription(logoContentDescription);
     }
 
     /**
@@ -377,21 +394,11 @@ class StartSurfaceToolbarView extends RelativeLayout {
     }
 
     /**
-     * Show or hide toolbar from tab.
-     * @param inStartSurfaceMode Whether or not toolbar should be shown or hidden.
-     * */
-    void setStartSurfaceMode(boolean inStartSurfaceMode) {
-        mInStartSurfaceMode = inStartSurfaceMode;
-        startToolbarVisibilityAnimations();
-    }
-
-    /**
      * Show or hide toolbar.
      * @param shouldShowStartSurfaceToolbar Whether or not toolbar should be shown or hidden.
      * */
     void setToolbarVisibility(boolean shouldShowStartSurfaceToolbar) {
-        mShouldShow = shouldShowStartSurfaceToolbar;
-        startToolbarVisibilityAnimations();
+        startToolbarVisibilityAnimations(shouldShowStartSurfaceToolbar);
     }
 
     /**
@@ -473,9 +480,7 @@ class StartSurfaceToolbarView extends RelativeLayout {
      * If transition animations shouldn't show, update the visibility of toolbar; Otherwise if
      * toolbar is already showing and transition animations should show, show transition animations.
      */
-    private void startToolbarVisibilityAnimations() {
-        boolean shouldShowStartSurfaceToolbar = mInStartSurfaceMode && mShouldShow;
-
+    private void startToolbarVisibilityAnimations(boolean shouldShowStartSurfaceToolbar) {
         if (mLayoutChangeAnimatorSet != null) mLayoutChangeAnimatorSet.cancel();
 
         if (!mShowTransitionAnimations) {

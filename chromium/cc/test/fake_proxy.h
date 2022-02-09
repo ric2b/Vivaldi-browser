@@ -7,7 +7,8 @@
 
 #include <memory>
 
-#include "base/single_thread_task_runner.h"
+#include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/paint_holding_reason.h"
 #include "cc/trees/proxy.h"
@@ -31,7 +32,6 @@ class FakeProxy : public Proxy {
   void SetNeedsUpdateLayers() override {}
   void SetNeedsCommit() override {}
   void SetNeedsRedraw(const gfx::Rect& damage_rect) override {}
-  void SetNextCommitWaitsForActivation() override {}
   void SetTargetLocalSurfaceId(
       const viz::LocalSurfaceId& target_local_surface_id) override {}
   bool RequestedAnimatePending() override;
@@ -54,14 +54,14 @@ class FakeProxy : public Proxy {
   void SetSourceURL(ukm::SourceId source_id, const GURL& url) override {}
   void SetUkmSmoothnessDestination(
       base::WritableSharedMemoryMapping ukm_smoothness_data) override {}
-  void ClearHistory() override {}
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override {}
   void SetEnableFrameRateThrottling(
       bool enable_frame_rate_throttling) override {}
+  uint32_t GetAverageThroughput() const override;
 
  private:
-  LayerTreeHost* layer_tree_host_;
+  raw_ptr<LayerTreeHost> layer_tree_host_;
 };
 
 }  // namespace cc

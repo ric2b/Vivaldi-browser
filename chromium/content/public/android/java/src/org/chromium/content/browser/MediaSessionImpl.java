@@ -138,9 +138,11 @@ public class MediaSessionImpl extends MediaSession {
         mIsControllable = isControllable;
         mIsSuspended = isSuspended;
 
+        try { // Vivaldi: Catch potential exceptions here to avoid native crash. Ref. VAB-5120
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().mediaSessionStateChanged(isControllable, isSuspended);
         }
+        } catch (Exception ignored) {}
     }
 
     @CalledByNative
@@ -157,9 +159,11 @@ public class MediaSessionImpl extends MediaSession {
         for (int action : actions) actionSet.add(action);
         mActionSet = actionSet;
 
+        try { // Vivaldi: Catch potential exceptions here to avoid native crash. Ref. VAB-5120
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().mediaSessionActionsChanged(actionSet);
         }
+        } catch (Exception ignored) {}
     }
 
     @CalledByNative

@@ -13,15 +13,8 @@
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/chrome_features.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/permissions/permission_manager.h"
-#include "components/permissions/permission_util.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -32,7 +25,6 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_directory_handle.mojom.h"
-#include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 #include "third_party/blink/public/mojom/web_launch/web_launch.mojom.h"
 #include "url/origin.h"
 
@@ -118,28 +110,50 @@ WebLaunchFilesHelper* WebLaunchFilesHelper::GetForWebContents(
 }
 
 // static
-void WebLaunchFilesHelper::SetLaunchPaths(
+void WebLaunchFilesHelper::EnqueueLaunchParams(
     content::WebContents* web_contents,
-    const GURL& launch_url,
-    std::vector<base::FilePath> launch_paths) {
-  if (launch_paths.empty())
-    return;
-
-  SetLaunchPathsIfPermitted(web_contents, launch_url, /*launch_dir=*/{},
-                            std::move(launch_paths));
-}
-
-// static
-void WebLaunchFilesHelper::SetLaunchDirectoryAndLaunchPaths(
-    content::WebContents* web_contents,
-    const GURL& launch_url,
+    const GURL& app_scope,
+    bool await_navigation,
+    GURL launch_url,
     base::FilePath launch_dir,
     std::vector<base::FilePath> launch_paths) {
-  if (launch_dir.empty() || launch_paths.empty())
+  auto helper = base::WrapUnique(
+      new WebLaunchFilesHelper(web_contents, app_scope, std::move(launch_url),
+                               std::move(launch_dir), std::move(launch_paths)));
+
+  auto* helper_ptr = helper.get();
+  web_contents->SetUserData(UserDataKey(), std::move(helper));
+  helper_ptr->Start(await_navigation);
+}
+
+WebLaunchFilesHelper::WebLaunchFilesHelper(
+    content::WebContents* web_contents,
+    const GURL& app_scope,
+    GURL launch_url,
+    base::FilePath launch_dir,
+    std::vector<base::FilePath> launch_paths)
+    : content::WebContentsObserver(web_contents),
+      content::WebContentsUserData<WebLaunchFilesHelper>(*web_contents),
+      app_scope_(app_scope.spec()),
+      launch_url_(std::move(launch_url)),
+      launch_dir_(std::move(launch_dir)),
+      launch_paths_(std::move(launch_paths)) {
+  DCHECK(InAppScope(launch_url_));
+}
+
+void WebLaunchFilesHelper::Start(bool await_navigation) {
+  // Wait for DidFinishNavigation before enqueuing.
+  if (await_navigation)
     return;
 
-  SetLaunchPathsIfPermitted(web_contents, launch_url, launch_dir,
-                            std::move(launch_paths));
+  url_params_enqueued_in_ = web_contents()->GetLastCommittedURL();
+  SendLaunchEntries();
+}
+
+// TODO(crbug.com/1250225): Move this class into chrome/browser/web_applications
+// and use WebAppRegistrar::IsUrlInAppScope().
+bool WebLaunchFilesHelper::InAppScope(const GURL& url) const {
+  return base::StartsWith(url.spec(), app_scope_, base::CompareCase::SENSITIVE);
 }
 
 void WebLaunchFilesHelper::DidFinishNavigation(
@@ -151,89 +165,51 @@ void WebLaunchFilesHelper::DidFinishNavigation(
   if (!handle->IsInPrimaryMainFrame())
     return;
 
-  MaybeSendLaunchEntries();
-}
+  // Launch params still haven't been enqueued.
+  if (!url_params_enqueued_in_.is_valid()) {
+    if (!InAppScope(handle->GetURL())) {
+      DestroySelf();
+      return;
+    }
 
-WebLaunchFilesHelper::WebLaunchFilesHelper(
-    content::WebContents* web_contents,
-    const GURL& launch_url,
-    base::FilePath launch_dir,
-    std::vector<base::FilePath> launch_paths)
-    : content::WebContentsObserver(web_contents),
-      launch_paths_(launch_paths),
-      launch_dir_(launch_dir),
-      launch_url_(launch_url) {
-  DCHECK(launch_paths.size());
-}
-
-// static
-void WebLaunchFilesHelper::SetLaunchPathsIfPermitted(
-    content::WebContents* web_contents,
-    const GURL& launch_url,
-    base::FilePath launch_dir,
-    std::vector<base::FilePath> launch_paths) {
-  const bool using_settings = base::FeatureList::IsEnabled(
-      features::kDesktopPWAsFileHandlingSettingsGated);
-
-  // Don't even bother creating the object if the permission is blocked.
-  if (!using_settings &&
-      PermissionManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext()))
-              ->GetPermissionStatus(ContentSettingsType::FILE_HANDLING,
-                                    launch_url, launch_url)
-              .content_setting == CONTENT_SETTING_BLOCK) {
+    url_params_enqueued_in_ = handle->GetURL();
+    SendLaunchEntries();
     return;
   }
 
-  auto helper = base::WrapUnique(
-      new WebLaunchFilesHelper(web_contents, launch_url, std::move(launch_dir),
-                               std::move(launch_paths)));
-  // When using settings instead of permissions, the setting should have
-  // been checked/prompt shown by this point.
-  if (using_settings)
-    helper->passed_permission_check_ = true;
-
-  WebLaunchFilesHelper* helper_ptr = helper.get();
-  web_contents->SetUserData(UserDataKey(), std::move(helper));
-  helper_ptr->MaybeSendLaunchEntries();
-}
-
-void WebLaunchFilesHelper::MaybeSendLaunchEntries() {
-  const GURL current_url =
-      permissions::PermissionUtil::GetLastCommittedOriginAsURL(web_contents());
-  if (launch_url_.GetOrigin() == current_url.GetOrigin()) {
-    if (!permission_was_checked_ && !passed_permission_check_) {
-      permission_was_checked_ = true;
-      content::RenderFrameHost* frame = web_contents()->GetMainFrame();
-      permissions::PermissionManager* permission_manager =
-          PermissionManagerFactory::GetForProfile(
-              Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
-      permission_manager->RequestPermission(
-          ContentSettingsType::FILE_HANDLING, frame, current_url,
-          /*user_gesture=*/true,
-          base::BindOnce(&WebLaunchFilesHelper::OnPermissionRequestResponse,
-                         weak_ptr_factory_.GetWeakPtr()));
-    } else if (passed_permission_check_) {
-      // If the permission was checked and passed, and then a same-site
-      // navigation (e.g. redirect) occurred, set the launch queue again.
-      SendLaunchEntries();
-    }
-  } else if (permission_was_checked_) {
-    // Delete `this` after a navigation to an ineligible URL.
-    web_contents()->RemoveUserData(UserDataKey());
-  }
-}
-
-void WebLaunchFilesHelper::OnPermissionRequestResponse(ContentSetting setting) {
-  passed_permission_check_ = setting == CONTENT_SETTING_ALLOW;
-
-  if (passed_permission_check_) {
+  // Re-enqueue launch params for page reloads.
+  // Check the current URL still matches as it may have changed via
+  // `history.pushState()`.
+  if (handle->GetReloadType() != content::ReloadType::NONE &&
+      url_params_enqueued_in_ == handle->GetURL()) {
     SendLaunchEntries();
+    return;
+  }
+
+  DestroySelf();
+  return;
+}
+
+void WebLaunchFilesHelper::SendLaunchEntries() {
+  DCHECK(url_params_enqueued_in_.is_valid());
+  DCHECK(InAppScope(url_params_enqueued_in_));
+  mojo::AssociatedRemote<blink::mojom::WebLaunchService> launch_service;
+  web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces()->GetInterface(
+      &launch_service);
+  DCHECK(launch_service);
+
+  if (!launch_paths_.empty() || !launch_dir_.empty()) {
+    EntriesBuilder entries_builder(web_contents(), launch_url_,
+                                   launch_paths_.size() + 1);
+    if (!launch_dir_.empty())
+      entries_builder.AddDirectoryEntry(launch_dir_);
+
+    for (const auto& path : launch_paths_)
+      entries_builder.AddFileEntry(path);
+
+    launch_service->SetLaunchFiles(entries_builder.Build());
   } else {
-    // Close the app asynchronously since it deletes the `PermissionManager`.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&WebLaunchFilesHelper::CloseApp,
-                                  weak_ptr_factory_.GetWeakPtr()));
+    launch_service->EnqueueLaunchParams(launch_url_);
   }
 }
 
@@ -242,20 +218,9 @@ void WebLaunchFilesHelper::CloseApp() {
   // `this` is deleted.
 }
 
-void WebLaunchFilesHelper::SendLaunchEntries() {
-  EntriesBuilder entries_builder(web_contents(), launch_url_,
-                                 launch_paths_.size() + 1);
-  if (!launch_dir_.empty())
-    entries_builder.AddDirectoryEntry(launch_dir_);
-
-  for (const auto& path : launch_paths_)
-    entries_builder.AddFileEntry(path);
-
-  mojo::AssociatedRemote<blink::mojom::WebLaunchService> launch_service;
-  web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces()->GetInterface(
-      &launch_service);
-  DCHECK(launch_service);
-  launch_service->SetLaunchFiles(entries_builder.Build());
+void WebLaunchFilesHelper::DestroySelf() {
+  web_contents()->RemoveUserData(UserDataKey());
+  // `this` is deleted.
 }
 
 }  // namespace web_launch

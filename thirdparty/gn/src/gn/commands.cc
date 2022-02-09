@@ -612,14 +612,12 @@ void FilterAndPrintTargets(bool indent, std::vector<const Target*>* targets) {
   }
 }
 
-void FilterAndPrintTargetSet(bool indent,
-                             const std::set<const Target*>& targets) {
+void FilterAndPrintTargetSet(bool indent, const TargetSet& targets) {
   std::vector<const Target*> target_vector(targets.begin(), targets.end());
   FilterAndPrintTargets(indent, &target_vector);
 }
 
-void FilterAndPrintTargetSet(const std::set<const Target*>& targets,
-                             base::ListValue* out) {
+void FilterAndPrintTargetSet(const TargetSet& targets, base::ListValue* out) {
   std::vector<const Target*> target_vector(targets.begin(), targets.end());
   FilterAndPrintTargets(&target_vector, out);
 }

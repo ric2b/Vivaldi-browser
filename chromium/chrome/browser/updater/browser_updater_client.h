@@ -11,7 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
@@ -77,7 +77,7 @@ class BrowserUpdaterClient
   void HandleStatusUpdate(
       base::RepeatingCallback<void(updater::UpdateService::UpdateState)>
           callback,
-      updater::UpdateService::UpdateState update_state);
+      const updater::UpdateService::UpdateState& update_state);
 
   // Handles status update from Chromium updater when registration is completed.
   void RegistrationCompleted(updater::UpdateService::Result result);

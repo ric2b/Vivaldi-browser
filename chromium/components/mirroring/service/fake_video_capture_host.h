@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/token.h"
+#include "base/unguessable_token.h"
 #include "media/capture/mojom/video_capture.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"

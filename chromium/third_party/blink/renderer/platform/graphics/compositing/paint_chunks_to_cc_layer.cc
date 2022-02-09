@@ -7,7 +7,6 @@
 #include "base/containers/adapters.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "cc/base/features.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/layers/layer.h"
 #include "cc/paint/display_item_list.h"
@@ -328,7 +327,7 @@ static bool CombineClip(const ClipPaintPropertyNode& clip,
   // The combined is the intersection if both are rectangular.
   DCHECK(!combined_is_rounded && !clip_is_rounded);
   combined_clip_rect = FloatRoundedRect(
-      Intersection(combined_clip_rect.Rect(), clip.PaintClipRect().Rect()));
+      IntersectRects(combined_clip_rect.Rect(), clip.PaintClipRect().Rect()));
   return true;
 }
 
@@ -431,10 +430,10 @@ void ConversionContext::StartClip(
   ApplyTransform(local_transform);
   const bool antialias = true;
   if (combined_clip_rect.IsRounded()) {
-    cc_list_.push<cc::ClipRRectOp>(combined_clip_rect, SkClipOp::kIntersect,
-                                   antialias);
+    cc_list_.push<cc::ClipRRectOp>(SkRRect(combined_clip_rect),
+                                   SkClipOp::kIntersect, antialias);
   } else {
-    cc_list_.push<cc::ClipRectOp>(combined_clip_rect.Rect(),
+    cc_list_.push<cc::ClipRectOp>(gfx::RectFToSkRect(combined_clip_rect.Rect()),
                                   SkClipOp::kIntersect, antialias);
   }
   if (const auto* clip_path = lowest_combined_clip_node.ClipPath()) {
@@ -596,7 +595,7 @@ void ConversionContext::StartEffect(const EffectPaintPropertyNode& effect) {
     // with empty bounds, with a filter applied that produces output even when
     // there's no input this will expand the bounds to match.
     gfx::RectF filtered_bounds = current_effect_->MapRect(
-        gfx::RectF(effect.Filter().ReferenceBox().Center(), gfx::SizeF()));
+        gfx::RectF(effect.Filter().ReferenceBox().CenterPoint(), gfx::SizeF()));
     effect_bounds_stack_.back().bounds = filtered_bounds;
     // Emit an empty paint operation to add the filtered bounds (mapped to layer
     // space) to the visual rect of the filter's SaveLayerOp.
@@ -878,7 +877,7 @@ static void UpdateTouchActionRegion(
        scroll_node; scroll_node = scroll_node->Parent()) {
     if (scroll_node->UserScrollableHorizontal() &&
         scroll_node->ContainerRect().width() <
-            scroll_node->ContentsSize().width()) {
+            scroll_node->ContentsRect().width()) {
       disable_cursor_control = TouchAction::kInternalPanXScrolls;
       break;
     }
@@ -889,12 +888,12 @@ static void UpdateTouchActionRegion(
   }
 
   for (const auto& touch_action_rect : hit_test_data.touch_action_rects) {
-    auto rect = FloatClipRect(gfx::RectF(touch_action_rect.rect));
+    FloatClipRect rect(gfx::RectF(touch_action_rect.rect));
     if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
                                                    rect)) {
       continue;
     }
-    rect.MoveBy(FloatPoint(-layer_offset));
+    rect.Move(-layer_offset);
     TouchAction touch_action = touch_action_rect.allowed_touch_action;
     if ((touch_action & TouchAction::kPanX) != TouchAction::kNone)
       touch_action |= disable_cursor_control;
@@ -908,12 +907,12 @@ static void UpdateWheelEventRegion(const HitTestData& hit_test_data,
                                    const gfx::Vector2dF& layer_offset,
                                    cc::Region& wheel_event_region) {
   for (const auto& wheel_event_rect : hit_test_data.wheel_event_rects) {
-    auto rect = FloatClipRect(gfx::RectF(wheel_event_rect));
+    FloatClipRect rect((gfx::RectF(wheel_event_rect)));
     if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
                                                    rect)) {
       continue;
     }
-    rect.MoveBy(FloatPoint(-layer_offset));
+    rect.Move(-layer_offset);
     wheel_event_region.Union(gfx::ToEnclosingRect(rect.Rect()));
   }
 }
@@ -950,8 +949,8 @@ static void UpdateNonFastScrollableRegion(
                                                  rect))
     return;
 
-  rect.MoveBy(FloatPoint(-layer_offset));
-  non_fast_scrollable_region.Union(EnclosingIntRect(rect.Rect()));
+  rect.Move(-layer_offset);
+  non_fast_scrollable_region.Union(gfx::ToEnclosingRect(rect.Rect()));
 }
 
 static void UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
@@ -968,27 +967,46 @@ static void UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
     auto chunk_state = chunk.properties.GetPropertyTreeState().Unalias();
     UpdateTouchActionRegion(*chunk.hit_test_data, layer_state, chunk_state,
                             layer_offset, touch_action_region);
-    // TODO(https://crbug.com/841364): Checking for empty rect here is to avoid
-    // costly checks for kWheelEventRegions. This "if" condition will be gone
-    // once kWheelEventRegions feature flag is removed.
-    if (!chunk.hit_test_data->wheel_event_rects.IsEmpty() &&
-        base::FeatureList::IsEnabled(::features::kWheelEventRegions)) {
-      UpdateWheelEventRegion(*chunk.hit_test_data, layer_state, chunk_state,
-                             layer_offset, wheel_event_region);
-    }
+    UpdateWheelEventRegion(*chunk.hit_test_data, layer_state, chunk_state,
+                           layer_offset, wheel_event_region);
     UpdateNonFastScrollableRegion(layer, *chunk.hit_test_data, layer_state,
                                   chunk_state, layer_offset,
                                   non_fast_scrollable_region);
   }
   layer.SetTouchActionRegion(std::move(touch_action_region));
-  // TODO(https://crbug.com/841364): Fist condition in the "if" statement below
-  // is to avoid costly checks for kWheelEventRegions. This "if" condition will
-  // be gone once kWheelEventRegions feature flag is removed.
-  if (wheel_event_region != layer.wheel_event_region() &&
-      base::FeatureList::IsEnabled(::features::kWheelEventRegions))
-    layer.SetWheelEventRegion(std::move(wheel_event_region));
-
+  layer.SetWheelEventRegion(std::move(wheel_event_region));
   layer.SetNonFastScrollableRegion(std::move(non_fast_scrollable_region));
+}
+
+static void UpdateRegionCaptureData(cc::Layer& layer,
+                                    const PropertyTreeState& layer_state,
+                                    const PaintChunkSubset& chunks) {
+  const gfx::Vector2dF layer_offset = layer.offset_to_transform_parent();
+  std::unique_ptr<viz::RegionCaptureBounds> capture_bounds;
+  for (const PaintChunk& chunk : chunks) {
+    if (!chunk.region_capture_data)
+      continue;
+    const PropertyTreeState chunk_state =
+        chunk.properties.GetPropertyTreeState().Unalias();
+    for (const std::pair<RegionCaptureCropId, gfx::Rect>& pair :
+         *chunk.region_capture_data) {
+      auto rect = FloatClipRect(gfx::RectF(pair.second));
+      if (!GeometryMapper::LocalToAncestorVisualRect(chunk_state, layer_state,
+                                                     rect)) {
+        continue;
+      }
+      rect.Move(-layer_offset);
+      if (!capture_bounds) {
+        capture_bounds = std::make_unique<viz::RegionCaptureBounds>();
+      }
+      capture_bounds->Set(pair.first.value(),
+                          gfx::ToEnclosingRect(rect.Rect()));
+    }
+    break;
+  }
+  // At this point, the bounds are in the coordinate space of
+  // the layer we are adding them to.
+  layer.SetCaptureBounds(std::move(capture_bounds));
 }
 
 static gfx::Point MapSelectionBoundPoint(const gfx::Point& point,
@@ -1056,6 +1074,7 @@ void PaintChunksToCcLayer::UpdateLayerProperties(
   UpdateBackgroundColor(layer, layer_state.Effect(), chunks);
   UpdateTouchActionWheelEventHandlerAndNonFastScrollableRegions(
       layer, layer_state, chunks);
+  UpdateRegionCaptureData(layer, layer_state, chunks);
 }
 
 const ClipPaintPropertyNode*& PaintChunksToCcLayer::TopClipToIgnore() {

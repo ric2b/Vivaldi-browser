@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -104,6 +104,12 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
 }  // namespace
 
 class ServiceWorkerContainerHostTest : public testing::Test {
+ public:
+  ServiceWorkerContainerHostTest(const ServiceWorkerContainerHostTest&) =
+      delete;
+  ServiceWorkerContainerHostTest& operator=(
+      const ServiceWorkerContainerHostTest&) = delete;
+
  protected:
   ServiceWorkerContainerHostTest()
       : task_environment_(BrowserTaskEnvironment::IO_MAINLOOP) {
@@ -330,14 +336,14 @@ class ServiceWorkerContainerHostTest : public testing::Test {
   BrowserTaskEnvironment task_environment_;
 
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
-  ServiceWorkerContextCore* context_;
+  raw_ptr<ServiceWorkerContextCore> context_;
   scoped_refptr<ServiceWorkerRegistration> registration1_;
   scoped_refptr<ServiceWorkerRegistration> registration2_;
   scoped_refptr<ServiceWorkerRegistration> registration3_;
   GURL script_url_;
   ServiceWorkerTestContentClient test_content_client_;
   TestContentBrowserClient test_content_browser_client_;
-  ContentBrowserClient* old_content_browser_client_;
+  raw_ptr<ContentBrowserClient> old_content_browser_client_;
   std::vector<ServiceWorkerRemoteContainerEndpoint> remote_endpoints_;
   std::vector<std::string> bad_messages_;
 
@@ -360,8 +366,6 @@ class ServiceWorkerContainerHostTest : public testing::Test {
   }
 
   url::ScopedSchemeRegistryForTests scoped_registry_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerContainerHostTest);
 };
 
 // Run tests with PlzDedicatedWorker.

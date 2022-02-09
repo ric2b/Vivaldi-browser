@@ -14,9 +14,9 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
-#include "base/sequenced_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -58,6 +58,7 @@
 #include "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/safe_browsing/safe_browsing_service.h"
+#import "ios/chrome/browser/signin/signin_util.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/web/public/thread/web_task_traits.h"
@@ -146,8 +147,9 @@ void IOSChromeMainParts::PreCreateMainMessageLoop() {
 void IOSChromeMainParts::PreCreateThreads() {
   // Create and start the stack sampling profiler if CANARY or DEV. The warning
   // below doesn't apply.
-  if (::GetChannel() == version_info::Channel::CANARY ||
-      ::GetChannel() == version_info::Channel::DEV) {
+  const version_info::Channel channel = ::GetChannel();
+  if (channel == version_info::Channel::CANARY ||
+      channel == version_info::Channel::DEV) {
     sampling_profiler_ = IOSThreadProfiler::CreateAndStartOnMainThread();
     IOSThreadProfiler::SetMainThreadTaskRunner(
         base::ThreadTaskRunnerHandle::Get());
@@ -180,6 +182,10 @@ void IOSChromeMainParts::PreCreateThreads() {
   if (FirstRun::IsChromeFirstRun())
     key.Set("yes");
 
+  // Compute device restore flag before IO is disallowed on UI thread, so the
+  // value is available from cache synchronously.
+  IsFirstSessionAfterDeviceRestore();
+
   // Convert freeform experimental settings into switches before initializing
   // local state, in case any of the settings affect policy.
   AppendSwitchesFromExperimentalSettings(
@@ -198,7 +204,7 @@ void IOSChromeMainParts::PreCreateThreads() {
   // initialize field trials. The field trials are needed by IOThread's
   // initialization which happens in BrowserProcess:PreCreateThreads. Metrics
   // initialization is handled in PreMainMessageLoopRun since it posts tasks.
-  SetupFieldTrials();
+  SetUpFieldTrials();
 
   // Set metrics upload for stack/heap profiles.
   IOSThreadProfiler::SetBrowserProcessReceiverCallback(base::BindRepeating(
@@ -223,7 +229,8 @@ void IOSChromeMainParts::PreCreateThreads() {
     if (malloc_intercepted) {
       // Start heap profiling as early as possible so it can start recording
       // memory allocations. Requires the allocator shim to be enabled.
-      heap_profiler_controller_ = std::make_unique<HeapProfilerController>();
+      heap_profiler_controller_ =
+          std::make_unique<HeapProfilerController>(channel);
       heap_profiler_controller_->Start();
     }
   }
@@ -357,7 +364,7 @@ void IOSChromeMainParts::PostDestroyThreads() {
 }
 
 // This will be called after the command-line has been mutated by about:flags
-void IOSChromeMainParts::SetupFieldTrials() {
+void IOSChromeMainParts::SetUpFieldTrials() {
   base::SetRecordActionTaskRunner(
       base::CreateSingleThreadTaskRunner({web::WebThread::UI}));
 
@@ -378,7 +385,7 @@ void IOSChromeMainParts::SetupFieldTrials() {
   std::vector<std::string> variation_ids =
       RegisterAllFeatureVariationParameters(&flags_storage, feature_list.get());
 
-  application_context_->GetVariationsService()->SetupFieldTrials(
+  application_context_->GetVariationsService()->SetUpFieldTrials(
       variation_ids, std::vector<base::FeatureList::FeatureOverrideInfo>(),
       std::move(feature_list), &ios_field_trials_);
 }

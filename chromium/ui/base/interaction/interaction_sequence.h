@@ -10,6 +10,7 @@
 
 #include "base/callback_forward.h"
 #include "base/component_export.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_piece_forward.h"
@@ -138,7 +139,7 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     // SafeElementReference here, but there are cases where we want to do
     // additional processing if this element goes away, so we'll add the
     // listeners manually instead.
-    TrackedElement* element = nullptr;
+    raw_ptr<TrackedElement> element = nullptr;
   };
 
   // Use a Builder to specify parameters when creating an InteractionSequence.
@@ -295,17 +296,6 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   // the process of being destructed.
   TrackedElement* GetNamedElement(const base::StringPiece& name);
   const TrackedElement* GetNamedElement(const base::StringPiece& name) const;
-
-  // Identifier that should be used by each framework to create a
-  // TrackedElement for use with NameElement() if the element does not already
-  // have an identifier.
-  //
-  // Currently, the identifier is not removed when the sequence completes, but
-  // in the future we may implement a ref-counting system for named elements
-  // that use a temporary identifier so that it does not persist after the
-  // sequences that reference the element are gone.
-  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(InteractionSequence,
-                                         kTemporaryIdentifier);
 
  private:
   explicit InteractionSequence(std::unique_ptr<Configuration> configuration);

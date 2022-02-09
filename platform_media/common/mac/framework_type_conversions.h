@@ -28,7 +28,7 @@ inline const CMTime& CMTimeToCoreMediaGlueCMTime(const CMTime& time) {
 
 inline base::TimeDelta CMTimeToTimeDelta(const CMTime& cm_time) {
   CMTime time = CMTimeToCoreMediaGlueCMTime(cm_time);
-  return base::TimeDelta::FromSecondsD(CMTimeGetSeconds(time));
+  return base::Seconds(CMTimeGetSeconds(time));
 }
 
 inline CMTime TimeDeltaToCoreMediaGlueCMTime(

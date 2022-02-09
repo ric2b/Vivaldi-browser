@@ -46,7 +46,7 @@ CrossProcessFrameConnector::CrossProcessFrameConnector(
   // be on the correct display. All subsequent updates to |screen_infos_|
   // ultimately come from the root, so it makes sense to do it here as well.
   screen_infos_ = current_child_frame_host()
-                      ->GetOutermostMainFrame()
+                      ->GetOutermostMainFrameOrEmbedder()
                       ->GetRenderWidgetHost()
                       ->GetScreenInfos();
 }
@@ -196,6 +196,8 @@ void CrossProcessFrameConnector::SynchronizeVisualProperties(
 
   if (!view_)
     return;
+
+  view_->UpdateScreenInfo();
 
   RenderWidgetHostImpl* render_widget_host = view_->host();
   DCHECK(render_widget_host);
@@ -363,13 +365,22 @@ void CrossProcessFrameConnector::UpdateViewportIntersection(
     const absl::optional<blink::FrameVisualProperties>& visual_properties) {
   bool intersection_changed = !intersection_state.Equals(intersection_state_);
   if (intersection_changed) {
+    RenderWidgetHostImpl* host = view_ ? view_->host() : nullptr;
+    bool main_frame = host && host->owner_delegate();
     bool visual_properties_changed = false;
     if (visual_properties.has_value()) {
-      absl::optional<blink::VisualProperties> last_properties =
-          view_->host()->LastComputedVisualProperties();
-      SynchronizeVisualProperties(visual_properties.value(), false);
-      visual_properties_changed =
-          last_properties != view_->host()->LastComputedVisualProperties();
+      // Subtlety: RenderWidgetHostViewChildFrame::UpdateViewportIntersection()
+      // will quietly fail to propagate the new intersection state for main
+      // frames, including portals and fenced frames. For those cases, we need
+      // to ensure that the updated VisualProperties are still propagated.
+      absl::optional<blink::VisualProperties> last_properties;
+      if (host && !main_frame)
+        last_properties = host->LastComputedVisualProperties();
+      SynchronizeVisualProperties(visual_properties.value(), main_frame);
+      if (host && !main_frame) {
+        visual_properties_changed =
+            last_properties != host->LastComputedVisualProperties();
+      }
     }
     UpdateViewportIntersectionInternal(intersection_state,
                                        visual_properties_changed);
@@ -425,10 +436,8 @@ void CrossProcessFrameConnector::OnVisibilityChanged(
   // the visibility. The Show/Hide methods will not be called if an inner
   // WebContents exists since the corresponding WebContents will itself call
   // Show/Hide on all the RenderWidgetHostViews (including this) one.
-  if (frame_proxy_in_parent_renderer_->frame_tree_node()
-          ->render_manager()
-          ->IsMainFrameForInnerDelegate()) {
-    view_->host()->delegate()->OnRenderFrameProxyVisibilityChanged(visibility);
+  if (view_->host()->delegate()->OnRenderFrameProxyVisibilityChanged(
+          frame_proxy_in_parent_renderer_, visibility_)) {
     return;
   }
   }
@@ -460,7 +469,7 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
     return nullptr;
 
   RenderFrameHostImpl* root =
-      current_child_frame_host()->GetOutermostMainFrame();
+      current_child_frame_host()->GetOutermostMainFrameOrEmbedder();
   return static_cast<RenderWidgetHostViewBase*>(root->GetView());
 }
 

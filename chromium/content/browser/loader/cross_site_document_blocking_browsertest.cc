@@ -12,7 +12,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -761,19 +760,30 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest, BackToAboutBlank) {
   )";
   std::string fetch_script = JsReplace(kFetchScriptTemplate, resource_url);
 
-  // Navigate to the test page and open a popup via |window.open|, explicitly
-  // specifying 'about:blank' destination, so that we can go back to it later.
+  // Navigate to the test page and open a popup via |window.open|.
   GURL initial_url("http://foo.com/title1.html");
   EXPECT_TRUE(NavigateToURL(shell(), initial_url));
   WebContentsAddedObserver popup_observer;
-  ASSERT_TRUE(ExecJs(shell(), "var popup = window.open('about:blank', '')"));
+  ASSERT_TRUE(ExecJs(shell(), "var popup = window.open('title1.html')"));
   WebContents* popup = popup_observer.GetWebContents();
-  EXPECT_EQ(GURL(url::kAboutBlankURL),
-            popup->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_TRUE(WaitForLoadStop(popup));
+  EXPECT_EQ(initial_url, popup->GetMainFrame()->GetLastCommittedURL());
   EXPECT_EQ(shell()->web_contents()->GetMainFrame()->GetLastCommittedOrigin(),
             popup->GetMainFrame()->GetLastCommittedOrigin());
-  EXPECT_EQ(url::Origin::Create(resource_url),
-            popup->GetMainFrame()->GetLastCommittedOrigin());
+
+  // Navigate the popup to about:blank. Note that we didn't directly
+  // window.open() to about:blank because otherwise the about:blank page will
+  // always get replaced on the next navigation.
+  {
+    TestNavigationObserver nav_observer(popup);
+    EXPECT_TRUE(ExecJs(popup, "location.href = 'about:blank';"));
+    nav_observer.Wait();
+    EXPECT_EQ(2, popup->GetController().GetEntryCount());
+    EXPECT_EQ(GURL(url::kAboutBlankURL),
+              popup->GetMainFrame()->GetLastCommittedURL());
+    EXPECT_EQ(shell()->web_contents()->GetMainFrame()->GetLastCommittedOrigin(),
+              popup->GetMainFrame()->GetLastCommittedOrigin());
+  }
 
   // Verify that CORB doesn't block same-origin request from the popup.
   {
@@ -1442,7 +1452,9 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, CorpVsBrowserInitiatedRequest) {
 
 // This test class sets up a link element for webbundle subresource loading.
 // e.g. <link rel=webbundle href=".../foo.wbn" resources="...">.
-class CrossSiteDocumentBlockingWebBundleTest : public ContentBrowserTest {
+class CrossSiteDocumentBlockingWebBundleTest
+    : public ContentBrowserTest,
+      public testing::WithParamInterface<std::string> {
  public:
   CrossSiteDocumentBlockingWebBundleTest() {
     scoped_feature_list_.InitAndEnableFeature(features::kSubresourceWebBundles);
@@ -1455,6 +1467,11 @@ class CrossSiteDocumentBlockingWebBundleTest : public ContentBrowserTest {
       const CrossSiteDocumentBlockingWebBundleTest&) = delete;
 
   net::EmbeddedTestServer* https_server() { return &https_server_; }
+
+  static std::string DescribeParams(
+      const testing::TestParamInfo<ParamType>& info) {
+    return info.param;
+  }
 
  protected:
   void SetupLinkWebBundleElementAndImgElement(const GURL& bundle_url,
@@ -1517,10 +1534,11 @@ class CrossSiteDocumentBlockingWebBundleTest : public ContentBrowserTest {
 // 1) cross-origin bundle, 2) same-origin bundle
 // X
 // A). CORB-protected MIME type (e.g. text/json), B) other type (e.g. image/png)
-IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
+IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingWebBundleTest,
                        CrossOriginWebBundleSubresoruceJson) {
   https_server()->StartAcceptingConnections();
-  GURL bundle_url("https://cross-origin.test/web_bundle/cross_origin.wbn");
+  GURL bundle_url("https://cross-origin.test/web_bundle/cross_origin" +
+                  GetParam() + ".wbn");
   GURL subresource_url("https://cross-origin.test/web_bundle/resource.json");
   RequestInterceptor interceptor(subresource_url);
   SetupLinkWebBundleElementAndImgElement(bundle_url, subresource_url);
@@ -1531,10 +1549,11 @@ IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
       << "JSON in a cross-origin webbundle should be blocked by CORB";
 }
 
-IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
+IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingWebBundleTest,
                        CrossOriginWebBundleSubresorucePng) {
   https_server()->StartAcceptingConnections();
-  GURL bundle_url("https://cross-origin.test/web_bundle/cross_origin.wbn");
+  GURL bundle_url("https://cross-origin.test/web_bundle/cross_origin" +
+                  GetParam() + ".wbn");
   GURL subresource_url("https://cross-origin.test/web_bundle/resource.png");
   RequestInterceptor interceptor(subresource_url);
   SetupLinkWebBundleElementAndImgElement(bundle_url, subresource_url);
@@ -1545,10 +1564,11 @@ IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
       << "PNG in a cross-origin webbundle should not be blocked";
 }
 
-IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
+IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingWebBundleTest,
                        SameOriginWebBundleSubresoruceJson) {
   https_server()->StartAcceptingConnections();
-  GURL bundle_url("https://same-origin.test/web_bundle/same_origin.wbn");
+  GURL bundle_url("https://same-origin.test/web_bundle/same_origin" +
+                  GetParam() + ".wbn");
   GURL subresource_url("https://same-origin.test/web_bundle/resource.json");
   RequestInterceptor interceptor(subresource_url);
   SetupLinkWebBundleElementAndImgElement(bundle_url, subresource_url);
@@ -1559,10 +1579,11 @@ IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
       << "JSON in a same-origin webbundle should not be blocked";
 }
 
-IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
+IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingWebBundleTest,
                        SameOriginWebBundleSubresorucePng) {
   https_server()->StartAcceptingConnections();
-  GURL bundle_url("https://same-origin.test/web_bundle/same_origin.wbn");
+  GURL bundle_url("https://same-origin.test/web_bundle/same_origin" +
+                  GetParam() + ".wbn");
   GURL subresource_url("https://same-origin.test/web_bundle/resource.png");
   RequestInterceptor interceptor(subresource_url);
   SetupLinkWebBundleElementAndImgElement(bundle_url, subresource_url);
@@ -1572,5 +1593,11 @@ IN_PROC_BROWSER_TEST_F(CrossSiteDocumentBlockingWebBundleTest,
   EXPECT_EQ("broken png", interceptor.response_body())
       << "PNG in a same-origin webbundle should not be blocked";
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    CrossSiteDocumentBlockingWebBundleTest,
+    CrossSiteDocumentBlockingWebBundleTest,
+    testing::Values("_b1", "_b2"),
+    CrossSiteDocumentBlockingWebBundleTest::DescribeParams);
 
 }  // namespace content

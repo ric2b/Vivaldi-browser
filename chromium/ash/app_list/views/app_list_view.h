@@ -17,7 +17,6 @@
 #include "ash/public/cpp/presentation_time_recorder.h"
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window_observer.h"
@@ -44,12 +43,10 @@ class AppsContainerView;
 class ApplicationDragAndDropHost;
 class AppListBackgroundShieldView;
 class AppListMainView;
-class AppListModel;
 class AppsGridView;
 class PagedAppsGridView;
 class PaginationModel;
 class SearchBoxView;
-class SearchModel;
 class StateTransitionNotifier;
 
 FORWARD_DECLARE_TEST(AppListControllerImplTest,
@@ -164,13 +161,6 @@ class ASH_EXPORT AppListView : public views::WidgetDelegateView,
   AppListView& operator=(const AppListView&) = delete;
 
   ~AppListView() override;
-
-  // Prevents handling input events for the |window| in context of handling in
-  // app list.
-  static void ExcludeWindowFromEventHandling(aura::Window* window);
-
-  static void SetShortAnimationForTesting(bool enabled);
-  static bool ShortAnimationsForTesting();
 
   // Used for testing, allows the page reset timer to be fired immediately
   // after starting.
@@ -373,11 +363,6 @@ class ASH_EXPORT AppListView : public views::WidgetDelegateView,
   // Moves the AppListView off screen and calls a layout if needed.
   void OnBoundsAnimationCompleted(AppListViewState target_state);
 
-  // Returns the expected tile bounds in screen coordinates the provided app
-  // grid item ID , if the item is in the first apps grid page. Otherwise, it
-  // returns 1x1 rectangle in the apps grid center.
-  gfx::Rect GetItemScreenBoundsInFirstGridPage(const std::string& id) const;
-
   gfx::NativeView parent_window() const { return parent_window_; }
 
   AppListViewState app_list_state() const { return app_list_state_; }
@@ -553,8 +538,6 @@ class ASH_EXPORT AppListView : public views::WidgetDelegateView,
   void ResetSubpixelPositionOffset(ui::Layer* layer);
 
   AppListViewDelegate* const delegate_;
-  AppListModel* const model_;        // Not Owned.
-  SearchModel* const search_model_;  // Not Owned.
 
   // Keeps track of the number of locks that prevent the app list view
   // from creating app list transition accessibility events. This is used to

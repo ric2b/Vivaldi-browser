@@ -153,8 +153,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
   } else {
     parse_result_->fetch_result = FetchResult::kSuccess;
     parse_result_->metadata.title = kListTitle;
-    parse_result_->metadata.expires =
-        base::TimeDelta::FromHours(kValidityHours);
+    parse_result_->metadata.expires = base::Hours(kValidityHours);
   }
 }
 
@@ -278,10 +277,10 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     ngram_search_string = BuildNgramSearchString(*pattern);
 
   if (make_request_filter_rule) {
-    RequestFilterRule rule;
-    rule.party.set();
+    RequestFilterRule filter_rule;
+    filter_rule.party.set();
     if (!default_ignore)
-      rule.is_allow_rule = true;
+      filter_rule.is_allow_rule = true;
     if (default_ignore == ignore) {
       DCHECK(ignore == false);
       DCHECK(exceptions);
@@ -326,56 +325,57 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
             }
           }
           if (!potential_domain.empty()) {
-            rule.included_domains.push_back(std::string(potential_domain));
+            filter_rule.included_domains.push_back(
+                std::string(potential_domain));
           }
         }
       } else if (option_domains) {
-        rule.included_domains.swap(option_domains.value());
+        filter_rule.included_domains.swap(option_domains.value());
       } else if (exception_domains) {
-        rule.included_domains.swap(exception_domains.value());
+        filter_rule.included_domains.swap(exception_domains.value());
       }
-      rule.resource_types = option_types.value();
+      filter_rule.resource_types = option_types.value();
       if (exception_types)
-        rule.resource_types &= exception_types.value();
+        filter_rule.resource_types &= exception_types.value();
     } else {
       if (option_domains)
-        rule.included_domains.swap(option_domains.value());
-      rule.resource_types = option_types.value();
+        filter_rule.included_domains.swap(option_domains.value());
+      filter_rule.resource_types = option_types.value();
       if (!ignore) {
-        DCHECK(default_ignore && !rule.is_allow_rule);
+        DCHECK(default_ignore && !filter_rule.is_allow_rule);
         // Under the DDG implementation, exceptions always mean ignore, so
         // they're only meaningful for block rules
         if (exception_domains)
-          rule.excluded_domains.swap(exception_domains.value());
+          filter_rule.excluded_domains.swap(exception_domains.value());
         // Exceptions have priority over options.
         if (exception_types)
-          rule.resource_types &= ~exception_types.value();
+          filter_rule.resource_types &= ~exception_types.value();
       }
     }
 
-    if (rule.resource_types.none()) {
+    if (filter_rule.resource_types.none()) {
       parse_result_->rules_info.unsupported_rules++;
       return;
     }
 
     if (plain_pattern.empty()) {
-      rule.pattern_type = RequestFilterRule::kRegex;
-      rule.pattern = *pattern;
-      rule.ngram_search_string = ngram_search_string;
+      filter_rule.pattern_type = RequestFilterRule::kRegex;
+      filter_rule.pattern = *pattern;
+      filter_rule.ngram_search_string = ngram_search_string;
     } else {
-      rule.pattern = plain_pattern;
+      filter_rule.pattern = plain_pattern;
     }
-    rule.host = domain;
+    filter_rule.host = domain;
 
     if (excluded_origins) {
       DCHECK(excluded_origins->is_list());
       for (const auto& origin : excluded_origins->GetList()) {
         if (origin.is_string())
-          rule.excluded_domains.push_back(origin.GetString());
+          filter_rule.excluded_domains.push_back(origin.GetString());
       }
     }
 
-    parse_result_->request_filter_rules.push_back(std::move(rule));
+    parse_result_->request_filter_rules.push_back(std::move(filter_rule));
     parse_result_->rules_info.valid_rules++;
   }
 

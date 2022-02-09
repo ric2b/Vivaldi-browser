@@ -225,8 +225,8 @@ Polymer({
     if (!this.networkState) {
       return false;
     }
-    return OncMojo.connectionStateIsConnected(
-               this.networkState.connectionState) &&
+    return !this.showRoaming_() &&
+        OncMojo.connectionStateIsConnected(this.networkState.connectionState) &&
         this.getTechnology_() !== '' && this.showTechnologyBadge;
   },
 
@@ -275,6 +275,8 @@ Polymer({
         return 'badge-lte-advanced';
       case 'UMTS':
         return 'badge-3g';
+      case '5GNR':
+        return 'badge-5g';
     }
     return '';
   },

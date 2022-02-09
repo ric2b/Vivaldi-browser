@@ -37,6 +37,8 @@ class SubstitutionPattern {
   SubstitutionPattern(const SubstitutionPattern& other);
   ~SubstitutionPattern();
 
+  SubstitutionPattern& operator=(const SubstitutionPattern&) = default;
+
   // Parses the given string and fills in the pattern. The pattern must only
   // be initialized once. On failure, returns false and sets the error.
   bool Parse(const Value& value, Err* err);

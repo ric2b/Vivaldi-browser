@@ -12,6 +12,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/starscan/starscan_fwd.h"
 #include "base/compiler_specific.h"
+#include "base/memory/tagging.h"
 #include "build/build_config.h"
 
 #if defined(ARCH_CPU_X86_64)
@@ -50,7 +51,9 @@ class ScanLoop {
   ScanLoop(const ScanLoop&) = delete;
   ScanLoop& operator=(const ScanLoop&) = delete;
 
-  // Scan input range. Assumes the range is properly aligned.
+  // Scan input range. Assumes the range is properly aligned. Please note that
+  // the function doesn't remask the input range and assumes MTE is disabled
+  // when function is called.
   void Run(uintptr_t* begin, uintptr_t* end);
 
  private:

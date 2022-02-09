@@ -15,7 +15,6 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -669,7 +668,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTestWithSyncTrustedVaultEnabled,
     base::RunLoop loop;
     std::vector<std::vector<uint8_t>> actual_keys;
     trusted_vault_client->FetchKeys(
-        sync_service->GetAuthenticatedAccountInfo(),
+        sync_service->GetAccountInfo(),
         base::BindLambdaForTesting(
             [&](const std::vector<std::vector<uint8_t>>& keys) {
               actual_keys = keys;

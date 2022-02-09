@@ -5,7 +5,7 @@
 #include "app/vivaldi_version_info.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
-#include "base/sequenced_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "menus/menu_node.h"

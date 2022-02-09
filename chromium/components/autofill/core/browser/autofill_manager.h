@@ -12,12 +12,13 @@
 
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/autofill_driver.h"
-#include "components/autofill/core/browser/autofill_metrics.h"
+#include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/common/dense_set.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/language_code.h"
@@ -354,22 +355,19 @@ class AutofillManager
   // |form_structures|.
   void OnFormsParsed(const std::vector<const FormData*>& forms);
 
-  void PropagateAutofillPredictionsToDriver(
-      const std::vector<FormStructure*>& forms);
-
   std::unique_ptr<AutofillMetrics::FormInteractionsUkmLogger>
   CreateFormInteractionsUkmLogger();
 
   // Provides driver-level context to the shared code of the component. Must
   // outlive this object.
-  AutofillDriver* const driver_;
+  const raw_ptr<AutofillDriver> driver_;
 
   // Do not access this directly. Instead, please use client() or
   // unsafe_client(). These functions check (or explicitly don't check) that the
   // client isn't accessed incorrectly.
-  AutofillClient* const client_;
+  const raw_ptr<AutofillClient> client_;
 
-  LogManager* const log_manager_;
+  const raw_ptr<LogManager> log_manager_;
 
   // Observer needed to re-run heuristics when the language has been detected.
   base::ScopedObservation<
@@ -390,12 +388,8 @@ class AutofillManager
   std::unique_ptr<AutofillMetrics::FormInteractionsUkmLogger>
       form_interactions_ukm_logger_;
 
-  // Task to delay propagate the query result to driver for testing.
-  base::CancelableOnceCallback<void(const std::vector<FormStructure*>&)>
-      query_result_delay_task_;
-
   // Will be not null only for |SaveCardBubbleViewsFullFormBrowserTest|.
-  ObserverForTest* observer_for_testing_ = nullptr;
+  raw_ptr<ObserverForTest> observer_for_testing_ = nullptr;
 };
 
 }  // namespace autofill

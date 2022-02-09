@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "media/gpu/chromeos/image_processor_backend.h"
 #include "media/gpu/media_gpu_export.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -48,7 +47,6 @@ class VaapiImageProcessorBackend : public ImageProcessorBackend {
 
  private:
   VaapiImageProcessorBackend(
-      scoped_refptr<VaapiWrapper> vaapi_wrapper,
       const PortConfig& input_config,
       const PortConfig& output_config,
       OutputMode output_mode,
@@ -60,7 +58,7 @@ class VaapiImageProcessorBackend : public ImageProcessorBackend {
   const VASurface* GetSurfaceForVideoFrame(scoped_refptr<VideoFrame> frame,
                                            bool use_protected);
 
-  const scoped_refptr<VaapiWrapper> vaapi_wrapper_;
+  scoped_refptr<VaapiWrapper> vaapi_wrapper_;
   bool needs_context_ = false;
 
   // VASurfaces are created via importing dma-bufs into libva using

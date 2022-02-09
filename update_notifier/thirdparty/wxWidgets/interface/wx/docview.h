@@ -716,7 +716,7 @@ public:
         @beginWxPerlOnly
         In wxPerl @a templates is a reference to a list of templates.
         If you override this method in your document manager it must
-        return two values, eg:
+        return two values, e.g.:
 
         @code
         (doctemplate, path) = My::DocManager->SelectDocumentPath(...);
@@ -922,6 +922,8 @@ public:
     /**
         Closes the view by calling OnClose(). If @a deleteWindow is @true, this
         function should delete the window associated with the view.
+
+        @return @true if the view was closed
     */
     virtual bool Close(bool deleteWindow = true);
 
@@ -971,6 +973,9 @@ public:
         example, if your views all share the same window, you need to
         disassociate the window from the view and perhaps clear the window. If
         @a deleteWindow is @true, delete the frame associated with the view.
+
+        Returning @false from this function prevents the view, and possibly the
+        document, from being closed.
     */
     virtual bool OnClose(bool deleteWindow);
 
@@ -1295,6 +1300,8 @@ public:
         Closes the document, by calling OnSaveModified() and then (if this
         returned @true) OnCloseDocument(). This does not normally delete the
         document object, use DeleteAllViews() to do this implicitly.
+
+        @return @true if the document was closed
     */
     virtual bool Close();
 
@@ -1302,7 +1309,7 @@ public:
         Calls wxView::Close() and deletes each view. Deleting the final view
         will implicitly delete the document itself, because the wxView
         destructor calls RemoveView(). This in turns calls OnChangedViewList(),
-        whose default implemention is to save and delete the document if no
+        whose default implementation is to save and delete the document if no
         views exist.
     */
     virtual bool DeleteAllViews();
@@ -1463,6 +1470,12 @@ public:
         Notice that previous wxWidgets versions used to call this function also
         from OnNewDocument(), rather counter-intuitively. This is no longer the
         case since wxWidgets 2.9.0.
+
+        Returning @false from this function prevents the document from closing.
+        The default implementation does this if the document is modified and
+        the user didn't confirm discarding the modifications to it.
+
+        Return @true to allow the document to be closed.
     */
     virtual bool OnCloseDocument();
 
@@ -1530,8 +1543,12 @@ public:
     virtual bool OnSaveModified();
 
     /**
-        Removes the view from the document's list of views, and calls
-        OnChangedViewList().
+        Removes the view from the document's list of views.
+
+        If the view was really removed, also calls OnChangedViewList().
+
+        @return @true if the view was removed or @false if the document didn't
+            have this view in the first place.
     */
     virtual bool RemoveView(wxView* view);
 

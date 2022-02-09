@@ -50,6 +50,8 @@ WebViewImpl.prototype.setupAttributes = function() {
     new WebViewAttributes.WasTypedAttribute(this);
   this.attributes[WebViewConstants.ATTRIBUTE_VIEW_TYPE] =
     new WebViewAttributes.ViewtypeAttribute(this);
+  this.attributes[WebViewConstants.ATTRIBUTE_WINDOW_ID] =
+    new WebViewAttributes.WindowIdAttribute(this);
 
   var autosizeAttributes = [
     WebViewConstants.ATTRIBUTE_MAXHEIGHT, WebViewConstants.ATTRIBUTE_MAXWIDTH,
@@ -151,6 +153,12 @@ WebViewImpl.prototype.createGuest = function() {
       params['inspect_tab_id'] = Number(this.attributes[
           WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue());
     }
+
+    if (this.attributes[WebViewConstants.ATTRIBUTE_WINDOW_ID].getValue()) {
+      params['windowId'] =
+          this.attributes[WebViewConstants.ATTRIBUTE_WINDOW_ID].getValue();
+    }
+
   }
 
   this.guest.create(params, $Function.bind(function() {
@@ -278,7 +286,7 @@ WebViewImpl.prototype.makeElementFullscreen = function() {
 };
 
 // vivaldi extensions
-RegisterVivaldiWebViewExtensions(WebViewImpl)
+RegisterVivaldiWebViewExtensions(WebViewImpl);
 
 // Exports.
 exports.$set('WebViewImpl', WebViewImpl);

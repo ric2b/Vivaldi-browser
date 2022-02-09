@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_item.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
+#include "third_party/blink/renderer/core/paint/fragment_data_iterator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_curve.h"
@@ -269,7 +270,6 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
   DCHECK(object->GetFrameView());
   DCHECK(!object->GetFrameView()->ShouldThrottleRendering());
 
-  static const FloatSize rect_rounding_radii(3, 3);
   auto color = object->StyleRef().VisitedDependentColor(
       GetCSSPropertyWebkitTapHighlightColor());
 
@@ -283,11 +283,11 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
                            !object->FirstFragment().NextFragment();
 
   wtf_size_t index = 0;
-  for (const auto* fragment = &object->FirstFragment(); fragment;
-       fragment = fragment->NextFragment(), ++index) {
-    ScopedDisplayItemFragment scoped_fragment(context, index);
-    auto rects = object->OutlineRects(
-        fragment->PaintOffset(), NGOutlineType::kIncludeBlockVisualOverflow);
+  for (FragmentDataIterator iterator(*object); !iterator.IsDone(); index++) {
+    const auto* fragment = iterator.GetFragmentData();
+    ScopedDisplayItemFragment scoped_fragment(context, fragment->FragmentID());
+    Vector<PhysicalRect> rects = object->CollectOutlineRectsAndAdvance(
+        NGOutlineType::kIncludeBlockVisualOverflow, iterator);
     if (rects.size() > 1)
       use_rounded_rects = false;
 
@@ -307,25 +307,27 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
 
     Path new_path;
     for (auto& rect : rects) {
-      FloatRect snapped_rect(PixelSnappedIntRect(rect));
-      if (use_rounded_rects)
-        new_path.AddRoundedRect(snapped_rect, rect_rounding_radii);
-      else
+      gfx::RectF snapped_rect(ToPixelSnappedRect(rect));
+      if (use_rounded_rects) {
+        constexpr float kRadius = 3;
+        new_path.AddRoundedRect(FloatRoundedRect(snapped_rect, kRadius));
+      } else {
         new_path.AddRect(snapped_rect);
+      }
     }
 
     DCHECK_LT(index, fragments_.size());
     auto& link_highlight_fragment = fragments_[index];
     link_highlight_fragment.SetColor(color);
 
-    auto bounding_rect = EnclosingIntRect(new_path.BoundingRect());
-    new_path.Translate(-FloatSize(ToIntSize(bounding_rect.Location())));
+    auto bounding_rect = gfx::ToEnclosingRect(new_path.BoundingRect());
+    new_path.Translate(-gfx::Vector2dF(bounding_rect.OffsetFromOrigin()));
 
     cc::Layer* layer = link_highlight_fragment.Layer();
     DCHECK(layer);
     if (link_highlight_fragment.GetPath() != new_path) {
       link_highlight_fragment.SetPath(new_path);
-      layer->SetBounds(gfx::Size(bounding_rect.Size()));
+      layer->SetBounds(bounding_rect.size());
       layer->SetNeedsDisplay();
     }
 
@@ -337,7 +339,7 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
     property_tree_state.SetEffect(Effect());
     RecordForeignLayer(context, *debug_name_client,
                        DisplayItem::kForeignLayerLinkHighlight, layer,
-                       bounding_rect.Location(), &property_tree_state);
+                       bounding_rect.origin(), &property_tree_state);
   }
 
   DCHECK_EQ(index, fragments_.size());

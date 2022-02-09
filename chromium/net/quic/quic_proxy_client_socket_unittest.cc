@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,6 +26,7 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/transport_security_state.h"
+#include "net/log/net_log.h"
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_util.h"
 #include "net/quic/address_utils.h"
@@ -58,6 +60,7 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_constants.h"
 
@@ -210,8 +213,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
 
   void Initialize() {
     std::unique_ptr<MockUDPClientSocket> socket(new MockUDPClientSocket(
-        mock_quic_data_.InitializeAndGetSequencedSocketData(),
-        net_log_.bound().net_log()));
+        mock_quic_data_.InitializeAndGetSequencedSocketData(), NetLog::Get()));
     socket->Connect(peer_addr_);
     runner_ = new TestTaskRunner(&clock_);
     send_algorithm_ = new quic::test::MockSendAlgorithm();
@@ -287,7 +289,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         std::make_unique<quic::QuicClientPushPromiseIndex>(), nullptr,
         base::DefaultTickClock::GetInstance(),
         base::ThreadTaskRunnerHandle::Get().get(),
-        /*socket_performance_watcher=*/nullptr, net_log_.bound().net_log());
+        /*socket_performance_watcher=*/nullptr, NetLog::Get());
 
     writer->set_delegate(session_.get());
 
@@ -323,7 +325,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         // TODO(crbug.com/1206799) Construct `QuicProxyClientSocket` with plain
         // `proxy_endpoint_` once it supports `url::SchemeHostPort`.
         HostPortPair::FromSchemeHostPort(destination_endpoint_),
-        net_log_.bound(),
+        NetLogWithSource::Make(NetLogSourceType::NONE),
         new HttpAuthController(HttpAuth::AUTH_PROXY, proxy_endpoint_.GetURL(),
                                NetworkIsolationKey(), &http_auth_cache_,
                                http_auth_handler_factory_.get(),
@@ -609,7 +611,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
     return std::string(buffer.data(), buffer.size());
   }
 
-  RecordingBoundTestNetLog net_log_;
+  RecordingNetLogObserver net_log_observer_;
   QuicFlagSaver saver_;
   const quic::ParsedQuicVersion version_;
   const quic::QuicStreamId client_data_stream_id1_;
@@ -624,7 +626,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
   std::unique_ptr<QuicProxyClientSocket> sock_;
   std::unique_ptr<TestProxyDelegate> proxy_delegate_;
 
-  quic::test::MockSendAlgorithm* send_algorithm_;
+  raw_ptr<quic::test::MockSendAlgorithm> send_algorithm_;
   scoped_refptr<TestTaskRunner> runner_;
 
   std::unique_ptr<QuicChromiumAlarmFactory> alarm_factory_;
@@ -765,10 +767,10 @@ TEST_P(QuicProxyClientSocketTest, ConnectWithAuthCredentials) {
   // Add auth to cache
   const std::u16string kFoo(u"foo");
   const std::u16string kBar(u"bar");
-  http_auth_cache_.Add(GURL(kProxyUrl), HttpAuth::AUTH_PROXY, "MyRealm1",
-                       HttpAuth::AUTH_SCHEME_BASIC, NetworkIsolationKey(),
-                       "Basic realm=MyRealm1", AuthCredentials(kFoo, kBar),
-                       "/");
+  http_auth_cache_.Add(
+      url::SchemeHostPort(GURL(kProxyUrl)), HttpAuth::AUTH_PROXY, "MyRealm1",
+      HttpAuth::AUTH_SCHEME_BASIC, NetworkIsolationKey(),
+      "Basic realm=MyRealm1", AuthCredentials(kFoo, kBar), "/");
 
   AssertConnectSucceeds();
 
@@ -1959,7 +1961,7 @@ TEST_P(QuicProxyClientSocketTest, NetLog) {
   NetLogSource sock_source = sock_->NetLog().source();
   sock_.reset();
 
-  auto entry_list = net_log_.GetEntriesForSource(sock_source);
+  auto entry_list = net_log_observer_.GetEntriesForSource(sock_source);
 
   ASSERT_EQ(entry_list.size(), 10u);
   EXPECT_TRUE(
@@ -2011,7 +2013,7 @@ class DeleteSockCallback : public TestCompletionCallbackBase {
     SetResult(result);
   }
 
-  std::unique_ptr<QuicProxyClientSocket>* sock_;
+  raw_ptr<std::unique_ptr<QuicProxyClientSocket>> sock_;
 };
 
 // If the socket is reset when both a read and write are pending, and the

@@ -134,8 +134,8 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
       state->GetInteger("top", &params.top);
       state->GetInteger("right", &params.right);
       state->GetInteger("bottom", &params.bottom);
-      state->GetBoolean("maximized", &params.maximized);
-      state->GetBoolean("always_on_top", &params.always_on_top);
+      params.maximized = state->FindBoolPath("maximized").value_or(false);
+      params.always_on_top = state->FindBoolPath("always_on_top").value_or(false);
       need_defaults = false;
     }
   }
@@ -294,7 +294,7 @@ DevtoolsConnectorItem::PreHandleKeyboardEvent(
 }
 
 bool DevtoolsConnectorItem::HandleContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {
   if (guest_delegate_) {
     return guest_delegate_->HandleContextMenu(render_frame_host, params);

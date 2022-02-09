@@ -71,6 +71,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/device_settings_lacros.h"
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/lacros/lacros_service.h"
 #include "components/policy/core/common/policy_loader_lacros.h"
 #endif
 
@@ -125,11 +128,21 @@ void ChromeBrowserPolicyConnector::Init(
 bool ChromeBrowserPolicyConnector::IsMainUserManaged() const {
   return PolicyLoaderLacros::IsMainUserManaged();
 }
+
+crosapi::mojom::DeviceSettings*
+ChromeBrowserPolicyConnector::GetDeviceSettings() const {
+  return device_settings_->GetDeviceSettings();
+}
 #endif
 
 bool ChromeBrowserPolicyConnector::IsDeviceEnterpriseManaged() const {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  auto* lacros_service = chromeos::LacrosService::Get();
+  return lacros_service->init_params()->is_device_enterprised_managed;
+#else
   NOTREACHED() << "This method is only defined for Chrome OS";
   return false;
+#endif
 }
 
 bool ChromeBrowserPolicyConnector::HasMachineLevelPolicies() {
@@ -160,7 +173,7 @@ ConfigurationPolicyProvider*
 ChromeBrowserPolicyConnector::GetPlatformProvider() {
   ConfigurationPolicyProvider* provider =
       BrowserPolicyConnectorBase::GetPolicyProviderForTesting();
-  return provider ? provider : platform_provider_;
+  return provider ? provider : platform_provider_.get();
 }
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -225,6 +238,10 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   MaybeCreateCloudPolicyManager(&providers);
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  device_settings_ = std::make_unique<DeviceSettingsLacros>();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   std::unique_ptr<CommandLinePolicyProvider> command_line_provider =
       CommandLinePolicyProvider::CreateIfAllowed(

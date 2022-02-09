@@ -111,7 +111,7 @@ Location GetBeginLocationFromJSON(const base::Value& value) {
       value.FindKey(kJsonLocation)->FindKey(kJsonLocationBeginLine)->GetInt();
   int column =
       value.FindKey(kJsonLocation)->FindKey(kJsonLocationBeginColumn)->GetInt();
-  return Location(nullptr, line, column, 0);
+  return Location(nullptr, line, column);
 }
 
 void GetCommentsFromJSON(ParseNode* node, const base::Value& value) {
@@ -120,7 +120,7 @@ void GetCommentsFromJSON(ParseNode* node, const base::Value& value) {
   Location loc = GetBeginLocationFromJSON(value);
 
   auto loc_for = [&loc](int line) {
-    return Location(nullptr, loc.line_number() + line, loc.column_number(), 0);
+    return Location(nullptr, loc.line_number() + line, loc.column_number());
   };
 
   if (value.FindKey(kJsonBeforeComment)) {
@@ -443,8 +443,7 @@ Value AccessorNode::ExecuteScopeAccess(Scope* scope, Err* err) const {
 
 void AccessorNode::SetNewLocation(int line_number) {
   Location old = base_.location();
-  base_.set_location(
-      Location(old.file(), line_number, old.column_number(), old.byte()));
+  base_.set_location(Location(old.file(), line_number, old.column_number()));
 }
 
 bool AccessorNode::ComputeAndValidateListIndex(Scope* scope,
@@ -782,14 +781,12 @@ std::unique_ptr<FunctionCallNode> FunctionCallNode::NewFromJSON(
 void FunctionCallNode::SetNewLocation(int line_number) {
   Location func_old_loc = function_.location();
   Location func_new_loc =
-      Location(func_old_loc.file(), line_number, func_old_loc.column_number(),
-               func_old_loc.byte());
+      Location(func_old_loc.file(), line_number, func_old_loc.column_number());
   function_.set_location(func_new_loc);
 
   Location args_old_loc = args_->Begin().location();
   Location args_new_loc =
-      Location(args_old_loc.file(), line_number, args_old_loc.column_number(),
-               args_old_loc.byte());
+      Location(args_old_loc.file(), line_number, args_old_loc.column_number());
   const_cast<Token&>(args_->Begin()).set_location(args_new_loc);
   const_cast<Token&>(args_->End()->value()).set_location(args_new_loc);
 }
@@ -848,8 +845,7 @@ std::unique_ptr<IdentifierNode> IdentifierNode::NewFromJSON(
 
 void IdentifierNode::SetNewLocation(int line_number) {
   Location old = value_.location();
-  value_.set_location(
-      Location(old.file(), line_number, old.column_number(), old.byte()));
+  value_.set_location(Location(old.file(), line_number, old.column_number()));
 }
 
 // ListNode -------------------------------------------------------------------
@@ -1135,8 +1131,7 @@ std::unique_ptr<LiteralNode> LiteralNode::NewFromJSON(
 
 void LiteralNode::SetNewLocation(int line_number) {
   Location old = value_.location();
-  value_.set_location(
-      Location(old.file(), line_number, old.column_number(), old.byte()));
+  value_.set_location(Location(old.file(), line_number, old.column_number()));
 }
 
 // UnaryOpNode ----------------------------------------------------------------

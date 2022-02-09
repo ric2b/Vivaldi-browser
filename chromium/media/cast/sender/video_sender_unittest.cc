@@ -13,8 +13,8 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/fake_single_thread_task_runner.h"
 #include "media/base/video_frame.h"
@@ -54,6 +54,9 @@ class TestPacketSender : public PacketTransport {
  public:
   TestPacketSender()
       : number_of_rtp_packets_(0), number_of_rtcp_packets_(0), paused_(false) {}
+
+  TestPacketSender(const TestPacketSender&) = delete;
+  TestPacketSender& operator=(const TestPacketSender&) = delete;
 
   // A singular packet implies a RTCP packet.
   bool SendPacket(PacketRef packet, base::OnceClosure cb) final {
@@ -100,8 +103,6 @@ class TestPacketSender : public PacketTransport {
   bool paused_;
   base::OnceClosure callback_;
   PacketRef stored_packet_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestPacketSender);
 };
 
 void IgnorePlayoutDelayChanges(base::TimeDelta unused_playout_delay) {}
@@ -140,6 +141,9 @@ class TransportClient : public CastTransport::Client {
  public:
   TransportClient() = default;
 
+  TransportClient(const TransportClient&) = delete;
+  TransportClient& operator=(const TransportClient&) = delete;
+
   void OnStatusChanged(CastTransportStatus status) final {
     EXPECT_EQ(TRANSPORT_STREAM_INITIALIZED, status);
   }
@@ -147,13 +151,15 @@ class TransportClient : public CastTransport::Client {
       std::unique_ptr<std::vector<FrameEvent>> frame_events,
       std::unique_ptr<std::vector<PacketEvent>> packet_events) final {}
   void ProcessRtpPacket(std::unique_ptr<Packet> packet) final {}
-
-  DISALLOW_COPY_AND_ASSIGN(TransportClient);
 };
 
 }  // namespace
 
 class VideoSenderTest : public ::testing::Test {
+ public:
+  VideoSenderTest(const VideoSenderTest&) = delete;
+  VideoSenderTest& operator=(const VideoSenderTest&) = delete;
+
  protected:
   VideoSenderTest()
       : task_runner_(new FakeSingleThreadTaskRunner(&testing_clock_)),
@@ -169,7 +175,7 @@ class VideoSenderTest : public ::testing::Test {
     transport_ = new TestPacketSender();
     transport_sender_ = std::make_unique<CastTransportImpl>(
         &testing_clock_, base::TimeDelta(), std::make_unique<TransportClient>(),
-        base::WrapUnique(transport_), task_runner_);
+        base::WrapUnique(transport_.get()), task_runner_);
   }
 
   ~VideoSenderTest() override = default;
@@ -238,14 +244,11 @@ class VideoSenderTest : public ::testing::Test {
   const scoped_refptr<CastEnvironment> cast_environment_;
   OperationalStatus operational_status_;
   FakeVideoEncodeAcceleratorFactory vea_factory_;
-  TestPacketSender* transport_;  // Owned by CastTransport.
+  raw_ptr<TestPacketSender> transport_;  // Owned by CastTransport.
   std::unique_ptr<CastTransportImpl> transport_sender_;
   std::unique_ptr<PeerVideoSender> video_sender_;
   int last_pixel_value_;
   base::TimeTicks first_frame_timestamp_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(VideoSenderTest);
 };
 
 TEST_F(VideoSenderTest, BuiltInEncoder) {

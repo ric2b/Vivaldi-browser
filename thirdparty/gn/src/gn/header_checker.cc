@@ -47,11 +47,10 @@ LocationRange CreatePersistentRange(const InputFile& input_file,
       input_file.name(), &clone_input_file, &tokens, &parse_root);
   clone_input_file->SetContents(input_file.contents());
 
-  return LocationRange(
-      Location(clone_input_file, range.begin().line_number(),
-               range.begin().column_number(), -1 /* TODO(scottmg) */),
-      Location(clone_input_file, range.end().line_number(),
-               range.end().column_number(), -1 /* TODO(scottmg) */));
+  return LocationRange(Location(clone_input_file, range.begin().line_number(),
+                                range.begin().column_number()),
+                       Location(clone_input_file, range.end().line_number(),
+                                range.end().column_number()));
 }
 
 // Given a reverse dependency chain where the target chain[0]'s includes are
@@ -154,7 +153,7 @@ void HeaderChecker::RunCheckOverFiles(const FileMap& files, bool force_check) {
 
   for (const auto& file : files) {
     // Only check C-like source files (RC files also have includes).
-    SourceFile::Type type = file.first.type();
+    const SourceFile::Type type = file.first.GetType();
     if (type != SourceFile::SOURCE_CPP && type != SourceFile::SOURCE_H &&
         type != SourceFile::SOURCE_C && type != SourceFile::SOURCE_M &&
         type != SourceFile::SOURCE_MM && type != SourceFile::SOURCE_RC)

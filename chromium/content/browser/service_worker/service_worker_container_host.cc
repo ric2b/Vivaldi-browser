@@ -18,9 +18,9 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
+#include "content/browser/service_worker/service_worker_security_utils.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/content_navigation_policy.h"
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
@@ -144,8 +144,10 @@ ServiceWorkerContainerHost::~ServiceWorkerContainerHost() {
       rfh->RemoveServiceWorkerContainerHost(client_uuid());
   }
 
-  if (IsContainerForClient() && controller_)
+  if (controller_) {
+    DCHECK(IsContainerForClient());
     controller_->Uncontrol(client_uuid());
+  }
 
   // Remove |this| as an observer of ServiceWorkerRegistrations.
   // TODO(falken): Use base::ScopedObservation instead of this explicit call.
@@ -185,7 +187,8 @@ void ServiceWorkerContainerHost::Register(
   }
 
   std::vector<GURL> urls = {url_, options->scope, script_url};
-  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
+  if (!service_worker_security_utils::AllOriginsMatchAndCanAccessServiceWorkers(
+          urls)) {
     mojo::ReportBadMessage(ServiceWorkerConsts::kBadMessageImproperOrigins);
     // ReportBadMessage() will kill the renderer process, but Mojo complains if
     // the callback is not run. Just run it with nonsense arguments.
@@ -382,10 +385,12 @@ void ServiceWorkerContainerHost::EnsureFileAccess(
     ChildProcessSecurityPolicyImpl* policy =
         ChildProcessSecurityPolicyImpl::GetInstance();
     for (const auto& file : file_paths) {
-      if (!policy->CanReadFile(GetProcessId(), file))
+      if (!policy->CanReadFile(GetProcessId(), file)) {
         mojo::ReportBadMessage(
             "The renderer doesn't have access to the file "
             "but it tried to grant access to the controller.");
+        return;
+      }
 
       if (!policy->CanReadFile(controller_process_id, file))
         policy->GrantReadFile(controller_process_id, file);
@@ -480,6 +485,7 @@ void ServiceWorkerContainerHost::AddMatchingRegistration(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(blink::ServiceWorkerScopeMatches(registration->scope(),
                                           GetUrlForScopeMatch()));
+  DCHECK(registration->key() == key());
   if (!IsEligibleForServiceWorkerController())
     return;
   size_t key = registration->scope().spec().size();
@@ -1199,7 +1205,7 @@ void ServiceWorkerContainerHost::SyncMatchingRegistrations() {
   const auto& registrations = context_->GetLiveRegistrations();
   for (const auto& key_registration : registrations) {
     ServiceWorkerRegistration* registration = key_registration.second;
-    if (!registration->is_uninstalled() &&
+    if (!registration->is_uninstalled() && registration->key() == key() &&
         blink::ServiceWorkerScopeMatches(registration->scope(),
                                          GetUrlForScopeMatch())) {
       AddMatchingRegistration(registration);
@@ -1580,7 +1586,8 @@ bool ServiceWorkerContainerHost::IsValidGetRegistrationMessage(
     return false;
   }
   std::vector<GURL> urls = {url_, client_url};
-  if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
+  if (!service_worker_security_utils::AllOriginsMatchAndCanAccessServiceWorkers(
+          urls)) {
     *out_error = ServiceWorkerConsts::kBadMessageImproperOrigins;
     return false;
   }
@@ -1663,7 +1670,7 @@ bool ServiceWorkerContainerHost::CanServeContainerHostMethods(
 blink::StorageKey
 ServiceWorkerContainerHost::GetCorrectStorageKeyForWebSecurityState(
     const GURL& url) const {
-  if (ServiceWorkerUtils::IsWebSecurityDisabled()) {
+  if (service_worker_security_utils::IsWebSecurityDisabled()) {
     url::Origin other_origin = url::Origin::Create(url);
 
     if (key_.origin() != other_origin)
@@ -1677,7 +1684,7 @@ const GURL ServiceWorkerContainerHost::GetOrigin() const {
   // Ideally, the origins of GetUrlForScopeMatch() and url() should be the same
   // but GURL::GetOrigin() doesn't work with blob URL.
   // See https://crbug.com/1144717
-  return GetUrlForScopeMatch().GetOrigin();
+  return GetUrlForScopeMatch().DeprecatedGetOriginAsURL();
 }
 
 const GURL& ServiceWorkerContainerHost::GetUrlForScopeMatch() const {

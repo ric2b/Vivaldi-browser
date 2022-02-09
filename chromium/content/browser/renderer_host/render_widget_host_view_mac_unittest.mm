@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/containers/queue.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -478,6 +477,10 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
   RenderWidgetHostViewMacTest() : rwhv_mac_(nullptr) {
   }
 
+  RenderWidgetHostViewMacTest(const RenderWidgetHostViewMacTest&) = delete;
+  RenderWidgetHostViewMacTest& operator=(const RenderWidgetHostViewMacTest&) =
+      delete;
+
   void SetUp() override {
     mock_clock_.Advance(base::Milliseconds(100));
     ui::SetEventTickClockForTesting(&mock_clock_);
@@ -560,8 +563,6 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
   base::mac::ScopedNSAutoreleasePool pool_;
 
   base::SimpleTestTickClock mock_clock_;
-
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMacTest);
 };
 
 TEST_F(RenderWidgetHostViewMacTest, Basic) {
@@ -1428,6 +1429,11 @@ class RenderWidgetHostViewMacPinchTest
     }
   }
 
+  RenderWidgetHostViewMacPinchTest(const RenderWidgetHostViewMacPinchTest&) =
+      delete;
+  RenderWidgetHostViewMacPinchTest& operator=(
+      const RenderWidgetHostViewMacPinchTest&) = delete;
+
   void SendBeginPinchEvent() {
     NSEvent* pinchBeginEvent = MockPinchEvent(NSEventPhaseBegan, 0);
     [rwhv_cocoa_ magnifyWithEvent:pinchBeginEvent];
@@ -1442,7 +1448,6 @@ class RenderWidgetHostViewMacPinchTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMacPinchTest);
 };
 
 INSTANTIATE_TEST_SUITE_P(, RenderWidgetHostViewMacPinchTest, testing::Bool());

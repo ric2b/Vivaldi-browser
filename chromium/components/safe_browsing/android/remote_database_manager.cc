@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -56,8 +57,8 @@ class RemoteSafeBrowsingDatabaseManager::ClientRequest {
   }
 
  private:
-  Client* client_;
-  RemoteSafeBrowsingDatabaseManager* db_manager_;
+  raw_ptr<Client> client_;
+  raw_ptr<RemoteSafeBrowsingDatabaseManager> db_manager_;
   GURL url_;
   base::ElapsedTimer timer_;
   base::WeakPtrFactory<ClientRequest> weak_factory_{this};
@@ -111,6 +112,8 @@ RemoteSafeBrowsingDatabaseManager::RemoteSafeBrowsingDatabaseManager()
       network::mojom::RequestDestination::kIframe);
   request_destinations_to_check_.insert(
       network::mojom::RequestDestination::kFrame);
+  request_destinations_to_check_.insert(
+      network::mojom::RequestDestination::kFencedframe);
 
   // The param is expected to be a comma-separated list of ints
   // corresponding to the enum types.  We're keeping this finch
@@ -121,7 +124,7 @@ RemoteSafeBrowsingDatabaseManager::RemoteSafeBrowsingDatabaseManager()
     // By default, we check all types except a few.
     static_assert(
         network::mojom::RequestDestination::kMaxValue ==
-            network::mojom::RequestDestination::kXslt,
+            network::mojom::RequestDestination::kFencedframe,
         "Decide if new request destination should be skipped on mobile.");
     for (int t_int = 0;
          t_int <=
@@ -306,12 +309,6 @@ AsyncMatch RemoteSafeBrowsingDatabaseManager::CheckCsdAllowlistUrl(
   SafeBrowsingApiHandler* api_handler = SafeBrowsingApiHandler::GetInstance();
   bool is_match = api_handler->StartCSDAllowlistCheck(url);
   return is_match ? AsyncMatch::MATCH : AsyncMatch::NO_MATCH;
-}
-
-bool RemoteSafeBrowsingDatabaseManager::MatchDownloadAllowlistString(
-    const std::string& str) {
-  NOTREACHED();
-  return true;
 }
 
 bool RemoteSafeBrowsingDatabaseManager::MatchDownloadAllowlistUrl(

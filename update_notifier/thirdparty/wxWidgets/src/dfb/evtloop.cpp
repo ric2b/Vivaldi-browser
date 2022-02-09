@@ -25,6 +25,7 @@
     #include "wx/log.h"
 #endif
 
+#include "wx/apptrait.h"
 #include "wx/thread.h"
 #include "wx/private/fdiodispatcher.h"
 #include "wx/dfb/private.h"
@@ -202,20 +203,8 @@ wxIDirectFBEventBufferPtr wxGUIEventLoop::GetDirectFBEventBuffer()
 // events dispatch and loop handling
 //-----------------------------------------------------------------------------
 
-bool wxGUIEventLoop::YieldFor(long eventsToProcess)
+void wxGUIEventLoop::DoYieldFor(long eventsToProcess)
 {
-#if wxUSE_THREADS
-    if ( !wxThread::IsMain() )
-        return true; // can't process events from other threads
-#endif // wxUSE_THREADS
-
-    m_isInsideYield = true;
-    m_eventsToProcessInsideYield = eventsToProcess;
-
-#if wxUSE_LOG
-    wxLog::Suspend();
-#endif // wxUSE_LOG
-
     // TODO: implement event filtering using the eventsToProcess mask
 
     // process all pending events:
@@ -225,16 +214,10 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
     // handle timers, sockets etc.
     OnNextIteration();
 
-    // it's necessary to call ProcessIdle() to update the frames sizes which
-    // might have been changed (it also will update other things set from
-    // OnUpdateUI() which is a nice (and desired) side effect)
-    while ( ProcessIdle() ) {}
+    wxEventLoopBase::DoYieldFor(eventsToProcess);
+}
 
-#if wxUSE_LOG
-    wxLog::Resume();
-#endif // wxUSE_LOG
-
-    m_isInsideYield = false;
-
-    return true;
+wxEventLoopSourcesManagerBase* wxGUIAppTraits::GetEventLoopSourcesManager()
+{
+    return wxAppTraits::GetEventLoopSourcesManager();
 }

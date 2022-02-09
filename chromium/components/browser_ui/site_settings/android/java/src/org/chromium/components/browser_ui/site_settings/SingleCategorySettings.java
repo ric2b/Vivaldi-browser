@@ -11,8 +11,10 @@ import static org.chromium.components.content_settings.PrefNames.ENABLE_QUIET_NO
 import static org.chromium.components.content_settings.PrefNames.NOTIFICATIONS_VIBRATE_ENABLED;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.ForegroundColorSpan;
@@ -46,6 +48,7 @@ import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SearchUtils;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics.AutoDarkSettingsChangeSource;
 import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference.CookieSettingsState;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
@@ -89,32 +92,6 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
      * {@link UrlUtilities#getDomainAndRegistry}.
      */
     public static final String EXTRA_SELECTED_DOMAINS = "selected_domains";
-
-    /**
-     * Observer that monitors changes for {@link SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT}.
-     * Used to receive updates that //component/site_settings might not have access to.
-     *
-     * This is a temporary workaround until JNI content setting observer is available thus is not a
-     * recommended pattern to follow.
-     * TODO(https://crbug.com/1252504): Remove when java content_settings_observer is available.
-     */
-    public interface AutoDarkSiteSettingObserver {
-        /**
-         * Called when {@link SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT} changed in its
-         * default value (by the toggle).
-         * @param isEnabled The new state of the default value.
-         */
-        void onDefaultValueChanged(boolean isEnabled);
-
-        /**
-         * Called when {@link SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT} as a site exception
-         * is being added or removed.
-         * @param isAdded True if a site exception is being added; False otherwise.
-         */
-        void onSiteExceptionChanged(boolean isAdded);
-    }
-
-    private static @Nullable AutoDarkSiteSettingObserver sAutoDarkSiteSettingsObserver;
 
     // The list that contains preferences.
     private RecyclerView mListView;
@@ -168,7 +145,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
     public static final String NOTIFICATIONS_VIBRATE_TOGGLE_KEY = "notifications_vibrate";
     public static final String NOTIFICATIONS_QUIET_UI_TOGGLE_KEY = "notifications_quiet_ui";
     public static final String EXPLAIN_PROTECTED_MEDIA_KEY = "protected_content_learn_more";
-    private static final String ADD_EXCEPTION_KEY = "add_exception";
+    public static final String ADD_EXCEPTION_KEY = "add_exception";
     public static final String COOKIE_INFO_TEXT_KEY = "cookie_info_text";
 
     // Keys for Allowed/Blocked preference groups/headers.
@@ -210,15 +187,6 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         public boolean isPreferenceControlledByCustodian(Preference preference) {
             return mCategory.isManagedByCustodian();
         }
-    }
-
-    /**
-     * Set the observer that looks at {@link SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT}
-     * @param observer
-     */
-    public static void setAutoDarkSiteSettingsObserver(
-            @Nullable AutoDarkSiteSettingObserver observer) {
-        sAutoDarkSiteSettingsObserver = observer;
     }
 
     private void getInfoForOrigins() {
@@ -269,10 +237,17 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         }
         if (!mGroupByAllowBlock) return;
 
-        // When the toggle is set to Blocked, the Allowed list header should read 'Exceptions', not
-        // 'Allowed' (because it shows exceptions from the rule).
-        int resourceId = toggleValue ? R.string.website_settings_allowed_group_heading
-                                     : R.string.website_settings_exceptions_group_heading;
+        int resourceId;
+        if (mCategory.showSites(SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE)) {
+            // REQUEST_DESKTOP_SITE has its own Allowed list header.
+            resourceId = R.string.website_settings_allowed_group_heading_request_desktop_site;
+        } else if (toggleValue) {
+            resourceId = R.string.website_settings_allowed_group_heading;
+        } else {
+            // When the toggle is set to Blocked, the Allowed list header should read 'Exceptions',
+            // not 'Allowed' (because it shows exceptions from the rule).
+            resourceId = R.string.website_settings_exceptions_group_heading;
+        }
         allowedGroup.setTitle(getHeaderTitle(resourceId, numAllowed));
         allowedGroup.setExpanded(mAllowListExpanded);
     }
@@ -287,9 +262,14 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
         if (!mGroupByAllowBlock) return;
 
         // Set the title and arrow icons for the header.
-        int resourceId = mCategory.showSites(SiteSettingsCategory.Type.SOUND)
-                ? R.string.website_settings_blocked_group_heading_sound
-                : R.string.website_settings_blocked_group_heading;
+        int resourceId;
+        if (mCategory.showSites(SiteSettingsCategory.Type.SOUND)) {
+            resourceId = R.string.website_settings_blocked_group_heading_sound;
+        } else if (mCategory.showSites(SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE)) {
+            resourceId = R.string.website_settings_blocked_group_heading_request_desktop_site;
+        } else {
+            resourceId = R.string.website_settings_blocked_group_heading;
+        }
         blockedGroup.setTitle(getHeaderTitle(resourceId, numBlocked));
         blockedGroup.setExpanded(mBlockListExpanded);
     }
@@ -454,6 +434,20 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                         SettingsNavigationSource.EXTRA_KEY, SettingsNavigationSource.OTHER);
                 website_pref.getExtras().putInt(
                         SettingsNavigationSource.EXTRA_KEY, navigationSource);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && mCategory.showSites(SiteSettingsCategory.Type.NOTIFICATIONS)) {
+                // In  Android O+, users can manage Notification channels through App Info. If this
+                // is the case we send the user directly to Android Settings to modify the
+                // Notification exception.
+                String channelId = getSiteSettingsDelegate().getChannelIdForOrigin(
+                        website_pref.site().getAddress().getOrigin());
+                Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
+                intent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId);
+                intent.putExtra(
+                        Settings.EXTRA_APP_PACKAGE, preference.getContext().getPackageName());
+                startActivityForResult(
+                        intent, SingleWebsiteSettings.REQUEST_CODE_NOTIFICATION_CHANNEL_SETTINGS);
+
             } else {
                 buildPreferenceDialog(website_pref.site()).show();
             }
@@ -483,7 +477,8 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                 if (type == SiteSettingsCategory.Type.NOTIFICATIONS) {
                     updateNotificationsSecondaryControls();
                 } else if (type == SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT) {
-                    sAutoDarkSiteSettingsObserver.onDefaultValueChanged((boolean) newValue);
+                    AutoDarkMetrics.recordAutoDarkSettingsChangeSource(
+                            AutoDarkSettingsChangeSource.SITE_SETTINGS_GLOBAL, (boolean) newValue);
                 } else if (type == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
                     recordSiteLayoutChanged((boolean) newValue);
                 }
@@ -659,8 +654,6 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
             } else {
                 RecordUserAction.record("SoundContentSetting.UnmuteBy.PatternException");
             }
-        } else if (mCategory.showSites(SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT)) {
-            sAutoDarkSiteSettingsObserver.onSiteExceptionChanged(true);
         }
     }
 
@@ -677,27 +670,23 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
 
         BrowserContextHandle browserContextHandle =
                 getSiteSettingsDelegate().getBrowserContextHandle();
-        boolean exception = false;
+        boolean allowSpecifyingExceptions = false;
         if (mCategory.showSites(SiteSettingsCategory.Type.SOUND)) {
-            exception = true;
+            allowSpecifyingExceptions = true;
         } else if (mCategory.showSites(SiteSettingsCategory.Type.JAVASCRIPT)) {
-            exception = true;
+            allowSpecifyingExceptions = true;
         } else if (mCategory.showSites(SiteSettingsCategory.Type.COOKIES)) {
-            exception = true;
+            allowSpecifyingExceptions = true;
         } else if (mCategory.showSites(SiteSettingsCategory.Type.BACKGROUND_SYNC)
                 && !WebsitePreferenceBridge.isCategoryEnabled(
                         browserContextHandle, ContentSettingsType.BACKGROUND_SYNC)) {
-            exception = true;
+            allowSpecifyingExceptions = true;
         } else if (mCategory.showSites(SiteSettingsCategory.Type.AUTOMATIC_DOWNLOADS)
                 && !WebsitePreferenceBridge.isCategoryEnabled(
                         browserContextHandle, ContentSettingsType.AUTOMATIC_DOWNLOADS)) {
-            exception = true;
-        } else if (mCategory.showSites(SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT)
-                && WebsitePreferenceBridge.isCategoryEnabled(
-                        browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)) {
-            exception = true;
+            allowSpecifyingExceptions = true;
         }
-        if (exception) {
+        if (allowSpecifyingExceptions) {
             getPreferenceScreen().addPreference(new AddExceptionPreference(getStyledContext(),
                     ADD_EXCEPTION_KEY, getAddExceptionDialogMessage(), mCategory, this));
         }
@@ -1131,8 +1120,9 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
 
                             if (mCategory.showSites(
                                         SiteSettingsCategory.Type.AUTO_DARK_WEB_CONTENT)) {
-                                sAutoDarkSiteSettingsObserver.onSiteExceptionChanged(
-                                        /*isAdded=*/false);
+                                AutoDarkMetrics.recordAutoDarkSettingsChangeSource(
+                                        AutoDarkSettingsChangeSource.SITE_SETTINGS_EXCEPTION_LIST,
+                                        false);
                             }
 
                             getInfoForOrigins();

@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/containers/circular_deque.h"
-#include "base/macros.h"
 
 namespace media {
 class AudioBus;
@@ -83,6 +82,9 @@ class DelayBuffer {
     // Constructor for an InputChunk with data.
     InputChunk(FrameTicks p, std::unique_ptr<media::AudioBus> b);
 
+    InputChunk(const InputChunk&) = delete;
+    InputChunk& operator=(const InputChunk&) = delete;
+
     // Move constructor/assignment.
     InputChunk(InputChunk&& other);
     InputChunk& operator=(InputChunk&& other);
@@ -91,9 +93,6 @@ class DelayBuffer {
 
     // Returns the position just after the last frame's position.
     FrameTicks GetEndPosition() const;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(InputChunk);
   };
 
   // The minimum number of un-read frames that must be kept.

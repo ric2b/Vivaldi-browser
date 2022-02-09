@@ -96,8 +96,7 @@ constexpr int kOffscreenWindowHeight = 838;
 
 // Delay to check for no longer used data url after initialization when the
 // browser is likely idle.
-constexpr base::TimeDelta kDataUrlGCStartupDelay =
-    base::TimeDelta::FromSeconds(60);
+constexpr base::TimeDelta kDataUrlGCStartupDelay = base::Seconds(60);
 
 }  // namespace
 

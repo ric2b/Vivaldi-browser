@@ -38,7 +38,6 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Batch;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.merchant_viewer.MerchantTrustSignalsCoordinator;
@@ -102,6 +101,7 @@ public final class StatusMediatorUnitTest {
     Bitmap mBitmap;
     OneshotSupplierImpl<TemplateUrlService> mTemplateUrlServiceSupplier;
     WindowAndroid mWindowAndroid;
+    LibraryLoader mOriginalLibraryLoader;
 
     @Before
     public void setUp() {
@@ -115,6 +115,7 @@ public final class StatusMediatorUnitTest {
         mModel = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> new PropertyModel(StatusProperties.ALL_KEYS));
 
+        mOriginalLibraryLoader = LibraryLoader.getInstance();
         doReturn(true).when(mLibraryLoader).isInitialized();
         LibraryLoader.setLibraryLoaderForTesting(mLibraryLoader);
 
@@ -137,6 +138,7 @@ public final class StatusMediatorUnitTest {
 
     @After
     public void tearDown() {
+        LibraryLoader.setLibraryLoaderForTesting(mOriginalLibraryLoader);
         TestThreadUtils.runOnUiThreadBlocking(() -> { mWindowAndroid.destroy(); });
     }
 
@@ -479,67 +481,46 @@ public final class StatusMediatorUnitTest {
     @Test
     @SmallTest
     @UiThreadTest
-    @DisabledTest(message = "crbug.com/1254561")
     public void testShowStoreIcon_DifferentUrl() {
         setupStoreIconForTesting("test1.com", false);
         // Show the default icon first.
         mMediator.setUrlHasFocus(true);
         mMediator.setShowIconsWhenUrlFocused(true);
         Assert.assertFalse(mMediator.isStoreIconShowing());
-        Assert.assertNotEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
 
         // Try to show the store icon.
-        mMediator.showStoreIcon(mWindowAndroid, "test2.com", mStoreIconDrawable, 0);
+        mMediator.showStoreIcon(mWindowAndroid, "test2.com", mStoreIconDrawable, 0, true);
         Assert.assertFalse(mMediator.isStoreIconShowing());
-        Assert.assertNotEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
     }
 
     @Test
     @SmallTest
     @UiThreadTest
-    @DisabledTest(message = "crbug.com/1254561")
     public void testShowStoreIcon_InIncognito() {
         setupStoreIconForTesting("test.com", true);
         // Show the default icon first.
         mMediator.setUrlHasFocus(true);
         mMediator.setShowIconsWhenUrlFocused(true);
         Assert.assertFalse(mMediator.isStoreIconShowing());
-        Assert.assertNotEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
 
         // Try to show the store icon.
-        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0);
+        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0, true);
         Assert.assertFalse(mMediator.isStoreIconShowing());
-        Assert.assertNotEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
     }
 
     @Test
     @SmallTest
     @UiThreadTest
-    @DisabledTest(message = "crbug.com/1254561")
     public void testShowStoreIcon() {
         setupStoreIconForTesting("test.com", false);
         // Show the default icon first.
         mMediator.setUrlHasFocus(true);
         mMediator.setShowIconsWhenUrlFocused(true);
         Assert.assertFalse(mMediator.isStoreIconShowing());
-        Assert.assertNotEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
 
         // Try to show the store icon.
-        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0);
+        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0, true);
         Assert.assertTrue(mMediator.isStoreIconShowing());
-        Assert.assertEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
         Assert.assertEquals(IconTransitionType.ROTATE,
                 mModel.get(StatusProperties.STATUS_ICON_RESOURCE).getTransitionType());
         Assert.assertNotNull(
@@ -552,16 +533,34 @@ public final class StatusMediatorUnitTest {
         Assert.assertFalse(mMediator.isStoreIconShowing());
 
         // Show store icon again.
-        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0);
+        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0, true);
         Assert.assertTrue(mMediator.isStoreIconShowing());
 
         // Simulate that we need to switch back to the default icon.
         mMediator.setUrlHasFocus(true);
         mMediator.setShowIconsWhenUrlFocused(true);
         Assert.assertFalse(mMediator.isStoreIconShowing());
-        Assert.assertNotEquals(mStoreIconDrawable,
-                mModel.get(StatusProperties.STATUS_ICON_RESOURCE)
-                        .getDrawable(mContext, mResources));
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
+    public void testShowStoreIcon_NotEligibleToShowIph() {
+        setupStoreIconForTesting("test.com", false);
+        // Show the default icon first.
+        mMediator.setUrlHasFocus(true);
+        mMediator.setShowIconsWhenUrlFocused(true);
+        Assert.assertFalse(mMediator.isStoreIconShowing());
+
+        // Try to show the store icon.
+        mMediator.showStoreIcon(mWindowAndroid, "test.com", mStoreIconDrawable, 0, false);
+        Assert.assertTrue(mMediator.isStoreIconShowing());
+        Assert.assertEquals(IconTransitionType.ROTATE,
+                mModel.get(StatusProperties.STATUS_ICON_RESOURCE).getTransitionType());
+        Assert.assertNotNull(
+                mModel.get(StatusProperties.STATUS_ICON_RESOURCE).getAnimationFinishedCallback());
+        mModel.get(StatusProperties.STATUS_ICON_RESOURCE).getAnimationFinishedCallback().run();
+        verify(mPageInfoIPHController, times(0)).showStoreIconIPH(anyInt(), eq(0));
     }
 
     /**

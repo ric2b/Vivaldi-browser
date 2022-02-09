@@ -9,12 +9,14 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/abstract_range.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_linked_hash_set.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
 
-using HighlightSetIterable = SetlikeIterable<Member<AbstractRange>>;
+using HighlightSetIterable =
+    SetlikeIterable<Member<AbstractRange>, AbstractRange>;
 class HighlightRegistry;
 
 class CORE_EXPORT Highlight : public ScriptWrappable,
@@ -37,6 +39,9 @@ class CORE_EXPORT Highlight : public ScriptWrappable,
 
   const int32_t& priority() const { return priority_; }
   void setPriority(const int32_t&);
+
+  AtomicString type() const { return type_; }
+  void setType(const AtomicString& type) { type_ = type; }
 
   bool Contains(AbstractRange*) const;
 
@@ -70,6 +75,7 @@ class CORE_EXPORT Highlight : public ScriptWrappable,
  private:
   HeapLinkedHashSet<Member<AbstractRange>> highlight_ranges_;
   int32_t priority_ = 0;
+  AtomicString type_ = "highlight";
   // Since a Highlight can be registered many times under different names in
   // many HighlightRegistries, we need to keep track of the number of times
   // it's present in each registry. If the Highlight is not registered anywhere,

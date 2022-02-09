@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
@@ -291,7 +291,7 @@ class TabRestoreTest : public InProcessBrowserTest {
   GURL url1_;
   GURL url2_;
 
-  const BrowserList* active_browser_list_;
+  raw_ptr<const BrowserList> active_browser_list_;
 
  private:
   std::unique_ptr<base::AutoReset<gfx::Animation::RichAnimationRenderMode>>
@@ -1744,16 +1744,28 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, BackToAboutBlank) {
   url::Origin initial_origin = url::Origin::Create(initial_url);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), initial_url));
 
-  // Open about:blank in a new tab.
   content::WebContents* old_popup = nullptr;
+  content::WebContents* tab1 =
+      browser()->tab_strip_model()->GetActiveWebContents();
   {
+    // Open a new popup.
     EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
-    content::WebContents* tab1 =
-        browser()->tab_strip_model()->GetActiveWebContents();
     content::WebContentsAddedObserver popup_observer;
-    ASSERT_TRUE(ExecJs(tab1, "window.open('about:blank')"));
+    ASSERT_TRUE(ExecJs(tab1, "var w = window.open('/title2.html');"));
     old_popup = popup_observer.GetWebContents();
     EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
+    EXPECT_EQ(initial_origin,
+              old_popup->GetMainFrame()->GetLastCommittedOrigin());
+    EXPECT_TRUE(WaitForLoadStop(old_popup));
+  }
+
+  {
+    // Navigate the popup to about:blank, inheriting the opener origin. Note
+    // that we didn't immediately open the popup to about:blank to avoid making
+    // it use the initial NavigationEntry, which can't be navigated back to.
+    content::TestNavigationObserver nav_observer(old_popup);
+    ASSERT_TRUE(ExecJs(tab1, "w.location.href = 'about:blank';"));
+    nav_observer.Wait();
     EXPECT_EQ(GURL(url::kAboutBlankURL),
               old_popup->GetMainFrame()->GetLastCommittedURL());
     EXPECT_EQ(initial_origin,

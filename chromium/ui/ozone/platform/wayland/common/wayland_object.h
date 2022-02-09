@@ -79,6 +79,17 @@ struct ObjectTraits<wl_proxy> {
   static void (*deleter)(void*);
 };
 
+// Checks the given |available_version| exposed by the server against
+// |min_version| and |max_version| supported by the client.
+// Returns false (with rendering a warning) if |available_version| is less than
+// the minimum supported version.
+// Returns true otherwise, renders an info message if |available_version| is
+// greater than the maximum supported one.
+bool CanBind(const std::string& interface,
+             uint32_t available_version,
+             uint32_t min_version,
+             uint32_t max_version);
+
 }  // namespace wl
 
 // Puts the forward declaration for struct TYPE and declares the template
@@ -94,6 +105,7 @@ struct ObjectTraits<wl_proxy> {
   }  // namespace wl
 
 // For convenience, keep aphabetical order in this list.
+DECLARE_WAYLAND_OBJECT_TRAITS(augmented_surface)
 DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device)
 DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device_manager)
 DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_offer)
@@ -104,6 +116,7 @@ DECLARE_WAYLAND_OBJECT_TRAITS(org_kde_kwin_idle)
 DECLARE_WAYLAND_OBJECT_TRAITS(org_kde_kwin_idle_timeout)
 DECLARE_WAYLAND_OBJECT_TRAITS(overlay_prioritizer)
 DECLARE_WAYLAND_OBJECT_TRAITS(overlay_prioritized_surface)
+DECLARE_WAYLAND_OBJECT_TRAITS(surface_augmenter)
 DECLARE_WAYLAND_OBJECT_TRAITS(wl_buffer)
 DECLARE_WAYLAND_OBJECT_TRAITS(wl_callback)
 DECLARE_WAYLAND_OBJECT_TRAITS(wl_compositor)
@@ -138,6 +151,8 @@ DECLARE_WAYLAND_OBJECT_TRAITS(xdg_toplevel)
 DECLARE_WAYLAND_OBJECT_TRAITS(xdg_wm_base)
 DECLARE_WAYLAND_OBJECT_TRAITS(zaura_shell)
 DECLARE_WAYLAND_OBJECT_TRAITS(zaura_surface)
+DECLARE_WAYLAND_OBJECT_TRAITS(zaura_toplevel)
+DECLARE_WAYLAND_OBJECT_TRAITS(zaura_popup)
 DECLARE_WAYLAND_OBJECT_TRAITS(zcr_cursor_shapes_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zcr_blending_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zcr_alpha_compositing_v1)
@@ -151,6 +166,7 @@ DECLARE_WAYLAND_OBJECT_TRAITS(zcr_text_input_extension_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zwp_idle_inhibit_manager_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zwp_idle_inhibitor_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zwp_linux_buffer_release_v1)
+DECLARE_WAYLAND_OBJECT_TRAITS(zwp_linux_buffer_params_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zwp_linux_dmabuf_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zwp_linux_explicit_synchronization_v1)
 DECLARE_WAYLAND_OBJECT_TRAITS(zwp_linux_surface_synchronization_v1)

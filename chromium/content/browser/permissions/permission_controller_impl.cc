@@ -64,7 +64,6 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
     case PermissionType::WINDOW_PLACEMENT:
     case PermissionType::FONT_ACCESS:
     case PermissionType::DISPLAY_CAPTURE:
-    case PermissionType::FILE_HANDLING:
     case PermissionType::GEOLOCATION:
       return absl::nullopt;
   }
@@ -81,7 +80,7 @@ void NotifySchedulerAboutPermissionRequest(RenderFrameHost* render_frame_host,
     return;
 
   static_cast<RenderFrameHostImpl*>(render_frame_host)
-      ->OnSchedulerTrackedFeatureUsed(feature.value());
+      ->OnBackForwardCacheDisablingStickyFeatureUsed(feature.value());
 }
 
 // Calls |original_cb|, a callback expecting the PermissionStatus of a set of

@@ -101,14 +101,14 @@ void BlockedUrlsReporter::OnUrlBlocked(RuleGroup group,
   base::TimeDelta time_since_last_notification =
       base::Time::Now() - last_notification_time_;
   if (time_since_last_notification >
-      base::TimeDelta::FromSeconds(kSecondsBetweenNotifications)) {
+      base::Seconds(kSecondsBetweenNotifications)) {
     NotifyOfNewBlockedUrls();
     return;
   }
 
   next_notifiaction_timer_.Start(
       FROM_HERE,
-      base::TimeDelta::FromSeconds(kSecondsBetweenNotifications) -
+      base::Seconds(kSecondsBetweenNotifications) -
           time_since_last_notification,
       base::BindOnce(&BlockedUrlsReporter::NotifyOfNewBlockedUrls,
                      weak_factory_.GetWeakPtr()));

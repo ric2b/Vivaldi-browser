@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/color_behavior.h"
+#include "third_party/blink/renderer/platform/heap/prefinalizer.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkData.h"
@@ -46,10 +47,12 @@ namespace blink {
 class CanvasImageSource;
 class HTMLCanvasElement;
 class ImageBitmap;
+class NoAllocDirectCallHost;
 class
     V8UnionCanvasRenderingContext2DOrGPUCanvasContextOrImageBitmapRenderingContextOrWebGL2RenderingContextOrWebGLRenderingContext;
 class
     V8UnionGPUCanvasContextOrImageBitmapRenderingContextOrOffscreenCanvasRenderingContext2DOrWebGL2RenderingContextOrWebGLRenderingContext;
+class WebGraphicsContext3DVideoFramePool;
 
 class CORE_EXPORT CanvasRenderingContext
     : public ScriptWrappable,
@@ -94,6 +97,8 @@ class CORE_EXPORT CanvasRenderingContext
     return canvas_rendering_type_ == CanvasRenderingAPI::kWebgpu;
   }
 
+  virtual NoAllocDirectCallHost* AsNoAllocDirectCallHost();
+
   // ActiveScriptWrappable
   // As this class inherits from ActiveScriptWrappable, as long as
   // HasPendingActivity returns true, we can ensure that the Garbage Collector
@@ -117,12 +122,7 @@ class CORE_EXPORT CanvasRenderingContext
       const ExecutionContext* execution_context);
 
   CanvasRenderingContextHost* Host() const { return host_; }
-
-  // TODO(https://crbug.com/1208480): This function applies only to 2D rendering
-  // contexts, and should be removed.
-  virtual CanvasColorParams CanvasRenderingContextColorParams() const {
-    return CanvasColorParams();
-  }
+  SkColorInfo CanvasRenderingContextSkColorInfo() const;
 
   virtual scoped_refptr<StaticBitmapImage> GetImage() = 0;
   virtual bool IsComposited() const = 0;
@@ -175,6 +175,19 @@ class CORE_EXPORT CanvasRenderingContext
     return false;
   }
 
+  // Copy the contents of the rendering context to a media::VideoFrame created
+  // using `frame_pool`, with color space specified by `dst_color_space`. If
+  // successful, take (using std::move) `callback` and issue it with the
+  // resulting frame, once the copy is completed. On failure, do not take
+  // `callback`.
+  using VideoFrameCopyCompletedCallback =
+      base::OnceCallback<void(scoped_refptr<media::VideoFrame>)>;
+  virtual void CopyRenderingResultsToVideoFrame(
+      WebGraphicsContext3DVideoFramePool* frame_pool,
+      SourceDrawingBuffer,
+      const gfx::ColorSpace& dst_color_space,
+      VideoFrameCopyCompletedCallback& callback) {}
+
   virtual cc::Layer* CcLayer() const { return nullptr; }
 
   enum LostContextMode {
@@ -195,7 +208,7 @@ class CORE_EXPORT CanvasRenderingContext
   // This method gets called at the end of script tasks that modified
   // the contents of the canvas (called didDraw). It marks the completion
   // of a presentable frame.
-  virtual void FinalizeFrame() {}
+  virtual void FinalizeFrame(bool printing = false) {}
 
   // Thread::TaskObserver implementation
   void DidProcessTask(const base::PendingTask&) override;
@@ -226,9 +239,9 @@ class CORE_EXPORT CanvasRenderingContext
     NOTREACHED();
     return 0;
   }
-  virtual IntSize DrawingBufferSize() const {
+  virtual gfx::Size DrawingBufferSize() const {
     NOTREACHED();
-    return IntSize(0, 0);
+    return gfx::Size(0, 0);
   }
 
   // OffscreenCanvas-specific methods.
@@ -268,6 +281,12 @@ class CORE_EXPORT CanvasRenderingContext
                          const CanvasContextCreationAttributesCore&,
                          CanvasRenderingAPI);
 
+  // TODO(https://crbug.com/1208480): This function applies only to 2D rendering
+  // contexts, and should be removed.
+  virtual CanvasColorParams CanvasRenderingContextColorParams() const {
+    return CanvasColorParams();
+  }
+
  private:
   void Dispose();
 
@@ -277,6 +296,7 @@ class CORE_EXPORT CanvasRenderingContext
 
   void RenderTaskEnded();
   bool did_draw_in_current_task_ = false;
+  bool did_print_in_current_task_ = false;
 
   const CanvasRenderingAPI canvas_rendering_type_;
 };

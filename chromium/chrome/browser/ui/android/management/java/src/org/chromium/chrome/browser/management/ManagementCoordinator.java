@@ -26,8 +26,8 @@ class ManagementCoordinator {
      */
     public ManagementCoordinator(Context context, Profile profile) {
         PropertyModel model = new PropertyModel.Builder(ManagementProperties.ALL_KEYS)
-                                      .with(ManagementProperties.ACCOUNT_IS_MANAGED,
-                                              ManagedBrowserUtils.isAccountManaged(profile))
+                                      .with(ManagementProperties.BROWSER_IS_MANAGED,
+                                              ManagedBrowserUtils.isBrowserManaged(profile))
                                       .with(ManagementProperties.ACCOUNT_MANAGER_NAME,
                                               ManagedBrowserUtils.getAccountManagerName(profile))
                                       .build();

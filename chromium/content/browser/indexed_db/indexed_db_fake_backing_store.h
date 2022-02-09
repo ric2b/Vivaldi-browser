@@ -10,7 +10,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/macros.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
 
@@ -122,6 +121,10 @@ class IndexedDBFakeBackingStore : public IndexedDBBackingStore {
     FakeTransaction(leveldb::Status phase_two_result,
                     blink::mojom::IDBTransactionMode mode);
     explicit FakeTransaction(leveldb::Status phase_two_result);
+
+    FakeTransaction(const FakeTransaction&) = delete;
+    FakeTransaction& operator=(const FakeTransaction&) = delete;
+
     void Begin(std::vector<ScopeLock> locks) override;
     leveldb::Status CommitPhaseOne(BlobWriteCallback) override;
     leveldb::Status CommitPhaseTwo() override;
@@ -130,8 +133,6 @@ class IndexedDBFakeBackingStore : public IndexedDBBackingStore {
 
    private:
     leveldb::Status result_;
-
-    DISALLOW_COPY_AND_ASSIGN(FakeTransaction);
   };
 
   std::unique_ptr<IndexedDBBackingStore::Transaction> CreateTransaction(

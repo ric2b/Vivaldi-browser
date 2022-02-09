@@ -99,8 +99,23 @@ class CORE_EXPORT ProgressTracker final
 
   HashMap<uint64_t, ProgressItem> progress_items_;
 
-  int elementsLoaded_ = 0;
-  int elementsTotal_ = 0;
+  // The count of resources loaded since the previous notification.
+  int vivaldi_loaded_resource_delta_ = 0;
+
+  // The count of resources started to load since the previous notification.
+  int vivaldi_started_resource_delta_ = 0;
+
+  // The number of bytes loaded from all resources since the previous
+  // notification.
+  int64_t vivaldi_bytes_delta_ = 0;
+
+  // Reset the delta counters after we send the notification with the current
+  // values or when the whole object is reset.
+  void vivaldi_reset_deltas() {
+    vivaldi_loaded_resource_delta_ = 0;
+    vivaldi_started_resource_delta_ = 0;
+    vivaldi_bytes_delta_ = 0;
+  }
 };
 
 }  // namespace blink

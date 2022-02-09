@@ -342,7 +342,7 @@ class NavigationController {
   // Returns the entry that should be displayed to the user in the address bar.
   // This is the pending entry if a navigation is in progress *and* is safe to
   // display to the user (see below), or the last committed entry otherwise.
-  // NOTE: This can be nullptr if no entry has committed!
+  // NOTE: This can be nullptr if no entry has been committed!
   //
   // A pending entry is safe to display if it started in the browser process or
   // if it's a renderer-initiated navigation in a new tab which hasn't been
@@ -418,14 +418,18 @@ class NavigationController {
   // Navigates directly to an error page in response to an event on the last
   // committed page (e.g., triggered by a subresource), with |error_page_html|
   // as the contents and |url| as the URL.
-
+  //
   // The error page will create a NavigationEntry that temporarily replaces the
   // original page's entry. The original entry will be put back into the entry
   // list after any other navigation.
-  virtual void LoadPostCommitErrorPage(RenderFrameHost* render_frame_host,
-                                       const GURL& url,
-                                       const std::string& error_page_html,
-                                       net::Error error) = 0;
+  //
+  // Returns the handle to the navigation for the error page, which may be null
+  // if the navigation is immediately canceled.
+  virtual base::WeakPtr<NavigationHandle> LoadPostCommitErrorPage(
+      RenderFrameHost* render_frame_host,
+      const GURL& url,
+      const std::string& error_page_html,
+      net::Error error) = 0;
 
   // Renavigation --------------------------------------------------------------
 

@@ -20,9 +20,6 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#ifdef __BORLANDC__
-    #pragma hdrstop
-#endif
 
 #if wxUSE_STREAMS
 
@@ -390,7 +387,7 @@ char wxStreamBuffer::GetChar()
 
 size_t wxStreamBuffer::Read(void *buffer, size_t size)
 {
-    wxASSERT_MSG( buffer, wxT("Warning: Null pointer is about to be used") );
+    wxCHECK_MSG( buffer, 0, wxT("NULL data pointer") );
 
     /* Clear buffer first */
     memset(buffer, 0x00, size);
@@ -471,7 +468,7 @@ size_t wxStreamBuffer::Read(wxStreamBuffer *dbuf)
 
 size_t wxStreamBuffer::Write(const void *buffer, size_t size)
 {
-    wxASSERT_MSG( buffer, wxT("Warning: Null pointer is about to be send") );
+    wxCHECK_MSG( buffer, 0, wxT("NULL data pointer") );
 
     if (m_stream)
     {
@@ -511,7 +508,7 @@ size_t wxStreamBuffer::Write(const void *buffer, size_t size)
             {
                 PutToBuffer(buffer, left);
                 size -= left;
-                buffer = (char *)buffer + left;
+                buffer = static_cast<const char*>(buffer) + left;
 
                 if ( !FlushBuffer() )
                 {
@@ -676,7 +673,7 @@ wxFileOffset wxStreamBuffer::Tell() const
 // wxStreamBase
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxStreamBase, wxObject)
+wxIMPLEMENT_ABSTRACT_CLASS(wxStreamBase, wxObject);
 
 wxStreamBase::wxStreamBase()
 {
@@ -714,7 +711,7 @@ wxFileOffset wxStreamBase::OnSysTell() const
 // wxInputStream
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxInputStream, wxStreamBase)
+wxIMPLEMENT_ABSTRACT_CLASS(wxInputStream, wxStreamBase);
 
 wxInputStream::wxInputStream()
 {
@@ -771,7 +768,7 @@ char *wxInputStream::AllocSpaceWBack(size_t needed_size)
 
 size_t wxInputStream::GetWBack(void *buf, size_t size)
 {
-    wxASSERT_MSG( buf, wxT("Warning: Null pointer is about to be used") );
+    wxCHECK_MSG( buf, 0, wxT("NULL data pointer") );
 
     /* Clear buffer first */
     memset(buf, 0x00, size);
@@ -807,7 +804,7 @@ size_t wxInputStream::GetWBack(void *buf, size_t size)
 
 size_t wxInputStream::Ungetch(const void *buf, size_t bufsize)
 {
-    wxASSERT_MSG( buf, wxT("Warning: Null pointer is about to be used in Ungetch()") );
+    wxCHECK_MSG( buf, 0, wxT("NULL data pointer") );
 
     if ( m_lasterror != wxSTREAM_NO_ERROR && m_lasterror != wxSTREAM_EOF )
     {
@@ -841,7 +838,7 @@ int wxInputStream::GetC()
 
 wxInputStream& wxInputStream::Read(void *buf, size_t size)
 {
-    wxASSERT_MSG( buf, wxT("Warning: Null pointer is about to be read") );
+    wxCHECK_MSG( buf, *this, wxT("NULL data pointer") );
 
     char *p = (char *)buf;
     m_lastcount = 0;
@@ -1037,7 +1034,7 @@ wxFileOffset wxInputStream::TellI() const
 // wxOutputStream
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxOutputStream, wxStreamBase)
+wxIMPLEMENT_ABSTRACT_CLASS(wxOutputStream, wxStreamBase);
 
 wxOutputStream::wxOutputStream()
 {
@@ -1121,7 +1118,7 @@ void wxOutputStream::Sync()
 // wxCountingOutputStream
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_DYNAMIC_CLASS(wxCountingOutputStream, wxOutputStream)
+wxIMPLEMENT_DYNAMIC_CLASS(wxCountingOutputStream, wxOutputStream);
 
 wxCountingOutputStream::wxCountingOutputStream ()
 {
@@ -1186,7 +1183,7 @@ wxFileOffset wxCountingOutputStream::OnSysTell() const
 // wxFilterInputStream
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxFilterInputStream, wxInputStream)
+wxIMPLEMENT_ABSTRACT_CLASS(wxFilterInputStream, wxInputStream);
 
 wxFilterInputStream::wxFilterInputStream()
  :  m_parent_i_stream(NULL),
@@ -1216,7 +1213,7 @@ wxFilterInputStream::~wxFilterInputStream()
 // wxFilterOutputStream
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxFilterOutputStream, wxOutputStream)
+wxIMPLEMENT_ABSTRACT_CLASS(wxFilterOutputStream, wxOutputStream);
 
 wxFilterOutputStream::wxFilterOutputStream()
  :  m_parent_o_stream(NULL),
@@ -1254,7 +1251,7 @@ wxFilterOutputStream::~wxFilterOutputStream()
 // wxFilterClassFactoryBase
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxFilterClassFactoryBase, wxObject)
+wxIMPLEMENT_ABSTRACT_CLASS(wxFilterClassFactoryBase, wxObject);
 
 wxString wxFilterClassFactoryBase::PopExtension(const wxString& location) const
 {
@@ -1290,7 +1287,7 @@ bool wxFilterClassFactoryBase::CanHandle(const wxString& protocol,
 // wxFilterClassFactory
 // ----------------------------------------------------------------------------
 
-IMPLEMENT_ABSTRACT_CLASS(wxFilterClassFactory, wxFilterClassFactoryBase)
+wxIMPLEMENT_ABSTRACT_CLASS(wxFilterClassFactory, wxFilterClassFactoryBase);
 
 wxFilterClassFactory *wxFilterClassFactory::sm_first = NULL;
 
