@@ -79,13 +79,6 @@ void FramePainter::PaintContents(GraphicsContext& context,
   if (document->IsPrintingOrPaintingPreview())
     root_layer_paint_flags = kPaintLayerPaintingOverflowContents;
 
-  if (global_paint_flags & kGlobalPaintWholePage) {
-    // NOTE(igor@vivaldi.com): set the same flags as
-    // DraggedNodeImageBuilder::CreateImage() does.
-    DCHECK(global_paint_flags & kGlobalPaintFlattenCompositingLayers);
-    root_layer_paint_flags |= kPaintLayerHaveTransparency;
-  }
-
   PaintLayer* root_layer = layout_view->Layer();
 
 #if DCHECK_IS_ON()

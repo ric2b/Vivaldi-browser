@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
+#include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
@@ -21,22 +22,20 @@ class CORE_EXPORT DisplayLockUtilities {
   // This class forces updates on display locks from the given node up the
   // ancestor chain until the local frame root.
   class CORE_EXPORT ScopedForcedUpdate {
-    DISALLOW_COPY_AND_ASSIGN(ScopedForcedUpdate);
     STACK_ALLOCATED();
 
    public:
     ScopedForcedUpdate(ScopedForcedUpdate&& other) : impl_(other.impl_) {
       other.impl_ = nullptr;
     }
-    ~ScopedForcedUpdate() {
-      if (impl_)
-        impl_->Destroy();
-    }
-
     ScopedForcedUpdate& operator=(ScopedForcedUpdate&& other) {
       impl_ = other.impl_;
       other.impl_ = nullptr;
       return *this;
+    }
+    ~ScopedForcedUpdate() {
+      if (impl_)
+        impl_->Destroy();
     }
 
    private:
@@ -52,6 +51,8 @@ class CORE_EXPORT DisplayLockUtilities {
     friend void Document::EnsurePaintLocationDataValidForNode(
         const Node* node,
         DocumentUpdateReason reason);
+    friend VisibleSelection
+    FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated() const;
 
     friend class DisplayLockContext;
 

@@ -51,7 +51,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
-#include "gpu/ipc/common/gpu_messages.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -471,7 +470,7 @@ gfx::NativeViewAccessible RenderWidgetHostViewAura::GetNativeViewAccessible() {
   if (manager)
     return ToBrowserAccessibilityWin(manager->GetRoot())->GetCOM();
 
-#elif defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#elif defined(OS_LINUX)
   BrowserAccessibilityManager* manager =
       host()->GetOrCreateRootBrowserAccessibilityManager();
   if (manager && manager->GetRoot())
@@ -772,11 +771,26 @@ void RenderWidgetHostViewAura::UpdateTooltip(
     const std::u16string& tooltip_text) {
   SetTooltipText(tooltip_text);
 
-  auto* tooltip_client = wm::GetTooltipClient(window_->GetRootWindow());
+  wm::TooltipClient* tooltip_client =
+      wm::GetTooltipClient(window_->GetRootWindow());
   if (tooltip_client) {
     // Content tooltips should be visible indefinitely.
     tooltip_client->SetHideTooltipTimeout(window_, {});
     tooltip_client->UpdateTooltip(window_);
+  }
+}
+
+void RenderWidgetHostViewAura::UpdateTooltipFromKeyboard(
+    const std::u16string& tooltip_text,
+    const gfx::Rect& bounds) {
+  SetTooltipText(tooltip_text);
+
+  wm::TooltipClient* tooltip_client =
+      wm::GetTooltipClient(window_->GetRootWindow());
+  if (tooltip_client) {
+    // Content tooltips should be visible indefinitely.
+    tooltip_client->SetHideTooltipTimeout(window_, {});
+    tooltip_client->UpdateTooltipFromKeyboard(bounds, window_);
   }
 }
 
@@ -1862,10 +1876,10 @@ bool RenderWidgetHostViewAura::TransformPointToCoordSpaceForView(
 }
 
 viz::FrameSinkId RenderWidgetHostViewAura::GetRootFrameSinkId() {
-  if (!window_ || !window_->GetHost() || !window_->GetHost()->compositor())
+  if (!GetCompositor())
     return viz::FrameSinkId();
 
-  return window_->GetHost()->compositor()->frame_sink_id();
+  return GetCompositor()->frame_sink_id();
 }
 
 viz::SurfaceId RenderWidgetHostViewAura::GetCurrentSurfaceId() const {
@@ -2047,7 +2061,6 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
       window_->GetHost()->RemoveObserver(this);
     UnlockMouse();
     wm::SetTooltipText(window_, nullptr);
-    display::Screen::GetScreen()->RemoveObserver(this);
 
     // This call is usually no-op since |this| object is already removed from
     // the Aura root window and we don't have a way to get an input method
@@ -2087,7 +2100,7 @@ void RenderWidgetHostViewAura::CreateAuraWindow(aura::client::WindowType type) {
   wm::SetTooltipText(window_, &tooltip_);
   wm::SetActivationDelegate(window_, this);
   aura::client::SetFocusChangeObserver(window_, this);
-  display::Screen::GetScreen()->AddObserver(this);
+  display_observer_.emplace(this);
 
   window_->SetType(type);
   window_->Init(ui::LAYER_SOLID_COLOR);
@@ -2238,7 +2251,7 @@ void RenderWidgetHostViewAura::Shutdown() {
   }
 }
 
-bool RenderWidgetHostViewAura::ShouldVirtualKeyboardOverlayContent() const {
+bool RenderWidgetHostViewAura::ShouldVirtualKeyboardOverlayContent() {
   // overlaycontent flag can only be set from main frame.
   RenderFrameHostImpl* frame = host()->frame_tree()->GetMainFrame();
   if (!frame)
@@ -2384,7 +2397,7 @@ void RenderWidgetHostViewAura::AddedToRootWindow() {
   UpdateLegacyWin();
 #endif
 
-    delegated_frame_host_->AttachToCompositor(window_->GetHost()->compositor());
+  delegated_frame_host_->AttachToCompositor(GetCompositor());
 }
 
 void RenderWidgetHostViewAura::RemovingFromRootWindow() {
@@ -2754,6 +2767,13 @@ void RenderWidgetHostViewAura::SetTooltipText(
   tooltip_ = tooltip_text;
   if (tooltip_observer_for_testing_)
     tooltip_observer_for_testing_->OnTooltipTextUpdated(tooltip_text);
+}
+
+ui::Compositor* RenderWidgetHostViewAura::GetCompositor() {
+  if (!window_ || !window_->GetHost())
+    return nullptr;
+
+  return window_->GetHost()->compositor();
 }
 
 }  // namespace content

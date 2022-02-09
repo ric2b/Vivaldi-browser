@@ -374,8 +374,16 @@ void SharedImageBackingGLImage::ReleaseGLTexture(bool have_context) {
   }
   if (IsPassthrough()) {
     if (passthrough_texture_) {
-      if (!have_context)
+      if (have_context) {
+        if (!passthrough_texture_->is_bind_pending()) {
+          const GLenum target = GetGLTarget();
+          gl::ScopedTextureBinder binder(target,
+                                         passthrough_texture_->service_id());
+          image_->ReleaseTexImage(target);
+        }
+      } else {
         passthrough_texture_->MarkContextLost();
+      }
       passthrough_texture_.reset();
     }
   } else {
@@ -483,18 +491,19 @@ SharedImageBackingGLImage::ProduceGLTexturePassthrough(
 std::unique_ptr<SharedImageRepresentationOverlay>
 SharedImageBackingGLImage::ProduceOverlay(SharedImageManager* manager,
                                           MemoryTypeTracker* tracker) {
-#if defined(OS_MAC) || defined(USE_OZONE)
+#if defined(OS_MAC) || defined(USE_OZONE) || defined(OS_WIN)
   return std::make_unique<SharedImageRepresentationOverlayImpl>(
       manager, this, tracker, image_);
-#else   // !(defined(OS_MAC) || defined(USE_OZONE))
+#else   // !(defined(OS_MAC) || defined(USE_OZONE) || defined(OS_WIN))
   return SharedImageBacking::ProduceOverlay(manager, tracker);
-#endif  // defined(OS_MAC) || defined(USE_OZONE)
+#endif  // defined(OS_MAC) || defined(USE_OZONE) || defined(OS_WIN)
 }
 
 std::unique_ptr<SharedImageRepresentationDawn>
 SharedImageBackingGLImage::ProduceDawn(SharedImageManager* manager,
                                        MemoryTypeTracker* tracker,
-                                       WGPUDevice device) {
+                                       WGPUDevice device,
+                                       WGPUBackendType backend_type) {
 #if defined(OS_MAC)
   auto result = SharedImageBackingFactoryIOSurface::ProduceDawn(
       manager, this, tracker, device, image_);
@@ -507,7 +516,7 @@ SharedImageBackingGLImage::ProduceDawn(SharedImageManager* manager,
   }
 
   return SharedImageBackingGLCommon::ProduceDawnCommon(
-      factory(), manager, tracker, device, this, IsPassthrough());
+      factory(), manager, tracker, device, backend_type, this, IsPassthrough());
 }
 
 std::unique_ptr<SharedImageRepresentationSkia>
@@ -670,6 +679,7 @@ void SharedImageBackingGLImage::SharedImageRepresentationGLTextureEndAccess(
     if (!passthrough_texture_->is_bind_pending()) {
       image_->ReleaseTexImage(target);
       image_bind_or_copy_needed_ = true;
+      passthrough_texture_->set_is_bind_pending(true);
     }
   }
 #else

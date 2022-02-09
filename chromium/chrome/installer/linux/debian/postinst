@@ -67,8 +67,5 @@ fi
 # Run the cron job immediately to perform repository configuration.
 nohup sh /etc/cron.daily/@@PACKAGE@@ > /dev/null 2>&1 &
 
-# Setup Widevine support
-nohup /opt/@@PACKAGE@@/update-widevine > /dev/null 2>&1 &
-
 # Setup proprietary media support
 nohup /opt/@@PACKAGE@@/update-ffmpeg > /dev/null 2>&1 &

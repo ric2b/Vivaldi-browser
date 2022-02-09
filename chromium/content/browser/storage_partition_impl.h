@@ -13,7 +13,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
-#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -231,7 +230,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   QuotaContext* GetQuotaContext();
   ConversionManagerImpl* GetConversionManager();
   FontAccessManagerImpl* GetFontAccessManager();
-  InterestGroupManager* GetInterestGroupStorage();
+  InterestGroupManager* GetInterestGroupManager();
   ComputePressureManager* GetComputePressureManager();
   std::string GetPartitionDomain();
 
@@ -388,6 +387,16 @@ class CONTENT_EXPORT StoragePartitionImpl
   // callbacks pending responses from |local_trust_token_fulfiller_|, providing
   // each callback a suitable error response.
   void OnLocalTrustTokenFulfillerConnectionError();
+
+  void OpenLocalStorageForProcess(
+      int process_id,
+      const blink::StorageKey& storage_key,
+      mojo::PendingReceiver<blink::mojom::StorageArea> receiver);
+  void BindSessionStorageAreaForProcess(
+      int process_id,
+      const blink::StorageKey& storage_key,
+      const std::string& namespace_id,
+      mojo::PendingReceiver<blink::mojom::StorageArea> receiver);
 
   // NOTE(andre@vivaldi.com) : When we have a WebView that "adopt" a WebContents
   // in WebViewGuest we need to set the parent of the WebView as fallback

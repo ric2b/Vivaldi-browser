@@ -9,7 +9,6 @@
 #include "base/callback.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/notification_observer.h"
@@ -26,6 +25,7 @@ class SimpleURLLoader;
 }  // namespace network
 
 class GURL;
+class Profile;
 
 class AdverseAdFilterListService : public KeyedService,
                                    public content::NotificationObserver {

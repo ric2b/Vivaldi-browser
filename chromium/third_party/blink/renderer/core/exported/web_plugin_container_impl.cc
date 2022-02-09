@@ -176,10 +176,10 @@ void WebPluginContainerImpl::Paint(GraphicsContext& context,
   IntRect visual_rect = FrameRect();
   visual_rect.Move(paint_offset);
 
-  if (WantsWheelEvents()) {
-    context.GetPaintController().RecordScrollHitTestData(
-        *GetLayoutEmbeddedContent(), DisplayItem::kPluginScrollHitTest, nullptr,
-        visual_rect);
+  if (WantsWheelEvents() &&
+      base::FeatureList::IsEnabled(::features::kWheelEventRegions)) {
+    context.GetPaintController().RecordHitTestData(
+        *GetLayoutEmbeddedContent(), visual_rect, TouchAction::kAuto, true);
   }
 
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() && layer_) {
@@ -809,16 +809,15 @@ void WebPluginContainerImpl::Trace(Visitor* visitor) const {
 }
 
 void WebPluginContainerImpl::HandleMouseEvent(MouseEvent& event) {
+  // TODO(dtapuska): Move WebMouseEventBuilder into the anonymous namespace
+  // in this class.
+  WebMouseEventBuilder transformed_event(element_->GetLayoutObject(), event);
+  if (transformed_event.GetType() == WebInputEvent::Type::kUndefined)
+    return;
+
   // We cache the parent LocalFrameView here as the plugin widget could be
   // deleted in the call to HandleEvent. See http://b/issue?id=1362948
   LocalFrameView* parent = ParentFrameView();
-
-  // TODO(dtapuska): Move WebMouseEventBuilder into the anonymous namespace
-  // in this class.
-  WebMouseEventBuilder transformed_event(parent, element_->GetLayoutObject(),
-                                         event);
-  if (transformed_event.GetType() == WebInputEvent::Type::kUndefined)
-    return;
 
   if (event.type() == event_type_names::kMousedown)
     FocusPlugin();
@@ -1047,8 +1046,7 @@ void WebPluginContainerImpl::HandleGestureEvent(GestureEvent& event) {
 }
 
 void WebPluginContainerImpl::SynthesizeMouseEventIfPossible(TouchEvent& event) {
-  WebMouseEventBuilder web_event(ParentFrameView(), element_->GetLayoutObject(),
-                                 event);
+  WebMouseEventBuilder web_event(element_->GetLayoutObject(), event);
   if (web_event.GetType() == WebInputEvent::Type::kUndefined)
     return;
 

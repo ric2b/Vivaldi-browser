@@ -512,7 +512,8 @@ std::string DevToolsHttpHandler::GetFrontendURLInternal(
                      type == DevToolsAgentHost::kTypeSharedWorker;
     frontend_url = base::StringPrintf(
         "https://chrome-devtools-frontend.appspot.com/serve_rev/%s/%s.html",
-        GetWebKitRevision().c_str(), is_worker ? "worker_app" : "inspector");
+        GetChromiumGitRevision().c_str(),
+        is_worker ? "worker_app" : "inspector");
   }
   return base::StringPrintf("%s?ws=%s%s%s", frontend_url.c_str(), host.c_str(),
                             kPageUrlPrefix, id.c_str());
@@ -689,8 +690,15 @@ void DevToolsHttpHandler::RespondToJsonList(
 }
 
 void DevToolsHttpHandler::OnDiscoveryPageRequest(int connection_id) {
-  std::string response = delegate_->GetDiscoveryPageHTML();
-  Send200(connection_id, response, "text/html; charset=UTF-8");
+  net::HttpServerResponseInfo response(net::HTTP_OK);
+  response.AddHeader("X-Frame-Options", "DENY");
+  response.SetBody(delegate_->GetDiscoveryPageHTML(),
+                   "text/html; charset=UTF-8");
+
+  thread_->task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&ServerWrapper::SendResponse,
+                                base::Unretained(server_wrapper_.get()),
+                                connection_id, response));
 }
 
 void DevToolsHttpHandler::OnFrontendResourceRequest(

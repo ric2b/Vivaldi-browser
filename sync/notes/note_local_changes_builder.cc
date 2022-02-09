@@ -4,6 +4,7 @@
 
 #include "sync/notes/note_local_changes_builder.h"
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -12,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/time.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
+#include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "sync/notes/note_specifics_conversions.h"
 #include "sync/notes/synced_note_tracker.h"
@@ -29,13 +31,20 @@ NoteLocalChangesBuilder::NoteLocalChangesBuilder(
 syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
     size_t max_entries) const {
   DCHECK(note_tracker_);
+
   const std::vector<const SyncedNoteTracker::Entity*>
-      entities_with_local_changes =
-          note_tracker_->GetEntitiesWithLocalChanges(max_entries);
-  DCHECK_LE(entities_with_local_changes.size(), max_entries);
+      entities_with_local_changes = note_tracker_->GetEntitiesWithLocalChanges(
+          base::FeatureList::IsEnabled(
+              switches::kSyncBookmarksEnforceLateMaxEntriesToCommit)
+              ? std::numeric_limits<int>::max()
+              : max_entries);
 
   syncer::CommitRequestDataList commit_requests;
   for (const SyncedNoteTracker::Entity* entity : entities_with_local_changes) {
+    if (commit_requests.size() >= max_entries) {
+      break;
+    }
+
     DCHECK(entity);
     DCHECK(entity->IsUnsynced());
     const sync_pb::EntityMetadata* metadata = entity->metadata();

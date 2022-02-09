@@ -1,9 +1,17 @@
+import("//vivaldi/gn/config/features.gni")
 
 config("delay_load_mf") {
   ldflags = [
     "/DELAYLOAD:mfplat.dll",
   ]
 }
+
+if (vivaldi_task_api_key != "") {
+  defines = [
+    "VIVALDI_GOOGLE_TASKS_API_KEY=\"$vivaldi_task_api_key\""
+  ]
+}
+
 
 static_library("apis") {
   public_deps = [

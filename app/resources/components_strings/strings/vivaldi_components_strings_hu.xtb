@@ -142,6 +142,7 @@
 <translation id="5810442152076338065">A(z) <ph name="DOMAIN" /> domainnel való kapcsolatod elavult kriptográfiával van titkosítva.</translation>
 <translation id="5838278095973806738">Ne írj be semmilyen bizalmas adatot (például jelszót vagy hitelkártyaadatot) a webhelyen, mivel a támadók ellophatják.</translation>
 <translation id="5869405914158311789">A webhely nem érhető el</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 van használatban}other{# van használatban}}</translation>
 <translation id="5932224571077948991">A webhely tolakodó vagy félrevezető hirdetéseket jelenít meg</translation>
 <translation id="6051221802930200923">Pillanatnyilag nem tudod felkeresni a(z) <ph name="SITE" /> webhelyet, mivel a webhely tanúsítványrögzítést használ. A hálózati hibák és támadások rendszerint átmenetiek, ezért az említett oldal működése később valószínűleg helyreáll.</translation>
 <translation id="6146055958333702838">Ellenőrizze a kábeleket, majd indítsa újra a routert, modemet vagy más
@@ -217,9 +218,9 @@
 <translation id="8740359287975076522">A(z) <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-címe&lt;/abbr&gt; nem található. A probléma diagnosztizálása folyamatban van.</translation>
 <translation id="8820817407110198400">Könyvjelzők</translation>
 <translation id="8940028675168378100">Blokkolta: <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">A webhely beállításainak megnyitása</translation>
 <translation id="9001074447101275817">A(z) <ph name="DOMAIN" /> proxy felhasználónevet és jelszót kér.</translation>
 <translation id="9008201768610948239">Mellőzés</translation>
-<translation id="9011424611726486705">Webhelybeállítások megnyitása</translation>
 <translation id="9025348182339809926">(Érvénytelen)</translation>
 <translation id="9039213469156557790">Emellett az oldal más forrásokat is tartalmaz, amelyek nem biztonságosak. Ezeket a forrásokat mások is megtekinthetik átvitel közben, és megváltoztatásukkal a támadók módosíthatják az oldal viselkedését.</translation>
 <translation id="9062620674789239642">Előfordulhat, hogy át lett helyezve, szerkesztve vagy törlésre került.</translation>

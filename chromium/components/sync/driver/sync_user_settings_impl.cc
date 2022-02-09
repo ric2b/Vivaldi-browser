@@ -202,8 +202,6 @@ bool SyncUserSettingsImpl::IsTrustedVaultKeyRequiredForPreferredDataTypes()
 }
 
 bool SyncUserSettingsImpl::IsTrustedVaultRecoverabilityDegraded() const {
-  // TODO(crbug.com/1081649): This should verify that at least one sync entity
-  // is affected.
   return IsEncryptedDatatypeEnabled() &&
          crypto_->IsTrustedVaultRecoverabilityDegraded();
 }
@@ -249,7 +247,7 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
 #endif
   types.RetainAll(registered_model_types_);
 
-  static_assert(37 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(38 + 1 /* notes */ == GetNumModelTypes(),
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync.");
   types.PutAll(ControlTypes());
@@ -261,6 +259,7 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
     types.Remove(SHARING_MESSAGE);
     types.Remove(USER_CONSENTS);
     types.Remove(USER_EVENTS);
+    types.Remove(WORKSPACE_DESK);
   }
   return types;
 }
@@ -270,8 +269,6 @@ ModelTypeSet SyncUserSettingsImpl::GetEncryptedDataTypes() const {
 }
 
 bool SyncUserSettingsImpl::IsEncryptedDatatypeEnabled() const {
-  if (crypto_->encryption_pending())
-    return true;
   const ModelTypeSet preferred_types = GetPreferredDataTypes();
   const ModelTypeSet encrypted_types = GetEncryptedDataTypes();
   DCHECK(encrypted_types.HasAll(AlwaysEncryptedUserTypes()));

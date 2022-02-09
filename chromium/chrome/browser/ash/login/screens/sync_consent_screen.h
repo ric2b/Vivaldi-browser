@@ -11,6 +11,7 @@
 #include "base/auto_reset.h"
 #include "base/macros.h"
 #include "base/scoped_observation.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 // TODO(https://crbug.com/1164001): move to forward declaration.
 #include "chrome/browser/ui/webui/chromeos/login/sync_consent_screen_handler.h"
@@ -86,13 +87,11 @@ class SyncConsentScreen : public BaseScreen,
   // syncer::SyncServiceObserver:
   void OnStateChanged(syncer::SyncService* sync) override;
 
-  // Reacts to "Continue and review settings after sign-in"
-  void OnContinueAndReview(const std::vector<int>& consent_description,
-                           const int consent_confirmation);
-
-  // Reacts to "Continue with default settings"
-  void OnContinueWithDefaults(const std::vector<int>& consent_description,
-                              const int consent_confirmation);
+  // Reacts to user action on non-split-settings sync.
+  void OnNonSplitSettingsContinue(const bool opted_in,
+                                  const bool review_sync,
+                                  const std::vector<int>& consent_description,
+                                  const int consent_confirmation);
 
   // Reacts to "Yes, I'm in" and "No, thanks".
   void OnContinue(const std::vector<int>& consent_description,
@@ -104,6 +103,9 @@ class SyncConsentScreen : public BaseScreen,
 
   // Enables sync if required when skipping the dialog.
   void MaybeEnableSyncForSkip();
+
+  // Called when sync engine initialization timed out.
+  void OnTimeout();
 
   // Sets internal condition "Sync disabled by policy" for tests.
   void SetProfileSyncDisabledByPolicyForTesting(bool value);
@@ -150,6 +152,15 @@ class SyncConsentScreen : public BaseScreen,
   // Returns true if profile sync has finished initialization.
   bool IsProfileSyncEngineInitialized() const;
 
+  // This function does two things based on account capability: turn on "sync
+  // everything" toggle for non-minor users; pass the minor mode signal to
+  // the front end, which controls whether nudge techniques could be used.
+  void PrepareScreenBasedOnCapability();
+
+  // Set "sync everything" toggle to be on or off. We also turn off all data
+  // types when the toggle is off.
+  void SetSyncEverythingEnabled(bool enabled);
+
   // Controls screen appearance.
   // Spinner is shown until sync status has been decided.
   SyncScreenBehavior behavior_ = SyncScreenBehavior::kUnknown;
@@ -166,11 +177,20 @@ class SyncConsentScreen : public BaseScreen,
   Profile* profile_ = nullptr;
   bool is_initialized_ = false;
 
+  // Used to record whether sync engine initialization is timed out.
+  base::OneShotTimer timeout_waiter_;
+  bool is_timed_out_ = false;
+
+  // The time when sync consent screen starts loading.
+  base::TimeTicks start_time_;
+
   absl::optional<bool> test_sync_disabled_by_policy_;
   absl::optional<bool> test_sync_engine_initialized_;
 
   // Notify tests.
   SyncConsentScreenTestDelegate* test_delegate_ = nullptr;
+
+  base::WeakPtrFactory<SyncConsentScreen> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(SyncConsentScreen);
 };

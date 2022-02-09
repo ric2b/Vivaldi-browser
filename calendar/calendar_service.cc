@@ -165,7 +165,7 @@ bool CalendarService::Init(
   if (thread_) {
     base::Thread::Options options;
     options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-    if (!thread_->StartWithOptions(options)) {
+    if (!thread_->StartWithOptions(std::move(options))) {
       Cleanup();
       return false;
     }

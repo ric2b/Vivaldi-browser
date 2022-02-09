@@ -19,7 +19,7 @@
 <translation id="1734878702283171397">Provoni të kontaktoni administratorin e sistemit.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Provoni të diagnostikoni rrjetin kompjuterik nga Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Faqja përmban programe të rrezikshme</translation>
-<translation id="1916770123977586577">Parametrat e përditësuar do të zbatohen kur faqja të rifreskohet</translation>
+<translation id="1916770123977586577">Freskoni faqen për të zbatuar parametrat e rinj</translation>
 <translation id="1919345977826869612">Reklamat</translation>
 <translation id="1974060860693918893">Parametrat e avancuar</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Të kontrolloni proxy-n dhe sistemin mbrojtës të rrjetit<ph name="END_LINK" /></translation>
@@ -76,7 +76,7 @@
 <translation id="3447884698081792621">Tregoj certifikatën (është lëshuar nga <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Fsheh detajet e avancuara</translation>
 <translation id="3484560055331845446">Mund të humbitni aksesin te Kontoja në Google. Chrome rekomandon ta ndryshoni fjalëkalimin që tani. Do ju kërkohet identifikimi.</translation>
-<translation id="3566021033012934673">Nuk jeni lidhur privatisht</translation>
+<translation id="3566021033012934673">Lidhja nuk është private</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Fsheh detajet</translation>
 <translation id="3630155396527302611">Nëse ndodhet që më parë në listën e programeve të autorizuara për aksesin në rrjetin kompjuterik,
@@ -97,7 +97,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Të kontrolloni konfigurimin e sistemit mbrojtës të rrjetit dhe të antivirusit<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Provoni të diagnostikoni rrjetin kompjuterik<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">E vlefshme</translation>
-<translation id="4250431568374086873">Nuk është tërësisht e sigurt lidhja me faqen</translation>
+<translation id="4250431568374086873">Lidhja me faqen është pjesërisht e sigurt</translation>
 <translation id="4265872034478892965">Autorizohet nga administratori</translation>
 <translation id="4305666528087210886">Nuk hapet skedari</translation>
 <translation id="4312866146174492540">Bllokoj (standarde)</translation>
@@ -142,15 +142,16 @@
 <translation id="5785756445106461925">Për më tepër, faqja nuk përmban resurse të pasigurta. Këto resurse mund të shihen nga të tjerët kalimthi dhe mund të modifikohen nga piratët e internetit për ndryshimin e paraqitjes së faqes.</translation>
 <translation id="5799902971440853357">Për momentin nuk mund ta vizitoni <ph name="SITE" />, sepse faqja dërgoi kredenciale të çrregullta që Vivaldi nuk i përpunon dot. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="5810442152076338065">Lidhja me <ph name="DOMAIN" /> mbrohet me metoda shifrimi të vjetruara.</translation>
-<translation id="5838278095973806738">Te faqja nuk duhen vendosur informacione konfidenciale (për shembull, fjalëkalimet ose kartat e kreditit), sepse mund të vidhen nga piratët e internetit.</translation>
+<translation id="5838278095973806738">Mos vendosni informacione konfidenciale te faqja (për shembull, fjalëkalimet ose kartat e kreditit), sepse mund të vidhen nga piratët e internetit.</translation>
 <translation id="5869405914158311789">Faqe e paarritshme</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {po përdoret 1} other {po përdoren #}}</translation>
 <translation id="5932224571077948991">Faqja tregon reklama të padëshirueshme ose evazive</translation>
 <translation id="6051221802930200923">Për momentin nuk mund ta vizitoni <ph name="SITE" />, sepse faqja përdor një certifikatë të lëshuar gabim. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="6146055958333702838">Kontrolloni kabllot dhe ndizni prapë ruterin, modemin apo çdo aparat tjetër
     që përdorni në rrjetin kompjuterik.</translation>
 <translation id="614940544461990577">Provoni:</translation>
 <translation id="6165508094623778733">Mësoni më shumë</translation>
-<translation id="6177128806592000436">Nuk është e sigurt lidhja me faqen</translation>
+<translation id="6177128806592000436">Lidhja me faqen është e pasigurt</translation>
 <translation id="6203231073485539293">Kontrolloni linjën e internetit</translation>
 <translation id="6225522625585012689">Vizitoni &lt;strong&gt;vivaldi://policy&lt;/strong&gt; për të parë listën e adresave URL të bllokuara dhe rregullat e tjera që aplikon administratori i sistemit.</translation>
 <translation id="625755898061068298">Zgjodhët t'i çaktivizoni vërejtjet për faqen.</translation>
@@ -205,7 +206,7 @@
 <translation id="8149426793427495338">Kompjuteri hyri në gjendje mosgatishmërie.</translation>
 <translation id="8150722005171944719">Është i palexueshëm skedari në <ph name="URL" />. Mund të jetë fshirë, zhvendosur ose aksesi po pengohet nga autorizimet e skedarit.</translation>
 <translation id="8184538546369750125">Përdor standardin e përgjithshëm (Autorizoj)</translation>
-<translation id="8211406090763984747">Lidhje e sigurt</translation>
+<translation id="8211406090763984747">Lidhja është e sigurt</translation>
 <translation id="8225771182978767009">Faqja është bllokuar nga personi që konfiguroi kompjuterin.</translation>
 <translation id="8241707690549784388">Faqja që kërkoni përdor informacionet tuaja të vjetra. Nëse ktheheni pas do ju duhet të përsëritni çdo veprim të mëparshëm. Të vijohet?</translation>
 <translation id="8241712895048303527">Bllokoj te kjo faqja</translation>
@@ -215,13 +216,13 @@
 <translation id="8332188693563227489">U refuzua aksesi në <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> u përgjigj shumë vonë.</translation>
 <translation id="8503813439785031346">Përdoruesi</translation>
-<translation id="8703575177326907206">Nuk është e shifruar lidhja me <ph name="DOMAIN" />.</translation>
+<translation id="8703575177326907206">Lidhja me <ph name="DOMAIN" /> është e pashifruar.</translation>
 <translation id="8740359287975076522">Nuk u gjet &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; e <ph name="HOST_NAME" />. Përcakton diagnozën e problemit...</translation>
 <translation id="8820817407110198400">Faqet interesante</translation>
 <translation id="8940028675168378100">U bllokua nga <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Shkoj te parametrat e faqes</translation>
 <translation id="9001074447101275817">Duhet një emër dhe fjalëkalim për proxy <ph name="DOMAIN" />.</translation>
 <translation id="9008201768610948239">Shpërfill</translation>
-<translation id="9011424611726486705">Hap parametrat e faqes</translation>
 <translation id="9025348182339809926">(E pavlefshme)</translation>
 <translation id="9039213469156557790">Për më tepër, faqja nuk përmban resurse të pasigurta. Këto resurse mund të shihen nga të tjerët kalimthi dhe mund të modifikohen nga piratët e internetit për ndryshimin e funksioneve të faqes.</translation>
 <translation id="9062620674789239642">Mund të jetë zhvendosur, modifikuar ose fshirë.</translation>

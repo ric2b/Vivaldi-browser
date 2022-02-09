@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standard</translation>
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">Bokmerke HTML-fil</translation>
-<translation id="1380436189840894976">Avslutta privatmodusen likevel?</translation>
 <translation id="1430915738399379752">Skriv ut</translation>
 <translation id="1433811987160647649">Spør før tilgang</translation>
 <translation id="1451375123200651445">Nettside, enkeltfil</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fildeskriptorar</translation>
 <translation id="1682548588986054654">Nytt privatvindauge</translation>
-<translation id="1698122934742150150">Berre den gjeldande privatøkta</translation>
 <translation id="1706625117072057435">Skaleringsnivå</translation>
 <translation id="1708338024780164500">(Ikkje i bruk)</translation>
 <translation id="1723824996674794290">Nytt &amp;vindauge</translation>
@@ -157,11 +155,9 @@
 <translation id="3511307672085573050">Kopier len&amp;kjeadressa</translation>
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
-<translation id="3574917942258583917">Avslutta privatmodusen likevel?</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Opna lenkja i eit privat&amp;vindauge</translation>
 <translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Handterarar</translation>
 <translation id="3678156199662914018">Utviding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skjermdelingsførespurnad</translation>
 <translation id="3711931198657368127">Lim &amp;inn og gå til <ph name="URL" /></translation>
@@ -194,7 +190,6 @@
 <translation id="4096508467498758490">Slå av utviklarmodus-utvidingar</translation>
 <translation id="4100839878934973028">Eit anna program på maskina di la til ein app som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="4109898769411476438">Lukk nettlesar før du importerer</translation>
-<translation id="4115080753528843955">Somme innhaldstenester nyttar unike identifikatorar for å kunna godkjenna tilgang til verna innhald</translation>
 <translation id="4130207949184424187">Denne utvidinga har endra kva side som vert vist når du søkjer frå adressefeltet.</translation>
 <translation id="4131410914670010031">Monokrom</translation>
 <translation id="4176463684765177261">Slått av</translation>

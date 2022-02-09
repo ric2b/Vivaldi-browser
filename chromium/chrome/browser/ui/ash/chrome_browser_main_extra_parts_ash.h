@@ -28,6 +28,7 @@ class AmbientClientImpl;
 class AppListClientImpl;
 class AshShellInit;
 class CastConfigControllerMediaRouter;
+class DesksClient;
 class ImeControllerClient;
 class InSessionAuthDialogClient;
 class LoginScreenClientImpl;
@@ -40,6 +41,7 @@ class QuickAnswersBrowserClientImpl;
 class ScreenOrientationDelegateChromeos;
 class SessionControllerClientImpl;
 class SystemTrayClientImpl;
+class TabClusterUIClient;
 class TabletModePageBehavior;
 class VpnListForwarder;
 class WallpaperControllerClientImpl;
@@ -93,6 +95,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
       screen_orientation_delegate_;
   std::unique_ptr<SessionControllerClientImpl> session_controller_client_;
   std::unique_ptr<SystemTrayClientImpl> system_tray_client_;
+  std::unique_ptr<TabClusterUIClient> tab_cluster_ui_client_;
   std::unique_ptr<TabletModePageBehavior> tablet_mode_page_behavior_;
   std::unique_ptr<VpnListForwarder> vpn_list_forwarder_;
   std::unique_ptr<WallpaperControllerClientImpl> wallpaper_controller_client_;
@@ -104,6 +107,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
 
   std::unique_ptr<internal::ChromeShelfControllerInitializer>
       chrome_shelf_controller_initializer_;
+  std::unique_ptr<DesksClient> desks_client_;
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
   std::unique_ptr<ExoParts> exo_parts_;

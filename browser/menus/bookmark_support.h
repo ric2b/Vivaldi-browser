@@ -23,7 +23,9 @@ struct BookmarkSupport {
     kFolderDark = 2,
     kSpeeddial = 3,
     kSpeeddialDark = 4,
-    kMax = 5,
+    kBookmarklet = 5,
+    kBookmarkletDark = 6,
+    kMax = 7,
   };
   BookmarkSupport();
   ~BookmarkSupport();

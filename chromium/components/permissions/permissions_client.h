@@ -175,6 +175,11 @@ class PermissionsClient {
       const GURL& requesting_origin,
       const GURL& embedding_origin);
 
+  // Checks if `requesting_origin` and `embedding_origin` are the new tab page
+  // origins.
+  virtual bool DoOriginsMatchNewTabPage(const GURL& requesting_origin,
+                                        const GURL& embedding_origin);
+
 #if defined(OS_ANDROID)
   // Returns whether the permission is controlled by the default search
   // engine (DSE). For example, in Chrome, making a search engine default
@@ -183,6 +188,11 @@ class PermissionsClient {
       content::BrowserContext* browser_context,
       ContentSettingsType type,
       const url::Origin& origin);
+
+  // Returns whether the given origin matches the default search engine (DSE)
+  // origin.
+  virtual bool IsDseOrigin(content::BrowserContext* browser_context,
+                           const url::Origin& origin);
 
   // Resets the permission if it's controlled by the default search
   // engine (DSE). The return value is true if the permission was reset.

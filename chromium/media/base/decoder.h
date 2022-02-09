@@ -23,7 +23,12 @@ enum class AudioDecoderType : int {
   kDecrypting = 3,  // DecryptingAudioDecoder
   kMediaCodec = 4,  // MediaCodecAudioDecoder (Android)
   kBroker = 5,      // AudioDecoderBroker
-  kTesting = 6,     // Never send this to UKM, for tests only.
+
+  kVivWMFDecoder = 6,
+  kVivATAudio = 7,
+  kVivPassThrough = 8,
+
+  kTesting = 9,     // Never send this to UKM, for tests only.
 
   // Keep this at the end and equal to the last entry.
   kMaxValue = kTesting,
@@ -50,7 +55,11 @@ enum class VideoDecoderType : int {
   // kChromeOs = 15,  // DEPRECATED, should be kVaapi or kV4L2 instead.
   kV4L2 = 16,       // V4L2VideoDecoder
 
-  kTesting = 17,  // Never send this to UKM, for tests only.
+kVivWMFDecoder = 17,
+kVivVTVideo = 18,
+kVivPassThrough = 19,
+
+  kTesting = 20,  // Never send this to UKM, for tests only.
 
   // Keep this at the end and equal to the last entry.
   kMaxValue = kTesting

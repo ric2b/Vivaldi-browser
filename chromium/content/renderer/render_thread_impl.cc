@@ -100,6 +100,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
@@ -150,6 +151,7 @@
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/rendering_pipeline.h"
 
@@ -169,11 +171,6 @@
 #include <windows.h>
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/ipc_factory.h"
-#include "platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.h"
-#endif
-
 #ifdef ENABLE_VTUNE_JIT_INTERFACE
 #include "v8/src/third_party/vtune/v8-vtune.h"
 #endif
@@ -191,6 +188,10 @@
 
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
 #include "base/test/clang_profiling.h"
+#endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/renderer/content/init_for_render_thread.h"
 #endif
 
 namespace content {
@@ -241,20 +242,26 @@ static_assert(
     "critical level not align");
 
 void* CreateHistogram(const char* name, int min, int max, size_t buckets) {
-  if (min <= 0)
-    min = 1;
-  std::string histogram_name;
-  RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
-  if (render_thread_impl) {  // Can be null in tests.
-    histogram_name = render_thread_impl->histogram_customizer()
-                         ->ConvertToCustomHistogramName(name);
-  } else {
-    histogram_name = std::string(name);
+  // Each histogram has an implicit '0' bucket (for underflow), so we can always
+  // bump the minimum to 1.
+  DCHECK_LE(0, min);
+  min = std::max(1, min);
+
+  // For boolean histograms, always include an overflow bucket [2, infinity).
+  if (max == 1 && buckets == 2) {
+    max = 2;
+    buckets = 3;
   }
-  base::HistogramBase* histogram =
-      base::Histogram::FactoryGet(histogram_name, min, max, buckets,
-                                  base::Histogram::kUmaTargetedHistogramFlag);
-  return histogram;
+
+  RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
+  // render_thread_impl can be null in tests.
+  std::string histogram_name = render_thread_impl
+                                   ? render_thread_impl->histogram_customizer()
+                                         ->ConvertToCustomHistogramName(name)
+                                   : std::string{name};
+  return base::Histogram::FactoryGet(
+      histogram_name, min, max, buckets,
+      base::Histogram::kUmaTargetedHistogramFlag);
 }
 
 void AddHistogramSample(void* hist, int sample) {
@@ -263,35 +270,35 @@ void AddHistogramSample(void* hist, int sample) {
 }
 
 void AddCrashKey(v8::CrashKeyId id, const std::string& value) {
-  namespace bd = base::debug;
+  using base::debug::AllocateCrashKeyString;
+  using base::debug::CrashKeySize;
+  using base::debug::SetCrashKeyString;
+
   switch (id) {
     case v8::CrashKeyId::kIsolateAddress:
-      static bd::CrashKeyString* isolate_address = bd::AllocateCrashKeyString(
-          "v8_isolate_address", bd::CrashKeySize::Size32);
-      bd::SetCrashKeyString(isolate_address, value);
+      static auto* const isolate_address =
+          AllocateCrashKeyString("v8_isolate_address", CrashKeySize::Size32);
+      SetCrashKeyString(isolate_address, value);
       break;
     case v8::CrashKeyId::kReadonlySpaceFirstPageAddress:
-      static bd::CrashKeyString* ro_space_firstpage_address =
-          bd::AllocateCrashKeyString("v8_ro_space_firstpage_address",
-                                     bd::CrashKeySize::Size32);
-      bd::SetCrashKeyString(ro_space_firstpage_address, value);
+      static auto* const ro_space_firstpage_address = AllocateCrashKeyString(
+          "v8_ro_space_firstpage_address", CrashKeySize::Size32);
+      SetCrashKeyString(ro_space_firstpage_address, value);
       break;
     case v8::CrashKeyId::kMapSpaceFirstPageAddress:
-      static bd::CrashKeyString* map_space_firstpage_address =
-          bd::AllocateCrashKeyString("v8_map_space_firstpage_address",
-                                     bd::CrashKeySize::Size32);
-      bd::SetCrashKeyString(map_space_firstpage_address, value);
+      static auto* const map_space_firstpage_address = AllocateCrashKeyString(
+          "v8_map_space_firstpage_address", CrashKeySize::Size32);
+      SetCrashKeyString(map_space_firstpage_address, value);
       break;
     case v8::CrashKeyId::kCodeSpaceFirstPageAddress:
-      static bd::CrashKeyString* code_space_firstpage_address =
-          bd::AllocateCrashKeyString("v8_code_space_firstpage_address",
-                                     bd::CrashKeySize::Size32);
-      bd::SetCrashKeyString(code_space_firstpage_address, value);
+      static auto* const code_space_firstpage_address = AllocateCrashKeyString(
+          "v8_code_space_firstpage_address", CrashKeySize::Size32);
+      SetCrashKeyString(code_space_firstpage_address, value);
       break;
     case v8::CrashKeyId::kDumpType:
-      static bd::CrashKeyString* dump_type =
-          bd::AllocateCrashKeyString("dump-type", bd::CrashKeySize::Size32);
-      bd::SetCrashKeyString(dump_type, value);
+      static auto* const dump_type =
+          AllocateCrashKeyString("dump-type", CrashKeySize::Size32);
+      SetCrashKeyString(dump_type, value);
       break;
     default:
       // Doing nothing for new keys is a valid option. Having this case allows
@@ -626,16 +633,7 @@ void RenderThreadImpl::Init() {
   is_threaded_animation_enabled_ =
       !command_line.HasSwitch(cc::switches::kDisableThreadedAnimation);
 
-// On macOS this value is adjusted in `UpdateScrollbarTheme()`,
-// but the system default is true.
-#if defined(OS_MAC)
-  is_elastic_overscroll_enabled_ = true;
-#elif defined(OS_WIN)
-  is_elastic_overscroll_enabled_ =
-      base::FeatureList::IsEnabled(features::kElasticOverscrollWin);
-#else
-  is_elastic_overscroll_enabled_ = false;
-#endif
+  is_elastic_overscroll_enabled_ = switches::IsElasticOverscrollEnabled();
 
   is_zoom_for_dsf_enabled_ = content::IsUseZoomForDSFEnabled();
 
@@ -666,37 +664,6 @@ void RenderThreadImpl::Init() {
     media::EnablePlatformDecoderSupport();
   }
 #endif
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (media::IPCFactory::IsAvailable()) {
-    auto ipc_media_pipeline_host_creator =
-        []() -> std::unique_ptr<media::IPCMediaPipelineHost> {
-      RenderThreadImpl* t = RenderThreadImpl::current();
-      if (!t)
-        return nullptr;
-
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host = t->GetGpuChannel();
-      if (!gpu_channel_host) {
-        gpu_channel_host = t->EstablishGpuChannelSync();
-        if (gpu_channel_host) {
-          LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                    << " Using newly established GpuChannelHost";
-        } else {
-          LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                     << " Establishing a GpuChannelHost failed, cannot create"
-                     << " IPCMediaPipelineHostImpl - Not able to decode "
-                        "proprietary media";
-          return nullptr;
-        }
-      }
-      return std::make_unique<media::IPCMediaPipelineHostImpl>(
-          gpu_channel_host.get());
-    };
-    media::IPCFactory::Preinitialize(
-        base::BindRepeating(ipc_media_pipeline_host_creator),
-        base::ThreadTaskRunnerHandle::Get(), GetMediaThreadTaskRunner());
-  }
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 
   memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
       FROM_HERE,
@@ -773,6 +740,10 @@ void RenderThreadImpl::Init() {
 
   variations_observer_ = std::make_unique<VariationsRenderThreadObserver>();
   AddObserver(variations_observer_.get());
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  platform_media::InitForRenderThread(*this);
+#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 }
 
 RenderThreadImpl::~RenderThreadImpl() {
@@ -984,6 +955,7 @@ void RenderThreadImpl::RegisterSchemes() {
   WebSecurityPolicy::RegisterURLSchemeAsDisplayIsolated(chrome_scheme);
   WebSecurityPolicy::RegisterURLSchemeAsNotAllowingJavascriptURLs(
       chrome_scheme);
+  WebSecurityPolicy::RegisterURLSchemeAsWebUI(chrome_scheme);
 
   // chrome-untrusted:
   WebString chrome_untrusted_scheme(
@@ -1222,6 +1194,8 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
       gpu_channel_host->gpu_feature_info()
               .status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] ==
           gpu::kGpuFeatureStatusEnabled &&
+      !gpu_channel_host->gpu_feature_info().IsWorkaroundEnabled(
+          gpu::DISABLE_CANVAS_OOP_RASTERIZATION) &&
       base::FeatureList::IsEnabled(features::kCanvasOopRasterization);
   bool support_gles2_interface = false;
   bool support_grcontext = !support_oop_rasterization;
@@ -1293,11 +1267,6 @@ void RenderThreadImpl::OnAssociatedInterfaceRequest(
     mojo::ScopedInterfaceEndpointHandle handle) {
   if (!associated_interfaces_.TryBindInterface(name, &handle))
     ChildThreadImpl::OnAssociatedInterfaceRequest(name, std::move(handle));
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetIOTaskRunner() {
-  return ChildProcess::current()->io_task_runner();
 }
 
 bool RenderThreadImpl::IsLcdTextEnabled() {
@@ -1441,11 +1410,11 @@ bool RenderThreadImpl::GetRendererMemoryMetrics(
 
   // Cache this result, as it can change while this code is running, and is used
   // as a divisor below.
-  size_t render_view_count = RenderView::GetRenderViewCount();
+  size_t web_view_count = blink::WebView::GetWebViewCount();
 
-  // If there are no render views it doesn't make sense to calculate metrics
+  // If there are no web views it doesn't make sense to calculate metrics
   // right now.
-  if (render_view_count == 0)
+  if (web_view_count == 0)
     return false;
 
   blink::WebMemoryStatistics blink_stats = blink::WebMemoryStatistics::Get();
@@ -1478,7 +1447,7 @@ bool RenderThreadImpl::GetRendererMemoryMetrics(
   memory_metrics->non_discardable_total_allocated_mb =
       (total_allocated - discardable_usage) / 1024 / 1024;
   memory_metrics->total_allocated_per_render_view_mb =
-      total_allocated / render_view_count / 1024 / 1024;
+      total_allocated / web_view_count / 1024 / 1024;
 
   return true;
 }

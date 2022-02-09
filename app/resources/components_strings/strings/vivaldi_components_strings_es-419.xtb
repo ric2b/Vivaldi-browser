@@ -139,6 +139,7 @@
 <translation id="5810442152076338065">Tu conexión a <ph name="DOMAIN" /> está encriptada con un conjunto de cifrado obsoleto.</translation>
 <translation id="5838278095973806738">No debes introducir información confidencial en este sitio (p. ej., contraseñas o tarjetas de crédito), ya que los atacantes podrían robártela.</translation>
 <translation id="5869405914158311789">No se puede acceder a este sitio</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 en uso}other{# en uso}}</translation>
 <translation id="5932224571077948991">El sitio muestra anuncios invasivos o engañosos</translation>
 <translation id="6051221802930200923">No puedes visitar <ph name="SITE" /> ahora porque el sitio web usa la fijación de certificados. Los ataques y errores de red suelen ser temporales, por lo que es posible que esta página funcione más tarde.</translation>
 <translation id="6146055958333702838">Revisa los cables y reinicia los routers, módems u otros dispositivos
@@ -211,7 +212,6 @@
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y su contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
-<translation id="9011424611726486705">Abrir la configuración del sitio</translation>
 <translation id="9025348182339809926">(No válido)</translation>
 <translation id="9039213469156557790">Además, esta página incluye otros recursos que no son seguros. Otras personas pueden ver estos recursos mientras se encuentran en tránsito, y un atacante puede modificarlos para cambiar el funcionamiento de la página.</translation>
 <translation id="9069693763241529744">Bloqueado por una extensión</translation>

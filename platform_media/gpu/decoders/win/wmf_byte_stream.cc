@@ -46,10 +46,11 @@ class WMFReadRequest
         // is done, see BeginRead below.
         read_cb_(base::BindRepeating(&WMFReadRequest::OnReadData,
                                      base::Unretained(this))) {
+    VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
   }
 
   ~WMFReadRequest() override {
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
+    VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
             << " initial_position=" << initial_position_
             << " all_read=" << (total_read_ == length_);
   }
@@ -60,12 +61,13 @@ class WMFReadRequest
       int64_t initial_position,
       BYTE* memory,
       int length,
-      const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
+      const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
       ipc_data_source::Buffer source_buffer,
       IMFAsyncResult* async_result) {
     DCHECK_GE(initial_position, 0);
     DCHECK(memory);
     DCHECK(length > 0);
+    DCHECK(source_buffer);
 
     initial_position_ = initial_position;
     memory_ = memory;
@@ -83,11 +85,16 @@ class WMFReadRequest
   }
 
   void ReadOnMainThread() {
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
+    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
             << " initial_position=" << initial_position_
             << " total_read=" << total_read_
             << " remaining_bytes=" << remaining_bytes()
             << " is_streaming=" << is_streaming_;
+    if (source_buffer_.IsReadError()) {
+      OnReadData(std::move(source_buffer_));
+      return;
+    }
+    DCHECK(source_buffer_);
     int to_read = std::min(remaining_bytes(), source_buffer_.GetCapacity());
     source_buffer_.SetReadRange(initial_position_ + total_read_, to_read);
     ipc_data_source::Buffer::Read(std::move(source_buffer_), read_cb_);
@@ -102,14 +109,14 @@ class WMFReadRequest
       int bytes_read = source_buffer_.GetReadSize();
       if (bytes_read < 0) {
         LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                     << " read_error=" << bytes_read
+                     << " Read error bytes_read=" << bytes_read
                      << " remaining_bytes=" << remaining_bytes();
         status = E_FAIL;
         break;
       }
       if (bytes_read == 0) {
         received_eos_ = true;
-        VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " received_eos"
+        VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " received_eos"
                 << " position=" << initial_position_
                 << " total_read=" << total_read_
                 << " remaining_bytes=" << remaining_bytes();
@@ -131,7 +138,7 @@ class WMFReadRequest
       if (is_streaming_) {
         bool halfway_done = (total_read_ >= remaining_bytes());
         if (!halfway_done) {
-          VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
                   << " Finishing Incomplete Read, bytes still missing : "
                   << remaining_bytes();
           break;
@@ -171,13 +178,15 @@ WMFByteStream::~WMFByteStream() {
 }
 
 void WMFByteStream::Initialize(
-    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> main_task_runner,
     ipc_data_source::Buffer source_buffer,
     bool is_streaming,
     int64_t stream_length) {
-  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+  VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " stream_length=" << stream_length
           << " is_streaming=" << is_streaming;
+  DCHECK(main_task_runner);
+  DCHECK(source_buffer);
 
   main_task_runner_ = std::move(main_task_runner);
   source_buffer_ = std::move(source_buffer);
@@ -187,8 +196,7 @@ void WMFByteStream::Initialize(
   is_streaming_ = is_streaming;
 }
 
-HRESULT STDMETHODCALLTYPE
-WMFByteStream::GetCapabilities(DWORD* capabilities) {
+HRESULT STDMETHODCALLTYPE WMFByteStream::GetCapabilities(DWORD* capabilities) {
   *capabilities =
       MFBYTESTREAM_IS_READABLE | MFBYTESTREAM_IS_SEEKABLE |
       (is_streaming_
@@ -208,8 +216,7 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::SetLength(QWORD length) {
   return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE
-WMFByteStream::GetCurrentPosition(QWORD* position) {
+HRESULT STDMETHODCALLTYPE WMFByteStream::GetCurrentPosition(QWORD* position) {
   *position = stream_position_;
   return S_OK;
 }
@@ -223,14 +230,12 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::SetCurrentPosition(QWORD position) {
   }
 
   if (is_streaming_) {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+    VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Cannot SetCurrentPosition to " << position
             << " Media is streaming";
-  }
-  else
-  {
-    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " SetCurrentPosition " << position;
+  } else {
+    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " SetCurrentPosition "
+            << position;
     stream_position_ = position;
   }
   return S_OK;
@@ -251,11 +256,16 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::Read(BYTE* buff,
   *read = 0;
   int max_read = CheckReadLength(len);
   if (max_read < 0)
-      return E_INVALIDARG;
+    return E_INVALIDARG;
 
   if (!source_buffer_) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " (E_FAIL) Attempt to read while another read is pending";
+    return E_FAIL;
+  }
+  if (source_buffer_.IsReadError()) {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " (E_FAIL) Attempt to read already failed buffer";
     return E_FAIL;
   }
 
@@ -282,8 +292,12 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::Read(BYTE* buff,
           &ipc_data_source::Buffer::Read, std::move(source_buffer_),
           base::BindOnce(blocking_read_done, &result_buffer, &read_done)));
 
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Start blocking read";
+
   // Wait until the callback is called from the main thread.
   read_done.Wait();
+
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " End blocking read";
   source_buffer_ = std::move(result_buffer);
   int bytes_read = source_buffer_.GetReadSize();
   if (bytes_read < 0) {
@@ -314,7 +328,12 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
   VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " len: " << len;
   int max_read = CheckReadLength(len);
   if (max_read < 0)
-      return E_INVALIDARG;
+    return E_INVALIDARG;
+  if (!source_buffer_) {
+    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " (E_FAIL) Attempt to read while another read is pending";
+    return E_FAIL;
+  }
 
   Microsoft::WRL::ComPtr<WMFReadRequest> read_request(
       Microsoft::WRL::Make<WMFReadRequest>(is_streaming_));
@@ -335,8 +354,8 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
   return S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE
-WMFByteStream::EndRead(IMFAsyncResult* result, ULONG* read) {
+HRESULT STDMETHODCALLTYPE WMFByteStream::EndRead(IMFAsyncResult* result,
+                                                 ULONG* read) {
   HRESULT hresult;
   Microsoft::WRL::ComPtr<IUnknown> unknown;
 
@@ -366,8 +385,9 @@ WMFByteStream::EndRead(IMFAsyncResult* result, ULONG* read) {
   return hresult;
 }
 
-HRESULT STDMETHODCALLTYPE
-WMFByteStream::Write(const BYTE* buff, ULONG len, ULONG* written) {
+HRESULT STDMETHODCALLTYPE WMFByteStream::Write(const BYTE* buff,
+                                               ULONG len,
+                                               ULONG* written) {
   // The stream is not writable, so do nothing here.
   return E_NOTIMPL;
 }
@@ -380,8 +400,8 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginWrite(const BYTE* buff,
   return E_NOTIMPL;
 }
 
-HRESULT STDMETHODCALLTYPE
-WMFByteStream::EndWrite(IMFAsyncResult* result, ULONG* written) {
+HRESULT STDMETHODCALLTYPE WMFByteStream::EndWrite(IMFAsyncResult* result,
+                                                  ULONG* written) {
   // The stream is not writable, so do nothing here.
   return E_NOTIMPL;
 }
@@ -401,8 +421,8 @@ WMFByteStream::Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
                               // if the llSeekOffset overflows the stream
       }
 
-      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " SetCurrentPosition " << seek_offset;
+      VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " SetCurrentPosition "
+              << seek_offset;
       stream_position_ = seek_offset;
       break;
 
@@ -416,8 +436,8 @@ WMFByteStream::Seek(MFBYTESTREAM_SEEK_ORIGIN seek_origin,
                               // if the llSeekOffset overflows the stream
       }
 
-      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " SetCurrentPosition " << next_position;
+      VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " SetCurrentPosition "
+              << next_position;
       stream_position_ = next_position;
       break;
   }
@@ -432,6 +452,11 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::Flush() {
 }
 
 HRESULT STDMETHODCALLTYPE WMFByteStream::Close() {
+  VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+  main_task_runner_.reset();
+
+  // Move to temporary that will be destructed.
+  ipc_data_source::Buffer to_release(std::move(source_buffer_));
   return S_OK;
 }
 

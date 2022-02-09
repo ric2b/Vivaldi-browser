@@ -35,9 +35,9 @@ const base::Feature kFlocPagesWithAdResourcesDefaultIncludedInFlocComputation{
 // TODO(yaoxia): merge other floc features into this one.
 const base::Feature kFederatedLearningOfCohorts{
 #if defined(VIVALDI_BUILD)
-    "FederatedLearningOfCohorts", base::FEATURE_DISABLED_BY_DEFAULT};
+    "FederatedLearningOfCohorts", base::FEATURE_DISABLED_BY_DEFAULT}; // Vivaldi disables this
 #else
-    "FederatedLearningOfCohorts", base::FEATURE_ENABLED_BY_DEFAULT};
+    "FederatedLearningOfCohorts", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 constexpr base::FeatureParam<base::TimeDelta> kFlocIdScheduledUpdateInterval{
     &kFederatedLearningOfCohorts, "update_interval",

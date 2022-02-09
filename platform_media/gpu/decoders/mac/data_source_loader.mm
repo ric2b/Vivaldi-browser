@@ -23,12 +23,16 @@
 - (BOOL)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     shouldWaitForLoadingOfRequestedResource:
         (AVAssetResourceLoadingRequest*)loadingRequest {
+  media::DispatchQueueRunnerProxy::ScopedRunner scoped_runner;
+
   handler_->Load(loadingRequest);
   return YES;
 }
 
 - (void)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     didCancelLoadingRequest:(AVAssetResourceLoadingRequest*)loadingRequest {
+  media::DispatchQueueRunnerProxy::ScopedRunner scoped_runner;
+
   // Sometimes, the resource loader cancels requests that have finished (and
   // then we may have pruned them.)
   if ([loadingRequest isFinished]) {

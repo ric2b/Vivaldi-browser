@@ -43,6 +43,7 @@ import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBri
 import org.chromium.chrome.browser.profiles.OTRProfileID;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKey;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
@@ -130,6 +131,12 @@ public class DownloadUtils {
             otrProfileID = profile != null ? profile.getOTRProfileID() : otrProfileID;
         }
 
+        // If the profile is off-the-record and it does not exist, then do not start the activity.
+        if (OTRProfileID.isOffTheRecord(otrProfileID)
+                && !Profile.getLastUsedRegularProfile().hasOffTheRecordProfile(otrProfileID)) {
+            return false;
+        }
+
         if (isTablet) { // TODO: We ignore tablet for now
             // Download Home shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.DOWNLOADS_URL);
@@ -197,6 +204,23 @@ public class DownloadUtils {
     public static OTRProfileID getOTRProfileIDFromIntent(Intent intent) {
         String serializedId = IntentUtils.safeGetString(intent.getExtras(), EXTRA_OTR_PROFILE_ID);
         return OTRProfileID.deserialize(serializedId);
+    }
+
+    /**
+     * @param intent An {@link Intent} instance.
+     * @return The boolean to state whether the profile exists or not.
+     */
+    public static boolean doesProfileExistFromIntent(Intent intent) {
+        boolean isProfileManagerInitialized = ProfileManager.isInitialized();
+        if (!isProfileManagerInitialized) {
+            return false;
+        }
+
+        String serializedId = IntentUtils.safeGetString(intent.getExtras(), EXTRA_OTR_PROFILE_ID);
+        OTRProfileID otrProfileID = OTRProfileID.deserializeWithoutVerify(serializedId);
+
+        return otrProfileID == null
+                || Profile.getLastUsedRegularProfile().hasOffTheRecordProfile(otrProfileID);
     }
 
     /**
@@ -268,7 +292,7 @@ public class DownloadUtils {
             final OfflinePageBridge bridge =
                     OfflinePageBridge.getForProfile(Profile.fromWebContents(tab.getWebContents()));
             bridge.scheduleDownload(tab.getWebContents(), OfflinePageBridge.ASYNC_NAMESPACE,
-                    tab.getUrlString(), DownloadUiActionFlags.PROMPT_DUPLICATE, origin);
+                    tab.getUrl().getSpec(), DownloadUiActionFlags.PROMPT_DUPLICATE, origin);
         } else {
             // Otherwise, the download can be started immediately.
             OfflinePageDownloadBridge.startDownload(tab, origin);

@@ -30,7 +30,13 @@
 #define IDC_VIV_HELP_MENU                       54103
 #define IDC_VIV_MAC_SERVICES                    54104
 #define IDC_VIV_BOOKMARK_CONTAINER              54105
+#define IDC_VIV_SUBSTITUTIONS_MENU_MAC          54106
+#define IDC_VIV_SPEECH_MENU_MAC                 54107
+// Special separator ids we need in some mac menus
+#define IDC_VIV_EDIT_SEPARATOR_MAC              54150
+#define IDC_VIV_WINDOW_SEPARATOR_MAC            54151
+
 // Dynamic ids start here.
-#define   IDC_VIV_DYNAMIC_MENU_ID_START         54200
+#define IDC_VIV_DYNAMIC_MENU_ID_START           54200
 
 #endif  // APP_VIVALDI_COMMANDS_H_

@@ -50,7 +50,7 @@ void IPCDemuxerStream::Read(ReadCB read_cb) {
   DCHECK(read_cb_.is_null()) << "Overlapping reads are not supported";
 
   // Don't accept any additional reads if we've been told to stop.
-  if (ipc_media_pipeline_host_ == NULL) {
+  if (!ipc_media_pipeline_host_) {
     std::move(read_cb).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
@@ -111,8 +111,9 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
       GuessChannelLayout(platform_audio_config.channel_count),
       platform_audio_config.samples_per_second, EmptyExtraData(),
       EncryptionScheme::kUnencrypted, base::TimeDelta(), 0);
+  audio_config.platform_media_pass_through_ = true;
 
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " Created AudioDecoderConfig with partially HARDCODED values :"
           << Loggable(audio_config);
 
@@ -127,7 +128,7 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
       ipc_media_pipeline_host_->video_config();
   DCHECK(platform_video_config.is_valid());
 
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " Creating VideoDecoderConfig : VideoCodec::kCodecH264 with "
              "HARDCODED values";
   // This demuxer stream is different from "normal" demuxers in that it outputs
@@ -148,8 +149,9 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes) +
               sizeof(platform_video_config.planes)),
       EncryptionScheme::kUnencrypted);
+  video_config.platform_media_pass_through_ = true;
 
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " VideoCodecProfile : " << GetProfileName(video_config.profile());
 
   return video_config;

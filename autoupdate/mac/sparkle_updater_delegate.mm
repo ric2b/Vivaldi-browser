@@ -9,6 +9,8 @@
 #include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/tools/vivaldi_tools.h"
 
+#import "thirdparty/macsparkle/Sparkle/SUErrors.h"
+
 namespace {
 
 base::Version GetItemVersion(SUAppcastItem* item) {
@@ -91,6 +93,13 @@ NSURL* rel_notes_url_;
   status_ = AutoUpdateStatus::kDidAbortWithError;
   std::string desc = "";
   std::string reason = "";
+
+  if (error.code == SUDownloadError ||
+      error.code == SUAppcastError) {
+    // Don't report to UI, will try again when internet connection is restored
+    return;
+  }
+
   if (error && [error localizedDescription] && [error localizedFailureReason]) {
     desc = [[error localizedDescription] UTF8String];
     reason = [[error localizedFailureReason] UTF8String];

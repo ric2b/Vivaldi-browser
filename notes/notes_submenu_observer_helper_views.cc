@@ -74,7 +74,7 @@ void NotesSubMenuObserverHelperViews::PopulateMenu(views::MenuItemView* parent,
   for (int i = 0, max = model->GetItemCount(); i < max; ++i) {
     // Add the menu item at the end.
     int menu_index =
-        parent->HasSubmenu() ? int{parent->GetSubmenu()->children().size()} : 0;
+        parent->HasSubmenu() ? static_cast<int>(parent->GetSubmenu()->children().size()) : 0;
     views::MenuItemView* item = AddMenuItem(parent, menu_index, model, i,
         model->GetTypeAt(i));
     if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {

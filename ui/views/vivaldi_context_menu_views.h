@@ -51,6 +51,7 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   void SetIcon(const gfx::Image& icon, int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
   RenderViewContextMenuBase::ToolkitDelegate* GetToolkitDelegate() override;
+  bool HasDarkTextColor() override;
 
  private:
   void RunMenuAt(views::Widget* parent,

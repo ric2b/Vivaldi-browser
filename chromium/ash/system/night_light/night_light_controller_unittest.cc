@@ -7,10 +7,10 @@
 #include <sstream>
 #include <string>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/display/cursor_window_controller.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/public/cpp/ash_features.h"
-#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/session/session_types.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
@@ -81,7 +81,7 @@ gfx::Vector3dF GetDisplayCompositorRGBScaleFactors(int64_t display_id) {
   ui::Compositor* compositor = host->compositor();
   DCHECK(compositor);
 
-  const SkMatrix44& matrix = compositor->display_color_matrix();
+  const skia::Matrix44& matrix = compositor->display_color_matrix();
   return gfx::Vector3dF(matrix.get(0, 0), matrix.get(1, 1), matrix.get(2, 2));
 }
 
@@ -1316,7 +1316,7 @@ class NightLightCrtcTest : public NightLightTest {
     return Shell::Get()
         ->window_tree_host_manager()
         ->cursor_window_controller()
-        ->ShouldEnableCursorCompositing();
+        ->is_cursor_compositing_enabled();
   }
 
   std::string GetLoggerActionsAndClear() {
@@ -1401,13 +1401,11 @@ TEST_F(NightLightCrtcTest, TestAllDisplaysSupportCrtcMatrix) {
   for (const auto* const pref : {prefs::kAccessibilityLargeCursorEnabled,
                                  prefs::kAccessibilityHighContrastEnabled}) {
     user1_pref_service()->SetBoolean(pref, true);
-    Shell::Get()->UpdateCursorCompositingEnabled();
     EXPECT_TRUE(IsCursorCompositingEnabled());
 
     // Disabling the accessibility feature should revert back to the hardware
     // cursor.
     user1_pref_service()->SetBoolean(pref, false);
-    Shell::Get()->UpdateCursorCompositingEnabled();
     EXPECT_FALSE(IsCursorCompositingEnabled());
   }
 }

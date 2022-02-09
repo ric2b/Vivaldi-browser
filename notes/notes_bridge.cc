@@ -298,7 +298,7 @@ jint NotesBridge::GetChildCount(JNIEnv* env,
                                 jint type) {
   DCHECK(IsLoaded());
   const NoteNode* node = GetNodeByID(id, type);
-  return jint{node->children().size()};
+  return static_cast<jint>(node->children().size());
 }
 
 void NotesBridge::GetChildIDs(JNIEnv* env,
@@ -337,7 +337,7 @@ ScopedJavaLocalRef<jobject> NotesBridge::GetChildAt(
 
   const NoteNode* parent = GetNodeByID(id, type);
   DCHECK(parent);
-  const NoteNode* child = parent->children()[size_t{index}].get();
+  const NoteNode* child = parent->children()[static_cast<size_t>(index)].get();
   return JavaNoteIdCreateNoteId(env, child->id(), GetNoteType(child));
 }
 

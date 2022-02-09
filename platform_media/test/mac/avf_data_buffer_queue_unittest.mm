@@ -39,8 +39,6 @@ class AVFDataBufferQueueTest : public testing::Test {
         capacity_available_(false),
         capacity_depleted_(false) {
     ipc_buffer_.Init(PlatformStreamType::kAudio);
-    ipc_buffer_.set_reply_cb(base::BindRepeating(
-        &AVFDataBufferQueueTest::OnRead, base::Unretained(this)));
   }
 
  protected:
@@ -48,6 +46,8 @@ class AVFDataBufferQueueTest : public testing::Test {
     CHECK(ipc_buffer_);
     ipc_buffer_.set_status(MediaDataStatus::kMediaError);
     last_read_status_.reset();
+    ipc_buffer_.set_reply_cb(base::BindOnce(
+        &AVFDataBufferQueueTest::OnRead, base::Unretained(this)));
     return std::move(ipc_buffer_);
   }
 

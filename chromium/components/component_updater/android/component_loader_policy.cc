@@ -6,7 +6,6 @@
 
 #include <jni.h>
 #include <stdio.h>
-#include <unistd.h>
 
 #include <map>
 #include <memory>
@@ -27,7 +26,9 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
+#include "base/strings/strcat.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -69,6 +70,15 @@ std::unique_ptr<base::DictionaryValue> ReadManifestFromFd(int fd) {
   return ReadManifest(content);
 }
 
+void RecordComponentLoadStatusHistogram(const std::string& suffix,
+                                        ComponentLoadResult status) {
+  DCHECK(!suffix.empty());
+  base::UmaHistogramEnumeration(
+      base::StrCat(
+          {"ComponentUpdater.AndroidComponentLoader.LoadStatus.", suffix}),
+      status);
+}
+
 }  // namespace
 
 ComponentLoaderPolicy::~ComponentLoaderPolicy() = default;
@@ -104,18 +114,19 @@ void AndroidComponentLoaderPolicy::ComponentLoaded(
 
   // Construct the file_name->file_descriptor map excluding the manifest file
   // as it's parsed and passed separately.
-  base::flat_map<std::string, int> fd_map;
+  base::flat_map<std::string, base::ScopedFD> fd_map;
   int manifest_fd = -1;
   for (size_t i = 0; i < file_names.size(); ++i) {
     const std::string& file_name = file_names[i];
     if (file_name == kManifestFileName) {
       manifest_fd = fds[i];
     } else {
-      fd_map[file_name] = fds[i];
+      fd_map[file_name] = base::ScopedFD(fds[i]);
     }
   }
+
   if (manifest_fd == -1) {
-    CloseFdsAndFail(fd_map);
+    ComponentLoadFailedInternal(ComponentLoadResult::kMissingManifest);
     return;
   }
 
@@ -124,12 +135,15 @@ void AndroidComponentLoaderPolicy::ComponentLoaded(
       {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(ReadManifestFromFd, manifest_fd),
       base::BindOnce(&AndroidComponentLoaderPolicy::NotifyNewVersion,
-                     base::Owned(this), fd_map));
+                     base::Owned(this), base::OwnedRef(std::move(fd_map))));
 }
 
-void AndroidComponentLoaderPolicy::ComponentLoadFailed(JNIEnv* env) {
+void AndroidComponentLoaderPolicy::ComponentLoadFailed(JNIEnv* env,
+                                                       jint error_code) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  loader_policy_->ComponentLoadFailed();
+  DCHECK(error_code > static_cast<int>(ComponentLoadResult::kComponentLoaded));
+  DCHECK(error_code <= static_cast<int>(ComponentLoadResult::kMaxValue));
+  ComponentLoadFailedInternal(static_cast<ComponentLoadResult>(error_code));
   delete this;
 }
 
@@ -142,31 +156,31 @@ AndroidComponentLoaderPolicy::GetComponentId(JNIEnv* env) {
 }
 
 void AndroidComponentLoaderPolicy::NotifyNewVersion(
-    const base::flat_map<std::string, int>& fd_map,
+    base::flat_map<std::string, base::ScopedFD>& fd_map,
     std::unique_ptr<base::DictionaryValue> manifest) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!manifest) {
-    CloseFdsAndFail(fd_map);
+    ComponentLoadFailedInternal(ComponentLoadResult::kMalformedManifest);
     return;
   }
   std::string version_ascii;
   manifest->GetStringASCII("version", &version_ascii);
   base::Version version(version_ascii);
   if (!version.IsValid()) {
-    CloseFdsAndFail(fd_map);
+    ComponentLoadFailedInternal(ComponentLoadResult::kInvalidVersion);
     return;
   }
+
+  RecordComponentLoadStatusHistogram(loader_policy_->GetMetricsSuffix(),
+                                     ComponentLoadResult::kComponentLoaded);
   loader_policy_->ComponentLoaded(version, fd_map, std::move(manifest));
 }
 
-void AndroidComponentLoaderPolicy::CloseFdsAndFail(
-    const base::flat_map<std::string, int>& fd_map) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto& iter : fd_map) {
-    close(iter.second);
-  }
-  loader_policy_->ComponentLoadFailed();
+void AndroidComponentLoaderPolicy::ComponentLoadFailedInternal(
+    ComponentLoadResult error) {
+  RecordComponentLoadStatusHistogram(loader_policy_->GetMetricsSuffix(), error);
+  loader_policy_->ComponentLoadFailed(error);
 }
 
 // static

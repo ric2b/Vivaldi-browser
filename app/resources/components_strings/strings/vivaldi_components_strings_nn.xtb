@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Hald fram</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />køyr nettverksdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Varsel</translation>
+<translation id="2491414235131909199">Ei utviding blokkerte denne sida</translation>
 <translation id="2501278716633472235">Gå attende</translation>
 <translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sende eit ugyldig svar.</translation>
@@ -220,7 +221,6 @@
 <translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Mellomtenaren <ph name="DOMAIN" /> krev eit brukarnamn og passord.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
-<translation id="9011424611726486705">Opna nettstadinnstillingar</translation>
 <translation id="9025348182339809926">(Ugyldig)</translation>
 <translation id="9039213469156557790">Vidare inneheld denne sida andre ressursar som ikkje er trygge. Desse kan verta lesne av andre under overføringa og kan verta endra av ein åtakar for å endra korleis sida oppfører seg.</translation>
 <translation id="9062620674789239642">Fila kan ha vorte flytta, endra eller sletta.</translation>

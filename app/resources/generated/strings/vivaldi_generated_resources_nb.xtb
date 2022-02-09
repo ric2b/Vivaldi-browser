@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standard</translation>
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">HTML-fil med bokmerker</translation>
-<translation id="1380436189840894976">Vil du avslutte privatmodus likevel?</translation>
 <translation id="1430915738399379752">Skriv ut</translation>
 <translation id="1433811987160647649">Spør før tilgang gis</translation>
 <translation id="1451375123200651445">Nettside, enkeltfil</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Filbeskrivelser</translation>
 <translation id="1682548588986054654">Nytt privatvindu</translation>
-<translation id="1698122934742150150">Bare for gjeldende privatøkt</translation>
 <translation id="1706625117072057435">Forstørrelsesnivåer</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
 <translation id="1723824996674794290">&amp;Nytt vindu</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagre &amp;bildet som...</translation>
 <translation id="2439110203301358333">Et annet program på datamaskinen la til en utvidelse som kan endre hvordan Vivaldi virker.</translation>
+<translation id="2443487764245141020">Nettsteder trenger kanskje også å gjenkjenne enheten din ved bruk av en identifikator</translation>
 <translation id="2445081178310039857">Rotkatalogen til utvidelsen er påkrevd.</translation>
 <translation id="2470702053775288986">Utvidelser som ikke støttes ble deaktivert</translation>
 <translation id="2476578072172137802">Nettsideinnstillinger</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Kopier lenkeadr&amp;esse</translation>
 <translation id="354068948465830244">Kan lese og endre nettstedsdata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
-<translation id="3574917942258583917">Vil du avslutte privatmodus likevel?</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Åpne lenken i inko&amp;gnitovindu</translation>
 <translation id="3627879631695760395">Installer <ph name="APP" />…</translation>
-<translation id="3668823961463113931">Håndteringer</translation>
 <translation id="3678156199662914018">Utvidelse: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> spør om å dele skjermen</translation>
 <translation id="3708684582558000260">Ikke la lukkede nettsteder fullføre sending eller mottak av data</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Deaktiver utvidelser i utviklermodus</translation>
 <translation id="4100839878934973028">Et annet program på datamaskinen la til et program som kan endre hvordan Vivaldi virker.</translation>
 <translation id="4109898769411476438">Lukk nettleser før du importerer</translation>
-<translation id="4115080753528843955">Noen innholdstjenester bruker unike identifikatorer for å gi tilgang til beskyttet innhold</translation>
 <translation id="4130207949184424187">Denne utvidelsen har endret hvilken side som vises når du søker fra adressefeltet.</translation>
 <translation id="4131410914670010031">Svart/hvitt</translation>
 <translation id="4176463684765177261">Deaktivert</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Advarsler oppstod under installasjon av utvidelsen:</translation>
 <translation id="479536056609751218">Nettside, bare HTML</translation>
 <translation id="4839303808932127586">La&amp;gre video som...</translation>
+<translation id="4840096453115567876">Vil du avslutte privatmodus likevel?</translation>
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4907306957610201395">Tilgangskategori</translation>
 <translation id="4912643508233590958">Oppvåkninger fra inaktiv</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Ingen tilgang.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Vis &amp;kontroller</translation>
+<translation id="7374461526650987610">Protokollbehandlere</translation>
 <translation id="7385854874724088939">Noe gikk galt under utskriften.  Sjekk printeren og prøv igjen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">&amp;Vis sidekilde</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Samle</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Avbryt</translation>
+<translation id="7659154729610375585">Vil du avslutte privatmodus likevel?</translation>
 <translation id="7661259717474717992">Tillat sider å lagre og lese infokapsler</translation>
 <translation id="7663719505383602579">Mottaker: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
@@ -454,6 +453,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8899851313684471736">Åpne lenken i et nytt &amp;vindu</translation>
 <translation id="8915370057835397490">Laster forslag</translation>
 <translation id="8916476537757519021">Privatmodus-underramme: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Bare denne privatøkten</translation>
 <translation id="895944840846194039">JavaScript-minne</translation>
 <translation id="8962083179518285172">Skjul detaljer</translation>
 <translation id="8973557916016709913">Opphev forstørrelsesnivå</translation>

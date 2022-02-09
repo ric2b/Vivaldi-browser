@@ -317,7 +317,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
 
   Browser::CreateParams create_params(Browser::TYPE_POPUP, profile, false);
   create_params.initial_bounds = bounds;
-  create_params.is_session_restore = false;
+  create_params.creation_source = Browser::CreationSource::kStartupCreator;
   create_params.is_vivaldi = true;
   create_params.window = window;
   create_params.ext_data = ext_data;
@@ -373,6 +373,12 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
     return RespondNow(Error(error));
   }
   ui::WindowShowState show_state = ConvertToWindowShowState(params->state);
+
+  // Don't trigger onStateChanged event for changes coming from JS. The
+  // assumption is that JS updates its state as needed after each
+  // windowPrivate.setState() call.
+  static_cast<VivaldiBrowserWindow*>(browser->window())->SetWindowState(
+      show_state);
 
   bool was_fullscreen = browser->window()->IsFullscreen();
   if (show_state != ui::SHOW_STATE_FULLSCREEN &&

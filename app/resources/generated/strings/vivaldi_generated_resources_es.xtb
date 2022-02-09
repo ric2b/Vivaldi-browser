@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Por defecto</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de marcadores</translation>
-<translation id="1380436189840894976">¿Quieres salir del modo de incógnito de todos modos?</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1433811987160647649">Preguntar antes de acceder</translation>
 <translation id="1451375123200651445">Página web (archivo único)</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1627276047960621195">Descriptores de archivo</translation>
 <translation id="1682548588986054654">Ventana de incógnito nueva</translation>
-<translation id="1698122934742150150">Solo a la sesión de incógnito actual</translation>
 <translation id="1706625117072057435">Niveles de zoom</translation>
 <translation id="1708338024780164500">(Inactivo)</translation>
 <translation id="1723824996674794290">Ventana &amp;nueva</translation>
@@ -72,13 +70,13 @@
 <translation id="2218515861914035131">Pegar como texto sin formato</translation>
 <translation id="2249605167705922988">p. ej. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir identificadores para contenido protegido (puede requerir el reinicio del sistema)</translation>
-<translation id="2277255602909579701">Todos los datos de los sitios y las cookies</translation>
+<translation id="2277255602909579701">Todas las cookies y datos de los sitios</translation>
 <translation id="2280486287150724112">Margen derecho</translation>
 <translation id="2282146716419988068">Proceso de la GPU</translation>
 <translation id="2301382460326681002">El directorio raíz de la extensión es inválido.</translation>
 <translation id="2318143611928805047">Tamaño de papel</translation>
 <translation id="2322193970951063277">Encabezado y pie de página</translation>
-<translation id="2326931316514688470">&amp;Recargar la aplicación</translation>
+<translation id="2326931316514688470">&amp;Recargar aplicación</translation>
 <translation id="2327492829706409234">Activar aplicación</translation>
 <translation id="2348176352564285430">Aplicación: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selecciona el directorio de la extensión</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Complemento desconocido</translation>
 <translation id="2423578206845792524">Guar&amp;dar imagen como...</translation>
 <translation id="2439110203301358333">Otro programa de tu equipo añadió una extensión que puede cambiar el funcionamiento de Vivaldi.</translation>
+<translation id="2443487764245141020">Es posible que los sitios también necesiten reconocer tu dispositivo mediante un identificador</translation>
 <translation id="2445081178310039857">Se requiere el directorio raíz de la extensión.</translation>
 <translation id="2470702053775288986">Extensiones no admitidas desactivadas</translation>
 <translation id="2476578072172137802">Ajustes del sitio</translation>
@@ -94,13 +93,13 @@
 <translation id="2498539833203011245">Minimizar</translation>
 <translation id="2509495747794740764">El valor de la escala debe ser un número entre 10 y 200.</translation>
 <translation id="253557089021624350">Número de actividades en curso</translation>
-<translation id="2546283357679194313">Cookies y datos de sitios</translation>
+<translation id="2546283357679194313">Cookies y datos de los sitios</translation>
 <translation id="2550212893339833758">Memoria trasladada al espacio de intercambio</translation>
 <translation id="2553440850688409052">Ocultar complemento</translation>
 <translation id="26224892172169984">No permitir a los sitios procesar protocolos</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reactivar</translation>
-<translation id="2721037002783622288">&amp;Buscar imagen con <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2721037002783622288">&amp;Buscar imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2783321960289401138">Crear acceso directo...</translation>
 <translation id="2785873697295365461">Descriptores de archivo</translation>
 <translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
@@ -157,13 +156,12 @@
 <translation id="3511307672085573050">Copi&amp;ar dirección del enlace</translation>
 <translation id="354068948465830244">Puede leer y cambiar datos de sitios</translation>
 <translation id="3560034655160545939">Revi&amp;sión ortográfica</translation>
-<translation id="3574917942258583917">¿Quieres salir del modo de incógnito de todos modos?</translation>
 <translation id="3587482841069643663">Todas</translation>
 <translation id="3627588569887975815">Abrir enlace en una ventana de incó&amp;gnito</translation>
 <translation id="3627879631695760395">Instalar <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Controladores</translation>
 <translation id="3678156199662914018">Extensión: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> solicita compartir pantalla</translation>
+<translation id="3708684582558000260">No permitir a los sitios cerrados terminar de enviar y recibir datos</translation>
 <translation id="3711931198657368127">Pe&amp;gar e ir a <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspeccionar ventana emergente</translation>
 <translation id="3744111561329211289">Sincronización en segundo plano</translation>
@@ -180,11 +178,11 @@
 <translation id="3909791450649380159">Cor&amp;tar</translation>
 <translation id="3927932062596804919">Denegar</translation>
 <translation id="3936390757709632190">Abrir &amp;audio en una pestaña nueva</translation>
-<translation id="3943582379552582368">Página &amp;anterior</translation>
-<translation id="3948116654032448504">&amp;Buscar imagen con <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3943582379552582368">&amp;Anterior página</translation>
+<translation id="3948116654032448504">&amp;Buscar imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Permitir a los sitios reproducir contenido protegido (recomendado)</translation>
 <translation id="3979395879372752341">Extensión nueva añadida (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="4021279097213088397">–</translation>
+<translation id="4021279097213088397">-</translation>
 <translation id="4022426551683927403">&amp;Añadir al diccionario</translation>
 <translation id="407520071244661467">Escala</translation>
 <translation id="4079140982534148664">Usar la revisión ortográfica mejorada</translation>
@@ -193,8 +191,7 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Desactivar extensiones en el modo desarrollador</translation>
 <translation id="4100839878934973028">Otro programa de tu equipo añadió una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
-<translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
-<translation id="4115080753528843955">Algunos servicios de contenido usan identificadores únicos para autorizar el acceso a contenido protegido</translation>
+<translation id="4109898769411476438">Cerrar navegador antes de importar</translation>
 <translation id="4130207949184424187">Esta extensión ha cambiado la página que se muestra al buscar desde Omnibox.</translation>
 <translation id="4131410914670010031">Blanco y negro</translation>
 <translation id="4176463684765177261">Desactivado</translation>
@@ -223,6 +220,7 @@
 <translation id="4726710629007580002">Hubo advertencias al intentar instalar esta extensión:</translation>
 <translation id="479536056609751218">Página web (solo HTML)</translation>
 <translation id="4839303808932127586">Gu&amp;ardar video como...</translation>
+<translation id="4840096453115567876">¿Quieres salir del modo de incógnito de todos modos?</translation>
 <translation id="488785315393301722">Mostrar detalles</translation>
 <translation id="4907306957610201395">Categoría de permiso</translation>
 <translation id="4912643508233590958">Activación inactiva</translation>
@@ -272,7 +270,7 @@
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recargar</translation>
 <translation id="5575473780076478375">Extensión de incógnito: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5614553682702429503">¿Guardar la contraseña?</translation>
+<translation id="5614553682702429503">¿Guardar contraseña?</translation>
 <translation id="5623842676595125836">Registro</translation>
 <translation id="5627086634964711283">También controla la página que se muestra al clicar en el botón de inicio.</translation>
 <translation id="563535393368633106">Preguntar antes de acceder (recomendado)</translation>
@@ -291,7 +289,7 @@
 <translation id="5828633471261496623">Imprimiendo...</translation>
 <translation id="583281660410589416">Desconocido</translation>
 <translation id="5860491529813859533">Activar</translation>
-<translation id="5867841422488265304">Busca o escribe una dirección web</translation>
+<translation id="5867841422488265304">Buscar o ingresar dirección</translation>
 <translation id="5910363049092958439">Guar&amp;dar imagen como...</translation>
 <translation id="5956585768868398362">¿Es esta la página de búsqueda que esperabas?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> máximo)</translation>
@@ -311,7 +309,7 @@
 <translation id="6206311232642889873">Copia&amp;r imagen</translation>
 <translation id="6239558157302047471">Recargar &amp;marco</translation>
 <translation id="6247802389331535091">Sistema: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6248988683584659830">Busca en los ajustes</translation>
+<translation id="6248988683584659830">Buscar en los ajustes</translation>
 <translation id="6251870443722440887">GDI administra</translation>
 <translation id="6264365405983206840">Seleccionar &amp;todo</translation>
 <translation id="6268252012308737255">Abrir con <ph name="APP" /></translation>
@@ -335,7 +333,7 @@
 <translation id="6612358246767739896">Contenido protegido</translation>
 <translation id="6639554308659482635">Memoria de SQLite</translation>
 <translation id="6686817083349815241">Guardar tu contraseña</translation>
-<translation id="6691936601825168937">Página &amp;siguiente</translation>
+<translation id="6691936601825168937">&amp;Siguiente página</translation>
 <translation id="6798954102094737107">Complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantener cambios</translation>
 <translation id="6817174620439930047">Preguntar cuando un sitio intente usar mensajes exclusivos del sistema para acceder a dispositivos MIDI (recomendado)</translation>
@@ -362,6 +360,7 @@
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7309257895202129721">Mostrar &amp;controles</translation>
+<translation id="7374461526650987610">Controladores de protocolos</translation>
 <translation id="7385854874724088939">Se produjo un error al intentar imprimir. Revisa tu impresora y reinténtalo.</translation>
 <translation id="7412226954991670867">Memoria de la GPU</translation>
 <translation id="7421925624202799674">Ver código &amp;fuente de la página</translation>
@@ -374,6 +373,7 @@
 <translation id="7576690715254076113">Intercalar</translation>
 <translation id="7629827748548208700">Pestaña: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancelar</translation>
+<translation id="7659154729610375585">¿Quieres salir del modo de incógnito de todos modos?</translation>
 <translation id="7661259717474717992">Permitir a los sitios guardar y leer datos de las cookies</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada por tu administrador</translation>
@@ -386,7 +386,7 @@
 <translation id="7760004034676677601">¿Es esta la página de inicio que esperabas?</translation>
 <translation id="7771452384635174008">Diseño</translation>
 <translation id="7782102568078991263">No hay más sugerencias de Google</translation>
-<translation id="7786889348652477777">&amp;Recargar la aplicación</translation>
+<translation id="7786889348652477777">&amp;Recargar aplicación</translation>
 <translation id="7791543448312431591">Añadir</translation>
 <translation id="7800518121066352902">Girar a la &amp;izquierda</translation>
 <translation id="7814458197256864873">&amp;Copiar</translation>
@@ -418,7 +418,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="8137559199583651773">Gestionar extensiones</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Descarga en curso} other {Descargas en curso}}</translation>
-<translation id="8230134520748321204">¿Guardar la contraseña de <ph name="ORIGIN" />?</translation>
+<translation id="8230134520748321204">¿Guardar contraseña de <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Esta extensión no aparece en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> y se puede haber añadido sin tu conocimiento.</translation>
 <translation id="8270242299912238708">Documentos PDF</translation>
 <translation id="8339059274628563283">Datos de <ph name="SITE" /> almacenados localmente</translation>
@@ -453,6 +453,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="8899851313684471736">Abrir enlace en una &amp;ventana nueva</translation>
 <translation id="8915370057835397490">Cargando sugerencia</translation>
 <translation id="8916476537757519021">Submarco de incógnito: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Solo a la sesión de incógnito actual</translation>
 <translation id="895944840846194039">Memoria de JavaScript</translation>
 <translation id="8962083179518285172">Ocultar detalles</translation>
 <translation id="8973557916016709913">Eliminar el nivel de zoom</translation>

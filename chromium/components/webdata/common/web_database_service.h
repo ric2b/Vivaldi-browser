@@ -18,7 +18,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/weak_ptr.h"
-#include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_database.h"
@@ -82,6 +81,8 @@ class WEBDATA_EXPORT WebDatabaseService
   virtual void ScheduleDBTask(const base::Location& from_here, WriteTask task);
 
   // Schedule a read task on the DB sequence.
+  // Retrieves a WeakPtr to the |consumer| so that |consumer| does not have to
+  // outlive the WebDatabaseService.
   virtual WebDataServiceBase::Handle ScheduleDBTaskWithResult(
       const base::Location& from_here,
       ReadTask task,

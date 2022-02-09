@@ -21,7 +21,6 @@
 <translation id="125220115284141797">默认</translation>
 <translation id="1297175357211070620">目标打印机</translation>
 <translation id="1303101771013849280">以前导出的书签（HTML文件）</translation>
-<translation id="1380436189840894976">确认要离开无痕模式？</translation>
 <translation id="1430915738399379752">打印</translation>
 <translation id="1433811987160647649">访问前先询问</translation>
 <translation id="1451375123200651445">网页（单个文件）</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">摄像头</translation>
 <translation id="1627276047960621195">文件描述符</translation>
 <translation id="1682548588986054654">新建隐身窗口</translation>
-<translation id="1698122934742150150">仅限当前的隐身会话</translation>
 <translation id="1706625117072057435">缩放级别</translation>
 <translation id="1708338024780164500">（闲置）</translation>
 <translation id="1723824996674794290">新建窗口(&amp;N)</translation>
@@ -157,13 +155,12 @@
 <translation id="3511307672085573050">复制链接地址(&amp;E)</translation>
 <translation id="354068948465830244">可读取和更改网站数据</translation>
 <translation id="3560034655160545939">拼写检查(&amp;S)</translation>
-<translation id="3574917942258583917">确认退出无痕模式？</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3627588569887975815">在隐身窗口中打开链接(&amp;G)</translation>
 <translation id="3627879631695760395">安装“<ph name="APP" />”…</translation>
-<translation id="3668823961463113931">处理程序</translation>
 <translation id="3678156199662914018">扩展程序：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 屏幕共享请求</translation>
+<translation id="3708684582558000260">不允许已关闭的网站完成数据收发操作</translation>
 <translation id="3711931198657368127">粘贴并转到 <ph name="URL" /></translation>
 <translation id="3727187387656390258">检查弹出窗口</translation>
 <translation id="3744111561329211289">后台同步</translation>
@@ -194,7 +191,6 @@
 <translation id="4096508467498758490">请停用以开发者模式运行的扩展程序</translation>
 <translation id="4100839878934973028">您计算机上的其他程序添加了一个应用，该应用可能会改变 Vivaldi 的工作方式。</translation>
 <translation id="4109898769411476438">导入之前关闭浏览器</translation>
-<translation id="4115080753528843955">某些内容服务使用唯一标识符以授权访问受保护的内容</translation>
 <translation id="4130207949184424187">此扩展程序更改了您通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="4131410914670010031">黑白</translation>
 <translation id="4176463684765177261">禁用</translation>
@@ -223,6 +219,7 @@
 <translation id="4726710629007580002">安装扩展程序时告警：</translation>
 <translation id="479536056609751218">网页，仅 HTML</translation>
 <translation id="4839303808932127586">视频另存为(&amp;V)...</translation>
+<translation id="4840096453115567876">仍要退出无痕模式？</translation>
 <translation id="488785315393301722">显示细节</translation>
 <translation id="4907306957610201395">权限类别</translation>
 <translation id="4912643508233590958">闲置状态唤醒</translation>
@@ -374,6 +371,7 @@
 <translation id="7576690715254076113">合并</translation>
 <translation id="7629827748548208700">标签页：<ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">取消</translation>
+<translation id="7659154729610375585">仍要退出无痕模式？</translation>
 <translation id="7661259717474717992">允许网站保存和读取 Cookie 数据</translation>
 <translation id="7663719505383602579">接收器：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">需由管理员安装</translation>
@@ -453,6 +451,7 @@
 <translation id="8899851313684471736">在新窗口中打开链接(&amp;W)</translation>
 <translation id="8915370057835397490">正在加载建议</translation>
 <translation id="8916476537757519021">隐身辅助框架：<ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">仅限当前隐身会话</translation>
 <translation id="895944840846194039">JavaScript 内存</translation>
 <translation id="8962083179518285172">隐藏细节</translation>
 <translation id="8973557916016709913">移除缩放级别</translation>

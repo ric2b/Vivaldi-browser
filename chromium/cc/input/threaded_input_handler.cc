@@ -77,6 +77,7 @@ base::WeakPtr<InputHandler> ThreadedInputHandler::AsWeakPtr() const {
 void ThreadedInputHandler::BindToClient(InputHandlerClient* client) {
   DCHECK(input_handler_client_ == nullptr);
   input_handler_client_ = client;
+  input_handler_client_->SetPrefersReducedMotion(prefers_reduced_motion_);
 }
 
 InputHandler::ScrollStatus ThreadedInputHandler::ScrollBegin(
@@ -871,6 +872,12 @@ ScrollElasticityHelper* ThreadedInputHandler::CreateScrollElasticityHelper() {
   return scroll_elasticity_helper_.get();
 }
 
+void ThreadedInputHandler::DestroyScrollElasticityHelper() {
+  // Remove any stretch before destroying helper.
+  scroll_elasticity_helper_->SetStretchAmount(gfx::Vector2dF());
+  scroll_elasticity_helper_.reset();
+}
+
 bool ThreadedInputHandler::GetScrollOffsetForLayer(ElementId element_id,
                                                    gfx::ScrollOffset* offset) {
   ScrollTree& scroll_tree = GetScrollTree();
@@ -956,7 +963,8 @@ void ThreadedInputHandler::ScrollEndForSnapFling(bool did_finish) {
       scroll_node->snap_container_data.has_value()) {
     scroll_node->snap_container_data.value().SetTargetSnapAreaElementIds(
         scroll_animating_snap_target_ids_);
-    updated_snapped_elements_.insert(scroll_node->element_id);
+    updated_snapped_elements_[scroll_node->element_id] =
+        scroll_animating_snap_target_ids_;
     SetNeedsCommit();
   }
   scroll_animating_snap_target_ids_ = TargetSnapAreaElementIds();
@@ -981,7 +989,7 @@ void ThreadedInputHandler::ProcessCommitDeltas(
       InnerViewportScrollNode() ? InnerViewportScrollNode()->element_id
                                 : ElementId();
 
-  base::flat_set<ElementId> snapped_elements;
+  base::flat_map<ElementId, TargetSnapAreaElementIds> snapped_elements;
   updated_snapped_elements_.swap(snapped_elements);
 
   // Scroll commit data is stored in the scroll tree so it has its own method
@@ -1106,7 +1114,8 @@ void ThreadedInputHandler::ScrollOffsetAnimationFinished() {
   if (scroll_node && scroll_node->snap_container_data.has_value()) {
     scroll_node->snap_container_data.value().SetTargetSnapAreaElementIds(
         scroll_animating_snap_target_ids_);
-    updated_snapped_elements_.insert(scroll_node->element_id);
+    updated_snapped_elements_[scroll_node->element_id] =
+        scroll_animating_snap_target_ids_;
     SetNeedsCommit();
   }
   scroll_animating_snap_target_ids_ = TargetSnapAreaElementIds();
@@ -1117,6 +1126,16 @@ void ThreadedInputHandler::ScrollOffsetAnimationFinished() {
     ScrollEnd(/*should_snap=*/false);
     return;
   }
+}
+
+void ThreadedInputHandler::SetPrefersReducedMotion(
+    bool prefers_reduced_motion) {
+  if (prefers_reduced_motion_ == prefers_reduced_motion)
+    return;
+  prefers_reduced_motion_ = prefers_reduced_motion;
+
+  if (input_handler_client_)
+    input_handler_client_->SetPrefersReducedMotion(prefers_reduced_motion_);
 }
 
 bool ThreadedInputHandler::IsCurrentlyScrolling() const {
@@ -1294,7 +1313,7 @@ InputHandler::ScrollStatus ThreadedInputHandler::TryScroll(
                  "LayerImpl::tryScroll: Failed due to no scrolling layer");
     scroll_status.thread = InputHandler::ScrollThread::SCROLL_ON_MAIN_THREAD;
     scroll_status.main_thread_scrolling_reasons =
-        MainThreadScrollingReason::kNonFastScrollableRegion;
+        MainThreadScrollingReason::kNoScrollingLayer;
     return scroll_status;
   }
 
@@ -2074,7 +2093,7 @@ bool ThreadedInputHandler::SnapAtScrollEnd(SnapReason reason) {
     // The snap target will be set when the animation is completed.
     scroll_animating_snap_target_ids_ = snap_target_ids;
   } else if (data.SetTargetSnapAreaElementIds(snap_target_ids)) {
-    updated_snapped_elements_.insert(scroll_node->element_id);
+    updated_snapped_elements_[scroll_node->element_id] = snap_target_ids;
     SetNeedsCommit();
   }
   return did_animate;

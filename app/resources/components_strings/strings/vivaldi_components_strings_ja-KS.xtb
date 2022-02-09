@@ -144,6 +144,7 @@
 <translation id="5810442152076338065"><ph name="DOMAIN" /> への接続は昔の暗号スイートで暗号化されてるで。</translation>
 <translation id="5838278095973806738">このサイトに大事な情報（パスワード、クレジット カードとか）を入れたらあかんで。悪さしよるユーザーに情報盗まれるかもしれへんし。</translation>
 <translation id="5869405914158311789">このサイト、アクセスできへん</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 個が使用中}other{# 個が使用中}}</translation>
 <translation id="5932224571077948991">このサイト、けったいな広告とか誤解招くような広告出してきよるわ</translation>
 <translation id="6051221802930200923"><ph name="SITE" />では証明書ピンニングが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="6146055958333702838">ケーブル見てな、使ってる可能性があるネットワークデバイス（ルーターとかモデムとか）
@@ -219,9 +220,9 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;見つからへんかったわ。もうちょっと見てみるな。</translation>
 <translation id="8820817407110198400">ブックマーク</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />にブロックされたわ</translation>
+<translation id="8963117664422609631">サイト設定に行く</translation>
 <translation id="9001074447101275817">プロキシー <ph name="DOMAIN" />にはユーザー名とパスワードが要るで。</translation>
 <translation id="9008201768610948239">無視する</translation>
-<translation id="9011424611726486705">サイト設定を開くで</translation>
 <translation id="9025348182339809926">（無効）</translation>
 <translation id="9039213469156557790">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの動作も変わるかも知れへん。</translation>
 <translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>

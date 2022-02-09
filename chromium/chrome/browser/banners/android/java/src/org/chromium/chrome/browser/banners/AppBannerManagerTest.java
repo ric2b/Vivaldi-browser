@@ -13,7 +13,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
-import static org.chromium.chrome.test.util.ViewUtils.waitForView;
+import static org.chromium.ui.test.util.ViewUtils.waitForView;
 
 import android.app.Activity;
 import android.app.Instrumentation;
@@ -912,6 +912,42 @@ public class AppBannerManagerTest {
 
         Assert.assertEquals(
                 0, RecordHistogram.getHistogramTotalCountForTesting(INSTALL_PATH_HISTOGRAM_NAME));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AppBanners"})
+    @CommandLineFlags.Add("enable-features=" + ChromeFeatureList.PWA_INSTALL_USE_BOTTOMSHEET)
+    public void testBlockedBottomSheetDoesNotAppearAgainForMonths() throws Exception {
+        String url = WebappTestPage.getServiceWorkerUrlWithManifestAndAction(mTestServer,
+                WEB_APP_MANIFEST_FOR_BOTTOM_SHEET_INSTALL, "call_stashed_prompt_on_click");
+        triggerBottomSheet(mTabbedActivityTestRule, url, /*click=*/true);
+
+        // Dismiss the bottom sheet after expanding it.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mBottomSheetController.hideContent(
+                    mBottomSheetController.getCurrentSheetContent(), false);
+        });
+        waitUntilBottomSheetStatus(
+                mTabbedActivityTestRule, BottomSheetController.SheetState.HIDDEN);
+
+        Tab tab = mTabbedActivityTestRule.getActivity().getActivityTab();
+
+        // Waiting two months shouldn't be long enough.
+        AppBannerManager.setTimeDeltaForTesting(61);
+        new TabLoadObserver(tab).fullyLoadUrl(url);
+        waitUntilBottomSheetStatus(
+                mTabbedActivityTestRule, BottomSheetController.SheetState.HIDDEN);
+
+        AppBannerManager.setTimeDeltaForTesting(62);
+        new TabLoadObserver(tab).fullyLoadUrl(url);
+        waitUntilBottomSheetStatus(
+                mTabbedActivityTestRule, BottomSheetController.SheetState.HIDDEN);
+
+        // Waiting three months should allow the bottom sheet to reappear.
+        AppBannerManager.setTimeDeltaForTesting(91);
+        new TabLoadObserver(tab).fullyLoadUrl(url);
+        waitUntilBottomSheetStatus(mTabbedActivityTestRule, BottomSheetController.SheetState.PEEK);
     }
 
     @Test

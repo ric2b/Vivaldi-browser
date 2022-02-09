@@ -20,6 +20,24 @@
 #include "ui/vivaldi_context_menu.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+namespace {
+
+SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
+#if !defined(OS_MAC)
+  // macOS incognito currently has a light on dark bookmark bar, but
+  // dark on light menus, so using the theme color in the folders is
+  // incorrect.
+  if (widget && widget->GetNativeTheme()) {
+    return widget->GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+  }
+#endif
+  return menu->GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+}
+
+}  // namespace
+
 namespace vivaldi {
 
 // Owned by the active menu api instance. Always present while a menu is open.
@@ -296,18 +314,30 @@ const gfx::ImageSkia* GetBookmarkDefaultIcon() {
   return Container->support.icons[BookmarkSupport::kUrl].ToImageSkia();
 }
 
-ui::ImageModel GetBookmarkFolderIcon(SkColor text_color) {
-  return ui::ImageModel::FromImage(
-      Container->support.icons[color_utils::IsDark(text_color)
-                                   ? BookmarkSupport::kFolder
-                                   : BookmarkSupport::kFolderDark]);
+const gfx::ImageSkia* GetBookmarkletIcon(views::MenuItemView* menu,
+                                         views::Widget* widget) {
+  return Container->support.icons[
+            color_utils::IsDark(TextColorForMenu(menu, widget))
+              ? BookmarkSupport::kBookmarklet
+              : BookmarkSupport::kBookmarkletDark].ToImageSkia();
 }
 
-ui::ImageModel GetBookmarkSpeeddialIcon(SkColor text_color) {
+ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
+                                     views::Widget* widget) {
   return ui::ImageModel::FromImage(
-      Container->support.icons[color_utils::IsDark(text_color)
-                                   ? BookmarkSupport::kSpeeddial
-                                   : BookmarkSupport::kSpeeddialDark]);
+      Container->support.icons[
+          color_utils::IsDark(TextColorForMenu(menu, widget))
+              ? BookmarkSupport::kFolder
+              : BookmarkSupport::kFolderDark]);
+}
+
+ui::ImageModel GetBookmarkSpeeddialIcon(views::MenuItemView* menu,
+                                        views::Widget* widget) {
+  return ui::ImageModel::FromImage(
+      Container->support.icons[
+          color_utils::IsDark(TextColorForMenu(menu, widget))
+              ? BookmarkSupport::kSpeeddial
+              : BookmarkSupport::kSpeeddialDark]);
 }
 
 }  // vivaldi

@@ -29,12 +29,12 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/ownership/fake_owner_settings_service.h"
+#include "chrome/browser/ash/policy/core/browser_policy_connector_chromeos.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
-#include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
+#include "chrome/browser/chromeos/policy/server_backed_state/server_backed_state_keys_broker.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/device_disabled_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
@@ -852,9 +852,17 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, EnrollmentForced) {
   EXPECT_TRUE(InstallAttributes::Get()->IsEnterpriseManaged());
 }
 
+// This test is flaky on ChromeOS. https://crbug.com/1231472
+#if defined(OS_CHROMEOS)
+#define MAYBE_ZeroTouchForcedAttestationFail \
+  DISABLED_ZeroTouchForcedAttestationFail
+#else
+#define MAYBE_ZeroTouchForcedAttestationFail ZeroTouchForcedAttestationFail
+#endif
 // Zero touch with attestation authentication fail. Attestation fails because we
 // send empty cert request. Should switch to interactive authentication.
-IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, ZeroTouchForcedAttestationFail) {
+IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest,
+                       MAYBE_ZeroTouchForcedAttestationFail) {
   auto initial_enrollment =
       enterprise_management::DeviceInitialEnrollmentStateResponse::
           INITIAL_ENROLLMENT_MODE_ZERO_TOUCH_ENFORCED;

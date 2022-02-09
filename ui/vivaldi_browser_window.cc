@@ -32,6 +32,7 @@
 #include "chrome/browser/printing/printing_init.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_preferences_util.h"
+#include "chrome/browser/sharing/sharing_dialog_data.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -212,6 +213,21 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
   return web_contents;
 }
 
+extensions::vivaldi::window_private::WindowState ConvertFromWindowShowState(
+    ui::WindowShowState state) {
+  using extensions::vivaldi::window_private::WindowState;
+  switch (state) {
+    case ui::SHOW_STATE_FULLSCREEN:
+      return WindowState::WINDOW_STATE_FULLSCREEN;
+    case ui::SHOW_STATE_MAXIMIZED:
+      return WindowState::WINDOW_STATE_MAXIMIZED;
+    case ui::SHOW_STATE_MINIMIZED:
+      return WindowState::WINDOW_STATE_MINIMIZED;
+    default:
+      return WindowState::WINDOW_STATE_NORMAL;
+  }
+}
+
 }  // namespace
 
 VivaldiBrowserWindowParams::VivaldiBrowserWindowParams() = default;
@@ -326,6 +342,8 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   views_ = VivaldiNativeAppWindowViews::Create();
   views_->Init(this, params);
+
+  views_->SetCanResize(browser_->create_params().can_resize);
 
   browser_->set_initial_show_state(params.state);
 
@@ -963,21 +981,22 @@ void VivaldiBrowserWindow::OnNativeWindowChanged(bool moved) {
 
   WindowStateData old_state = window_state_data_;
   WindowStateData new_state;
-  new_state.is_fullscreen = views_->IsFullscreenOrPending();
-  new_state.is_minimized = views_->IsMinimized();
-  new_state.is_maximized = views_->IsMaximized();
+  if (views_->IsFullscreenOrPending()) {
+    new_state.state = ui::SHOW_STATE_FULLSCREEN;
+  } else if (views_->IsMaximized()) {
+    new_state.state = ui::SHOW_STATE_MAXIMIZED;
+  } else if (views_->IsMinimized()) {
+    new_state.state = ui::SHOW_STATE_MINIMIZED;
+  } else {
+    new_state.state = ui::SHOW_STATE_NORMAL;
+  }
   new_state.bounds = views_->GetBounds();
 
   // Call the delegate so it can dispatch events to the js side
   // for any change in state.
-  if (old_state.is_fullscreen != new_state.is_fullscreen)
-    OnFullscreenChanged(new_state.is_fullscreen);
-
-  if (old_state.is_maximized != new_state.is_maximized)
-    OnMaximizedChanged(new_state.is_maximized);
-
-  if (old_state.is_minimized != new_state.is_minimized)
-    OnMinimizedChanged(new_state.is_minimized);
+  if (old_state.state != new_state.state) {
+    OnStateChanged(new_state.state);
+  }
 
   if (old_state.bounds.x() != new_state.bounds.x() ||
       old_state.bounds.y() != new_state.bounds.y()) {
@@ -1123,31 +1142,15 @@ content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() const {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
 
-void VivaldiBrowserWindow::OnMinimizedChanged(bool minimized) {
+void VivaldiBrowserWindow::OnStateChanged(ui::WindowShowState state) {
   if (browser_.get() == nullptr) {
     return;
   }
+  using extensions::vivaldi::window_private::WindowState;
+  WindowState window_state = ConvertFromWindowShowState(state);
   ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::window_private::OnMinimized::kEventName,
-      extensions::vivaldi::window_private::OnMinimized::Create(id(), minimized),
-      browser_->profile());
-}
-
-void VivaldiBrowserWindow::OnMaximizedChanged(bool maximized) {
-  if (browser_.get() == nullptr) {
-    return;
-  }
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::window_private::OnMaximized::kEventName,
-      extensions::vivaldi::window_private::OnMaximized::Create(id(), maximized),
-      browser_->profile());
-}
-
-void VivaldiBrowserWindow::OnFullscreenChanged(bool fullscreen) {
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::window_private::OnFullscreen::kEventName,
-      extensions::vivaldi::window_private::OnFullscreen::Create(id(),
-                                                                fullscreen),
+      extensions::vivaldi::window_private::OnStateChanged::kEventName,
+      extensions::vivaldi::window_private::OnStateChanged::Create(id(), window_state),
       browser_->profile());
 }
 

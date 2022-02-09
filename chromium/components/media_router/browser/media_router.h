@@ -133,7 +133,7 @@ class MediaRouter : public KeyedService {
 
   // Detaches the media route specified by |route_id|. The request might come
   // from the page or from an event like navigation or garbage collection.
-  virtual void DetachRoute(const MediaRoute::Id& route_id) = 0;
+  virtual void DetachRoute(MediaRoute::Id route_id) = 0;
 
   // Posts |message| to a MediaSink connected via MediaRoute with |route_id|.
   virtual void SendRouteMessage(const MediaRoute::Id& route_id,
@@ -202,7 +202,7 @@ class MediaRouter : public KeyedService {
   // Includes details about routes/sessions owned by the MRP.
   // Used by chrome://media-router-internals.
   virtual void GetProviderState(
-      MediaRouteProviderId provider_id,
+      mojom::MediaRouteProviderId provider_id,
       mojom::MediaRouteProvider::GetStateCallback callback) const = 0;
 
  private:

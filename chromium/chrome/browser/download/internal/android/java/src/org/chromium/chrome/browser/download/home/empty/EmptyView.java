@@ -16,6 +16,9 @@ import org.chromium.chrome.browser.download.home.empty.EmptyProperties.State;
 import org.chromium.chrome.browser.download.internal.R;
 import org.chromium.ui.widget.LoadingView;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** A view that represents the visuals required for the empty state of the download home list. */
 class EmptyView {
     private final ViewGroup mView;
@@ -30,6 +33,9 @@ class EmptyView {
         mEmptyContainer = mView.findViewById(R.id.empty_container);
         mEmptyView = (TextView) mView.findViewById(R.id.empty);
         mLoadingView = (LoadingView) mView.findViewById(R.id.loading);
+        if (BuildConfig.IS_VIVALDI)
+            mEmptyContainer.setBackgroundColor(
+                    mEmptyView.getResources().getColor(R.color.vivaldi_transparent));
     }
 
     /** The Android {@link View} representing the empty view. */

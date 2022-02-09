@@ -67,8 +67,6 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
   bool IsPlayerActive() override;
   WebContents* GetWebContents() override;
   bool TogglePlayPause() override;
-  void UpdatePlaybackState(bool is_playing,
-                           bool reached_end_of_stream) override;
   void SkipAd() override;
   void NextTrack() override;
   void PreviousTrack() override;
@@ -82,6 +80,9 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
 
   void MediaSessionActionsChanged(
       const std::set<media_session::mojom::MediaSessionAction>& actions);
+
+  void MediaSessionPositionChanged(
+      const absl::optional<media_session::MediaPosition>& media_position);
 
   gfx::Size GetSize();
 
@@ -135,6 +136,9 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
   // create an instance.
   explicit PictureInPictureWindowControllerImpl(WebContents* web_contents);
 
+  // Recompute the playback state and update the window accordingly.
+  void UpdatePlaybackState();
+
   // Signal to the media player that |this| is leaving Picture-in-Picture mode.
   void OnLeavingPictureInPicture(bool should_pause_video);
 
@@ -185,6 +189,9 @@ class CONTENT_EXPORT PictureInPictureWindowControllerImpl
   // requests and holding states such as the active player id.
   // The session will be nullptr when there is no active session.
   std::unique_ptr<PictureInPictureSession> active_session_;
+
+  // The media position info as last reported to us by MediaSessionImpl.
+  absl::optional<media_session::MediaPosition> media_position_;
 
   // Vivaldi specific:
   base::WeakPtr<vivaldi_content::TabActivationDelegate> vivaldi_delegate_;

@@ -63,8 +63,6 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">تعطيل إضافات وضع مطور البرامج</translation>
 <translation id="4100839878934973028">‏أضاف برنامج آخر بجهاز الكمبيوتر تطبيقًا قد يؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
-<translation id="4115080753528843955">Certains services de contenu utilisent des identificateurs uniques pour autoriser l'accès au contenu protégé.
-بغض خدمات المحتوى تستخدم معرفات فريدة لأغراض تخويل الوصول إلى المحتوى المحمي</translation>
 <translation id="4130207949184424187">غيّرت هذه الإضافة الصفحة التي تظهر عند البحث في المربع متعدد الاستخدامات.</translation>
 <translation id="4176463684765177261">معطل</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />كيلوبايت (<ph name="NUM_KILOBYTES_LIVE" />كيلوبايت مباشرة)</translation>

@@ -5,13 +5,13 @@
 #include "third_party/blink/renderer/modules/screen_enumeration/screens.h"
 
 #include "base/containers/contains.h"
-#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/screen_enumeration/screen_advanced.h"
+#include "ui/display/screen_info.h"
 
 namespace blink {
 
@@ -58,7 +58,7 @@ void Screens::Trace(Visitor* visitor) const {
 }
 
 void Screens::UpdateScreenInfos(LocalDOMWindow* window,
-                                const ScreenInfos& new_infos) {
+                                const display::ScreenInfos& new_infos) {
   // Expect that all updates contain a non-zero set of screens.
   DCHECK(!new_infos.screen_infos.empty());
 
@@ -72,7 +72,7 @@ void Screens::UpdateScreenInfos(LocalDOMWindow* window,
   for (WTF::wtf_size_t i = 0; i < screens_.size();
        /*conditionally incremented*/) {
     if (base::Contains(new_infos.screen_infos, screens_[i]->DisplayId(),
-                       &ScreenInfo::display_id)) {
+                       &display::ScreenInfo::display_id)) {
       ++i;
     } else {
       screens_.EraseAt(i);
@@ -96,7 +96,7 @@ void Screens::UpdateScreenInfos(LocalDOMWindow* window,
   // before we send out any events.
   current_display_id_ = new_infos.current_display_id;
 
-  // (2) At this point, all data strutures are up to date.
+  // (2) At this point, all data structures are up to date.
   // screens_ has the current set of screens.
   // current_screen_ has new values pushed to it.
   // (prior to this function) individual ScreenAdvanced objects have new values.
@@ -115,17 +115,24 @@ void Screens::UpdateScreenInfos(LocalDOMWindow* window,
   // (5) Send change events to individual screens if they have changed.
   // It's not guaranteed that screen_infos are ordered, so for each screen
   // find the info that corresponds to it in old_info and new_infos.
-  for (const auto& screen : screens_) {
+  //
+  // Note: we cannot use an iterator-based loop here, as iterators may be
+  // invalidated by DispatchEvent(), which may call ContextDestroyed().
+  for (wtf_size_t i = 0; i < screens_.size(); ++i) {
+    const auto& screen = screens_[i];
     auto id = screen->DisplayId();
-    auto new_it =
-        base::ranges::find(new_infos.screen_infos, id, &ScreenInfo::display_id);
+    auto new_it = base::ranges::find(new_infos.screen_infos, id,
+                                     &display::ScreenInfo::display_id);
     DCHECK(new_it != new_infos.screen_infos.end());
     auto old_it = base::ranges::find(prev_screen_infos_.screen_infos, id,
-                                     &ScreenInfo::display_id);
+                                     &display::ScreenInfo::display_id);
     if (old_it != prev_screen_infos_.screen_infos.end() && *old_it != *new_it) {
       // TODO(enne): http://crbug.com/1202981 only send this event when
       // properties on ScreenAdvanced (vs anything in ScreenInfo) change.
       screen->DispatchEvent(*Event::Create(event_type_names::kChange));
+
+      // Note: screen may no longer be valid and screens_ may have been
+      // cleared at this point via DispatchEvent calling ContextDestroyed.
     }
   }
 

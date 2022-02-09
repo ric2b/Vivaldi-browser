@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Wybierz plik zakładek Opery</translation>
 <translation id="3451317331714872347">Krajobraz 8</translation>
 <translation id="3457498675806041407">Potwierdź zamknięcie</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> jest już zainstalowany i zostanie aktywowany po ponownym uruchomieniu przeglądarki.</translation>
 <translation id="3516213908976398531">Krajobraz 11</translation>
 <translation id="3521635864657970829">Czy na pewno chcesz zamknąć to okno?</translation>
 <translation id="3540597690227428180">Zwierzę 9</translation>
@@ -97,7 +98,7 @@
 <translation id="527605719918376753">Wycisz kartę</translation>
 <translation id="5305569355661722298">Potwierdź zamknięcie okna</translation>
 <translation id="5388358297987318779">Otwórz obraz</translation>
-<translation id="5416008465899576639">Nowa wersja Vivaldi jest dostępna.</translation>
+<translation id="5416008465899576639">Dostępna jest nowa wersja przeglądarki Vivaldi.</translation>
 <translation id="5497042274492038489">Potwierdź zamknięcie okna</translation>
 <translation id="5594602170491763400">Potwór 5</translation>
 <translation id="5615637589913244581">Opera 15+ (Beta)</translation>
@@ -163,6 +164,7 @@
 <translation id="8912720443398351457">Czy na pewno chcesz zamknąć przeglądarkę Vivaldi?</translation>
 <translation id="8947109330183116400">Wybierz plik HTML z zakładkami</translation>
 <translation id="9017566390391482291">Wybierz folder profilu przeglądarki Vivaldi, z którego chcesz zaimportować dane</translation>
+<translation id="9048058608784130603">Oczekująca aktualizacja <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Edytuj</translation>
 <translation id="912022491595344261">Otwórz obraz jako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otwórz link</translation>

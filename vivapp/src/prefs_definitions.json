@@ -638,6 +638,19 @@
         "type": "string",
         "default": "",
         "syncable": true
+      },
+      "status": {
+        "button_style": {
+          "type": "enum",
+          "default": "image",
+          "syncable": false,
+          "description": "Calendar status button style",
+          "enum_values": {
+            "image": 0,
+            "text": 1,
+            "imageandtext": 2
+          }
+        }
       }
     },
     "clear_private_data": {
@@ -1064,6 +1077,12 @@
         "description": "Are feeds shown in mail panel?",
         "type": "boolean",
         "default": true,
+        "syncable": true
+      },
+      "search_on_enter": {
+        "description": "Start mail search by pressing enter key",
+        "type": "boolean",
+        "default": false,
         "syncable": true
       }
     },
@@ -1593,12 +1612,6 @@
         },
         "crypto_token": {
           "description": "Load Google crypto token.",
-          "type": "boolean",
-          "default": true,
-          "syncable": true
-        },
-        "media_router": {
-          "description": "Load Chrome cast extension.",
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -2524,6 +2537,7 @@
           "BreakMode",
           "SyncStatus",
           "MailStatus",
+          "CalendarStatus",
           "StatusInfo",
           "TaskList",
           "VersionInfo",
@@ -2756,6 +2770,14 @@
           "type": "boolean",
           "default": true,
           "syncable": true
+        }
+      },
+      "translate_selection_button": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true,
+          "description": "Show a translate selected text button when selecting text."
         }
       },
       "allow_selection_in_links": {

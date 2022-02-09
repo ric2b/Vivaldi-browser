@@ -59,14 +59,27 @@ void SetPrimaryAccount(IdentityManager* identity_manager,
   // yet been received from `AccountManagerFacade`, entities can ask about the
   // Primary Account and expect it to be available pretty early. Manually seed
   // the account in `AccountTrackerService` to get around this issue.
-  const CoreAccountId account_id = account_tracker_service->SeedAccountInfo(
-      /*gaia=*/device_account.key.id, device_account.raw_email);
+  const CoreAccountId device_account_id =
+      account_tracker_service->SeedAccountInfo(
+          /*gaia=*/device_account.key.id, device_account.raw_email);
+
   // TODO(https://crbug.com/1194983): Figure out how split sync settings will
   // work here. For now, we will mimic Ash's behaviour of having sync turned on
   // by default.
-  identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
-      account_id, ConsentLevel::kSync);
-
+  const CoreAccountId primary_account_id =
+      identity_manager->GetPrimaryAccountId(ConsentLevel::kSync);
+  if (primary_account_id == device_account_id)
+    return;  // Already correct primary account set, nothing to do.
+  if (!primary_account_id.empty()) {
+    // Different primary account found, have to clear it first.
+    // TODO(https://crbug.com/1223364): Replace this if with a CHECK after all
+    //                                  the existing users have been migrated.
+    identity_manager->GetPrimaryAccountMutator()->ClearPrimaryAccount(
+        signin_metrics::ACCOUNT_REMOVED_FROM_DEVICE,
+        signin_metrics::SignoutDelete::kIgnoreMetric);
+  }
+  CHECK(identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
+      device_account_id, ConsentLevel::kSync));
   CHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kSync));
   CHECK_EQ(identity_manager->GetPrimaryAccountInfo(ConsentLevel::kSync).gaia,
            device_account.key.id);
@@ -95,8 +108,7 @@ IdentityManager::IdentityManager(IdentityManager::InitParameters&& parameters)
                         std::move(parameters.accounts_mutator),
                         std::move(parameters.accounts_cookie_mutator),
                         std::move(parameters.device_accounts_synchronizer)),
-      diagnostics_provider_(std::move(parameters.diagnostics_provider)),
-      allow_access_token_fetch_(parameters.allow_access_token_fetch) {
+      diagnostics_provider_(std::move(parameters.diagnostics_provider)) {
   DCHECK(account_fetcher_service_);
   DCHECK(diagnostics_provider_);
 
@@ -202,7 +214,6 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
-  CHECK(allow_access_token_fetch_);
   return std::make_unique<AccessTokenFetcher>(
       account_id, oauth_consumer_name, token_service_.get(),
       primary_account_manager_.get(), scopes, std::move(callback), mode);
@@ -216,7 +227,6 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
-  CHECK(allow_access_token_fetch_);
   return std::make_unique<AccessTokenFetcher>(
       account_id, oauth_consumer_name, token_service_.get(),
       primary_account_manager_.get(), url_loader_factory, scopes,
@@ -232,7 +242,6 @@ IdentityManager::CreateAccessTokenFetcherForClient(
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
-  CHECK(allow_access_token_fetch_);
   return std::make_unique<AccessTokenFetcher>(
       account_id, client_id, client_secret, oauth_consumer_name,
       token_service_.get(), primary_account_manager_.get(), scopes,
@@ -300,73 +309,41 @@ GoogleServiceAuthError IdentityManager::GetErrorStateOfRefreshTokenForAccount(
   return token_service_->GetAuthError(account_id);
 }
 
-absl::optional<AccountInfo> IdentityManager::FindExtendedAccountInfoByAccountId(
-    const CoreAccountId& account_id) const {
-  AccountInfo account_info =
-      account_tracker_service_->GetAccountInfo(account_id);
-  if (account_info.IsEmpty())
-    return absl::nullopt;
-  return account_info;
-}
-
-absl::optional<AccountInfo>
-IdentityManager::FindExtendedAccountInfoForAccountWithRefreshToken(
+AccountInfo IdentityManager::FindExtendedAccountInfo(
     const CoreAccountInfo& account_info) const {
-  AccountInfo extended_account_info =
-      account_tracker_service_->GetAccountInfo(account_info.account_id);
-
-  // AccountTrackerService always returns an AccountInfo, even on failure. In
-  // case of failure, the AccountInfo will be unpopulated, thus we should not
-  // be able to find a valid refresh token.
-  if (!HasAccountWithRefreshToken(extended_account_info.account_id))
-    return absl::nullopt;
-
-  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+  return FindExtendedAccountInfoByAccountId(account_info.account_id);
 }
 
-absl::optional<AccountInfo>
-IdentityManager::FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
+AccountInfo IdentityManager::FindExtendedAccountInfoByAccountId(
     const CoreAccountId& account_id) const {
-  AccountInfo account_info =
-      account_tracker_service_->GetAccountInfo(account_id);
+  if (!HasAccountWithRefreshToken(account_id))
+    return AccountInfo();
 
-  // AccountTrackerService always returns an AccountInfo, even on failure. In
-  // case of failure, the AccountInfo will be unpopulated, thus we should not
-  // be able to find a valid refresh token.
-  if (!HasAccountWithRefreshToken(account_info.account_id))
-    return absl::nullopt;
-
-  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+  // AccountTrackerService returns an empty AccountInfo if the account is not
+  // found.
+  return account_tracker_service_->GetAccountInfo(account_id);
 }
 
-absl::optional<AccountInfo> IdentityManager::
-    FindExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-        const std::string& email_address) const {
+AccountInfo IdentityManager::FindExtendedAccountInfoByEmailAddress(
+    const std::string& email_address) const {
   AccountInfo account_info =
       account_tracker_service_->FindAccountInfoByEmail(email_address);
-
   // AccountTrackerService always returns an AccountInfo, even on failure. In
   // case of failure, the AccountInfo will be unpopulated, thus we should not
   // be able to find a valid refresh token.
-  if (!HasAccountWithRefreshToken(account_info.account_id))
-    return absl::nullopt;
-
-  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+  return HasAccountWithRefreshToken(account_info.account_id) ? account_info
+                                                             : AccountInfo();
 }
 
-absl::optional<AccountInfo>
-IdentityManager::FindExtendedAccountInfoForAccountWithRefreshTokenByGaiaId(
+AccountInfo IdentityManager::FindExtendedAccountInfoByGaiaId(
     const std::string& gaia_id) const {
   AccountInfo account_info =
       account_tracker_service_->FindAccountInfoByGaiaId(gaia_id);
-
   // AccountTrackerService always returns an AccountInfo, even on failure. In
   // case of failure, the AccountInfo will be unpopulated, thus we should not
   // be able to find a valid refresh token.
-  if (!HasAccountWithRefreshToken(account_info.account_id))
-    return absl::nullopt;
-
-  return GetAccountInfoForAccountWithRefreshToken(account_info.account_id);
+  return HasAccountWithRefreshToken(account_info.account_id) ? account_info
+                                                             : AccountInfo();
 }
 
 std::unique_ptr<UbertokenFetcher>
@@ -474,7 +451,7 @@ IdentityManager::GetIdentityMutatorJavaObject() {
       identity_mutator_.GetJavaObject());
 }
 
-void IdentityManager::ForceRefreshOfExtendedAccountInfo(
+void IdentityManager::RefreshAccountInfoIfStale(
     const CoreAccountId& account_id) {
   DCHECK(HasAccountWithRefreshToken(account_id));
   AccountInfo account_info =
@@ -482,13 +459,13 @@ void IdentityManager::ForceRefreshOfExtendedAccountInfo(
   if (account_info.account_image.IsEmpty()) {
     account_info_fetch_start_times_[account_id] = base::TimeTicks::Now();
   }
-  account_fetcher_service_->ForceRefreshOfAccountInfo(account_id);
+  account_fetcher_service_->RefreshAccountInfoIfStale(account_id);
 }
 
-void IdentityManager::ForceRefreshOfExtendedAccountInfo(
+void IdentityManager::RefreshAccountInfoIfStale(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& j_core_account_id) {
-  ForceRefreshOfExtendedAccountInfo(
+  RefreshAccountInfoIfStale(
       ConvertFromJavaCoreAccountId(env, j_core_account_id));
 }
 
@@ -501,16 +478,15 @@ IdentityManager::GetPrimaryAccountInfo(JNIEnv* env, jint consent_level) const {
   return ConvertToJavaCoreAccountInfo(env, account_info);
 }
 
-base::android::ScopedJavaLocalRef<jobject> IdentityManager::
-    FindExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-        JNIEnv* env,
-        const base::android::JavaParamRef<jstring>& j_email) const {
-  auto account_info =
-      FindExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-          base::android::ConvertJavaStringToUTF8(env, j_email));
-  if (!account_info.has_value())
+base::android::ScopedJavaLocalRef<jobject>
+IdentityManager::FindExtendedAccountInfoByEmailAddress(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& j_email) const {
+  AccountInfo account_info = FindExtendedAccountInfoByEmailAddress(
+      base::android::ConvertJavaStringToUTF8(env, j_email));
+  if (account_info.IsEmpty())
     return nullptr;
-  return ConvertToJavaAccountInfo(env, account_info.value());
+  return ConvertToJavaAccountInfo(env, account_info);
 }
 
 base::android::ScopedJavaLocalRef<jobjectArray>
@@ -534,6 +510,12 @@ IdentityManager::GetAccountsWithRefreshTokens(JNIEnv* env) const {
 }
 #endif
 
+AccountInfo IdentityManager::FindExtendedPrimaryAccountInfo(
+    ConsentLevel consent_level) {
+  CoreAccountId account_id = GetPrimaryAccountId(consent_level);
+  return account_tracker_service_->GetAccountInfo(account_id);
+}
+
 PrimaryAccountManager* IdentityManager::GetPrimaryAccountManager() const {
   return primary_account_manager_.get();
 }
@@ -555,7 +537,7 @@ GaiaCookieManagerService* IdentityManager::GetGaiaCookieManagerService() const {
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-ash::AccountManager* IdentityManager::GetAshAccountManager() const {
+account_manager::AccountManager* IdentityManager::GetAshAccountManager() const {
   return ash_account_manager_;
 }
 #endif

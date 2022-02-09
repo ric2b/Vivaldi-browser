@@ -17,7 +17,7 @@ import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
+import android.graphics.drawable.GradientDrawable;
 import android.text.SpannableString;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
@@ -80,8 +80,7 @@ import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.Toast;
-
-import java.util.List;
+import org.chromium.url.GURL;
 
 /**
  * The Toolbar layout to be used for a custom tab. This is used for both phone and tablet UIs.
@@ -137,6 +136,8 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     private ImageButton mSecurityButton;
     private LinearLayout mCustomActionButtons;
     private ImageButton mCloseButton;
+    // This View will be non-null only for bottom sheet custom tabs.
+    private ImageView mHandleView;
 
     // Whether dark tint should be applied to icons and text.
     private boolean mUseDarkColors;
@@ -149,12 +150,10 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
 
     private CustomTabToolbarAnimationDelegate mAnimDelegate;
     private int mState = STATE_DOMAIN_ONLY;
-    private String mFirstUrl;
+    private GURL mFirstUrl;
 
     private CustomTabLocationBar mLocationBar;
     private LocationBarModel mLocationBarModel;
-
-    private boolean mIncognitoIconHidden;
 
     private Runnable mTitleAnimationStarter = new Runnable() {
         @Override
@@ -332,15 +331,6 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         }
     }
 
-    /**
-     * @param value Whether the incognito icon should be hidden.
-     */
-    public void setIncognitoIconHidden(boolean value) {
-        if (mIncognitoIconHidden == value) return;
-        mIncognitoIconHidden = value;
-        requestLayout();
-    }
-
     @Override
     protected String getContentPublisher() {
         Tab tab = getToolbarDataProvider().getTab();
@@ -352,7 +342,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         }
 
         // TODO(bauerb): Remove this once trusted CDN publisher URLs have rolled out completely.
-        if (mState == STATE_TITLE_ONLY) return parsePublisherNameFromUrl(tab.getUrlString());
+        if (mState == STATE_TITLE_ONLY) return parsePublisherNameFromUrl(tab.getUrl());
 
         return null;
     }
@@ -362,10 +352,10 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         super.onNavigatedToDifferentPage();
         mLocationBarModel.notifyTitleChanged();
         if (mState == STATE_TITLE_ONLY) {
-            if (TextUtils.isEmpty(mFirstUrl)) {
-                mFirstUrl = getToolbarDataProvider().getTab().getUrlString();
+            if (mFirstUrl == null || mFirstUrl.isEmpty()) {
+                mFirstUrl = getToolbarDataProvider().getTab().getUrl();
             } else {
-                if (mFirstUrl.equals(getToolbarDataProvider().getTab().getUrlString())) return;
+                if (mFirstUrl.equals(getToolbarDataProvider().getTab().getUrl())) return;
                 setUrlBarHidden(false);
             }
         }
@@ -389,8 +379,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     }
 
     private void updateToolbarLayoutMargin() {
-        final boolean shouldShowIncognitoIcon =
-                !mIncognitoIconHidden && getToolbarDataProvider().isIncognito();
+        final boolean shouldShowIncognitoIcon = getToolbarDataProvider().isIncognito();
         mIncognitoImageView.setVisibility(shouldShowIncognitoIcon ? VISIBLE : GONE);
 
         int startMargin = calculateStartMarginWhenCloseButtonVisibilityGone();
@@ -544,7 +533,9 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                         + fraction * (Color.green(finalColor) - Color.green(initialColor)));
                 int blue = (int) (Color.blue(initialColor)
                         + fraction * (Color.blue(finalColor) - Color.blue(initialColor)));
-                background.setColor(Color.rgb(red, green, blue));
+                int color = Color.rgb(red, green, blue);
+                background.setColor(color);
+                setHandleViewBackgroundColor(color);
             }
         });
         mBrandColorTransitionAnimation.addListener(new AnimatorListenerAdapter() {
@@ -581,6 +572,17 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         return mLocationBar;
     }
 
+    public void setHandleView(ImageView view) {
+        mHandleView = view;
+        setHandleViewBackgroundColor(getBackground().getColor());
+    }
+
+    private void setHandleViewBackgroundColor(int color) {
+        if (mHandleView == null) return;
+        GradientDrawable drawable = (GradientDrawable) mHandleView.getBackground();
+        ((GradientDrawable) drawable.mutate()).setColor(color);
+    }
+
     @Override
     public boolean onLongClick(View v) {
         if (v == mCloseButton || v.getParent() == mCustomActionButtons) {
@@ -595,17 +597,17 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         return false;
     }
 
-    private static String parsePublisherNameFromUrl(String url) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    static String parsePublisherNameFromUrl(GURL url) {
         // TODO(ianwen): Make it generic to parse url from URI path. http://crbug.com/599298
         // The url should look like: https://www.google.com/amp/s/www.nyt.com/ampthml/blogs.html
         // or https://www.google.com/amp/www.nyt.com/ampthml/blogs.html.
-        Uri uri = Uri.parse(url);
-        List<String> segments = uri.getPathSegments();
-        if (segments.size() >= 3) {
-            if (segments.get(1).length() > 1) return segments.get(1);
-            return segments.get(2);
+        String[] segments = url.getPath().split("/");
+        if (segments.length >= 4 && "amp".equals(segments[1])) {
+            if (segments[2].length() > 1) return segments[2];
+            return segments[3];
         }
-        return url;
+        return url.getSpec();
     }
 
     @Override
@@ -802,7 +804,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             }
 
             String publisherUrl = TrustedCdn.getPublisherUrl(tab);
-            String url = publisherUrl != null ? publisherUrl : tab.getUrlString().trim();
+            String url = publisherUrl != null ? publisherUrl : tab.getUrl().getSpec().trim();
             if (mState == STATE_TITLE_ONLY) {
                 if (!TextUtils.isEmpty(mLocationBarDataProvider.getTitle())) {
                     updateTitleBar();

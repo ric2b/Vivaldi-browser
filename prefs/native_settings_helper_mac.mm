@@ -68,10 +68,13 @@ int getSystemDarkMode() {
 std::string getSystemAccentColor() {
   std::string accentColorString = "";
   if (@available(macOS 10.14, *)) {
-    NSColor* c = [[NSColor controlAccentColor]
-        colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-    accentColorString =
-        RgbToHexString(c.redComponent,c.greenComponent,c.blueComponent);
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults stringForKey:@"AppleAccentColor"]) {
+      NSColor* c = [[NSColor controlAccentColor]
+          colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+      accentColorString =
+          RgbToHexString(c.redComponent,c.greenComponent,c.blueComponent);
+    }
   }
   return accentColorString;
 }

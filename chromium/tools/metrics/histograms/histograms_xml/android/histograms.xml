@@ -37,14 +37,40 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <variant name=".UnknownIntent"/>
 </variants>
 
+<variants name="JankMetricsScenarios">
+  <variant name="">
+    <obsolete>
+      Renamed to .Total
+    </obsolete>
+  </variant>
+  <variant name=".NewTabPage" summary="while NTP is open"/>
+  <variant name=".OmniboxFocus" summary="while Omnibox is focused"/>
+  <variant name=".OpenLinkInNewTab"
+      summary="while opening a link in a new tab using the long press menu"/>
+  <variant name=".StartSurfaceHomepage"
+      summary="while the homepage on start surface is visible"/>
+  <variant name=".StartSurfaceTabSwitcher"
+      summary="while the tab switcher on start surface is visible"/>
+  <variant name=".Startup" summary="while Chrome is starting"/>
+  <variant name=".TabSwitcher" summary="while Tab switcher is open"/>
+  <variant name=".Total"
+      summary="while ChromeTabbedActivity is resumed. However, there's an
+               unusual implementation detail: Individual frame durations are
+               measured in Java, and passed over to C++ for recording once
+               every 30 seconds. Thus, frames that occur near program
+               termination might be dropped from the data"/>
+</variants>
+
 <variants name="MessageIdentifiers">
   <variant name=".AddToHomescreenIPH"/>
   <variant name=".GeneratedPasswordSaved"/>
   <variant name=".MerchantTrust"/>
   <variant name=".PopupBlocked"/>
+  <variant name=".ReaderMode"/>
   <variant name=".SafetyTip"/>
   <variant name=".SaveAddressProfile"/>
   <variant name=".SavePassword"/>
+  <variant name=".SendTabToSelf"/>
   <variant name=".UpdatePassword"/>
 </variants>
 
@@ -163,7 +189,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.DropOutReason{Intent}"
-    enum="AutofillAssistantDropOutReason" expires_after="2021-08-22">
+    enum="AutofillAssistantDropOutReason" expires_after="2022-06-08">
   <owner>selakovic@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -179,7 +205,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.FeatureModuleInstallation"
     enum="AutofillAssistantFeatureModuleInstallation"
-    expires_after="2021-10-25">
+    expires_after="2022-06-08">
   <owner>mcarlen@chromium.org</owner>
   <owner>autofill_assistant+watch@google.com</owner>
   <summary>
@@ -190,7 +216,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.OnboardingFetcher.ResultStatus"
-    enum="AutofillAssistantOnboardingFetcherResultStatus" expires_after="M93">
+    enum="AutofillAssistantOnboardingFetcherResultStatus"
+    expires_after="2022-06-08">
   <owner>sandromaggi@google.com</owner>
   <owner>mcarlen@google.com</owner>
   <summary>
@@ -202,7 +229,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.OnBoarding{Intent}"
-    enum="AutofillAssistantOnBoarding" expires_after="2021-09-04">
+    enum="AutofillAssistantOnBoarding" expires_after="2022-06-08">
   <owner>lsuder@chromium.org</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -215,7 +242,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.AutofillChanged"
     enum="AutofillAssistantPaymentRequestAutofillInfoChanged"
-    expires_after="2021-10-04">
+    expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -226,7 +253,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.FirstNameOnly"
-    enum="Boolean" expires_after="M93">
+    enum="Boolean" expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -239,7 +266,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.MandatoryPostalCode"
     enum="AutofillAssistantPaymentRequestMandatoryPostalCode"
-    expires_after="M93">
+    expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -253,7 +280,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.Prefilled"
-    enum="AutofillAssistantPaymentRequestPrefilled" expires_after="2021-10-04">
+    enum="AutofillAssistantPaymentRequestPrefilled" expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -398,7 +425,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.ChildProcessLauncher.OnServiceConnectedTimedOutResult"
-    enum="OnServiceConnectedTimedOutResult" expires_after="2021-10-31">
+    enum="OnServiceConnectedTimedOutResult" expires_after="2022-01-02">
   <owner>boliu@chromium.org</owner>
   <owner>src/base/android/OWNERS</owner>
   <summary>
@@ -487,7 +514,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.ChromeStartupDelegate.FailureReason"
-    enum="ChromeStartupDelegateFailureType" expires_after="2021-11-07">
+    enum="ChromeStartupDelegateFailureType" expires_after="2022-01-09">
   <owner>gangwu@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -497,7 +524,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.ChromeStartupDelegate.Result"
-    enum="ChromeStartupDelegateResult" expires_after="2021-11-07">
+    enum="ChromeStartupDelegateResult" expires_after="2022-01-09">
   <owner>gangwu@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -640,7 +667,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DarkTheme.EnabledReason" enum="DarkThemeEnabledReason"
-    expires_after="2021-10-25">
+    expires_after="2021-12-26">
   <owner>twellington@chromium.org</owner>
   <owner>clank-app-team@google.com</owner>
   <summary>
@@ -650,7 +677,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DarkTheme.EnabledState" enum="BooleanEnabled"
-    expires_after="2021-10-25">
+    expires_after="2021-12-26">
   <owner>twellington@chromium.org</owner>
   <owner>clank-app-team@google.com</owner>
   <summary>
@@ -660,7 +687,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DarkTheme.Preference.State"
-    enum="DarkThemePreferences" expires_after="2021-10-25">
+    enum="DarkThemePreferences" expires_after="2021-12-26">
   <owner>twellington@chromium.org</owner>
   <owner>clank-app-team@google.com</owner>
   <summary>
@@ -774,7 +801,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DeviceSize.LargestDisplaySize" units="dp"
-    expires_after="2021-10-10">
+    expires_after="2021-12-12">
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <owner>clank-app-team@google.com</owner>
@@ -786,7 +813,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DeviceSize.SmallestDisplaySize" units="dp"
-    expires_after="2021-10-10">
+    expires_after="2021-12-12">
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <owner>clank-app-team@google.com</owner>
@@ -927,7 +954,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DownloadManager.Menu.Action"
-    enum="Android.DownloadManager.Menu.Actions" expires_after="2021-09-19">
+    enum="Android.DownloadManager.Menu.Actions" expires_after="2021-11-21">
   <owner>dtrainor@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>The count of Download Home top level menu actions taken.</summary>
@@ -952,7 +979,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DownloadManager.NotificationInteraction"
-    enum="DownloadNotificationInteractions" expires_after="2021-10-31">
+    enum="DownloadNotificationInteractions" expires_after="2022-01-02">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -962,14 +989,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DownloadManager.OpenSource.Audio"
-    enum="AndroidDownloadOpenSource" expires_after="2021-10-10">
+    enum="AndroidDownloadOpenSource" expires_after="2021-12-12">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>Records how users open audio download files on Android.</summary>
 </histogram>
 
 <histogram name="Android.DownloadManager.OpenSource.Other"
-    enum="AndroidDownloadOpenSource" expires_after="2021-10-04">
+    enum="AndroidDownloadOpenSource" expires_after="2021-12-05">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -979,7 +1006,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DownloadManager.OpenSource.Video"
-    enum="AndroidDownloadOpenSource" expires_after="2021-10-04">
+    enum="AndroidDownloadOpenSource" expires_after="2021-12-05">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>Records how users open video download files on Android.</summary>
@@ -1180,7 +1207,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.FontLookup.Blink.DLFontsLatencySuccess" units="ms"
-    expires_after="2021-09-30">
+    expires_after="2021-12-05">
   <owner>drott@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -1189,6 +1216,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     renderer. Includes time for error checking and attempting to create the font
     from the retrieved blob, if there is one. Only records timings for
     situations in which a font was successfully instantiated and returned.
+  </summary>
+</histogram>
+
+<histogram name="Android.FontLookup.Blink.GetTableLatency" units="ms"
+    expires_after="2022-08-12">
+  <owner>drott@chromium.org</owner>
+  <owner>cduvall@chromium.org</owner>
+  <owner>layout-dev@chromium.org</owner>
+  <summary>
+    Records the latency of fetching the font name lookup table from the browser.
+    The table is cached by the renderer so will usually only be fetched once per
+    renderer startup. This is recorded when an attempt is made to fetch the
+    table, typically once per renderer on the first font lookup for that
+    process. If the original fetch fails, this will be recorded the next time a
+    font lookup is requested.
   </summary>
 </histogram>
 
@@ -1463,37 +1505,36 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Android.Jank.FrameDuration" units="ms"
+<histogram name="Android.Jank.FrameDuration{Scenario}" units="ms"
     expires_after="2021-09-30">
   <owner>salg@google.com</owner>
   <owner>ssid@chromium.org</owner>
   <summary>
     Amount of time it takes to draw Android UI frames on ChromeTabbedActivity as
-    measured by Android's FrameMetrics API. Each frame's duration is recorded
-    individually while ChromeTabbedActivity is resumed. However, there's an
-    unusual implementation detail: Individual frame durations are measured in
-    Java, and passed over to C++ for recording once every 30 seconds. Thus,
-    frames that occur near program termination might be dropped from the data.
+    measured by Android's FrameMetrics API. Each frame's draw duration is stored
+    individually {Scenario}.
 
     The samples for this metric (Along with Android.Jank.JankBursts and
-    Android.Jank.MissedFrames) are manually passed from Java to C++ every 30
-    seconds to be recorded. This is done instead of recording in real time from
-    Java due to the large number of generated samples (potentially ~60 per
-    second). Recording them directly from Java would result in a JNI call for
-    each sample which could cause performance issues.
+    Android.Jank.MissedFrames) are manually passed from Java to C++ to be
+    recorded. This is done instead of recording in real time from Java due to
+    the large number of generated samples (potentially ~60 per second).
+    Recording them directly from Java would result in a JNI call for each sample
+    which could cause performance issues.
 
     FrameMetrics only reports frames with Android UI updates. An idle omnibox
     would report only 2 frames per second due to the cursor blink animation.
     Scrolling through a web page may record no frames if no Android UI (like the
     address bar) updates.
   </summary>
+  <token key="Scenario" variants="JankMetricsScenarios"/>
 </histogram>
 
-<histogram name="Android.Jank.JankBursts" units="ms" expires_after="2021-09-30">
+<histogram name="Android.Jank.JankBursts{Scenario}" units="ms"
+    expires_after="2021-09-30">
   <owner>salg@google.com</owner>
   <owner>ssid@chromium.org</owner>
   <summary>
-    Recorded every 30 seconds alongside Android.Jank.FrameDuration. Each sample
+    Recorded alongside Android.Jank.FrameDuration {Scenario}. Each sample
     represents a jank burst: the total frame duration of one or many janky
     frames drawn in quick succession. For example, the following sequence of
     frame durations: [2ms, 100ms, 100ms, 100ms, 2ms, 2ms, 2ms, 100ms, 2ms] would
@@ -1511,22 +1552,31 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     it indicates its jankyness is caused by a different event or animation. (see
     go/clank-zero-browser-jank for more details).
   </summary>
+  <token key="Scenario" variants="JankMetricsScenarios"/>
 </histogram>
 
-<histogram name="Android.Jank.MissedFrames" units="frames"
+<histogram name="Android.Jank.MissedFrames{Scenario}" units="frames"
     expires_after="2021-09-30">
   <owner>salg@google.com</owner>
   <owner>ssid@chromium.org</owner>
   <summary>
-    Number of frames that Android's FrameMetrics API failed to report on because
-    of high main thread activity. Android.Jank.FrameDuration and
-    Android.Jank.JankBursts are not recorded for these missed frames. This
-    metric is reported every 30 seconds along with Android.Jank.FrameDuration.
+    Number of frames that Android's FrameMetrics API skipped reporting on
+    because of high main thread activity. This metric is recorded at the same
+    time as Android.Jank.* histograms {Scenario}. Each sample is the number of
+    frames that we didn't receive timings for, so their draw duration is not
+    recorded in the respective Android.Jank.FrameDuration.* histogram, and (even
+    if its duration was greater than 16ms) it is not counted in any
+    Android.Jank.JankyBursts.* samples.
+
+    A high number of missed frames would mean that we are taking too long to
+    record frame metrics and that the other Android.Jank.* histograms may not be
+    accurate.
   </summary>
+  <token key="Scenario" variants="JankMetricsScenarios"/>
 </histogram>
 
 <histogram name="Android.KernelVersion" enum="AndroidKernelVersion"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>rsesek@chromium.org</owner>
   <summary>
     Reports the kernel major and minor version from the utsname.release field.
@@ -1664,7 +1714,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Android.MemoryPressureNotification"
-    enum="Android.MemoryPressureNotification" expires_after="2021-10-04">
+    enum="Android.MemoryPressureNotification" expires_after="2021-12-05">
   <owner>ssid@chromium.org</owner>
   <summary>
     Memory pressure notifications sent by Android through ComponentCallbacks2.
@@ -1674,7 +1724,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram base="true" name="Android.Messages.Dismissed{MessageIdentifier}"
+<histogram name="Android.Messages.Dismissed{MessageIdentifier}"
     enum="MessageDismissReason" expires_after="2022-06-01">
   <owner>pavely@chromium.org</owner>
   <owner>lazzzis@chromium.org</owner>
@@ -1752,7 +1802,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.NativeBackgroundTask.TaskFinished"
-    enum="BackgroundTaskId" expires_after="2021-06-15">
+    enum="BackgroundTaskId" expires_after="2023-06-15">
   <owner>mheikal@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <owner>hnakashima@chromium.org</owner>
@@ -1790,7 +1840,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.NativeBackgroundTask.TaskStarted"
-    enum="BackgroundTaskId" expires_after="2021-06-15">
+    enum="BackgroundTaskId" expires_after="2023-06-15">
   <owner>mheikal@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <owner>hnakashima@chromium.org</owner>
@@ -1836,7 +1886,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.NTP.Impression" enum="NTPImpressionType"
-    expires_after="2021-10-10">
+    expires_after="2021-12-12">
   <owner>finkm@chromium.org</owner>
   <summary>
     Counts impressions of the NTP on Android. It also counts potential
@@ -1859,7 +1909,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.InvalidMatch" enum="MatchResult"
-    expires_after="2021-11-07">
+    expires_after="2022-01-09">
   <owner>ender@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
@@ -1876,8 +1926,25 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.Omnibox.RefineActionUsage" enum="RefineActionUsage"
+    expires_after="2022-08-01">
+  <owner>ender@chromium.org</owner>
+  <owner>jdonnelly@chromium.org</owner>
+  <summary>
+    Records interactions with the Search Refine button, differentiating by
+    context (zero-prefix vs non-zero-prefix), including the cases where the User
+    did not interact with the Refine button placed beside the Search suggestion
+    at all.
+
+    Recorded once per interaction with the Omnibox and Sugestions, when the
+    Omnibox loses focus. This includes cases where the User chooses to navigate
+    somewhere (both by using a suggestion or pressing Go button on keyboard), or
+    abandons the Omnibox.
+  </summary>
+</histogram>
+
 <histogram name="Android.Omnibox.SuggestionList.LayoutTime"
-    units="microseconds" expires_after="2021-09-19">
+    units="microseconds" expires_after="2021-11-21">
   <owner>ender@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
@@ -1904,7 +1971,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.SuggestionList.MeasureTime"
-    units="microseconds" expires_after="2021-09-19">
+    units="microseconds" expires_after="2021-11-21">
   <owner>ender@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
@@ -1932,7 +1999,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.SuggestionView.CreateTime"
-    units="microseconds" expires_after="2021-10-04">
+    units="microseconds" expires_after="2021-12-05">
   <owner>ender@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
@@ -1955,7 +2022,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.SuggestionView.Reused" enum="BooleanReused"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>ender@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
@@ -2027,7 +2094,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PackageStats.CacheSize" units="MB"
-    expires_after="2021-10-25">
+    expires_after="2021-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -2036,7 +2103,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PackageStats.CodeSize" units="MB"
-    expires_after="2021-10-25">
+    expires_after="2021-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -2047,7 +2114,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PackageStats.DataSize" units="MB"
-    expires_after="2021-10-25">
+    expires_after="2021-12-26">
   <owner>nyquist@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -2057,7 +2124,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.BitmapScalerTask" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2066,7 +2133,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.CacheHits" units="Hits"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2076,7 +2143,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecodeRequests" units="Hits"
-    expires_after="2021-10-04">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2086,7 +2153,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostFailureOutOfMemory" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2100,7 +2167,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoFileError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2114,7 +2181,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoIoError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2128,7 +2195,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoRuntimeError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2142,7 +2209,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoUnknownError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2156,7 +2223,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DialogAction"
-    enum="PhotoPickerDialogAction" expires_after="2021-06-01">
+    enum="PhotoPickerDialogAction" expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2165,7 +2232,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.EnumeratedFiles" units="Files"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2175,7 +2242,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.EnumeratedRate"
-    units="Files per 10th of a second" expires_after="2021-06-01">
+    units="Files per 10th of a second" expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2185,7 +2252,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.EnumerationTime" units="ms"
-    expires_after="2021-08-09">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2195,7 +2262,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.ExifOrientation" enum="ExifOrientation"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2206,7 +2273,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.ImageByteCount" units="KB"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2216,7 +2283,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.ImageDecodeTime" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2226,7 +2293,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.RequestProcessTime" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2237,7 +2304,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.RequestProcessTimeAnimation" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2248,7 +2315,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.RequestProcessTimeThumbnail" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2259,7 +2326,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.UpscaleLowResBitmap" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2270,7 +2337,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.VideoByteCount" units="KB"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2280,7 +2347,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.VideoDecodeTimeAnimation" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2291,7 +2358,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.VideoDecodeTimeThumbnail" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2301,7 +2368,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PlayServices.Installed" enum="BooleanInstalled"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -2311,7 +2378,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PlayServices.Version" units="versioncode"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -2373,7 +2440,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Rotation.BeginToRendererFrameActivation" units="ms"
-    expires_after="M95">
+    expires_after="2021-12-12">
   <owner>jonross@chromium.org</owner>
   <owner>sadrul@chromium.org</owner>
   <summary>
@@ -2435,7 +2502,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.SeccompStatus.RendererSandbox"
-    enum="AndroidSeccompSandboxStatus" expires_after="2021-10-04">
+    enum="AndroidSeccompSandboxStatus" expires_after="2021-12-05">
   <owner>rsesek@chromium.org</owner>
   <summary>
     Reports the status of the seccomp-bpf sandbox in renderer processes.
@@ -2502,7 +2569,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.StrictMode.OverrideUrlLoadingTime" units="ms"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>yfriedman@chromium.org</owner>
   <owner>wnwen@chromium.org</owner>
   <summary>
@@ -2541,12 +2608,12 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     the survey is accepted. Note:
 
     1) The download attempt might not result in a survey download due to
-    different reasons (e.g. download request failed or network failure); 2)
-    Chrome may also successfully download the survey number of times in previous
-    sessions, but the surveys were not able to be shown for min amount of times.
-    In such scenario, the total number of attempts across all sessions will be
-    recorded; 3) If the number of allowed download attempts has been saturated
-    before the survey being accepted, nothing will be recorded.
+    different reasons (e.g. download request failed or network failure). 2)
+    Chrome may have also successfully downloaded the survey several times in
+    previous sessions, but the surveys were not able to be shown for min amount
+    of times. In such scenarios, the total number of attempts across all
+    sessions will be recorded. 3) If the number of allowed download attempts has
+    been saturated before the survey is accepted, nothing will be recorded.
 
     Recorded when a survey prompt is accepted. Android Only.
   </summary>
@@ -2665,7 +2732,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.ThemeColor" enum="Android.ThemeColor"
-    expires_after="M95">
+    expires_after="2021-12-12">
   <owner>sinansahin@google.com</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2769,7 +2836,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AndroidX.ApiCall" enum="AndroidXWebkitApiCall"
     expires_after="2022-01-31">
-  <owner>laisminchillo@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records calls to WebView APIs from AndroidX. Some AndroidX-originating calls
@@ -2780,6 +2847,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowIn30s" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2790,6 +2860,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowIn3m" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2800,6 +2873,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowIn5s" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2810,6 +2886,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowTime" units="ms"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2838,15 +2917,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.ClearProxyOverride" units="units"
     expires_after="2021-08-01">
-  <owner>laisminchillo@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>Records ClearProxyOverride calls.</summary>
 </histogram>
 
 <histogram name="Android.WebView.ComponentUpdater.CPSDirectorySize" units="KB"
     expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Size on disk taken by the ComponentsProviderService serving directory. This
@@ -2856,8 +2935,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.ComponentUpdater.CUSDirectorySize" units="KB"
     expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Size on disk taken by the AwComponentUpdateService directory. This is logged
@@ -2866,9 +2945,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.ComponentUpdater.GetFilesDuration" units="ms"
-    expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
+    expires_after="2022-01-09">
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Duration of ComponentsProviderService getFilesForComponent request. This
@@ -2878,9 +2957,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.ComponentUpdater.GetFilesResult"
-    enum="WebViewComponentUpdaterGetFilesResult" expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
+    enum="WebViewComponentUpdaterGetFilesResult" expires_after="2022-01-09">
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Logs the result of ComponentsProviderService getFilesForComponent request.
@@ -2889,10 +2968,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.WebView.ComponentUpdater.SafeModeActionExecuted"
+    enum="Boolean" expires_after="2022-06-30">
+  <owner>nator@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Whether a SafeMode action was executed by Component Updater services. This
+    is logged whenever a nonembedded Component Updater service checks whether
+    SafeMode is enabled.
+  </summary>
+</histogram>
+
 <histogram name="Android.WebView.ComponentUpdater.UnexpectedExit"
     enum="Boolean" expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Whether AwComponentUpdateService quit unexpectedly on the previous run. This
@@ -2902,9 +2992,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.ComponentUpdater.UpdateJobDuration" units="ms"
-    expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
+    expires_after="2021-12-12">
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Duration of AwComponentUpdateService update job. This job is responsible for
@@ -2914,8 +3004,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.ComponentUpdater.UpdateJobFilesChanged"
     units="count" expires_after="2021-10-08">
-  <owner>laisminchillo@chromium.org</owner>
   <owner>nator@chromium.org</owner>
+  <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     How many components were updated by AwComponentUpdateService update job.
@@ -2925,6 +3015,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.ConnectedToVariationService" enum="Boolean"
     expires_after="M93">
+  <obsolete>
+    Removed Jun 2021 for cleanup (no longer needed): https://crbug.com/1217220
+  </obsolete>
   <owner>hazems@chromium.org</owner>
   <owner>webview-team@google.com</owner>
   <summary>
@@ -2970,7 +3063,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.CustomDefaultVideoPoster" enum="Boolean"
-    expires_after="2021-06-01">
+    expires_after="2021-08-01">
   <owner>torne@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3160,6 +3253,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.EverAttachedToWindow" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -3196,8 +3292,28 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.WebView.ForceDarkBehavior"
+    enum="WebViewForceDarkBehavior" expires_after="2021-12-03">
+  <owner>peter@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records strategy to be used by force dark in WebView when
+    setForceDarkBehavior API is called by the embedding application.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.ForceDarkMode" enum="WebViewForceDarkMode"
+    expires_after="2021-12-03">
+  <owner>peter@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records WebView's force dark setting and the UI's night mode when
+    setForceDark API is called by the embedding application.
+  </summary>
+</histogram>
+
 <histogram name="Android.WebView.Gfx.HardwareDrawType"
-    enum="WebViewDrawAndSubmissionType" expires_after="2021-06-15">
+    enum="WebViewDrawAndSubmissionType" expires_after="2022-01-15">
   <owner>vasilyt@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -3235,6 +3351,69 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.WebView.LoadDataWithBaseUrl.HistoryUrl.{Timing}"
+    enum="URLValueForLoadDataWithBaseURL" expires_after="M95">
+  <owner>rakina@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records whether the history_url_for_data_url parameter used for a
+    loadDataWithBaseURL commit is empty/null, invalid, the same as the baseUrl
+    parameter, the same as the data: URL, or an entirely different value.
+    Recorded at navigation at {Timing}.
+  </summary>
+  <token key="Timing">
+    <variant name="DidCommitNavigation"/>
+    <variant name="NavigationRequestCreated"/>
+  </token>
+</histogram>
+
+<histogram name="Android.WebView.LoadDataWithBaseUrl.IsInMainFrame"
+    enum="BooleanMainFrame" expires_after="M95">
+  <owner>rakina@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    When the base_url_for_data_url parameter is set and the URL is a data: URL
+    (NavigationRequest::IsLoadDataWithBaseURL() returns true), records whether
+    the navigation happens on a main frame or a subframe. Recorded when the
+    NavigationRequest is created.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.LoadDataWithBaseUrl.LoadingUrl"
+    enum="URLValueForLoadDataWithBaseURL" expires_after="M95">
+  <owner>rakina@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records whether the loading URL (DidCommitParams' URL) used for a
+    loadDataWithBaseURL commit is empty/null, invalid, the same as the baseUrl
+    parameter, the same as the data: URL, or an entirely different value.
+    Recorded at DidCommitNavigation.
+  </summary>
+</histogram>
+
+<histogram
+    name="Android.WebView.LoadDataWithBaseUrl.NextNavigationIsSameDocument"
+    enum="Boolean" expires_after="M95">
+  <owner>rakina@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records whether a navigation that happens on/away from a document loaded
+    through a loadDataWithBaseUrl navigation is same-document or not. Recorded
+    at DidCommitNavigation.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.LoadDataWithBaseUrl.SameUrlReplacement"
+    enum="Boolean" expires_after="M95">
+  <owner>rakina@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records whether a loadDataWithBaseURL navigation is categorized as a
+    same-URL-replacement navigation or not. Recorded from
+    NavigationRequest::StartNavigation().
+  </summary>
+</histogram>
+
 <histogram name="Android.WebView.LoadUrl.UrlScheme" enum="WebViewUrlScheme"
     expires_after="2022-03-29">
   <owner>ntfschr@chromium.org</owner>
@@ -3246,6 +3425,46 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     overloads), postUrl(), and loadData (this is implicitly &quot;data:&quot;).
     also records if this value is &quot;empty&quot;, which means either null or
     &quot;about:blank&quot;. This intentionally excludes loadDataWithBaseURL().
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.Metrics.PackagesAllowList.ParseStatus"
+    enum="AppPackageNameAllowlistParseStatus" expires_after="2022-07-01">
+  <owner>hazems@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records the result of parsing the apps package names allowlist used to
+    populate the &quot;app_package_name&quot; field in UMA metrics logs. This is
+    recorded when the AwAppsPackageNamesAllowlistComponentLoaderPolicy is
+    successfully loaded by EmbeddedComponentLoader, i.e when ComponentLoaded is
+    called by the loader.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.Metrics.PackagesAllowList.RecordStatus"
+    enum="AppPackageNameLoggingRuleStatus" expires_after="2022-07-01">
+  <owner>hazems@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records the status of the apps package names allowlist used to populate the
+    &quot;app_package_name&quot; field in UMA metrics log. The status tracks if
+    a new version is loaded, a cached one is used or if loading the allowlist
+    has failed. It's recorded everytime the app package name is queried when a
+    new metrics log is created.
+  </summary>
+</histogram>
+
+<histogram
+    name="Android.WebView.Metrics.PackagesAllowList.ResultReceivingDelay"
+    units="ms" expires_after="2022-07-01">
+  <owner>hazems@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records the time delta between creating a AwMetricsServiceClient instance
+    during WebView startup and the time when the app package names allowlist is
+    loaded and looked up. This only records when a new version of the allowlist
+    is loaded successfully. i.e it's not recorded if the loading the allowlist
+    fails or if a cached version is used.
   </summary>
 </histogram>
 
@@ -3261,7 +3480,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.NonEmbeddedMetrics.HistogramRecordAge"
-    units="minutes" expires_after="2021-07-20">
+    units="minutes" expires_after="2022-06-07">
   <owner>hazems@chromium.org</owner>
   <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -3275,7 +3494,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.NonEmbeddedMetrics.NumHistograms"
-    units="histograms" expires_after="2021-07-20">
+    units="histograms" expires_after="2022-06-07">
   <owner>ntfschr@chromium.org</owner>
   <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -3288,7 +3507,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.NonEmbeddedMetrics.ParsingLogResult"
     enum="AndroidWebViewNonEmbeddedMetricsParsingLogResult"
-    expires_after="2021-07-20">
+    expires_after="2022-06-07">
   <owner>hazems@chromium.org</owner>
   <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -3302,7 +3521,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.NonEmbeddedMetrics.RetrieveMetricsTaskStatus"
     enum="AndroidWebViewNonEmbeddedMetricsRetrieveMetricsTaskStatus"
-    expires_after="2021-07-20">
+    expires_after="2022-06-07">
   <owner>hazems@chromium.org</owner>
   <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -3314,7 +3533,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.NonEmbeddedMetrics.TransmissionResult"
-    enum="AndroidWebViewDevUiMetricsTransmission" expires_after="2021-07-20">
+    enum="AndroidWebViewDevUiMetricsTransmission" expires_after="2022-06-07">
   <owner>ntfschr@chromium.org</owner>
   <owner>hazems@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
@@ -3347,6 +3566,39 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Android.WebView.PageTimeSpent.{Scheme}" units="ms"
+    expires_after="2022-07-01">
+  <owner>mvanouwerkerk@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Time spent on a page. This is measured from navigation commit to the start
+    of the next navigation.
+  </summary>
+  <token key="Scheme">
+    <variant name="App"/>
+    <variant name="Blob"/>
+    <variant name="Chrome"/>
+    <variant name="ChromeNative"/>
+    <variant name="Content"/>
+    <variant name="CustomTab"/>
+    <variant name="Data"/>
+    <variant name="Devtools"/>
+    <variant name="Document"/>
+    <variant name="File"/>
+    <variant name="Filesystem"/>
+    <variant name="Ftp"/>
+    <variant name="Http"/>
+    <variant name="Https"/>
+    <variant name="Inline"/>
+    <variant name="Intent"/>
+    <variant name="Jar"/>
+    <variant name="JavaScript"/>
+    <variant name="Other"/>
+    <variant name="Sms"/>
+    <variant name="Tel"/>
+  </token>
+</histogram>
+
 <histogram name="Android.WebView.PrefLoadTime" units="ms"
     expires_after="2020-12-01">
   <obsolete>
@@ -3367,9 +3619,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Records the number of SafeMode actions WebView received from the
     SafeModeService. This is only recorded once during startup if SafeMode is
-    enabled (see &quot;Android.WebView.SafeMode.Enabled&quot;), otherwise this
-    is not recorded at all (because there were no SafeMode actions to execute).
-    This is recorded before executing any SafeMode actions.
+    enabled (see &quot;Android.WebView.SafeMode.SafeModeEnabled&quot;),
+    otherwise this is not recorded at all (because there were no SafeMode
+    actions to execute). This is recorded before executing any SafeMode actions.
   </summary>
 </histogram>
 
@@ -3379,20 +3631,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records the time spent blocking WebView startup to check for SafeMode (see
-    &quot;Android.WebView.SafeMode.Enabled&quot;). This is recorded once during
-    WebView startup, regardless of whether SafeMode is enabled.
-  </summary>
-</histogram>
-
-<histogram name="Android.WebView.SafeMode.Enabled" enum="BooleanEnabled"
-    expires_after="2022-06-08">
-  <owner>ntfschr@chromium.org</owner>
-  <owner>src/android_webview/OWNERS</owner>
-  <summary>
-    Records whether or not WebView is starting up in SafeMode. This is a mode
-    where WebView takes extra steps during startup to reduce the risk of
-    starting in a bad state. This is recorded once during WebView startup,
-    regardless of whether SafeMode is enabled.
+    &quot;Android.WebView.SafeMode.SafeModeEnabled&quot;). This is recorded once
+    during WebView startup, regardless of whether SafeMode is enabled.
   </summary>
 </histogram>
 
@@ -3404,7 +3644,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Records whether SafeMode was able to execute all the specified SafeMode
     actions or if it encountered an error. This is recorded once during WebView
     startup and only if SafeMode is enabled (see
-    &quot;Android.WebView.SafeMode.Enabled&quot;).
+    &quot;Android.WebView.SafeMode.SafeModeEnabled&quot;).
   </summary>
 </histogram>
 
@@ -3416,8 +3656,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Records the time spent blocking WebView startup to both retrieve the list of
     SafeMode actions from the SafeModeService and to execute those actions. This
     is recorded once during startup only if SafeMode is enabled (see
-    &quot;Android.WebView.SafeMode.Enabled&quot;). This can be interpreted as
-    the additional startup cost caused by enabling SafeMode.
+    &quot;Android.WebView.SafeMode.SafeModeEnabled&quot;). This can be
+    interpreted as the additional startup cost caused by enabling SafeMode.
+  </summary>
+</histogram>
+
+<histogram name="Android.WebView.SafeMode.SafeModeEnabled"
+    enum="BooleanEnabled" expires_after="2022-06-08">
+  <owner>ntfschr@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records whether or not WebView is starting up in SafeMode. This is a mode
+    where WebView takes extra steps during startup to reduce the risk of
+    starting in a bad state. This is recorded once during WebView startup,
+    regardless of whether SafeMode is enabled.
   </summary>
 </histogram>
 
@@ -3433,7 +3685,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.SetProxyOverride.BypassRules"
     enum="BooleanPresent" expires_after="2021-08-01">
-  <owner>laisminchillo@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records whether bypass rules were present in SetProxyOverride calls.
@@ -3442,7 +3694,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.SetProxyOverride.ProxySchemeFilterType"
     enum="AndroidWebViewProxySchemeFilterType" expires_after="2021-08-01">
-  <owner>laisminchillo@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records the type of scheme filter in SetProxyOverride calls.
@@ -3451,7 +3703,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.SetProxyOverride.ProxyUrlType"
     enum="AndroidWebViewProxyUrlType" expires_after="2021-08-01">
-  <owner>laisminchillo@chromium.org</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>Records the type of url in SetProxyOverride calls.</summary>
 </histogram>
@@ -3500,7 +3752,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.CreationTime.Stage1.FactoryInit"
-    units="ms" expires_after="2021-09-26">
+    units="ms" expires_after="2021-11-28">
   <owner>changwan@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3510,7 +3762,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.CreationTime.Stage2.ProviderInit.Cold"
-    units="ms" expires_after="2021-09-26">
+    units="ms" expires_after="2021-11-28">
   <owner>changwan@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3522,7 +3774,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.CreationTime.Stage2.ProviderInit.Warm"
-    units="ms" expires_after="2021-09-26">
+    units="ms" expires_after="2021-11-28">
   <owner>changwan@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3582,7 +3834,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Startup.InitType"
-    enum="AndroidWebViewInitType" expires_after="2021-07-01">
+    enum="AndroidWebViewInitType" expires_after="2021-09-21">
   <owner>torne@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3593,7 +3845,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.SupportLibrary.ClientIsCompat"
     enum="WebViewClientTypeEnum" expires_after="2021-11-13">
-  <owner>laisminchillo@chromium.org</owner>
   <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
@@ -3614,6 +3865,32 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="Android.WebView.UniversalAccess.OriginUrlMismatchInHistoryUtil"
+    enum="BooleanAllowed" expires_after="2022-06-04">
+  <owner>alexmitra@chromium.org</owner>
+  <owner>torne@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records when we allow a cross origin push state from a file URL solely
+    because AllowUniversalAccessFromFileURLs is enabled. This is logged from the
+    implementation of history.
+  </summary>
+</histogram>
+
+<histogram
+    name="Android.WebView.UniversalAccess.OriginUrlMismatchInRenderFrame"
+    enum="BooleanAllowed" expires_after="2022-06-04">
+  <owner>alexmitra@chromium.org</owner>
+  <owner>torne@chromium.org</owner>
+  <owner>src/android_webview/OWNERS</owner>
+  <summary>
+    Records when we allow a cross origin push state from a file URL solely
+    because AllowUniversalAccessFromFileURLs is enabled. This is logged from the
+    implementation of the frame renderer.
+  </summary>
+</histogram>
+
 <histogram name="Android.WebView.UserAgent.Valid" enum="WebViewUserAgentType"
     expires_after="M88">
   <obsolete>
@@ -3629,8 +3906,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Visibility.Global" enum="WebViewVisibility"
-    expires_after="2021-07-01">
+    expires_after="2022-06-01">
   <owner>idries@google.com</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records the global visibility state of WebView in seconds, updated with
@@ -3644,8 +3922,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Visibility.PerWebView"
-    enum="WebViewVisibility" expires_after="2021-07-01">
+    enum="WebViewVisibility" expires_after="2022-06-01">
   <owner>idries@google.com</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records per-WebView visibility duration in seconds, updated with every
@@ -3661,8 +3940,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.WebViewOpenWebVisible.Global"
-    enum="WebViewOpenWebVisibility" expires_after="2021-07-01">
+    enum="WebViewOpenWebVisibility" expires_after="2022-06-01">
   <owner>idries@google.com</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Identical to Android.WebView.Visibility.Global except that the
@@ -3676,8 +3956,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.WebViewOpenWebVisible.PerWebView"
-    enum="WebViewOpenWebVisibility" expires_after="2021-07-01">
+    enum="WebViewOpenWebVisibility" expires_after="2022-06-01">
   <owner>idries@google.com</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Identical to Android.WebView.Visibility.PerWebView except that the
@@ -3691,8 +3972,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.WebViewOpenWebVisible.ScreenPortion"
-    enum="WebViewOpenWebScreenPortion" expires_after="2021-07-01">
+    enum="WebViewOpenWebScreenPortion" expires_after="2022-06-01">
   <owner>idries@google.com</owner>
+  <owner>ntfschr@chromium.org</owner>
   <owner>src/android_webview/OWNERS</owner>
   <summary>
     Records the number of seconds that WebView is displaying Open Web Content

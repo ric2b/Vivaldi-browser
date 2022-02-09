@@ -27,6 +27,7 @@
 #include "base/synchronization/atomic_flag.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_checker.h"
+#include "media/base/timestamp_constants.h"
 #include "ui/gfx/geometry/size.h"
 
 @class PlayerNotificationObserver;
@@ -162,18 +163,18 @@ class AVFMediaDecoder {
   base::scoped_nsobject<id> time_observer_handle_;
 
   base::TimeDelta duration_;
-  AudioStreamBasicDescription audio_stream_format_;
+  AudioStreamBasicDescription audio_stream_format_{0};
   CMFormatDescriptionRef video_stream_format_;
   gfx::Size video_coded_size_;
-  int bitrate_;
+  int bitrate_ = 0;
 
-  base::TimeDelta last_audio_timestamp_;
-  base::TimeDelta last_video_timestamp_;
-  PlaybackState playback_state_;
+  base::TimeDelta last_audio_timestamp_ = media::kNoTimestamp;
+  base::TimeDelta last_video_timestamp_ = media::kNoTimestamp;
+  PlaybackState playback_state_ = STOPPED;
 
   // Whether we are currently processing either a user- or auto-initiated seek
   // request.
-  bool seeking_;
+  bool seeking_ = false;
 
   // A user- or auto-initiated seek request postponed until AVPlayer is not
   // considered likely to stall for lack of data.
@@ -190,13 +191,13 @@ class AVFMediaDecoder {
   // request.
   base::OnceClosure seek_on_seek_done_task_;
 
-  bool stream_has_ended_;
+  bool stream_has_ended_ = false;
   base::TimeDelta min_loaded_range_size_;
 
   scoped_refptr<SharedCancellationFlag> background_tasks_canceled_;
 
   base::ThreadChecker thread_checker_;
-  base::WeakPtrFactory<AVFMediaDecoder> weak_ptr_factory_;
+  base::WeakPtrFactory<AVFMediaDecoder> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AVFMediaDecoder);
 };

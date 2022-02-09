@@ -20,7 +20,6 @@
 <translation id="125220115284141797">Predeterminado</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de Marcadores</translation>
-<translation id="1380436189840894976">¿Abandonar de todos modos el modo incógnito?</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1433811987160647649">Preguntar antes de acceder</translation>
 <translation id="1451375123200651445">Página web (como un único archivo)</translation>
@@ -37,7 +36,6 @@
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1627276047960621195">Descriptores de archivos</translation>
 <translation id="1682548588986054654">Nueva ventana de incógnito</translation>
-<translation id="1698122934742150150">Solo a la sesión de incógnito actual</translation>
 <translation id="1706625117072057435">Niveles de zoom</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1723824996674794290">Nueva &amp;ventana</translation>
@@ -153,10 +151,8 @@
 <translation id="3511307672085573050">Copiar la &amp;dirección del vínculo</translation>
 <translation id="354068948465830244">Esta extensión puede leer y cambiar los datos del sitio</translation>
 <translation id="3560034655160545939">&amp;Corrección ortográfica</translation>
-<translation id="3574917942258583917">¿Deseas salir del modo de navegación incógnito de todas formas?</translation>
 <translation id="3587482841069643663">Todos</translation>
 <translation id="3627588569887975815">Abrir el enlace en una ventana de incó&amp;gnito</translation>
-<translation id="3668823961463113931">Manejadores</translation>
 <translation id="3678156199662914018">Extensión: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitud para compartir la pantalla de <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Pe&amp;gar e ir a <ph name="URL" /></translation>
@@ -189,7 +185,6 @@
 <translation id="4096508467498758490">Inhabilitar extensiones en modo de programador</translation>
 <translation id="4100839878934973028">Otro programa en tu computadora agregó una aplicación que puede cambiar el funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Cerrar el navegador antes de importar</translation>
-<translation id="4115080753528843955">Algunos servicios de contenido usan identificadores únicos con el propósito de autorizar el acceso a contenido protegido</translation>
 <translation id="4130207949184424187">Esta extensión cambió la página que se muestra al realizar búsquedas desde el cuadro multifunción.</translation>
 <translation id="4131410914670010031">Blanco y negro</translation>
 <translation id="4176463684765177261">Deshabilitado</translation>

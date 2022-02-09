@@ -252,7 +252,7 @@ void MailPrivateWriteTextToMessageFileFunction::OnFinished(bool result) {
   if (result == true) {
     Respond(NoArguments());
   } else {
-    Respond(Error(base::StringPrintf("Error saving file")));
+    Respond(Error("Error saving file"));
   }
 }
 
@@ -284,7 +284,7 @@ void MailPrivateWriteBufferToMessageFileFunction::OnFinished(bool result) {
   if (result == true) {
     Respond(NoArguments());
   } else {
-    Respond(Error(base::StringPrintf("Error saving file")));
+    Respond(Error("Error saving file"));
   }
 }
 

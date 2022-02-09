@@ -58,7 +58,7 @@ bool DocumentBlockedInterstitial::ShouldDisplayURL() const {
 void DocumentBlockedInterstitial::OnInterstitialClosing() {}
 
 void DocumentBlockedInterstitial::PopulateInterstitialStrings(
-    base::DictionaryValue* load_time_data) {
+    base::Value* load_time_data) {
   CHECK(load_time_data);
 
   std::u16string blocker_name =
@@ -70,19 +70,19 @@ void DocumentBlockedInterstitial::PopulateInterstitialStrings(
           ? l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_TRACKERS)
           : l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_ADS);
 
-  load_time_data->SetString(
+  load_time_data->SetStringKey(
       "tabTitle",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_TAB_TITLE, blocker_name));
-  load_time_data->SetString(
+  load_time_data->SetStringKey(
       "heading",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_HEADING, blocker_name));
-  load_time_data->SetString(
+  load_time_data->SetStringKey(
       "primaryParagraph", l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_INFO));
-  load_time_data->SetString(
+  load_time_data->SetStringKey(
       "proceedButtonText",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_ALLOW_DOMAIN, block_type,
                                  GetFormattedHostName()));
-  load_time_data->SetString(
+  load_time_data->SetStringKey(
       "primaryButtonText",
       l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_GO_BACK));
 }

@@ -10,7 +10,11 @@ import android.content.res.Resources;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.ColorRes;
+import androidx.annotation.DimenRes;
 import androidx.appcompat.content.res.AppCompatResources;
+
+import com.google.android.material.color.MaterialColors;
+import com.google.android.material.elevation.ElevationOverlayProvider;
 
 import org.chromium.base.ApiCompatibilityUtils;
 
@@ -18,6 +22,8 @@ import org.chromium.base.ApiCompatibilityUtils;
  * Provides common default colors for Chrome UI.
  */
 public class ChromeColors {
+    private static final String TAG = "ChromeColors";
+
     /**
      * Determines the default theme color used for toolbar based on the provided parameters.
      *
@@ -30,6 +36,20 @@ public class ChromeColors {
         return forceDarkBgColor
                 ? ApiCompatibilityUtils.getColor(res, R.color.toolbar_background_primary_dark)
                 : ApiCompatibilityUtils.getColor(res, R.color.toolbar_background_primary);
+    }
+
+    /**
+     * Determines the default theme color used for toolbar based on the provided parameters.
+     *
+     * @param context {@link Context} used to retrieve colors.
+     * @param isIncognito Whether the color is used in incognito mode. If true, this method will
+     *                    return a non-dynamic dark theme color.
+     * @return The default theme color.
+     */
+    public static @ColorInt int getDefaultThemeColor(Context context, boolean isIncognito) {
+        return isIncognito ? ApiCompatibilityUtils.getColor(
+                       context.getResources(), R.color.toolbar_background_primary_dark)
+                           : MaterialColors.getColor(context, R.attr.colorSurface, TAG);
     }
 
     /**
@@ -122,5 +142,17 @@ public class ChromeColors {
     public static ColorStateList getSecondaryIconTint(Context context, boolean forceLightIconTint) {
         return AppCompatResources.getColorStateList(
                 context, getSecondaryIconTintRes(forceLightIconTint));
+    }
+
+    /**
+     * Calculates the surface color using theme colors. Only the elevation is needed.
+     * @param context The {@link Context} used to retrieve attrs, colors, and dimens.
+     * @param elevationDimen The dimen to look up the elevation level with.
+     * @return the {@link ColorInt} for the background of a surface view.
+     */
+    public static @ColorInt int getSurfaceColor(Context context, @DimenRes int elevationDimen) {
+        ElevationOverlayProvider elevationOverlayProvider = new ElevationOverlayProvider(context);
+        float elevation = context.getResources().getDimension(elevationDimen);
+        return elevationOverlayProvider.compositeOverlayWithThemeSurfaceColorIfNeeded(elevation);
     }
 }

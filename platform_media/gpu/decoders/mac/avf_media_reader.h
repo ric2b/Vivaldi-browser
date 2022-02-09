@@ -23,12 +23,9 @@
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 
-@class DataSourceLoader;
-
 namespace media {
 
 class IPCDataSource;
-class DataRequestHandler;
 
 // Wraps AVAssetReader and uses it to perform media decoding tasks.
 //
@@ -89,10 +86,9 @@ class AVFMediaReader {
   AVAssetTrack* GetTrack(PlatformStreamType stream_type) const;
 
   base::scoped_nsobject<AVAsset> asset_;
-  base::scoped_nsobject<DataSourceLoader> data_source_loader_;
   StreamReader stream_readers_[kPlatformStreamTypeCount];
 
-  int bitrate_;
+  int bitrate_ = 0;
   gfx::Size video_coded_size_;
 
   dispatch_queue_t queue_;

@@ -40,6 +40,7 @@ import org.chromium.base.metrics.test.ShadowRecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -63,7 +64,8 @@ import java.util.Map;
 /** Unit tests for the {@link AdaptiveToolbarButtonController} */
 @Config(manifest = Config.NONE,
         shadows = {ShadowRecordHistogram.class,
-                AdaptiveToolbarButtonControllerTest.ShadowChromeFeatureList.class})
+                AdaptiveToolbarButtonControllerTest.ShadowChromeFeatureList.class,
+                AdaptiveToolbarButtonControllerTest.ShadowVoiceRecognitionHandler.class})
 @RunWith(BaseRobolectricTestRunner.class)
 @EnableFeatures({ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR,
         ChromeFeatureList.VOICE_SEARCH_AUDIO_CAPTURE_POLICY})
@@ -78,6 +80,17 @@ public class AdaptiveToolbarButtonControllerTest {
         public static String getFieldTrialParamByFeature(String feature, String paramKey) {
             Assert.assertTrue(ChromeFeatureList.isEnabled(feature));
             return sParamValues.getOrDefault(paramKey, "");
+        }
+    }
+
+    @Implements(VoiceRecognitionHandler.class)
+    static class ShadowVoiceRecognitionHandler {
+        static boolean sIsVoiceRecognitionEnabled;
+
+        @Implementation
+        public static boolean isVoiceSearchEnabled(
+                AndroidPermissionDelegate androidPermissionDelegate) {
+            return sIsVoiceRecognitionEnabled;
         }
     }
 
@@ -104,8 +117,8 @@ public class AdaptiveToolbarButtonControllerTest {
         MockitoAnnotations.initMocks(this);
         ShadowChromeFeatureList.sParamValues.clear();
         ShadowRecordHistogram.reset();
+        ShadowVoiceRecognitionHandler.sIsVoiceRecognitionEnabled = true;
         AdaptiveToolbarFeatures.clearParsedParamsForTesting();
-        AdaptiveToolbarFeatures.setIsVoiceRecognitionEnabledForTesting(true);
         mButtonData = new ButtonDataImpl(
                 /*canShow=*/true, /*drawable=*/null, mock(View.OnClickListener.class),
                 /*contentDescriptionResId=*/0, /*supportsTinting=*/false,
@@ -114,7 +127,6 @@ public class AdaptiveToolbarButtonControllerTest {
 
     @After
     public void tearDown() {
-        AdaptiveToolbarFeatures.clearParsedParamsForTesting();
         SharedPreferencesManager.getInstance().removeKey(
                 ChromePreferenceKeys.ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED);
         SharedPreferencesManager.getInstance().removeKey(ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS);

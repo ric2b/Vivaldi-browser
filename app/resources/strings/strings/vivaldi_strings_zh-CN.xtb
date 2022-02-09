@@ -15,7 +15,6 @@
 <translation id="3485073444286678268">目标文件夹无效，请重新选择。</translation>
 <translation id="3642991949832251880">仍要退出 Vivaldi？</translation>
 <translation id="3784826321032465839">安装 Vivaldi</translation>
-<translation id="3850557856045828465">警告：Vivaldi 无法阻止扩展程序记录您的浏览历史。要在隐身模式下停用该扩展程序，请取消选中此选项。</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4079588913451946215">全局用户模式安装</translation>
 <translation id="421958613172216971">选择一个文件夹</translation>
@@ -26,11 +25,11 @@
 <translation id="4619978527973181021">接受并安装</translation>
 <translation id="479976146866774527">正在安装 Vivaldi</translation>
 <translation id="5051728323101947360">将独立版本的 Vivaldi 设为默认应用</translation>
+<translation id="5167047459440711824">警告：Vivaldi 无法阻止扩展程序记录您的浏览活动。若要在无痕模式下停用该扩展程序，请取消选中此选项。</translation>
 <translation id="5247376421371319618">接受并更新</translation>
 <translation id="5288672417093782294">转到 Vivaldi 通知设置</translation>
 <translation id="5302048478445481009">语言</translation>
 <translation id="5743878272102782872">任务管理器 - Vivaldi</translation>
-<translation id="6213772951145281007">退出 Vivaldi 时清除 Cookie 及网站数据</translation>
 <translation id="6569282126279967574">哎呀！Vivaldi 浏览器崩溃了。是否立即重新启动？</translation>
 <translation id="694714344624446243">Vivaldi 安装程序</translation>
 <translation id="7658239707568436148">放弃</translation>

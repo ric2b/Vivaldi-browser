@@ -6,6 +6,7 @@
 <translation id="1644574205037202324">历史</translation>
 <translation id="17513872634828108">打开的标签</translation>
 <translation id="1829244130665387512">在网页中查找</translation>
+<translation id="1910514478706885609">在新标签组中打开</translation>
 <translation id="2038563949887743358">开启“请求切换到桌面版网站”</translation>
 <translation id="2306442503286132111">书签已保存至 <ph name="FOLDER_NAME" /> 文件夹</translation>
 <translation id="2433507940547922241">外观</translation>
@@ -17,6 +18,7 @@
 <translation id="3076631378407175873">版权所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留所有权利。</translation>
 <translation id="3234355010754616171">新建隐身标签</translation>
 <translation id="3377025655491224618">隐私标签</translation>
+<translation id="3504699618187058974">标签组</translation>
 <translation id="3518985090088779359">接受并继续</translation>
 <translation id="3700829948786686853">欢迎使用 Vivaldi</translation>
 <translation id="3719826155360621982">首页</translation>
@@ -25,6 +27,7 @@
 <translation id="4243710787042215766">在隐身标签中打开</translation>
 <translation id="4526803704855831732">隐身标签</translation>
 <translation id="4759238208242260848">下载</translation>
+<translation id="4865987431642283918">默认设备语言</translation>
 <translation id="4883379392681899581">离开隐身模式</translation>
 <translation id="4943872375798546930">无结果</translation>
 <translation id="49576331685473090">内容封锁器</translation>
@@ -37,6 +40,7 @@
 要调整您的搜索内容，长按即可选中所需内容。要缩小您的搜索范围，请向上滑动到面板顶部，然后点按搜索框。</translation>
 <translation id="6150320133806434356">书签已保存</translation>
 <translation id="6336451774241870485">新建隐身标签</translation>
+<translation id="6585139692466700358">借助 Vivaldi 的翻译服务将网站翻译为其他语言</translation>
 <translation id="6593061639179217415">桌面版网站</translation>
 <translation id="6610147964972079463">关闭隐身标签</translation>
 <translation id="706339621163631076">浏览器隐私政策</translation>

@@ -7,88 +7,63 @@
 
 #include "platform_media/renderer/decoders/ipc_factory.h"
 
-#include "platform_media/common/platform_mime_util.h"
-
-#include "base/bind.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
-#if defined(OS_MAC)
-#include "base/mac/mac_util.h"
-#endif
+#include "platform_media/common/platform_media.mojom.h"
 
 namespace media {
 
+IPCFactory* IPCFactory::g_factory = nullptr;
+
 namespace {
 
-struct IPCFactoryParams {
-  IPCMediaPipelineHost::Creator host_creator;
-  scoped_refptr<base::SequencedTaskRunner> main_task_runner;
-  scoped_refptr<base::SequencedTaskRunner> media_task_runner;
+struct IPCFactoryGlobals {
+  mojo::Remote<platform_media::mojom::PipelineFactory> gpu_remote;
 };
 
-IPCFactoryParams* GetIPCFactoryParams() {
-  static base::NoDestructor<IPCFactoryParams> params;
-  return params.get();
+IPCFactoryGlobals& GetIPCFactoryGlobals() {
+  static base::NoDestructor<IPCFactoryGlobals> globals;
+  return *globals;
 }
 
 }  // namespace
 
-// static
-bool IPCFactory::IsAvailable() {
-  if (IsPlatformMediaPipelineAvailable(PlatformMediaCheckType::BASIC)) {
-    VLOG(2) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << ": Yes";
-    return true;
+IPCFactory::IPCFactory() = default;
+IPCFactory::~IPCFactory() = default;
+
+/* static */
+void IPCFactory::GetPipelienFactory(GetPipelineFactoryResult callback) {
+  instance()->GetGpuConnectorRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&IPCFactory::GetPipelienFactoryImpl, std::move(callback)));
+}
+
+/* static */
+void IPCFactory::GetPipelienFactoryImpl(
+    IPCFactory::GetPipelineFactoryResult callback) {
+  DCHECK(instance()->GetGpuConnectorRunner()->RunsTasksInCurrentSequence());
+  IPCFactoryGlobals& globals = GetIPCFactoryGlobals();
+  if (!globals.gpu_remote) {
+    mojo::PendingReceiver<platform_media::mojom::PipelineFactory> receiver =
+        globals.gpu_remote.BindNewPipeAndPassReceiver();
+
+    globals.gpu_remote.set_disconnect_handler(base::BindOnce([]() {
+      // This will trigger a new factory creation attempt when accessing the
+      // factory next time.
+      GetIPCFactoryGlobals().gpu_remote.reset();
+    }));
+
+    instance()->CreateGpuFactory(std::move(receiver));
   }
-
-  VLOG(2) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << ": No";
-  return false;
+  std::move(callback).Run(*globals.gpu_remote);
 }
 
-// static
-void IPCFactory::Preinitialize(
-    const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
-    const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
-    const scoped_refptr<base::SequencedTaskRunner>& media_task_runner) {
-  DCHECK(IsAvailable());
-  DCHECK(ipc_media_pipeline_host_creator);
-  DCHECK(main_task_runner);
-  DCHECK(media_task_runner);
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-
-  // The params may already be initialized when running tests.
-  IPCFactoryParams* params = GetIPCFactoryParams();
-  params->host_creator = ipc_media_pipeline_host_creator;
-  params->main_task_runner = main_task_runner;
-  params->media_task_runner = media_task_runner;
-}
-
-// static
-std::unique_ptr<IPCMediaPipelineHost> IPCFactory::CreateHostOnMainThread() {
-  std::unique_ptr<IPCMediaPipelineHost> host;
-  IPCFactoryParams* params = GetIPCFactoryParams();
-  if (params->host_creator) {
-    DCHECK(params->main_task_runner);
-    DCHECK(params->main_task_runner->RunsTasksInCurrentSequence());
-    host = params->host_creator.Run();
-  }
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " host=" << host.get();
-  return host;
-}
-
-// static
-const scoped_refptr<base::SequencedTaskRunner>& IPCFactory::MediaTaskRunner() {
-  IPCFactoryParams* params = GetIPCFactoryParams();
-  DCHECK(params->media_task_runner);
-  return params->media_task_runner;
-}
-
-// static
-const scoped_refptr<base::SequencedTaskRunner>& IPCFactory::MainTaskRunner() {
-  IPCFactoryParams* params = GetIPCFactoryParams();
-  DCHECK(params->main_task_runner);
-  return params->main_task_runner;
+/* static */
+void IPCFactory::ResetGpuRemoteForTests() {
+  DCHECK(instance()->GetGpuConnectorRunner()->RunsTasksInCurrentSequence());
+  GetIPCFactoryGlobals().gpu_remote.reset();
 }
 
 }  // namespace media

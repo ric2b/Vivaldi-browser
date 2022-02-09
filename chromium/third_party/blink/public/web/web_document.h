@@ -34,6 +34,8 @@
 #include "net/cookies/site_for_cookies.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "services/network/public/mojom/restricted_cookie_manager.mojom-shared.h"
+#include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_draggable_region.h"
@@ -82,8 +84,8 @@ class WebDocument : public WebNode {
   BLINK_EXPORT WebString Encoding() const;
   BLINK_EXPORT WebString ContentLanguage() const;
   BLINK_EXPORT WebString GetReferrer() const;
-  BLINK_EXPORT absl::optional<SkColor> ThemeColor() const;
-  // The url of the OpenSearch Desription Document (if any).
+  BLINK_EXPORT absl::optional<SkColor> ThemeColor();
+  // The url of the OpenSearch Description Document (if any).
   BLINK_EXPORT WebURL OpenSearchDescriptionURL() const;
 
   // Returns the frame the document belongs to or 0 if the document is
@@ -141,6 +143,22 @@ class WebDocument : public WebNode {
   BLINK_EXPORT uint64_t GetVisualViewportScrollingElementIdForTesting();
 
   BLINK_EXPORT bool IsLoaded();
+
+  // Returns true if the document is in prerendering.
+  BLINK_EXPORT bool IsPrerendering();
+
+  // Return true if  accessibility processing has been enabled.
+  BLINK_EXPORT bool IsAccessibilityEnabled();
+
+  // Adds `callback` to the post-prerendering activation steps.
+  // https://jeremyroman.github.io/alternate-loading-modes/#document-post-prerendering-activation-steps-list
+  BLINK_EXPORT void AddPostPrerenderingActivationStep(
+      base::OnceClosure callback);
+
+  // Sets a cookie manager which can be used for this document.
+  BLINK_EXPORT void SetCookieManager(
+      CrossVariantMojoRemote<
+          network::mojom::RestrictedCookieManagerInterfaceBase> cookie_manager);
 
 #if INSIDE_BLINK
   BLINK_EXPORT WebDocument(Document*);

@@ -64,16 +64,13 @@ class MEDIA_EXPORT Buffer {
   // on errors.
   static void Read(Buffer buffer, ReadCB read_cb);
 
-  // Indicate that the last read operation completed with an error. Once set,
-  // the error status cannot be cleared.
-  void SetReadError();
-
-  // Set the last read size. The value must not be negative.
-  void SetReadSize(int read_size);
-
   // Deliver the buffer with new data back to the callback passed to Read(). The
   // method consumes the instance.
-  static void SendReply(Buffer buffer);
+  static bool OnRawDataRead(int read_size, Buffer buffer);
+
+  static void OnRawDataError(Buffer buffer) {
+    OnRawDataRead(kReadError, std::move(buffer));
+  }
 
   bool IsReadError() const;
   int GetReadSize() const;
@@ -81,7 +78,6 @@ class MEDIA_EXPORT Buffer {
   const uint8_t* GetReadData() const;
 
  private:
-  // To make the move cheap wrap the implemenatation around unique_ptr.
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

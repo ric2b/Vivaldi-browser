@@ -46,7 +46,7 @@ static const size_t kInvalidIndex = -1;
 // It is the responsibility of something upstream (at time of writing, the sync
 // server) to create these tagged nodes when initializing sync for the first
 // time for a user.  Thus, once the backend finishes initializing, the
-// ProfileSyncService can rely on the presence of tagged nodes.
+// SyncService can rely on the presence of tagged nodes.
 const char kMainNotesTag[] = "main_notes";
 const char kOtherNotesTag[] = "other_notes";
 const char kTrashNotesTag[] = "trash_notes";
@@ -368,6 +368,15 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
     return node;
   }
 
+  // Check to prevent creating empty lists in |updates_per_parent_id| and
+  // unnecessary rehashing.
+  auto updates_per_parent_id_iter =
+      updates_per_parent_id->find(node.entity().id);
+  if (updates_per_parent_id_iter == updates_per_parent_id->end()) {
+    return node;
+  }
+  DCHECK(!updates_per_parent_id_iter->second.empty());
+
   // Only folders may have descendants (ignore them otherwise). Treat
   // permanent nodes as folders explicitly.
   if (!node.update_.entity.is_folder &&
@@ -376,8 +385,8 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   }
 
   // Populate descendants recursively.
-  for (UpdateResponseData& child_update :
-       (*updates_per_parent_id)[node.entity().id]) {
+  node.children_.reserve(updates_per_parent_id_iter->second.size());
+  for (UpdateResponseData& child_update : updates_per_parent_id_iter->second) {
     DCHECK_EQ(child_update.entity.parent_id, node.entity().id);
     DCHECK(IsValidNotesSpecifics(child_update.entity.specifics.notes(),
                                  child_update.entity.is_folder));
@@ -387,8 +396,8 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   }
 
   // Sort the children according to their unique position.
-  std::stable_sort(node.children_.begin(), node.children_.end(),
-                   UniquePositionLessThan);
+  std::sort(node.children_.begin(), node.children_.end(),
+            UniquePositionLessThan);
 
   return node;
 }

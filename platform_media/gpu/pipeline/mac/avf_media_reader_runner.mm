@@ -13,12 +13,12 @@
 #include "media/base/bind_to_current_loop.h"
 
 #include "base/vivaldi_switches.h"
-#include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 #include "platform_media/gpu/decoders/mac/avf_media_reader.h"
 #include "platform_media/gpu/decoders/mac/data_request_handler.h"
+#include "platform_media/gpu/pipeline/mac/media_utils_mac.h"
 
 namespace media {
 
@@ -29,42 +29,40 @@ void InitializeReader(AVFMediaReader* reader,
                       PlatformMediaPipeline::InitializeCB initialize_cb) {
   const bool success = reader->Initialize(std::move(asset));
 
-  int bitrate = -1;
-  media::PlatformMediaTimeInfo time_info;
-  media::PlatformAudioConfig audio_config;
-  media::PlatformVideoConfig video_config;
-
+  auto result = platform_media::mojom::PipelineInitResult::New();
   if (success) {
-    bitrate = reader->bitrate();
-    time_info.duration = reader->duration();
-    time_info.start_time = reader->start_time();
+    result->bitrate = reader->bitrate();
+    result->time_info.duration = reader->duration();
+    result->time_info.start_time = reader->start_time();
 
     if (reader->has_audio_track()) {
-      audio_config.format = SampleFormat::kSampleFormatF32;
-      audio_config.channel_count =
+      result->audio_config.format = SampleFormat::kSampleFormatF32;
+      result->audio_config.channel_count =
           reader->audio_stream_format().mChannelsPerFrame;
-      audio_config.samples_per_second =
+      result->audio_config.samples_per_second =
           reader->audio_stream_format().mSampleRate;
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " Using PlatformAudioConfig : " << Loggable(audio_config);
+              << " Using PlatformAudioConfig : "
+              << Loggable(result->audio_config);
     } else {
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No Audio Track ";
     }
 
     if (reader->has_video_track()) {
       media::Strides strides = reader->GetStrides();
-      video_config = GetPlatformVideoConfig(
+      result->video_config = GetPlatformVideoConfig(
           reader->video_stream_format(), reader->video_transform(),
           strides.stride_Y, strides.stride_UV);
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " Using PlatformVideoConfig : " << Loggable(video_config);
+              << " Using PlatformVideoConfig : "
+              << Loggable(result->video_config);
     } else {
       VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No Video Track ";
     }
+    result->success = true;
   }
 
-  std::move(initialize_cb)
-      .Run(success, bitrate, time_info, audio_config, video_config);
+  std::move(initialize_cb).Run(std::move(result));
 }
 
 }  // namespace
@@ -75,7 +73,7 @@ AVFMediaReaderRunner::AVFMediaReaderRunner() {
 
 AVFMediaReaderRunner::~AVFMediaReaderRunner() {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   data_request_handler_->Stop();
 
@@ -116,52 +114,15 @@ bool AVFMediaReaderRunner::IsAvailable() {
   return use_reader;
 }
 
-// static
-void AVFMediaReaderRunner::WarmUp() {
-  if (!IsAvailable())
-    return;
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-
-  // To warmup the sandbox we do not need to read anything. It is sufficient
-  // to report an empty stream to media API.
-  ipc_data_source::Info source_info;
-  source_info.size = 0;
-  source_info.mime_type = "video/mp4";
-  source_info.buffer.Init(base::ReadOnlySharedMemoryMapping(),
-                          ipc_data_source::Reader());
-
-  // Normally AVFMediaReader runs on own queue and DataRequestHandler lives on
-  // the main thread queue. But the warmup function runs on the main thread and
-  // should not return until the AVFMediaReader::Initialize returns. Yet the
-  // data source should live on a queue that never blocks to avoid a deadlock.
-  // So we reverse queues and directly run Initialize on the main thread.
-  dispatch_queue_t loader_queue = dispatch_queue_create(
-      "com.vivaldi.warmupMediaLoader", DISPATCH_QUEUE_SERIAL);
-
-  scoped_refptr<DataRequestHandler> data_request_handler =
-      base::MakeRefCounted<media::DataRequestHandler>();
-  data_request_handler->Init(std::move(source_info), loader_queue);
-
-  AVFMediaReader reader(dispatch_get_main_queue());
-  base::scoped_nsobject<AVAsset> asset(data_request_handler->GetAsset(),
-                                       base::scoped_policy::RETAIN);
-  reader.Initialize(std::move(asset));
-  dispatch_async(loader_queue, ^{
-    data_request_handler->Stop();
-  });
-  dispatch_release(loader_queue);
-}
-
 void AVFMediaReaderRunner::Initialize(ipc_data_source::Info source_info,
                                       InitializeCB initialize_cb) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Mime type : " << source_info.mime_type;
 
   data_request_handler_ = base::MakeRefCounted<media::DataRequestHandler>();
-  data_request_handler_->Init(std::move(source_info),
-                              dispatch_get_main_queue());
+  data_request_handler_->Init(std::move(source_info), nil);
 
   reader_queue_ = dispatch_queue_create("com.operasoftware.MediaReader",
                                         DISPATCH_QUEUE_SERIAL);
@@ -169,8 +130,7 @@ void AVFMediaReaderRunner::Initialize(ipc_data_source::Info source_info,
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << ": Failed, could not create dispatch queue";
     std::move(initialize_cb)
-        .Run(false, -1, media::PlatformMediaTimeInfo(),
-             media::PlatformAudioConfig(), media::PlatformVideoConfig());
+        .Run(platform_media::mojom::PipelineInitResult::New());
     return;
   }
 
@@ -189,7 +149,7 @@ void AVFMediaReaderRunner::ReadMediaData(IPCDecodingBuffer buffer) {
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Renderer asking for media data, stream_type="
           << GetStreamTypeName(buffer.stream_type());
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   __block auto cb = BindToCurrentLoop(base::BindOnce(
       &AVFMediaReaderRunner::DataReady, weak_ptr_factory_.GetWeakPtr()));
@@ -202,14 +162,14 @@ void AVFMediaReaderRunner::ReadMediaData(IPCDecodingBuffer buffer) {
 
 void AVFMediaReaderRunner::WillSeek() {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   data_request_handler_->Suspend();
 }
 
 void AVFMediaReaderRunner::Seek(base::TimeDelta time, SeekCB seek_cb) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   data_request_handler_->Resume();
 
@@ -224,7 +184,7 @@ void AVFMediaReaderRunner::DataReady(IPCDecodingBuffer ipc_buffer) {
           << " stream_type=" << GetStreamTypeName(ipc_buffer.stream_type())
           << " status=" << static_cast<int>(ipc_buffer.status())
           << " suspended_handler=" << data_request_handler_->IsSuspended();
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (ipc_buffer.status() == MediaDataStatus::kMediaError &&
       data_request_handler_->IsSuspended() && ipc_buffer.data_size() > 0) {

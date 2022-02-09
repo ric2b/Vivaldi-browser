@@ -3,6 +3,8 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_BLOCKED_URL_REPORTER_TAB_HELPER_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_BLOCKED_URL_REPORTER_TAB_HELPER_H_
 
+#include <set>
+
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"

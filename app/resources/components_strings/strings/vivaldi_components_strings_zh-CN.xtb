@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">继续</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />正在进行网络诊断<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">通知</translation>
+<translation id="2491414235131909199">此页面已被某个扩展程序屏蔽</translation>
 <translation id="2501278716633472235">返回</translation>
 <translation id="2539524384386349900">检测</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 发送的响应无效。</translation>
@@ -143,6 +144,7 @@
 <translation id="5810442152076338065">您与 <ph name="DOMAIN" /> 之间的连接采用过时的加密套件进行了加密。</translation>
 <translation id="5838278095973806738">请勿在此网站上输入任何敏感信息（例如密码或信用卡信息），因为攻击者可能会盗取这些信息。</translation>
 <translation id="5869405914158311789">无法访问此网站</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{正在使用 1 个} other {正在使用 # 个}}</translation>
 <translation id="5932224571077948991">网站展示过侵扰性或误导性广告</translation>
 <translation id="6051221802930200923">您目前无法访问 <ph name="SITE" />，因为此网站使用了证书锁定。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="6146055958333702838">请检查所有网线连接状况，然后重启所有您可能正在使用的任何路由器、调制解调器
@@ -218,14 +220,14 @@
 <translation id="8740359287975076522">无法找到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS 地址&lt;/abbr&gt;。正在诊断该问题。</translation>
 <translation id="8820817407110198400">书签</translation>
 <translation id="8940028675168378100">被 <ph name="BLOCKER_NAME" /> 屏蔽</translation>
+<translation id="8963117664422609631">转到网站设置</translation>
 <translation id="9001074447101275817">代理 (<ph name="DOMAIN" />) 要求提供用户名和口令。</translation>
 <translation id="9008201768610948239">忽略</translation>
-<translation id="9011424611726486705">打开网站设置</translation>
 <translation id="9025348182339809926">（无效）</translation>
 <translation id="9039213469156557790">而且，此页中包含其他不安全的资源。这些资源在传输过程中能被他人查看，而攻击者可以修改这些资源，从而改变此页的行为。</translation>
 <translation id="9062620674789239642">该文件可能已被移动、修改或删除。</translation>
 <translation id="9069693763241529744">已被某款扩展程序阻止</translation>
-<translation id="910924428752220542">Vivaldi 口令</translation>
+<translation id="910924428752220542">Vivaldi 密码</translation>
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9180553614777056266">广告拦截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>

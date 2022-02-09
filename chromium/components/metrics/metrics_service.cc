@@ -5,7 +5,7 @@
 //------------------------------------------------------------------------------
 // Description of the life cycle of a instance of MetricsService.
 //
-// OVERVIEW
+//  OVERVIEW
 //
 // A MetricsService instance is typically created at application startup.  It is
 // the central controller for the acquisition of log data, and the automatic
@@ -455,7 +455,7 @@ bool MetricsService::StageCurrentLogForTest() {
 // Initialization methods
 
 void MetricsService::InitializeMetricsState() {
-  SCOPED_UMA_HISTOGRAM_SHORT_TIMER("UMA.MetricsService.Initialize.Time");
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("UMA.MetricsService.Initialize.Time");
 
   const int64_t buildtime = MetricsLog::GetBuildTime();
   const std::string version = client_->GetVersionString();
@@ -475,6 +475,9 @@ void MetricsService::InitializeMetricsState() {
   if (!state_manager_->clean_exit_beacon()->exited_cleanly()) {
     provider.LogCrash(
         state_manager_->clean_exit_beacon()->browser_last_live_timestamp());
+    // Reset flag, and wait until we call LogNeedForCleanShutdown() before
+    // monitoring.
+    state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
   }
 
   // HasPreviousSessionData is called first to ensure it is never bypassed.

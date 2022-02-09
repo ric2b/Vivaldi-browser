@@ -144,6 +144,7 @@
 <translation id="5810442152076338065">Tilkoblingen til <ph name="DOMAIN" /> er kryptert med en foreldet chifferpakke.</translation>
 <translation id="5838278095973806738">Du bør ikke skrive inn sensitiv informasjon på denne siden (for eksempel passord eller betalingsinformasjon) da det kan blir stjålet av angripere.</translation>
 <translation id="5869405914158311789">Siden kan ikke nås</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 i bruk}other{# i bruk}}</translation>
 <translation id="5932224571077948991">Nettstedet viser påtrengende eller villedende annonser</translation>
 <translation id="6051221802930200923">Du kan ikke besøke <ph name="SITE" /> akkurat no, fordi nettsiden bruker sertifikatlåsing. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="6146055958333702838">Kontroller eventuelle kabler og start eventuelle rutere, modem og andre
@@ -154,7 +155,7 @@
 <translation id="6203231073485539293">Sjekk internettilkoblingen</translation>
 <translation id="6225522625585012689">Gå til &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for å se listen over blokkerte nettadresser og andre regler systemadministratoren din har fastsatt.</translation>
 <translation id="625755898061068298">Du har valgt å skru av sikkerhetsadvarsler for denne siden.</translation>
-<translation id="6264485186158353794">Tilbake til sikkerhet</translation>
+<translation id="6264485186158353794">Tilbake til trygg grunn</translation>
 <translation id="6305205051461490394"><ph name="URL" /> kan ikke nås.</translation>
 <translation id="6321917430147971392">Sjekk DNS-innstillingene</translation>
 <translation id="6328639280570009161">Prøv å deaktivere nettverksforslag</translation>
@@ -219,9 +220,9 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> sin &lt;abbr id="dnsDefinition"&gt;DNS-adresse&lt;/abbr&gt; ble ikke funnet. Undersøker problemet.</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
 <translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Gå til nettstedsinnstillingene</translation>
 <translation id="9001074447101275817">Mellomtjeneren <ph name="DOMAIN" /> krever brukernavn og passord.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
-<translation id="9011424611726486705">Åpne nettstedsinnstillinger</translation>
 <translation id="9025348182339809926">(Ugyldig)</translation>
 <translation id="9039213469156557790">Dessuten inneholder denne siden noen ressurser som ikke er sikre. Disse ressursene kan sees av andre under overføring, og kan endres av en angriper for å endre sidens oppførsel.</translation>
 <translation id="9062620674789239642">Den kan ha blitt flyttet, redigert eller slettet.</translation>

@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/memory/unsafe_shared_memory_region.h"
-#include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "components/content/vivaldi_content_delegates.h"
@@ -46,6 +45,9 @@ typedef base::OnceCallback<void(
 
 typedef base::OnceCallback<void(int64_t, int64_t)>
     JSScrollPositionCallback;
+
+typedef base::OnceCallback<void(const std::string&)>
+    JSDetermineTextLanguageCallback;
 
 namespace extensions {
 
@@ -180,6 +182,10 @@ class VivaldiPrivateTabObserver
   void ScrollPositionReceived(JSScrollPositionCallback callback,
                               int64_t x,
                               int64_t y);
+  void DetermineTextLanguage(const std::string& text,
+                             JSDetermineTextLanguageCallback callback);
+  void DetermineTextLanguageDone(JSDetermineTextLanguageCallback callback,
+                                 const std::string& langCode);
 
   // If a page is accessing a resource controlled by a permission this will
   // fire.
@@ -192,6 +198,8 @@ private:
   void SaveZoomLevelToExtData(double zoom_level);
 
   void OnPrefsChanged(const std::string& path);
+
+  void MojoConnectionDestroyed();
 
   // Show images for all pages loaded in this tab. Default is true.
   bool show_images_ = true;
@@ -427,6 +435,23 @@ class TabsPrivateRevertTranslatePageFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateRevertTranslatePageFunction);
+};
+
+class TabsPrivateDetermineTextLanguageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.determineTextLanguage",
+                             TABSPRIVATE_DETERMINETEXTLANGUAGE)
+
+  TabsPrivateDetermineTextLanguageFunction() = default;
+
+ protected:
+  ~TabsPrivateDetermineTextLanguageFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+  void DetermineTextLanguageDone(const std::string& langCode);
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateDetermineTextLanguageFunction);
 };
 
 }  // namespace extensions

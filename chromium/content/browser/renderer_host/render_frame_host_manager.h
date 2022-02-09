@@ -44,7 +44,8 @@ class RenderFrameHostManagerTest;
 class RenderFrameProxyHost;
 class RenderViewHost;
 class RenderViewHostImpl;
-class RenderWidgetHostView;
+class RenderWidgetHostViewBase;
+class RenderWidgetHostViewChildFrame;
 class TestWebContents;
 
 using PageBroadcastMethodCallback =
@@ -195,7 +196,7 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Returns the view associated with the current RenderViewHost, or null if
   // there is no current one.
-  RenderWidgetHostView* GetRenderWidgetHostView() const;
+  RenderWidgetHostViewBase* GetRenderWidgetHostView() const;
 
   // Returns whether this manager is a main frame and belongs to a FrameTreeNode
   // that belongs to an inner WebContents.
@@ -408,9 +409,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   void OnDidUpdateOrigin(const url::Origin& origin,
                          bool is_potentially_trustworthy_unique_origin);
 
-  // Send updated ad frame type to all frame proxies at ready-to-commit time
-  // when the ad status gets updated.
-  void OnDidSetAdFrameType(blink::mojom::AdFrameType ad_frame_type);
+  // Send updated ad status to all frame proxies at ready-to-commit time when it
+  // gets updated.
+  void OnDidSetIsAdSubframe(bool is_ad_subframe);
 
   void EnsureRenderViewInitialized(RenderViewHostImpl* render_view_host,
                                    SiteInstance* instance);
@@ -460,7 +461,7 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Sets the child RenderWidgetHostView for this frame, which must be part of
   // an inner WebContents.
-  void SetRWHViewForInnerContents(RenderWidgetHostView* child_rwhv);
+  void SetRWHViewForInnerContents(RenderWidgetHostViewChildFrame* child_rwhv);
 
   // Returns the number of RenderFrameProxyHosts for this frame.
   size_t GetProxyCount();
@@ -571,6 +572,14 @@ class CONTENT_EXPORT RenderFrameHostManager
   // clear that it is also used to transfer pages between FrameTrees for
   // prerendering.
   std::unique_ptr<BackForwardCacheImpl::Entry> TakePrerenderedPage();
+
+  // Returns the first RenderFrameProxyHosts in `proxy_hosts_` found to not have
+  // a corresponding RenderViewHost. Used to check if a subframe creation can
+  // proceed, since it needs the RenderViewHosts to create proxies for the
+  // subframe. This is only used for temporary debugging to figure out how this
+  // case can happen.
+  // TODO(https://crbug.com/1243541): Remove this once the bug is fixed.
+  RenderFrameProxyHost* GetProxyHostWithoutRenderViewHost();
 
  private:
   friend class NavigatorTest;

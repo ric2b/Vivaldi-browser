@@ -21,7 +21,6 @@
 <translation id="125220115284141797">фабрични</translation>
 <translation id="1297175357211070620">Назначение</translation>
 <translation id="1303101771013849280">Файл с отметки HTML</translation>
-<translation id="1380436189840894976">Изход от частен режим?</translation>
 <translation id="1430915738399379752">Отпечатай</translation>
 <translation id="1433811987160647649">Питай преди достъп</translation>
 <translation id="1451375123200651445">Страницата в един файл</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Файлови описатели</translation>
 <translation id="1682548588986054654">Създай частен прозорец</translation>
-<translation id="1698122934742150150">Само за текущата частна сесия</translation>
 <translation id="1706625117072057435">Увеличаване</translation>
 <translation id="1708338024780164500">(неразрешено)</translation>
 <translation id="1723824996674794290">Създай &amp;прозорец</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Неизвестна приставка</translation>
 <translation id="2423578206845792524">Запи&amp;ши картината като…</translation>
 <translation id="2439110203301358333">Друга програма в компютъра добави разширение, вероятно променящо начина на работа на Vivaldi.</translation>
+<translation id="2443487764245141020">Сайтовете може да се наложи да разпознаят вашето устройство с помощта на идентификатор</translation>
 <translation id="2445081178310039857">Задължително въведете главна директория на разширението.</translation>
 <translation id="2470702053775288986">Забранени неподдържани разширения</translation>
 <translation id="2476578072172137802">Настройки на сайта</translation>
@@ -106,7 +105,7 @@
 <translation id="2809586584051668049">и още <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показвай картини</translation>
 <translation id="2850541429955027218">Добави темата</translation>
-<translation id="2861941300086904918">Диспечер на сигурността в Native Client</translation>
+<translation id="2861941300086904918">Диспечер на защитата в Native Client</translation>
 <translation id="2881076733170862447">При щракване върху разширението</translation>
 <translation id="2889064240420137087">Отвори препратката в…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> не можа да се свърже с принтера. Уверете се, че принтерът е свързан и опитайте отново.</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Копирай &amp;адреса на препратката</translation>
 <translation id="354068948465830244">Може да чете и променя данните на сайта</translation>
 <translation id="3560034655160545939">&amp;Провери правописа</translation>
-<translation id="3574917942258583917">Изход от частен режим?</translation>
 <translation id="3587482841069643663">всички</translation>
 <translation id="3627588569887975815">Отвори препратката в &amp;частен прозорец</translation>
 <translation id="3627879631695760395">Инсталирай <ph name="APP" />…</translation>
-<translation id="3668823961463113931">Обработчици</translation>
 <translation id="3678156199662914018">Разширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Заявка за споделяне на екрана от <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Не позволявай на затворените сайтове да приключват изпращане или получаване на данни</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Забрани разширенията в развоен режим</translation>
 <translation id="4100839878934973028">Друга програма в компютъра добави приложение, вероятно променящо начина на работа на Vivaldi.</translation>
 <translation id="4109898769411476438">Затворете браузъра преди внасяне</translation>
-<translation id="4115080753528843955">Определени услуги за съдържание ползват уникални идентификатори за удостоверен достъп до защитено съдържание</translation>
 <translation id="4130207949184424187">Разширение промени страницата, показвана при търсене от омнибокса.</translation>
 <translation id="4131410914670010031">черно-бяло</translation>
 <translation id="4176463684765177261">Забранен</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Опитът за инсталиране на разширението е с предизвестие:</translation>
 <translation id="479536056609751218">Страницата само в HTML</translation>
 <translation id="4839303808932127586">Запи&amp;ши клипа като…</translation>
+<translation id="4840096453115567876">Изход от режим на частно сърфиране?</translation>
 <translation id="488785315393301722">Покажи подробности</translation>
 <translation id="4907306957610201395">Категория на разрешение</translation>
 <translation id="4912643508233590958">Брой събуждания</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Достъпът е отказан.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
 <translation id="7309257895202129721">Покажи &amp;контролите</translation>
+<translation id="7374461526650987610">Обработчици на протокол</translation>
 <translation id="7385854874724088939">Нещо не е наред при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="7412226954991670867">Памет на ГПУ</translation>
 <translation id="7421925624202799674">&amp;Покажи кода на страницата</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Свързване</translation>
 <translation id="7629827748548208700">Раздел: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Отказ</translation>
+<translation id="7659154729610375585">Изход от режим на частно сърфиране?</translation>
 <translation id="7661259717474717992">Позволи записване и четене на данни в бисквитките от сайтовете</translation>
 <translation id="7663719505383602579">Получател: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Инсталирано от администратора</translation>
@@ -454,6 +453,7 @@
 <translation id="8899851313684471736">Отвори препратката в нов &amp;прозорец</translation>
 <translation id="8915370057835397490">Зареждане на предложение</translation>
 <translation id="8916476537757519021">Частна подрамка: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Спри само за текущата сесия на частно сърфиране</translation>
 <translation id="895944840846194039">Памет на JavaScript</translation>
 <translation id="8962083179518285172">Скрий подробностите</translation>
 <translation id="8973557916016709913">Премахване на увеличаването</translation>

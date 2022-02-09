@@ -15,9 +15,8 @@ fi
 if [ "$action" = "upgrade" ] ; then
   exit 0
 fi
-# Reset propritary media and Widevine on uninstall/purge
+# Reset propritary media on uninstall/purge
 if [ "$action" = "remove" ]; then
-  /opt/@@PACKAGE@@/update-widevine --undo ||:
   /opt/@@PACKAGE@@/update-ffmpeg --undo ||:
 fi
 

@@ -21,11 +21,13 @@
 #include "base/types/strong_alias.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/network_delegate.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/websockets/websocket_event_interface.h"
 #include "services/network/network_service.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
+#include "services/network/throttling/scoped_throttling_token.h"
 #include "services/network/websocket_throttler.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
@@ -72,7 +74,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client,
       absl::optional<WebSocketThrottler::PendingConnection>
           pending_connection_tracker,
-      base::TimeDelta delay);
+      base::TimeDelta delay,
+      const absl::optional<base::UnguessableToken>& throttling_profile_id);
+
   ~WebSocket() override;
 
   // mojom::WebSocket methods:
@@ -88,8 +92,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
 
   // These methods are called by the network delegate to forward these events to
   // the |header_client_|.
-  int OnBeforeStartTransaction(net::CompletionOnceCallback callback,
-                               net::HttpRequestHeaders* headers);
+  int OnBeforeStartTransaction(
+      const net::HttpRequestHeaders& headers,
+      net::NetworkDelegate::OnBeforeStartTransactionCallback callback);
   int OnHeadersReceived(
       net::CompletionOnceCallback callback,
       const net::HttpResponseHeaders* original_response_headers,
@@ -148,8 +153,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
       base::OnceCallback<void(const net::AuthCredentials*)> callback,
       const absl::optional<net::AuthCredentials>& credential);
   void OnBeforeSendHeadersComplete(
-      net::CompletionOnceCallback callback,
-      net::HttpRequestHeaders* out_headers,
+      net::NetworkDelegate::OnBeforeStartTransactionCallback callback,
       int result,
       const absl::optional<net::HttpRequestHeaders>& headers);
   void OnHeadersReceivedComplete(
@@ -240,6 +244,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) WebSocket : public mojom::WebSocket {
   // condition between the readable signal on the data pipe and the channel on
   // which StartClosingHandshake() is called.
   std::unique_ptr<CloseInfo> pending_start_closing_handshake_;
+
+  const absl::optional<base::UnguessableToken> throttling_profile_id_;
+  uint32_t net_log_source_id_ = net::NetLogSource::kInvalidId;
+  std::unique_ptr<ScopedThrottlingToken> throttling_token_;
 
   base::WeakPtrFactory<WebSocket> weak_ptr_factory_{this};
 

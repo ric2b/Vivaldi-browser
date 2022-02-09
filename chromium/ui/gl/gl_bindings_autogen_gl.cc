@@ -309,6 +309,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_ANGLE_texture_external_update");
   ext.b_GL_ANGLE_translated_shader_source =
       gfx::HasExtension(extensions, "GL_ANGLE_translated_shader_source");
+  ext.b_GL_ANGLE_webgl_compatibility =
+      gfx::HasExtension(extensions, "GL_ANGLE_webgl_compatibility");
   ext.b_GL_APPLE_fence = gfx::HasExtension(extensions, "GL_APPLE_fence");
   ext.b_GL_APPLE_sync = gfx::HasExtension(extensions, "GL_APPLE_sync");
   ext.b_GL_APPLE_vertex_array_object =
@@ -448,6 +450,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   ext.b_GL_NV_blend_equation_advanced =
       gfx::HasExtension(extensions, "GL_NV_blend_equation_advanced");
   ext.b_GL_NV_fence = gfx::HasExtension(extensions, "GL_NV_fence");
+  ext.b_GL_NV_framebuffer_blit =
+      gfx::HasExtension(extensions, "GL_NV_framebuffer_blit");
   ext.b_GL_NV_framebuffer_mixed_samples =
       gfx::HasExtension(extensions, "GL_NV_framebuffer_mixed_samples");
   ext.b_GL_NV_internalformat_sample_query =
@@ -652,6 +656,9 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       ext.b_GL_ARB_framebuffer_object) {
     fn.glBlitFramebufferFn = reinterpret_cast<glBlitFramebufferProc>(
         GetGLProcAddress("glBlitFramebuffer"));
+  } else if (ext.b_GL_NV_framebuffer_blit) {
+    fn.glBlitFramebufferFn = reinterpret_cast<glBlitFramebufferProc>(
+        GetGLProcAddress("glBlitFramebufferNV"));
   } else if (ext.b_GL_ANGLE_framebuffer_blit) {
     fn.glBlitFramebufferFn = reinterpret_cast<glBlitFramebufferProc>(
         GetGLProcAddress("glBlitFramebufferANGLE"));

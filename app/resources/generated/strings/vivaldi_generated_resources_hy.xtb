@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Ստանդարտ</translation>
 <translation id="1297175357211070620">Վերջնակետ</translation>
 <translation id="1303101771013849280">Էջանիշերի HTML ֆայլ</translation>
-<translation id="1380436189840894976">Այնուամենայնիվ դո՞ւրս գալ գաղտնի ռեժիմից։</translation>
 <translation id="1430915738399379752">Տպել</translation>
 <translation id="1433811987160647649">Հարցնել մինչ օգտվելը</translation>
 <translation id="1451375123200651445">Վեբ էջ, մեկ ֆայլ</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Տեսախցիկ</translation>
 <translation id="1627276047960621195">Ֆայլերի դեսկրիպտորներ</translation>
 <translation id="1682548588986054654">Նոր գաղտնի պատուհան</translation>
-<translation id="1698122934742150150">Միայն ընթացիկ գաղտնի սեսիայի համար</translation>
 <translation id="1706625117072057435">Խոշորացումներ</translation>
 <translation id="1708338024780164500">(Ոչ ակտիվ)</translation>
 <translation id="1723824996674794290">Ն&amp;որ պատուհան</translation>
@@ -156,11 +154,9 @@
 <translation id="3511307672085573050">Պատճենել հղման հաս&amp;ցեն</translation>
 <translation id="354068948465830244">Կարող է կարդալ և փոփոխել կայքի տեղեկույթը</translation>
 <translation id="3560034655160545939">Ո&amp;ւղղագրության ստուգում</translation>
-<translation id="3574917942258583917">Այնուամենայնիվ դո՞ւրս գալ գաղտնի ռեժիմից։</translation>
 <translation id="3587482841069643663">Բոլորը</translation>
 <translation id="3627588569887975815">Բացել հղումը &amp;գաղտնի պատուհանում</translation>
 <translation id="3627879631695760395">Տեղակայել «<ph name="APP" />» հավելվածը…</translation>
-<translation id="3668823961463113931">Մշակիչներ</translation>
 <translation id="3678156199662914018">Ընդլայնում. <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Էկրանի ընդհանրացման հարցում <ph name="APP_NAME" />-ից</translation>
 <translation id="3708684582558000260">Թույլ չտալ փակված կայքերին ավարտել տվյալների ուղարկումը կամ ստացումը</translation>
@@ -194,7 +190,6 @@
 <translation id="4096508467498758490">Անջատել մշակողի ռեժիմում աշխատող ընդլայնումները</translation>
 <translation id="4100839878934973028">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է հավելված, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
 <translation id="4109898769411476438">Փակեք բրաուզերը մինչ ներկրելը</translation>
-<translation id="4115080753528843955">Որոշ ծառայություններ օգտագործում են եզակի իդենտիֆիկատորներ՝ պաշտպանված բովանդակության օգտագործումը լիազորելու նպատակով</translation>
 <translation id="4130207949184424187">Այս ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
 <translation id="4131410914670010031">Սև ու սպիտակ</translation>
 <translation id="4176463684765177261">Անջատած է</translation>

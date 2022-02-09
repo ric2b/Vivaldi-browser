@@ -26,7 +26,7 @@ import org.chromium.ui.base.ViewUtils;
 
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiSyncActivity;
-import org.vivaldi.browser.sync.VivaldiProfileSyncService;
+import org.vivaldi.browser.sync.VivaldiSyncService;
 import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
 
 /**
@@ -223,8 +223,8 @@ public class RecentTabsPage
                 if (VivaldiAccountManager.get().getSimplifiedState()
                         == VivaldiAccountManager.SimplifiedState.LOGGED_IN) {
                     mView.findViewById(R.id.no_sync_sign_in_button).setVisibility(View.GONE);
-                    if (VivaldiProfileSyncService.get().getCommitStatus()
-                            != VivaldiProfileSyncService.CycleStatus.SUCCESS) {
+                    if (VivaldiSyncService.get().getCommitStatus()
+                            != VivaldiSyncService.CycleStatus.SUCCESS) {
                         ((android.widget.TextView) mView.findViewById(R.id.no_sync_text))
                                 .setText(R.string.vivaldi_sync_in_progress_text);
                         return;
@@ -308,6 +308,12 @@ public class RecentTabsPage
     public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
             int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
         updateMargins();
+    }
+
+    @Override
+    public void onAndroidVisibilityChanged(int visibility) {
+        // TODO(crbug/1223069): Remove this workaround for default method desugaring in D8 causing
+        // AbstractMethodErrors in some cases once fixed upstream.
     }
 
     private void updateMargins() {

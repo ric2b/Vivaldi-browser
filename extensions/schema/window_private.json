@@ -171,34 +171,18 @@
     ],
     "events": [
       {
-        "name": "onMinimized",
+        "name": "onStateChanged",
         "type": "function",
-        "description": "Fired when the window changes minimized status.",
+        "description": "Fired when the window state changes (minimize/maximize/fullscreen).",
         "parameters": [
           {
             "type": "integer",
             "name": "windowId"
           },
           {
-            "type": "boolean",
-            "name": "enabled",
-            "description": "Changed minimized state."
-          }
-        ]
-      },
-      {
-        "name": "onMaximized",
-        "type": "function",
-        "description": "Fired when the window changes maximized status.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          },
-          {
-            "type": "boolean",
-            "name": "enabled",
-            "description": "Changed maximized state."
+            "name": "state",
+            "$ref": "WindowState",
+            "description": "The new state set to the window."
           }
         ]
       },
@@ -226,22 +210,6 @@
             "type": "boolean",
             "name": "activated",
             "description": "Changed activation state."
-          }
-        ]
-      },
-      {
-        "name": "onFullscreen",
-        "type": "function",
-        "description": "Fired when the window changes fullscreen status.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
-          },
-          {
-            "type": "boolean",
-            "name": "enabled",
-            "description": "Changed fullscreen state."
           }
         ]
       },

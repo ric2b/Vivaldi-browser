@@ -50,17 +50,7 @@ constexpr base::TimeDelta kStandaloneCheckPeriod =
 #endif
     ;
 
-void StartUpdateNotifierIfEnabled(bool force_enable) {
-  if (force_enable) {
-    base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
-    cmdline.AppendSwitch(vivaldi_update_notifier::kEnable);
-    int exit_code = vivaldi::RunNotifierSubaction(cmdline);
-    if (exit_code != 0) {
-      LOG(ERROR) << "Failed to enable update notifier";
-      return;
-    }
-  }
-
+void StartUpdateNotifierIfEnabled() {
   // We want to run the notifier with the current flags even if those are
   // different from the command line in the task scheduler entry. This way one
   // can kill the notifier and try with a new value of --vuu.
@@ -141,21 +131,14 @@ void LaunchUpdateNotifier(Profile* profile) {
     return;
   }
 
-  // Check the obsolete auto update pref. This hack fixes VB-30912.
-  bool force_enable = false;
-  PrefService* prefs = profile->GetPrefs();
-  if (prefs->GetBoolean(vivaldiprefs::kAutoUpdateEnabled)) {
-    // Make sure we don't consider the pref on next launch.
-    prefs->SetBoolean(vivaldiprefs::kAutoUpdateEnabled, false);
-    force_enable = true;
-  }
+  // Ensure that the old obsolete preference is removed from the profile.
+  profile->GetPrefs()->ClearPref(vivaldiprefs::kAutoUpdateEnabled);
 
   base::ThreadPool::PostDelayedTask(
       FROM_HERE,
       {base::WithBaseSyncPrimitives(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&StartUpdateNotifierIfEnabled, force_enable),
-      kLaunchUpdateCheckDelay);
+      base::BindOnce(&StartUpdateNotifierIfEnabled), kLaunchUpdateCheckDelay);
 }
 
 void DisableStandaloneAutoUpdate() {

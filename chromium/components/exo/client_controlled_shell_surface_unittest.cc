@@ -4,11 +4,12 @@
 
 #include "components/exo/client_controlled_shell_surface.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/frame/header_view.h"
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/frame/wide_frame_view.h"
-#include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/arc_resize_lock_type.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/shelf/shelf.h"
@@ -16,6 +17,7 @@
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/test_widget_builder.h"
 #include "ash/wm/drag_window_resizer.h"
+#include "ash/wm/full_restore/full_restore_controller.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/pip/pip_positioner.h"
 #include "ash/wm/splitview/split_view_controller.h"
@@ -48,8 +50,11 @@
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
 #include "components/exo/wm_helper.h"
+#include "components/full_restore/features.h"
+#include "components/full_restore/full_restore_utils.h"
 #include "third_party/skia/include/utils/SkNoDrawCanvas.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -1080,7 +1085,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnapWindowInSplitViewModeTest) {
   window1->SetBounds(split_view_controller->GetSnappedWindowBoundsInScreen(
       ash::SplitViewController::LEFT, window1));
   state1->set_bounds_locally(false);
-  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kLeftSnapped);
+  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kPrimarySnapped);
   EXPECT_EQ(shell_surface1->GetWidget()->GetWindowBoundsInScreen(),
             split_view_controller->GetSnappedWindowBoundsInScreen(
                 ash::SplitViewController::LEFT,
@@ -1094,7 +1099,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnapWindowInSplitViewModeTest) {
   window1->SetBounds(split_view_controller->GetSnappedWindowBoundsInScreen(
       ash::SplitViewController::RIGHT, window1));
   state1->set_bounds_locally(false);
-  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kRightSnapped);
+  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kSecondarySnapped);
   EXPECT_EQ(shell_surface1->GetWidget()->GetWindowBoundsInScreen(),
             split_view_controller->GetSnappedWindowBoundsInScreen(
                 ash::SplitViewController::RIGHT,
@@ -1294,10 +1299,10 @@ TEST_F(ClientControlledShellSurfaceDragTest, DragWindowFromTopInTabletMode) {
 
   // Drag the window long enough (pass one fourth of the screen vertical
   // height) to snap the window to splitscreen.
-  shell->overview_controller()->EndOverview();
+  shell->overview_controller()->EndOverview(ash::OverviewEndAction::kTests);
   SendGestureEvents(window, gfx::Point(0, 210));
   EXPECT_EQ(ash::WindowState::Get(window)->GetStateType(),
-            WindowStateType::kLeftSnapped);
+            WindowStateType::kPrimarySnapped);
 }
 
 namespace {
@@ -1783,6 +1788,7 @@ TEST_F(ClientControlledShellSurfaceTest, WideFrame) {
   EXPECT_EQ(surface->window(), target);
 }
 
+// Tests that a WideFrameView is created for an unparented ARC task and that the
 TEST_F(ClientControlledShellSurfaceTest, NoFrameOnModalContainer) {
   std::unique_ptr<Surface> surface(new Surface);
   auto shell_surface =
@@ -2061,9 +2067,9 @@ TEST_F(ClientControlledShellSurfaceTest, SnappedInTabletMode) {
 
   EnableTabletMode(true);
 
-  ash::WMEvent event(ash::WM_EVENT_SNAP_LEFT);
+  ash::WMEvent event(ash::WM_EVENT_SNAP_PRIMARY);
   window_state->OnWMEvent(&event);
-  EXPECT_EQ(window_state->GetStateType(), WindowStateType::kLeftSnapped);
+  EXPECT_EQ(window_state->GetStateType(), WindowStateType::kPrimarySnapped);
 
   ash::NonClientFrameViewAsh* frame_view =
       static_cast<ash::NonClientFrameViewAsh*>(
@@ -2152,8 +2158,8 @@ TEST_F(ClientControlledShellSurfaceDisplayTest,
   surface->SetFrame(SurfaceFrameType::NORMAL);
   surface->Commit();
   shell_surface->OnBoundsChangeEvent(WindowStateType::kMinimized,
-                                     WindowStateType::kRightSnapped, display_id,
-                                     gfx::Rect(0, 0, 100, 100), 0);
+                                     WindowStateType::kSecondarySnapped,
+                                     display_id, gfx::Rect(0, 0, 100, 100), 0);
   EXPECT_EQ(3, delegate->bounds_change_count());
   EXPECT_EQ(
       frame_view->GetClientBoundsForWindowBounds(gfx::Rect(0, 0, 100, 100)),
@@ -2163,8 +2169,8 @@ TEST_F(ClientControlledShellSurfaceDisplayTest,
   // Snapped, in tablet mode.
   EnableTabletMode(true);
   shell_surface->OnBoundsChangeEvent(WindowStateType::kMinimized,
-                                     WindowStateType::kRightSnapped, display_id,
-                                     gfx::Rect(0, 0, 100, 100), 0);
+                                     WindowStateType::kSecondarySnapped,
+                                     display_id, gfx::Rect(0, 0, 100, 100), 0);
   EXPECT_EQ(4, delegate->bounds_change_count());
   EXPECT_EQ(gfx::Rect(0, 0, 100, 100), delegate->requested_bounds().back());
 }
@@ -2686,7 +2692,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnappedClientBounds) {
   surface->Commit();
   EXPECT_EQ(gfx::Rect(50, 68, 200, 332), widget->GetWindowBoundsInScreen());
 
-  ash::WMEvent event(ash::WM_EVENT_SNAP_LEFT);
+  ash::WMEvent event(ash::WM_EVENT_SNAP_PRIMARY);
   ash::WindowState::Get(window)->OnWMEvent(&event);
   EXPECT_EQ(gfx::Rect(0, 32, 400, 568), delegate->requested_bounds().back());
 
@@ -2740,6 +2746,19 @@ TEST_F(ClientControlledShellSurfaceTest,
     surface->Commit();
     EXPECT_FALSE(shell_surface->CanResize());
 
+    // Test if the proper resize lock type is set depending on the resizability
+    // of the window.
+    aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+    EXPECT_EQ(window->GetProperty(ash::kArcResizeLockTypeKey),
+              ash::ArcResizeLockType::RESIZE_LIMITED);
+    shell_surface->SetMinimumSize(gfx::Size(1, 1));
+    shell_surface->SetMaximumSize(gfx::Size(1, 1));
+    surface->Commit();
+    EXPECT_EQ(window->GetProperty(ash::kArcResizeLockTypeKey),
+              ash::ArcResizeLockType::FULLY_LOCKED);
+    shell_surface->SetMinimumSize(gfx::Size(0, 0));
+    shell_surface->SetMaximumSize(gfx::Size(0, 0));
+
     shell_surface->SetResizeLock(false);
     surface->Commit();
     EXPECT_TRUE(shell_surface->CanResize());
@@ -2789,6 +2808,75 @@ TEST_F(ClientControlledShellSurfaceTest, OverlayShadowBounds) {
     gfx::Size shadow_size = shell_surface->GetShadowBounds().size();
     EXPECT_EQ(shadow_size, overlay_size);
   }
+}
+
+class ClientControlledShellSurfaceFullRestoreTest
+    : public ClientControlledShellSurfaceTest {
+ public:
+  ClientControlledShellSurfaceFullRestoreTest() = default;
+  ClientControlledShellSurfaceFullRestoreTest(
+      const ClientControlledShellSurfaceFullRestoreTest&) = delete;
+  ClientControlledShellSurfaceFullRestoreTest& operator=(
+      const ClientControlledShellSurfaceFullRestoreTest&) = delete;
+  ~ClientControlledShellSurfaceFullRestoreTest() override = default;
+
+  // ClientControlledShellSurfaceTest:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        ::full_restore::features::kFullRestore);
+    ClientControlledShellSurfaceTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// WideFrameView follows its respective surface when it is eventually parented.
+// See crbug.com/1223135.
+TEST_F(ClientControlledShellSurfaceFullRestoreTest,
+       WideframeForUnparentedTasks) {
+  auto surface = std::make_unique<Surface>();
+  auto shell_surface =
+      exo_test_helper()->CreateClientControlledShellSurface(surface.get());
+
+  // Create a non-wide frame shell surface.
+  auto desktop_buffer = std::make_unique<Buffer>(
+      exo_test_helper()->CreateGpuMemoryBuffer(gfx::Size(64, 64)));
+  surface->Attach(desktop_buffer.get());
+  surface->SetInputRegion(gfx::Rect(0, 0, 64, 64));
+  shell_surface->SetGeometry(gfx::Rect(100, 0, 64, 64));
+  surface->SetFrame(SurfaceFrameType::NORMAL);
+  surface->Commit();
+  auto* wide_frame = shell_surface->wide_frame_for_test();
+  ASSERT_FALSE(wide_frame);
+
+  // Set the |full_restore::kParentToHiddenContainerKey| for the surface and
+  // reparent it, simulating the Full Restore process for an unparented ARC
+  // task.
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  window->SetProperty(full_restore::kParentToHiddenContainerKey, true);
+  aura::client::ParentWindowWithContext(window,
+                                        /*context=*/window->GetRootWindow(),
+                                        window->GetBoundsInScreen());
+
+  // Maximize the surface. The WideFrameView should be created and a crash
+  // should not occur.
+  shell_surface->SetMaximized();
+  surface->Commit();
+  const auto* hidden_container_parent = window->parent();
+  wide_frame = shell_surface->wide_frame_for_test();
+  EXPECT_TRUE(wide_frame);
+  EXPECT_EQ(hidden_container_parent,
+            wide_frame->GetWidget()->GetNativeWindow()->parent());
+
+  // Call the FullRestoreController, simulating the ARC task becoming ready. The
+  // surface should be reparented and the WideFrameView should follow it.
+  ash::FullRestoreController::Get()->OnARCTaskReadyForUnparentedWindow(window);
+  EXPECT_NE(hidden_container_parent, window->parent());
+  wide_frame = shell_surface->wide_frame_for_test();
+  EXPECT_TRUE(wide_frame);
+  EXPECT_EQ(window->parent(),
+            wide_frame->GetWidget()->GetNativeWindow()->parent());
 }
 
 }  // namespace exo

@@ -1,7 +1,3 @@
-#!/usr/bin/env python
-
-from __future__ import print_function
-
 from subprocess import check_output
 import re
 import json
@@ -9,8 +5,8 @@ from os.path import exists, join, normpath
 from licenses_vivaldi_texts import onlineLicenses
 
 try:
-  f = open(normpath("gen/vivaldi/vivapp/module_list"), 'r')
-  maindeps = f.read().decode("utf-8")
+  f = open(normpath("gen/vivaldi/vivapp/module_list"), mode="r", encoding="utf-8")
+  maindeps = f.read()
   f.close()
 except:
   maindeps = ""
@@ -42,14 +38,14 @@ for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
     file_name = join(moduledir, l)
     if exists(file_name):
       entry["License File"] = file_name
-      f = open(file_name)
-      entry["license"] = f.read().decode("utf-8")
+      f = open(file_name, mode="r", encoding="utf-8")
+      entry["license"] = f.read()
       f.close()
       break
 
   # get one word license type from package.json
-  f = open(join(moduledir, "package.json"))
-  pjson = json.loads(f.read().decode("utf-8"))
+  f = open(join(moduledir, "package.json"), mode="r", encoding="utf-8")
+  pjson = json.loads(f.read())
   f.close()
   preferred = None
   if "license" in pjson:
@@ -118,7 +114,7 @@ for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
 
   for e in entry:
     try:
-      entry[e] = entry[e].encode("ASCII")
+      entry[e] = entry[e]
     except:
       pass
   modules[moduledir] = entry

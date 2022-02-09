@@ -52,16 +52,6 @@
 #include "ui/platform_window/x11/atk_event_conversion.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-// NOTE(espen@vivaldi.com) I assume this is a chrome bug that will be corrected
-// quite quickly (added for ch 83).
-// Prevent calling CoalesceEventsIfNeeded() if we are in a recursive call to
-// DispatchUiEvent(). Before calling DispatchUiEvent() recursivly the event
-// location is adjusted using the located_events_grabber object. That adjustment
-// is not possible (and it is needed) after a successful call to
-// CoalesceEventsIfNeeded().
-static bool VivaldiDispatchIsRecursive = false;
-
 namespace ui {
 namespace {
 
@@ -174,7 +164,8 @@ x11::NotifyDetail XI2DetailToXDetail(x11::Input::NotifyDetail xi2_detail) {
 void SyncSetCounter(x11::Connection* connection,
                     x11::Sync::Counter counter,
                     int64_t value) {
-  x11::Sync::Int64 sync_value{.hi = value >> 32, .lo = value & 0xFFFFFFFF};
+  x11::Sync::Int64 sync_value{.hi = static_cast<int32_t>(value >> 32),
+                              .lo = static_cast<uint32_t>(value)};
   connection->sync().SetCounter({counter, sync_value});
 }
 
@@ -772,6 +763,17 @@ bool X11Window::ShouldUseNativeFrame() const {
 void X11Window::SetCursor(scoped_refptr<PlatformCursor> cursor) {
   DCHECK(cursor);
 
+  // When a DnD loop is running, DesktopDragDropClientOzone may change the
+  // cursor type based on the current dnd operation. Setting cursor type with
+  // the current window that is involved in the DnD is no-op as
+  // X11WholeScreenMoveLoop grabs the pointer and is responsible for changing
+  // current pointer's bitmap. Thus, pass the changed cursor to the drag loop so
+  // that it handles the change.
+  if (drag_loop_) {
+    drag_loop_->UpdateCursor(X11Cursor::FromPlatformCursor(cursor));
+    return;
+  }
+
   last_cursor_ = X11Cursor::FromPlatformCursor(cursor);
   on_cursor_loaded_.Reset(base::BindOnce(DefineCursor, xwindow_));
   last_cursor_->OnCursorLoaded(on_cursor_loaded_.callback());
@@ -780,8 +782,8 @@ void X11Window::SetCursor(scoped_refptr<PlatformCursor> cursor) {
 void X11Window::MoveCursorTo(const gfx::Point& location_px) {
   connection_->WarpPointer(x11::WarpPointerRequest{
       .dst_window = x_root_window_,
-      .dst_x = bounds_in_pixels_.x() + location_px.x(),
-      .dst_y = bounds_in_pixels_.y() + location_px.y(),
+      .dst_x = static_cast<int16_t>(bounds_in_pixels_.x() + location_px.x()),
+      .dst_y = static_cast<int16_t>(bounds_in_pixels_.y() + location_px.y()),
   });
 }
 
@@ -996,6 +998,44 @@ void X11Window::SetOpacity(float opacity) {
   }
 }
 
+bool X11Window::CanSetDecorationInsets() const {
+  return ui::WmSupportsHint(x11::GetAtom("_GTK_FRAME_EXTENTS"));
+}
+
+void X11Window::SetDecorationInsets(gfx::Insets insets_px) {
+  std::vector<uint32_t> extents{static_cast<uint32_t>(insets_px.left()),
+                                static_cast<uint32_t>(insets_px.right()),
+                                static_cast<uint32_t>(insets_px.top()),
+                                static_cast<uint32_t>(insets_px.bottom())};
+  x11::SetArrayProperty(xwindow_, x11::GetAtom("_GTK_FRAME_EXTENTS"),
+                        x11::Atom::CARDINAL, extents);
+}
+
+void X11Window::SetOpaqueRegion(std::vector<gfx::Rect> region_px) {
+  std::vector<uint32_t> value;
+  for (const auto& rect : region_px) {
+    value.push_back(rect.x());
+    value.push_back(rect.y());
+    value.push_back(rect.width());
+    value.push_back(rect.height());
+  }
+  x11::SetArrayProperty(xwindow_, x11::GetAtom("_NET_WM_OPAQUE_REGION"),
+                        x11::Atom::CARDINAL, value);
+}
+
+void X11Window::SetInputRegion(gfx::Rect region_px) {
+  connection_->shape().Rectangles(x11::Shape::RectanglesRequest{
+      .operation = x11::Shape::So::Set,
+      .destination_kind = x11::Shape::Sk::Input,
+      .ordering = x11::ClipOrdering::YXBanded,
+      .destination_window = xwindow_,
+      .rectangles = {{static_cast<int16_t>(region_px.x()),
+                      static_cast<int16_t>(region_px.y()),
+                      static_cast<uint16_t>(region_px.width()),
+                      static_cast<uint16_t>(region_px.height())}},
+  });
+}
+
 std::string X11Window::GetWorkspace() const {
   absl::optional<int> workspace_id = workspace_;
   return workspace_id.has_value() ? base::NumberToString(workspace_id.value())
@@ -1016,7 +1056,7 @@ void X11Window::SetVisibleOnAllWorkspaces(bool always_visible) {
 
   workspace_ = kAllWorkspaces;
   SendClientMessage(xwindow_, x_root_window_, x11::GetAtom("_NET_WM_DESKTOP"),
-                    {new_desktop, 0, 0, 0, 0});
+                    {static_cast<uint32_t>(new_desktop), 0, 0, 0, 0});
 }
 
 bool X11Window::IsVisibleOnAllWorkspaces() const {
@@ -1112,6 +1152,14 @@ bool X11Window::HandleAsAtkEvent(const x11::Event& x11_event, bool transient) {
 }
 
 void X11Window::OnEvent(const x11::Event& xev) {
+  auto event_type = ui::EventTypeFromXEvent(xev);
+  if (event_type != ET_UNKNOWN) {
+    // If this event can be translated, it will be handled in ::DispatchEvent.
+    // Otherwise, we end up processing XEvents twice that could lead to unwanted
+    // behaviour like loosing activation during tab drag and etc.
+    return;
+  }
+
   auto* prop = xev.As<x11::PropertyNotifyEvent>();
   auto* target_current_context = drag_drop_client_->target_current_context();
   if (prop && target_current_context &&
@@ -1159,9 +1207,19 @@ void X11Window::DispatchUiEvent(ui::Event* event, const x11::Event& xev) {
   // Process X11-specific bits
   HandleEvent(xev);
 
+  x11::Event last_xev;
+  std::unique_ptr<ui::Event> last_motion;
+  if (CoalesceEventsIfNeeded(xev, event->type(), &last_xev)) {
+    last_motion = ui::BuildEventFromXEvent(last_xev);
+    event = last_motion.get();
+  }
+
   // If |event| is a located event (mouse, touch, etc) and another X11 window
   // is set as the current located events grabber, the |event| must be
   // re-routed to that grabber. Otherwise, just send the event.
+  // Note: We want to coalesce events before doing this, since this modifies our
+  // ui::Event's coordinates, and coalescing would simply undo the coordinate
+  // change.
   auto* located_events_grabber = window_manager->located_events_grabber();
   if (event->IsLocatedEvent() && located_events_grabber &&
       located_events_grabber != this) {
@@ -1173,15 +1231,7 @@ void X11Window::DispatchUiEvent(ui::Event* event, const x11::Event& xev) {
                                            GetBounds(),
                                            event->AsLocatedEvent());
     }
-    VivaldiDispatchIsRecursive = vivaldi::IsVivaldiRunning();
     return located_events_grabber->DispatchUiEvent(event, xev);
-  }
-
-  x11::Event last_xev;
-  std::unique_ptr<ui::Event> last_motion;
-  if (!VivaldiDispatchIsRecursive && CoalesceEventsIfNeeded(xev, event->type(), &last_xev)) {
-    last_motion = ui::BuildEventFromXEvent(last_xev);
-    event = last_motion.get();
   }
 
   // If after CoalescePendingMotionEvents the type of xev is resolved to
@@ -1206,8 +1256,6 @@ void X11Window::DispatchUiEvent(ui::Event* event, const x11::Event& xev) {
       platform_window_delegate_->DispatchEvent(event);
 #endif
   }
-
-  VivaldiDispatchIsRecursive = false;
 }
 
 void X11Window::OnXWindowStateChanged() {
@@ -1263,8 +1311,9 @@ void X11Window::OnXWindowStateChanged() {
   }
 
   if (new_state != state_) {
+    auto old_state = state_;
     state_ = new_state;
-    platform_window_delegate_->OnWindowStateChanged(state_);
+    platform_window_delegate_->OnWindowStateChanged(old_state, state_);
   }
 }
 
@@ -1524,8 +1573,6 @@ void X11Window::ConvertEventLocationToTargetLocation(
       display->GetDisplayMatching(target_window_bounds);
   auto display_window_current =
       display->GetDisplayMatching(current_window_bounds);
-  DCHECK_EQ(display_window_target.device_scale_factor(),
-            display_window_current.device_scale_factor());
 
   ConvertEventLocationToTargetWindowLocation(target_window_bounds.origin(),
                                              current_window_bounds.origin(),
@@ -1818,7 +1865,9 @@ void X11Window::AfterActivationStateChanged() {
   if (had_pointer_capture && !has_pointer_capture)
     OnXWindowLostCapture();
 
-  bool is_active = IsActive();
+  // A window can be both minimized and active from x11's perspective.
+  // But we treat a minimized window as inactive for platform consistency.
+  bool is_active = IsActive() && !IsMinimized();
   if (!was_active_ && is_active)
     SetFlashFrameHint(false);
 
@@ -2277,8 +2326,8 @@ void X11Window::UpdateWindowRegion(
     // is due to a bug in KWin <= 4.11.5 (KDE bug #330573) where setting a null
     // shape causes the hint to disable system borders to be ignored (resulting
     // in a double border).
-    x11::Rectangle r{0, 0, bounds_in_pixels_.width(),
-                     bounds_in_pixels_.height()};
+    x11::Rectangle r{0, 0, static_cast<uint16_t>(bounds_in_pixels_.width()),
+                     static_cast<uint16_t>(bounds_in_pixels_.height())};
     set_shape({r});
   }
 }

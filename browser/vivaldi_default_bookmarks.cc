@@ -490,7 +490,7 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   if (item.url.is_empty()) {
     VLOG(2) << "Adding folder " << item.title << " guid=" << item.guid;
     node = model_->AddFolder(parent_node, index, title, custom_meta.map(),
-                             item.guid);
+                             absl::nullopt, item.guid);
     stats_.added_folders++;
   } else {
     VLOG(2) << "Adding url " << item.title << " guid=" << item.guid;

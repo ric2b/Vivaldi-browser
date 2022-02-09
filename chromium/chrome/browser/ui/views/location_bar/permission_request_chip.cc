@@ -25,6 +25,7 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
+
 bool IsCameraPermission(permissions::RequestType type) {
   return type == permissions::RequestType::kCameraStream;
 }
@@ -112,54 +113,38 @@ bool ShouldBubbleStartOpen(permissions::PermissionPrompt::Delegate* delegate) {
 PermissionRequestChip::PermissionRequestChip(
     Browser* browser,
     permissions::PermissionPrompt::Delegate* delegate)
-    : PermissionChip(delegate,
-                     GetPermissionIconId(delegate),
-                     GetPermissionMessage(delegate),
-                     ShouldBubbleStartOpen(delegate)),
+    : PermissionChip(
+          delegate,
+          {GetPermissionIconId(delegate), GetPermissionMessage(delegate),
+           ShouldBubbleStartOpen(delegate),
+           base::FeatureList::IsEnabled(
+               permissions::features::kPermissionChipIsProminentStyle),
+           OmniboxChipButton::Theme::kBlue, /*should_expand=*/true}),
       browser_(browser) {
   chip_shown_time_ = base::TimeTicks::Now();
   VerifyCameraAndMicRequest(delegate);
 }
 
-PermissionRequestChip::~PermissionRequestChip() {
-  if (prompt_bubble_) {
-    views::Widget* widget = prompt_bubble_->GetWidget();
-    widget->RemoveObserver(this);
-    widget->Close();
-  }
-}
+PermissionRequestChip::~PermissionRequestChip() = default;
 
-void PermissionRequestChip::OpenBubble() {
-  // The prompt bubble is either not opened yet or already closed on
-  // deactivation.
-  DCHECK(!prompt_bubble_);
-
+views::View* PermissionRequestChip::CreateBubble() {
   PermissionPromptBubbleView* prompt_bubble = new PermissionPromptBubbleView(
       browser_, delegate(), chip_shown_time_, PermissionPromptStyle::kChip);
   prompt_bubble->Show();
   prompt_bubble->GetWidget()->AddObserver(this);
-  prompt_bubble_ = prompt_bubble;
 
   RecordChipButtonPressed();
+
+  return prompt_bubble;
 }
 
-views::BubbleDialogDelegateView*
-PermissionRequestChip::GetPermissionPromptBubbleForTest() {
-  return prompt_bubble_;
-}
-
-void PermissionRequestChip::OnWidgetClosing(views::Widget* widget) {
-  DCHECK_EQ(widget, prompt_bubble_->GetWidget());
-  PermissionChip::OnWidgetClosing(widget);
-  prompt_bubble_ = nullptr;
-}
-
-bool PermissionRequestChip::IsBubbleShowing() const {
-  return prompt_bubble_;
+void PermissionRequestChip::Collapse(bool allow_restart) {
+  PermissionChip::Collapse(allow_restart);
+  ShowBlockedBadge();
 }
 
 void PermissionRequestChip::RecordChipButtonPressed() {
-    base::UmaHistogramLongTimes("Permissions.Chip.TimeToInteraction",
+  base::UmaHistogramMediumTimes("Permissions.Chip.TimeToInteraction",
                                 base::TimeTicks::Now() - chip_shown_time_);
 }
 

@@ -41,8 +41,13 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 1;
-const int kCompatibleVersionNumber = 1;
+const int kCurrentVersionNumber = 2;
+const int kCompatibleVersionNumber = 2;
+
+sql::InitStatus LogMigrationFailure(int from_version) {
+  LOG(ERROR) << "Mail Client DB failed to migrate from version " << from_version;
+  return sql::INIT_FAILURE;
+}
 
 enum class InitStep {
   OPEN = 0,
@@ -99,9 +104,6 @@ sql::InitStatus MailClientDatabase::Init(
   //       RecreateAllButStarAndURLTables.
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;
-
-  /*bool firstRun = !GetDB().DoesTableExist("accounts");
-  int cur_version = meta_table_.GetVersionNumber();*/
 
   if (!CreateMessageTable())
     return sql::INIT_FAILURE;
@@ -162,6 +164,18 @@ sql::InitStatus MailClientDatabase::EnsureCurrentVersion() {
   if (meta_table_.GetCompatibleVersionNumber() > kCurrentVersionNumber) {
     LOG(WARNING) << "Mail database is too new.";
     return sql::INIT_TOO_NEW;
+  }
+
+  int cur_version = meta_table_.GetVersionNumber();
+
+  if (cur_version == 1) {
+    if (!UpdateToVersion2()) {
+      return LogMigrationFailure(cur_version);
+    }
+    cur_version = 2;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+      std::min(cur_version, kCompatibleVersionNumber));
   }
 
   return sql::INIT_OK;

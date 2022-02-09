@@ -6,6 +6,7 @@
 #define CHROME_RENDERER_CART_COMMERCE_HINT_AGENT_H_
 
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
@@ -41,16 +42,17 @@ class CommerceHintAgent
   // as |request_url| should be skipped for AddToCart detection.
   static bool ShouldSkipAddToCartRequest(const GURL& navigation_url,
                                          const GURL& request_url);
-
-  void ExtractProducts();
   void OnProductsExtracted(std::unique_ptr<base::Value> result);
   static const std::vector<std::string> ExtractButtonTexts(
       const blink::WebFormElement& form);
 
  private:
+  void MaybeExtractProducts();
+  void ExtractProducts();
   void ExtractCartFromCurrentFrame();
 
   GURL starting_url_;
+  base::TimeTicks last_extraction_time_;
   base::WeakPtrFactory<CommerceHintAgent> weak_factory_{this};
 
   class JavaScriptRequest : public blink::WebScriptExecutionCallback {
@@ -58,12 +60,14 @@ class CommerceHintAgent
     explicit JavaScriptRequest(base::WeakPtr<CommerceHintAgent> agent);
     JavaScriptRequest(const JavaScriptRequest&) = delete;
     JavaScriptRequest& operator=(const JavaScriptRequest&) = delete;
+    void WillExecute() override;
     void Completed(
         const blink::WebVector<v8::Local<v8::Value>>& result) override;
 
    private:
     ~JavaScriptRequest() override;
     base::WeakPtr<CommerceHintAgent> agent_;
+    base::TimeTicks start_time_;
   };
 
   // content::RenderFrameObserver overrides

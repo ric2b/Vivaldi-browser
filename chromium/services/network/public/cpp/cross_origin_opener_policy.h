@@ -9,8 +9,10 @@
 
 #include "base/component_export.h"
 #include "services/network/public/mojom/cross_origin_opener_policy.mojom-shared.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace network {
+struct CrossOriginEmbedderPolicy;
 
 // This corresponds to network::mojom::CrossOriginOpenerPolicy.
 // See the comments there.
@@ -36,6 +38,10 @@ bool IsAccessFromCoopPage(mojom::CoopAccessReportType);
 
 COMPONENT_EXPORT(NETWORK_CPP_BASE)
 const char* CoopAccessReportTypeToString(mojom::CoopAccessReportType type);
+
+COMPONENT_EXPORT(NETWORK_CPP_BASE)
+void AugmentCoopWithCoep(CrossOriginOpenerPolicy* coop,
+                         const CrossOriginEmbedderPolicy& coep);
 
 }  // namespace network
 

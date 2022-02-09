@@ -23,8 +23,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/task/thread_pool.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "base/vivaldi_switches.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -44,6 +44,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
@@ -61,7 +62,6 @@
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/locale/locale_kit.h"
-#include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
 #include "components/prefs/pref_service.h"
@@ -82,8 +82,8 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/lights/razer_chroma_handler.h"
 #include "ui/shell_dialogs/select_file_policy.h"
-#include "ui/vivaldi_ui_utils.h"
 #include "ui/vivaldi_skia_utils.h"
+#include "ui/vivaldi_ui_utils.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 
@@ -105,9 +105,6 @@ namespace extensions {
 
 namespace {
 
-const char kDevToolsLegacyScheme[] = "chrome-devtools";
-const char kDevToolsScheme[] = "devtools";
-
 ContentSetting vivContentSettingFromString(const std::string& name) {
   ContentSetting setting;
   content_settings::ContentSettingFromString(name, &setting);
@@ -115,7 +112,7 @@ ContentSetting vivContentSettingFromString(const std::string& name) {
 }
 
 ContentSettingsType vivContentSettingsTypeFromGroupName(
-  const std::string& name) {
+    const std::string& name) {
   return site_settings::ContentSettingsTypeFromGroupName(name);
 }
 
@@ -169,7 +166,7 @@ void VivaldiUtilitiesAPI::Shutdown() {
   }
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >::
+static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>>::
     DestructorAtExit g_factory_utils = LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -273,7 +270,7 @@ bool VivaldiUtilitiesAPI::AuthenticateUser(
                    : nullptr;
 
   bool success = api->password_access_authenticator_.EnsureUserIsAuthenticated(
-    password_manager::ReauthPurpose::VIEW_PASSWORD);
+      password_manager::ReauthPurpose::VIEW_PASSWORD);
 
   api->native_window_ = nullptr;
 
@@ -281,7 +278,7 @@ bool VivaldiUtilitiesAPI::AuthenticateUser(
 }
 
 bool VivaldiUtilitiesAPI::OsReauthCall(
-  password_manager::ReauthPurpose purpose) {
+    password_manager::ReauthPurpose purpose) {
 #if defined(OS_WIN)
   return password_manager_util_win::AuthenticateUser(native_window_, purpose);
 #elif defined(OS_MAC)
@@ -357,7 +354,7 @@ VivaldiUtilitiesAPI::DialogPosition::DialogPosition(
 
 ExtensionFunction::ResponseAction UtilitiesShowPasswordDialogFunction::Run() {
   Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
-                      dispatcher()->GetAssociatedWebContents());
+      dispatcher()->GetAssociatedWebContents());
   chrome::ManagePasswordsForPage(browser);
 
   return RespondNow(NoArguments());
@@ -424,167 +421,86 @@ ExtensionFunction::ResponseAction UtilitiesIsTabInLastSessionFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(is_in_session)));
 }
 
-UtilitiesIsUrlValidFunction::UtilitiesIsUrlValidFunction() {}
+ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
+  return RespondNow(Error("Unexpected call to the browser process"));
+}
 
-UtilitiesIsUrlValidFunction::~UtilitiesIsUrlValidFunction() {}
+ExtensionFunction::ResponseAction UtilitiesCanOpenUrlExternallyFunction::Run() {
+  using vivaldi::utilities::CanOpenUrlExternally::Params;
+  namespace Results = vivaldi::utilities::CanOpenUrlExternally::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  GURL url(params->url);
+
+  bool result = false;
+  do {
+    if (!url.is_valid())
+      break;
+
+    // Check first if the user already decided to show or block the URL. If the
+    // user has blocked it, return false to treat the blocked scheme as unknown
+    // and send the url to the search engine rather than showing it. If the user
+    // has accepted it, then presume that the scheme shows something useful and
+    // return true.
+    ExternalProtocolHandler::BlockState block_state =
+        ExternalProtocolHandler::GetBlockState(
+            url.scheme(), nullptr,
+            Profile::FromBrowserContext(browser_context()));
+    if (block_state != ExternalProtocolHandler::UNKNOWN) {
+      result = (block_state == ExternalProtocolHandler::DONT_BLOCK);
+      break;
+    }
+
+    // Ask OS if something handles the url. On Linux this always return
+    // xdg-open, so there we effectively treat URL with any scheme as openable
+    // until the user blocks it. But on Mac and Windows the behavior is more
+    // sensible.
+    std::u16string application_name =
+        shell_integration::GetApplicationNameForProtocol(url);
+    if (!application_name.empty()) {
+      result = true;
+      break;
+    }
+
+    // As the last resort check if the browser handles the protocol itself
+    // perhaps via an installed extension or something.
+    //
+    // TODO(igor@vivaldi.com): Figure out if this check is really necessary
+    // given the above GetApplicationNameForProtocol() check?
+    auto default_protocol_worker =
+        base::MakeRefCounted<shell_integration::DefaultProtocolClientWorker>(
+            url.scheme());
+
+    // StartCheckIsDefault takes ownership and releases everything once all
+    // background activities finishes
+    default_protocol_worker->StartCheckIsDefault(
+        base::BindOnce(&UtilitiesCanOpenUrlExternallyFunction::
+                           OnDefaultProtocolClientWorkerFinished,
+                       this));
+    return RespondLater();
+
+  } while (false);
+
+  return RespondNow(ArgumentList(Results::Create(result)));
+}
 
 // Based on OnDefaultProtocolClientWorkerFinished in
 // external_protocol_handler.cc
-void UtilitiesIsUrlValidFunction::OnDefaultProtocolClientWorkerFinished(
-    shell_integration::DefaultWebClientState state) {
-  namespace Results = vivaldi::utilities::IsUrlValid::Results;
+void UtilitiesCanOpenUrlExternallyFunction::
+    OnDefaultProtocolClientWorkerFinished(
+        shell_integration::DefaultWebClientState state) {
+  namespace Results = vivaldi::utilities::CanOpenUrlExternally::Results;
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // If we get here, either Vivaldi is not the default or we cannot work out
-  // what the default is, so we proceed.
-  if (prompt_user_ && state == shell_integration::NOT_DEFAULT) {
-    // Ask the user if they want to allow the protocol, but only
-    // if the url is a valid formatted url with a registered
-    // program to handle it.
-    std::u16string application_name =
-      shell_integration::GetApplicationNameForProtocol(url_);
-
-    result_.external_handler = result_.url_valid && !application_name.empty();
-  }
-  Respond(ArgumentList(Results::Create(result_)));
-}
-
-ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
-  using vivaldi::utilities::IsUrlValid::Params;
-  namespace Results = vivaldi::utilities::IsUrlValid::Results;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  GURL url(params->url);
-
-  result_.url_valid = !params->url.empty() && url.is_valid();
-  // GURL::spec() can only be called when url is valid.
-  std::string spec = url.is_valid() ? url.spec() : base::EmptyString();
-  result_.scheme_valid =
-      URLPattern::IsValidSchemeForExtensions(url.scheme()) ||
-      url.SchemeIs(url::kJavaScriptScheme) || url.SchemeIs(url::kDataScheme) ||
-      url.SchemeIs(url::kMailToScheme) || spec == url::kAboutBlankURL ||
-      url.SchemeIs(content::kViewSourceScheme) ||
-      url.SchemeIs(kDevToolsLegacyScheme) || url.SchemeIs(kDevToolsScheme);
-
-  result_.scheme_parsed = url.scheme();
-  result_.normalized_url = spec;
-  result_.external_handler = false;
-
-  if (result_.url_valid && result_.scheme_valid) {
-    // We have valid schemes and url, no need to check for external handler.
-    return RespondNow(ArgumentList(Results::Create(result_)));
-  }
-  // We have an invalid scheme, let's see if it's an external handler.
-  // The worker creates tasks with references to itself and puts them into
-  // message loops.
-  ExternalProtocolHandler::BlockState block_state =
-      ExternalProtocolHandler::GetBlockState(
-          url.scheme(), nullptr,
-          Profile::FromBrowserContext(browser_context()));
-  prompt_user_ = block_state == ExternalProtocolHandler::UNKNOWN;
-  url_ = url;
-
-  auto default_protocol_worker = base::MakeRefCounted<
-      shell_integration::DefaultProtocolClientWorker>(
-      url.scheme());
-
-  // StartCheckIsDefault takes ownership and releases everything once all
-  // background activities finishes
-  default_protocol_worker->StartCheckIsDefault(base::BindOnce(
-      &UtilitiesIsUrlValidFunction::OnDefaultProtocolClientWorkerFinished,
-      this));
-  return RespondLater();
+  bool can_open_with_browser = (state == shell_integration::IS_DEFAULT);
+  Respond(ArgumentList(Results::Create(can_open_with_browser)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetUrlFragmentsFunction::Run() {
-  using vivaldi::utilities::GetUrlFragments::Params;
-  namespace Results = vivaldi::utilities::GetUrlFragments::Results;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  vivaldi::utilities::UrlFragments fragments;
-  GURL url(params->url);
-  if (url.is_valid()) {
-    url::Parsed parsed;
-    if (url.SchemeIsFile()) {
-      ParseFileURL(url.spec().c_str(), url.spec().length(), &parsed);
-    } else {
-      ParseStandardURL(url.spec().c_str(), url.spec().length(), &parsed);
-      if (url.host().empty() && parsed.host.end() > 0) {
-        // Of the type "javascript:..."
-        ParsePathURL(url.spec().c_str(), url.spec().length(), false, &parsed);
-      }
-    }
-
-    if (parsed.scheme.is_valid()) {
-      fragments.scheme.fragment = url.scheme();
-      fragments.scheme.begin = parsed.CountCharactersBefore(
-          url::Parsed::SCHEME, true);
-      fragments.scheme.end = parsed.scheme.end();
-    }
-    if (parsed.username.is_valid()) {
-      fragments.username.fragment = url.username();
-      fragments.username.begin = parsed.CountCharactersBefore(
-          url::Parsed::USERNAME, true);
-      fragments.username.end = parsed.username.end();
-    }
-    if (parsed.password.is_valid()) {
-      fragments.password.fragment = url.password();
-      fragments.password.begin = parsed.CountCharactersBefore(
-          url::Parsed::PASSWORD, true);
-      fragments.password.end = parsed.password.end();
-    }
-    if (parsed.host.is_valid()) {
-      fragments.host.fragment = url.host();
-      fragments.host.begin = parsed.CountCharactersBefore(
-          url::Parsed::HOST, true);
-      fragments.host.end = parsed.host.end();
-    }
-    if (parsed.port.is_valid()) {
-      fragments.port.fragment = url.port();
-      fragments.port.begin = parsed.CountCharactersBefore(
-          url::Parsed::PORT, true);
-      fragments.port.end = parsed.port.end();
-    }
-    if (parsed.path.is_valid()) {
-      fragments.path.fragment = url.path();
-      fragments.path.begin = parsed.CountCharactersBefore(
-          url::Parsed::PATH, true);
-      fragments.path.end = parsed.path.end();
-    }
-    if (parsed.query.is_valid()) {
-      fragments.query.fragment = url.query();
-      fragments.query.begin = parsed.CountCharactersBefore(
-          url::Parsed::QUERY, true);
-      fragments.query.end = parsed.query.end();
-    }
-    if (parsed.ref.is_valid()) {
-      fragments.ref.fragment = url.ref();
-      fragments.ref.begin = parsed.CountCharactersBefore(
-          url::Parsed::REF, true);
-      fragments.ref.end = parsed.ref.end();
-    }
-    if (parsed.host.is_valid()) {
-      DomainInfo info = GetDomainInfo(url);
-      if (!info.domain_without_registry.empty()) {
-        fragments.tld.fragment = info.domain_and_registry.substr(
-            info.domain_without_registry.length() + 1);
-      } else {
-        fragments.tld.fragment = info.domain_and_registry;
-      }
-      std::size_t offset = fragments.host.fragment.find(fragments.tld.fragment);
-      if (offset != std::string::npos) {
-        fragments.tld.begin = fragments.host.begin + offset;
-        fragments.tld.end = parsed.host.end();
-      }
-    }
-  }
-
-  return RespondNow(ArgumentList(Results::Create(fragments)));
+  return RespondNow(Error("Unexpected call to the browser process"));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
@@ -602,8 +518,7 @@ ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
     return RespondNow(Error(error));
 
   std::string text;
-  content::RenderWidgetHostView* rwhv =
-      web_contents->GetRenderWidgetHostView();
+  content::RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
   if (rwhv) {
     text = base::UTF16ToUTF8(rwhv->GetSelectedText());
   }
@@ -631,6 +546,7 @@ class FileSelectionRunner : private ui::SelectFileDialog::Listener {
 
   static void Start(const FileSelectionOptions& options,
                     ResultCallback callback);
+
  private:
   FileSelectionRunner(ResultCallback callback);
   ~FileSelectionRunner() override;
@@ -690,11 +606,11 @@ void FileSelectionRunner::FileSelectionCanceled(void* params) {
 
 // Converts file extensions to a ui::SelectFileDialog::FileTypeInfo.
 void ConvertExtensionsToFileTypeInfo(
-    const std::vector<vivaldi::utilities::FileExtension>&
-        extensions, ui::SelectFileDialog::FileTypeInfo* file_type_info) {
+    const std::vector<vivaldi::utilities::FileExtension>& extensions,
+    ui::SelectFileDialog::FileTypeInfo* file_type_info) {
   for (const auto& item : extensions) {
     base::FilePath::StringType allowed_extension =
-      base::FilePath::FromUTF8Unsafe(item.ext).value();
+        base::FilePath::FromUTF8Unsafe(item.ext).value();
 
     // FileTypeInfo takes a nested vector like [["htm", "html"], ["txt"]] to
     // group equivalent extensions, but we don't use this feature here.
@@ -759,11 +675,11 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   }
   if (params->params.thumbnail_bookmark_id) {
     if (!base::StringToInt64(*params->params.thumbnail_bookmark_id,
-      &bookmark_id) ||
-      bookmark_id <= 0) {
+                             &bookmark_id) ||
+        bookmark_id <= 0) {
       return RespondNow(
-        Error("thumbnailBookmarkId is not a valid positive integer - " +
-          *params->params.thumbnail_bookmark_id));
+          Error("thumbnailBookmarkId is not a valid positive integer - " +
+                *params->params.thumbnail_bookmark_id));
     }
   } else if (params->params.set_path_in_prefs &&
              *params->params.set_path_in_prefs) {
@@ -785,8 +701,7 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   FileSelectionRunner::Start(
       options,
       base::BindOnce(&UtilitiesSelectLocalImageFunction::OnFileSelected, this,
-                     bookmark_id, preference_index,
-                     preference_path));
+                     bookmark_id, preference_index, preference_path));
 
   return RespondLater();
 }
@@ -805,9 +720,8 @@ void UtilitiesSelectLocalImageFunction::OnFileSelected(
   }
   if (preference_path.empty()) {
     VivaldiDataSourcesAPI::UpdateMapping(
-      browser_context(), bookmark_id, preference_index, std::move(path),
-      base::BindOnce(
-        &UtilitiesSelectLocalImageFunction::SendResult, this));
+        browser_context(), bookmark_id, preference_index, std::move(path),
+        base::BindOnce(&UtilitiesSelectLocalImageFunction::SendResult, this));
   } else {
     Profile* profile =
         Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
@@ -826,12 +740,7 @@ void UtilitiesSelectLocalImageFunction::SendResult(bool success) {
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {
-  namespace Results = vivaldi::utilities::GetVersion::Results;
-
-  vivaldi::utilities::GetVersionResults results;
-  results.vivaldi_version = ::vivaldi::GetVivaldiVersionString();
-  results.chromium_version = version_info::GetVersionNumber();
-  return RespondNow(ArgumentList(Results::Create(results)));
+  return RespondNow(Error("Unexpected call to the browser process"));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetFFMPEGStateFunction::Run() {
@@ -1062,6 +971,21 @@ ExtensionFunction::ResponseAction UtilitiesOpenPageFunction::Run() {
   return RespondNow(ArgumentList(Results::Create()));
 }
 
+ExtensionFunction::ResponseAction UtilitiesBroadcastMessageFunction::Run() {
+  using vivaldi::utilities::BroadcastMessage::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::utilities::OnBroadcastMessage::kEventName,
+      vivaldi::utilities::OnBroadcastMessage::Create(
+          params->window_id, params->action, params->prompt, params->urls),
+      browser_context());
+
+  namespace Results = vivaldi::utilities::BroadcastMessage::Results;
+  return RespondNow(ArgumentList(Results::Create()));
+}
+
 ExtensionFunction::ResponseAction
 UtilitiesSetDefaultContentSettingsFunction::Run() {
   using vivaldi::utilities::SetDefaultContentSettings::Params;
@@ -1085,8 +1009,8 @@ UtilitiesSetDefaultContentSettingsFunction::Run() {
       HostContentSettingsMapFactory::GetForProfile(profile);
 
   const content_settings::ContentSettingsInfo* info =
-    content_settings::ContentSettingsRegistry::GetInstance()->Get(
-      content_type);
+      content_settings::ContentSettingsRegistry::GetInstance()->Get(
+          content_type);
 
   bool is_valid_settings_value = info->IsDefaultSettingValid(default_setting);
   DCHECK(is_valid_settings_value);
@@ -1154,7 +1078,7 @@ vivaldi::utilities::CookieMode ToCookieMode(CookieControlsMode mode) {
   }
 }
 
-}
+}  // namespace
 
 ExtensionFunction::ResponseAction
 UtilitiesSetBlockThirdPartyCookiesFunction::Run() {
@@ -1194,6 +1118,28 @@ ExtensionFunction::ResponseAction UtilitiesOpenTaskManagerFunction::Run() {
       dispatcher()->GetAssociatedWebContents());
 
   chrome::OpenTaskManager(browser);
+  return RespondNow(ArgumentList(Results::Create()));
+}
+
+ExtensionFunction::ResponseAction UtilitiesCreateQRCodeFunction::Run() {
+  using vivaldi::utilities::CreateQRCode::Params;
+  namespace Results = vivaldi::utilities::CreateQRCode::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string error;
+  content::WebContents* web_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+          params->id, browser_context(), &error);
+  if (!web_contents)
+    return RespondNow(Error(error));
+  qrcode_generator::QRCodeGeneratorBubbleController* bubble_controller =
+      qrcode_generator::QRCodeGeneratorBubbleController::Get(web_contents);
+  content::NavigationEntry* entry =
+      web_contents->GetController().GetLastCommittedEntry();
+  bubble_controller->ShowBubble(entry->GetURL());
+
   return RespondNow(ArgumentList(Results::Create()));
 }
 
@@ -1271,12 +1217,13 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
     bool version_changed = false;
     std::string version = ::vivaldi::GetVivaldiVersionString();
     std::string last_seen_version =
-      profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
+        profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
 
     std::vector<std::string> version_array = base::SplitString(
         version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-    std::vector<std::string> last_seen_array = base::SplitString(
-        last_seen_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    std::vector<std::string> last_seen_array =
+        base::SplitString(last_seen_version, ".", base::KEEP_WHITESPACE,
+                          base::SPLIT_WANT_NONEMPTY);
 
     if (version_array.size() != 4 || last_seen_array.size() != 4) {
       version_changed = true;
@@ -1289,10 +1236,9 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
           base::StringToInt(last_seen_array[0], &last_seen_major) &&
           base::StringToInt(version_array[1], &version_minor) &&
           base::StringToInt(last_seen_array[1], &last_seen_minor)) {
-        version_changed =
-          (version_major > last_seen_major) ||
-          ((version_minor > last_seen_minor) &&
-          (version_major >= last_seen_major));
+        version_changed = (version_major > last_seen_major) ||
+                          ((version_minor > last_seen_minor) &&
+                           (version_major >= last_seen_major));
         profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                        version);
       }
@@ -1319,7 +1265,7 @@ ExtensionFunction::ResponseAction UtilitiesSetDialogPositionFunction::Run() {
                  params->position.width, params->position.height);
 
   VivaldiUtilitiesAPI* api =
-    VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
 
   bool found = api->SetDialogPostion(
       params->window_id, vivaldi::utilities::ToString(params->dialog_name),
@@ -1339,12 +1285,11 @@ UtilitiesIsRazerChromaAvailableFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(available)));
 }
 
-ExtensionFunction::ResponseAction
-UtilitiesIsRazerChromaReadyFunction::Run() {
+ExtensionFunction::ResponseAction UtilitiesIsRazerChromaReadyFunction::Run() {
   namespace Results = vivaldi::utilities::IsRazerChromaReady::Results;
 
   VivaldiUtilitiesAPI* api =
-    VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
 
   bool available = api->IsRazerChromaReady();
   return RespondNow(ArgumentList(Results::Create(available)));
@@ -1358,7 +1303,7 @@ ExtensionFunction::ResponseAction UtilitiesSetRazerChromaColorFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   VivaldiUtilitiesAPI* api =
-    VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
 
   RazerChromaColors colors;
   for (size_t i = 0; i < params->colors.size(); i++) {
@@ -1410,8 +1355,8 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
     if (!profile->HasOffTheRecordProfile(Profile::OTRProfileID::PrimaryID())) {
       return RespondNow(NoArguments());
     }
-    profile =
-        profile->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID(), false);
+    profile = profile->GetOffTheRecordProfile(
+        Profile::OTRProfileID::PrimaryID(), false);
   }
 
   HostContentSettingsMap* map =
@@ -1439,7 +1384,7 @@ ExtensionFunction::ResponseAction UtilitiesIsDialogOpenFunction::Run() {
   bool visible = false;
 
   switch (params->dialog_name) {
-    case vivaldi::utilities::DialogName::DIALOG_NAME_PASSWORD :
+    case vivaldi::utilities::DialogName::DIALOG_NAME_PASSWORD:
       if (PasswordBubbleViewBase::manage_password_bubble()) {
         visible =
             PasswordBubbleViewBase::manage_password_bubble()->GetVisible();
@@ -1495,19 +1440,20 @@ ExtensionFunction::ResponseAction UtilitiesStartChromecastFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run() {
+ExtensionFunction::ResponseAction
+UtilitiesGetMediaAvailableStateFunction::Run() {
   namespace Results = vivaldi::utilities::GetMediaAvailableState::Results;
   bool is_available = true;
 #if defined(OS_WIN)
   const base::CommandLine& command_line =
-    *base::CommandLine::ForCurrentProcess();
+      *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kAutoTestMode)) {
-    _OSVERSIONINFOEXW version_info = { sizeof(version_info) };
+    _OSVERSIONINFOEXW version_info = {sizeof(version_info)};
     ::GetVersionEx(reinterpret_cast<_OSVERSIONINFOW*>(&version_info));
 
     DWORD os_type = 0;
     ::GetProductInfo(version_info.dwMajorVersion, version_info.dwMinorVersion,
-      0, 0, &os_type);
+                     0, 0, &os_type);
 
     // Only present on Vista+. All these 'N' versions of Windows come without
     // a media player or codecs.
@@ -1585,12 +1531,11 @@ ExtensionFunction::ResponseAction UtilitiesGenerateQRCodeFunction::Run() {
       qr_code_service_remote_.get();
 
   auto callback = base::BindOnce(
-    &UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse, this);
+      &UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse, this);
   generator->GenerateQRCode(std::move(request), std::move(callback));
 
   return RespondLater();
 }
-
 
 void UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse(
     const qrcode_generator::mojom::GenerateQRCodeResponsePtr response) {
@@ -1615,7 +1560,7 @@ void UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse(
     Profile* profile = Profile::FromBrowserContext(browser_context());
     PrefService* service = profile->GetOriginalProfile()->GetPrefs();
     std::string save_file_pattern =
-      service->GetString(vivaldiprefs::kWebpagesCaptureSaveFilePattern);
+        service->GetString(vivaldiprefs::kWebpagesCaptureSaveFilePattern);
 
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE,
@@ -1654,6 +1599,17 @@ void UtilitiesGenerateQRCodeFunction::RespondOnUiThread(
   namespace Results = vivaldi::utilities::GenerateQRCode::Results;
 
   Respond(ArgumentList(Results::Create(image_data)));
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetGAPIKeyFunction::Run() {
+  namespace Results = vivaldi::utilities::GetGAPIKey::Results;
+
+#ifdef VIVALDI_GOOGLE_TASKS_API_KEY
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_GOOGLE_TASKS_API_KEY)));
+#else
+  return RespondNow(Error("No API key defined"));
+#endif  // VIVALDI_GOOGLE_TASKS_API_KEY
 }
 
 }  // namespace extensions

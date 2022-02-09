@@ -17,6 +17,7 @@
 
 class PrefRegistrySimple;
 class PrefService;
+class Profile;
 
 namespace aura {
 class Window;
@@ -34,6 +35,10 @@ class PlatformChannelEndpoint;
 namespace version_info {
 enum class Channel;
 }  // namespace version_info
+
+namespace policy {
+class PolicyMap;
+}  // namespace policy
 
 namespace user_manager {
 class User;
@@ -89,6 +94,9 @@ extern const char kClearUserDataDir1Pref[];
 // A dictionary local state pref that records the last data version of
 // lacros-chrome.
 extern const char kDataVerPref[];
+
+// Lacros' user data is backward compatible up until this version.
+extern const char kRequiredDataVersion[];
 
 // Registers user profile preferences related to the lacros-chrome binary.
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -159,6 +167,10 @@ bool IsLacrosWindow(const aura::Window* window);
 // account_manager logic.
 bool DoesMetadataSupportNewAccountManager(base::Value* metadata);
 
+// Checks for the given profile if the user is affiliated or belongs to the
+// sign-in profile.
+bool IsSigninProfileOrBelongsToAffiliatedUser(Profile* profile);
+
 // Returns the UUID and version for all tracked interfaces. Exposed for testing.
 base::flat_map<base::Token, uint32_t> GetInterfaceVersions();
 
@@ -196,14 +208,31 @@ void RecordDataVer(PrefService* local_state,
                    const std::string& user_id_hash,
                    const base::Version& version);
 
+// Checks if lacros' data directory needs to be wiped for backward incompatible
+// data.
+bool IsDataWipeRequired(const std::string& user_id_hash);
+
+// Exposed for testing. The arguments are passed to
+// `IsDataWipeRequiredInternal()`.
+bool IsDataWipeRequiredForTesting(base::Version data_version,
+                                  const base::Version& current_version,
+                                  const base::Version& required_version);
+
 // Gets the version of the rootfs lacros-chrome. By reading the metadata json
 // file in the correct format.
 base::Version GetRootfsLacrosVersionMayBlock(
     const base::FilePath& version_file_path);
 
+// To be called at primary user login, to cache the policy value for launch
+// switch.
+void CacheLacrosLaunchSwitch(const policy::PolicyMap& map);
+
 // Exposed for testing. Returns the lacros integration suggested by the policy
 // lacros-availability, modified by Finch flags and user flags as appropriate.
 LacrosLaunchSwitch GetLaunchSwitchForTesting();
+
+// Clears the cached values for policy data.
+void ClearLacrosLaunchSwitchCacheForTest();
 
 }  // namespace browser_util
 }  // namespace crosapi

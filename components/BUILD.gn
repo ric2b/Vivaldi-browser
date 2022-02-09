@@ -13,7 +13,7 @@ source_set("adverse_adblocking") {
     "//build:branding_buildflags",
     "//components/prefs",
     "//components/keyed_service/content",
-    "//components/safe_browsing/core/db:v4_protocol_manager_util",
+    "//components/safe_browsing/core/browser/db:v4_protocol_manager_util",
     "//components/subresource_filter/core/browser",
     "//components/subresource_filter/core/common",
     "//components/subresource_filter/content/browser",

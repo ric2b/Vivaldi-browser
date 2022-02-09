@@ -251,13 +251,19 @@ NoteNode* NotesModel::ImportNote(const NoteNode* parent,
 NoteNode* NotesModel::AddFolder(const NoteNode* parent,
                                 size_t index,
                                 const std::u16string& name,
+                                absl::optional<base::Time> creation_time,
                                 absl::optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
 
+  const base::Time provided_creation_time_or_now =
+      creation_time.value_or(Time::Now());
+
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      generate_next_node_id(), guid.value_or(base::GUID::GenerateRandomV4()),
       NoteNode::FOLDER);
+  new_node->SetCreationTime(provided_creation_time_or_now);
+
   new_node->SetTitle(name);
   DCHECK(new_node->GetTitle() == name);
   DCHECK(new_node->is_folder());

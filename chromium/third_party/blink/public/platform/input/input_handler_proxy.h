@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/snap_fling_controller.h"
 #include "cc/paint/element_id.h"
@@ -68,6 +67,8 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
  public:
   InputHandlerProxy(cc::InputHandler& input_handler,
                     InputHandlerProxyClient* client);
+  InputHandlerProxy(const InputHandlerProxy&) = delete;
+  InputHandlerProxy& operator=(const InputHandlerProxy&) = delete;
   ~InputHandlerProxy() override;
 
   ElasticOverscrollController* elastic_overscroll_controller() {
@@ -171,6 +172,7 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   void WillShutdown() override;
   void Animate(base::TimeTicks time) override;
   void ReconcileElasticOverscrollAndRootScroll() override;
+  void SetPrefersReducedMotion(bool prefers_reduced_motion) override;
   void UpdateRootLayerStateForSynchronousInputHandler(
       const gfx::ScrollOffset& total_scroll_offset,
       const gfx::ScrollOffset& max_scroll_offset,
@@ -223,6 +225,7 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   void DispatchSingleInputEvent(std::unique_ptr<EventWithCallback>,
                                 const base::TimeTicks);
   void DispatchQueuedInputEvents();
+  void UpdateElasticOverscroll();
 
   // Helper functions for handling more complicated input events.
   EventDisposition HandleMouseWheel(const blink::WebMouseWheelEvent& event);
@@ -362,13 +365,14 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   // hit test information is unnecessary (e.g. tests).
   bool event_attribution_enabled_ = true;
 
+  // This tracks whether the user has set prefers reduced motion.
+  bool prefers_reduced_motion_ = false;
+
   // Helpers for the momentum scroll jank UMAs.
   std::unique_ptr<MomentumScrollJankTracker> momentum_scroll_jank_tracker_;
 
   // Swipe to move cursor feature.
   std::unique_ptr<CursorControlHandler> cursor_control_handler_;
-
-  DISALLOW_COPY_AND_ASSIGN(InputHandlerProxy);
 };
 
 }  // namespace blink

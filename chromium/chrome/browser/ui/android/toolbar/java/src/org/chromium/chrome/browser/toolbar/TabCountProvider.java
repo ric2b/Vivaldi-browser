@@ -198,6 +198,9 @@ public class TabCountProvider {
     }
 
     private void updateTabCount() {
+        // Note(david@vivaldi.com): We need to check for null here as we might force an update to
+        // early.
+        if (mTabModelSelector == null) return;
         if (!mTabModelSelector.isTabStateInitialized()) return;
 
         final int tabCount =

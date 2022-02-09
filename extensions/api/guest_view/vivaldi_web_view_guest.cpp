@@ -614,7 +614,8 @@ void WebViewGuest::AllowRunningInsecureContent() {
     MixedContentSettingsTabHelper::FromWebContents(web_contents());
   if (mixed_content_settings) {
     // Update browser side settings to allow active mixed content.
-    mixed_content_settings->AllowRunningOfInsecureContent();
+    mixed_content_settings->AllowRunningOfInsecureContent(
+        *web_contents()->GetOpener());
   }
 
   web_contents()->ForEachFrame(

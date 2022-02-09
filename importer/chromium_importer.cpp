@@ -33,6 +33,7 @@
 #include "components/password_manager/core/browser/password_form.h"
 #include "importer/chrome_importer_utils.h"
 #include "sql/statement.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 
 ChromiumImporter::ChromiumImporter() {}
@@ -104,7 +105,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
     return;
   }
 
-  base::Optional<base::Value> local_state(
+  absl::optional<base::Value> local_state(
       base::JSONReader::Read(local_state_string));
   if (!local_state) {
     LOG(ERROR) << "Unable to parse JSON in Local State.";

@@ -341,7 +341,7 @@ bool MenuUpgrade::Insert(const base::Value& bundle_value,
       base::Value list(base::Value::Type::LIST);
       int i = 0;
       bool added = false;
-      for (auto& child : children->TakeList()) {
+      for (auto& child : children->GetList()) {
         if (i++ == index) {
           added = true;
           auto c = bundle_value.Clone();

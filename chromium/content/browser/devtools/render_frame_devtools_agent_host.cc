@@ -58,6 +58,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -205,7 +206,7 @@ void RenderFrameDevToolsAgentHost::AddAllAgentHosts(
 }
 
 // static
-void RenderFrameDevToolsAgentHost::WebContentsMainFrameCreated(
+void RenderFrameDevToolsAgentHost::AttachToWebContents(
     WebContents* web_contents) {
   if (ShouldForceCreation()) {
     // Force agent host.
@@ -338,7 +339,9 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       may_attach_to_brower
           ? protocol::TargetHandler::AccessMode::kRegular
           : protocol::TargetHandler::AccessMode::kAutoAttachOnly,
-      GetId(), GetRendererChannel(), session->GetRootSession()));
+      GetId(),
+      protocol::TargetAutoAttacher::CreateForFrame(GetRendererChannel()),
+      session->GetRootSession()));
   session->AddHandler(std::make_unique<protocol::PageHandler>(
       emulation_handler_ptr, browser_handler_ptr,
       session->GetClient()->MayReadLocalFiles()));
@@ -576,7 +579,7 @@ void RenderFrameDevToolsAgentHost::UpdateFrameAlive() {
   if (render_frame_alive_ && render_frame_crashed_) {
     render_frame_crashed_ = false;
     for (DevToolsSession* session : sessions())
-      session->ClearPendingMessages();
+      session->ClearPendingMessages(/*did_crash=*/true);
     for (auto* inspector : protocol::InspectorHandler::ForAgentHost(this))
       inspector->TargetReloadedAfterCrash();
   }
@@ -705,13 +708,16 @@ std::string RenderFrameDevToolsAgentHost::GetType() {
       static_cast<WebContentsImpl*>(web_contents())->IsPortal()) {
     return kTypePage;
   }
+  // NOTE(andre@vivaldi.com) : Bugs VB-82239 and VB-67178 was caused by the
+  // hiarchy differences in Vivaldi compared to regular Chrome. So the
+  // frametypes would get mixed up causing different behavior in DevTools.
+  if (IsChildFrame())
+    return kTypeFrame;
   if (web_contents() &&
       static_cast<WebContentsImpl*>(web_contents())->GetOuterWebContents()) {
     return VivaldiTabCheck::IsVivaldiTab(web_contents()) ? kTypePage
                                                          : kTypeGuest;
   }
-  if (IsChildFrame())
-    return kTypeFrame;
   DevToolsManager* manager = DevToolsManager::GetInstance();
   if (manager->delegate() && web_contents()) {
     std::string type = manager->delegate()->GetTargetType(web_contents());

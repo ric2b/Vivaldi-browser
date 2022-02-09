@@ -26,13 +26,13 @@ namespace content {
 
 TransactionImpl::TransactionImpl(
     base::WeakPtr<IndexedDBTransaction> transaction,
-    const url::Origin& origin,
+    const blink::StorageKey& storage_key,
     base::WeakPtr<IndexedDBDispatcherHost> dispatcher_host,
     scoped_refptr<base::SequencedTaskRunner> idb_runner)
     : dispatcher_host_(dispatcher_host),
       indexed_db_context_(dispatcher_host->context()),
       transaction_(std::move(transaction)),
-      origin_(origin),
+      storage_key_(storage_key),
       idb_runner_(std::move(idb_runner)) {
   DCHECK(idb_runner_->RunsTasksInCurrentSequence());
   DCHECK(dispatcher_host_);
@@ -57,6 +57,13 @@ void TransactionImpl::CreateObjectStore(int64_t object_store_id,
     return;
   }
 
+  if (!transaction_->IsAcceptingRequests()) {
+    mojo::ReportBadMessage(
+        "CreateObjectStore was called after committing or aborting the "
+        "transaction");
+    return;
+  }
+
   IndexedDBConnection* connection = transaction_->connection();
   if (!connection->IsConnected())
     return;
@@ -76,6 +83,13 @@ void TransactionImpl::DeleteObjectStore(int64_t object_store_id) {
   if (transaction_->mode() != blink::mojom::IDBTransactionMode::VersionChange) {
     mojo::ReportBadMessage(
         "DeleteObjectStore must be called from a version change transaction.");
+    return;
+  }
+
+  if (!transaction_->IsAcceptingRequests()) {
+    mojo::ReportBadMessage(
+        "DeleteObjectStore was called after committing or aborting the "
+        "transaction");
     return;
   }
 
@@ -108,6 +122,12 @@ void TransactionImpl::Put(
     std::move(callback).Run(
         blink::mojom::IDBTransactionPutResult::NewErrorResult(
             blink::mojom::IDBError::New(error.code(), error.message())));
+    return;
+  }
+
+  if (!transaction_->IsAcceptingRequests()) {
+    mojo::ReportBadMessage(
+        "Put was called after committing or aborting the transaction");
     return;
   }
 
@@ -167,6 +187,12 @@ void TransactionImpl::PutAll(int64_t object_store_id,
     std::move(callback).Run(
         blink::mojom::IDBTransactionPutAllResult::NewErrorResult(
             blink::mojom::IDBError::New(error.code(), error.message())));
+    return;
+  }
+
+  if (!transaction_->IsAcceptingRequests()) {
+    mojo::ReportBadMessage(
+        "PutAll was called after committing or aborting the transaction");
     return;
   }
 
@@ -268,6 +294,12 @@ void TransactionImpl::Commit(int64_t num_errors_handled) {
   if (!transaction_)
     return;
 
+  if (!transaction_->IsAcceptingRequests()) {
+    // This really shouldn't be happening, but seems to be happening anyway. So
+    // rather than killing the renderer, simply ignore the request.
+    return;
+  }
+
   IndexedDBConnection* connection = transaction_->connection();
   if (!connection->IsConnected())
     return;
@@ -281,7 +313,7 @@ void TransactionImpl::Commit(int64_t num_errors_handled) {
   }
 
   indexed_db_context_->quota_manager_proxy()->GetUsageAndQuota(
-      origin_, blink::mojom::StorageType::kTemporary,
+      storage_key_, blink::mojom::StorageType::kTemporary,
       indexed_db_context_->IDBTaskRunner(),
       base::BindOnce(&TransactionImpl::OnGotUsageAndQuotaForCommit,
                      weak_factory_.GetWeakPtr()));

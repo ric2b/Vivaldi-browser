@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Seleccioneu el fitxer de marcadors d'Opera</translation>
 <translation id="3451317331714872347">Paisatge 8</translation>
 <translation id="3457498675806041407">Confirmeu la sortida</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ja s'ha instal·lat i s'activarà quan reinicieu el navegador.</translation>
 <translation id="3516213908976398531">Paisatge 11</translation>
 <translation id="3521635864657970829">Segur que voleu tancar aquesta finestra?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
@@ -112,7 +113,7 @@
 <translation id="6040143037577758943">Tanca</translation>
 <translation id="6229528619562190452">Feu clic aquí per actualitzar Vivaldi.</translation>
 <translation id="6234173136417926046">Fes servir aquesta Imatge com a Fons de la Pantalla d'Inici</translation>
-<translation id="630690498669249215">Fitxer de Marcadors d'Opera</translation>
+<translation id="630690498669249215">Fitxer de marcadors d'Opera</translation>
 <translation id="6339818817272922368">Compte local</translation>
 <translation id="6438786710866753178">Paisatge 4</translation>
 <translation id="6477028720702061455">Seleccioneu la carpeta del perfil d'Opera a importar</translation>
@@ -163,6 +164,7 @@
 <translation id="8912720443398351457">Segur que voleu sortir de Vivaldi?</translation>
 <translation id="8947109330183116400">Seleccioneu un fitxer HTML de marcadors</translation>
 <translation id="9017566390391482291">Seleccioneu la carpeta del perfil de Vivaldi a importar</translation>
+<translation id="9048058608784130603">Actualització pendent <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Edita</translation>
 <translation id="912022491595344261">Obre la imatge com a <ph name="USER" /></translation>
 <translation id="9157539936604258187">Obre l'enllaç</translation>

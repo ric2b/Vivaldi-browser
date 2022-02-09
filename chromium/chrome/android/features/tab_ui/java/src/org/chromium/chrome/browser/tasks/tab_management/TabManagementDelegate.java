@@ -11,6 +11,7 @@ import android.view.ViewGroup;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 
+import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
@@ -36,6 +37,7 @@ import org.chromium.chrome.browser.tasks.TasksSurfaceProperties;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestions;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.top.Toolbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -208,7 +210,7 @@ public interface TabManagementDelegate {
      * @return The {@link StartSurfaceLayout}.
      */
     Layout createStartSurfaceLayout(Context context, LayoutUpdateHost updateHost,
-            LayoutRenderHost renderHost, StartSurface startSurface);
+            LayoutRenderHost renderHost, StartSurface startSurface, JankTracker jankTracker);
 
     /**
      * Create the {@link StartSurface}
@@ -237,6 +239,8 @@ public interface TabManagementDelegate {
      * @param tabCreatorManger Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
+     * @param jankTracker Measures jank while tab switcher is visible.
+     * @param toolbarSupplier Supplies the {@link Toolbar}.
      * @return the {@link StartSurface}
      */
     StartSurface createStartSurface(@NonNull Activity activity,
@@ -257,7 +261,8 @@ public interface TabManagementDelegate {
             @NonNull ActivityLifecycleDispatcher activityLifecycleDispatcher,
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
-            @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher);
+            @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
+            @NonNull JankTracker jankTracker, @NonNull Supplier<Toolbar> toolbarSupplier);
 
     /**
      * Create a {@link TabGroupModelFilter} for the given {@link TabModel}.
@@ -275,4 +280,11 @@ public interface TabManagementDelegate {
     TabSuggestions createTabSuggestions(@NonNull Context context,
             @NonNull TabModelSelector tabModelSelector,
             @NonNull ActivityLifecycleDispatcher activityLifecycleDispatcher);
+
+    /**
+     * Apply the theme overlay for the target activity used for Tab management components. This
+     * theme needs to be applied once before creating any of the tab related component.
+     * @param activity The target {@link Activity} that used Tab theme.
+     */
+    void applyThemeOverlays(@NonNull Activity activity);
 }

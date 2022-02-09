@@ -4,7 +4,9 @@
 
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller.h"
 
+#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
@@ -12,6 +14,7 @@
 #import "components/policy/policy_constants.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
+#include "components/signin/public/base/account_consistency_method.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/sync/driver/mock_sync_service.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
@@ -24,7 +27,7 @@
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service_fake.h"
-#import "ios/chrome/browser/sync/profile_sync_service_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_mock.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
@@ -34,6 +37,7 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
@@ -72,7 +76,7 @@ class SettingsTableViewControllerTest : public ChromeTableViewControllerTest {
     ChromeTableViewControllerTest::SetUp();
 
     TestChromeBrowserState::Builder builder;
-    builder.AddTestingFactory(ProfileSyncServiceFactory::GetInstance(),
+    builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateMockSyncService));
     builder.AddTestingFactory(
         SyncSetupServiceFactory::GetInstance(),
@@ -95,8 +99,7 @@ class SettingsTableViewControllerTest : public ChromeTableViewControllerTest {
         SyncSetupServiceFactory::GetForBrowserState(
             chrome_browser_state_.get()));
     sync_service_mock_ = static_cast<syncer::MockSyncService*>(
-        ProfileSyncServiceFactory::GetForBrowserState(
-            chrome_browser_state_.get()));
+        SyncServiceFactory::GetForBrowserState(chrome_browser_state_.get()));
 
     auth_service_ = static_cast<AuthenticationServiceFake*>(
         AuthenticationServiceFactory::GetInstance()->GetForBrowserState(
@@ -122,6 +125,10 @@ class SettingsTableViewControllerTest : public ChromeTableViewControllerTest {
   }
 
   void TearDown() override {
+    // Cleanup any policies left from the test.
+    [[NSUserDefaults standardUserDefaults]
+        removeObjectForKey:kPolicyLoaderIOSConfigurationKey];
+
     [static_cast<SettingsTableViewController*>(controller())
         settingsWillBeDismissed];
     ChromeTableViewControllerTest::TearDown();
@@ -145,7 +152,7 @@ class SettingsTableViewControllerTest : public ChromeTableViewControllerTest {
   }
 
   void SetupSyncServiceEnabledExpectations() {
-    ON_CALL(*sync_setup_service_mock_, IsSyncEnabled())
+    ON_CALL(*sync_setup_service_mock_, CanSyncFeatureStart())
         .WillByDefault(Return(true));
     ON_CALL(*sync_setup_service_mock_, IsSyncingAllDataTypes())
         .WillByDefault(Return(true));
@@ -188,6 +195,9 @@ class SettingsTableViewControllerTest : public ChromeTableViewControllerTest {
 // Verifies that the Sync & Google Services icon displays Sync on state when
 // the user has turned on sync during sign-in.
 TEST_F(SettingsTableViewControllerTest, SyncOn) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(signin::kMobileIdentityConsistency);
+
   SetupSyncServiceEnabledExpectations();
   ON_CALL(*sync_setup_service_mock_, GetSyncServiceState())
       .WillByDefault(Return(SyncSetupService::kNoSyncServiceError));
@@ -199,15 +209,19 @@ TEST_F(SettingsTableViewControllerTest, SyncOn) {
   NSArray* account_items = [controller().tableViewModel
       itemsInSectionWithIdentifier:SettingsSectionIdentifier::
                                        SettingsSectionIdentifierAccount];
-  ASSERT_EQ(2U, account_items.count);
+  ASSERT_EQ(3U, account_items.count);
 
-  SettingsImageDetailTextItem* sync_item =
-      static_cast<SettingsImageDetailTextItem*>(account_items[1]);
-  ASSERT_NSEQ(sync_item.text, l10n_util::GetNSString(
-                                  IDS_IOS_GOOGLE_SERVICES_SYNC_SETTINGS_TITLE));
-  ASSERT_NSEQ(
-      sync_item.detailText,
-      l10n_util::GetNSString(IDS_IOS_SIGN_IN_TO_CHROME_SETTING_SYNC_ON));
+  TableViewDetailIconItem* sync_item =
+      base::mac::ObjCCastStrict<TableViewDetailIconItem>(account_items[1]);
+  ASSERT_NSEQ(sync_item.text,
+              l10n_util::GetNSString(IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE));
+  ASSERT_NSEQ(sync_item.detailText, nil);
+
+  TableViewDetailIconItem* google_service_item =
+      base::mac::ObjCCastStrict<TableViewDetailIconItem>(account_items[2]);
+  ASSERT_NSEQ(google_service_item.text,
+              l10n_util::GetNSString(IDS_IOS_GOOGLE_SERVICES_SETTINGS_TITLE));
+  ASSERT_NSEQ(google_service_item.detailText, nil);
 }
 
 // Verifies that the sign-in setting item is replaced by the managed sign-in

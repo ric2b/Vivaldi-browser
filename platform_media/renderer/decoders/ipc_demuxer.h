@@ -14,7 +14,8 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequence_checker.h"
+#include "base/sequenced_task_runner.h"
 #include "media/base/demuxer.h"
 #include "media/base/media_export.h"
 
@@ -35,24 +36,30 @@ struct PlatformVideoConfig;
 // source for the IPCMediaPipelineHost.
 class MEDIA_EXPORT IPCDemuxer : public Demuxer {
  public:
-  IPCDemuxer(std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
+  using StartIPCResult = base::OnceCallback<void(bool success)>;
+
+  IPCDemuxer(scoped_refptr<base::SequencedTaskRunner> media_task_runner,
              MediaLog* media_log);
   ~IPCDemuxer() override;
 
+  // THis must be called on media_task_runner.
+  void StartIPC(DataSource* data_source,
+               std::string mimetype,
+               StartIPCResult callback);
+
   // Checks if the content is supported by this demuxer. Return an empty string
   // if this is not possible or adjusted mime type.
-  static std::string CanPlayType(const std::string& content_type, const GURL& url);
+  static std::string CanPlayType(const std::string& content_type,
+                                 const GURL& url);
   static bool CanPlayType(const std::string& content_type);
 
   // Demuxer implementation.
   //
-  // All Demuxer functions are expected to be called on |task_runner_|'s
-  // thread.
+  // All Demuxer functions are expected to be called on media_task_runner.
+
   std::string GetDisplayName() const override;
-  void Initialize(DemuxerHost* host,
-                  PipelineStatusCallback status_cb) override;
-  void Seek(base::TimeDelta time,
-            PipelineStatusCallback status_cb) override;
+  void Initialize(DemuxerHost* host, PipelineStatusCallback status_cb) override;
+  void Seek(base::TimeDelta time, PipelineStatusCallback status_cb) override;
   void Stop() override;
   void AbortPendingReads() override;
   std::vector<DemuxerStream*> GetAllStreams() override;
@@ -77,8 +84,13 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   void StartWaitingForSeek(base::TimeDelta seek_time) override;
   void CancelPendingSeek(base::TimeDelta seek_time) override;
 
+  void VivaldiFinishOnMediaThread() override;
+
  protected:
+  void OnStartIPCDone(StartIPCResult callback, bool success);
   void StartWaitingForSeekOnMediaThread();
+
+  const scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
 
   std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
   std::unique_ptr<IPCDemuxerStream> audio_stream_;
@@ -86,7 +98,9 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
 
   MediaLog* media_log_ = nullptr;
 
-  base::WeakPtrFactory<IPCDemuxer> weak_ptr_factory_;
+  SEQUENCE_CHECKER(owner_sequence_checker_);
+
+  base::WeakPtrFactory<IPCDemuxer> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(IPCDemuxer);
 };

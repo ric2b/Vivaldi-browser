@@ -5,4 +5,6 @@ declare_args() {
   vivaldi_disable_sparkle = false
   enable_widevine_signing = false
   vivaldi_disable_widevine_verification = false
+  # Google API key for Google tasks, calendar
+  vivaldi_task_api_key = ""
 }

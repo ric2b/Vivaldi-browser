@@ -140,6 +140,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="5810442152076338065">Vaše spojení se serverem <ph name="DOMAIN" /> je šifrováno za použití zastaralé šifrovací sady.</translation>
 <translation id="5838278095973806738">Na tento web byste neměli zadávat citlivé údaje (například hesla nebo čísla platebních karet), protože by je mohli odcizit útočníci.</translation>
 <translation id="5869405914158311789">Tento web není dostupný</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Používá se 1}few{Používají se #}many{Používá se #}other{Používá se #}}</translation>
 <translation id="5932224571077948991">Stránka obsahuje rušivé nebo zavádějící reklamy</translation>
 <translation id="6051221802930200923">Web <ph name="SITE" /> nyní nemůžete navštívit, protože používá připínání certifikátů. Síťové chyby a útoky jsou obvykle dočasné, tato stránka pravděpodobně později bude fungovat.</translation>
 <translation id="6146055958333702838">Zkontrolujte všechny kabely a restartujte všechny směrovače, modemy a další síťová zařízení, která používáte.</translation>
@@ -214,9 +215,9 @@ Kontaktujte administrátora systému.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Překlad názvu na DNS serveru&lt;/abbr&gt; pro webovou stránku <ph name="HOST_NAME" /> nelze najít. Diagnostikování problému…</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="8940028675168378100">Zablokováno <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Přejít do nastavení webu</translation>
 <translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> vyžaduje uživatelské jméno a heslo.</translation>
 <translation id="9008201768610948239">Opomíjet</translation>
-<translation id="9011424611726486705">Otevřít nastavení webu</translation>
 <translation id="9025348182339809926">(neplatný)</translation>
 <translation id="9039213469156557790">Tato stránka obsahuje ještě další nezabezpečené zdroje. Tyto zdroje budou během přenosu moci zobrazit jiní uživatelé a případní útočníci je mohou upravit a změnit tak chování stránky.</translation>
 <translation id="9062620674789239642">Soubor mohl být přesunut, upraven nebo smazán.</translation>

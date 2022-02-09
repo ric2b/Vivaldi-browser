@@ -143,6 +143,7 @@
 <translation id="5810442152076338065">您的 <ph name="DOMAIN" /> 連線使用過舊的加密套件進行加密。</translation>
 <translation id="5838278095973806738">請勿在這個網站上輸入任何機密資訊 (例如密碼或信用卡號碼)，以免遭到攻擊者竊取。</translation>
 <translation id="5869405914158311789">無法存取這個網站</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{目前使用 1 個 Cookie}other{目前使用 # 個 Cookie}}</translation>
 <translation id="5932224571077948991">網站顯示干擾性或誤導性廣告</translation>
 <translation id="6051221802930200923">目前無法造訪 <ph name="SITE" />，因為這個網站使用憑證鎖定功能。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="6146055958333702838">檢查您的網路線是否穩固連接。重新啟動您可能正在使用的任何
@@ -218,9 +219,9 @@
 <translation id="8740359287975076522">找不到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS位置&lt;/abbr&gt;，正在診斷問題。</translation>
 <translation id="8820817407110198400">書籤</translation>
 <translation id="8940028675168378100">已遭 <ph name="BLOCKER_NAME" /> 封鎖</translation>
+<translation id="8963117664422609631">前往網站設定</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> Proxy 要求提供使用者名稱和密碼。</translation>
 <translation id="9008201768610948239">略過</translation>
-<translation id="9011424611726486705">開啟網站設定</translation>
 <translation id="9025348182339809926">(無效)</translation>
 <translation id="9039213469156557790">此外，這個網頁含有其他不安全的資源。其他人可能會在資源傳輸期間檢視這些資源，攻擊者也可能會修改這些資源，進而變更網頁行為。</translation>
 <translation id="9062620674789239642">檔案可能已遭到移動、編輯或刪除。</translation>

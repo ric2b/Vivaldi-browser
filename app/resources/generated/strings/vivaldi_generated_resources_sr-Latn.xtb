@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Podrazumevano</translation>
 <translation id="1297175357211070620">Odredište</translation>
 <translation id="1303101771013849280">HTML datoteka sa obeleživačima</translation>
-<translation id="1380436189840894976">Želite li ipak da izađete iz privatnog režima?</translation>
 <translation id="1430915738399379752">Odštampaj</translation>
 <translation id="1433811987160647649">Pitaj pre pristupanja</translation>
 <translation id="1451375123200651445">Veb stranica, jedna datoteka</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskriptori datoteka</translation>
 <translation id="1682548588986054654">Novi privatni prozor</translation>
-<translation id="1698122934742150150">Samo trenutna privatna sesija</translation>
 <translation id="1706625117072057435">Nivoi zumiranja</translation>
 <translation id="1708338024780164500">(Neaktivno)</translation>
 <translation id="1723824996674794290">&amp;Novi prozor</translation>
@@ -59,7 +57,7 @@
 <translation id="1963227389609234879">Ukloni sve</translation>
 <translation id="1994173015038366702">URL sajta</translation>
 <translation id="2019718679933488176">&amp;Otvori zvučni zapis u novoj kartici</translation>
-<translation id="2050339315714019657">Vertikalno</translation>
+<translation id="2050339315714019657">Uspravno</translation>
 <translation id="2076269580855484719">Sakrij ovu dodatnu komponentu</translation>
 <translation id="2087822576218954668">Štampanje: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Ponovo učitaj &amp;okvir</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Nepoznata dodatna komponenta</translation>
 <translation id="2423578206845792524">&amp;Sačuvaj sliku kao...</translation>
 <translation id="2439110203301358333">Drugi program na računaru je dodao proširenje koje može da promeni način na koji Vivaldi funkcioniše.</translation>
+<translation id="2443487764245141020">Sajtovi će možda morati i da prepoznaju vaš uređaj pomoću identifikatora</translation>
 <translation id="2445081178310039857">Osnovni direktorijum proširenja je obavezan.</translation>
 <translation id="2470702053775288986">Nepodržana proširenja su onemogućena</translation>
 <translation id="2476578072172137802">Podešavanja sajta</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Kopiraj adr&amp;esu veze</translation>
 <translation id="354068948465830244">Ovo može da čita i menja podatke sajta</translation>
 <translation id="3560034655160545939">&amp;Provera pravopisa</translation>
-<translation id="3574917942258583917">Želite li ipak da izađete iz privatnog režima?</translation>
 <translation id="3587482841069643663">Sve</translation>
 <translation id="3627588569887975815">Otvori vezu u pri&amp;vatnom prozoru</translation>
-<translation id="3627879631695760395">Instaliranje aplikacije <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Rukovaoci</translation>
+<translation id="3627879631695760395">Instaliraj aplikaciju <ph name="APP" />...</translation>
 <translation id="3678156199662914018">Proširenje: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Zahtev za deljenje ekrana aplikacije <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Ne dozvoli zatvorenim sajtovima da završe slanje ili primanje podataka</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Onemogući proširenja pokrenuta u režimu programera</translation>
 <translation id="4100839878934973028">Drugi program na računaru je dodao aplikaciju koja može da promeni način na koji Vivaldi funkcioniše.</translation>
 <translation id="4109898769411476438">Zatvori pregledač pre uvoza</translation>
-<translation id="4115080753528843955">Neke usluge sadržaja koriste jedinstvene identifikatore radi davanja ovlašćenja za pristup zaštićenom sadržaju</translation>
 <translation id="4130207949184424187">Ovo proširenje je promenilo stranicu koja se prikazuje kada pretražujete iz trake adrese.</translation>
 <translation id="4131410914670010031">Crno-belo</translation>
 <translation id="4176463684765177261">Onemogućeno</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Postoje upozorenja prilikom pokušaja instaliranja ovog proširenja:</translation>
 <translation id="479536056609751218">Veb stranica, samo HTML</translation>
 <translation id="4839303808932127586">Sačuvaj &amp;video zapis kao...</translation>
+<translation id="4840096453115567876">Ipak zatvoriti privatni režim?</translation>
 <translation id="488785315393301722">Prikaži detalje</translation>
 <translation id="4907306957610201395">Kategorija dozvole</translation>
 <translation id="4912643508233590958">Aktiviranja iz stanja mirovanja</translation>
@@ -258,7 +255,7 @@
 <translation id="5355926466126177564">Proširenje „<ph name="EXTENSION_NAME" />“ je promenilo stranicu koja se prikazuje kada pretražujete iz trake adrese.</translation>
 <translation id="5360150013186312835">Prikaži na traci alata</translation>
 <translation id="5362741141255528695">Izaberite datoteku privatnog ključa.</translation>
-<translation id="536638840841140142">Nijedna</translation>
+<translation id="536638840841140142">Nema</translation>
 <translation id="5370819323174483825">Ponovo &amp;učitaj</translation>
 <translation id="5398572795982417028">Prevelika referenca za stranice, ograničenje je <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Nastavi preuzimanje</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> tpi</translation>
 <translation id="7309257895202129721">Prikaži &amp;kontrole</translation>
+<translation id="7374461526650987610">Rukovaoci protokolom</translation>
 <translation id="7385854874724088939">Došlo je do greške pri pokušaju štampanja. Proverite štampač i pokušajte ponovo.</translation>
 <translation id="7412226954991670867">GPU memorija</translation>
 <translation id="7421925624202799674">&amp;Prikaži izvor stranice</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Upari</translation>
 <translation id="7629827748548208700">Kartica: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Otkaži</translation>
+<translation id="7659154729610375585">Ipak izaći iz privatnog režima?</translation>
 <translation id="7661259717474717992">Dozvoli sajtovima da čuvaju i čitaju podatke kolačića</translation>
 <translation id="7663719505383602579">Prijemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalirao administrator</translation>
@@ -440,7 +439,7 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="862750493060684461">CSS keš</translation>
 <translation id="8661290697478713397">Otvori vezu u pri&amp;vatnom prozoru</translation>
 <translation id="8664389313780386848">&amp;Prikaži izvor stranice</translation>
-<translation id="8708000541097332489">Obriši pri zatvaranju</translation>
+<translation id="8708000541097332489">Obriši pri izlasku</translation>
 <translation id="8714838604780058252">Grafika u pozadini</translation>
 <translation id="8725066075913043281">Pokušaj ponovo</translation>
 <translation id="8757090071857742562">Nije uspelo prebacivanje radne površine.  Proverite da li ste potvrdili upit za početak deljenja ekrana.</translation>
@@ -454,6 +453,7 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="8899851313684471736">Otvori vezu u novom &amp;prozoru</translation>
 <translation id="8915370057835397490">Učitavanje predloga</translation>
 <translation id="8916476537757519021">Podokvir u privatnom režimu: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Samo trenutna privatna sesija</translation>
 <translation id="895944840846194039">JavaScript memorija</translation>
 <translation id="8962083179518285172">Sakrij detalje</translation>
 <translation id="8973557916016709913">Ukloni nivo zumiranja</translation>
@@ -470,7 +470,7 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="9218430445555521422">Postavi kao podrazumevano</translation>
 <translation id="9219103736887031265">Slike</translation>
 <translation id="93766956588638423">Popravi proširenje</translation>
-<translation id="98515147261107953">Horizontalno</translation>
+<translation id="98515147261107953">Položeno</translation>
 <translation id="994289308992179865">&amp;Ponavljaj</translation>
 <translation id="998747458861718449">&amp;Ispitaj</translation>
 </translationbundle>

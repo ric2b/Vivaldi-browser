@@ -17,6 +17,7 @@
 #include "components/request_filter/request_filter_manager.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 
@@ -37,9 +38,9 @@ class RequestFilterProxyingURLLoaderFactory
     InProgressRequest(
         RequestFilterProxyingURLLoaderFactory* factory,
         uint64_t request_id,
+        int32_t network_service_request_id,
         int32_t view_routing_id,
         int32_t frame_routing_id,
-        int32_t network_service_request_id,
         uint32_t options,
         const network::ResourceRequest& request,
         const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -126,7 +127,10 @@ class RequestFilterProxyingURLLoaderFactory
     void ContinueToStartRequest(State state_on_error, int error_code);
     void ContinueToStartRequestWithOk();
     void ContinueToHandleOverrideHeaders(int error_code);
-    void ContinueToResponseStarted(int error_code);
+    void OverwriteHeadersAndContinueToResponseStarted(int error_code);
+    void AssignParsedHeadersAndContinueToResponseStarted(
+        network::mojom::ParsedHeadersPtr parsed_headers);
+    void ContinueToResponseStarted();
     void ContinueToBeforeRedirect(const net::RedirectInfo& redirect_info,
                                   int error_code);
     void HandleResponseOrRedirectHeaders(
@@ -184,7 +188,7 @@ class RequestFilterProxyingURLLoaderFactory
     // network::mojom::TrustedURLLoaderHeaderClient binding on the factory. This
     // is only set to true if there is a listener that needs to view or modify
     // headers set in the network process.
-    bool has_any_extra_headers_listeners_ = false;
+    const bool has_any_extra_headers_listeners_ = false;
     bool current_request_uses_header_client_ = false;
     OnBeforeSendHeadersCallback on_before_send_headers_callback_;
     OnHeadersReceivedCallback on_headers_received_callback_;

@@ -14,6 +14,7 @@ source_set("vivaldi_account") {
     "//base",
     "//base:i18n",
     #"//chrome/browser",
+    "//chrome/common:buildflags",
     "//components/autofill/core/common",
     "//components/keyed_service/content",
     "//components/keyed_service/core",

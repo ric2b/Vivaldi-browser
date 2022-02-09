@@ -2,6 +2,7 @@
 
 #include "components/request_filter/adblock_filter/blocked_urls_reporter.h"
 
+#include "base/containers/cxx20_erase.h"
 #include "base/stl_util.h"
 #include "components/request_filter/adblock_filter/blocked_urls_reporter_tab_helper.h"
 #include "content/public/browser/web_contents.h"

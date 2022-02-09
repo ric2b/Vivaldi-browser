@@ -15,7 +15,6 @@
 <translation id="3485073444286678268">目的地のフォルダー、使えへんやつや。他の選んで。</translation>
 <translation id="3642991949832251880">かまわんとVivaldi閉じる？</translation>
 <translation id="3784826321032465839">Vivaldiインストール</translation>
-<translation id="3850557856045828465">警告：拡張機能による閲覧履歴の記録は、Vivaldiには止められへんねん。プライベートモードでこの拡張機能を無効にするにやったら、このオプション外しといて。</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4079588913451946215">ユーザーみんなにインストール</translation>
 <translation id="421958613172216971">どのフォルダーにするん</translation>
@@ -26,11 +25,11 @@
 <translation id="4619978527973181021">承認してインストール</translation>
 <translation id="479976146866774527">Vivaldiインストールしとるで</translation>
 <translation id="5051728323101947360">スタンドアローンのVivaldiをデフォルトのアプリとして使えるようにする</translation>
+<translation id="5167047459440711824">Vivaldi側では、拡張機能がブラウジング履歴を記録するのを止めることはできへんねん。プライベートモードでこの拡張機能無効にするんやったら、このオプション外しといて。</translation>
 <translation id="5247376421371319618">承認してアップデート</translation>
 <translation id="5288672417093782294">Vivaldi の通知設定に行く</translation>
 <translation id="5302048478445481009">言語</translation>
 <translation id="5743878272102782872">タスクマネージャー - Vivaldi</translation>
-<translation id="6213772951145281007">Vivaldi閉じる時Cookieもサイトデータも消す</translation>
 <translation id="6569282126279967574">うわ！Vivaldiクラッシュしたわ。再起動しよか？</translation>
 <translation id="694714344624446243">Vivaldiインストーラー</translation>
 <translation id="7658239707568436148">キャンセル</translation>

@@ -7,11 +7,12 @@
 #include <algorithm>
 #include <utility>
 
-#include "ash/public/cpp/app_types.h"
+#include "ash/constants/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -22,12 +23,12 @@
 #include "ash/wm/workspace/backdrop_controller.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "ash/wm/workspace_controller.h"
+#include "base/bind.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
+#include "base/containers/cxx20_erase.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/no_destructor.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
@@ -127,16 +128,6 @@ void FixWindowStackingAccordingToGlobalMru(aura::Window* window_to_fix) {
       closest_sibling_above_window = window;
     }
   }
-}
-
-// Returns Jan 1, 2010 00:00:00 as a base::Time object in the local timezone.
-base::Time GetLocalEpoch() {
-  static base::NoDestructor<base::Time> local_epoch;
-  if (local_epoch->is_null()) {
-    ignore_result(base::Time::FromLocalExploded({2010, 1, 5, 1, 0, 0, 0, 0},
-                                                local_epoch.get()));
-  }
-  return *local_epoch;
 }
 
 // Used to temporarily turn off the automatic window positioning while windows
@@ -343,6 +334,8 @@ void Desk::SetName(std::u16string new_name, bool set_by_user) {
 
   for (auto& observer : observers_)
     observer.OnDeskNameChanged(name_);
+
+  DesksController::Get()->NotifyDeskNameChanged(this, name_);
 }
 
 void Desk::PrepareForActivationAnimation() {
@@ -369,7 +362,7 @@ void Desk::Activate(bool update_window_activation) {
   if (!IsConsecutiveDailyVisit())
     RecordAndResetConsecutiveDailyVisits(/*being_removed=*/false);
 
-  int current_date = GetDaysFromLocalEpoch();
+  int current_date = desks_restore_util::GetDaysFromLocalEpoch();
   if (current_date < last_day_visited_ || first_day_visited_ == -1) {
     // If |current_date| < |last_day_visited_| then the user has moved timezones
     // or the stored data has been corrupted so reset |first_day_visited_|.
@@ -411,7 +404,7 @@ void Desk::Deactivate(bool update_window_activation) {
     root->GetChildById(container_id_)->Hide();
 
   is_active_ = false;
-  last_day_visited_ = GetDaysFromLocalEpoch();
+  last_day_visited_ = desks_restore_util::GetDaysFromLocalEpoch();
 
   active_desk_timer_.Stop();
 
@@ -572,7 +565,8 @@ bool Desk::IsConsecutiveDailyVisit() const {
   if (last_day_visited_ == -1)
     return true;
 
-  const int days_since_last_visit = GetDaysFromLocalEpoch() - last_day_visited_;
+  const int days_since_last_visit =
+      desks_restore_util::GetDaysFromLocalEpoch() - last_day_visited_;
   return days_since_last_visit <= 1;
 }
 
@@ -580,7 +574,7 @@ void Desk::RecordAndResetConsecutiveDailyVisits(bool being_removed) {
   if (being_removed && is_active_) {
     // When the user removes the active desk, update |last_day_visited_| to the
     // current day to account for the time they spent on this desk.
-    last_day_visited_ = GetDaysFromLocalEpoch();
+    last_day_visited_ = desks_restore_util::GetDaysFromLocalEpoch();
   }
 
   const int consecutive_daily_visits =
@@ -591,22 +585,6 @@ void Desk::RecordAndResetConsecutiveDailyVisits(bool being_removed) {
 
   last_day_visited_ = -1;
   first_day_visited_ = -1;
-}
-
-int Desk::GetDaysFromLocalEpoch() const {
-  base::Time now = override_clock_ ? override_clock_->Now() : base::Time::Now();
-  return (now - GetLocalEpoch()).InDays();
-}
-
-void Desk::OverrideClockForTesting(base::Clock* test_clock) {
-  DCHECK(!override_clock_);
-  override_clock_ = test_clock;
-}
-
-void Desk::ResetVisitedMetricsForTesting() {
-  const int current_date = GetDaysFromLocalEpoch();
-  first_day_visited_ = current_date;
-  last_day_visited_ = current_date;
 }
 
 void Desk::MoveWindowToDeskInternal(aura::Window* window,

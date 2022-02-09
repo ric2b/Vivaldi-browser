@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Padrão</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Ficheiro HTML de favoritos</translation>
-<translation id="1380436189840894976">Sair do modo de navegação privada mesmo assim?</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1433811987160647649">Perguntar antes de aceder</translation>
 <translation id="1451375123200651445">Página Web, ficheiro único</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Câmara</translation>
 <translation id="1627276047960621195">Descritores de ficheiros</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
-<translation id="1698122934742150150">Apenas para a sessão no modo de navegação privada atual</translation>
 <translation id="1706625117072057435">Níveis de ampliação</translation>
 <translation id="1708338024780164500">(Inativa)</translation>
 <translation id="1723824996674794290">&amp;Nova janela</translation>
@@ -67,7 +65,7 @@
 <translation id="2148892889047469596">Transmitir separador</translation>
 <translation id="2150139952286079145">Pesquisar destinos</translation>
 <translation id="215753907730220065">Sair do modo de ecrã inteiro</translation>
-<translation id="2177950615300672361">Separador de navegação anónima: <ph name="TAB_NAME" /></translation>
+<translation id="2177950615300672361">Separador em navegação privada: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Módulo Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Colar como texto simples</translation>
 <translation id="2249605167705922988">p. ex., 1-5, 8, 11-13</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Plug-in desconhecido</translation>
 <translation id="2423578206845792524">Gra&amp;var imagem como...</translation>
 <translation id="2439110203301358333">Outro programa do computador adicionou uma extensão que pode alterar o funcionamento do Vivaldi.</translation>
+<translation id="2443487764245141020">Alguns websites também podem precisar de um identificador para reconhecer o seu equipamento</translation>
 <translation id="2445081178310039857">É necessário o directório de raiz da extensão.</translation>
 <translation id="2470702053775288986">Extensões não suportadas desativadas</translation>
 <translation id="2476578072172137802">Definições de website</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Copiar &amp;endereço da ligação</translation>
 <translation id="354068948465830244">Pode ler e alterar dados do website</translation>
 <translation id="3560034655160545939">&amp;Verificação ortográfica</translation>
-<translation id="3574917942258583917">Pretende sair do modo de navegação privada mesmo assim?</translation>
 <translation id="3587482841069643663">Tudo</translation>
 <translation id="3627588569887975815">Abrir ligação numa janela em modo incó&amp;gnito</translation>
 <translation id="3627879631695760395">Instalar <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Processadores</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Pedido de partilha de ecrã de <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Não permitir que os sites fechados concluam o envio ou a receção de dados</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Desativar extensões de modo de programador</translation>
 <translation id="4100839878934973028">Outro programa do computador adicionou uma aplicação que pode alterar o funcionamento do Vivaldi.</translation>
 <translation id="4109898769411476438">Fechar o navegador antes da importação</translation>
-<translation id="4115080753528843955">Alguns serviços de conteúdos utilizam identificadores únicos com o objetivo de autorizarem o acesso a conteúdo protegido</translation>
 <translation id="4130207949184424187">Esta extensão alterou a página apresentada quando pesquisa a partir da caixa geral.</translation>
 <translation id="4131410914670010031">Preto e branco</translation>
 <translation id="4176463684765177261">Desativado</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Há mensagens de aviso após a instalação desta extensão:</translation>
 <translation id="479536056609751218">Página Web, apenas HTML</translation>
 <translation id="4839303808932127586">Gra&amp;var vídeo como...</translation>
+<translation id="4840096453115567876">Pretende sair do Modo de navegação privada mesmo assim?</translation>
 <translation id="488785315393301722">Mostrar detalhes</translation>
 <translation id="4907306957610201395">Categoria de permissões</translation>
 <translation id="4912643508233590958">Reativações após inatividade</translation>
@@ -272,7 +269,7 @@
 <translation id="5521078259930077036">É esta a página inicial de que estava à espera?</translation>
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recarregar</translation>
-<translation id="5575473780076478375">Extensão da navegação anónima: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5575473780076478375">Extensão em navegação privada: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5614553682702429503">Guardar a palavra-passe?</translation>
 <translation id="5623842676595125836">Registo</translation>
 <translation id="5627086634964711283">Também controla a página apresentada quando clica no botão Página Inicial.</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7309257895202129721">Mostrar &amp;controlos</translation>
+<translation id="7374461526650987610">Processadores de protocolos</translation>
 <translation id="7385854874724088939">Ocorreu um erro ao tentar imprimir. Verifique a impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória GPU</translation>
 <translation id="7421925624202799674">&amp;Ver código fonte da página</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Agrupar</translation>
 <translation id="7629827748548208700">Separador: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancelar</translation>
+<translation id="7659154729610375585">Pretende sair do Modo de navegação privada mesmo assim?</translation>
 <translation id="7661259717474717992">Autorizar os websites a guardar e ler dados de cookies</translation>
 <translation id="7663719505383602579">Recetor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada pelo seu administrador</translation>
@@ -436,9 +435,9 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="857943718398505171">Permitido (recomendado)</translation>
 <translation id="8584280235376696778">&amp;Abrir vídeo num separador novo</translation>
 <translation id="8605428685123651449">Memória SQLite</translation>
-<translation id="8615618338313291042">Aplicação em navegação anónima: <ph name="APP_NAME" /></translation>
+<translation id="8615618338313291042">Aplicação em navegação privada: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">Cache CSS</translation>
-<translation id="8661290697478713397">Abrir ligação numa janela de nave&amp;gação anónima</translation>
+<translation id="8661290697478713397">Abrir ligação numa janela de nave&amp;gação privada</translation>
 <translation id="8664389313780386848">&amp;Ver código fonte da página</translation>
 <translation id="8708000541097332489">Limpar à saída</translation>
 <translation id="8714838604780058252">Imagens em segundo plano</translation>
@@ -453,7 +452,8 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8859174528519900719">Subestrutura: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Abrir ligação numa nova &amp;janela</translation>
 <translation id="8915370057835397490">A carregar sugestão</translation>
-<translation id="8916476537757519021">Subestrutura da navegação anónima: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8916476537757519021">Subpainel em navegação privada: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Apenas para a atual sessão de navegação privada</translation>
 <translation id="895944840846194039">Memória JavaScript</translation>
 <translation id="8962083179518285172">Ocultar detalhes</translation>
 <translation id="8973557916016709913">Remover nível de ampliação</translation>

@@ -7,6 +7,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/widget/widget.h"
@@ -109,6 +110,16 @@ void VivaldiContextMenuViews::UpdateMenu(ui::SimpleMenuModel* menu_model,
 RenderViewContextMenuBase::ToolkitDelegate*
 VivaldiContextMenuViews::GetToolkitDelegate() {
   return toolkit_delegate_.get();
+}
+
+bool VivaldiContextMenuViews::HasDarkTextColor() {
+  views::Widget* widget = GetTopLevelWidgetFromWebContents(web_contents_);
+  if (widget && widget->GetNativeTheme()) {
+    return color_utils::IsDark(widget->GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor));
+  } else {
+    return true; // Assume light background
+  }
 }
 
 }  // namespace vivialdi

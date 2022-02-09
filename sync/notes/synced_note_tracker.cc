@@ -10,12 +10,12 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
+#include "base/containers/cxx20_erase.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
@@ -128,12 +128,9 @@ syncer::ClientTagHash SyncedNoteTracker::GetClientTagHashFromGUID(
 std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
     sync_pb::ModelTypeState model_type_state) {
   // base::WrapUnique() used because the constructor is private.
-  auto tracker = base::WrapUnique(new SyncedNoteTracker(
+  return base::WrapUnique(new SyncedNoteTracker(
       std::move(model_type_state), /*notes_full_title_reuploaded=*/false,
       /*last_sync_time=*/base::Time::Now()));
-  tracker->note_client_tags_in_protocol_enabled_ = base::FeatureList::IsEnabled(
-      switches::kSyncUseClientTagForBookmarkCommits);
-  return tracker;
 }
 
 // static
@@ -162,27 +159,6 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
   auto tracker = base::WrapUnique(
       new SyncedNoteTracker(model_metadata.model_type_state(),
                             notes_full_title_reuploaded, last_sync_time));
-
-  // Read |note_client_tags_in_protocol_enabled_| while honoring the
-  // corresponding feature toggle too.
-  if (model_metadata.note_client_tags_in_protocol_enabled()) {
-    // If the feature used to be enabled, it can continue to do so as long as
-    // the feature toggle is still enabled. If it becomes disabled, the boolean
-    // transitions to false immediately (independently of in-flight local
-    // changes) to guarantee that there is an effective kill switch.
-    tracker->note_client_tags_in_protocol_enabled_ =
-        base::FeatureList::IsEnabled(
-            switches::kSyncUseClientTagForBookmarkCommits);
-  } else {
-    // If the feature used to be disabled, transitioning to true requires *NOT*
-    // having pending local changes (in-flight creations, strictly speaking, but
-    // that's too complex to implement), to avoid creating duplicates on the
-    // server (the same note with and without a client tag).
-    tracker->note_client_tags_in_protocol_enabled_ =
-        !tracker->HasLocalChanges() &&
-        base::FeatureList::IsEnabled(
-            switches::kSyncUseClientTagForBookmarkCommits);
-  }
 
   bool is_not_corrupted = tracker->InitEntitiesFromModelAndMetadata(
       model, std::move(model_metadata));
@@ -354,8 +330,6 @@ sync_pb::NotesModelMetadata SyncedNoteTracker::BuildNoteModelMetadata() const {
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.set_notes_full_title_reuploaded(notes_full_title_reuploaded_);
   model_metadata.set_last_sync_time(syncer::TimeToProtoTime(last_sync_time_));
-  model_metadata.set_note_client_tags_in_protocol_enabled(
-      note_client_tags_in_protocol_enabled_);
 
   for (const std::pair<const std::string, std::unique_ptr<Entity>>& pair :
        sync_id_to_entities_map_) {
@@ -645,7 +619,8 @@ bool SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
 }
 
 bool SyncedNoteTracker::note_client_tags_in_protocol_enabled() const {
-  return note_client_tags_in_protocol_enabled_;
+  return base::FeatureList::IsEnabled(
+      switches::kSyncUseClientTagForBookmarkCommits);
 }
 
 void SyncedNoteTracker::TraverseAndAppend(

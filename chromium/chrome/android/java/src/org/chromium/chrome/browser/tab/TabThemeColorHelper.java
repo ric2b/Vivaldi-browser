@@ -10,7 +10,6 @@ import org.chromium.base.Callback;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.net.NetError;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.url.GURL;
 
 // Vivaldi
 import android.graphics.Bitmap;
@@ -56,11 +55,6 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     @Override
     public void onUrlUpdated(Tab tab) {
         updateIfNeeded(tab, false);
-    }
-
-    @Override
-    public void onDidFailLoad(Tab tab, boolean isMainFrame, int errorCode, GURL failingUrl) {
-        updateIfNeeded(tab, true);
     }
 
     @Override

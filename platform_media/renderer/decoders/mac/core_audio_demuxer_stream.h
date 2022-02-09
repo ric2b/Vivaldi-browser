@@ -17,7 +17,7 @@
 #include "media/base/audio_decoder_config.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_resource.h"
-#include "platform_media/common/mac/scoped_audio_queue_ref.h"
+#include "platform_media/renderer/decoders/mac/scoped_audio_queue_ref.h"
 
 namespace media {
 

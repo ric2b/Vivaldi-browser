@@ -140,6 +140,7 @@
 <translation id="5810442152076338065">Vaše pripojenie k doméne <ph name="DOMAIN" /> je šifrované pomocou zastaranej šifrovacej súpravy.</translation>
 <translation id="5838278095973806738">Na tejto stránke by ste nemali zadávať citlivé informácie (napríklad heslá alebo čísla kreditných kariet), pretože by ich mohli ukradnúť útočníci.</translation>
 <translation id="5869405914158311789">K tomuto webu sa nedá pripojiť</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Používa sa 1}few{Používajú sa #}many{Používa sa #}other{Používa sa #}}</translation>
 <translation id="5932224571077948991">Stránka zobrazuje obťažujúce alebo zavádzajúce reklamy</translation>
 <translation id="6051221802930200923">Web <ph name="SITE" /> momentálne nemôžete navštíviť, pretože používa pripínanie certifikátov. Chyby siete a útoky sú zvyčajne dočasné, takže by táto stránka mala neskôr pravdepodobne fungovať.</translation>
 <translation id="6146055958333702838">Skontrolujte všetky káble a reštartujte všetky používané smerovače, modemy alebo iné sieťové zariadenia.</translation>
@@ -214,9 +215,9 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; sa nenašla. Problém sa diagnostikuje.</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="8940028675168378100">Zablokované cez <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Prejsť do nastavení webu</translation>
 <translation id="9001074447101275817">Proxy server <ph name="DOMAIN" /> vyžaduje používateľské meno a heslo.</translation>
 <translation id="9008201768610948239">Ignorovať</translation>
-<translation id="9011424611726486705">Otvoriť nastavenia stránky</translation>
 <translation id="9025348182339809926">(Neplatný)</translation>
 <translation id="9039213469156557790">Táto stránka obsahuje aj iné zdroje, ktoré nie sú zabezpečené. Tieto zdroje môžu pri prenose vidieť ostatní používatelia a útočník ich môže upraviť tak, aby zmenil správanie stránky.</translation>
 <translation id="9062620674789239642">Mohol byť presunutý, upravený alebo odstránený.</translation>

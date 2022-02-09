@@ -12,13 +12,22 @@
 
 #include <array>
 
-#include "media/base/sample_format.h"
-#include "media/base/video_frame.h"
-#include "media/base/video_transformation.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
+// The media headers are included to get enum definitions only, there is no
+// link-time dependency on media/base to avoid a dependency loop via GpuChannel.
+//
+// TODO(igor@vivaldi.com): Decouple our Mojo types from gpu_channel.mojom to
+// avoid dependency hacks.
+#include "media/base/sample_format.h"
+#include "media/base/video_frame.h"
+#include "media/base/video_transformation.h"
+
 namespace media {
+
+// All these types are mapped to the corresponding type in
+// platform_media::mojom, see platform_media_mojom_traits.h .
 
 // Type of a particular stream in a media container.
 enum class PlatformStreamType {
@@ -64,38 +73,37 @@ struct PlatformMediaTimeInfo {
 
 struct PlatformAudioConfig {
   static constexpr PlatformStreamType kStreamType = PlatformStreamType::kAudio;
-  PlatformAudioConfig()
-      : format(kUnknownSampleFormat),
-        channel_count(-1),
-        samples_per_second(-1) {}
 
   bool is_valid() const {
     return channel_count > 0 && samples_per_second > 0 &&
            format != kUnknownSampleFormat;
   }
 
-  SampleFormat format;
-  int channel_count;
-  int samples_per_second;
+  SampleFormat format = kUnknownSampleFormat;
+  int channel_count = 0;
+  int samples_per_second = 0;
 };
 
 struct PlatformVideoConfig {
+  PlatformVideoConfig();
+  PlatformVideoConfig(const PlatformVideoConfig&);
+  ~PlatformVideoConfig();
+  PlatformVideoConfig& operator=(const PlatformVideoConfig&);
+
   static constexpr PlatformStreamType kStreamType = PlatformStreamType::kVideo;
   struct Plane {
-    Plane() : stride(-1), offset(-1), size(-1) {}
-
     bool is_valid() const { return stride > 0 && offset >= 0 && size > 0; }
 
-    int stride;
-    int offset;
-    int size;
+    int stride = 0;
+    int offset = 0;
+    int size = 0;
   };
 
-  PlatformVideoConfig() : rotation(VideoRotation::VIDEO_ROTATION_0) {}
-  PlatformVideoConfig(const PlatformVideoConfig& other) = default;
-  ~PlatformVideoConfig() {}
+  using PlaneArray = std::array<Plane, VideoFrame::kMaxPlanes>;
 
   bool is_valid() const {
+    // Note that we do not check if planes[kAPlane] as presence of alpha is
+    // enterely optional.
     return !coded_size.IsEmpty() && !visible_rect.IsEmpty() &&
            !natural_size.IsEmpty() && planes[VideoFrame::kYPlane].is_valid() &&
            planes[VideoFrame::kVPlane].is_valid() &&
@@ -105,8 +113,8 @@ struct PlatformVideoConfig {
   gfx::Size coded_size;
   gfx::Rect visible_rect;
   gfx::Size natural_size;
-  Plane planes[VideoFrame::kMaxPlanes];
-  VideoRotation rotation;
+  PlaneArray planes;
+  VideoRotation rotation = VIDEO_ROTATION_0;
 };
 
 struct Strides {

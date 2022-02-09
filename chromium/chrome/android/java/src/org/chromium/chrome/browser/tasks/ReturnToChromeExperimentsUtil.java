@@ -15,16 +15,17 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
+import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.homepage.HomepageManager;
+import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.tab.Tab;
@@ -32,6 +33,8 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -211,8 +214,10 @@ public final class ReturnToChromeExperimentsUtil {
      */
     public static Tab handleLoadUrlFromStartSurface(
             LoadUrlParams params, @Nullable Boolean incognito, @Nullable Tab parentTab) {
-        return handleLoadUrlWithPostDataFromStartSurface(
-                params, null, null, incognito, parentTab, false, false, null, null);
+        try (TraceEvent e = TraceEvent.scoped("StartSurface.LoadUrl")) {
+            return handleLoadUrlWithPostDataFromStartSurface(
+                    params, null, null, incognito, parentTab, false, false, null, null);
+        }
     }
 
     /**
@@ -318,7 +323,7 @@ public final class ReturnToChromeExperimentsUtil {
 
             // These are duplicated here but would have been recorded by LocationBarLayout#loadUrl.
             RecordUserAction.record("MobileOmniboxUse");
-            AppHooks.get().getLocaleManager().recordLocaleBasedSearchMetrics(
+            LocaleManager.getInstance().recordLocaleBasedSearchMetrics(
                     false, url, params.getTransitionType());
         }
 
@@ -401,11 +406,25 @@ public final class ReturnToChromeExperimentsUtil {
         return StartSurfaceConfiguration.isStartSurfaceSinglePaneEnabled()
                 && (TextUtils.isEmpty(homePageUrl)
                         || UrlUtilities.isCanonicalizedNTPUrl(homePageUrl))
-                && !StartSurfaceConfiguration.shouldHideStartSurfaceWithAccessibilityOn(context)
+                && !shouldHideStartSurfaceWithAccessibilityOn(context)
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
     }
 
     /**
+     * @return Whether start surface should be hidden when accessibility is enabled. If it's true,
+     *         NTP is shown as homepage. Also, when time threshold is reached, grid tab switcher or
+     *         overview list layout is shown instead of start surface.
+     */
+    public static boolean shouldHideStartSurfaceWithAccessibilityOn(Context context) {
+        // TODO(crbug.com/1127732): Move this method back to StartSurfaceConfiguration.
+        return ChromeAccessibilityUtil.get().isAccessibilityEnabled()
+                && !(StartSurfaceConfiguration.SUPPORT_ACCESSIBILITY.getValue()
+                        && TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(context));
+    }
+
+    /**
+     *
+     * @param context The activity context.
      * @param tabModelSelector The tab model selector.
      * @return the total tab count, and works before native initialization.
      */

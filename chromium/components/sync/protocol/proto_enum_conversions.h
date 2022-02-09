@@ -137,6 +137,10 @@ const char* ProtoEnumToString(
 const char* ProtoEnumToString(
     sync_pb::WorkspaceDeskSpecifics::WindowState window_state);
 
+const char* ProtoEnumToString(
+    sync_pb::UserConsentTypes::AssistantActivityControlConsent::SettingType
+        setting_type);
+
 // Vivaldi specific
 const char* ProtoEnumToString(
     sync_pb::NotesSpecifics::VivaldiSpecialNotesType special_type);

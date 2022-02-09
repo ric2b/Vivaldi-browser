@@ -11,10 +11,10 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -27,7 +27,6 @@
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/credit_card_art_image.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
@@ -130,7 +129,8 @@ int GetAutofillEntryCount(const std::u16string& name,
       "SELECT count FROM autofill WHERE name = ? AND value = ?"));
   s.BindString16(0, name);
   s.BindString16(1, value);
-  s.Step();
+  if (!s.Step())
+    return 0;
   return s.ColumnInt(0);
 }
 
@@ -1214,7 +1214,7 @@ TEST_F(AutofillTableTest,
   s1.BindString(0, profile.guid());
   ASSERT_TRUE(s1.is_valid());
   ASSERT_TRUE(s1.Step());
-  EXPECT_EQ(0, s1.ColumnInt(1));
+  EXPECT_EQ(1, s1.ColumnInt(0));
 
   // Enable the feature again and load the profile.
   scoped_feature_list_.Reset();
@@ -3678,19 +3678,19 @@ TEST_F(AutofillTableTest, SetAndGetCreditCardOfferData) {
       GURL("https://www.offer_3_example.com/");
 
   // Set merchant domains for offer 1.
-  credit_card_offer_1.merchant_domain.emplace_back(
+  credit_card_offer_1.merchant_origins.emplace_back(
       "http://www.merchant_domain_1_1.com/");
-  credit_card_offer_1.merchant_domain.emplace_back(
+  credit_card_offer_1.merchant_origins.emplace_back(
       "http://www.merchant_domain_1_2.com/");
-  credit_card_offer_1.merchant_domain.emplace_back(
+  credit_card_offer_1.merchant_origins.emplace_back(
       "http://www.merchant_domain_1_3.com/");
   // Set merchant domains for offer 2.
-  credit_card_offer_2.merchant_domain.emplace_back(
+  credit_card_offer_2.merchant_origins.emplace_back(
       "http://www.merchant_domain_2_1.com/");
   // Set merchant domains for offer 3.
-  credit_card_offer_3.merchant_domain.emplace_back(
+  credit_card_offer_3.merchant_origins.emplace_back(
       "http://www.merchant_domain_3_1.com/");
-  credit_card_offer_3.merchant_domain.emplace_back(
+  credit_card_offer_3.merchant_origins.emplace_back(
       "http://www.merchant_domain_3_2.com/");
 
   // Set display strings for all 3 offers.
@@ -3758,43 +3758,13 @@ TEST_F(AutofillTableTest, SetAndGetCreditCardOfferData) {
     EXPECT_EQ(data.display_strings.usage_instructions_text,
               output_offer_data[output_index]
                   ->display_strings.usage_instructions_text);
-    ASSERT_THAT(data.merchant_domain,
+    ASSERT_THAT(data.merchant_origins,
                 testing::UnorderedElementsAreArray(
-                    output_offer_data[output_index]->merchant_domain));
+                    output_offer_data[output_index]->merchant_origins));
     ASSERT_THAT(data.eligible_instrument_id,
                 testing::UnorderedElementsAreArray(
                     output_offer_data[output_index]->eligible_instrument_id));
   }
-}
-
-TEST_F(AutofillTableTest, SetAndGetAndClearCreditCardArtImage) {
-  CreditCardArtImage image1("image1", 1, {UINT8_MAX});
-  table_->AddCreditCardArtImage(image1);
-  CreditCardArtImage image2("image2", 2, {UINT8_MAX});
-  table_->AddCreditCardArtImage(image2);
-
-  std::vector<std::unique_ptr<CreditCardArtImage>> output;
-  EXPECT_TRUE(table_->GetCreditCardArtImages(&output));
-  EXPECT_EQ(2U, output.size());
-  EXPECT_EQ("image1", output[0]->id);
-  EXPECT_EQ(1, output[0]->instrument_id);
-  EXPECT_EQ(UINT8_MAX, output[0]->card_art_image[0]);
-  EXPECT_EQ("image2", output[1]->id);
-  EXPECT_EQ(2, output[1]->instrument_id);
-  EXPECT_EQ(UINT8_MAX, output[1]->card_art_image[0]);
-
-  EXPECT_TRUE(table_->ClearCreditCardArtImage("image1"));
-  output.clear();
-  EXPECT_TRUE(table_->GetCreditCardArtImages(&output));
-  EXPECT_EQ(1U, output.size());
-  EXPECT_EQ("image2", output[0]->id);
-  EXPECT_EQ(2, output[0]->instrument_id);
-  EXPECT_EQ(UINT8_MAX, output[0]->card_art_image[0]);
-
-  EXPECT_TRUE(table_->ClearAllServerData());
-  output.clear();
-  EXPECT_TRUE(table_->GetCreditCardArtImages(&output));
-  EXPECT_EQ(0U, output.size());
 }
 
 }  // namespace autofill

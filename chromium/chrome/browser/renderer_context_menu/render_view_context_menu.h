@@ -11,13 +11,13 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_sub_menu_model.h"
+#include "chrome/browser/web_applications/system_web_apps/system_web_app_types.h"
 #include "components/renderer_context_menu/context_menu_content_type.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
@@ -30,6 +30,10 @@
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/vector2d.h"
+
+#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_LINUX)
+#include "chrome/browser/lens/region_search/lens_region_search_controller.h"
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/context_menu_matcher.h"
@@ -45,6 +49,7 @@ class QuickAnswersMenuObserver;
 class SharedClipboardContextMenuObserver;
 class SpellingMenuObserver;
 class SpellingOptionsSubMenuObserver;
+class NotesSubMenuObserver;
 
 namespace content {
 class RenderFrameHost;
@@ -69,6 +74,12 @@ class MediaPlayerAction;
 namespace ui {
 class DataTransferEndpoint;
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+namespace policy {
+class DlpRulesManager;
+}  // namespace policy
+#endif
 
 class RenderViewContextMenu : public RenderViewContextMenuBase,
                               public ProtocolHandlerRegistry::Observer {
@@ -120,6 +131,10 @@ class RenderViewContextMenu : public RenderViewContextMenuBase,
   // Returns true if keyboard lock is active and requires the user to press and
   // hold escape to exit exclusive access mode.
   bool IsPressAndHoldEscRequiredToExitFullscreen() const;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  virtual const policy::DlpRulesManager* GetDlpRulesManager() const;
+#endif
 
  private:
   friend class RenderViewContextMenuTest;
@@ -200,6 +215,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase,
   void AppendSharingItems();
   void AppendClickToCallItem();
   void AppendSharedClipboardItem();
+  void AppendLensRegionSearchItem();
   void AppendQRCodeGeneratorItem(bool for_image, bool draw_icon);
 
   std::unique_ptr<ui::DataTransferEndpoint> CreateDataEndpoint(
@@ -220,6 +236,8 @@ class RenderViewContextMenu : public RenderViewContextMenuBase,
   bool IsQRCodeGeneratorEnabled() const;
   bool IsRouteMediaEnabled() const;
   bool IsOpenLinkOTREnabled() const;
+  bool IsSearchWebForEnabled() const;
+  bool IsLensRegionSearchEnabled() const;
 
   // Command execution functions.
   void ExecOpenWebApp();
@@ -233,6 +251,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase,
   void ExecCopyLinkText();
   void ExecCopyImageAt();
   void ExecSearchLensForImage();
+  void ExecLensRegionSearch();
   void ExecSearchWebForImage();
   void ExecLoadImage();
   void ExecPlayPause();
@@ -331,6 +350,23 @@ class RenderViewContextMenu : public RenderViewContextMenuBase,
   // Shared clipboard menu observer.
   std::unique_ptr<SharedClipboardContextMenuObserver>
       shared_clipboard_context_menu_observer_;
+
+  // The type of system app (if any) associated with the WebContents we're in.
+  absl::optional<web_app::SystemAppType> system_app_type_;
+
+#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_LINUX)
+  // Controller for Lens Region Search feature. This controller will be
+  // destroyed as soon as the RenderViewContextMenu object is destroyed. The
+  // RenderViewContextMenu is reset every time it is shown, but persists between
+  // uses so that it doesn't go out of scope before finishing work. This means
+  // that when another context menu opens, the Lens Region Search feature will
+  // close if active.
+  std::unique_ptr<lens::LensRegionSearchController>
+      lens_region_search_controller_;
+#endif
+
+  // Vivaldi
+  std::unique_ptr<NotesSubMenuObserver> insert_note_submenu_observer_;
 
 #ifdef VIVALDI_BUILD
 #include "browser/menus/vivaldi_render_view_context_menu.inc"

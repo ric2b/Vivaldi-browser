@@ -11,6 +11,7 @@
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/widget/widget.h"
 
 namespace views {
 class GridLayout;
@@ -40,15 +41,17 @@ class SharesheetBubbleView : public views::BubbleDialogDelegateView {
 
   // |delivered_callback| is run to inform the caller whether something failed,
   // or the intent has been delivered to a target selected by the user.
+  // |close_callback| is run to inform the caller when the bubble is closed.
   void ShowBubble(std::vector<TargetInfo> targets,
                   apps::mojom::IntentPtr intent,
-                  ::sharesheet::DeliveredCallback delivered_callback);
-  void ShowNearbyShareBubble(
-      apps::mojom::IntentPtr intent,
-      ::sharesheet::DeliveredCallback delivered_callback);
+                  ::sharesheet::DeliveredCallback delivered_callback,
+                  ::sharesheet::CloseCallback close_callback);
+  void ShowNearbyShareBubble(apps::mojom::IntentPtr intent,
+                             ::sharesheet::DeliveredCallback delivered_callback,
+                             ::sharesheet::CloseCallback close_callback);
   void ShowActionView();
   void ResizeBubble(const int& width, const int& height);
-  void CloseBubble();
+  void CloseBubble(views::Widget::ClosedReason reason);
 
  private:
   class SharesheetParentWidgetObserver;
@@ -90,6 +93,7 @@ class SharesheetBubbleView : public views::BubbleDialogDelegateView {
   std::u16string active_target_;
   apps::mojom::IntentPtr intent_;
   ::sharesheet::DeliveredCallback delivered_callback_;
+  ::sharesheet::CloseCallback close_callback_;
 
   int width_ = 0;
   int height_ = 0;

@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Predeterminat</translation>
 <translation id="1297175357211070620">Destí</translation>
 <translation id="1303101771013849280">Fitxer HTML dels marcadors</translation>
-<translation id="1380436189840894976">Voleu sortir del mode privat igualment?</translation>
 <translation id="1430915738399379752">Imprimeix</translation>
 <translation id="1433811987160647649">Pregunta abans d'accedir</translation>
 <translation id="1451375123200651445">Pàgina web, fitxer únic</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Càmera</translation>
 <translation id="1627276047960621195">Descriptors dels fitxers</translation>
 <translation id="1682548588986054654">Nova finestra privada</translation>
-<translation id="1698122934742150150">Només la sessió privada actual</translation>
 <translation id="1706625117072057435">Nivells de zoom</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1723824996674794290">&amp;Nova finestra</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Connector desconegut</translation>
 <translation id="2423578206845792524">De&amp;sa la imatge com a...</translation>
 <translation id="2439110203301358333">Un altre programa del dispositiu ha afegit una extensió que pot canviar el funcionament de Vivaldi.</translation>
+<translation id="2443487764245141020">És possible que els llocs web també hagin de reconèixer el teu dispositiu mitjançant un identificador</translation>
 <translation id="2445081178310039857">El directori arrel de l'extensió és obligatori.</translation>
 <translation id="2470702053775288986">Extensions no compatibles desactivades</translation>
 <translation id="2476578072172137802">Ajustos del lloc</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Copia l'adr&amp;eça de l'enllaç</translation>
 <translation id="354068948465830244">Pot llegir i modificar les dades dels llocs web</translation>
 <translation id="3560034655160545939">&amp;Corrector ortogràfic</translation>
-<translation id="3574917942258583917">Voleu sortir del mode privat de totes maneres?</translation>
 <translation id="3587482841069643663">Totes</translation>
 <translation id="3627588569887975815">Obre l'enllaç a una finestra pri&amp;vada</translation>
 <translation id="3627879631695760395">Instal·la <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Gestors</translation>
 <translation id="3678156199662914018">Extensió: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Sol·licitud de <ph name="APP_NAME" /> per compartir la pantalla</translation>
 <translation id="3708684582558000260">No permetis que els llocs web tancats acabin d'enviar o de rebre dades</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Desactiva les extensions del mode desenvolupador</translation>
 <translation id="4100839878934973028">Un altre programa del dispositiu ha afegit una aplicació que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="4109898769411476438">Tanca el navegador abans d'importar</translation>
-<translation id="4115080753528843955">Part dels serveis de contingut fan servir identificadors únics per tal d'autoritzar accés a contingut protegit</translation>
 <translation id="4130207949184424187">Aquesta extensió ha canviat la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
 <translation id="4131410914670010031">Blanc i negre</translation>
 <translation id="4176463684765177261">Desactivat</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Han aparegut advertències quan s'ha intentat instal·lar aquesta extensió:</translation>
 <translation id="479536056609751218">Pàgina web, només HTML</translation>
 <translation id="4839303808932127586">De&amp;sa el vídeo com a...</translation>
+<translation id="4840096453115567876">Vols sortir del mode d'incògnit de totes maneres?</translation>
 <translation id="488785315393301722">Mostra els detalls</translation>
 <translation id="4907306957610201395">Categoria de permisos</translation>
 <translation id="4912643508233590958">Activacions en estat de repòs</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Accés denegat.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7309257895202129721">Mostra els &amp;controls</translation>
+<translation id="7374461526650987610">Gestors de protocol</translation>
 <translation id="7385854874724088939">S'ha produït un problema en intentar imprimir. Comproveu la impressora i torneu-ho a provar.</translation>
 <translation id="7412226954991670867">Memòria de la GPU</translation>
 <translation id="7421925624202799674">&amp;Visualitza el codi de la pàgina</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Intercala</translation>
 <translation id="7629827748548208700">Pestanya: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancel·la</translation>
+<translation id="7659154729610375585">Vols sortir del mode d'incògnit de totes maneres?</translation>
 <translation id="7661259717474717992">Permet que els llocs web desin i llegeixin les dades de les galetes</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instal·lada per l'administrador</translation>
@@ -454,6 +453,7 @@ Deseu el fitxer de clau a una ubicació segura. El necessitareu per crear versio
 <translation id="8899851313684471736">Obre l'enllaç a una &amp;finestra nova</translation>
 <translation id="8915370057835397490">Carregant suggeriments</translation>
 <translation id="8916476537757519021">Submarc d'incògnit: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Només la sessió d'incògnit actual</translation>
 <translation id="895944840846194039">Memòria de JavaScript</translation>
 <translation id="8962083179518285172">Amaga els detalls</translation>
 <translation id="8973557916016709913">Suprimeix el nivell de zoom</translation>

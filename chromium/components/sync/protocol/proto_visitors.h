@@ -43,6 +43,7 @@
 #include "components/sync/protocol/user_consent_specifics.pb.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
+#include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/sync/protocol/workspace_desk_specifics.pb.h"
 
 #include "components/sync/protocol/notes_specifics.pb.h"
@@ -456,7 +457,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(37 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(38 + 1 /* notes */ == GetNumModelTypes(),
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -495,6 +496,8 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(wallet_metadata);
   VISIT(web_app);
   VISIT(wifi_configuration);
+  VISIT(workspace_desk);
+  VISIT(webauthn_credential);
   VISIT(notes);
 }
 
@@ -660,6 +663,20 @@ VISIT_PROTO_FIELDS(const sync_pb::NigoriSpecifics& proto) {
   VISIT(custom_passphrase_key_derivation_method);
   VISIT(custom_passphrase_key_derivation_salt);
   VISIT(trusted_vault_debug_info);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::WebauthnCredentialSpecifics& proto) {
+  VISIT_BYTES(sync_id);
+  VISIT_BYTES(credential_id);
+  VISIT(rp_id);
+  VISIT_BYTES(user_id);
+  VISIT_REP(newly_shadowed_credential_ids);
+  VISIT(creation_time);
+  VISIT(user_name);
+  VISIT(user_display_name);
+  // |private_key| is deliberately omitted to avoid including sensitive
+  // information in debugging output, which might be included in bug reports
+  // etc.
 }
 
 VISIT_PROTO_FIELDS(
@@ -959,7 +976,6 @@ VISIT_PROTO_FIELDS(const sync_pb::TabNavigation& proto) {
   VISIT(global_id);
   VISIT(favicon_url);
   VISIT_ENUM(blocked_state);
-  VISIT_REP(content_pack_categories);
   VISIT(http_status_code);
   VISIT(obsolete_referrer_policy);
   VISIT(is_restored);
@@ -1051,6 +1067,7 @@ VISIT_PROTO_FIELDS(
     const sync_pb::UserConsentTypes::AssistantActivityControlConsent& proto) {
   VISIT(ui_audit_key);
   VISIT_ENUM(status);
+  VISIT_ENUM(setting_type);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::UserConsentTypes::SyncConsent& proto) {
@@ -1210,6 +1227,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::App& proto) {
   VISIT_ENUM(window_state);
   VISIT(z_index);
   VISIT(app);
+  VISIT(window_id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::AppOneOf& proto) {

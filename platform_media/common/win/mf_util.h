@@ -14,30 +14,28 @@
 #error Should only be built with USE_SYSTEM_PROPRIETARY_CODECS
 #endif
 
-#include <windows.h>
+#include "base/win/windows_types.h"
 
-#include <string>
-
-#include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
 
 namespace media {
 
-// Utility functions for loading different subsets of the Media Foundation
-// libraries.  In each case, the library name appropriate for the current
-// Windows version is chosen.  The functions can be called many times per
-// process and return the same value throughout the lifetime of the process.
-MEDIA_EXPORT bool LoadMFCommonLibraries();
-MEDIA_EXPORT void LoadMFAudioDecoderLibraries();
-MEDIA_EXPORT bool LoadMFAudioDecoderLibrary(AudioCodec codec);
-MEDIA_EXPORT bool LoadMFVideoDecoderLibraries();
-MEDIA_EXPORT bool LoadMFSourceReaderLibraries();
+// Try to load common MF DLLs. This should be called once per process prior
+// sandbox initialization. With demuxer_support load all libraries for media
+// demultiplexing.
+MEDIA_EXPORT void LoadMFDecodingLibraries(bool demuxer_support);
 
-MEDIA_EXPORT std::string GetMFAudioDecoderLibraryName(AudioCodec codec);
-MEDIA_EXPORT std::string GetMFVideoDecoderLibraryName();
+// Get audio decoding library. Must be called after calling
+// LoadMFCommonLibraries().
+HMODULE GetMFAudioDecoderLibrary();
 
-MEDIA_EXPORT FARPROC
-GetFunctionFromLibrary(const char* function_name, const char* library_name);
+// Get video decoding library. Must be called after calling
+// LoadMFCommonLibraries().
+HMODULE GetMFVideoDecoderLibrary();
+
+// Return true if media demuxer support is available. Must be called after
+// calling LoadMFCommonLibraries().
+bool HasMFDemuxerSupport();
 
 }  // namespace media
 

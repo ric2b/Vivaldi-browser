@@ -12,17 +12,16 @@
 #include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "ipc/ipc_sender.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_buffer.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
-#include "platform_media/common/media_pipeline_messages.h"
 #include "platform_media/common/platform_ipc_util.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
-#include "platform_media/gpu/data_source/ipc_data_source_impl.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 
 namespace media {
@@ -40,65 +39,94 @@ constexpr const char* GetDecodeDataReadTraceEventName(PlatformStreamType type) {
 
 }  // namespace
 
+class IPCMediaPipeline::Factory
+    : public platform_media::mojom::PipelineFactory {
+ public:
+  Factory() {
+    VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
+  }
+
+  ~Factory() override {
+    VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
+  }
+
+ private:
+  friend IPCMediaPipeline;
+
+  void StartNewPipeline(platform_media::mojom::PipelineParamsPtr params,
+                        StartNewPipelineCallback callback) override {
+    // Pipeline owns itself and self-delete when renderer closes the message
+    // pipes or calls Stop().
+    IPCMediaPipeline* pipeline = new IPCMediaPipeline();
+    pipeline->Initialize(std::move(params), std::move(callback));
+  }
+};
+
+/* static */
+void IPCMediaPipeline::CreateFactory(mojo::GenericPendingReceiver receiver) {
+  mojo::PendingReceiver<platform_media::mojom::PipelineFactory>
+      factory_receiver = receiver.As<platform_media::mojom::PipelineFactory>();
+  if (!factory_receiver) {
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+               << " wrong factory interface - "
+               << receiver.interface_name().value_or("");
+    return;
+  }
+
+  // The factory lives until the renderer process disconnects.
+  auto factory = std::make_unique<Factory>();
+  mojo::MakeSelfOwnedReceiver(std::move(factory), std::move(factory_receiver));
+}
+
 IPCMediaPipeline::IPCMediaPipeline() {
   std::fill(std::begin(has_media_type_), std::end(has_media_type_), false);
-
-  IPCDecodingBuffer::ReplyCB reply_cb = base::BindRepeating(
-      &IPCMediaPipeline::DecodedDataReady, weak_ptr_factory_.GetWeakPtr());
   for (PlatformStreamType stream_type : AllStreamTypes()) {
     GetElem(ipc_decoding_buffers_, stream_type).Init(stream_type);
-    GetElem(ipc_decoding_buffers_, stream_type).set_reply_cb(reply_cb);
   }
 }
 
 IPCMediaPipeline::~IPCMediaPipeline() {
-  VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " routing_id=" << routing_id_;
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (data_source_) {
+  VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (pending_source_buffer_) {
     // In case of abrupt termination like after the renderer process crash the
-    // data_source_ here may still have a pending callback. Call it before the
-    // destructor for media_pipeline_ is called to ensure that the callback is
-    // called before the pipeline destructor.
-    data_source_->Stop();
+    // source buffer here may still have a pending callback. Ensure that the
+    // callback is called to release of system resources.
+    ipc_data_source::Buffer::OnRawDataError(std::move(pending_source_buffer_));
   }
 }
 
-/* static */
-std::unique_ptr<gpu::PropmediaGpuChannel::PipelineBase>
-IPCMediaPipeline::Create() {
-  return std::make_unique<IPCMediaPipeline>();
+void IPCMediaPipeline::DisconnectHandler() {
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
+  Stop();
 }
 
-/* static */
-void IPCMediaPipeline::ReadRawData(base::WeakPtr<IPCMediaPipeline> pipeline,
-                                   ipc_data_source::Buffer source_buffer) {
-  if (pipeline) {
-    DCHECK_CALLED_ON_VALID_THREAD(pipeline->thread_checker_);
-    if (pipeline->data_source_) {
-      pipeline->data_source_->Read(std::move(source_buffer));
-      return;
-    }
+void IPCMediaPipeline::Stop() {
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this;
+  data_source_.reset();
+  receiver_.reset();
+  if (pending_source_buffer_) {
+    ipc_data_source::Buffer::OnRawDataError(std::move(pending_source_buffer_));
   }
-  source_buffer.SetReadError();
-  ipc_data_source::Buffer::SendReply(std::move(source_buffer));
+  base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
 void IPCMediaPipeline::Initialize(
-    IPC::Sender* channel,
-    gpu::mojom::VivaldiMediaPipelineParamsPtr params) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(channel);
-  DCHECK(!channel_);
+    platform_media::mojom::PipelineParamsPtr params,
+    StartNewPipelineCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(state_, CONSTRUCTED);
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " route_id=" << params->route_id
+  DCHECK(!receiver_.is_bound());
+  DCHECK(!data_source_);
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " this=" << this
           << " data_size=" << params->data_source_size
           << " streaming=" << params->is_data_source_streaming
           << " mime_type=" << params->mime_type;
 
-  channel_ = channel;
-  routing_id_ = params->route_id;
+  // Bind now to always tell the host about any errors so it can promptly stop.
+  data_source_.Bind(std::move(params->data_source));
+  receiver_.Bind(std::move(params->pipeline));
+
   do {
     base::ReadOnlySharedMemoryMapping data_source_mapping =
         params->data_source_buffer.Map();
@@ -111,13 +139,15 @@ void IPCMediaPipeline::Initialize(
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Creating the PlatformMediaPipeline";
     media_pipeline_ = PlatformMediaPipeline::Create();
-
     if (!media_pipeline_)
       break;
 
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Creating the IPCDataSource";
-    data_source_ = std::make_unique<IPCDataSourceImpl>(channel_, routing_id_);
+    // Unretained() is safe as impl_ owns the remote and the disconnect handler
+    // is never called after the remote destruction.
+    data_source_.set_disconnect_handler(base::BindOnce(
+        &IPCMediaPipeline::DisconnectHandler, base::Unretained(this)));
+    receiver_.set_disconnect_handler(base::BindOnce(
+        &IPCMediaPipeline::DisconnectHandler, base::Unretained(this)));
 
     ipc_data_source::Info source_info;
     source_info.is_streaming = params->is_data_source_streaming;
@@ -130,128 +160,187 @@ void IPCMediaPipeline::Initialize(
                             weak_ptr_factory_.GetWeakPtr()));
 
     state_ = BUSY;
-    media_pipeline_->Initialize(std::move(source_info),
-                                base::BindOnce(&IPCMediaPipeline::Initialized,
-                                               weak_ptr_factory_.GetWeakPtr()));
+    media_pipeline_->Initialize(
+        std::move(source_info),
+        base::BindOnce(&IPCMediaPipeline::Initialized,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
     return;
   } while (false);
 
-  channel_->Send(new MediaPipelineMsg_Initialized(
-      routing_id_, false, 0, PlatformMediaTimeInfo(), PlatformAudioConfig(),
-      PlatformVideoConfig()));
+  std::move(callback).Run(platform_media::mojom::PipelineInitResult::New());
 }
 
-void IPCMediaPipeline::Initialized(bool success,
-                                   int bitrate,
-                                   const PlatformMediaTimeInfo& time_info,
-                                   const PlatformAudioConfig& audio_config,
-                                   const PlatformVideoConfig& video_config) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void IPCMediaPipeline::Initialized(
+    StartNewPipelineCallback callback,
+    platform_media::mojom::PipelineInitResultPtr result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(state_, BUSY);
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " ( success = " << success
-          << " )" << Loggable(audio_config);
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " success=" << result->success
+          << " duration=" << result->time_info.duration
+          << " bitrate=" << result->bitrate
+          << " audio=" << result->audio_config.is_valid()
+          << " video=" << result->video_config.is_valid();
 
   GetElem(has_media_type_, PlatformStreamType::kAudio) =
-      audio_config.is_valid();
+      result->audio_config.is_valid();
   GetElem(has_media_type_, PlatformStreamType::kVideo) =
-      video_config.is_valid();
+      result->video_config.is_valid();
 
-  channel_->Send(new MediaPipelineMsg_Initialized(
-      routing_id_, success, bitrate, time_info, audio_config, video_config));
+  state_ = result->success ? DECODING : STOPPED;
 
-  state_ = success ? DECODING : STOPPED;
+  std::move(callback).Run(std::move(result));
 }
 
-void IPCMediaPipeline::OnReadDecodedData(PlatformStreamType stream_type) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+/* static */
+void IPCMediaPipeline::ReadRawData(base::WeakPtr<IPCMediaPipeline> pipeline,
+                                   ipc_data_source::Buffer buffer) {
+  DCHECK(buffer);
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " size=" << buffer.GetRequestedSize()
+          << " position=" << buffer.GetReadPosition()
+          << " has_pipeline=" << !!pipeline
+          << " stopped=" << !pipeline->data_source_.is_bound();
+  do {
+    if (!pipeline)
+      break;
+
+    DCHECK_CALLED_ON_VALID_SEQUENCE(pipeline->sequence_checker_);
+    if (!pipeline->data_source_)
+      break;
+    if (pipeline->pending_source_buffer_) {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " attempt to read when another request is active";
+      break;
+    }
+
+    // Unretained is safe as the pipeline owns hosts_.
+    pipeline->data_source_->ReadRawData(
+        buffer.GetReadPosition(), buffer.GetRequestedSize(),
+        base::BindOnce(&IPCMediaPipeline::OnRawDataReady,
+                       base::Unretained(pipeline.get())));
+    pipeline->pending_source_buffer_ = std::move(buffer);
+
+    return;
+  } while (false);
+
+  ipc_data_source::Buffer::OnRawDataError(std::move(buffer));
+}
+
+void IPCMediaPipeline::OnRawDataReady(int read_size) {
+  if (!pending_source_buffer_) {
+    // This should never happen unless the renderer process in a bad state as
+    // we never send a new request until we get a reply.
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " unexpected reply";
+  } else if (ipc_data_source::Buffer::OnRawDataRead(
+                 read_size, std::move(pending_source_buffer_))) {
+    return;
+  }
+  Stop();
+}
+
+void IPCMediaPipeline::ReadDecodedData(PlatformStreamType stream_type,
+                                       ReadDecodedDataCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   TRACE_EVENT0("IPC_MEDIA", "IPCMediaPipeline::OnReadDecodedData");
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " stream_type=" << GetStreamTypeName(stream_type);
 
   // We must be in the decoding state and not already running an asynchronous
   // call to decode data of this type.
-  if (state_ != DECODING || !GetElem(ipc_decoding_buffers_, stream_type)) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Unexpected call to "
-               << __FUNCTION__;
-    return;
-  }
-  if (!has_media_type(stream_type)) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " No data of given media kind ("
-               << GetStreamTypeName(stream_type) << ") to decode";
-    return;
-  }
+  do {
+    if (state_ != DECODING || !GetElem(ipc_decoding_buffers_, stream_type)) {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Unexpected call to " << __FUNCTION__;
+      break;
+    }
+    if (!has_media_type(stream_type)) {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " No data of given media kind ("
+                 << GetStreamTypeName(stream_type) << ") to decode";
+      break;
+    }
 
-  TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA",
-                           GetDecodeDataReadTraceEventName(stream_type), this);
+    TRACE_EVENT_ASYNC_BEGIN0(
+        "IPC_MEDIA", GetDecodeDataReadTraceEventName(stream_type), this);
 
-  IPCDecodingBuffer buffer =
-      std::move(GetElem(ipc_decoding_buffers_, stream_type));
-  media_pipeline_->ReadMediaData(std::move(buffer));
+    IPCDecodingBuffer buffer =
+        std::move(GetElem(ipc_decoding_buffers_, stream_type));
+    buffer.set_reply_cb(base::BindOnce(&IPCMediaPipeline::DecodedDataReady,
+                                       weak_ptr_factory_.GetWeakPtr(),
+                                       std::move(callback)));
+    media_pipeline_->ReadMediaData(std::move(buffer));
+    return;
+  } while (false);
+
+  std::move(callback).Run(nullptr);
 }
 
-void IPCMediaPipeline::DecodedDataReady(IPCDecodingBuffer buffer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void IPCMediaPipeline::DecodedDataReady(ReadDecodedDataCallback callback,
+                                        IPCDecodingBuffer buffer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(state_, DECODING);
 
   PlatformStreamType stream_type = buffer.stream_type();
   DCHECK(!GetElem(ipc_decoding_buffers_, stream_type));
   DCHECK(buffer);
 
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " stream_type=" << GetStreamTypeName(stream_type)
-          << " status=" << static_cast<int>(buffer.status())
-          << " data_size=" << buffer.data_size();
-  if (buffer.status() == MediaDataStatus::kConfigChanged) {
-    switch (stream_type) {
-      case PlatformStreamType::kAudio:
-        DCHECK(buffer.GetAudioConfig().is_valid());
-        channel_->Send(new MediaPipelineMsg_AudioConfigChanged(
-            routing_id_, buffer.GetAudioConfig()));
-        break;
-      case PlatformStreamType::kVideo:
-        DCHECK(buffer.GetVideoConfig().is_valid());
-        channel_->Send(new MediaPipelineMsg_VideoConfigChanged(
-            routing_id_, buffer.GetVideoConfig()));
-        break;
-    }
-  } else {
-    MediaPipelineMsg_DecodedDataReady_Params reply_params;
-    reply_params.stream_type = stream_type;
-    reply_params.status = buffer.status();
-    base::ReadOnlySharedMemoryRegion region_to_send;
-    switch (buffer.status()) {
-      case MediaDataStatus::kEOS:
-        break;
-      case MediaDataStatus::kMediaError:
-        LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                     << " status : MediaDataStatus::kMediaError";
-        break;
-      case MediaDataStatus::kConfigChanged:
-        NOTREACHED();
-        break;
-      case MediaDataStatus::kOk:
-        reply_params.size = buffer.data_size();
-        reply_params.timestamp = buffer.timestamp();
-        reply_params.duration = buffer.duration();
-        region_to_send = buffer.extract_region_to_send();
-        break;
-    }
+  auto result = platform_media::mojom::DecodingResult::New();
+  base::ReadOnlySharedMemoryRegion region_to_send;
+  switch (buffer.status()) {
+    case MediaDataStatus::kMediaError:
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " status : MediaDataStatus::kMediaError";
+      result.reset();
+      break;
+    case MediaDataStatus::kEOS:
+      VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " eos stream_type=" << GetStreamTypeName(stream_type);
+      result->set_end_of_file(true);
+      break;
+    case MediaDataStatus::kConfigChanged:
+      VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " config_change stream_type="
+              << GetStreamTypeName(stream_type);
+      switch (stream_type) {
+        case PlatformStreamType::kAudio:
+          DCHECK(buffer.GetAudioConfig().is_valid());
+          result->set_audio_config(buffer.GetAudioConfig());
+          break;
+        case PlatformStreamType::kVideo:
+          DCHECK(buffer.GetVideoConfig().is_valid());
+          result->set_video_config(buffer.GetVideoConfig());
+          break;
+      }
+      break;
+    case MediaDataStatus::kOk:
+      VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << "decoded_data stream_type=" << GetStreamTypeName(stream_type)
+              << " status=" << static_cast<int>(buffer.status())
+              << " data_size=" << buffer.data_size();
 
-    channel_->Send(new MediaPipelineMsg_DecodedDataReady(
-        routing_id_, reply_params, std::move(region_to_send)));
+      auto data = platform_media::mojom::DecodedData::New();
+      data->size = buffer.data_size();
+      data->timestamp = buffer.timestamp();
+      data->duration = buffer.duration();
+      data->region = buffer.extract_region_to_send();
+      result->set_decoded_data(std::move(data));
+      break;
   }
-
-  TRACE_EVENT_ASYNC_END0("IPC_MEDIA",
-                         GetDecodeDataReadTraceEventName(stream_type), this);
 
   // Reuse the buffer the next time.
   GetElem(ipc_decoding_buffers_, stream_type) = std::move(buffer);
+
+  std::move(callback).Run(std::move(result));
+
+  TRACE_EVENT_ASYNC_END0("IPC_MEDIA",
+                         GetDecodeDataReadTraceEventName(stream_type), this);
 }
 
-void IPCMediaPipeline::OnWillSeek() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void IPCMediaPipeline::WillSeek() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(receiver_.is_bound());
   VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " reading_audio="
           << !GetElem(ipc_decoding_buffers_, PlatformStreamType::kAudio)
           << " reading_video="
@@ -260,8 +349,8 @@ void IPCMediaPipeline::OnWillSeek() {
   media_pipeline_->WillSeek();
 }
 
-void IPCMediaPipeline::OnSeek(base::TimeDelta time) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void IPCMediaPipeline::Seek(base::TimeDelta time, SeekCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " reading_audio="
           << !GetElem(ipc_decoding_buffers_, PlatformStreamType::kAudio)
           << " reading_video="
@@ -270,39 +359,22 @@ void IPCMediaPipeline::OnSeek(base::TimeDelta time) {
   if (state_ != DECODING) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Unexpected call to "
                << __FUNCTION__;
+    std::move(callback).Run(false);
     return;
   }
   state_ = BUSY;
 
-  media_pipeline_->Seek(time,
-                        base::BindRepeating(&IPCMediaPipeline::SeekDone,
-                                            weak_ptr_factory_.GetWeakPtr()));
+  media_pipeline_->Seek(time, base::BindOnce(&IPCMediaPipeline::SeekDone,
+                                             weak_ptr_factory_.GetWeakPtr(),
+                                             std::move(callback)));
 }
 
-void IPCMediaPipeline::SeekDone(bool success) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void IPCMediaPipeline::SeekDone(SeekCallback callback, bool success) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(state_, BUSY);
 
-  channel_->Send(new MediaPipelineMsg_Sought(routing_id_, success));
-
   state_ = DECODING;
-}
-
-bool IPCMediaPipeline::OnMessageReceived(const IPC::Message& msg) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  bool handled = true;
-  TRACE_EVENT0("IPC_MEDIA", "IPCMediaPipeline::OnMessageReceived");
-  IPC_BEGIN_MESSAGE_MAP(IPCMediaPipeline, msg)
-    IPC_MESSAGE_FORWARD(MediaPipelineMsg_RawDataReady, data_source_.get(),
-                        IPCDataSourceImpl::OnRawDataReady)
-    IPC_MESSAGE_HANDLER(MediaPipelineMsg_ReadDecodedData, OnReadDecodedData)
-    IPC_MESSAGE_HANDLER(MediaPipelineMsg_WillSeek, OnWillSeek)
-    IPC_MESSAGE_HANDLER(MediaPipelineMsg_Seek, OnSeek)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  DCHECK(handled) << msg.type();
-  return handled;
+  std::move(callback).Run(success);
 }
 
 }  // namespace media

@@ -31,8 +31,8 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   ui::MenuModel* GetSystemMenuModel();
 
   // On Windows, we serve an icon adjusted for hidpi.
-  gfx::ImageSkia GetWindowIcon() override;
-  gfx::ImageSkia GetWindowAppIcon() override;
+  ui::ImageModel GetWindowIcon() override;
+  ui::ImageModel GetWindowAppIcon() override;
 
  protected:
    gfx::Insets GetFrameInsets() const override;

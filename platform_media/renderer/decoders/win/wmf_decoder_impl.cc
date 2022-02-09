@@ -9,9 +9,9 @@
 
 #include <mferror.h>
 #include <wmcodecdsp.h>
+#include <wrl/client.h>
 #include <algorithm>
 #include <string>
-#include <wrl/client.h>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -23,23 +23,11 @@
 #include "media/base/data_buffer.h"
 #include "media/base/decoder_buffer.h"
 #include "platform_media/common/platform_logging_util.h"
-#include "platform_media/common/platform_mime_util.h"
 #include "platform_media/common/win/mf_util.h"
 
 namespace media {
 
 namespace {
-
-template <DemuxerStream::Type StreamType>
-void ReportInitResult(bool success);
-
-template <>
-void ReportInitResult<DemuxerStream::AUDIO>(bool success) {
-}
-
-template <>
-void ReportInitResult<DemuxerStream::VIDEO>(bool success) {
-}
 
 // This function is used as |no_longer_needed_cb| of
 // VideoFrame::WrapExternalYuvData to make sure we keep reference to DataBuffer
@@ -85,9 +73,7 @@ GUID AudioCodecToAudioSubtypeGUID(AudioCodec codec) {
 template <DemuxerStream::Type StreamType>
 WMFDecoderImpl<StreamType>::WMFDecoderImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : task_runner_(task_runner),
-      output_sample_size_(0),
-      get_stride_function_(nullptr) {}
+    : task_runner_(task_runner), output_sample_size_(0) {}
 
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
@@ -99,12 +85,12 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Media Config not accepted for codec : "
             << GetCodecName(config.codec());
-    std::move(init_cb).Run(media::Status(media::StatusCode::kDecoderUnsupportedConfig));
+    std::move(init_cb).Run(
+        media::Status(media::StatusCode::kDecoderUnsupportedConfig));
     return;
   } else {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " Supported decoder config for codec : "
-            << Loggable(config);
+            << " Supported decoder config for codec : " << Loggable(config);
   }
 
   config_ = config;
@@ -114,8 +100,8 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Creating/Configuring failed for codec : "
             << GetCodecName(config.codec());
-    ReportInitResult<StreamType>(false);
-    std::move(init_cb).Run(media::Status(media::StatusCode::kDecoderFailedCreation));
+    std::move(init_cb).Run(
+        media::Status(media::StatusCode::kDecoderFailedCreation));
     return;
   }
 
@@ -124,33 +110,30 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
   output_cb_ = output_cb;
   ResetTimestampState();
 
-  ReportInitResult<StreamType>(true);
   std::move(init_cb).Run(media::Status());
 }
 
 template <DemuxerStream::Type StreamType>
-void WMFDecoderImpl<StreamType>::Decode(
-    scoped_refptr<DecoderBuffer> buffer,
-    DecodeCB decode_cb) {
+void WMFDecoderImpl<StreamType>::Decode(scoped_refptr<DecoderBuffer> buffer,
+                                        DecodeCB decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   debug_buffer_logger_.Log(buffer);
 
   if (buffer->end_of_stream()) {
-    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " (EOS)";
+    VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " (EOS)";
     const bool drained_ok = Drain();
     LOG_IF(WARNING, !drained_ok)
         << " PROPMEDIA(RENDERER) : " << __FUNCTION__
         << " Drain did not succeed - returning DECODE_ERROR";
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(decode_cb),
-                   drained_ok ? DecodeStatus::OK : DecodeStatus::DECODE_ERROR));
+        FROM_HERE, base::BindOnce(std::move(decode_cb),
+                                  drained_ok ? DecodeStatus::OK
+                                             : DecodeStatus::DECODE_ERROR));
     return;
   }
-  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " (" << buffer->timestamp() << ")";
+  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " ("
+          << buffer->timestamp() << ")";
 
   const HRESULT hr = ProcessInput(buffer);
   DCHECK_NE(MF_E_NOTACCEPTING, hr)
@@ -164,7 +147,8 @@ void WMFDecoderImpl<StreamType>::Decode(
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " processing buffer failed, returning DECODE_ERROR";
 
-  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(decode_cb), status));
+  task_runner_->PostTask(FROM_HERE,
+                         base::BindOnce(std::move(decode_cb), status));
 }
 
 template <DemuxerStream::Type StreamType>
@@ -196,7 +180,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     return false;
   }
 
-  bool isAvailable = IsPlatformAudioDecoderAvailable(config.codec());
+  bool isAvailable = !!GetMFAudioDecoderLibrary();
 
   LOG_IF(WARNING, !isAvailable)
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -209,13 +193,13 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
 template <>
 bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     const DecoderConfig& config) {
-  if (!IsPlatformVideoDecoderAvailable()) {
+  if (!GetMFVideoDecoderLibrary()) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Video Platform Decoder : Unavailable";
     return false;
   }
 
-  LOG_IF(WARNING, !(config.codec() == VideoCodec::kCodecH264))
+  LOG_IF(WARNING, config.codec() != VideoCodec::kCodecH264)
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " Unsupported Video codec : " << GetCodecName(config.codec());
 
@@ -243,16 +227,14 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
 
 // static
 template <>
-std::string WMFDecoderImpl<DemuxerStream::AUDIO>::GetModuleName(
-    const DecoderConfig& config) {
-  return GetMFAudioDecoderLibraryName(config.codec());
+HMODULE WMFDecoderImpl<DemuxerStream::AUDIO>::GetModuleLibrary() {
+  return GetMFAudioDecoderLibrary();
 }
 
 // static
 template <>
-std::string WMFDecoderImpl<DemuxerStream::VIDEO>::GetModuleName(
-    const DecoderConfig& /* config */) {
-  return GetMFVideoDecoderLibraryName();
+HMODULE WMFDecoderImpl<DemuxerStream::VIDEO>::GetModuleLibrary() {
+  return GetMFVideoDecoderLibrary();
 }
 
 // static
@@ -282,9 +264,13 @@ WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
   Microsoft::WRL::ComPtr<IMFTransform> decoder;
 
   // CoCreateInstance() is not avaliable in the sandbox, must "reimplement it".
-  decltype(DllGetClassObject)* const get_class_object =
-      reinterpret_cast<decltype(DllGetClassObject)*>(GetFunctionFromLibrary(
-          "DllGetClassObject", GetModuleName(config).c_str()));
+  HMODULE library = GetModuleLibrary();
+  if (!library)
+    return decoder;
+
+  auto* const get_class_object =
+      reinterpret_cast<decltype(DllGetClassObject)*>(::GetProcAddress(
+          library, "DllGetClassObject"));
   if (!get_class_object) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while retrieving class object getter function.";
@@ -301,8 +287,9 @@ WMFDecoderImpl<StreamType>::CreateWMFDecoder(const DecoderConfig& config) {
     return decoder;
   }
 
-  hr = factory->CreateInstance(nullptr, __uuidof(IMFTransform),
-                               reinterpret_cast<void**>(decoder.GetAddressOf()));
+  hr =
+      factory->CreateInstance(nullptr, __uuidof(IMFTransform),
+                              reinterpret_cast<void**>(decoder.GetAddressOf()));
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while creating decoder instance.";
@@ -318,9 +305,6 @@ bool WMFDecoderImpl<StreamType>::ConfigureDecoder() {
     return false;
 
   if (!SetOutputMediaType())
-    return false;
-
-  if (!InitializeDecoderFunctions())
     return false;
 
   // It requires both input and output to be set.
@@ -496,8 +480,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
   Microsoft::WRL::ComPtr<IMFMediaType> out_media_type;
 
   HRESULT hr = S_OK;
-  for (uint32_t i = 0; SUCCEEDED(
-           decoder_->GetOutputAvailableType(0, i, out_media_type.GetAddressOf()));
+  for (uint32_t i = 0; SUCCEEDED(decoder_->GetOutputAvailableType(
+           0, i, out_media_type.GetAddressOf()));
        ++i) {
     GUID out_subtype = {0};
     hr = out_media_type->GetGUID(MF_MT_SUBTYPE, &out_subtype);
@@ -622,18 +606,6 @@ size_t WMFDecoderImpl<DemuxerStream::VIDEO>::CalculateOutputBufferSize(
   return stream_info.cbSize;
 }
 
-template <>
-bool WMFDecoderImpl<DemuxerStream::AUDIO>::InitializeDecoderFunctions() {
-  return true;
-}
-
-template <>
-bool WMFDecoderImpl<DemuxerStream::VIDEO>::InitializeDecoderFunctions() {
-  get_stride_function_ = reinterpret_cast<decltype(get_stride_function_)>(
-      GetFunctionFromLibrary("MFGetStrideForBitmapInfoHeader", "evr.dll"));
-  return get_stride_function_ != nullptr;
-}
-
 template <DemuxerStream::Type StreamType>
 HRESULT WMFDecoderImpl<StreamType>::ProcessInput(
     const scoped_refptr<DecoderBuffer>& input) {
@@ -732,8 +704,7 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
       // Need to wait for more input data to produce output.
       break;
     case MF_E_TRANSFORM_STREAM_CHANGE:
-      VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-              << " STREAM_CHANGE";
+      VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " STREAM_CHANGE";
       // For some reason we need to set up output media type again.
       if (!SetOutputMediaType())
         return MF_E_UNEXPECTED;
@@ -919,8 +890,8 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
       DataBuffer::CopyFrom(data, data_size);
 
   LONG stride = 0;
-  HRESULT hr = get_stride_function_(MFVideoFormat_YV12.Data1,
-                                    config_.coded_size().width(), &stride);
+  HRESULT hr = MFGetStrideForBitmapInfoHeader(
+      MFVideoFormat_YV12.Data1, config_.coded_size().width(), &stride);
 
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -933,9 +904,9 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
 
   if (stride != adjusted_stride) {
     // patricia@vivaldi.com : I don't know why we do this and it smells fishy
-      LOG(WARNING) << __FUNCTION__ << " Before Stride : " << stride;
-      stride = adjusted_stride;
-      LOG(WARNING) << __FUNCTION__ << " After Stride : " << stride;
+    LOG(WARNING) << __FUNCTION__ << " Before Stride : " << stride;
+    stride = adjusted_stride;
+    LOG(WARNING) << __FUNCTION__ << " After Stride : " << stride;
   }
 
   // Number of rows has to be divisible by 16.
@@ -950,9 +921,9 @@ WMFDecoderImpl<DemuxerStream::VIDEO>::CreateOutputBufferInternal(
   }
 
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
-      VideoPixelFormat::PIXEL_FORMAT_YV12, config_.coded_size(), config_.visible_rect(),
-      config_.natural_size(), stride, stride / 2, stride / 2,
-      const_cast<uint8_t*>(data_buffer->data()),
+      VideoPixelFormat::PIXEL_FORMAT_YV12, config_.coded_size(),
+      config_.visible_rect(), config_.natural_size(), stride, stride / 2,
+      stride / 2, const_cast<uint8_t*>(data_buffer->data()),
       const_cast<uint8_t*>(data_buffer->data() +
                            (rows * stride + rows * stride / 4)),
       const_cast<uint8_t*>(data_buffer->data() + (rows * stride)), timestamp);
@@ -994,7 +965,6 @@ Microsoft::WRL::ComPtr<IMFSample> WMFDecoderImpl<StreamType>::CreateSample(
 
 template <>
 void WMFDecoderImpl<DemuxerStream::AUDIO>::ResetTimestampState() {
-
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " samples_per_second : " << config_.samples_per_second();
 

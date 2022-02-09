@@ -34,7 +34,6 @@
 #include "chrome/browser/sync/bookmark_sync_service_factory.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/model_type_store_service_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/sync/sync_invalidations_service_factory.h"
@@ -219,10 +218,10 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile) : profile_(profile) {
       profile_, ServiceAccessType::IMPLICIT_ACCESS);
 
   component_factory_ = std::make_unique<ProfileSyncComponentsFactoryImpl>(
-      this, chrome::GetChannel(), prefs::kSavingBrowserHistoryDisabled,
-      content::GetUIThreadTaskRunner({}), web_data_service_thread_,
-      profile_web_data_service_, account_web_data_service_,
-      profile_password_store_, account_password_store_,
+      this, chrome::GetChannel(), content::GetUIThreadTaskRunner({}),
+      web_data_service_thread_, profile_web_data_service_,
+      account_web_data_service_, profile_password_store_,
+      account_password_store_,
       BookmarkSyncServiceFactory::GetForProfile(profile_),
       vivaldi::NoteSyncServiceFactory::GetForProfile(profile_));
 
@@ -232,8 +231,8 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile) : profile_(profile) {
   // TODO(crbug.com/1113597): consider destroying/notifying
   // |trusted_vault_client_| upon IdentityManager shutdown, to avoid its usages
   // afterwards. This can be done by tranferring |trusted_vault_client_|
-  // ownership to ProfileSyncService and acting on
-  // ProfileSyncService::Shutdown() or by handling
+  // ownership to SyncServiceImpl and acting on
+  // SyncServiceImpl::Shutdown() or by handling
   // IdentityManagerFactory::Observer::IdentityManagerShutdown().
   trusted_vault_client_ =
       std::make_unique<syncer::StandaloneTrustedVaultClient>(

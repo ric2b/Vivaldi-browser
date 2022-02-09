@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/extensions/api/history/history_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "db/vivaldi_history_database.h"
@@ -35,7 +35,7 @@ class HistoryPrivateEventRouter : public history::HistoryServiceObserver {
                      const std::string& event_name,
                      std::vector<base::Value> event_args);
   Profile* profile_;
-  ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
+  base::ScopedObservation<history::HistoryService, history::HistoryServiceObserver>
       history_service_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryPrivateEventRouter);

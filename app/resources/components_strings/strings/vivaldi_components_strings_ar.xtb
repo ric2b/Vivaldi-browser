@@ -51,6 +51,7 @@
 <translation id="5617949217645503996">أعاد <ph name="HOST_NAME" /> توجيهك مرات كثيرة جدًا.</translation>
 <translation id="5675650730144413517">يتعذّر على هذه الصفحة العمل</translation>
 <translation id="5869405914158311789">لا يمكن الوصول إلى موقع الويب هذا</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 in use} أخرى {# in use}}</translation>
 <translation id="6146055958333702838">تحقق من أي كابلات وأعد تشغيل أي أجهزة توجيه أو أجهزة مودم أو أجهزة شبكة
         أخرى ربما تستخدمها.</translation>
 <translation id="6165508094623778733">مزيد من المعلومات</translation>

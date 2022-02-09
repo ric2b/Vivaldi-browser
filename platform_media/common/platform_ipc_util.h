@@ -5,11 +5,7 @@
 #ifndef PLATFORM_MEDIA_COMMON_PLATFORM_IPC_UTIL_H_
 #define PLATFORM_MEDIA_COMMON_PLATFORM_IPC_UTIL_H_
 
-#include "platform_media/common/feature_toggles.h"
-
 #include "platform_media/common/platform_media_pipeline_types.h"
-
-#include "media/base/media_export.h"
 
 namespace media {
 

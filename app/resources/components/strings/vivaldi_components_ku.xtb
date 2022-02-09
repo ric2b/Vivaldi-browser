@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ku">
-<translation id="3830627370375585318">Mafe bide Vivaldi ku di sazkiriyên dîwarê parastinê an veyruskujê de bigihîje torê
-          .</translation>
+<translation id="3830627370375585318">Di nav sazkariyên dîwarê parastinê an jî vîruskujê de
+          mafê bide Vivaldiyê da ku bigihîje torê.</translation>
 <translation id="4200102020577305737">Biçe
-          Kulîna Vivaldi &gt;
+          Kulîna Vivaldiyê &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
           &gt;
-          Sazkariyên LAN
-          û hilnebijêre "Ji bo LAN ya xwe pêşkêşerek nûnerê bi kar bîne"".</translation>
+          Sazkariyên LAN-ê
+          û "Ji bo LAN-a xwe rajekara nûnerê bi kar bîne" hilnebijêre.</translation>
 <translation id="4932161901409251843">Biçe
-           kulîna Vivaldi&gt;&gt;
+           Kulîna Vivaldiyê&gt;&gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          û piştrast bike pevsaziya te bi "cigîr tune" an "rasterast" tê danîn.</translation>
-<translation id="5248344925342018662">Tu rûpelek ewlekar a Vivaldi dibînî</translation>
+          û piştrast bike, ka pevsaziya te wekî "nûner tune" an jî "rasterast" e</translation>
+<translation id="5248344925342018662">Tu rûpelekê ewledar a Vivaldiyê dibînî</translation>
 <translation id="7023871570427738255">Biçe
-          Kulîna Vivaldi &gt;
+          Kulîna Vivaldiyê &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
           <ph name="ADVANCED_TITLE" />
-          Û hilnebijêre"<ph name="NO_PREFETCH_DESCRIPTION" />."
-          Ger ev pirsgirêk çareser nebû, em pêşniyaz dikin ku tu vê vebijêrkê hilbijêrî
-          Dîsa ji bo performansa çêtir.</translation>
+          Û "<ph name="NO_PREFETCH_DESCRIPTION" />." hilnebijêre
+          Heke ev pirsgirêk çareser nebû, em pêşniyaz dikin ku tu vê vebijêrkê dîsa hilbijêrî
+           ji bo performansa çêtir.</translation>
 <translation id="8187289872471304532">Biçe
-          Sepan &gt; Vebijarkên Pergalê &gt; Tor &gt; Pêşketî &gt; Nûner
+          Sepan &gt; Vebijêrkên pergalê &gt; Tor &gt; Pêşketî &gt; Nûner
            û nûnerên ku hatine hilbijartin ji holê rake.</translation>
 </translationbundle>

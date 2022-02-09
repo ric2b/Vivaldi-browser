@@ -23,8 +23,9 @@ IPCDecodingBuffer& IPCDecodingBuffer::operator=(IPCDecodingBuffer&&) = default;
 
 // static
 void IPCDecodingBuffer::Reply(IPCDecodingBuffer buffer) {
-  const ReplyCB& reply_cb = buffer.impl_->reply_cb;
-  reply_cb.Run(std::move(buffer));
+  ReplyCB reply_cb = std::move(buffer.impl_->reply_cb);
+  DCHECK(reply_cb);
+  std::move(reply_cb).Run(std::move(buffer));
 }
 
 void IPCDecodingBuffer::Init(PlatformStreamType stream_type) {

@@ -31,12 +31,15 @@ class AXRelationCache {
   bool IsAriaOwned(AXID) const;
   bool IsAriaOwned(const AXObject*) const;
 
-  // Returns the parent of the given object due to aria-owns.
-  AXObject* GetAriaOwnedParent(const AXObject*) const;
+  // Returns the parent of the given object due to aria-owns, if valid,
+  // otherwise, removes the child from maps indicating that it is owned.
+  AXObject* ValidatedAriaOwner(const AXObject*);
 
   // Returns the validated owned children of this element with aria-owns.
-  void GetAriaOwnedChildren(const AXObject* owner,
-                            HeapVector<Member<AXObject>>& owned_children);
+  // Any children that are no longer valid are removed from maps indicating they
+  // are owned.
+  void ValidatedAriaOwnedChildren(const AXObject* owner,
+                                  HeapVector<Member<AXObject>>& owned_children);
 
   // Return true if any label ever pointed to the element via the for attribute.
   bool MayHaveHTMLLabelViaForAttribute(const HTMLElement&);
@@ -51,6 +54,10 @@ class AXRelationCache {
 
   // Remove given AXID from cache.
   void RemoveAXID(AXID);
+
+  // The child cannot be owned, either because the child was removed or the
+  // relation was invalid, so remove from all relevant mappings.
+  void RemoveOwnedRelation(AXID);
 
   // Update map of ids to related objects.
   // If one or more ids aren't found, they're added to a lookup table so that if
@@ -84,10 +91,16 @@ class AXRelationCache {
   // owned ids have not changed, e.g. when an object has been refreshed.
   void UpdateAriaOwnsWithCleanLayout(AXObject* owner, bool force = false);
 
+  // Is there work to be done when layout becomes clean?
+  bool IsDirty() const;
+
   static bool IsValidOwner(AXObject* owner);
   static bool IsValidOwnedChild(AXObject* child);
 
  private:
+  // Returns the parent of the given object due to aria-owns.
+  AXObject* GetAriaOwnedParent(const AXObject*) const;
+
   // Given an object that has explicitly set elements for aria-owns, update the
   // internal state to reflect the new set of children owned by this object.
   // Note that |owned_children| will be the AXObjects corresponding to the
@@ -104,9 +117,17 @@ class AXRelationCache {
   void UpdateRelatedText(Node*);
 
   bool IsValidOwnsRelation(AXObject* owner, AXObject* child) const;
-  void UnmapOwnedChildren(const AXObject* owner, Vector<AXID>);
-  void MapOwnedChildren(const AXObject* owner, Vector<AXID>);
+  void UnmapOwnedChildren(const AXObject* owner,
+                          const Vector<AXID>& removed_child_ids,
+                          const Vector<AXID>& newly_owned_ids);
+
+  void MapOwnedChildren(const AXObject* owner, const Vector<AXID>&);
   void GetReverseRelated(Node*, HeapVector<Member<AXObject>>& sources);
+
+  // Set the parent of |child| to its natural parent, without any aria-owns.
+  // If no natural parent is possible, this means the child can no longer be in
+  // the AXTree, so remove the child.
+  AXObject* RestoreParentOrPrune(AXObject* child);
 
   // Updates |aria_owner_to_children_mapping_| after calling UpdateAriaOwns for
   // either the content attribute or the attr associated elements.

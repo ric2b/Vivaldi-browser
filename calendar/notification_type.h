@@ -10,6 +10,7 @@
 #define CALENDAR_NOTIFICATION_TYPE_H_
 
 #include <string>
+#include <vector>
 
 #include "calendar/calendar_typedefs.h"
 

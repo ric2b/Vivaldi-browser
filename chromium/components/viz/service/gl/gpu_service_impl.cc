@@ -17,6 +17,7 @@
 #include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/viz/common/features.h"
@@ -109,7 +110,13 @@
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
-#include "platform_media/gpu/pipeline/propmedia_gpu_channel.h"
+
+namespace gpu {
+// This function pointer is defined in gpu/ipc/service/gpu_channel.cc
+extern GPU_IPC_SERVICE_EXPORT void (*g_vivaldi_media_pipeline_factory_creator)(
+    mojo::GenericPendingReceiver receiver);
+}
+
 #endif
 
 namespace viz {
@@ -343,6 +350,8 @@ GpuServiceImpl::GpuServiceImpl(
       gpu_preferences_(gpu_preferences),
       gpu_info_(gpu_info),
       gpu_feature_info_(gpu_feature_info),
+      gpu_driver_bug_workarounds_(
+          gpu_feature_info.enabled_gpu_driver_bug_workarounds),
       gpu_info_for_hardware_gpu_(gpu_info_for_hardware_gpu),
       gpu_feature_info_for_hardware_gpu_(gpu_feature_info_for_hardware_gpu),
       gpu_extra_info_(gpu_extra_info),
@@ -429,10 +438,10 @@ GpuServiceImpl::GpuServiceImpl(
   weak_ptr_ = weak_ptr_factory_.GetWeakPtr();
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  // Glue together PropmediaGpuChannel and IPCMediaPipeline here where the code
+  // Glue together GpuChannel and IPCMediaPipeline here where the code
   // links against all relevant libraries.
-  gpu::PropmediaGpuChannel::g_create_pipeline =
-      &media::IPCMediaPipeline::Create;
+  gpu::g_vivaldi_media_pipeline_factory_creator =
+      &media::IPCMediaPipeline::CreateFactory;
 #endif
 }
 
@@ -464,6 +473,7 @@ GpuServiceImpl::~GpuServiceImpl() {
   if (watchdog_thread_)
     watchdog_thread_->OnGpuProcessTearDown();
 
+  compositor_gpu_thread_.reset();
   media_gpu_channel_manager_.reset();
 
   gpu_channel_manager_.reset();
@@ -564,14 +574,20 @@ void GpuServiceImpl::InitializeWithHost(
     // When using real buffers for testing overlay configurations, we need
     // access to SharedImageManager on the viz thread to obtain the buffer
     // corresponding to a mailbox.
-    bool thread_safe_manager = features::ShouldUseRealBuffersForPageFlipTest();
+    const bool display_context_on_another_thread = features::IsDrDcEnabled();
+    bool thread_safe_manager = display_context_on_another_thread;
+#if defined(USE_OZONE)
+    thread_safe_manager |= features::ShouldUseRealBuffersForPageFlipTest();
+#endif
     owned_shared_image_manager_ = std::make_unique<gpu::SharedImageManager>(
-        thread_safe_manager, false /* display_context_on_another_thread */);
+        thread_safe_manager, display_context_on_another_thread);
     shared_image_manager = owned_shared_image_manager_.get();
+#if defined(USE_OZONE)
   } else {
     // With this feature enabled, we don't expect to receive an external
     // SharedImageManager.
     DCHECK(!features::ShouldUseRealBuffersForPageFlipTest());
+#endif
   }
 
   shutdown_event_ = shutdown_event;
@@ -601,6 +617,10 @@ void GpuServiceImpl::InitializeWithHost(
 
   if (watchdog_thread())
     watchdog_thread()->AddPowerObserver();
+
+  // Create and Initialize compositor gpu thread.
+  compositor_gpu_thread_ =
+      CompositorGpuThread::Create(gpu_channel_manager_.get());
 }
 
 void GpuServiceImpl::Bind(
@@ -784,7 +804,7 @@ void GpuServiceImpl::CreateGpuMemoryBuffer(
 void GpuServiceImpl::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                             int client_id,
                                             const gpu::SyncToken& sync_token) {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GpuServiceImpl::DestroyGpuMemoryBuffer,
                                   weak_ptr_, id, client_id, sync_token));
@@ -853,34 +873,27 @@ void GpuServiceImpl::RequestHDRStatusOnMainThread(
 
 void GpuServiceImpl::RegisterDisplayContext(
     gpu::DisplayContext* display_context) {
-  DCHECK(main_runner_->BelongsToCurrentThread());
   display_contexts_.AddObserver(display_context);
 }
 
 void GpuServiceImpl::UnregisterDisplayContext(
     gpu::DisplayContext* display_context) {
-  DCHECK(main_runner_->BelongsToCurrentThread());
   display_contexts_.RemoveObserver(display_context);
 }
 
 void GpuServiceImpl::LoseAllContexts() {
-  DCHECK(main_runner_->BelongsToCurrentThread());
-
   if (IsExiting())
     return;
-
   for (auto& display_context : display_contexts_)
     display_context.MarkContextLost();
   gpu_channel_manager_->LoseAllContexts();
 }
 
 void GpuServiceImpl::DidCreateContextSuccessfully() {
-  DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host_->DidCreateContextSuccessfully();
 }
 
 void GpuServiceImpl::DidCreateOffscreenContext(const GURL& active_url) {
-  DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host_->DidCreateOffscreenContext(active_url);
 }
 
@@ -904,7 +917,6 @@ void GpuServiceImpl::DidDestroyOffscreenContext(const GURL& active_url) {
 void GpuServiceImpl::DidLoseContext(bool offscreen,
                                     gpu::error::ContextLostReason reason,
                                     const GURL& active_url) {
-  DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host_->DidLoseContext(offscreen, reason, active_url);
 }
 
@@ -922,7 +934,6 @@ void GpuServiceImpl::DidUpdateHDRStatus(bool hdr_enabled) {
 void GpuServiceImpl::StoreShaderToDisk(int client_id,
                                        const std::string& key,
                                        const std::string& shader) {
-  DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host_->StoreShaderToDisk(client_id, key, shader);
 }
 
@@ -994,8 +1005,10 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
     return;
   }
 
+  auto channel_token = base::UnguessableToken::Create();
   gpu::GpuChannel* gpu_channel = gpu_channel_manager_->EstablishChannel(
-      client_id, client_tracing_id, is_gpu_host, cache_shaders_on_disk);
+      channel_token, client_id, client_tracing_id, is_gpu_host,
+      cache_shaders_on_disk);
 
   if (!gpu_channel) {
     // This returns a null handle, which is treated by the client as a failure
@@ -1007,14 +1020,29 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
   mojo::MessagePipe pipe;
   gpu_channel->Init(pipe.handle0.release(), shutdown_event_);
 
-  media_gpu_channel_manager_->AddChannel(client_id);
+  media_gpu_channel_manager_->AddChannel(client_id, channel_token);
 
   std::move(callback).Run(std::move(pipe.handle1), gpu_info_,
                           gpu_feature_info_);
 }
 
-void GpuServiceImpl::CloseChannel(int32_t client_id) {
+void GpuServiceImpl::SetChannelClientPid(int32_t client_id,
+                                         base::ProcessId client_pid) {
   if (io_runner_->BelongsToCurrentThread()) {
+    main_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&GpuServiceImpl::SetChannelClientPid,
+                                          weak_ptr_, client_id, client_pid));
+    return;
+  }
+
+  // Note that the GpuService client must be trusted by definition, so DCHECKing
+  // this condition is reasonable.
+  DCHECK_NE(client_pid, base::kNullProcessId);
+  gpu_channel_manager_->SetChannelClientPid(client_id, client_pid);
+}
+
+void GpuServiceImpl::CloseChannel(int32_t client_id) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&GpuServiceImpl::CloseChannel, weak_ptr_, client_id));
@@ -1026,7 +1054,7 @@ void GpuServiceImpl::CloseChannel(int32_t client_id) {
 void GpuServiceImpl::LoadedShader(int32_t client_id,
                                   const std::string& key,
                                   const std::string& data) {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GpuServiceImpl::LoadedShader, weak_ptr_,
                                   client_id, key, data));
@@ -1036,7 +1064,7 @@ void GpuServiceImpl::LoadedShader(int32_t client_id,
 }
 
 void GpuServiceImpl::WakeUpGpu() {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GpuServiceImpl::WakeUpGpu, weak_ptr_));
     return;
@@ -1049,21 +1077,23 @@ void GpuServiceImpl::WakeUpGpu() {
 }
 
 void GpuServiceImpl::GpuSwitched(gl::GpuPreference active_gpu_heuristic) {
+  if (!main_runner_->BelongsToCurrentThread()) {
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::GpuSwitched, weak_ptr_,
+                                  active_gpu_heuristic));
+    return;
+  }
   DVLOG(1) << "GPU: GPU has switched";
+
   if (!in_host_process()) {
     ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched(
         active_gpu_heuristic);
-  }
-  if (io_runner_->BelongsToCurrentThread()) {
-    main_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&GpuServiceImpl::UpdateGPUInfoGL, weak_ptr_));
-    return;
   }
   GpuServiceImpl::UpdateGPUInfoGL();
 }
 
 void GpuServiceImpl::DisplayAdded() {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GpuServiceImpl::DisplayAdded, weak_ptr_));
     return;
@@ -1075,7 +1105,7 @@ void GpuServiceImpl::DisplayAdded() {
 }
 
 void GpuServiceImpl::DisplayRemoved() {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GpuServiceImpl::DisplayRemoved, weak_ptr_));
     return;
@@ -1087,7 +1117,7 @@ void GpuServiceImpl::DisplayRemoved() {
 }
 
 void GpuServiceImpl::DisplayMetricsChanged() {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&GpuServiceImpl::DisplayMetricsChanged, weak_ptr_));
@@ -1100,7 +1130,7 @@ void GpuServiceImpl::DisplayMetricsChanged() {
 }
 
 void GpuServiceImpl::DestroyAllChannels() {
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&GpuServiceImpl::DestroyAllChannels, weak_ptr_));
@@ -1113,7 +1143,7 @@ void GpuServiceImpl::DestroyAllChannels() {
 void GpuServiceImpl::OnBackgroundCleanup() {
 // Currently only called on Android.
 #if defined(OS_ANDROID)
-  if (io_runner_->BelongsToCurrentThread()) {
+  if (!main_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&GpuServiceImpl::OnBackgroundCleanup, weak_ptr_));
@@ -1243,5 +1273,23 @@ void GpuServiceImpl::UpdateOverlayAndHDRInfo() {
     DidUpdateHDRStatus(hdr_enabled_);
 }
 #endif
+
+void GpuServiceImpl::GetDawnInfo(GetDawnInfoCallback callback) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+
+  main_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&GpuServiceImpl::GetDawnInfoOnMain,
+                                base::Unretained(this), std::move(callback)));
+}
+
+void GpuServiceImpl::GetDawnInfoOnMain(GetDawnInfoCallback callback) {
+  DCHECK(main_runner_->BelongsToCurrentThread());
+
+  std::vector<std::string> dawn_info_list;
+  gpu::CollectDawnInfo(gpu_preferences_, &dawn_info_list);
+
+  io_runner_->PostTask(FROM_HERE,
+                       base::BindOnce(std::move(callback), dawn_info_list));
+}
 
 }  // namespace viz

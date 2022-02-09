@@ -11,6 +11,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/network_delegate_impl.h"
+#include "net/cookies/same_party_context.h"
 #include "services/network/network_context.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -38,9 +39,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkServiceNetworkDelegate
   int OnBeforeURLRequest(net::URLRequest* request,
                          net::CompletionOnceCallback callback,
                          GURL* new_url) override;
-  int OnBeforeStartTransaction(net::URLRequest* request,
-                               net::CompletionOnceCallback callback,
-                               net::HttpRequestHeaders* headers) override;
+  int OnBeforeStartTransaction(
+      net::URLRequest* request,
+      const net::HttpRequestHeaders& headers,
+      OnBeforeStartTransactionCallback callback) override;
   int OnHeadersReceived(
       net::URLRequest* request,
       net::CompletionOnceCallback callback,
@@ -55,8 +57,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkServiceNetworkDelegate
                    bool started,
                    int net_error) override;
   void OnPACScriptError(int line_number, const std::u16string& error) override;
-  bool OnCanGetCookies(const net::URLRequest& request,
-                       bool allowed_from_caller) override;
+  bool OnAnnotateAndMoveUserBlockedCookies(
+      const net::URLRequest& request,
+      net::CookieAccessResultList& maybe_included_cookies,
+      net::CookieAccessResultList& excluded_cookies,
+      bool allowed_from_caller) override;
   bool OnCanSetCookie(const net::URLRequest& request,
                       const net::CanonicalCookie& cookie,
                       net::CookieOptions* options,
@@ -64,7 +69,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkServiceNetworkDelegate
   bool OnForcePrivacyMode(
       const GURL& url,
       const net::SiteForCookies& site_for_cookies,
-      const absl::optional<url::Origin>& top_frame_origin) const override;
+      const absl::optional<url::Origin>& top_frame_origin,
+      net::SamePartyContext::Type same_party_context_type) const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const net::URLRequest& request,
       const GURL& target_url,

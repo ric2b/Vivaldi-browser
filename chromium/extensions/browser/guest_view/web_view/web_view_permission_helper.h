@@ -26,6 +26,10 @@ class GuestViewBase;
 
 using guest_view::GuestViewBase;
 
+namespace base {
+class DictionaryValue;
+}
+
 namespace extensions {
 
 class WebViewGuest;

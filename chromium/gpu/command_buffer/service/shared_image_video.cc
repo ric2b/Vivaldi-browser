@@ -276,9 +276,9 @@ class SharedImageRepresentationVideoSkiaVk
     if (!vulkan_image_) {
       DCHECK(!promise_texture_);
 
-      vulkan_image_ =
-          CreateVkImageFromAhbHandle(scoped_hardware_buffer_->TakeBuffer(),
-                                     context_state(), size(), format());
+      vulkan_image_ = CreateVkImageFromAhbHandle(
+          scoped_hardware_buffer_->TakeBuffer(), context_state(), size(),
+          format(), VK_QUEUE_FAMILY_FOREIGN_EXT);
       if (!vulkan_image_)
         return nullptr;
 
@@ -438,6 +438,10 @@ std::unique_ptr<gles2::AbstractTexture> SharedImageVideo::GenAbstractTexture(
 }
 
 void SharedImageVideo::BeginGLReadAccess(const GLuint service_id) {
+  // TODO(vasilyt): We never should change gl bindings and not update tracking.
+  // UpdateAndBindTexImage might change one, so we do restore here as a
+  // temporary fix to merge to M93.
+  ScopedRestoreTextureBinding restore_bindings;
   stream_texture_sii_->UpdateAndBindTexImage(service_id);
 }
 

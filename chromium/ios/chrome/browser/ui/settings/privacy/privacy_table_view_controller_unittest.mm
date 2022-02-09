@@ -23,7 +23,7 @@
 #import "ios/chrome/browser/main/test_browser.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
-#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/sync_service_factory.h"
 #include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -54,7 +54,7 @@ class PrivacyTableViewControllerTest : public ChromeTableViewControllerTest {
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.SetPrefService(CreatePrefService());
     test_cbs_builder.AddTestingFactory(
-        ProfileSyncServiceFactory::GetInstance(),
+        SyncServiceFactory::GetInstance(),
         base::BindRepeating(&BuildMockSyncService));
     chrome_browser_state_ = test_cbs_builder.Build();
 
@@ -94,8 +94,7 @@ class PrivacyTableViewControllerTest : public ChromeTableViewControllerTest {
 
   syncer::MockSyncService* mock_sync_service() {
     return static_cast<syncer::MockSyncService*>(
-        ProfileSyncServiceFactory::GetForBrowserState(
-            chrome_browser_state_.get()));
+        SyncServiceFactory::GetForBrowserState(chrome_browser_state_.get()));
   }
 
   web::WebTaskEnvironment task_environment_;
@@ -108,6 +107,9 @@ class PrivacyTableViewControllerTest : public ChromeTableViewControllerTest {
 // Tests PrivacyTableViewController is set up with all appropriate items
 // and sections.
 TEST_F(PrivacyTableViewControllerTest, TestModel) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(signin::kMobileIdentityConsistency);
+
   CreateController();
   CheckController();
   EXPECT_EQ(2, NumberOfSections());
@@ -128,7 +130,7 @@ TEST_F(PrivacyTableViewControllerTest, TestModel) {
       handoffSubtitle, 1, 0);
 
   CheckSectionFooter(
-      l10n_util::GetNSString(IDS_IOS_OPTIONS_PRIVACY_GOOGLE_SERVICES_FOOTER),
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_GOOGLE_SERVICES_FOOTER),
       /* section= */ 0);
 }
 

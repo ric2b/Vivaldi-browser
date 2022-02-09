@@ -15,7 +15,6 @@
 <translation id="3485073444286678268">목적지 폴더가 유효하지 않습니다. 다른 폴더를 선택해주세요.</translation>
 <translation id="3642991949832251880">Vivaldi를 종료하시겠습니까?</translation>
 <translation id="3784826321032465839">Vivaldi 설치</translation>
-<translation id="3850557856045828465">경고: Vivaldi에서는 확장 프로그램에 인터넷 사용 기록이 저장될 수 있습니다. 시크릿 모드에서 이 확장 프로그램을 사용 중지하려면 옵션을 선택 취소하세요.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4079588913451946215">모든 사용자에게 설치</translation>
 <translation id="421958613172216971">폴더 선택</translation>
@@ -26,11 +25,11 @@
 <translation id="4619978527973181021">동의 및 설치</translation>
 <translation id="479976146866774527">Vivaldi 설치 중</translation>
 <translation id="5051728323101947360">단독 Vivaldi를 기본 앱으로 만들기</translation>
+<translation id="5167047459440711824">경고: Vivaldi는 확장 프로그램들이 당신의 브라우징 기록을 기록하는 것을 방지할 수 없습니다. 시크릿 모드에서 이 확장 프로그램을 사용 중지하려면 옵션을 선택 해제하세요.</translation>
 <translation id="5247376421371319618">동의 및 업데이트</translation>
 <translation id="5288672417093782294">Vivaldi 알림 설정으로 이동</translation>
 <translation id="5302048478445481009">언어</translation>
 <translation id="5743878272102782872">작업 관리자 - Vivaldi</translation>
-<translation id="6213772951145281007">Vivaldi을 종료할 때 쿠키 및 사이트 데이터 삭제</translation>
 <translation id="6569282126279967574">이런! Vivaldi에 충돌이 발생했습니다. 지금 재시작하시겠습니까?</translation>
 <translation id="694714344624446243">Vivaldi 인스톨러</translation>
 <translation id="7658239707568436148">취소</translation>

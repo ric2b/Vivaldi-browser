@@ -26,9 +26,12 @@ class CustomThemeSupplier;
 class TabMenuModelFactory;
 
 namespace gfx {
-class ImageSkia;
 class Rect;
 }  // namespace gfx
+
+namespace ui {
+class ImageModel;
+}
 
 namespace web_app {
 
@@ -102,10 +105,10 @@ class AppBrowserController : public TabStripModelObserver,
   virtual bool HasMinimalUiButtons() const = 0;
 
   // Returns the app icon for the window to use in the task list.
-  virtual gfx::ImageSkia GetWindowAppIcon() const = 0;
+  virtual ui::ImageModel GetWindowAppIcon() const = 0;
 
   // Returns the icon to be displayed in the window title bar.
-  virtual gfx::ImageSkia GetWindowIcon() const = 0;
+  virtual ui::ImageModel GetWindowIcon() const = 0;
 
   // Returns the color of the title bar.
   virtual absl::optional<SkColor> GetThemeColor() const;
@@ -143,7 +146,15 @@ class AppBrowserController : public TabStripModelObserver,
 
   virtual std::unique_ptr<TabMenuModelFactory> GetTabMenuModelFactory() const;
 
+  // Returns true when an app's effective display mode is
+  // window-controls-overlay.
+  virtual bool AppUsesWindowControlsOverlay() const;
+
+  // Returns true when the app's effective display mode is
+  // window-controls-overlay and the user has toggled WCO on for the app.
   virtual bool IsWindowControlsOverlayEnabled() const;
+
+  virtual void ToggleWindowControlsOverlayEnabled();
 
   // Whether the browser should show the reload button in the toolbar.
   virtual bool HasReloadButton() const;
@@ -182,6 +193,8 @@ class AppBrowserController : public TabStripModelObserver,
 
   // content::WebContentsObserver:
   void DidStartNavigation(content::NavigationHandle* handle) override;
+  void ReadyToCommitNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
   void DidChangeThemeColor() override;
   void OnBackgroundColorChanged() override;
@@ -214,7 +227,7 @@ class AppBrowserController : public TabStripModelObserver,
   virtual void OnTabRemoved(content::WebContents* contents);
 
   // Gets the icon to use if the app icon is not available.
-  gfx::ImageSkia GetFallbackAppIcon() const;
+  ui::ImageModel GetFallbackAppIcon() const;
 
  private:
   // Sets the url that the app browser controller was created with.

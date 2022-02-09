@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Изберете файл с отметки на Opera.</translation>
 <translation id="3451317331714872347">Пейзаж 8</translation>
 <translation id="3457498675806041407">Потвърждение при изход</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> е вече инсталиран и ще се задейства след повторен пуск.</translation>
 <translation id="3516213908976398531">Пейзаж 11</translation>
 <translation id="3521635864657970829">Наистина ли затваряте прозореца?</translation>
 <translation id="3540597690227428180">Животно 9</translation>
@@ -157,12 +158,13 @@
 <translation id="8669345741879513971">Чудовище 10</translation>
 <translation id="867544375504146191">Яндекс</translation>
 <translation id="8768970203213061953">Пейзаж 14</translation>
-<translation id="8773635261052182196">Повече няма да виждате известия. Можете да ги разрешите отново от настройките на Vivaldi.</translation>
+<translation id="8773635261052182196">Повече няма да виждате известия. Може да ги разрешите отново от настройките на Vivaldi.</translation>
 <translation id="8813277370772331957">Напомни по-късно</translation>
 <translation id="8894900864683381599">Добави препратката като панел</translation>
 <translation id="8912720443398351457">Наистина ли излизате от Vivaldi?</translation>
 <translation id="8947109330183116400">Изберете файл с отметки HTML.</translation>
 <translation id="9017566390391482291">Изберете папка с профил на Vivaldi за внасяне.</translation>
+<translation id="9048058608784130603">Изчакващо обновяване <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Редактирай</translation>
 <translation id="912022491595344261">Отвори картината като <ph name="USER" /></translation>
 <translation id="9157539936604258187">Отвори препратката</translation>

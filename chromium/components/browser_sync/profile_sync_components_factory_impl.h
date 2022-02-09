@@ -48,7 +48,6 @@ class ProfileSyncComponentsFactoryImpl
   ProfileSyncComponentsFactoryImpl(
       BrowserSyncClient* sync_client,
       version_info::Channel channel,
-      const char* history_disabled_pref,
       const scoped_refptr<base::SequencedTaskRunner>& ui_thread,
       const scoped_refptr<base::SequencedTaskRunner>& db_thread,
       const scoped_refptr<autofill::AutofillWebDataService>&
@@ -76,7 +75,6 @@ class ProfileSyncComponentsFactoryImpl
 
   // SyncApiComponentFactory implementation:
   std::unique_ptr<syncer::DataTypeManager> CreateDataTypeManager(
-      syncer::ModelTypeSet initial_types,
       const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
           debug_info_listener,
       const syncer::DataTypeController::TypeMap* controllers,
@@ -122,7 +120,6 @@ class ProfileSyncComponentsFactoryImpl
   // Client/platform specific members.
   BrowserSyncClient* const sync_client_;
   const version_info::Channel channel_;
-  const char* history_disabled_pref_;
   const scoped_refptr<base::SequencedTaskRunner> ui_thread_;
   const scoped_refptr<base::SequencedTaskRunner> db_thread_;
   const scoped_refptr<base::SequencedTaskRunner>

@@ -14,6 +14,7 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/numerics/clamped_math.h"
+#include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "browser/translate/vivaldi_translate_client.h"
@@ -64,12 +65,14 @@
 #include "extensions/schema/tabs_private.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "prefs/vivaldi_gen_pref_enums.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_tab_zoom_pref.h"
 #include "renderer/tabs_private_service.h"
 #include "renderer/vivaldi_render_messages.h"
+#include "third_party/cld_3/src/src/nnet_language_identifier.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -205,7 +208,7 @@ class TabMutingHandler : public content_settings::Observer {
   TabsAutoMutingValues muteRule_ = TabsAutoMutingValues::kOff;
   // NOTE(andre@vivaldi.com) : This is per profile so make sure the handler
   // takes this into account.
-  ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_{
+  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer> observer_{
       this};
 
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
@@ -255,7 +258,7 @@ class TabMutingHandler : public content_settings::Observer {
   TabMutingHandler(Profile* profile) : profile_(profile) {
     host_content_settings_map_ =
         HostContentSettingsMapFactory::GetForProfile(profile_);
-    observer_.Add(host_content_settings_map_);
+    observer_.Observe(host_content_settings_map_);
 
     prefs_registrar_.Init(profile_->GetPrefs());
     // NOTE(andre@vivaldi.com) : Unretained is safe as this will live along
@@ -517,7 +520,13 @@ void VivaldiPrivateTabObserver::RenderFrameCreated(
   // the new interface.
   tabs_private_service_.reset();
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
-      &tabs_private_service_);
+      tabs_private_service_.BindNewEndpointAndPassReceiver());
+  tabs_private_service_.set_disconnect_handler(base::BindOnce(
+    &VivaldiPrivateTabObserver::MojoConnectionDestroyed, base::Unretained(this)));
+}
+
+void VivaldiPrivateTabObserver::MojoConnectionDestroyed() {
+  tabs_private_service_.reset();
 }
 
 void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
@@ -697,9 +706,15 @@ void VivaldiPrivateTabObserver::DidFinishLoad(
 void VivaldiPrivateTabObserver::GetAccessKeys(
     JSAccessKeysCallback callback) {
   DCHECK(callback);
+  if (!tabs_private_service_) {
+    std::move(callback).Run(std::vector<::vivaldi::mojom::AccessKeyPtr>());
+    return;
+  }
   tabs_private_service_->GetAccessKeysForPage(
-      base::BindOnce(&VivaldiPrivateTabObserver::AccessKeysReceived,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&VivaldiPrivateTabObserver::AccessKeysReceived,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+          std::vector<::vivaldi::mojom::AccessKeyPtr>()));
 }
 
 void VivaldiPrivateTabObserver::AccessKeysReceived(
@@ -711,9 +726,15 @@ void VivaldiPrivateTabObserver::AccessKeysReceived(
 void VivaldiPrivateTabObserver::GetScrollPosition(
     JSScrollPositionCallback callback) {
   DCHECK(callback);
+  if (!tabs_private_service_) {
+    std::move(callback).Run(0, 0);
+    return;
+  }
   tabs_private_service_->GetScrollPosition(
-      base::BindOnce(&VivaldiPrivateTabObserver::ScrollPositionReceived,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&VivaldiPrivateTabObserver::ScrollPositionReceived,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+          0, 0));
 }
 
 void VivaldiPrivateTabObserver::ScrollPositionReceived(
@@ -732,15 +753,43 @@ void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
 void VivaldiPrivateTabObserver::GetSpatialNavigationRects(
     JSSpatialNavigationRectsCallback callback) {
   DCHECK(callback);
+  if (!tabs_private_service_) {
+    std::move(callback).Run(std::vector<::vivaldi::mojom::SpatnavRectPtr>());
+    return;
+  }
   tabs_private_service_->GetSpatialNavigationRects(
-      base::BindOnce(&VivaldiPrivateTabObserver::SpatialNavigationRectsReceived,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(
+              &VivaldiPrivateTabObserver::SpatialNavigationRectsReceived,
+              weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+          std::vector<::vivaldi::mojom::SpatnavRectPtr>()));
 }
 
 void VivaldiPrivateTabObserver::SpatialNavigationRectsReceived(
     JSSpatialNavigationRectsCallback callback,
     std::vector<::vivaldi::mojom::SpatnavRectPtr> rects) {
   std::move(callback).Run(std::move(rects));
+}
+
+void VivaldiPrivateTabObserver::DetermineTextLanguage(const std::string& text,
+    JSDetermineTextLanguageCallback callback) {
+  DCHECK(callback);
+  if (!tabs_private_service_) {
+    std::move(callback).Run(chrome_lang_id::NNetLanguageIdentifier::kUnknown);
+    return;
+  }
+  tabs_private_service_->DetermineTextLanguage(
+      text,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&VivaldiPrivateTabObserver::DetermineTextLanguageDone,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+          chrome_lang_id::NNetLanguageIdentifier::kUnknown));
+}
+
+void VivaldiPrivateTabObserver::DetermineTextLanguageDone(
+    JSDetermineTextLanguageCallback callback,
+    const std::string& langCode) {
+  std::move(callback).Run(std::move(langCode));
 }
 
 void VivaldiPrivateTabObserver::OnPermissionAccessed(
@@ -1188,7 +1237,6 @@ void TabsPrivateGetSpatialNavigationRectsFunction::
     rect.path = nav_rect->path;
     results.push_back(std::move(rect));
   }
-
   Respond(ArgumentList(Results::Create(results)));
 }
 
@@ -1320,6 +1368,34 @@ TabsPrivateRevertTranslatePageFunction::Run() {
     translate_manager->RevertTranslation();
   }
   return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateDetermineTextLanguageFunction::Run() {
+  using tabs_private::DetermineTextLanguage::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string error;
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
+  if (!tab_api)
+    return RespondNow(Error(error));
+  tab_api->DetermineTextLanguage(
+      params->text,
+      base::BindOnce(
+          &TabsPrivateDetermineTextLanguageFunction::DetermineTextLanguageDone,
+          this));
+
+  return RespondLater();
+}
+
+void TabsPrivateDetermineTextLanguageFunction::DetermineTextLanguageDone(
+    const std::string& langCode) {
+  namespace Results = tabs_private::DetermineTextLanguage::Results;
+
+  Respond(ArgumentList(Results::Create(langCode)));
 }
 
 }  // namespace extensions

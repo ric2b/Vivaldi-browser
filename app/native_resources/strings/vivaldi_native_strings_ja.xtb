@@ -24,15 +24,15 @@
 <translation id="1924750141060565109">風景１５</translation>
 <translation id="19598411548897379">一般</translation>
 <translation id="1985669426322966465">ソフトウェアの更新</translation>
-<translation id="2079036669923635404">最新版のVivaldi <ph name="VERSION" /> が、クリック後すぐにお使い頂けます。</translation>
+<translation id="2079036669923635404">最新版の Vivaldi <ph name="VERSION" /> が、クリック後すぐにお使い頂けます。</translation>
 <translation id="2141974047387702305">更新ファイルのダウンロード中にエラーが発生しました。インターネットに接続していることをご確認の上、後ほどもう一度お試しください。</translation>
 <translation id="2339641773402824483">更新を確認中...</translation>
 <translation id="2441056087170876076">怪獣２</translation>
 <translation id="2444387452209867610">メモを挿入</translation>
 <translation id="2486841023299517366">動物４</translation>
-<translation id="2612127540243995147">インストール準備ができました。Vivaldiを閉じて再起動します。</translation>
+<translation id="2612127540243995147">インストール準備ができました。Vivaldi を閉じて再起動します。</translation>
 <translation id="2613387515621326337">アップデートサイトを表示する</translation>
-<translation id="2647368062414805334">Edgeが起動しているため、Vivaldiへ設定をインポートすることができません。作業内容を保存し、Edgeのウィンドウを閉じてからもう一度やり直してください。</translation>
+<translation id="2647368062414805334">Edge が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Edge のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">動物３</translation>
 <translation id="2873951654529031587">ごみ箱</translation>
@@ -40,35 +40,36 @@
 <translation id="2923448633003185837">貼り付けて移動</translation>
 <translation id="2977472760057091832">プライベートウィンドウで開く</translation>
 <translation id="2989805286512600854">新しいタブで開く</translation>
-<translation id="3027988479108856431">残念ですが、Yandexの起動中は設定を利用できません。Vivaldiにこれらの設定をインポートするには、作業中の処理を保存して全てのYandexのウィンドウを閉じ、継続をクリックしてください。</translation>
+<translation id="3027988479108856431">Yandex が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Yandex のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="3084011186245865060">風景６</translation>
-<translation id="3093931836425623631">Vivaldiは、Chromiumオープンソースプロジェクトとその他のオープンソースソフトウェアによって構築されています。</translation>
+<translation id="3093931836425623631">Vivaldi は、Chromium オープンソースプロジェクトとその他のオープンソースソフトウェアによって構築されています。</translation>
 <translation id="3127383884976966729">動物７</translation>
 <translation id="3156398087075132709">新しいブックマーク</translation>
 <translation id="3255747772218936245">更新をインストール</translation>
-<translation id="3259769196742189631">W3Cのサービスによる検証</translation>
+<translation id="3259769196742189631">W3C のサービスによる検証</translation>
 <translation id="3302905971452834934">怪獣１</translation>
 <translation id="3334610655141903168">（無名）</translation>
 <translation id="3372505110412186107"><ph name="VERSION" /> は最新版のVivaldiです。</translation>
 <translation id="3383198080133834965">ばっちり最新版です！</translation>
-<translation id="3402602684546832928">Operaのブックマークファイルを選択します</translation>
+<translation id="3402602684546832928">Opera のブックマークファイルを選択してください</translation>
 <translation id="3451317331714872347">風景８</translation>
 <translation id="3457498675806041407">終了の確認</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> のインストールが完了しました。ブラウザの再起動を行なってください。</translation>
 <translation id="3516213908976398531">風景１１</translation>
 <translation id="3521635864657970829">本当にこのウィンドウを閉じますか？</translation>
 <translation id="3540597690227428180">動物９</translation>
 <translation id="3542768452570884558">新しいウィンドウで開く (&amp;W)</translation>
 <translation id="3588820906588687999">新しいタブで画像を開く</translation>
 <translation id="3601066750251199488">怪獣３</translation>
-<translation id="3680031241659195730">Vivaldiの新バージョンが出ました！</translation>
+<translation id="3680031241659195730">Vivaldi の新バージョンが出ました！</translation>
 <translation id="3708982624815781692">ダウンロードはキャンセルされました。</translation>
 <translation id="3732157130969736834">ブックマークにリンク先を追加</translation>
 <translation id="3732388226447288666">動物２</translation>
 <translation id="3732439195215136813">動物５</translation>
-<translation id="3795800845758778870">Braveブラウザが起動しているため、Vivaldiへ設定をインポートすることができません。作業内容を保存し、Braveブラウザのウィンドウを閉じてからもう一度やり直してください。</translation>
+<translation id="3795800845758778870">Brave ブラウザが起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Brave ブラウザのウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="3822431842304177896">新しい区切り線</translation>
 <translation id="3832132597516774400">風景５</translation>
-<translation id="3914946330804881301">Operaからインポートしたもの</translation>
+<translation id="3914946330804881301">Opera からインポートしたもの</translation>
 <translation id="3921292902397893431">怪獣８</translation>
 <translation id="3943857333388298514">貼り付け</translation>
 <translation id="4005270918754737597">このバージョンをスキップする</translation>
@@ -77,18 +78,18 @@
 <translation id="4074744496918018786">プライベートウィンドウで画像を開く</translation>
 <translation id="4324492550286218827">風景２</translation>
 <translation id="4406101500523955324">プライベートウィンドウで開く</translation>
-<translation id="4420816922321010053">本当にVivaldiを終了しますか？</translation>
+<translation id="4420816922321010053">本当に Vivaldi を終了しますか？</translation>
 <translation id="443008484043213881">ツール</translation>
 <translation id="4456211719108566931">怪獣６</translation>
 <translation id="4512900838580567989">バックグラウンドのタブで開く</translation>
-<translation id="4515472507709384008">Opera バージョン 15以上</translation>
+<translation id="4515472507709384008">Opera バージョン 15 以上</translation>
 <translation id="4548358047305717967">バックグラウンドのタブで画像を開く</translation>
 <translation id="4582480609585453144">リンクをバックグラウンドタブで開く</translation>
 <translation id="4636708767492582204">メールで送る</translation>
 <translation id="4677434526832593569">動物８</translation>
 <translation id="474217410105706308">タブをミュート</translation>
 <translation id="4881695831933465202">開く</translation>
-<translation id="498766871928286903"><ph name="TOTAL_SIZE_TO_DOWNLOAD" />中<ph name="DOWNLOADED" /></translation>
+<translation id="498766871928286903"><ph name="TOTAL_SIZE_TO_DOWNLOAD" /> 中 <ph name="DOWNLOADED" /></translation>
 <translation id="5014281392052865061">インポートしたスピードダイヤル</translation>
 <translation id="5092656712000637858">ウェブパネルに追加</translation>
 <translation id="5177818338935286353">怪獣７</translation>
@@ -97,10 +98,10 @@
 <translation id="527605719918376753">タブをミュート</translation>
 <translation id="5305569355661722298">ウィンドウを閉じる確認</translation>
 <translation id="5388358297987318779">画像を開く</translation>
-<translation id="5416008465899576639">Vivaldiの更新があります。</translation>
+<translation id="5416008465899576639">Vivaldi の更新があります。</translation>
 <translation id="5497042274492038489">ウィンドウを閉じる確認</translation>
 <translation id="5594602170491763400">怪獣５</translation>
-<translation id="5615637589913244581">Opera バージョン 15以上 (ベータ)</translation>
+<translation id="5615637589913244581">Opera バージョン 15 以上（ベータ）</translation>
 <translation id="5648110075441906505">新しいウィンドウで画像を開く</translation>
 <translation id="5656371807944747581">アップデートエラー！</translation>
 <translation id="5716238312826274098">通知を無効にする</translation>
@@ -108,28 +109,28 @@
 <translation id="5770433027661640693">風景１０</translation>
 <translation id="5857090052475505287">新しいフォルダー</translation>
 <translation id="588258955323874662">全画面表示</translation>
-<translation id="5916080360077521750">残念ですが、Chromeの起動中は設定を利用できません。Vivaldiにこれらの設定をインポートするには、作業中の処理を保存して全てのChromeのウィンドウを閉じ、継続をクリックしてください。</translation>
+<translation id="5916080360077521750">Chrome が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Chrome のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="6040143037577758943">閉じる</translation>
-<translation id="6229528619562190452">クリックしてVivaldiを更新。</translation>
+<translation id="6229528619562190452">クリックして Vivaldi を更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使用する</translation>
-<translation id="630690498669249215">Operaのブックマークファイル</translation>
+<translation id="630690498669249215">Opera のブックマークファイル</translation>
 <translation id="6339818817272922368">ローカルアカウント</translation>
 <translation id="6438786710866753178">風景４</translation>
-<translation id="6477028720702061455">インポートするOperaのプロファイルフォルダーを選択してください</translation>
-<translation id="6510706699590490869">Vivaldiを更新 (&amp;U)</translation>
+<translation id="6477028720702061455">インポートする Opera のプロファイルフォルダーを選択してください</translation>
+<translation id="6510706699590490869">Vivaldi を更新 (&amp;U)</translation>
 <translation id="6538338088414940408">バックグラウンドタブでリンクを開く</translation>
 <translation id="6551219277044048123">検索エンジンに追加... (&amp;G)</translation>
 <translation id="6630781781151951863">風景１８</translation>
 <translation id="6635049669875534328">リリースノート:</translation>
-<translation id="6693585104974197539">インポートするEdgeプロファイルフォルダを選択してください</translation>
-<translation id="6726279523566323394">インポートするBraveプロファイルフォルダを選択してください</translation>
-<translation id="6804831687363620480">残念ですが、Opera 15+の起動中は設定を利用できません。Vivaldiにこれらの設定をインポートするには、作業中の処理を保存して全てのOpera 15+のウィンドウを閉じ、継続をクリックしてください。</translation>
-<translation id="6892812721183419409"><ph name="USER" />でリンクを開く</translation>
+<translation id="6693585104974197539">インポートする Edge プロファイルフォルダーを選択してください</translation>
+<translation id="6726279523566323394">インポートする Brave プロファイルフォルダーを選択してください</translation>
+<translation id="6804831687363620480">Opera 15+ が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Opera 15+ のウィンドウを閉じてからもう一度やり直してください。</translation>
+<translation id="6892812721183419409"><ph name="USER" /> でリンクを開く</translation>
 <translation id="6896758677409633944">コピー</translation>
 <translation id="7086554968911045110">風景７</translation>
 <translation id="7111492742514999492">風景９</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7581266044164103589">更新インストーラーの起動に失敗しました。お使いのコンピューターに十分なメモリとストレージの空き容量があることをご確認の上、後ほどもう一度お試しください。</translation>
+<translation id="7581266044164103589">更新インストーラーの起動に失敗しました。お使いのコンピューターに十分なメモリーとストレージの空き容量があることをご確認の上、後ほどもう一度お試しください。</translation>
 <translation id="7658239707568436148">キャンセル</translation>
 <translation id="7715497554424665066">更新を無視 (&amp;I)</translation>
 <translation id="7724603315864178912">切り取り</translation>
@@ -146,25 +147,26 @@
 <translation id="8373293945112511707">風景１</translation>
 <translation id="8388552048012645975">更新をダウンロード中...</translation>
 <translation id="8427094907586191051">風景１７</translation>
-<translation id="8439034818057146672">新しいVivaldiのインストール準備ができました。</translation>
-<translation id="8446668873108041390">AppleScriptを通じたJavaScript実行は無効になっています。設定&gt;プライバシー&gt;Apple Eventsに、Apple EventsからのJavaScript実行を許可する設定があります。</translation>
+<translation id="8439034818057146672">新しい Vivaldi のインストール準備ができました。</translation>
+<translation id="8446668873108041390">AppleScript を通じた JavaScript 実行は無効になっています。設定 &gt; プライバシー &gt; Apple Events に、Apple Events からの JavaScript 実行を許可する設定があります。</translation>
 <translation id="8539196077526389150">風景１３</translation>
-<translation id="8562339533180097902">Vivaldiを閉じてインストールする</translation>
+<translation id="8562339533180097902">Vivaldi を閉じてインストールする</translation>
 <translation id="8567452685425968223">更新を展開中...</translation>
 <translation id="8624587806981488221">画像を再読み込み (&amp;R)</translation>
-<translation id="864444594187862076">Opera バージョン 15以上 (デベロッパー)</translation>
+<translation id="864444594187862076">Opera バージョン 15 以上（デベロッパー）</translation>
 <translation id="8651348004684669199">表示中のタブを追加</translation>
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">風景１４</translation>
-<translation id="8773635261052182196">更新の通知は今後表示されません。再度表示させたい場合は、Vivaldiの設定から行ってください。</translation>
+<translation id="8773635261052182196">更新の通知は今後表示されません。再度表示させたい場合は、Vivaldi の設定から行ってください。</translation>
 <translation id="8813277370772331957">後ほど確認する</translation>
 <translation id="8894900864683381599">ウェブパネルにリンク先を追加</translation>
-<translation id="8912720443398351457">本当にVivaldiを終了しますか？</translation>
-<translation id="8947109330183116400">HTMLブックマークファイルを選択してください</translation>
-<translation id="9017566390391482291">インポートするVivaldiのプロファイルフォルダーを選択してください</translation>
+<translation id="8912720443398351457">本当に Vivaldi を終了しますか？</translation>
+<translation id="8947109330183116400">HTML ブックマークファイルを選択してください</translation>
+<translation id="9017566390391482291">インポートする Vivaldi のプロファイルフォルダーを選択してください</translation>
+<translation id="9048058608784130603">再起動待ち <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">編集</translation>
-<translation id="912022491595344261"><ph name="USER" />で画像を開く</translation>
+<translation id="912022491595344261"><ph name="USER" /> で画像を開く</translation>
 <translation id="9157539936604258187">開く</translation>
 <translation id="9169060351863393881">Opera バージョン 12.x</translation>
 <translation id="939305735877869636">Brave</translation>

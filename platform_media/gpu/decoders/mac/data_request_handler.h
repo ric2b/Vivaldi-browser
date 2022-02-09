@@ -17,6 +17,7 @@
 #include "base/mac/scoped_dispatch_object.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "media/base/data_source.h"
 #include "media/base/media_export.h"
 
@@ -27,6 +28,50 @@
 namespace media {
 
 class IPCDataSource;
+
+// Helper for tests to have dispatch_queue_t with SequencedTaskRunner.
+class DispatchQueueRunnerProxy {
+ public:
+  static bool enabled() { return g_proxy != nullptr; }
+
+  static DispatchQueueRunnerProxy* instance() { return g_proxy; }
+
+  virtual ~DispatchQueueRunnerProxy() {}
+  virtual dispatch_queue_t GetQueue() = 0;
+
+  class ScopedRunner {
+   public:
+    ScopedRunner() {
+      if (enabled()) {
+        instance()->EnterRunner();
+      }
+    }
+    ~ScopedRunner() {
+      if (enabled()) {
+        instance()->ExitRunner();
+      }
+    }
+  };
+
+ protected:
+  // This can only be called once. The proxy pointer must remain valid until the
+  // program exit.
+  static void init_instance(DispatchQueueRunnerProxy* proxy) {
+    DCHECK(!g_proxy);
+    DCHECK(proxy);
+    g_proxy = proxy;
+  }
+
+  virtual void EnterRunner() = 0;
+  virtual void ExitRunner() = 0;
+
+ private:
+  friend ScopedRunner;
+
+  static MEDIA_EXPORT DispatchQueueRunnerProxy* g_proxy;
+};
+
+class IPCPipelineTestSetup;
 
 // Bridge between AVAssetResourceLoader that sometimes makes overlapping
 // read requests an IPCDataSource that cannot handle overlapping reads.
@@ -82,7 +127,7 @@ class MEDIA_EXPORT DataRequestHandler
   bool IsHandlingDataRequests() const;
 
  private:
-  friend class base::RefCountedThreadSafe<DataRequestHandler>;
+  friend base::RefCountedThreadSafe<DataRequestHandler>;
 
   ~DataRequestHandler();
 

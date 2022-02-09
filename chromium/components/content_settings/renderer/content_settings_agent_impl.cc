@@ -16,11 +16,11 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "content/public/child/child_thread.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/public/renderer/render_view.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -112,8 +112,7 @@ ContentSettingsAgentImpl::ContentSettingsAgentImpl(
           &ContentSettingsAgentImpl::OnContentSettingsAgentRequest,
           base::Unretained(this)));
 
-  content::RenderFrame* main_frame =
-      render_frame->GetRenderView()->GetMainRenderFrame();
+  content::RenderFrame* main_frame = render_frame->GetMainRenderFrame();
   // TODO(nasko): The main frame is not guaranteed to be in the same process
   // with this frame with --site-per-process. This code needs to be updated
   // to handle this case. See https://crbug.com/496670.
@@ -210,9 +209,13 @@ void ContentSettingsAgentImpl::DidCommitProvisionalLoad(
   // "blocked".
   ClearBlockedContentSettings();
 
-  // The BrowserInterfaceBroker is reset on navigation, so we will need to
-  // re-acquire the ContentSettingsManager.
-  content_settings_manager_.reset();
+  if (!base::FeatureList::IsEnabled(
+          features::kNavigationThreadingOptimizations)) {
+    // TODO(crbug.com/1187753): Remove this once it's verified it isn't needed.
+    // ContentSettingsManager was moved to be per-process in
+    // http://crrev.com/c/1949036, so should be safe to remove.
+    content_settings_manager_.reset();
+  }
 
 #if DCHECK_IS_ON()
   GURL url = frame->GetDocument().Url();

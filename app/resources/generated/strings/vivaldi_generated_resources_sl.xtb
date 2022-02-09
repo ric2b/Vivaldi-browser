@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Privzeto</translation>
 <translation id="1297175357211070620">Cilj</translation>
 <translation id="1303101771013849280">Datoteka HTML z zaznamki</translation>
-<translation id="1380436189840894976">Želite zapustiti način brez beleženja zgodovine?</translation>
 <translation id="1430915738399379752">Natisni</translation>
 <translation id="1433811987160647649">Vprašaj pred dostopom</translation>
 <translation id="1451375123200651445">Spletna stran, ena datoteka</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskriptorji datotek</translation>
 <translation id="1682548588986054654">Novo okno brez beleženja zgodovine</translation>
-<translation id="1698122934742150150">Samo za trenutno sejo brez beleženja zgodovine</translation>
 <translation id="1706625117072057435">Ravni povečave</translation>
 <translation id="1708338024780164500">(Nеaktivno)</translation>
 <translation id="1723824996674794290">&amp;Novo okno</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Neznani vtičnik</translation>
 <translation id="2423578206845792524">Sh&amp;rani sliko kot...</translation>
 <translation id="2439110203301358333">Drug program v računalniku je dodal razširitev, ki lahko spremeni način delovanja Chroma.</translation>
+<translation id="2443487764245141020">Spletna mesta bodo morda morala prepoznati tudi vašo napravo z identifikatorjem</translation>
 <translation id="2445081178310039857">Potreben je korenski imenik razširitve.</translation>
 <translation id="2470702053775288986">Nepodprte razširitve onemogočene</translation>
 <translation id="2476578072172137802">Nastavitve spletnega mesta</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Kopiraj naslov pov&amp;ezave</translation>
 <translation id="354068948465830244">Lahko bere in spreminja podatke spletnega mesta</translation>
 <translation id="3560034655160545939">&amp;Preverjanje črkovanja</translation>
-<translation id="3574917942258583917">Ali želite vseeno zapustiti način brez beleženja zgodovine?</translation>
 <translation id="3587482841069643663">Vse</translation>
 <translation id="3627588569887975815">Odpri povezavo v oknu brez bele&amp;ženja zgodovine</translation>
 <translation id="3627879631695760395">Namesti <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Kontrolniki</translation>
 <translation id="3678156199662914018">Razširitev: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Zahteva za skupno rabo zaslona aplikacije <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Ne dovoli, da zaprta spletna mesta dokončajo pošiljanje ali prejemanje podatkov</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Onemogočanje razširitev za razvijalski način</translation>
 <translation id="4100839878934973028">Drug program v računalniku je dodal aplikacijo, ki lahko spremeni način delovanja Chroma.</translation>
 <translation id="4109898769411476438">Pred uvozom zaprite brskalnik</translation>
-<translation id="4115080753528843955">Nekatere storitve z vsebinami uporabljajo edinstvene identifikatorje za odobritev dostopa do zaščitenih vsebin</translation>
 <translation id="4130207949184424187">Zaradi te razširitve se je spremenila stran, ki je prikazana, ko iščete v naslovni vrstici.</translation>
 <translation id="4131410914670010031">Črno-belo</translation>
 <translation id="4176463684765177261">Onemogočeno</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Pri poskusu namestitve razširitve so bila opozorila:</translation>
 <translation id="479536056609751218">Spletna stran, samo HTML</translation>
 <translation id="4839303808932127586">Shr&amp;ani video posnetek kot...</translation>
+<translation id="4840096453115567876">Vseeno zapustim način brez beleženja zgodovine?</translation>
 <translation id="488785315393301722">Pokaži podrobnosti</translation>
 <translation id="4907306957610201395">Kategorija dovoljenj</translation>
 <translation id="4912643508233590958">Prekinitev mirovanja</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Dostop zavrnjen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Pokaži &amp;kontrolnike</translation>
+<translation id="7374461526650987610">Upravljalci protokolov</translation>
 <translation id="7385854874724088939">Napaka pri tiskanju. Preverite tiskalnik in poskusite znova.</translation>
 <translation id="7412226954991670867">GPU pomnilnik</translation>
 <translation id="7421925624202799674">&amp;Prikaz izvorne kode strani</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Zbiraj</translation>
 <translation id="7629827748548208700">Zavihek: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Prekliči</translation>
+<translation id="7659154729610375585">Vseeno zapustim način brez beleženja zgodovine?</translation>
 <translation id="7661259717474717992">Spletnim mestom dovoli shranjevanje in branje podatkov piškotkov</translation>
 <translation id="7663719505383602579">Sprejemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Namestil skrbnik</translation>
@@ -453,6 +452,7 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8899851313684471736">Odpri povezavo v novem &amp;oknu</translation>
 <translation id="8915370057835397490">Nalaganje predloga</translation>
 <translation id="8916476537757519021">Podokvir za način brez beleženja zgodovine: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Samo trenutna seja brez beleženja zgodovine</translation>
 <translation id="895944840846194039">JavaScript pomnilnik</translation>
 <translation id="8962083179518285172">Skrij podrobnosti</translation>
 <translation id="8973557916016709913">Odstrani stopnjo povečave</translation>

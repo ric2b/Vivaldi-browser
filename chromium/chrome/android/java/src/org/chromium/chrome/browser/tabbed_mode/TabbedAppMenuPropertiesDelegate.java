@@ -17,7 +17,6 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.datareduction.DataReductionMainMenuItem;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
 import org.chromium.chrome.browser.feed.shared.FeedFeatures;
-import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedMainMenuItem;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -47,7 +46,6 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     WebFeedSnackbarController.FeedLauncher mFeedLauncher;
     ModalDialogManager mModalDialogManager;
     SnackbarManager mSnackbarManager;
-    WebFeedBridge mWebFeedBridge;
 
     // Vivaldi
     private final ObservableSupplier<BookmarkBridge> mVivaldiBookmarkBridgeSupplier;
@@ -59,15 +57,13 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
             WebFeedSnackbarController.FeedLauncher feedLauncher,
-            ModalDialogManager modalDialogManager, SnackbarManager snackbarManager,
-            WebFeedBridge webFeedBridge) {
+            ModalDialogManager modalDialogManager, SnackbarManager snackbarManager) {
         super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
                 toolbarManager, decorView, overviewModeBehaviorSupplier, bookmarkBridgeSupplier);
         mAppMenuDelegate = appMenuDelegate;
         mFeedLauncher = feedLauncher;
         mModalDialogManager = modalDialogManager;
         mSnackbarManager = snackbarManager;
-        mWebFeedBridge = webFeedBridge;
 
         // Vivaldi
         mVivaldiBookmarkBridgeSupplier = bookmarkBridgeSupplier;
@@ -112,7 +108,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             ((WebFeedMainMenuItem) view)
                     .initialize(mActivityTabProvider.get(), appMenuHandler,
                             new LargeIconBridge(Profile.getLastUsedRegularProfile()), mFeedLauncher,
-                            mModalDialogManager, mSnackbarManager, mWebFeedBridge);
+                            mModalDialogManager, mSnackbarManager);
         }
 
         if (ChromeApplicationImpl.isVivaldi() && view instanceof AppMenuIconRowFooter) {

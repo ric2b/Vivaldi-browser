@@ -15,6 +15,7 @@ struct DropData;
 }  // namespace content
 
 namespace remote_cocoa {
+class DroppedScreenShotCopierMac;
 namespace mojom {
 class WebContentsNSViewHost;
 }  // namespace mojom
@@ -36,6 +37,13 @@ CONTENT_EXPORT
   base::scoped_nsobject<WebDragSource> _dragSource;
   BOOL _mouseDownCanMoveWindow;
 
+  // Utility to copy screenshots to a usable directory for PWAs. This utility
+  // will maintain a temporary directory for such screenshot files until this
+  // WebContents is destroyed.
+  // https://crbug.com/1148078
+  std::unique_ptr<remote_cocoa::DroppedScreenShotCopierMac>
+      _droppedScreenShotCopier;
+
   BOOL vivaldiFramelessContentView_;
 }
 
@@ -45,6 +53,10 @@ CONTENT_EXPORT
 
 - (void)VivaldiSetInFramelessContentView:(BOOL)framelessContentView;
 - (void)setMouseDownCanMoveWindow:(BOOL)canMove;
+
+// Enable the workaround for https://crbug.com/1148078. This is called by
+// in-PWA-process instances, to limit the workaround's effect to just PWAs.
+- (void)enableDroppedScreenShotCopier;
 
 // Returns the available drag operations. This is a required method for
 // NSDraggingSource. It is supposedly deprecated, but the non-deprecated API

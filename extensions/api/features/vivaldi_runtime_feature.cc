@@ -230,7 +230,7 @@ bool Enable(content::BrowserContext* browser_context,
       vivaldiprefs::kVivaldiExperiments);
   base::ListValue* experiments_list = update.Get();
 
-  experiments_list->Clear();
+  experiments_list->ClearList();
   for (const auto& i : *entries) {
     // Enable it if it's different than the default
     if (i.second.enabled

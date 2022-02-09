@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standard</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Tilføjer HTML-fil som bogmærke</translation>
-<translation id="1380436189840894976">Afslut inkognitotilstand alligevel?</translation>
 <translation id="1430915738399379752">Udskriv</translation>
 <translation id="1433811987160647649">Spørg, før der gives adgang</translation>
 <translation id="1451375123200651445">Webside, enkelt fil</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Filbeskrivelser</translation>
 <translation id="1682548588986054654">Nyt privat-vindue</translation>
-<translation id="1698122934742150150">Kun for den aktuelle inkognitosession</translation>
 <translation id="1706625117072057435">Zoomniveauer</translation>
 <translation id="1708338024780164500">(inaktiv)</translation>
 <translation id="1723824996674794290">&amp;Nyt vindue</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Ukendt plugin</translation>
 <translation id="2423578206845792524">&amp;Gem billede som...</translation>
 <translation id="2439110203301358333">Et andet program på din computer tilføjede en udvidelse, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
+<translation id="2443487764245141020">Det kan også være nødvendigt for websites at identificere din enhed ved hjælp af et id</translation>
 <translation id="2445081178310039857">Udvidelsens rodmappe er påkrævet.</translation>
 <translation id="2470702053775288986">Understøttede udvidelser er blevet deaktiveret</translation>
 <translation id="2476578072172137802">Indstillinger for website</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Kopier linkadr&amp;esse</translation>
 <translation id="354068948465830244">Den kan læse og ændre websitedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontrol</translation>
-<translation id="3574917942258583917">Vil du afslutte inkognitotilstand alligevel?</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Åbn link i inko&amp;gnitovindue</translation>
 <translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Håndtering</translation>
 <translation id="3678156199662914018">Udvidelse: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> anmoder om at dele din skærm</translation>
 <translation id="3708684582558000260">Tillad ikke, at lukkede websites kan færdiggøre afsendelsen eller modtagelsen af data</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Deaktiver udvidelser, der kører i udviklertilstand</translation>
 <translation id="4100839878934973028">Et andet program på din computer tilføjede en app, der kan ændre den måde, hvorpå Vivaldi fungerer.</translation>
 <translation id="4109898769411476438">Luk browser inden import</translation>
-<translation id="4115080753528843955">Nogle indholdstjenester bruger unikke identifikationer til tildeling af adgang til beskyttet indhold</translation>
 <translation id="4130207949184424187">Denne udvidelse har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
 <translation id="4131410914670010031">Sort/hvid</translation>
 <translation id="4176463684765177261">Deaktiveret</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Der opstod advarsler under forsøget på at installere udvidelsen:</translation>
 <translation id="479536056609751218">Webside, kun HTML</translation>
 <translation id="4839303808932127586">&amp;Gem video som ...</translation>
+<translation id="4840096453115567876">Vil du afslutte inkognitotilstand alligevel?</translation>
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4907306957610201395">Tilladelseskategori</translation>
 <translation id="4912643508233590958">Aktivering efter dvale</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Adgang nægtet.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Vis &amp;knapper</translation>
+<translation id="7374461526650987610">Protokolhåndterere</translation>
 <translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
 <translation id="7412226954991670867">GPU-hukommelse</translation>
 <translation id="7421925624202799674">&amp;Vis sidens kilde</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Sætvis</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Annuller</translation>
+<translation id="7659154729610375585">Vil du afslutte inkognitotilstand alligevel?</translation>
 <translation id="7661259717474717992">Tillad, at websites gemmer og læser cookiedata</translation>
 <translation id="7663719505383602579">Modtager: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installeret af din administrator</translation>
@@ -454,6 +453,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8899851313684471736">Åbn link i nyt &amp;vindue</translation>
 <translation id="8915370057835397490">Indlæser forslag</translation>
 <translation id="8916476537757519021">Underramme for inkognitotilstand: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Kun for den aktuelle inkognitosession</translation>
 <translation id="895944840846194039">JavaScript-hukommelse</translation>
 <translation id="8962083179518285172">Skjul detaljer</translation>
 <translation id="8973557916016709913">Fjern zoomniveau</translation>

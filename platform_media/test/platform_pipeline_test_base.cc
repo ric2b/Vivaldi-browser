@@ -14,16 +14,12 @@
 #include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
 #include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
 #endif
-#include "platform_media/common/platform_mime_util.h"
-#include "platform_media/renderer/decoders/ipc_demuxer.h"
-#include "platform_media/renderer/decoders/ipc_factory.h"
-#include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
-#include "platform_media/renderer/decoders/pass_through_video_decoder.h"
 #include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "media/video/mock_video_decode_accelerator.h"
 
-
-#include "platform_media/test/test_pipeline_host.h"
+#include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "platform_media/renderer/decoders/ipc_factory.h"
+#include "platform_media/test/ipc_pipeline_test_setup.h"
 
 using ::testing::_;
 using ::testing::AnyNumber;
@@ -52,30 +48,31 @@ VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles() {
   return all_profiles;
 }
 
-std::unique_ptr<IPCMediaPipelineHost> CreateIPCMediaPipelineHost() {
-  return std::make_unique<TestPipelineHost>();
-}
-
 // IPCDemuxer expects that the pipeline host is already initialized when
-// Chromium calls its Initialize from Demuxer interface. This subclass overrides
-// Initialize to init the host first as this provides a convinient place to
-// perform an asynchronous init when running the tests.
+// Chromium calls its Initialize from Demuxer interface using StartIPC() call.
+// This subclass overrides Initialize to call StartIPC() first as this provides
+// a convinient place to perform an asynchronous init.
 class TestIPCDemuxer : public IPCDemuxer {
  public:
-  TestIPCDemuxer(std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
+  TestIPCDemuxer(DataSource* data_source,
+                 scoped_refptr<base::SequencedTaskRunner> media_task_runner,
                  std::string mime_type,
                  MediaLog* media_log)
-      : IPCDemuxer(std::move(ipc_media_pipeline_host), media_log),
-        mime_type_(mime_type),
-        weak_ptr_factory_(this) {}
+      : IPCDemuxer(std::move(media_task_runner), media_log),
+        data_source_(data_source),
+        mime_type_(std::move(mime_type)) {}
 
   void Initialize(DemuxerHost* host,
                   PipelineStatusCallback status_cb) override {
-    DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
-    ipc_media_pipeline_host_->Initialize(
-        mime_type_, base::BindOnce(&TestIPCDemuxer::OnHostInitialized,
-                                   weak_ptr_factory_.GetWeakPtr(), host,
-                                   std::move(status_cb)));
+    DataSource* data_source = data_source_;
+    data_source_ = nullptr;
+
+    // Unretained() is safe as the callback can only be called before the parent
+    // class destructor is called.
+    StartIPC(
+        data_source, std::move(mime_type_),
+        base::BindOnce(&TestIPCDemuxer::OnHostInitialized,
+                       base::Unretained(this), host, std::move(status_cb)));
   }
 
   void OnHostInitialized(DemuxerHost* host,
@@ -89,21 +86,19 @@ class TestIPCDemuxer : public IPCDemuxer {
     IPCDemuxer::Initialize(host, std::move(status_cb));
   }
 
-  absl::optional<container_names::MediaContainerName> GetContainerForMetrics()
-      const override {
-    return absl::nullopt;
-  }
-
  private:
+  DataSource* data_source_ = nullptr;
   std::string mime_type_;
-  base::WeakPtrFactory<TestIPCDemuxer> weak_ptr_factory_;
 };
 
 }  // namespace
 
 PlatformPipelineTestBase::PlatformPipelineTestBase()
-    : mock_video_accelerator_factories_(new MockGpuVideoAcceleratorFactories(nullptr))
-{}
+    : mock_video_accelerator_factories_(
+          new MockGpuVideoAcceleratorFactories(nullptr)) {
+  IPCPipelineTestSetup::InitStatics();
+}
+
 PlatformPipelineTestBase::~PlatformPipelineTestBase() {}
 
 Demuxer* PlatformPipelineTestBase::CreatePlatformDemuxer(
@@ -112,31 +107,18 @@ Demuxer* PlatformPipelineTestBase::CreatePlatformDemuxer(
     MediaLog* media_log) {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
-  IPCFactory::Preinitialize(base::BindRepeating(&CreateIPCMediaPipelineHost),
-                            task_environment_.GetMainThreadTaskRunner(),
-                            task_environment_.GetMainThreadTaskRunner());
   std::string adjusted_mime_type = IPCDemuxer::CanPlayType(content_type, url);
   if (!adjusted_mime_type.empty()) {
-    auto pipeline_host = IPCFactory::CreateHostOnMainThread();
-    pipeline_host->init_data_source(data_source.get());
-    return new TestIPCDemuxer(std::move(pipeline_host), adjusted_mime_type,
-                              media_log);
+    return new TestIPCDemuxer(data_source.get(),
+                              task_environment_.GetMainThreadTaskRunner(),
+                              std::move(adjusted_mime_type), media_log);
   }
   return nullptr;
 }
 
 void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
-        std::vector<std::unique_ptr<AudioDecoder>> & audio_decoders,
-        const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner)
-{
-  const std::string content_type;
-  const GURL url("file://" + filepath_.AsUTF8Unsafe());
-  std::string adjusted_mime_type = IPCDemuxer::CanPlayType(content_type, url);
-  if (!adjusted_mime_type.empty()) {
-    audio_decoders.push_back(
-        std::make_unique<PassThroughAudioDecoder>(media_task_runner));
-  }
-
+    std::vector<std::unique_ptr<AudioDecoder>>& audio_decoders,
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner) {
 #if defined(OS_MAC)
   audio_decoders.push_back(std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
@@ -146,18 +128,9 @@ void PlatformPipelineTestBase::AppendPlatformAudioDecoders(
 }
 
 void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
-        std::vector<std::unique_ptr<VideoDecoder>> & video_decoders,
-        const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-        MediaLog* media_log)
-{
-  const std::string content_type;
-  const GURL url("file://" + filepath_.AsUTF8Unsafe());
-  std::string adjusted_mime_type = IPCDemuxer::CanPlayType(content_type, url);
-  if (!adjusted_mime_type.empty()) {
-    video_decoders.push_back(
-        std::make_unique<PassThroughVideoDecoder>(media_task_runner));
-  }
-
+    std::vector<std::unique_ptr<VideoDecoder>>& video_decoders,
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    MediaLog* media_log) {
 #if defined(OS_WIN)
   video_decoders.push_back(
       std::make_unique<WMFVideoDecoder>(media_task_runner));
@@ -169,4 +142,4 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
   EXPECT_CALL(*mock_video_accelerator_factories_, GetTaskRunner())
       .WillRepeatedly(testing::Return(media_task_runner));
 }
-}
+}  // namespace media

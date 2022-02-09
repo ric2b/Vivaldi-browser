@@ -17,7 +17,7 @@ import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInCallback;
-import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.sync.SyncUserDataWiper;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
@@ -60,7 +60,7 @@ public class SigninChecker
     }
 
     private void validateAccountSettings() {
-        mAccountManagerFacade.tryGetGoogleAccounts(accounts -> {
+        mAccountManagerFacade.getAccounts().then(accounts -> {
             mAccountTrackerService.seedAccountsIfNeeded(() -> {
                 mSigninManager.runAfterOperationInProgress(() -> {
                     validatePrimaryAccountExists(accounts);
@@ -111,7 +111,7 @@ public class SigninChecker
                                     new SignInCallback() {
                                         @Override
                                         public void onSignInComplete() {
-                                            ProfileSyncService.get().setFirstSetupComplete(
+                                            SyncService.get().setFirstSetupComplete(
                                                     SyncFirstSetupCompleteSource.BASIC_FLOW);
                                         }
 
@@ -145,9 +145,9 @@ public class SigninChecker
                 final SignInCallback signInCallback = new SignInCallback() {
                     @Override
                     public void onSignInComplete() {
-                        final ProfileSyncService profileSyncService = ProfileSyncService.get();
-                        if (profileSyncService != null) {
-                            profileSyncService.setFirstSetupComplete(
+                        final SyncService syncService = SyncService.get();
+                        if (syncService != null) {
+                            syncService.setFirstSetupComplete(
                                     SyncFirstSetupCompleteSource.BASIC_FLOW);
                         }
                         ++mNumOfChildAccountChecksDone;
@@ -156,13 +156,17 @@ public class SigninChecker
                     @Override
                     public void onSignInAborted() {}
                 };
-                boolean shouldWipeData = ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.WIPE_DATA_ON_CHILD_ACCOUNT_SIGNIN);
-                SyncUserDataWiper.wipeSyncUserDataIfRequired(shouldWipeData).then((Void v) -> {
-                    RecordUserAction.record("Signin_Signin_WipeDataOnChildAccountSignin");
+                if (ChromeFeatureList.isEnabled(
+                            ChromeFeatureList.WIPE_DATA_ON_CHILD_ACCOUNT_SIGNIN)) {
+                    SyncUserDataWiper.wipeSyncUserData().then((Void v) -> {
+                        RecordUserAction.record("Signin_Signin_WipeDataOnChildAccountSignin2");
+                        mSigninManager.signinAndEnableSync(
+                                SigninAccessPoint.FORCED_SIGNIN, account, signInCallback);
+                    });
+                } else {
                     mSigninManager.signinAndEnableSync(
                             SigninAccessPoint.FORCED_SIGNIN, account, signInCallback);
-                });
+                }
                 return;
             }
         }

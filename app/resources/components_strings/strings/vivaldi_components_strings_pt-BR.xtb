@@ -144,6 +144,7 @@
 <translation id="5810442152076338065">Sua conexão com <ph name="DOMAIN" /> está criptografada com um pacote de criptografia obsoleto.</translation>
 <translation id="5838278095973806738">Você não deve fornecer nenhuma informação confidencial neste site (como senhas importantes ou números de cartão de crédito), pois elas podem ser roubadas por qualquer invasor que interceptar os dados entre você e o site.</translation>
 <translation id="5869405914158311789">Não foi possível acessar este site</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =0 {Nenhum} =1 {1 em uso} other {# em uso}}</translation>
 <translation id="5932224571077948991">No site, há exibição de anúncios invasivos ou enganosos</translation>
 <translation id="6051221802930200923">Não é possível acessar <ph name="SITE" /> no momento, porque o site usa bloqueio de certificados. Como os ataques e erros de rede são geralmente temporários, esta pagina provavelmente funcionará mais tarde.</translation>
 <translation id="6146055958333702838">Verifique todos os cabos e reinicie todos os roteadores, modens ou outros dispositivos de rede
@@ -217,11 +218,11 @@
 <translation id="8503813439785031346">Nome de usuário</translation>
 <translation id="8703575177326907206">Sua conexão com <ph name="DOMAIN" /> não está criptografada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar um &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; para <ph name="HOST_NAME" />. Diagnosticando o problema...</translation>
-<translation id="8820817407110198400">Marcadores</translation>
+<translation id="8820817407110198400">Favoritos</translation>
 <translation id="8940028675168378100">Bloqueado pelo <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Ir para configurações do site</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> exige um nome de usuário e uma senha.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
-<translation id="9011424611726486705">Abra as configurações do site</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Esses recursos podem ser visualizados por outros usuários enquanto eles navegam e podem ser modificados por um invasor para alterar o comportamento da página.</translation>
 <translation id="9062620674789239642">Talvez ele tenha sido movido, editado ou excluído.</translation>

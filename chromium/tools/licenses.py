@@ -553,7 +553,7 @@ def FindThirdPartyDirs(prune_paths, root, extra_third_party_dirs=None):
       third_party_dirs.add(dir)
       ProcessAdditionalReadmePathsJson(root, dir, third_party_dirs)
 
-  return third_party_dirs
+  return sorted(third_party_dirs)
 
 
 def FindThirdPartyDirsWithFiles(root):
@@ -604,7 +604,7 @@ def GetThirdPartyDepsFromGNDepsOutput(gn_deps, target_os):
       # Skip over files that are known not to be used on iOS.
       continue
     third_party_deps.add(third_party_path[:-1])
-  return third_party_deps
+  return sorted(third_party_deps)
 
 
 def FindThirdPartyDeps(gn_out_dir, gn_target, target_os):

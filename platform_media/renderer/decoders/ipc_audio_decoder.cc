@@ -24,7 +24,6 @@
 #include "media/filters/ffmpeg_glue.h"
 
 #include "platform_media/common/platform_logging_util.h"
-#include "platform_media/common/platform_mime_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/renderer/decoders/ipc_factory.h"
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
@@ -82,11 +81,10 @@ IPCAudioDecoder::InMemoryDataSource::InMemoryDataSource(
                            base::Unretained(this)));
 }
 
-void IPCAudioDecoder::InMemoryDataSource::Read(
-    int64_t position,
-    int size,
-    uint8_t* data,
-    DataSource::ReadCB read_cb) {
+void IPCAudioDecoder::InMemoryDataSource::Read(int64_t position,
+                                               int size,
+                                               uint8_t* data,
+                                               DataSource::ReadCB read_cb) {
   if (stopped_ || size < 0 || position < 0) {
     std::move(read_cb).Run(kReadError);
     return;
@@ -148,11 +146,11 @@ bool IPCAudioDecoder::IsAvailable() {
     VLOG(2) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << ": No, disabled";
     return false;
   }
-  return IPCFactory::IsAvailable();
+  return IPCMediaPipelineHost::IsAvailable();
 }
 
 IPCAudioDecoder::IPCAudioDecoder(FFmpegURLProtocol* protocol)
-    : data_source_(new InMemoryDataSource(protocol)),
+    : data_source_(std::make_unique<InMemoryDataSource>(protocol)),
       channels_(0),
       sample_rate_(0),
       number_of_frames_(0),
@@ -166,13 +164,13 @@ IPCAudioDecoder::IPCAudioDecoder(FFmpegURLProtocol* protocol)
 }
 
 IPCAudioDecoder::~IPCAudioDecoder() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 
   if (!ipc_media_pipeline_host_)
     return;
 
-  IPCFactory::MediaTaskRunner()->PostTask(
+  media_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&IPCAudioDecoder::FinishHostOnMediaThread,
                                 std::move(data_source_),
                                 std::move(ipc_media_pipeline_host_)));
@@ -182,38 +180,29 @@ IPCAudioDecoder::~IPCAudioDecoder() {
 void IPCAudioDecoder::FinishHostOnMediaThread(
     std::unique_ptr<InMemoryDataSource> data_source,
     std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host) {
-  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
-
-  // Explicitly destruct the host before the data source as the host holds a
-  // pointer to the latter.
+  // Explicitly destruct the host before the data source destructor runs as the
+  // host holds a pointer to the latter.
   ipc_media_pipeline_host.reset();
-}
-
-void IPCAudioDecoder::RunCreatorOnMainThread() {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  ipc_media_pipeline_host_ = IPCFactory::CreateHostOnMainThread();
-  async_task_done_.Signal();
 }
 
 bool IPCAudioDecoder::Initialize() {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(IPCFactory::MediaTaskRunner()) << "Must call Preinitialize() first";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
+
+  // TODO(igor@vivaldi.com): Use a worker sequence, not the global media thread,
+  // as the pipeline host can use any sequence.
+  media_task_runner_ = IPCFactory::instance()->GetHostIpcRunner();
+
+  ipc_media_pipeline_host_ = std::make_unique<IPCMediaPipelineHost>();
 
   base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope scoped_wait;
 
   // Unretained() is safe as we synchronize on the signal.
-  IPCFactory::MainTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&IPCAudioDecoder::RunCreatorOnMainThread,
-                                base::Unretained(this)));
-  async_task_done_.Wait();
-  ipc_media_pipeline_host_->init_data_source(data_source_.get());
-
-  IPCFactory::MediaTaskRunner()->PostTask(
+  media_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&IPCMediaPipelineHost::Initialize,
                      base::Unretained(ipc_media_pipeline_host_.get()),
-                     data_source_->mime_type(),
+                     data_source_.get(), data_source_->mime_type(),
                      base::BindOnce(&IPCAudioDecoder::OnInitialized,
                                     base::Unretained(this))));
   async_task_done_.Wait();
@@ -222,7 +211,7 @@ bool IPCAudioDecoder::Initialize() {
 }
 
 void IPCAudioDecoder::OnInitialized(bool success) {
-  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
   const PlatformAudioConfig& audio_config =
       ipc_media_pipeline_host_->audio_config();
@@ -233,12 +222,14 @@ void IPCAudioDecoder::OnInitialized(bool success) {
     channels_ = audio_config.channel_count;
     sample_rate_ = audio_config.samples_per_second;
     duration_ = ipc_media_pipeline_host_->time_info().duration;
-    number_of_frames_ = base::saturated_cast<int>(
-        ceil(duration_.InSecondsF() * sample_rate_));
+    number_of_frames_ =
+        base::saturated_cast<int>(ceil(duration_.InSecondsF() * sample_rate_));
     bytes_per_frame_ =
         channels_ * SampleFormatToBytesPerChannel(audio_config.format);
     sample_format_ = audio_config.format;
   } else {
+    // The host explicitly allow to delete it during the initialize callback
+    // call.
     ipc_media_pipeline_host_.reset();
   }
 
@@ -246,9 +237,9 @@ void IPCAudioDecoder::OnInitialized(bool success) {
 }
 
 int IPCAudioDecoder::Read(
-        std::vector<std::unique_ptr<AudioBus>>* decoded_audio_packets) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  DCHECK(thread_checker_.CalledOnValidThread());
+    std::vector<std::unique_ptr<AudioBus>>* decoded_audio_packets) {
+  VLOG(7) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
+  DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
 
   if (!ipc_media_pipeline_host_)
     return 0;
@@ -258,7 +249,7 @@ int IPCAudioDecoder::Read(
   base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope scoped_wait;
 
   // Unretained() is safe as we synchronize on the signal.
-  IPCFactory::MediaTaskRunner()->PostTask(
+  media_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&IPCAudioDecoder::ReadInternal, base::Unretained(this)));
   async_task_done_.Wait();
@@ -267,8 +258,8 @@ int IPCAudioDecoder::Read(
 }
 
 void IPCAudioDecoder::ReadInternal() {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
+  VLOG(7) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
   // Unretained(this) is safe as the decoder must be waiting in
   // IPCAudioDecoder::Read for the signal.
@@ -279,8 +270,8 @@ void IPCAudioDecoder::ReadInternal() {
 
 void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
                                 scoped_refptr<DecoderBuffer> buffer) {
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
+  VLOG(7) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
+  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
   switch (status) {
     case DemuxerStream::Status::kAborted:
@@ -301,25 +292,24 @@ void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
         break;
       }
 
-      int frames_in_buffer = ((int) buffer->data_size() / bytes_per_frame_);
+      int frames_in_buffer = ((int)buffer->data_size() / bytes_per_frame_);
       int frames_still_pending = (number_of_frames_ - frames_read_);
 
       const int frame_count = std::min(frames_in_buffer, frames_still_pending);
 
       if (frame_count > 0) {
-
         decoded_audio_packets_->emplace_back(
             AudioBus::Create(channels_, frame_count));
-        AudioBus *audio_bus = decoded_audio_packets_->back().get();
+        AudioBus* audio_bus = decoded_audio_packets_->back().get();
 
         // Deinterleave each channel. The final format should be 32bit
         // floating-point planar.
         if (sample_format_ == SampleFormat::kSampleFormatF32) {
-          const float *decoded_audio_data =
-              reinterpret_cast<const float *>(buffer->data());
+          const float* decoded_audio_data =
+              reinterpret_cast<const float*>(buffer->data());
           for (int channel_index = 0; channel_index < channels_;
                ++channel_index) {
-            float *bus_data = audio_bus->channel(channel_index);
+            float* bus_data = audio_bus->channel(channel_index);
             for (int frame_index = 0, channel_offset = channel_index;
                  frame_index < frame_count;
                  ++frame_index, channel_offset += channels_) {

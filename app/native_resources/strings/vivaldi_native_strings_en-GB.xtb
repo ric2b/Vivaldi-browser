@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Select Opera bookmark file</translation>
 <translation id="3451317331714872347">Landscape 8</translation>
 <translation id="3457498675806041407">Confirm Exit</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> is already installed and will be activated after restarting the browser.</translation>
 <translation id="3516213908976398531">Landscape 11</translation>
 <translation id="3521635864657970829">Do You Really Want To Close This Window?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
@@ -163,6 +164,7 @@
 <translation id="8912720443398351457">Do You Really Want To Exit Vivaldi?</translation>
 <translation id="8947109330183116400">Select HTML bookmark file</translation>
 <translation id="9017566390391482291">Select Vivaldi profile folder for import</translation>
+<translation id="9048058608784130603">Pending update <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Edit</translation>
 <translation id="912022491595344261">Open Image as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Open Link</translation>

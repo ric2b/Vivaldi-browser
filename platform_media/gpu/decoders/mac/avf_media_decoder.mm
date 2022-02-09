@@ -24,9 +24,9 @@
 #include "net/base/mime_util.h"
 
 #include "platform_media/common/mac/framework_type_conversions.h"
-#include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
 #include "platform_media/gpu/decoders/mac/avf_audio_tap.h"
 #include "platform_media/gpu/decoders/mac/data_request_handler.h"
+#include "platform_media/gpu/pipeline/mac/media_utils_mac.h"
 
 namespace {
 using PlayerObserverOnceCallback = base::OnceClosure;
@@ -110,12 +110,12 @@ namespace {
 
 // The initial value of the amount of data that we require AVPlayer to have in
 // order to consider it unlikely to stall right after starting to play.
-const base::TimeDelta kInitialRequiredLoadedTimeRange =
+constexpr base::TimeDelta kInitialRequiredLoadedTimeRange =
     base::TimeDelta::FromMilliseconds(300);
 
 // Each time AVPlayer runs out of data we increase the required loaded time
 // range size up to this value.
-const base::TimeDelta kMaxRequiredLoadedTimeRange =
+constexpr base::TimeDelta kMaxRequiredLoadedTimeRange =
     base::TimeDelta::FromSeconds(4);
 
 class BackgroundThread {
@@ -278,16 +278,8 @@ bool IsPlayerLikelyToStall(
 
 AVFMediaDecoder::AVFMediaDecoder(AVFMediaDecoderClient* client)
     : client_(client),
-      audio_stream_format_({0}),
-      bitrate_(-1),
-      last_audio_timestamp_(media::kNoTimestamp),
-      last_video_timestamp_(media::kNoTimestamp),
-      playback_state_(STOPPED),
-      seeking_(false),
-      stream_has_ended_(false),
       min_loaded_range_size_(kInitialRequiredLoadedTimeRange),
-      background_tasks_canceled_(new SharedCancellationFlag),
-      weak_ptr_factory_(this) {
+      background_tasks_canceled_(new SharedCancellationFlag) {
   DCHECK(client_ != NULL);
 }
 
@@ -335,8 +327,7 @@ void AVFMediaDecoder::Initialize(ipc_data_source::Info source_info,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   data_request_handler_ = base::MakeRefCounted<media::DataRequestHandler>();
-  data_request_handler_->Init(std::move(source_info),
-                              dispatch_get_main_queue());
+  data_request_handler_->Init(std::move(source_info), nil);
 
   base::scoped_nsobject<NSArray> asset_keys_to_load_and_test(
       [[NSArray arrayWithObjects:@"playable", @"hasProtectedContent", @"tracks",
@@ -549,7 +540,7 @@ bool AVFMediaDecoder::CalculateBitrate() {
 
   const float bitrate =
       [AudioTrack() estimatedDataRate] + [VideoTrack() estimatedDataRate];
-  if (std::isnan(bitrate) ||
+  if (std::isnan(bitrate) || bitrate < 0.0 ||
       !base::IsValueInRangeForNumericType<decltype(bitrate_)>(bitrate))
     return false;
 

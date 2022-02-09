@@ -50,6 +50,12 @@ std::string GetDecoderName(VideoDecoderType type) {
       return "VDAVideoDecoder";
     case VideoDecoderType::kV4L2:
       return "V4L2VideoDecoder";
+    case VideoDecoderType::kVivWMFDecoder:
+      return "WMFVideoDecoder";
+    case VideoDecoderType::kVivVTVideo:
+      return "VivVTVideoDecoder";
+    case VideoDecoderType::kVivPassThrough:
+      return "PassThroughVideoDecoder";
     case VideoDecoderType::kTesting:
       return "Testing or Mock Video decoder";
     default:
@@ -72,6 +78,12 @@ std::string GetDecoderName(AudioDecoderType type) {
       return "MediaCodecAudioDecoder";
     case AudioDecoderType::kBroker:
       return "AudioDecoderBroker";
+    case AudioDecoderType::kVivWMFDecoder:
+      return "WMFAudioDecoder";
+    case AudioDecoderType::kVivATAudio:
+      return "ATAudioDecoder";
+    case AudioDecoderType::kVivPassThrough:
+      return "PassThroughAudioDecoder";
     case AudioDecoderType::kTesting:
       return "Testing or Mock Audio decoder";
     default:

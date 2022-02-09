@@ -30,7 +30,6 @@ class Vector2dF;
 namespace blink {
 
 class PaintChunkSubset;
-class PropertyTreeManager;
 class PropertyTreeState;
 class RasterInvalidationTracking;
 
@@ -80,8 +79,7 @@ class PLATFORM_EXPORT PaintChunksToCcLayer {
   static void UpdateLayerProperties(cc::Layer& layer,
                                     const PropertyTreeState& layer_state,
                                     const PaintChunkSubset&,
-                                    cc::LayerSelection& layer_selection,
-                                    PropertyTreeManager* = nullptr);
+                                    cc::LayerSelection& layer_selection);
 
   // NOTE(igor@vivaldi.com): We use this during the whole page capture
   // to filter out the scrolling clip.

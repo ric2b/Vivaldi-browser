@@ -2,16 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as barcodeChip from '../../barcode_chip.js';
 import {assert, assertInstanceof} from '../../chrome_util.js';
 import * as dom from '../../dom.js';
+import {reportError} from '../../error.js';
 import {FaceOverlay} from '../../face.js';
-import {BarcodeScanner} from '../../models/barcode.js';
 import {DeviceOperator, parseMetadata} from '../../mojo/device_operator.js';
 import * as nav from '../../nav.js';
 import * as state from '../../state.js';
-import {Facing, Mode, Resolution} from '../../type.js';
+import {
+  CanceledError,
+  ErrorLevel,
+  ErrorType,
+  Facing,
+  Resolution,
+} from '../../type.js';
 import * as util from '../../util.js';
+import {WaitableEvent} from '../../waitable_event.js';
 import {windowController} from '../../window_controller.js';
 
 /**
@@ -72,12 +78,6 @@ export class Preview {
     this.focus_ = null;
 
     /**
-     * @type {?BarcodeScanner}
-     * @private
-     */
-    this.scanner_ = null;
-
-    /**
      * @type {!Facing}
      * @private
      */
@@ -89,15 +89,31 @@ export class Preview {
      */
     this.vidPid_ = null;
 
+    /**
+     * @type {boolean}
+     * @private
+     */
+    this.isSupportPTZ_ = false;
+
+    /**
+     * Device id to constraints to reset default PTZ setting.
+     * @type {!Map<string, !MediaTrackConstraints>}
+     * @private
+     */
+    this.deviceDefaultPTZ_ = new Map();
+
+    /**
+     * @type {?function()}
+     * @private
+     */
+    this.cancelWaitReadyForTakePhoto_ = null;
+
     window.addEventListener('resize', () => this.onWindowStatusChanged_());
 
     windowController.addListener(() => this.onWindowStatusChanged_());
 
     [state.State.EXPERT, state.State.SHOW_METADATA].forEach((s) => {
       state.addObserver(s, this.updateShowMetadata_.bind(this));
-    });
-    [state.State.EXPERT, state.State.SCAN_BARCODE].forEach((s) => {
-      state.addObserver(s, this.updateScanBarcode_.bind(this));
     });
   }
 
@@ -166,12 +182,83 @@ export class Preview {
   }
 
   /**
+   * @private
+   */
+  async updatePTZ_() {
+    const deviceOperator = await DeviceOperator.getInstance();
+    const {pan, tilt, zoom} = this.getVideoTrack_().getCapabilities();
+
+    this.isSupportPTZ_ = await (async () => {
+      if (pan === undefined && tilt === undefined && zoom === undefined) {
+        return false;
+      }
+      if (deviceOperator === null) {
+        // Enable PTZ on fake camera for testing.
+        return true;
+      }
+      if (this.facing_ !== Facing.EXTERNAL) {
+        // PTZ function is excluded from builtin camera until we set up
+        // its AVL calibration standard.
+        return false;
+      }
+
+      return true;
+    })();
+
+    if (!this.isSupportPTZ_) {
+      return;
+    }
+
+    const {deviceId} = this.getVideoTrack_().getSettings();
+    if (this.deviceDefaultPTZ_.has(deviceId)) {
+      return;
+    }
+
+    const defaultConstraints = {};
+    if (deviceOperator === null) {
+      // VCD of fake camera will always reset to default when first opened. Use
+      // current value at first open as default.
+      if (pan !== undefined) {
+        defaultConstraints.pan = pan;
+      }
+      if (tilt !== undefined) {
+        defaultConstraints.tilt = tilt;
+      }
+      if (zoom !== undefined) {
+        defaultConstraints.zoom = zoom;
+      }
+    } else {
+      if (pan !== undefined) {
+        defaultConstraints.pan = await deviceOperator.getPanDefault(deviceId);
+      }
+      if (tilt !== undefined) {
+        defaultConstraints.tilt = await deviceOperator.getTiltDefault(deviceId);
+      }
+      if (zoom !== undefined) {
+        defaultConstraints.zoom = await deviceOperator.getZoomDefault(deviceId);
+      }
+    }
+    this.deviceDefaultPTZ_.set(deviceId, defaultConstraints);
+  }
+
+  /**
    * If the preview camera support PTZ controls.
    * @return {boolean}
    */
   isSupportPTZ() {
-    const {pan, tilt, zoom} = this.getVideoTrack_().getCapabilities();
-    return pan !== undefined || tilt !== undefined || zoom !== undefined;
+    return this.isSupportPTZ_;
+  }
+
+  /**
+   * @return {!Promise}
+   */
+  async resetPTZ() {
+    if (this.stream_ === null || !this.isSupportPTZ_) {
+      return;
+    }
+    const {deviceId} = this.getVideoTrack_().getSettings();
+    const defaultPTZ = this.deviceDefaultPTZ_.get(deviceId);
+    await this.getVideoTrack_().applyConstraints({advanced: [defaultPTZ]});
   }
 
   /**
@@ -209,8 +296,7 @@ export class Preview {
     });
     await video.play();
     this.video_.parentElement.replaceChild(tpl, this.video_);
-    this.video_.removeAttribute('srcObject');
-    this.video_.load();
+    this.video_.srcObject = null;
     this.video_ = video;
     video.addEventListener('resize', () => this.onIntrinsicSizeChanged_());
     video.addEventListener(
@@ -241,11 +327,8 @@ export class Preview {
         }
       }, 100);
       await this.updateFacing_();
-      this.scanner_ = new BarcodeScanner(this.video_, (value) => {
-        barcodeChip.show(value);
-      });
-      this.updateScanBarcode_();
       this.updateShowMetadata_();
+      await this.updatePTZ_();
 
       const deviceOperator = await DeviceOperator.getInstance();
       if (deviceOperator !== null) {
@@ -254,9 +337,11 @@ export class Preview {
             await deviceOperator.setCameraFrameRotationEnabledAtSource(
                 deviceId, false);
         if (!isSuccess) {
-          console.warn(
-              'Cannot disable camera frame rotation. ' +
-              'The camera is probably being used by another app.');
+          reportError(
+              ErrorType.FRAME_ROTATION_NOT_DISABLED, ErrorLevel.WARNING,
+              new Error(
+                  'Cannot disable camera frame rotation. ' +
+                  'The camera is probably being used by another app.'));
         }
         this.vidPid_ = await deviceOperator.getVidPid(deviceId);
       }
@@ -289,29 +374,47 @@ export class Preview {
       if (deviceOperator !== null) {
         deviceOperator.dropConnection(deviceId);
       }
+      if (this.cancelWaitReadyForTakePhoto_ !== null) {
+        this.cancelWaitReadyForTakePhoto_();
+      }
       this.stream_ = null;
-    }
-    if (this.scanner_ !== null) {
-      this.scanner_.stop();
-      this.scanner_ = null;
     }
     state.set(state.State.STREAMING, false);
   }
 
   /**
-   * Checks whether to scan barcode on preview or not.
-   * @private
+   * Waits for preview stream ready for taking photo.
+   * @return {!Promise}
    */
-  updateScanBarcode_() {
-    if (this.scanner_ === null) {
-      return;
+  async waitReadyForTakePhoto() {
+    if (this.stream_ === null) {
+      throw new CanceledError('Preview is closed');
     }
-    if (state.get(Mode.PHOTO) && state.get(state.State.SCAN_BARCODE)) {
-      this.scanner_.start();
-    } else {
-      this.scanner_.stop();
-      barcodeChip.dismiss();
-    }
+
+    // Chrome use muted state on video track representing no frame input
+    // returned from preview video for a while and call |takePhoto()| with
+    // video track in muted state will fail with |kInvalidStateError| exception.
+    // To mitigate chance of hitting this error, here we ensure frame inputs
+    // from the preview and checked video muted state before taking photo.
+    const track = this.getVideoTrack_();
+    const waitFrame = async () => {
+      const onReady = new WaitableEvent();
+      const callbackId = this.video_.requestVideoFrameCallback((now) => {
+        onReady.signal(true);
+      });
+      this.cancelWaitReadyForTakePhoto_ = () => {
+        this.video_.cancelVideoFrameCallback(callbackId);
+        onReady.signal(false);
+      };
+      const ready = await onReady.wait();
+      this.cancelWaitReadyForTakePhoto_ = null;
+      return ready;
+    };
+    do {
+      if (!await waitFrame()) {
+        throw new CanceledError('Preview is closed');
+      }
+    } while (track.muted);
   }
 
   /**
@@ -381,7 +484,9 @@ export class Preview {
           continue;
         }
         if (map.has(val)) {
-          console.error(`Duplicated value: ${val}`);
+          reportError(
+              ErrorType.METADATA_MAPPING_FAILURE, ErrorLevel.ERROR,
+              new Error(`Duplicated value: ${val}`));
           continue;
         }
         map.set(val, key.slice(prefix.length));
@@ -580,8 +685,10 @@ export class Preview {
     const isSuccess = await deviceOperator.removeMetadataObserver(
         deviceId, this.metadataObserverId_);
     if (!isSuccess) {
-      console.error(`Failed to remove metadata observer with id: ${
-          this.metadataObserverId_}`);
+      reportError(
+          ErrorType.REMOVE_METADATA_OBSERVER_FAILURE, ErrorLevel.ERROR,
+          new Error(`Failed to remove metadata observer with id: ${
+              this.metadataObserverId_}`));
     }
     this.metadataObserverId_ = null;
 

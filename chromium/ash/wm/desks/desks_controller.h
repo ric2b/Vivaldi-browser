@@ -63,6 +63,11 @@ class ASH_EXPORT DesksController : public DesksHelper,
     // Called when the desk switch animations on all root windows finish.
     virtual void OnDeskSwitchAnimationFinished() = 0;
 
+    // Called when the desk's name is changed, including when the name is set on
+    // a newly created desk if we are not using name user nudges.
+    virtual void OnDeskNameChanged(const Desk* desk,
+                                   const std::u16string& new_name) = 0;
+
    protected:
     virtual ~Observer() = default;
   };
@@ -70,8 +75,7 @@ class ASH_EXPORT DesksController : public DesksHelper,
   DesksController();
   ~DesksController() override;
 
-  // Convenience method for returning the DesksController instance. The actual
-  // instance is created and owned by Shell.
+  // Convenience method for returning the DesksController instance.
   static DesksController* Get();
 
   // Returns the default name for a desk at |desk_index|.
@@ -187,6 +191,8 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // Notifies each desk in |desks_| that their contents has changed.
   void NotifyAllDesksForContentChanged();
 
+  void NotifyDeskNameChanged(const Desk* desk, const std::u16string& new_name);
+
   // Reverts the name of the given |desk| to the default value (i.e. "Desk 1",
   // "Desk 2", ... etc.) according to its position in the |desks_| list, as if
   // it was never modified by users.
@@ -238,6 +244,10 @@ class ASH_EXPORT DesksController : public DesksHelper,
   std::u16string GetDeskName(int index) const override;
   int GetNumberOfDesks() const override;
   void SendToDeskAtIndex(aura::Window* window, int desk_index) override;
+  std::unique_ptr<DeskTemplate> CaptureActiveDeskAsTemplate() const override;
+  void CreateAndActivateNewDeskForTemplate(
+      const std::u16string& template_name,
+      base::OnceCallback<void(bool)> callback) override;
 
   // Updates the default names (e.g. "Desk 1", "Desk 2", ... etc.) given to the
   // desks. This is called when desks are added, removed or reordered to update
@@ -268,6 +278,8 @@ class ASH_EXPORT DesksController : public DesksHelper,
   void OnAnimationFinished(DeskAnimationBase* animation);
 
   bool HasDesk(const Desk* desk) const;
+
+  bool HasDeskWithName(const std::u16string& desk_name) const;
 
   // Activates the given |desk| and deactivates the currently active one. |desk|
   // has to be an existing desk. If |update_window_activation| is true,

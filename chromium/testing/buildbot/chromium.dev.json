@@ -679,6 +679,7 @@
       }
     ]
   },
+  "linux-ssd-rel-swarming": {},
   "mac-rel-swarming": {
     "gtest_tests": [
       {

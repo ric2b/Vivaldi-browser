@@ -67,6 +67,7 @@ import org.chromium.chrome.browser.tab.state.PersistedTabDataConfiguration;
 import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.DummyUiChromeActivityTestCase;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -78,7 +79,6 @@ import org.chromium.components.payments.CurrencyFormatterJni;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
-import org.chromium.ui.test.util.DummyUiActivityTestCase;
 import org.chromium.ui.widget.ButtonCompat;
 import org.chromium.ui.widget.ChipView;
 import org.chromium.ui.widget.ChromeImageView;
@@ -96,7 +96,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         "enable-features=" + ChromeFeatureList.COMMERCE_PRICE_TRACKING + "<Study",
         "force-fieldtrials=Study/Group"})
-public class TabListViewHolderTest extends DummyUiActivityTestCase {
+public class TabListViewHolderTest extends DummyUiChromeActivityTestCase {
     @Rule
     public JniMocker mMocker = new JniMocker();
 
@@ -134,6 +134,8 @@ public class TabListViewHolderTest extends DummyUiActivityTestCase {
     private static final String USD_CURRENCY_SYMBOL = "$";
     private static final String EXPECTED_PRICE = "$5.00";
     private static final String EXPECTED_PREVIOUS_PRICE = "$10";
+    private static final String EXPECTED_CONTENT_DESCRIPTION =
+            "The price of this item recently dropped from $10 to $5.00";
     private static final GURL TEST_GURL = new GURL("https://www.google.com");
 
     private ViewGroup mTabGridView;
@@ -218,6 +220,7 @@ public class TabListViewHolderTest extends DummyUiActivityTestCase {
     public void setUpTest() throws Exception {
         super.setUpTest();
         MockitoAnnotations.initMocks(this);
+        TabUiTestHelper.applyThemeOverlays(getActivity());
         ViewGroup view = new LinearLayout(getActivity());
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -888,6 +891,7 @@ public class TabListViewHolderTest extends DummyUiActivityTestCase {
         TextView previousPrice = mTabGridView.findViewById(R.id.previous_price);
         Assert.assertEquals(EXPECTED_PRICE, currentPrice.getText());
         Assert.assertEquals(EXPECTED_PREVIOUS_PRICE, previousPrice.getText());
+        Assert.assertEquals(EXPECTED_CONTENT_DESCRIPTION, priceCardView.getContentDescription());
     }
 
     private void mockCurrencyFormatter() {

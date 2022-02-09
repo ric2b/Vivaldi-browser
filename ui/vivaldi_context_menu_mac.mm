@@ -16,6 +16,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "prefs/native_settings_helper_mac.h"
 #include "ui/base/models/simple_menu_model.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/views/vivaldi_context_menu_views.h"
@@ -148,4 +149,8 @@ NSView* VivaldiContextMenuMac::GetActiveNativeView() {
   } else {
     return web_contents_->GetNativeView().GetNativeNSView();
   }
+}
+
+bool VivaldiContextMenuMac::HasDarkTextColor() {
+  return vivaldi::getSystemDarkMode() == 0;
 }

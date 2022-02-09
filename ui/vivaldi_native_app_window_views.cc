@@ -117,7 +117,9 @@ gfx::Rect GetInitialWindowBounds(const VivaldiBrowserWindowParams& params,
 }  // namespace
 
 VivaldiNativeAppWindowViews::VivaldiNativeAppWindowViews()
-    : window_(nullptr), web_view_(nullptr), widget_(nullptr) {}
+    : window_(nullptr), web_view_(nullptr), widget_(nullptr) {
+  set_owned_by_client();
+}
 
 VivaldiNativeAppWindowViews::~VivaldiNativeAppWindowViews() = default;
 
@@ -304,7 +306,7 @@ gfx::NativeView VivaldiNativeAppWindowViews::GetNativeView() {
 
 // WidgetDelegate implementation.
 
-gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowAppIcon() {
+ui::ImageModel VivaldiNativeAppWindowViews::GetWindowAppIcon() {
   if (window_->browser()->is_type_popup()) {
     content::WebContents* web_contents =
         window_->browser()->tab_strip_model()->GetActiveWebContents();
@@ -313,25 +315,25 @@ gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowAppIcon() {
           favicon::ContentFaviconDriver::FromWebContents(web_contents);
       gfx::Image app_icon = favicon_driver->GetFavicon();
       if (!app_icon.IsEmpty())
-        return *app_icon.ToImageSkia();
+        return ui::ImageModel::FromImage(app_icon);
     }
   }
 
   if (icon_family_.empty()) {
-    return gfx::ImageSkia();
+    return ui::ImageModel();
   }
   const gfx::Image* img =
       icon_family_.GetBest(kLargeIconSizeViv, kLargeIconSizeViv);
-  return img ? *img->ToImageSkia() : gfx::ImageSkia();
+  return img ? ui::ImageModel::FromImage(*img) : ui::ImageModel();
 }
 
-gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowIcon() {
+ui::ImageModel VivaldiNativeAppWindowViews::GetWindowIcon() {
   if (icon_family_.empty()) {
-    return gfx::ImageSkia();
+    return ui::ImageModel();
   }
   const gfx::Image* img =
       icon_family_.GetBest(kSmallIconSizeViv, kSmallIconSizeViv);
-  return img ? *img->ToImageSkia() : gfx::ImageSkia();
+  return img ? ui::ImageModel::FromImage(*img) : ui::ImageModel();
 }
 
 void VivaldiNativeAppWindowViews::SetIconFamily(gfx::ImageFamily images) {
@@ -366,10 +368,6 @@ void VivaldiNativeAppWindowViews::OnWidgetMove() {
 
 views::View* VivaldiNativeAppWindowViews::GetInitiallyFocusedView() {
   return web_view_;
-}
-
-bool VivaldiNativeAppWindowViews::CanResize() const {
-  return true;
 }
 
 bool VivaldiNativeAppWindowViews::CanMaximize() const {

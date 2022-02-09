@@ -8,31 +8,59 @@
 #ifndef PLATFORM_MEDIA_RENDERER_DECODERS_IPC_FACTORY_H_
 #define PLATFORM_MEDIA_RENDERER_DECODERS_IPC_FACTORY_H_
 
-#include "platform_media/common/feature_toggles.h"
-
-#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
-
 #include "media/base/media_export.h"
+#include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+
+#include "platform_media/common/platform_media.mojom-forward.h"
 
 namespace media {
 
-class MEDIA_EXPORT IPCFactory
-{
-public:
-  static bool IsAvailable();
-  static void Preinitialize(
-      const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
-      const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
-      const scoped_refptr<base::SequencedTaskRunner>& media_task_runner);
+// TODO(igor@vivaldi.com): Figure out how to add MEDIA_EXPORT to generated mojom
+// classes and move all relevant functionality to subclasses.
+class MEDIA_EXPORT IPCFactory {
+ public:
+  IPCFactory();
+  virtual ~IPCFactory();
 
-  // This must be called on the main thread.
-  static std::unique_ptr<IPCMediaPipelineHost> CreateHostOnMainThread();
+  static bool has_instance() { return g_factory != nullptr; }
 
-  static const scoped_refptr<base::SequencedTaskRunner>& MediaTaskRunner();
+  static IPCFactory* instance() {
+    DCHECK(g_factory);
+    return g_factory;
+  }
 
-  static const scoped_refptr<base::SequencedTaskRunner>& MainTaskRunner();
+  static void init_instance(IPCFactory* factory) {
+    DCHECK(!g_factory);
+    DCHECK(factory);
+    g_factory = factory;
+  }
+
+  // This can be called on any thread.
+  virtual scoped_refptr<base::SequencedTaskRunner> GetHostIpcRunner() = 0;
+
+  using GetPipelineFactoryResult =
+      base::OnceCallback<void(platform_media::mojom::PipelineFactory& factory)>;
+
+  // This can be called on any thread. The callback will be called on a runner
+  // suitable for doing PipelineFactory calls.
+  static void GetPipelienFactory(GetPipelineFactoryResult callback);
+
+  // This must be called on Gpu connector runner.
+  static void ResetGpuRemoteForTests();
+
+ protected:
+  // This must be called on Gpu connector runner.
+  virtual void CreateGpuFactory(mojo::GenericPendingReceiver) = 0;
+
+  // This can be called on any thread.
+  virtual scoped_refptr<base::SequencedTaskRunner> GetGpuConnectorRunner() = 0;
+
+ private:
+  static void GetPipelienFactoryImpl(GetPipelineFactoryResult callback);
+
+  static IPCFactory* g_factory;
 };
 
-}
+}  // namespace media
 
-#endif // PLATFORM_MEDIA_RENDERER_DECODERS_IPC_FACTORY_H_
+#endif  // PLATFORM_MEDIA_RENDERER_DECODERS_IPC_FACTORY_H_

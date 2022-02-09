@@ -11,7 +11,7 @@
 <translation id="1454726940098520109">Ne mutassa újra</translation>
 <translation id="1462666970065907900">Biztos be akarod zárni az ablakot?</translation>
 <translation id="1480046233931937785">Készítők</translation>
-<translation id="1526344461589023948">Hiba lépett fel aletöltött frissítés mentésekor. Ellenőrizd, hogy a gépen van elegendő szabad lemezterület, és később próbáld újra.</translation>
+<translation id="1526344461589023948">Hiba lépett fel a letöltött frissítés mentésekor. Ellenőrizd, hogy a gépen van elegendő szabad lemezterület, és később próbáld újra.</translation>
 <translation id="1657174850639146440">Szörny 9</translation>
 <translation id="1676595396635191120">Új privát ablak</translation>
 <translation id="1702758681952953055">Ha a hiba továbbra is fennáll, jelentsd be a következő adatokkal:</translation>
@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Opera könyvjelző fájl kiválasztása</translation>
 <translation id="3451317331714872347">Tájkép 8</translation>
 <translation id="3457498675806041407">Kilépés megerősítése</translation>
+<translation id="3470981972195599598">A Vivaldi <ph name="VERSION" /> már telepítve van és a böngésző újraindítását követően aktiválódik.</translation>
 <translation id="3516213908976398531">Tájkép 11</translation>
 <translation id="3521635864657970829">Biztos be akarod zárni az ablakot?</translation>
 <translation id="3540597690227428180">Állat 9</translation>
@@ -163,6 +164,7 @@
 <translation id="8912720443398351457">Biztos ki akarsz lépni a Vivaldiból?</translation>
 <translation id="8947109330183116400">HTML könyvjelző fájl kiválasztása</translation>
 <translation id="9017566390391482291">Vivaldi profil mappa kiválasztása importáláshoz</translation>
+<translation id="9048058608784130603">Függő <ph name="VERSION" /> frissítés</translation>
 <translation id="9065203028668620118">Szerkesztés</translation>
 <translation id="912022491595344261">Kép megnyitása mint <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hivatkozás megnyitása</translation>

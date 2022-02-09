@@ -48,7 +48,7 @@ class NotificationTable {
 
  protected:
   virtual sql::Database& GetDB() = 0;
-  void FillNotificationRow(const sql::Statement& statement,
+  void FillNotificationRow(sql::Statement& statement,
                            NotificationRow* notification);
 
  private:

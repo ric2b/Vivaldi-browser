@@ -35,6 +35,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
   void SetParentView(gfx::NativeView parent_view) override;
+  bool HasDarkTextColor() override;
 
  private:
   NSView* GetActiveNativeView();

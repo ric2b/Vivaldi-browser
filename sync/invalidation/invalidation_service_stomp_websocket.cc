@@ -114,7 +114,9 @@ InvalidationServiceStompWebsocket::InvalidationServiceStompWebsocket(
           std::move(remote),
           /*auth_cert_observer=*/mojo::NullRemote(),
           /*auth_handler=*/mojo::NullRemote(),
-          /*header_client=*/mojo::NullRemote());
+          /*header_client=*/mojo::NullRemote(),
+          /*throttling_profile_id=*/absl::nullopt
+      );
 }
 
 InvalidationServiceStompWebsocket::~InvalidationServiceStompWebsocket() {

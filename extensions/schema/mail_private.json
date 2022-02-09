@@ -123,13 +123,7 @@
         ],
         "returns_async": {
           "name": "callback",
-          "optional": true,
-          "parameters": [
-            {
-              "name": "result",
-              "type": "string"
-            }
-          ]
+          "parameters": []
         }
       },
       {
@@ -158,13 +152,7 @@
         ],
         "returns_async": {
           "name": "callback",
-          "optional": true,
-          "parameters": [
-            {
-              "name": "result",
-              "type": "string"
-            }
-          ]
+          "parameters": []
         }
       },
       {

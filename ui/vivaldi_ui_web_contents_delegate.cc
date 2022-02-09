@@ -18,6 +18,7 @@
 #include "components/printing/browser/print_composite_client.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/color_chooser.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
@@ -112,10 +113,11 @@ bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
-content::ColorChooser* VivaldiUIWebContentsDelegate::OpenColorChooser(
-  content::WebContents* web_contents,
-  SkColor initial_color,
-  const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
+std::unique_ptr<content::ColorChooser>
+VivaldiUIWebContentsDelegate::OpenColorChooser(
+    content::WebContents* web_contents,
+    SkColor initial_color,
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
 
@@ -291,6 +293,9 @@ bool VivaldiUIWebContentsDelegate::OnMessageReceived(
 void VivaldiUIWebContentsDelegate::DidFinishNavigation(
   content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->HasCommitted()) {
+    LOG(ERROR)
+        << "VivaldiUIWebContentsDelegate::DidFinishNavigation: Failed to load "
+        << navigation_handle->GetURL().spec();
     return;
   }
 

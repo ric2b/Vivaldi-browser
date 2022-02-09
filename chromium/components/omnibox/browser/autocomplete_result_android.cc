@@ -11,6 +11,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/omnibox/browser/jni_headers/AutocompleteResult_jni.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
@@ -24,11 +25,17 @@ using base::android::ToJavaBooleanArray;
 using base::android::ToJavaIntArray;
 
 namespace {
+// Special value passed to VerifyCoherency() suggesting that the action
+// requesting verification has no specific index associated with it.
+constexpr const int kNoMatchIndex = -1;
+
 // Used for histograms, append only.
 enum class MatchVerificationResult {
   VALID_MATCH = 0,
   WRONG_MATCH = 1,
   BAD_RESULT_SIZE = 2,
+  NATIVE_MATCH_DEAD = 3,
+  INVALID_MATCH_POSITION = 4,
   // Keep as the last entry:
   COUNT
 };
@@ -61,7 +68,7 @@ ScopedJavaLocalRef<jobject> AutocompleteResult::GetOrCreateJavaObject(
   ScopedJavaLocalRef<jobjectArray> j_group_names =
       ToJavaArrayOfStrings(env, group_names);
 
-  java_result_ = Java_AutocompleteResult_build(
+  java_result_ = Java_AutocompleteResult_fromNative(
       env, reinterpret_cast<intptr_t>(this), BuildJavaMatches(env), j_group_ids,
       j_group_names, j_group_collapsed_states);
 
@@ -73,7 +80,7 @@ void AutocompleteResult::DestroyJavaObject() const {
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AutocompleteResult_destroy(env, java_result_);
+  Java_AutocompleteResult_notifyNativeDestroyed(env, java_result_);
   java_result_.Reset();
 }
 
@@ -96,6 +103,8 @@ ScopedJavaLocalRef<jobjectArray> AutocompleteResult::BuildJavaMatches(
 void AutocompleteResult::GroupSuggestionsBySearchVsURL(JNIEnv* env,
                                                        int first_index,
                                                        int last_index) {
+  if (first_index == last_index)
+    return;
   const int num_elements = matches_.size();
   if (first_index < 0 || last_index <= first_index ||
       last_index > num_elements) {
@@ -114,7 +123,8 @@ void AutocompleteResult::GroupSuggestionsBySearchVsURL(JNIEnv* env,
 
 bool AutocompleteResult::VerifyCoherency(
     JNIEnv* env,
-    const JavaParamRef<jlongArray>& j_matches_array) {
+    const JavaParamRef<jlongArray>& j_matches_array,
+    jint match_index) {
   DCHECK(j_matches_array);
 
   std::vector<jlong> j_matches;
@@ -126,6 +136,15 @@ bool AutocompleteResult::VerifyCoherency(
                               MatchVerificationResult::COUNT);
     NOTREACHED() << "AutocompletResult objects are of different size: "
                  << j_matches.size() << " (Java) vs " << size() << " (Native)";
+    return false;
+  }
+
+  if (match_index != kNoMatchIndex && match_index >= static_cast<int>(size())) {
+    UMA_HISTOGRAM_ENUMERATION("Android.Omnibox.InvalidMatch",
+                              MatchVerificationResult::INVALID_MATCH_POSITION,
+                              MatchVerificationResult::COUNT);
+    NOTREACHED() << "Requested action index is not valid: " << match_index
+                 << " outside of " << size() << " limit";
     return false;
   }
 

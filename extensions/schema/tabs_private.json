@@ -469,6 +469,34 @@
             }
           ]
         }
+      },
+      {
+        "name": "determineTextLanguage",
+        "type": "function",
+        "description": "Attempts to determined the language of the given text.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0,
+            "description": "Any valid tabId can be used here, it is only used to determine which renderer to use."
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "description": "String to determine the language for. If the string is too short, this operation might not yield a language code."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "langCode",
+              "type": "string",
+              "description": "Contains the language code for the given text, or empty string if language could not be determined."
+            }
+          ]
+        }
       }
     ],
     "events": [

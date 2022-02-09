@@ -71,11 +71,11 @@ void ContentIndexServiceImpl::CreateForWorker(
   auto* storage_partition = static_cast<StoragePartitionImpl*>(
       render_process_host->GetStoragePartition());
 
-  mojo::MakeSelfOwnedReceiver(
-      std::make_unique<ContentIndexServiceImpl>(
-          info.origin, storage_partition->GetContentIndexContext(),
-          storage_partition->GetServiceWorkerContext()),
-      std::move(receiver));
+  mojo::MakeSelfOwnedReceiver(std::make_unique<ContentIndexServiceImpl>(
+                                  info.storage_key.origin(),
+                                  storage_partition->GetContentIndexContext(),
+                                  storage_partition->GetServiceWorkerContext()),
+                              std::move(receiver));
 }
 
 ContentIndexServiceImpl::ContentIndexServiceImpl(
@@ -154,7 +154,7 @@ void ContentIndexServiceImpl::GetDescriptions(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   content_index_context_->database().GetDescriptions(
-      service_worker_registration_id, std::move(callback));
+      service_worker_registration_id, origin_, std::move(callback));
 }
 
 }  // namespace content

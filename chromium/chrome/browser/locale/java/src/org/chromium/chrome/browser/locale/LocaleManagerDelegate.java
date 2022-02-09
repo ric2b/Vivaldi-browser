@@ -140,7 +140,8 @@ public class LocaleManagerDelegate {
     }
 
     /**
-     * @see {@link LocaleManager#overrideDefaultSearchEngine()}
+     * Overrides the default search engine to a different search engine we designate. This is a
+     * no-op if the user has manually changed DSP settings.
      */
     void overrideDefaultSearchEngine() {
         if (!isSearchEngineAutoSwitchEnabled() || !isSpecialLocaleEnabled()) return;
@@ -149,7 +150,8 @@ public class LocaleManagerDelegate {
     }
 
     /**
-     * @see {@link LocaleManager#revertDefaultSearchEngineOverride()}
+     * Reverts the temporary change made in {@link #overrideDefaultSearchEngine()}. This is a no-op
+     * if the user has manually changed DSP settings.
      */
     private void revertDefaultSearchEngineOverride() {
         if (!isSearchEngineAutoSwitchEnabled() || isSpecialLocaleEnabled()) return;
@@ -259,9 +261,9 @@ public class LocaleManagerDelegate {
     }
 
     /**
-     * @see {@link LocaleManager#isSearchEngineAutoSwitchEnabled()}
+     * @return Whether auto switch for search engine is enabled.
      */
-    public boolean isSearchEngineAutoSwitchEnabled() {
+    private boolean isSearchEngineAutoSwitchEnabled() {
         return SharedPreferencesManager.getInstance().readBoolean(
                 ChromePreferenceKeys.LOCALE_MANAGER_AUTO_SWITCH, false);
     }
@@ -305,6 +307,7 @@ public class LocaleManagerDelegate {
      */
     @SearchEnginePromoType
     public int getSearchEnginePromoShowType() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return SearchEnginePromoType.DONT_SHOW;
         if (!isSpecialLocaleEnabled()) return SearchEnginePromoType.DONT_SHOW;
         SharedPreferencesManager preferences = SharedPreferencesManager.getInstance();
         if (preferences.readBoolean(ChromePreferenceKeys.LOCALE_MANAGER_PROMO_SHOWN, false)) {
@@ -325,6 +328,11 @@ public class LocaleManagerDelegate {
      */
     public String getMailRUReferralId() {
         return "";
+    }
+
+    public List<TemplateUrl> getSearchEnginesForPromoDialog(@SearchEnginePromoType int promoType) {
+        throw new IllegalStateException(
+                "Not applicable unless existing or new promos are required");
     }
 
     /**
@@ -351,16 +359,6 @@ public class LocaleManagerDelegate {
         return mLocaleTemplateUrlLoader;
     }
 
-    public List<TemplateUrl> getSearchEnginesForPromoDialog(@SearchEnginePromoType int promoType) {
-        throw new IllegalStateException(
-                "Not applicable unless existing or new promos are required");
-    }
-
-    public void onUserSearchEngineChoice(
-            @SearchEnginePromoType int type, List<String> keywords, String keyword) {
-        onUserSearchEngineChoiceFromPromoDialog(type, keywords, keyword);
-    }
-
     /**
      * @see {@link LocaleManager#recordLocaleBasedSearchWidgetMetrics()}
      */
@@ -384,6 +382,7 @@ public class LocaleManagerDelegate {
      * @see {@link LocaleManager#needToCheckForSearchEnginePromo()}
      */
     public boolean needToCheckForSearchEnginePromo() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         if (ChromeFeatureList.isInitialized()
                 && !ChromeFeatureList.isEnabled(
                         ChromeFeatureList.SEARCH_ENGINE_PROMO_EXISTING_DEVICE)) {

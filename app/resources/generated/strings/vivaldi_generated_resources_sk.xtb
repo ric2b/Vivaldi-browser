@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Predvolené</translation>
 <translation id="1297175357211070620">Cieľ</translation>
 <translation id="1303101771013849280">Súbor HTML so záložkami</translation>
-<translation id="1380436189840894976">Aj tak ukončiť súkromný režim?</translation>
 <translation id="1430915738399379752">Tlačiť</translation>
 <translation id="1433811987160647649">Spýtať sa pred prístupom</translation>
 <translation id="1451375123200651445">Webová stránka, jeden súbor</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskriptory súborov</translation>
 <translation id="1682548588986054654">Nové súkromné okno</translation>
-<translation id="1698122934742150150">Iba aktuálna súkromná relácia</translation>
 <translation id="1706625117072057435">Úrovne priblíženia</translation>
 <translation id="1708338024780164500">(Neaktívny)</translation>
 <translation id="1723824996674794290">&amp;Nové okno</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Neznámy doplnok</translation>
 <translation id="2423578206845792524">Uložiť &amp;obrázok ako...</translation>
 <translation id="2439110203301358333">Iný program v počítači pridal rozšírenie, ktoré môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
+<translation id="2443487764245141020">Weby tiež môžu rozpoznať vaše zariadenie pomocou identifikátora</translation>
 <translation id="2445081178310039857">Požaduje sa koreňový adresár rozšírenia.</translation>
 <translation id="2470702053775288986">Nepodporovaný typ rozšírenia bol zakázaný</translation>
 <translation id="2476578072172137802">Nastavenia stránky</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Kopírovať adre&amp;su odkazu</translation>
 <translation id="354068948465830244">Môže čítať údaje stránok a meniť ich</translation>
 <translation id="3560034655160545939">&amp;Kontrola pravopisu</translation>
-<translation id="3574917942258583917">Aj tak ukončiť súkromný režim?</translation>
 <translation id="3587482841069643663">Všetko</translation>
 <translation id="3627588569887975815">Otvoriť odkaz v novom &amp;súkromnom okne</translation>
 <translation id="3627879631695760395">Inštalovať aplikáciu <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Obslužné nástroje</translation>
 <translation id="3678156199662914018">Rozšírenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Žiadosť o zdieľanie obrazovky s aplikáciou <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Nepovoliť zavretým webom dokončovať odosielanie alebo prijímanie údajov</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Zakázať rozšírenia v režime pre vývojárov</translation>
 <translation id="4100839878934973028">Iný program v počítači pridal aplikáciu, ktorá môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="4109898769411476438">Zatvoriť prehliadač pred importovaním</translation>
-<translation id="4115080753528843955">Niektoré obsahové služby používajú na účely autorizácie prístupu k chránenému obsahu jedinečné identifikátory</translation>
 <translation id="4130207949184424187">Toto rozšírenie zmenilo stránku, ktorá sa zobrazí pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="4131410914670010031">Čiernobielo</translation>
 <translation id="4176463684765177261">Zakázané</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Pri pokuse o inštaláciu tohto rozšírenia sa objavili upozornenia:</translation>
 <translation id="479536056609751218">Webová stránka, len kód HTML</translation>
 <translation id="4839303808932127586">Uložiť &amp;video ako...</translation>
+<translation id="4840096453115567876">Naozaj chcete ukončiť súkromný režim?</translation>
 <translation id="488785315393301722">Zobraziť podrobnosti</translation>
 <translation id="4907306957610201395">Kategória povolení</translation>
 <translation id="4912643508233590958">Prebudenia z nečinnosti</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Prístup bol odmietnutý.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Zobraziť &amp;ovládacie prvky</translation>
+<translation id="7374461526650987610">Obslužné nástroje protokolov</translation>
 <translation id="7385854874724088939">Pri pokuse o tlač sa vyskytla chyba. Skontrolujte svoju tlačiareň a skúste to znova.</translation>
 <translation id="7412226954991670867">Pamäť GPU</translation>
 <translation id="7421925624202799674">&amp;Zobraziť zdrojový kód stránky</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Kompletovať</translation>
 <translation id="7629827748548208700">List: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Zrušiť</translation>
+<translation id="7659154729610375585">Naozaj chcete ukončiť súkromný režim?</translation>
 <translation id="7661259717474717992">Povoliť stránkam ukladať a čítať údaje súborov cookie</translation>
 <translation id="7663719505383602579">Prijímač: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainštalované vaším správcom</translation>
@@ -453,6 +452,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8899851313684471736">Otvoriť odkaz v novom &amp;okne</translation>
 <translation id="8915370057835397490">Načítavajú sa návrhy</translation>
 <translation id="8916476537757519021">Súkromný podrámec: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Len pre aktuálnu reláciu súkromného režimu</translation>
 <translation id="895944840846194039">Pamäť JavaScript</translation>
 <translation id="8962083179518285172">Skryť podrobnosti</translation>
 <translation id="8973557916016709913">Odstrániť úroveň priblíženia</translation>

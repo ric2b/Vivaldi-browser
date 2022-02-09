@@ -175,7 +175,7 @@ bool MoveTabToWindow(Browser* source_browser,
 
   TabStripModel* source_tab_strip = source_browser->tab_strip_model();
   std::unique_ptr<content::WebContents> web_contents =
-      source_tab_strip->DetachWebContentsAt(tab_index);
+      source_tab_strip->DetachWebContentsAtForInsertion(tab_index);
   if (!web_contents) {
     return false;
   }

@@ -79,10 +79,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
 #endif
   }
 #endif
-  // Never launch the update notifier process from guest windows
-  if (!profile->IsGuestSession()) {
-    LaunchUpdateNotifier(profile);
-  }
+  LaunchUpdateNotifier(profile);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   apps::AppLaunchParams params(extension->name(),

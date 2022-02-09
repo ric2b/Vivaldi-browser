@@ -7,12 +7,16 @@
 
 #include "ui/gfx/geometry/rect.h"
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 // Sets the |x| and |width| components of |popup_bounds| as the x-coordinate
 // of the starting point and the width of the popup, taking into account the
 // direction it's supposed to grow (either to the left or to the right).
 // Components |y| and |height| of |popup_bounds| are not changed.
 void CalculatePopupXAndWidth(int popup_preferred_width,
-                             const gfx::Rect& window_bounds,
+                             const gfx::Rect& content_area_bounds,
                              const gfx::Rect& element_bounds,
                              bool is_rtl,
                              gfx::Rect* popup_bounds);
@@ -22,14 +26,14 @@ void CalculatePopupXAndWidth(int popup_preferred_width,
 // direction it's supposed to grow (either up or down). Components |x| and
 // |width| of |popup_bounds| are not changed.
 void CalculatePopupYAndHeight(int popup_preferred_height,
-                              const gfx::Rect& window_bounds,
+                              const gfx::Rect& content_area_bounds,
                               const gfx::Rect& element_bounds,
                               gfx::Rect* popup_bounds);
 
 // Convenience method which handles both the vertical and horizontal bounds
 // and returns a new Rect.
 gfx::Rect CalculatePopupBounds(const gfx::Size& desired_size,
-                               const gfx::Rect& window_bounds,
+                               const gfx::Rect& content_area_bounds,
                                const gfx::Rect& element_bounds,
                                bool is_rtl);
 
@@ -39,5 +43,10 @@ gfx::Rect CalculatePopupBounds(const gfx::Size& desired_size,
 bool CanShowDropdownHere(int item_height,
                          const gfx::Rect& content_area_bounds,
                          const gfx::Rect& element_bounds);
+
+// Returns whether there is any open prompt in |web_contents| with bounds that
+// overlap |screen_bounds|.
+bool BoundsOverlapWithAnyOpenPrompt(const gfx::Rect& screen_bounds,
+                                    content::WebContents* web_contents);
 
 #endif  // CHROME_BROWSER_UI_VIEWS_AUTOFILL_AUTOFILL_POPUP_VIEW_UTILS_H_

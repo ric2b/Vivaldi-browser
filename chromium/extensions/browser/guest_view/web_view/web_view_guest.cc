@@ -50,6 +50,7 @@
 #include "extensions/browser/api/guest_view/web_view/web_view_internal_api.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/bad_message.h"
+#include "extensions/browser/content_script_tracker.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extension_web_contents_observer.h"
@@ -678,8 +679,13 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
         if (view_name == "extension_popup") {
           // 1. Create an ExtensionFrameHelper for the viewtype.
           // 2. take a WebContents as parameter.
-          extension_host_.reset(new ::vivaldi::VivaldiExtensionHost(
-            context, mojom::ViewType::kExtensionPopup, new_contents));
+          std::string src_string;
+          if (create_params.GetString("src", &src_string)) {
+            GURL popup_url = guest_site = GURL(src_string);
+            extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
+                context, popup_url, mojom::ViewType::kExtensionPopup,
+                new_contents);
+          }
         }
       }
       task_manager::WebContentsTags::CreateForTabContents(new_contents);
@@ -918,8 +924,8 @@ void WebViewGuest::GuestZoomChanged(double old_zoom_level,
   double old_zoom_factor = ConvertZoomLevelToZoomFactor(old_zoom_level);
   double new_zoom_factor = ConvertZoomLevelToZoomFactor(new_zoom_level);
   auto args = std::make_unique<base::DictionaryValue>();
-  args->SetDouble(webview::kOldZoomFactor, old_zoom_factor);
-  args->SetDouble(webview::kNewZoomFactor, new_zoom_factor);
+  args->SetDoubleKey(webview::kOldZoomFactor, old_zoom_factor);
+  args->SetDoubleKey(webview::kNewZoomFactor, new_zoom_factor);
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventZoomChange, std::move(args)));
 }
@@ -1225,6 +1231,9 @@ void WebViewGuest::ReadyToCommitNavigation(
       ->MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
           {owner_web_contents()->GetMainFrame()->GetLastCommittedOrigin()},
           kPushToRendererNow);
+
+  ContentScriptTracker::ReadyToCommitNavigationWithGuestViewContentScripts(
+      base::PassKey<WebViewGuest>(), owner_web_contents(), navigation_handle);
 }
 
 void WebViewGuest::DidFinishNavigation(
@@ -1282,7 +1291,7 @@ void WebViewGuest::DidFinishNavigation(
 void WebViewGuest::LoadProgressChanged(double progress) {
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, web_contents()->GetURL().spec());
-  args->SetDouble(webview::kProgress, progress);
+  args->SetDoubleKey(webview::kProgress, progress);
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventLoadProgress, std::move(args)));
 }
@@ -1963,6 +1972,13 @@ void WebViewGuest::LoadURLWithParams(
 
   // Handle chrome://restart and chrome://quit urls.
   if (is_vivaldi_host && HandleNonNavigationAboutURL(url)) {
+    return;
+  }
+
+  // NOTE(andre@vivaldi.com) : Loading of extension popups is initiated in
+  // VivaldiExtensionHost for it to not inherit the security policies of the
+  // embedder, Vivaldi.
+  if (extension_host_) {
     return;
   }
 

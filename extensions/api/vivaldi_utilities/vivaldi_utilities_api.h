@@ -26,8 +26,8 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/lights/razer_chroma_handler.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 
 class Browser;
 
@@ -115,7 +115,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
     int window_id() { return window_id_; }
     const std::string& dialog_name() { return dialog_name_; }
     const gfx::Rect& rect() { return rect_; }
-    const std::string& flow_direction() { return flow_direction_;  }
+    const std::string& flow_direction() { return flow_direction_; }
 
    private:
     int window_id_ = 0;
@@ -123,6 +123,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
     gfx::Rect rect_;
     std::string flow_direction_;
   };
+
  protected:
   bool OsReauthCall(password_manager::ReauthPurpose purpose);
 
@@ -140,7 +141,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   std::map<std::string, base::Value*> key_to_values_map_;
 
   // List used for the dialog position apis.
-  std::vector<std::unique_ptr<DialogPosition> > dialog_to_point_list_;
+  std::vector<std::unique_ptr<DialogPosition>> dialog_to_point_list_;
 
   // Persistent class used for re-authentication of the user when viewing
   // saved passwords. It cannot be instanciated per call as it keeps state
@@ -200,13 +201,30 @@ class UtilitiesIsTabInLastSessionFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsTabInLastSessionFunction);
 };
 
+// This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
+// various JS bindings constrains.
 class UtilitiesIsUrlValidFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isUrlValid", UTILITIES_ISURLVALID)
-  UtilitiesIsUrlValidFunction();
+  UtilitiesIsUrlValidFunction() = default;
 
- protected:
-  ~UtilitiesIsUrlValidFunction() override;
+ private:
+  ~UtilitiesIsUrlValidFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsUrlValidFunction);
+};
+
+class UtilitiesCanOpenUrlExternallyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.canOpenUrlExternally",
+                             UTILITIES_CANOPENURLEXTERNALLY)
+  UtilitiesCanOpenUrlExternallyFunction() = default;
+
+ private:
+  ~UtilitiesCanOpenUrlExternallyFunction() override = default;
 
   void OnDefaultProtocolClientWorkerFinished(
       shell_integration::DefaultWebClientState state);
@@ -214,14 +232,11 @@ class UtilitiesIsUrlValidFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
- private:
-  bool prompt_user_ = false;
-  GURL url_;
-  vivaldi::utilities::UrlValidResults result_;
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsUrlValidFunction);
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesCanOpenUrlExternallyFunction);
 };
 
+// This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
+// various JS bindings constrains.
 class UtilitiesGetUrlFragmentsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getUrlFragments",
@@ -292,10 +307,11 @@ class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectLocalImageFunction);
 };
 
+// This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
+// various JS bindings constrains.
 class UtilitiesGetVersionFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.getVersion",
-                             UTILITIES_GETVERSION)
+  DECLARE_EXTENSION_FUNCTION("utilities.getVersion", UTILITIES_GETVERSION)
   UtilitiesGetVersionFunction() = default;
 
  protected:
@@ -496,8 +512,7 @@ class UtilitiesSavePageFunction : public ExtensionFunction {
 
 class UtilitiesOpenPageFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.openPage",
-                             UTILITIES_OPENPAGE)
+  DECLARE_EXTENSION_FUNCTION("utilities.openPage", UTILITIES_OPENPAGE)
   UtilitiesOpenPageFunction() = default;
 
  protected:
@@ -507,6 +522,21 @@ class UtilitiesOpenPageFunction : public ExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenPageFunction);
+};
+
+class UtilitiesBroadcastMessageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.broadcastMessage",
+                             UTILITIES_BROADCAST_MESSAGE)
+  UtilitiesBroadcastMessageFunction() = default;
+
+ protected:
+  ~UtilitiesBroadcastMessageFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesBroadcastMessageFunction);
 };
 
 class UtilitiesSetDefaultContentSettingsFunction : public ExtensionFunction {
@@ -584,6 +614,19 @@ class UtilitiesOpenTaskManagerFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenTaskManagerFunction);
 };
 
+class UtilitiesCreateQRCodeFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.createQRCode", UTILITIES_CREATE_QR_CODE)
+  UtilitiesCreateQRCodeFunction() = default;
+
+ protected:
+  ~UtilitiesCreateQRCodeFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesCreateQRCodeFunction);
+};
 
 class UtilitiesGetStartupActionFunction : public ExtensionFunction {
  public:
@@ -746,11 +789,12 @@ class UtilitiesFocusDialogFunction : public ExtensionFunction {
 };
 
 class UtilitiesStartChromecastFunction : public ExtensionFunction {
-public:
- DECLARE_EXTENSION_FUNCTION("utilities.startChromecast", UTILITIES_IS_FIRST_RUN)
- UtilitiesStartChromecastFunction() = default;
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.startChromecast",
+                             UTILITIES_IS_FIRST_RUN)
+  UtilitiesStartChromecastFunction() = default;
 
-private:
+ private:
   ~UtilitiesStartChromecastFunction() override = default;
   ResponseAction Run() override;
 
@@ -759,8 +803,7 @@ private:
 
 class UtilitiesIsFirstRunFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.isFirstRun",
-                             UTILITIES_START_CHROMECAST)
+  DECLARE_EXTENSION_FUNCTION("utilities.isFirstRun", UTILITIES_IS_FIRST_RUN)
   UtilitiesIsFirstRunFunction() = default;
 
  private:
@@ -790,9 +833,22 @@ class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
       qr_code_service_remote_;
 
   vivaldi::utilities::CaptureQRDestination dest_ =
-                vivaldi::utilities::CAPTURE_QR_DESTINATION_DATAURL;
+      vivaldi::utilities::CAPTURE_QR_DESTINATION_DATAURL;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGenerateQRCodeFunction);
+};
+
+class UtilitiesGetGAPIKeyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getGAPIKey",
+                             UTILITIES_GET_GOOGLE_API_KEY)
+  UtilitiesGetGAPIKeyFunction() = default;
+
+ private:
+  ~UtilitiesGetGAPIKeyFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetGAPIKeyFunction);
 };
 
 }  // namespace extensions

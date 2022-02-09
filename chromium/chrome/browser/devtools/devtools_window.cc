@@ -55,6 +55,7 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
+#include "content/public/browser/color_chooser.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -135,7 +136,7 @@ void SetPreferencesFromJson(Profile* profile, const std::string& json) {
   if (!parsed || !parsed->is_dict())
     return;
   DictionaryPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
-  for (const auto& dict_value : parsed->DictItems()) {
+  for (auto dict_value : parsed->DictItems()) {
     if (!dict_value.second.is_string())
       continue;
     update.Get()->SetKey(dict_value.first, std::move(dict_value.second));
@@ -1382,7 +1383,10 @@ void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
                                         const GURL& target_url,
                                         WebContents* new_contents) {
   if (target_url.SchemeIs(content::kChromeDevToolsScheme) &&
-      target_url.path().rfind("toolbox.html") != std::string::npos) {
+      (target_url.path().rfind("device_mode_emulation_frame.html") !=
+           std::string::npos
+       // TODO(crbug.com/1228264): Remove toolbox.html allowance
+       || target_url.path().rfind("toolbox.html") != std::string::npos)) {
     CHECK(can_dock_);
 
     // Ownership will be passed in DevToolsWindow::AddNewContents.
@@ -1476,7 +1480,7 @@ content::JavaScriptDialogManager* DevToolsWindow::GetJavaScriptDialogManager(
   return javascript_dialogs::AppModalDialogManager::GetInstance();
 }
 
-content::ColorChooser* DevToolsWindow::OpenColorChooser(
+std::unique_ptr<content::ColorChooser> DevToolsWindow::OpenColorChooser(
     WebContents* web_contents,
     SkColor initial_color,
     const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
@@ -1503,7 +1507,7 @@ void DevToolsWindow::ActivateWindow() {
     return;
   if (is_docked_ && GetInspectedBrowserWindow())
     main_web_contents_->Focus();
-  else if (!is_docked_ && !browser_->window()->IsActive())
+  else if (!is_docked_ && browser_ && !browser_->window()->IsActive())
     browser_->window()->Activate();
 }
 
@@ -1573,8 +1577,11 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
     // okay to just null the raw pointer here.
     browser_ = nullptr;
 
+    // TODO(crbug.com/1221967): WebContents should be removed with a reason
+    // other than kInsertedIntoOtherTabStrip, it's not getting reinserted into
+    // another tab strip.
     owned_main_web_contents_ = std::make_unique<OwnedMainWebContents>(
-        tab_strip_model->DetachWebContentsAt(
+        tab_strip_model->DetachWebContentsAtForInsertion(
             tab_strip_model->GetIndexOfWebContents(main_web_contents_)));
   } else if (!dock_requested && was_docked) {
     UpdateBrowserWindow();

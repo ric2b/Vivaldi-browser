@@ -101,12 +101,6 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
     /** The {@link LayoutManagerHost}, who is responsible for showing the active {@link Layout}. */
     protected final LayoutManagerHost mHost;
 
-    /**
-     * A means of notifying features that the browser controls' android view is being forced to
-     * hide.
-     */
-    private final ObservableSupplierImpl<Boolean> mAndroidViewShownSupplier;
-
     /** The last X coordinate of the last {@link MotionEvent#ACTION_DOWN} event. */
     protected int mLastTapX;
 
@@ -169,9 +163,9 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
     private final ObservableSupplierImpl<TabModelSelector> mTabModelSelectorSupplier =
             new ObservableSupplierImpl<>();
     private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
-    private final ObservableSupplierImpl<BrowserControlsStateProvider>
-            mBrowserControlsStateProviderSupplier = new ObservableSupplierImpl<>();
     private final CompositorModelChangeProcessor.FrameRequestSupplier mFrameRequestSupplier;
+
+    private BrowserControlsStateProvider mBrowserControlsStateProvider;
 
     /** The overlays that can be drawn on top of the active layout. */
     protected final List<SceneOverlay> mSceneOverlays = new ArrayList<>();
@@ -209,8 +203,7 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
                 return;
             }
 
-            tabCreating(
-                    getTabModelSelector().getCurrentTabId(), tab.getUrlString(), tab.isIncognito());
+            tabCreating(getTabModelSelector().getCurrentTabId(), tab.isIncognito());
         }
 
         @Override
@@ -272,8 +265,6 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider) {
         mHost = host;
         mPxToDp = 1.f / mHost.getContext().getResources().getDisplayMetrics().density;
-        mAndroidViewShownSupplier = new ObservableSupplierImpl<>();
-        mAndroidViewShownSupplier.set(true);
         mTabContentManagerSupplier = tabContentManagerSupplier;
         mLayerTitleCacheSupplier = layerTitleCacheSupplier;
         mTopUiThemeColorProvider = topUiThemeColorProvider;
@@ -286,8 +277,11 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
                 HistoryNavigationCoordinator.getSceneOverlayClass(),
                 ContinuousSearchContainerCoordinator.getSceneOverlayClass(),
                 TopToolbarOverlayCoordinator.class,
-                ScrollingBottomViewSceneLayer.class,
+                // StripLayoutHelperManager should be updated before ScrollingBottomViewSceneLayer
+                // Since ScrollingBottomViewSceneLayer change the container size,
+                // it causes relocation tab strip scene layer.
                 StripLayoutHelperManager.class,
+                ScrollingBottomViewSceneLayer.class,
                 StatusIndicatorCoordinator.getSceneOverlayClass(),
                 ContextualSearchPanel.class};
         // clang-format on
@@ -359,7 +353,7 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
                 // When toolbar is at the top we need to consider the top controls minimum height.
                 if (VivaldiUtils.isTopToolbarOn())
                     yOffset = e.getY()
-                            - mBrowserControlsStateProviderSupplier.get().getTopControlsMinHeight();
+                            - mBrowserControlsStateProvider.getTopControlsMinHeight();
                 // Create a new motion event with the correct y-offset.
                 e = MotionEvent.obtain(e.getDownTime(), e.getEventTime(), e.getAction(), e.getX(),
                         yOffset, e.getMetaState());
@@ -494,21 +488,14 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
             TopUiThemeColorProvider topUiColorProvider) {
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
+        mBrowserControlsStateProvider = mHost.getBrowserControlsManager();
+
         // Build Layouts
         mStaticLayout = new StaticLayout(mContext, this, renderHost, mHost, mFrameRequestSupplier,
-                selector, mTabContentManagerSupplier.get(), mBrowserControlsStateProviderSupplier,
+                selector, mTabContentManagerSupplier.get(), mBrowserControlsStateProvider,
                 mTopUiThemeColorProvider);
 
-        // Set up layout parameters
-        mStaticLayout.setLayoutHandlesTabLifecycles(true);
-
         setNextLayout(null);
-
-        // Initialize Layouts
-        mStaticLayout.onFinishNativeInitialization();
-
-        // Initialize Layouts
-        mBrowserControlsStateProviderSupplier.set(mHost.getBrowserControlsManager());
 
         // Set the dynamic resource loader for all overlay panels.
         mOverlayPanelManager.setDynamicResourceLoader(dynamicResourceLoader);
@@ -623,9 +610,9 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
                 mCachedVisibleViewport, mLayerTitleCacheSupplier.get(), tabContentManager,
                 resourceManager, browserControlsManager);
 
-        float offsetPx = mBrowserControlsStateProviderSupplier.get() == null
+        float offsetPx = mBrowserControlsStateProvider == null
                 ? 0
-                : mBrowserControlsStateProviderSupplier.get().getTopControlOffset();
+                : mBrowserControlsStateProvider.getTopControlOffset();
 
         for (int i = 0; i < mSceneOverlays.size(); i++) {
             // If the SceneOverlay is not showing, don't bother adding it to the tree.
@@ -660,10 +647,8 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
         if (overlayHidesControls || mActiveLayout.forceHideBrowserControlsAndroidView()) {
             mControlsHidingToken = controlsVisibilityManager.hideAndroidControlsAndClearOldToken(
                     mControlsHidingToken);
-            mAndroidViewShownSupplier.set(false);
         } else {
             controlsVisibilityManager.releaseAndroidControlsHidingToken(mControlsHidingToken);
-            mAndroidViewShownSupplier.set(true);
         }
     }
 
@@ -735,7 +720,7 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
      * @param url         The url of the created tab.
      * @param isIncognito Whether or not created tab will be incognito.
      */
-    protected void tabCreating(int sourceId, String url, boolean isIncognito) {
+    protected void tabCreating(int sourceId, boolean isIncognito) {
         if (getActiveLayout() != null) getActiveLayout().onTabCreating(sourceId);
     }
 
@@ -833,7 +818,7 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
     // Whether the tab is ready to display or it should be faded in as it loads.
     private static boolean shouldStall(Tab tab) {
         return (tab.isFrozen() || tab.needsReload())
-                && !NativePage.isNativePageUrl(tab.getUrlString(), tab.isIncognito());
+                && !NativePage.isNativePageUrl(tab.getUrl(), tab.isIncognito());
     }
 
     @Override

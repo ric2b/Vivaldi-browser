@@ -25,6 +25,7 @@ import org.mockito.quality.Strictness;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -83,6 +84,7 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @FlakyTest(message = "https://crbug.com/1205346")
     public void signinWhenPrimaryAccountIsRenamedToAKnownAccount() {
         mActivityTestRule.startMainActivityOnBlankPage();
         mAccountManagerTestRule.addAccountAndWaitForSeeding("the.second.account@gmail.com");
@@ -104,6 +106,7 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @FlakyTest(message = "https://crbug.com/1205346")
     public void signoutWhenPrimaryAccountIsRenamedToAnUnknownAccount() {
         mActivityTestRule.startMainActivityOnBlankPage();
         mAccountManagerTestRule.addAccountAndWaitForSeeding("the.second.account@gmail.com");
@@ -125,6 +128,7 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @FlakyTest(message = "https://crbug.com/1205346")
     public void signoutWhenPrimaryAccountIsRemoved() {
         mActivityTestRule.startMainActivityOnBlankPage();
         mAccountManagerTestRule.addAccountAndWaitForSeeding("the.second.account@gmail.com");
@@ -143,6 +147,7 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.WIPE_DATA_ON_CHILD_ACCOUNT_SIGNIN})
     public void signinWhenChildAccountIsTheOnlyAccount() {
         mActivityTestRule.startMainActivityOnBlankPage();
         UserActionTester actionTester = new UserActionTester();
@@ -156,7 +161,7 @@ public class SigninCheckerTest {
         });
         Assert.assertEquals(2, SigninHelperProvider.get().getNumOfChildAccountChecksDoneForTests());
         Assert.assertTrue(
-                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin"));
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
     }
 
     @Test
@@ -176,7 +181,7 @@ public class SigninCheckerTest {
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(
-                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin"));
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
     }
 
     @Test
@@ -194,7 +199,7 @@ public class SigninCheckerTest {
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(
-                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin"));
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
     }
 
     @Test
@@ -212,6 +217,6 @@ public class SigninCheckerTest {
         });
         Assert.assertNull(mAccountManagerTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(
-                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin"));
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
     }
 }

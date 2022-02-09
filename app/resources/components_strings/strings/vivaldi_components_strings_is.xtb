@@ -144,6 +144,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="5810442152076338065">Tenging þín við <ph name="DOMAIN" /> er dulrituð með úreltum dulritunaraðferðarpakka (e. cipher suite).</translation>
 <translation id="5838278095973806738">Þú ættir ekki að skrá inn neinar viðkvæmar upplýsingar á þessari síðu (til dæmis lykilorð og kreditkort) þar sem að upplýsingunum gæti verið stolið af tölvuþrjótum.</translation>
 <translation id="5869405914158311789">Ekki náðist í síðu</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Ein í notkun}other{# í notkun}}</translation>
 <translation id="5932224571077948991">Síða sýnir uppáþrengjandi eða villandi auglýsingar</translation>
 <translation id="6051221802930200923">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vefsíðan notar vottorðs festingu (e. certificate pinning). Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
 <translation id="6146055958333702838">Athugaðu allar snúrur og endurræstu alla beina (e. router) og mótöld (e. modem) eða önnur
@@ -219,9 +220,9 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS-veffangið&lt;/abbr&gt; fyrir <ph name="HOST_NAME" /> fannst ekki. Vandamálið er í skoðun.</translation>
 <translation id="8820817407110198400">Bókamerki</translation>
 <translation id="8940028675168378100">Lokað á af <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Opna stillingar fyrir vefsvæði</translation>
 <translation id="9001074447101275817">Velselið <ph name="DOMAIN" /> þarfnast notendanafns og lykilorðs.</translation>
 <translation id="9008201768610948239">Hunsa</translation>
-<translation id="9011424611726486705">Opna stillingar fyrir síðu</translation>
 <translation id="9025348182339809926">(Ógilt)</translation>
 <translation id="9039213469156557790">Þessi síða geymir að auki önnur gögn sem ekki eru örugg. Aðrir geta skoðað þessi gögn þegar verið er að sækja þau og getur þeim verið breytt af tölvuþrjóti til þess að breyta hegðun á síðunni.</translation>
 <translation id="9062620674789239642">Hugsanlega var hún færð, henni breytt eða eytt.</translation>

@@ -10,16 +10,16 @@
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/vivaldi_paths.h"
-#include "media/filters/file_data_source.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
 #include "media/base/video_decoder_config.h"
+#include "media/filters/file_data_source.h"
 #include "media/test/test_media_source.h"
-#include "platform_media/renderer/decoders/ipc_demuxer.h"
-#include "platform_media/test/test_pipeline_host.h"
 
+#include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "platform_media/test/ipc_pipeline_test_setup.h"
 #if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
@@ -33,7 +33,8 @@ namespace media {
 namespace {
 
 #if defined(OS_WIN)
-DemuxerStream* GetStream(std::unique_ptr<Demuxer> & demuxer, DemuxerStream::Type type) {
+DemuxerStream* GetStream(std::unique_ptr<Demuxer>& demuxer,
+                         DemuxerStream::Type type) {
   std::vector<DemuxerStream*> streams = demuxer->GetAllStreams();
   for (auto* stream : streams) {
     if (stream->type() == type)
@@ -58,7 +59,6 @@ base::FilePath GetVivaldiTestDataFilePath(const std::string& name) {
   return file_path.Append(GetPlatformMediaTestDataPath()).AppendASCII(name);
 }
 
-
 class PlatformMediaMockMediaSource : public TestMediaSource {
  public:
   PlatformMediaMockMediaSource(const std::string& filename,
@@ -69,30 +69,28 @@ class PlatformMediaMockMediaSource : public TestMediaSource {
                         mimetype,
                         initial_append_size,
                         initial_sequence_mode,
-                        GetVivaldiTestDataFilePath(filename)){}
+                        GetVivaldiTestDataFilePath(filename)) {}
 };
 
 class PlatformMediaPipelineIntegrationTest
     : public testing::Test,
       public PipelineIntegrationTestBase {
  public:
-   void SetUp() override {
-     static bool registered = false;
-     if (!registered) {
-       vivaldi::RegisterVivaldiPaths();
-       registered = true;
-     }
-   }
-   static bool IsEnabled() {
-#if defined(OS_MAC)
-    return true;
-#elif defined(OS_WIN)
-    if (base::win::GetVersion() >= base::win::Version::WIN7)
-      return true;
-#endif
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Unsupported OS, skipping test";
-    return false;
+  ~PlatformMediaPipelineIntegrationTest() override {
+    // Make sure the demuxer is detroyed before ipc_pipeline_test_setup_ as that
+    // waits for all IPC to finish.
+    if (pipeline_->IsRunning())
+      Stop();
+
+    demuxer_.reset();
+  }
+
+  void SetUp() override {
+    static bool registered = false;
+    if (!registered) {
+      vivaldi::RegisterVivaldiPaths();
+      registered = true;
+    }
   }
   PipelineStatus StartVivaldiWithFile(
       const std::string& filename,
@@ -103,13 +101,13 @@ class PlatformMediaPipelineIntegrationTest
           CreateAudioDecodersCB()) {
     std::unique_ptr<FileDataSource> file_data_source(new FileDataSource());
     base::FilePath file_path(GetVivaldiTestDataFilePath(filename));
-    CHECK(file_data_source->Initialize(file_path)) << "Is " << file_path.value()
-      << " missing?";
+    CHECK(file_data_source->Initialize(file_path))
+        << "Is " << file_path.value() << " missing?";
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     filepath_ = file_path;
 #endif
     return StartInternal(std::move(file_data_source), cdm_context, test_type,
-      prepend_video_decoders_cb, prepend_audio_decoders_cb);
+                         prepend_video_decoders_cb, prepend_audio_decoders_cb);
   }
 
   PipelineStatus StartVivaldi(const std::string& filename) {
@@ -130,13 +128,11 @@ class PlatformMediaPipelineIntegrationTest
                                 prepend_video_decoders_cb,
                                 prepend_audio_decoders_cb);
   }
+  IPCPipelineTestSetup ipc_pipeline_test_setup_;
 };
 
 #if defined(OS_MAC) || defined(OS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4", kHashed));
 
   Play();
@@ -154,10 +150,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
-  if (!IsEnabled())
-    return;
-
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+            StartVivaldi("vivaldi-bear-320x240-16x9-aspect.mp4", kHashed));
 
   Play();
 
@@ -173,9 +167,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_16x9_Aspect) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
 
   Play();
@@ -192,9 +183,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("sfx.m4a", kHashed));
 
   Play();
@@ -202,16 +190,13 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
   ASSERT_TRUE(WaitUntilOnEnded());
 
 #if defined(OS_MAC)
-    EXPECT_EQ("-5.29,-5.47,-5.05,-4.33,-2.99,-3.79,", GetAudioHash());
+  EXPECT_EQ("-5.29,-5.47,-5.05,-4.33,-2.99,-3.79,", GetAudioHash());
 #elif defined(OS_WIN)
   EXPECT_EQ("0.46,1.72,4.26,4.57,3.39,1.54,", GetAudioHash());
 #endif
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePaused) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
 
   base::TimeDelta duration(pipeline_->GetMediaDuration());
@@ -235,9 +220,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePaused) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
 
   base::TimeDelta duration(pipeline_->GetMediaDuration());
@@ -257,9 +239,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Seek_VideoOnly) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_silent.mp4", kHashed));
 
   Play();
@@ -269,9 +248,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Seek_VideoOnly) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, PlayInLoop) {
-  if (!IsEnabled())
-    return;
-
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear.mp4"));
 
   const base::TimeDelta duration = pipeline_->GetMediaDuration();
@@ -288,10 +264,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, PlayInLoop) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
-  if (!IsEnabled())
-    return;
-
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-bear_truncated.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+            StartVivaldi("vivaldi-bear_truncated.mp4"));
 
   Play();
   WaitUntilCurrentTimeIsAfter(base::TimeDelta::FromMicroseconds(1066666));
@@ -299,9 +273,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, DecodingError) {
-  if (!IsEnabled())
-    return;
-
   // TODO(wdzierzanowski): WMFMediaPipeline (Windows) doesn't detect the error?
   // (DNA-30324).
 #if !defined(OS_WIN)
@@ -312,9 +283,6 @@ TEST_F(PlatformMediaPipelineIntegrationTest, DecodingError) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
-  if (!IsEnabled())
-    return;
-
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
@@ -322,13 +290,11 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_0.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_0, metadata_.video_decoder_config.video_transformation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_0,
+            metadata_.video_decoder_config.video_transformation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
-  if (!IsEnabled())
-    return;
-
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
@@ -336,13 +302,11 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_90.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_90, metadata_.video_decoder_config.video_transformation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_90,
+            metadata_.video_decoder_config.video_transformation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
-  if (!IsEnabled())
-    return;
-
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
@@ -350,13 +314,11 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_180.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_180, metadata_.video_decoder_config.video_transformation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_180,
+            metadata_.video_decoder_config.video_transformation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
-  if (!IsEnabled())
-    return;
-
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
   if (base::win::GetVersion() < base::win::Version::WIN8)
@@ -364,16 +326,15 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_270.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_270, metadata_.video_decoder_config.video_transformation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_270,
+            metadata_.video_decoder_config.video_transformation());
 }
 
 // Configuration change happens only on Windows.
 #if defined(OS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
-  if (!IsEnabled())
-    return;
-
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-config_change_audio.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+            StartVivaldi("vivaldi-config_change_audio.mp4"));
 
   Play();
 
@@ -390,10 +351,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
-  if (!IsEnabled())
-    return;
-
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-config_change_video.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+            StartVivaldi("vivaldi-config_change_video.mp4"));
 
   Play();
 
@@ -410,8 +369,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
 #endif  // defined(OS_WIN)
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
-
-  ASSERT_EQ(PipelineStatus::PIPELINE_OK, StartVivaldi("vivaldi-nonzero-start-time.mp4"));
+  ASSERT_EQ(PipelineStatus::PIPELINE_OK,
+            StartVivaldi("vivaldi-nonzero-start-time.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
   ASSERT_EQ(base::TimeDelta::FromMicroseconds(390000),
@@ -420,10 +379,11 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
 
 #endif  // defined(OS_MAC) || defined(OS_WIN)
 
-
-TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MediaSource_MP4_AudioOnly) {
+TEST_F(PlatformMediaPipelineIntegrationTest,
+       BasicPlayback_MediaSource_MP4_AudioOnly) {
   PlatformMediaMockMediaSource source("what-does-the-fox-say.mp4",
-    "audio/mp4; codecs=\"mp4a.40.5\"", kAppendWholeFile);
+                                      "audio/mp4; codecs=\"mp4a.40.5\"",
+                                      kAppendWholeFile);
   StartPipelineWithMediaSource(&source);
   source.EndOfStream();
 
@@ -437,6 +397,5 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MediaSource_MP4_Audio
   source.Shutdown();
   Stop();
 }
-
 
 }  // namespace media

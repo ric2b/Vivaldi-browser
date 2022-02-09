@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Domyślne</translation>
 <translation id="1297175357211070620">Drukarka</translation>
 <translation id="1303101771013849280">Plik HTML z zakładkami</translation>
-<translation id="1380436189840894976">Czy na pewno chcesz zamknąć tryb prywatny?</translation>
 <translation id="1430915738399379752">Drukuj</translation>
 <translation id="1433811987160647649">Pytaj przed uzyskaniem dostępu</translation>
 <translation id="1451375123200651445">Strona internetowa, pojedynczy plik</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskryptory plików</translation>
 <translation id="1682548588986054654">Nowe okno prywatne</translation>
-<translation id="1698122934742150150">Tylko w bieżącej sesji prywatnej</translation>
 <translation id="1706625117072057435">Poziomy powiększenia</translation>
 <translation id="1708338024780164500">(nieaktywny)</translation>
 <translation id="1723824996674794290">&amp;Nowe okno</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Nieznana wtyczka</translation>
 <translation id="2423578206845792524">Zapisz &amp;obraz jako...</translation>
 <translation id="2439110203301358333">Inny program na twoim komputerze dodał rozszerzenie, które może zmienić działanie Vivaldi.</translation>
+<translation id="2443487764245141020">Do rozpoznawania Twojego urządzenia strony mogą też potrzebować identyfikatora</translation>
 <translation id="2445081178310039857">Katalog główny rozszerzenia jest wymagany.</translation>
 <translation id="2470702053775288986">Wyłączono nieobsługiwane rozszerzenia</translation>
 <translation id="2476578072172137802">Ustawienia strony</translation>
@@ -125,7 +124,7 @@
 <translation id="3036546437875325427">Włącz Flasha</translation>
 <translation id="3046910703532196514">Strona internetowa, kompletna</translation>
 <translation id="3067198360141518313">Uruchom wtyczkę</translation>
-<translation id="3080207940057008665">Inny program na twoim komputerze dodał motyw, który może zmienić działanie Vivaldi.</translation>
+<translation id="3080207940057008665">Inny program na twoim komputerze dodał motyw, który może zmienić sposób działania Vivaldi.</translation>
 <translation id="3084548735795614657">Upuść, aby zainstalować</translation>
 <translation id="3122464029669770682">Procesor</translation>
 <translation id="3124111068741548686">Uchwyty USER</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Kopiuj adr&amp;es linku</translation>
 <translation id="354068948465830244">Może odczytywać i modyfikować dane stron</translation>
 <translation id="3560034655160545939">&amp;Sprawdzanie pisowni</translation>
-<translation id="3574917942258583917">Czy na pewno chcesz zamknąć tryb prywatny?</translation>
 <translation id="3587482841069643663">Wszystkie</translation>
 <translation id="3627588569887975815">Otwórz link w oknie &amp;prywatnym</translation>
 <translation id="3627879631695760395">Zainstaluj <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Moduły obsługi</translation>
 <translation id="3678156199662914018">Rozszerzenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Żądanie udostępnienia ekranu od <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Nie zezwalaj stronom na kontynuowanie przesyłania lub odbierania danych po ich zamknięciu</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Wyłącz rozszerzenia trybu programisty</translation>
 <translation id="4100839878934973028">Inny program na twoim komputerze dodał aplikację, która może zmienić działanie Vivaldi.</translation>
 <translation id="4109898769411476438">Zamknij przeglądarkę przed rozpoczęciem importu</translation>
-<translation id="4115080753528843955">Niektóre usługi zawartości używają unikalnych identyfikatorów w celu autoryzacji dostępu do treści chronionych</translation>
 <translation id="4130207949184424187">To rozszerzenie zmieniło stronę wyświetlaną przy wyszukiwaniu w polu adresu.</translation>
 <translation id="4131410914670010031">Czarno-biały</translation>
 <translation id="4176463684765177261">Wyłączono</translation>
@@ -214,7 +210,7 @@
 <translation id="4434045419905280838">Wyskakujące okna i przekierowania</translation>
 <translation id="4478664379124702289">Zapisz link ja&amp;ko...</translation>
 <translation id="4579581181964204535">Nie można przesłać <ph name="HOST_NAME" />.</translation>
-<translation id="4593021220803146968">&amp;Przejdź do strony <ph name="URL" /></translation>
+<translation id="4593021220803146968">&amp;Przejdź do <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacje i rozszerzenia może zmieniać tylko menedżer (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozszerzenie zmieniło stronę wyświetlaną po otwarciu nowej karty.</translation>
 <translation id="4643612240819915418">&amp;Otwórz film w nowej karcie</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Wystąpiły ostrzeżenia podczas próby instalacji tego rozszerzenia:</translation>
 <translation id="479536056609751218">Strona internetowa, tylko kod HTML</translation>
 <translation id="4839303808932127586">&amp;Zapisz film jako...</translation>
+<translation id="4840096453115567876">Zamknąć tryb prywatny mimo to?</translation>
 <translation id="488785315393301722">Pokaż szczegóły</translation>
 <translation id="4907306957610201395">Kategoria uprawnień</translation>
 <translation id="4912643508233590958">Wznowienia z bezczynności</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Odmowa dostępu.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Pokaż elementy sterują&amp;ce</translation>
+<translation id="7374461526650987610">Obsługa protokołów</translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="7412226954991670867">Pamięć GPU</translation>
 <translation id="7421925624202799674">&amp;Wyświetl źródło strony</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Sortuj</translation>
 <translation id="7629827748548208700">Karta: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Anuluj</translation>
+<translation id="7659154729610375585">Zamknąć tryb prywatny mimo to?</translation>
 <translation id="7661259717474717992">Zezwalaj stronom na zapis i odczyt danych w ciasteczkach</translation>
 <translation id="7663719505383602579">Odbiornik ARC: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Zainstalowane przez twojego administratora</translation>
@@ -453,6 +452,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8899851313684471736">Otwórz link w nowym &amp;oknie</translation>
 <translation id="8915370057835397490">Ładowanie sugestii</translation>
 <translation id="8916476537757519021">Ramka iframe w trybie prywatnym: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Tylko w bieżącej sesji prywatnej</translation>
 <translation id="895944840846194039">Pamięć JavaScript</translation>
 <translation id="8962083179518285172">Ukryj szczegóły</translation>
 <translation id="8973557916016709913">Usuń poziom powiększenia</translation>

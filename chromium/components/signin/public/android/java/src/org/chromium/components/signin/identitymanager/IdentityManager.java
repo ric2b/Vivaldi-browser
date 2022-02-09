@@ -159,20 +159,18 @@ public class IdentityManager {
      * Looks up and returns information for account with given |email|. If the account
      * cannot be found, return a null value.
      */
-    public @Nullable AccountInfo findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-            String email) {
-        return IdentityManagerJni.get()
-                .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-                        mNativeIdentityManager, email);
+    public @Nullable AccountInfo findExtendedAccountInfoByEmailAddress(String email) {
+        return IdentityManagerJni.get().findExtendedAccountInfoByEmailAddress(
+                mNativeIdentityManager, email);
     }
 
     /**
-     * Forces refreshing extended {@link AccountInfo} with image for the given
-     * list of {@link CoreAccountInfo}.
+     * Refreshes extended {@link AccountInfo} with image for the given
+     * list of {@link CoreAccountInfo} if the existing ones are stale.
      */
-    public void forceRefreshOfExtendedAccountInfo(List<CoreAccountInfo> accountInfos) {
+    public void refreshAccountInfoIfStale(List<CoreAccountInfo> accountInfos) {
         for (CoreAccountInfo accountInfo : accountInfos) {
-            IdentityManagerJni.get().forceRefreshOfExtendedAccountInfo(
+            IdentityManagerJni.get().refreshAccountInfoIfStale(
                     mNativeIdentityManager, accountInfo.getId());
         }
     }
@@ -208,10 +206,8 @@ public class IdentityManager {
         @Nullable
         CoreAccountInfo getPrimaryAccountInfo(long nativeIdentityManager, int consentLevel);
         @Nullable
-        AccountInfo findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-                long nativeIdentityManager, String email);
+        AccountInfo findExtendedAccountInfoByEmailAddress(long nativeIdentityManager, String email);
         CoreAccountInfo[] getAccountsWithRefreshTokens(long nativeIdentityManager);
-        void forceRefreshOfExtendedAccountInfo(
-                long nativeIdentityManager, CoreAccountId coreAccountId);
+        void refreshAccountInfoIfStale(long nativeIdentityManager, CoreAccountId coreAccountId);
     }
 }

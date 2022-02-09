@@ -574,7 +574,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         new ActivityTabProvider.ActivityTabTabObserver(mActivity.getActivityTabProvider()) {
             @Override
             public void onObservingDifferentTab(Tab tab, boolean hint) {
-                if (tab != null && !tab.isBeingRestored())
+                if (tab != null && !tab.isBeingRestored() && mTabStripTreeProvider != null)
                     mTabStripTreeProvider.setTabStripBackgroundColor(tab.getThemeColor());
             }
         };

@@ -13,6 +13,7 @@
 #include "notes/note_model_loader.h"
 #include "notes/note_node.h"
 #include "notes/notes_model_observer.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
@@ -93,12 +94,13 @@ class NotesModel : public KeyedService {
     return node && (node == root_.get() || node->parent() == root_.get());
   }
 
-  // Adds a new folder node at the specified position with the given |guid|. If
-  // no GUID is provided (i.e. nullopt), then a random one will be generated. If
-  // a GUID is provided, it must be valid.
+  // Adds a new folder node at the specified position with the given
+  // |creation_time| and |guid|. If no GUID is provided (i.e. nullopt), then a
+  // random one will be generated. If a GUID is provided, it must be valid.
   NoteNode* AddFolder(const NoteNode* parent,
                       size_t index,
                       const std::u16string& name,
+                      absl::optional<base::Time> creation_time = absl::nullopt,
                       absl::optional<base::GUID> guid = absl::nullopt);
 
   // Adds a note at the specified position with the given |creation_time| and

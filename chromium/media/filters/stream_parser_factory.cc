@@ -7,8 +7,8 @@
 #include <stddef.h>
 
 #include "base/command_line.h"
+#include "base/cxx17_backports.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -33,9 +33,6 @@
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/formats/mp4/es_descriptor.h"
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/common/platform_mime_util.h"
-#endif
 #if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
 #include "media/formats/mp2t/mp2t_stream_parser.h"
 #endif
@@ -413,13 +410,6 @@ static bool VerifyCodec(const CodecInfo* codec_info,
                         std::vector<CodecInfo::HistogramTag>* video_codecs) {
   switch (codec_info->type) {
     case CodecInfo::AUDIO:
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-      if (codec_info->tag == CodecInfo::HISTOGRAM_MPEG2AAC ||
-          codec_info->tag == CodecInfo::HISTOGRAM_MPEG4AAC) {
-        if (!IsPlatformAudioDecoderAvailable(kCodecAAC))
-          return false;
-      }
-#endif
       if (audio_codecs)
         audio_codecs->push_back(codec_info->tag);
       return true;
@@ -430,13 +420,6 @@ static bool VerifyCodec(const CodecInfo* codec_info,
       if (codec_info->tag == CodecInfo::HISTOGRAM_H264 &&
           !media::HasPlatformDecoderSupport()) {
         return false;
-      }
-#endif
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-      if (codec_info->tag == CodecInfo::HISTOGRAM_H264) {
-        if (!IsPlatformVideoDecoderAvailable())
-          return false;
       }
 #endif
       if (video_codecs)

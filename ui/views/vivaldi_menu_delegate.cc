@@ -7,13 +7,15 @@ namespace views {
 MenuItemView* MenuDelegate::GetVivaldiSiblingMenu(
     MenuItemView* menu,
     const gfx::Point& screen_point,
-    gfx::Rect* rect) {
+    gfx::Rect* rect,
+    MenuAnchorPosition* anchor) {
   return nullptr;
 }
 
 MenuItemView* MenuDelegate::GetNextSiblingMenu(bool next,
                                                bool* has_mnemonics,
-                                               gfx::Rect* rect) {
+                                               gfx::Rect* rect,
+                                               MenuAnchorPosition* anchor) {
   return nullptr;
 }
 

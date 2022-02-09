@@ -20,13 +20,15 @@ VivaldiAccountPasswordHandler::VivaldiAccountPasswordHandler(Profile* profile,
       password_store_(PasswordStoreFactory::GetForProfile(
           profile,
           ServiceAccessType::IMPLICIT_ACCESS)) {
-
   UpdatePassword();
   if (password_store_)
     password_store_->AddObserver(this);
 }
 
-VivaldiAccountPasswordHandler::~VivaldiAccountPasswordHandler() {}
+VivaldiAccountPasswordHandler::~VivaldiAccountPasswordHandler() {
+  if (password_store_)
+    password_store_->RemoveObserver(this);
+}
 
 void VivaldiAccountPasswordHandler::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
@@ -76,6 +78,7 @@ void VivaldiAccountPasswordHandler::OnGetPasswordStoreResults(
 }
 
 void VivaldiAccountPasswordHandler::OnLoginsChanged(
+    password_manager::PasswordStoreInterface* store,
     const password_manager::PasswordStoreChangeList& changes) {
   for (const auto& change : changes) {
     if (change.form().signon_realm == kSyncSignonRealm &&
@@ -90,11 +93,15 @@ void VivaldiAccountPasswordHandler::OnLoginsChanged(
   }
 }
 
+void VivaldiAccountPasswordHandler::OnLoginsRetained(
+    password_manager::PasswordStoreInterface* store,
+    const std::vector<password_manager::PasswordForm>& retained_passwords) {}
+
 void VivaldiAccountPasswordHandler::UpdatePassword() {
   if (!password_store_)
     return;
 
-  password_manager::PasswordStore::FormDigest form_digest(
+  password_manager::PasswordFormDigest form_digest(
       password_manager::PasswordForm::Scheme::kOther, kSyncSignonRealm,
       GURL(kSyncOrigin));
 
@@ -103,7 +110,6 @@ void VivaldiAccountPasswordHandler::UpdatePassword() {
 
 void VivaldiAccountPasswordHandler::PasswordReceived(
     const std::string& password) {
-
   bool should_notfify = password.empty() || password_.empty();
 
   password_ = password;

@@ -431,33 +431,6 @@ bool DisableSchedulerTask() {
   return true;
 }
 
-bool IsEnabledSchedulerTask(bool check_for_autorun, bool& enabled) {
-  DCHECK(!enabled);
-  Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
-  bool ok = GetSchedulerRegisteredTask(pRegisteredTask, enabled);
-  if (!ok)
-    return false;
-  if (pRegisteredTask || !check_for_autorun)
-    return true;
-
-  // No task was created, check if we have an older autorun registry entry.
-  //
-  // With the autorun we supported an auto update only for single installation
-  // per user. With multiple installations enabling an update for one disabled
-  // updates for others. With the task scheduler we support independent updates.
-  // So always enable the task scheduler if any installation wants updates. The
-  // user may disable the individual notifications later.
-  if (!vivaldi::IsUpdateNotifierEnabledAsAutorunForAnyPath()) {
-    if (!EnableSchedulerTask())
-      return false;
-    enabled = true;
-  }
-
-  // Remove the no longer needed autorun entry.
-  vivaldi::DisableUpdateNotifierAsAutorun(GetExeDir());
-  return true;
-}
-
 bool UnregisterSchedulerTask() {
   Microsoft::WRL::ComPtr<ITaskService> pService;
   Microsoft::WRL::ComPtr<ITaskFolder> pRootFolder;
@@ -543,15 +516,28 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
       break;
     case Subaction::kIsEnabled: {
       bool enabled = false;
-      if (!IsEnabledSchedulerTask(/*check_for_autorun=*/false, enabled))
+      Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
+      bool ok = GetSchedulerRegisteredTask(pRegisteredTask, enabled);
+      if (!ok)
         return ExitCode::kError;
       if (!enabled)
         return ExitCode::kDisabled;
+      DCHECK(pRegisteredTask);
       break;
     }
     case Subaction::kLaunchIfEnabled: {
       bool enabled = false;
-      if (!IsEnabledSchedulerTask(/*check_for_autorun=*/true, enabled))
+      Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
+      bool ok = GetSchedulerRegisteredTask(pRegisteredTask, enabled);
+      if (ok && !pRegisteredTask) {
+        // No task was found, enable the updates by default.
+        DCHECK(!enabled);
+        ok = EnableSchedulerTask();
+        if (ok) {
+          enabled = true;
+        }
+      }
+      if (!ok)
         return ExitCode::kError;
       if (!enabled)
         return ExitCode::kDisabled;

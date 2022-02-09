@@ -11,6 +11,7 @@ namespace vivaldi {
 
 VivaldiExtensionHost::VivaldiExtensionHost(
     content::BrowserContext* browser_context,
+    const GURL& url,
     extensions::mojom::ViewType host_type,
     content::WebContents* webcontents)
     : delegate_(extensions::ExtensionsBrowserClient::Get()
@@ -23,6 +24,12 @@ VivaldiExtensionHost::VivaldiExtensionHost(
   extensions::ExtensionWebContentsObserver::GetForWebContents(webcontents)
       ->dispatcher()
       ->set_delegate(this);
+
+  // start loading the target right away as we do not do this in webviews
+  webcontents->GetController().LoadURL(
+      url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
+      std::string());
+
 }
 
 VivaldiExtensionHost::~VivaldiExtensionHost() {}

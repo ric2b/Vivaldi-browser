@@ -70,11 +70,16 @@ class Menubar : public views::MenuDelegate {
                        const gfx::Point& p,
                        ui::MenuSourceType source_type) override;
 
-  views::MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
-                                             const gfx::Point& screen_point,
-                                             gfx::Rect* rect) override;
-  views::MenuItemView* GetNextSiblingMenu(bool next, bool* has_mnemonics,
-                                          gfx::Rect* rect) override;
+  views::MenuItemView* GetVivaldiSiblingMenu(
+      views::MenuItemView* menu,
+      const gfx::Point& screen_point,
+      gfx::Rect* rect,
+      views::MenuAnchorPosition* anchor) override;
+  views::MenuItemView* GetNextSiblingMenu(
+      bool next,
+      bool* has_mnemonics,
+      gfx::Rect* rect,
+      views::MenuAnchorPosition* anchor) override;
 
  private:
   typedef std::map<int, views::MenuItemView*> IdToMenuMap;

@@ -130,7 +130,7 @@ bool ChromeBookmarkFileReader::DecodeNode(const base::DictionaryValue& value) {
         static_cast<const base::ListValue*>(child_values);
 
     // Skip empty folders.
-    if (!list_values->empty()) {
+    if (!list_values->GetList().empty()) {
       HandleEntry("folder", value);
       DecodeChildren(*list_values);
     }

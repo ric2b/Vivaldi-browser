@@ -13,6 +13,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
+import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
@@ -97,7 +98,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<LayerTitleCache> layerTitleCacheSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider) {
+            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker) {
         super(host, contentContainer, tabContentManagerSupplier, layerTitleCacheSupplier,
                 topUiThemeColorProvider);
         Context context = host.getContext();
@@ -112,6 +113,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
         mTabContentManagerSupplier.addObserver(new Callback<TabContentManager>() {
             @Override
             public void onResult(TabContentManager manager) {
+                manager.addThumbnailChangeListener((id) -> requestUpdate());
                 if (mOverviewLayout != null) {
                     mOverviewLayout.setTabContentManager(manager);
                 }
@@ -135,7 +137,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
                 assert tabManagementDelegate != null;
 
                 mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(
-                        context, this, renderHost, startSurface);
+                        context, this, renderHost, startSurface, jankTracker);
             }
         }
 
@@ -341,7 +343,9 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     @Override
     public void releaseResourcesForTab(int tabId) {
         super.releaseResourcesForTab(tabId);
-        mTitleCache.remove(tabId);
+        if (mTitleCache != null) {
+            mTitleCache.remove(tabId);
+        }
     }
 
     /**
@@ -460,7 +464,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
      */
     protected class ToolbarSwipeHandler implements SwipeHandler {
         /** The scroll direction of the current gesture. */
-        /*Vivaldi*/ protected  @ScrollDirection int mScrollDirection;
+        private @ScrollDirection int mScrollDirection;
 
         /**
          * The range in degrees that a swipe can be from a particular direction to be considered
@@ -500,12 +504,10 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             if (mScrollDirection == ScrollDirection.UNKNOWN) return;
 
             // Vivaldi - Show Overview layout whether address bar is at top or bottom
-            if (mSupportSwipeDown && mOverviewLayout != null) {
-                if ((VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.DOWN)
-                        || (!VivaldiUtils.isTopToolbarOn()
-                        && mScrollDirection == ScrollDirection.UP)) {
+            if (mSupportSwipeDown && mOverviewLayout != null
+                && ((VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.DOWN)
+                || (!VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.UP))) {
                     showOverview(true);
-                }
             } else if (mScrollDirection == ScrollDirection.LEFT
                     || mScrollDirection == ScrollDirection.RIGHT) {
                 startShowing(mToolbarSwipeLayout, true);

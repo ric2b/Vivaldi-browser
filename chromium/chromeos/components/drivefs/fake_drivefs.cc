@@ -10,12 +10,12 @@
 
 #include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/containers/cxx20_erase.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
@@ -23,8 +23,8 @@
 #include "base/threading/thread_restrictions.h"
 #include "chromeos/components/drivefs/drivefs_util.h"
 #include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
+#include "chromeos/dbus/cros_disks/fake_cros_disks_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_cros_disks_client.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -303,10 +303,6 @@ void FakeDriveFs::Init(
     drivefs::mojom::DriveFsConfigurationPtr config,
     mojo::PendingReceiver<drivefs::mojom::DriveFs> receiver,
     mojo::PendingRemote<drivefs::mojom::DriveFsDelegate> delegate) {
-  {
-    base::ScopedAllowBlockingForTesting allow_io;
-    CHECK(base::CreateDirectory(mount_path_.Append(".Trash")));
-  }
   mojo::FusePipes(std::move(pending_delegate_receiver_), std::move(delegate));
   receiver_.reset();
   receiver_.Bind(std::move(receiver));

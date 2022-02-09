@@ -71,7 +71,7 @@ class FakeSigner : public TrustTokenRequestSigningHelper::Signer {
     return false;
   }
 
-  std::string GetAlgorithmIdentifier() override { return "fake-signer"; }
+  std::string GetAlgorithmIdentifier() const override { return "fake-signer"; }
 };
 
 // IdentitySigner returns a "signature" over given signing data whose value
@@ -90,7 +90,9 @@ class IdentitySigner : public TrustTokenRequestSigningHelper::Signer {
               base::span<const uint8_t> verification_key) override {
     return std::equal(data.begin(), data.end(), signature.begin());
   }
-  std::string GetAlgorithmIdentifier() override { return "identity-signer"; }
+  std::string GetAlgorithmIdentifier() const override {
+    return "identity-signer";
+  }
 };
 
 // FailingSigner always fails the Sign and Verify options.
@@ -106,7 +108,9 @@ class FailingSigner : public TrustTokenRequestSigningHelper::Signer {
               base::span<const uint8_t> verification_key) override {
     return false;
   }
-  std::string GetAlgorithmIdentifier() override { return "failing-signer"; }
+  std::string GetAlgorithmIdentifier() const override {
+    return "failing-signer";
+  }
 };
 
 // Reconstructs |request|'s canonical request data, extracts the signatures from
@@ -400,6 +404,36 @@ TEST_F(TrustTokenRequestSigningHelperTestWithMockTime, ProvidesTimeHeader) {
   EXPECT_THAT(
       *my_request,
       Header("Sec-Time", StrEq(base::TimeToISO8601(base::Time::Now()))));
+}
+
+TEST_F(TrustTokenRequestSigningHelperTest, ProvidesMajorVersionHeader) {
+  std::unique_ptr<TrustTokenStore> store = TrustTokenStore::CreateForTesting();
+
+  TrustTokenRequestSigningHelper::Params params(
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.com")),
+      *SuitableTrustTokenOrigin::Create(GURL("https://toplevel.com")));
+  params.sign_request_data = mojom::TrustTokenSignRequestData::kHeadersOnly;
+  params.should_add_timestamp = true;
+
+  TrustTokenRedemptionRecord my_record;
+  my_record.set_public_key("key");
+  my_record.set_body("look at me, I'm an RR body");
+  store->SetRedemptionRecord(params.issuers.front(), params.toplevel,
+                             my_record);
+
+  TrustTokenRequestSigningHelper helper(
+      store.get(), std::move(params), std::make_unique<FakeSigner>(),
+      std::make_unique<TrustTokenRequestCanonicalizer>());
+
+  auto my_request = MakeURLRequest("https://destination.com/");
+  my_request->set_initiator(url::Origin::Create(GURL("https://issuer.com/")));
+  mojom::TrustTokenOperationStatus result =
+      ExecuteBeginOperationAndWaitForResult(&helper, my_request.get());
+
+  EXPECT_EQ(result, mojom::TrustTokenOperationStatus::kOk);
+  // This test's expectation should change whenever the supported Trust Tokens
+  // major version changes.
+  EXPECT_THAT(*my_request, Header("Sec-Trust-Token-Version", "TrustTokenV3"));
 }
 
 // Test RR attachment without request signing:

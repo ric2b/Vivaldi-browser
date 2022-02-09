@@ -279,7 +279,7 @@ void AutofillControllerTest::SetUp() {
 
   accessory_mediator_ =
       [[FormInputAccessoryMediator alloc] initWithConsumer:nil
-                                                  delegate:nil
+                                                   handler:nil
                                               webStateList:NULL
                                        personalDataManager:NULL
                                              passwordStore:nullptr
@@ -525,7 +525,7 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
   scoped_refptr<AutofillWebDataService> web_data_service =
       ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
           chrome_browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS);
-  __block TestConsumer consumer;
+  TestConsumer consumer;
   const int limit = 1;
   consumer.result_ = {CreateAutofillEntry(u"Should"),
                       CreateAutofillEntry(u"get"),
@@ -537,10 +537,14 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
   // No value should be returned before anything is loaded via form submission.
   ASSERT_EQ(0U, consumer.result_.size());
   ExecuteJavaScript(@"submit.click()");
+  // We can't make |consumer| a __block variable because TestConsumer lacks copy
+  // construction. We just pass a pointer instead as we know that the callback
+  // is executed within the life-cyle of |consumer|.
+  TestConsumer* consumer_ptr = &consumer;
   WaitForCondition(^bool {
     web_data_service->GetFormValuesForElementName(u"greeting", std::u16string(),
-                                                  limit, &consumer);
-    return consumer.result_.size();
+                                                  limit, consumer_ptr);
+    return consumer_ptr->result_.size();
   });
   base::ThreadPoolInstance::Get()->FlushForTesting();
   WaitForBackgroundTasks();

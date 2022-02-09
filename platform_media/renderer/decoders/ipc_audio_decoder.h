@@ -11,7 +11,7 @@
 #include "platform_media/common/feature_toggles.h"
 
 #include "base/synchronization/waitable_event.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "media/base/media_export.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 
@@ -59,12 +59,11 @@ class MEDIA_EXPORT IPCAudioDecoder {
   void DataReady(DemuxerStream::Status status,
                  scoped_refptr<DecoderBuffer> buffer);
 
-  void RunCreatorOnMainThread();
-
   static void FinishHostOnMediaThread(
       std::unique_ptr<InMemoryDataSource> data_source,
       std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host);
 
+  scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
   std::unique_ptr<InMemoryDataSource> data_source_;
 
   int channels_;
@@ -80,7 +79,7 @@ class MEDIA_EXPORT IPCAudioDecoder {
   std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
   base::WaitableEvent async_task_done_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(decoder_sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(IPCAudioDecoder);
 };

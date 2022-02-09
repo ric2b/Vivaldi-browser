@@ -14,6 +14,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/strings/grit/ui_strings.h"
 
 namespace vivaldi {
 namespace {
@@ -116,6 +117,45 @@ base::scoped_nsobject<NSMenuItem> BuildEditMenu(NSApplication* nsapp,
             Item(IDS_EDIT_SELECT_ALL_MAC)
                 .tag(IDC_CONTENT_CONTEXT_SELECTALL)
                 .action(@selector(selectAll:)),
+            // Content below is not configurable. It will be tested for and kept
+            // when setting up menus with data from UI.
+            Item(IDS_EDIT_SPELLING_GRAMMAR_MAC)
+                .tag(IDC_SPELLCHECK_MENU)
+                .submenu({
+                    Item(IDS_EDIT_SHOW_SPELLING_GRAMMAR_MAC)
+                        .action(@selector(showGuessPanel:))
+                        .key_equivalent(@":", NSEventModifierFlagCommand),
+                    Item(IDS_EDIT_CHECK_DOCUMENT_MAC)
+                        .action(@selector(checkSpelling:))
+                        .key_equivalent(@";", NSEventModifierFlagCommand),
+                    Item(IDS_EDIT_CHECK_SPELLING_TYPING_MAC)
+                        .action(@selector(toggleContinuousSpellChecking:)),
+                    Item(IDS_EDIT_CHECK_GRAMMAR_MAC)
+                        .action(@selector(toggleGrammarChecking:)),
+                }),
+            Item(IDS_EDIT_SUBSTITUTIONS_MAC)
+                .tag(IDC_VIV_SUBSTITUTIONS_MENU_MAC)
+                .submenu({
+                    Item(IDS_EDIT_SHOW_SUBSTITUTIONS_MAC)
+                        .action(@selector(orderFrontSubstitutionsPanel:)),
+                    Item().is_separator(),
+                    Item(IDS_EDIT_SMART_QUOTES_MAC)
+                        .action(@selector(toggleAutomaticQuoteSubstitution:)),
+                    Item(IDS_EDIT_SMART_DASHES_MAC)
+                        .action(@selector(toggleAutomaticDashSubstitution:)),
+                    Item(IDS_EDIT_TEXT_REPLACEMENT_MAC)
+                        .action(@selector(toggleAutomaticTextReplacement:)),
+                }),
+            Item(IDS_SPEECH_MAC)
+                .tag(IDC_VIV_SPEECH_MENU_MAC)
+                .submenu({
+                    Item(IDS_SPEECH_START_SPEAKING_MAC)
+                        .action(@selector(startSpeaking:)),
+                    Item(IDS_SPEECH_STOP_SPEAKING_MAC)
+                        .action(@selector(stopSpeaking:)),
+                }),
+             Item().is_separator()
+                .tag(IDC_VIV_EDIT_SEPARATOR_MAC),
             // The "Start Dictation..." and "Emoji & Symbols" items are
             // inserted by AppKit.
           })
@@ -179,7 +219,7 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
                 .tag(IDC_ALL_WINDOWS_FRONT)
                 .action(@selector(arrangeInFront:)),
             Item().is_separator()
-              .tag(55555), // 55555 defines start of dynamic tab list
+              .tag(IDC_VIV_WINDOW_SEPARATOR_MAC), // Start of dynamic tab list
               // configurable elements and tabs go here.
             Item().is_separator(), // seperator before open window list
           })

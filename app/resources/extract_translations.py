@@ -132,7 +132,7 @@ def main():
         continue
       node_list[node.unique_id] = node
 
-  with open(options.output_file, "w") as f:
+  with open(options.output_file, "w", encoding="utf8") as f:
     print('msgid ""', file=f)
     print('msgstr ""', file=f)
     if options.locale:

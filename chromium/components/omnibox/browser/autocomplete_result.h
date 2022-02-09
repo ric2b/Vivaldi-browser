@@ -77,7 +77,8 @@ class AutocompleteResult {
   // AutocompleteMatch objects held by this instance of the AutocompleteResult
   // and returns true if the two sets are same.
   bool VerifyCoherency(JNIEnv* env,
-                       const base::android::JavaParamRef<jlongArray>& matches);
+                       const base::android::JavaParamRef<jlongArray>& matches,
+                       jint match_index);
 #endif
 
   // Moves matches from |old_matches| to provide a consistent result set.
@@ -125,7 +126,7 @@ class AutocompleteResult {
   // Called after matches are deduped and sorted and before they are culled.
   void GroupAndDemoteMatchesWithHeaders();
 
-  // Sets |pedal| in matches that have Pedal-triggering text.
+  // Sets |action| in matches that have Pedal-triggering text.
   void AttachPedalsToMatches(const AutocompleteInput& input,
                              const AutocompleteProviderClient& client);
 

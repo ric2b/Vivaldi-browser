@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Прадвызначана</translation>
 <translation id="1297175357211070620">Прынтар</translation>
 <translation id="1303101771013849280">Файл HTML з закладкамі</translation>
-<translation id="1380436189840894976">Усё адно выйсці з рэжыму інкогніта?</translation>
 <translation id="1430915738399379752">Друк</translation>
 <translation id="1433811987160647649">Пытацца дазволу на доступ</translation>
 <translation id="1451375123200651445">Вэб-старонка, адзін файл</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Дэскрыптары файла</translation>
 <translation id="1682548588986054654">Новае акно ў рэжыме інкогніта</translation>
-<translation id="1698122934742150150">Толькі для гэтага сеанса ў рэжыме інкогніта</translation>
 <translation id="1706625117072057435">Маштабаванне</translation>
 <translation id="1708338024780164500">(не актыўна)</translation>
 <translation id="1723824996674794290">&amp;Новае акно</translation>
@@ -157,13 +155,12 @@
 <translation id="3511307672085573050">Скапіяваць адрас &amp;спасылкі</translation>
 <translation id="354068948465830244">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="3560034655160545939">&amp;Праверка правапісу</translation>
-<translation id="3574917942258583917">Усё адно выйсці з рэжыму інкогніта?</translation>
 <translation id="3587482841069643663">Усе</translation>
 <translation id="3627588569887975815">Адкрыць спасылку ў акне ў рэжыме і&amp;нкогніта</translation>
 <translation id="3627879631695760395">Усталяваць <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Апрацоўнікі</translation>
 <translation id="3678156199662914018">Пашырэнне: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запыт на доступ да экрана ад <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Забараняць закрытым сайтам адпраўляць і атрымліваць даныя</translation>
 <translation id="3711931198657368127">Ус&amp;тавіць і перайсці да <ph name="URL" /></translation>
 <translation id="3727187387656390258">Інспектаваць выплыўное акно</translation>
 <translation id="3744111561329211289">Фонавая сінхранізацыя</translation>
@@ -194,7 +191,6 @@
 <translation id="4096508467498758490">Адключыць пашырэнні ў рэжыме распрацоўніка</translation>
 <translation id="4100839878934973028">Іншая праграма на вашым камп'ютары дадала тэму, якая можа ўплываць на працу Vivaldi.</translation>
 <translation id="4109898769411476438">Закрыйце браўзер перад імпартам</translation>
-<translation id="4115080753528843955">Некаторыя службы для доступу да абароненага змесціва выкарыстоўваюць унікальныя ідэнтыфікатары</translation>
 <translation id="4130207949184424187">Пашырэнне змяніла сістэму пошуку.</translation>
 <translation id="4131410914670010031">Чорна-белы друк</translation>
 <translation id="4176463684765177261">Адключана</translation>

@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standardeinstellung</translation>
 <translation id="1297175357211070620">Ziel</translation>
 <translation id="1303101771013849280">Lesezeichen-HTML-Datei</translation>
-<translation id="1380436189840894976">Privaten Modus trotzdem beenden?</translation>
 <translation id="1430915738399379752">Drucken</translation>
 <translation id="1433811987160647649">Vor dem Zugriff nachfragen</translation>
 <translation id="1451375123200651445">Webseite, Einzeldatei (MHTML)</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Dateideskriptoren</translation>
 <translation id="1682548588986054654">Neues privates Fenster</translation>
-<translation id="1698122934742150150">Nur aktuelle private Sitzung</translation>
 <translation id="1706625117072057435">Zoomstufen</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
 <translation id="1723824996674794290">Neues &amp;Fenster</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Unbekanntes Plug-in</translation>
 <translation id="2423578206845792524">Bi&amp;ld speichern unter...</translation>
 <translation id="2439110203301358333">Ein anderes Programm auf Ihrem Computer hat eine Erweiterung hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
+<translation id="2443487764245141020">Websites müssen möglicherweise Ihr Gerät auch anhand einer eindeutigen Kennung identifizieren können</translation>
 <translation id="2445081178310039857">Stammverzeichnis der Erweiterung ist erforderlich.</translation>
 <translation id="2470702053775288986">Nicht unterstützte Erweiterungen deaktiviert</translation>
 <translation id="2476578072172137802">Website-Einstellungen</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Adr&amp;esse des Links kopieren</translation>
 <translation id="354068948465830244">Kann Websitedaten lesen und ändern</translation>
 <translation id="3560034655160545939">&amp;Rechtschreibprüfung</translation>
-<translation id="3574917942258583917">Privaten Modus trotzdem beenden?</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Link in &amp;privatem Fenster öffnen</translation>
 <translation id="3627879631695760395"><ph name="APP" /> installieren...</translation>
-<translation id="3668823961463113931">Handler</translation>
 <translation id="3678156199662914018">Erweiterung: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Anfrage zur Bildschirmfreigabe durch <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Geschlossene Websites dürfen den Datenversand oder -empfang nicht abschließen</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Erweiterungen im Entwicklermodus deaktivieren</translation>
 <translation id="4100839878934973028">Ein anderes Programm auf Ihrem Computer hat eine App hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="4109898769411476438">Browser vor dem Import schließen</translation>
-<translation id="4115080753528843955">Einige Inhaltsdienste verwenden eindeutige Identifikatoren, um den Zugriff auf geschützte Inhalte zu autorisieren.</translation>
 <translation id="4130207949184424187">Diese Erweiterung hat eine Änderung der Seite vorgenommen, die bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="4131410914670010031">Schwarz-Weiß</translation>
 <translation id="4176463684765177261">Deaktiviert</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Es gab Warnungen beim Versuch, diese Erweiterung zu installieren:</translation>
 <translation id="479536056609751218">Webseite, nur HTML</translation>
 <translation id="4839303808932127586">Video &amp;speichern unter...</translation>
+<translation id="4840096453115567876">Privater Modus trotzdem verlassen?</translation>
 <translation id="488785315393301722">Details anzeigen</translation>
 <translation id="4907306957610201395">Berechtigungskategorie</translation>
 <translation id="4912643508233590958">Inaktive Weckbefehle</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
+<translation id="7374461526650987610">Protokoll-Handler</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">Seitenquelltext &amp;anzeigen</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Sortieren</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Abbrechen</translation>
+<translation id="7659154729610375585">Privater Modus trotzdem beenden?</translation>
 <translation id="7661259717474717992">Speichern und Lesen von Cookiedaten zulassen</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Von Ihrem Administrator installiert</translation>
@@ -453,6 +452,7 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8899851313684471736">Link in neuem &amp;Fenster öffnen</translation>
 <translation id="8915370057835397490">Vorschläge werden geladen</translation>
 <translation id="8916476537757519021">Privater Subframe: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Nur aktuelle private Sitzung</translation>
 <translation id="895944840846194039">JavaScript-Speicher</translation>
 <translation id="8962083179518285172">Details ausblenden</translation>
 <translation id="8973557916016709913">Zoom zurücksetzen</translation>

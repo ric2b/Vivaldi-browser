@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Varsayılan</translation>
 <translation id="1297175357211070620">Hedef</translation>
 <translation id="1303101771013849280">Yer İmleri HTML Dosyası</translation>
-<translation id="1380436189840894976">Yine de gizli moddan çıkılsın mı?</translation>
 <translation id="1430915738399379752">Yazdır</translation>
 <translation id="1433811987160647649">Erişmeden önce sor</translation>
 <translation id="1451375123200651445">Web Sayfası, Tek Dosya</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Dosya Açıklayıcıları</translation>
 <translation id="1682548588986054654">Yeni Gizli Pencere</translation>
-<translation id="1698122934742150150">Sadece geçerli gizli oturum</translation>
 <translation id="1706625117072057435">Yakınlaştırma seviyeleri</translation>
 <translation id="1708338024780164500">(Pasif)</translation>
 <translation id="1723824996674794290">&amp;Yeni pencere</translation>
@@ -157,11 +155,9 @@
 <translation id="3511307672085573050">Bağlantı Adr&amp;esini Kopyala</translation>
 <translation id="354068948465830244">Bu eklenti, site verilerini okuyabilir ve değiştirebilir</translation>
 <translation id="3560034655160545939">&amp;Yazım denetimi</translation>
-<translation id="3574917942258583917">Yine de gizli moddan çıkılsın mı?</translation>
 <translation id="3587482841069643663">Tümü</translation>
 <translation id="3627588569887975815">Bağlantıyı giz&amp;li pencerede aç</translation>
 <translation id="3627879631695760395"><ph name="APP" /> Uygulamasını Yükle...</translation>
-<translation id="3668823961463113931">İşleyiciler</translation>
 <translation id="3678156199662914018">Eklenti: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Ekran Paylaşım İsteği</translation>
 <translation id="3708684582558000260">Kapatılan sitelerin veri gönderme veya alma işlemini bitirmesine izin verme</translation>
@@ -195,7 +191,6 @@
 <translation id="4096508467498758490">Geliştirici modu eklentilerini devre dışı bırakın</translation>
 <translation id="4100839878934973028">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir uygulama ekledi.</translation>
 <translation id="4109898769411476438">İçe Aktarma İşleminden Önce Tarayıcıyı Kapatın</translation>
-<translation id="4115080753528843955">Bazı içerik hizmetleri korunmuş içeriğe erişimi yetkilendirmek amacıyla benzersiz tanımlayıcılar kullanır</translation>
 <translation id="4130207949184424187">Bu eklenti, Çok Amaçlı Adres Çubuğunda arama yaptığınızda gösterilen sayfayı değiştirdi.</translation>
 <translation id="4131410914670010031">Siyah beyaz</translation>
 <translation id="4176463684765177261">Devre dışı</translation>

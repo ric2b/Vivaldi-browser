@@ -24,9 +24,7 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
               nullptr /* source_site_instance */, params->transition,
               params->is_renderer_initiated, params->extra_headers,
               controller->GetBrowserContext(),
-              nullptr /* blob_url_loader_factory */,
-              false /*should_replace_entry*/,
-              target_contents /* web_contents */));
+              nullptr /* blob_url_loader_factory */));
 
   controller->SetPendingEntry(std::move(entry));
   controller->SetNeedsReload();

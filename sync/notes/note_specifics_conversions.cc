@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
@@ -23,6 +24,7 @@
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
+#include "sync/notes/synced_note_tracker.h"
 #include "url/gurl.h"
 
 namespace sync_notes {
@@ -176,19 +178,20 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
   base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
   DCHECK(guid.is_valid());
 
+  const int64_t creation_time_us = specifics.creation_time_us();
+  const base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
+      // Use FromDeltaSinceWindowsEpoch because creation_time_us has
+      // always used the Windows epoch.
+      base::TimeDelta::FromMicroseconds(creation_time_us));
+
   const vivaldi::NoteNode* node;
   if (is_folder) {
     node = model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
-                            guid);
+                            creation_time, guid);
   } else if (specifics.special_node_type() ==
              sync_pb::NotesSpecifics::SEPARATOR) {
-    const int64_t create_time_us = specifics.creation_time_us();
-    base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
-        // Use FromDeltaSinceWindowsEpoch because create_time_us has
-        // always used the Windows epoch.
-        base::TimeDelta::FromMicroseconds(create_time_us));
     node = model->AddSeparator(parent, index, NodeTitleFromSpecifics(specifics),
-                               create_time, guid);
+                               creation_time, guid);
   } else {
     const int64_t create_time_us = specifics.creation_time_us();
     base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
@@ -248,7 +251,7 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
   if (node->is_folder()) {
     new_node =
         model->AddFolder(node->parent(), node->parent()->GetIndexOf(node),
-                         node->GetTitle(), guid);
+                         node->GetTitle(), node->GetCreationTime(), guid);
   } else if (node->is_separator()) {
     new_node =
         model->AddSeparator(node->parent(), node->parent()->GetIndexOf(node),
@@ -298,8 +301,8 @@ base::GUID InferGuidFromLegacyOriginatorId(
     return guid;
   }
 
-  return base::GUID::ParseLowercase(InferGuidForLegacyNote(
-      originator_cache_guid, originator_client_item_id));
+  return base::GUID::ParseLowercase(
+      InferGuidForLegacyNote(originator_cache_guid, originator_client_item_id));
 }
 
 bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
@@ -308,18 +311,19 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
                          const std::string& originator_client_item_id) {
   DCHECK(base::GUID::ParseLowercase(specifics.guid()).is_valid());
 
-  // If the client tag hash matches, that should already be good enough.
-  if (syncer::ClientTagHash::FromUnhashed(
-          syncer::NOTES, specifics.guid()) == client_tag_hash) {
-    return true;
+  if (!client_tag_hash.value().empty()) {
+    // Earlier vivaldi versions were mistakenly using the BOOKMARKS type here,
+    // so we temporarily produce tags using the BOOKMARKS type and allow it.
+    // Remove this in a few version. 07-2021
+    return syncer::ClientTagHash::FromUnhashed(
+               syncer::NOTES, specifics.guid()) == client_tag_hash ||
+           syncer::ClientTagHash::FromUnhashed(
+               syncer::BOOKMARKS, specifics.guid()) == client_tag_hash;
   }
 
-  // Earlier vivaldi versions were mistakenly using the BOOKMARKS type here,
-  // so we temporarily produce tags using the BOOKMARKS type and allow it.
-  // Remove this in a few version. 07-2021
-  if (syncer::ClientTagHash::FromUnhashed(
-          syncer::BOOKMARKS, specifics.guid()) == client_tag_hash) {
-    return true;
+  // Guard against returning true for cases where the GUID cannot be inferred.
+  if (originator_cache_guid.empty() && originator_client_item_id.empty()) {
+    return false;
   }
 
   if (base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid()) {
@@ -331,6 +335,49 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
 
   return specifics.guid() == InferGuidForLegacyNote(originator_cache_guid,
                                                     originator_client_item_id);
+}
+
+void MaybeFixGuidInSpecificsDueToPastBug(const SyncedNoteTracker& tracker,
+                                         syncer::EntityData* update_entity) {
+  DCHECK(update_entity);
+
+  // Permanent entities and tombstones have no GUID to fix.
+  if (!update_entity->server_defined_unique_tag.empty() ||
+      update_entity->is_deleted()) {
+    return;
+  }
+
+  // If the GUID in specifics is populated (inferred or otherwise), there's
+  // nothing to populate.
+  if (!update_entity->specifics.notes().guid().empty()) {
+    return;
+  }
+
+  // The bug that motivates this function (crbug.com/1231450) only affected
+  // notes created with a client tag hash. Skip all other updates.
+  if (update_entity->client_tag_hash.value().empty()) {
+    return;
+  }
+
+  const SyncedNoteTracker::Entity* const tracked_entity =
+      tracker.GetEntityForSyncId(update_entity->id);
+  if (!tracked_entity || !tracked_entity->note_node()) {
+    // The entity is not tracked locally or it has been deleted, so the GUID is
+    // unknown.
+    return;
+  }
+
+  // Reaching this point should guarantee that the local GUID is correct, but
+  // to double check, let's verify that client tag hash matches the GUID.
+  const base::GUID local_guid = tracked_entity->note_node()->guid();
+  if (update_entity->client_tag_hash !=
+      SyncedNoteTracker::GetClientTagHashFromGUID(local_guid)) {
+    return;
+  }
+
+  update_entity->specifics.mutable_notes()->set_guid(
+      local_guid.AsLowercaseString());
+  update_entity->is_note_guid_in_specifics_preprocessed = true;
 }
 
 }  // namespace sync_notes

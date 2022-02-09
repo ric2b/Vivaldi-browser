@@ -399,6 +399,7 @@ const char* const kAllocatorDumpNameAllowlist[] = {
     "sync/0x?/model_type/WALLET_METADATA",
     "sync/0x?/model_type/WEB_APP",
     "sync/0x?/model_type/WIFI_CONFIGURATION",
+    "sync/0x?/model_type/WORKSPACE_DESK",
     "sync/0x?/model_type/NOTES",
     "tab_restore/service_helper_0x?/entries",
     "tab_restore/service_helper_0x?/entries/tab_0x?",

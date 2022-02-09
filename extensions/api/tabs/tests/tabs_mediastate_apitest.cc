@@ -83,7 +83,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastate_1) {
   profile->GetPrefs()->SetInteger(vivaldiprefs::kTabsAutoMuting,
                                   static_cast<int>(TabsAutoMutingValues::kOff));
 
-  ASSERT_TRUE(RunExtensionTest({.name = "automuting-expect-sound"},
+  ASSERT_TRUE(RunExtensionTest("automuting-expect-sound", {},
                                {.allow_in_incognito = true}))
       << message_;
 }
@@ -97,7 +97,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastate_2) {
       vivaldiprefs::kTabsAutoMuting,
       static_cast<int>(TabsAutoMutingValues::kOnlyactive));
 
-  ASSERT_TRUE(RunExtensionTest({.name = "automuting-expect-sound"},
+  ASSERT_TRUE(RunExtensionTest("automuting-expect-sound", {},
                                {.allow_in_incognito = true}))
       << message_;
 }
@@ -111,7 +111,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastate_3) {
       vivaldiprefs::kTabsAutoMuting,
       static_cast<int>(TabsAutoMutingValues::kPrioritizeactive));
 
-  ASSERT_TRUE(RunExtensionTest({.name = "automuting-expect-sound"},
+  ASSERT_TRUE(RunExtensionTest("automuting-expect-sound", {},
                                {.allow_in_incognito = true}))
       << message_;
 }
@@ -120,7 +120,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastate_3) {
 IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastateMuted) {
   SetSound(CONTENT_SETTING_BLOCK);
 
-  ASSERT_TRUE(RunExtensionTest({.name = "automuting-expect-muting"},
+  ASSERT_TRUE(RunExtensionTest("automuting-expect-muting", {},
                                {.allow_in_incognito = true}))
       << message_;
 }
@@ -134,7 +134,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastateMuted_1) {
       vivaldiprefs::kTabsAutoMuting,
       static_cast<int>(TabsAutoMutingValues::kOnlyactive));
 
-  ASSERT_TRUE(RunExtensionTest({.name = "automuting-expect-muting"},
+  ASSERT_TRUE(RunExtensionTest("automuting-expect-muting", {},
                                {.allow_in_incognito = true}))
       << message_;
 }
@@ -148,7 +148,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, WebviewMediastateMuted_2) {
       vivaldiprefs::kTabsAutoMuting,
       static_cast<int>(TabsAutoMutingValues::kPrioritizeactive));
 
-  ASSERT_TRUE(RunExtensionTest({.name = "automuting-expect-muting"},
+  ASSERT_TRUE(RunExtensionTest("automuting-expect-muting", {},
                                {.allow_in_incognito = true}))
       << message_;
 }

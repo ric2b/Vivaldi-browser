@@ -219,5 +219,8 @@ message NigoriSpecifics {
 
   optional TrustedVaultDebugInfo trusted_vault_debug_info = 50;
 
+  // Boolean corresponding to whether workspace desk should be encrypted.
+  optional bool encrypt_workspace_desk = 51;
+
   optional bool encrypt_notes = 20000;
 }

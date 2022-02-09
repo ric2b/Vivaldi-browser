@@ -116,7 +116,7 @@ bool RecurrrenceExceptionTable ::UpdateRecurrenceExceptionRow(
 }
 
 void RecurrrenceExceptionTable::FillRecurrenceExceptionRow(
-    const sql::Statement& s,
+    sql::Statement& s,
     RecurrenceExceptionRow* recurrenceRow) {
   RecurrenceExceptionID id = s.ColumnInt64(0);
   EventID parent_event_id = s.ColumnInt64(1);

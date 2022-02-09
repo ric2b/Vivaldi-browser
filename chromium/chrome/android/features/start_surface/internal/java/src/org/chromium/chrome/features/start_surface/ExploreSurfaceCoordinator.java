@@ -10,19 +10,24 @@ import android.view.MotionEvent;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.feed.FeedLaunchReliabilityLoggingState;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.feed.FeedSurfaceLifecycleManager;
+import org.chromium.chrome.browser.feed.FeedSwipeRefreshLayout;
 import org.chromium.chrome.browser.feed.shared.FeedSurfaceDelegate;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.NewTabPageLaunchOrigin;
 import org.chromium.chrome.browser.ntp.ScrollableContainerDelegate;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.toolbar.top.Toolbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.start_surface.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -71,6 +76,9 @@ class ExploreSurfaceCoordinator implements FeedSurfaceDelegate {
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate}.
      * @param windowAndroid The current {@link WindowAndroid}.
      * @param tabModelSelector The current {@link TabModelSelector}.
+     * @param toolbarSupplier Supplies the {@link Toolbar}.
+     * @param feedLaunchReliabilityLoggingState Holds the state for feed surface creation.
+     * @param swipeRefreshLayout The layout to support pull-to-refresg.
      */
     ExploreSurfaceCoordinator(@NonNull Activity activity, @NonNull ViewGroup parentView,
             @NonNull PropertyModel containerPropertyModel, boolean hasHeader,
@@ -79,7 +87,10 @@ class ExploreSurfaceCoordinator implements FeedSurfaceDelegate {
             @NonNull ScrollableContainerDelegate scrollableContainerDelegate,
             @NonNull SnackbarManager snackbarManager,
             @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
-            @NonNull WindowAndroid windowAndroid, @NonNull TabModelSelector tabModelSelector) {
+            @NonNull WindowAndroid windowAndroid, @NonNull TabModelSelector tabModelSelector,
+            @NonNull Supplier<Toolbar> toolbarSupplier,
+            FeedLaunchReliabilityLoggingState feedLaunchReliabilityLoggingState,
+            @Nullable FeedSwipeRefreshLayout swipeRefreshLayout) {
         mActivity = activity;
         mHasHeader = hasHeader;
         mParentTabSupplier = parentTabSupplier;
@@ -96,7 +107,8 @@ class ExploreSurfaceCoordinator implements FeedSurfaceDelegate {
                     boolean isPlaceholderShown, @NewTabPageLaunchOrigin int launchOrigin) {
                 return internalCreateFeedSurfaceCoordinator(mHasHeader, isInNightMode,
                         isPlaceholderShown, bottomSheetController, scrollableContainerDelegate,
-                        launchOrigin);
+                        launchOrigin, toolbarSupplier, feedLaunchReliabilityLoggingState,
+                        swipeRefreshLayout);
             }
         };
     }
@@ -127,7 +139,9 @@ class ExploreSurfaceCoordinator implements FeedSurfaceDelegate {
             boolean isInNightMode, boolean isPlaceholderShown,
             BottomSheetController bottomSheetController,
             ScrollableContainerDelegate scrollableContainerDelegate,
-            @NewTabPageLaunchOrigin int launchOrigin) {
+            @NewTabPageLaunchOrigin int launchOrigin, @NonNull Supplier<Toolbar> toolbarSupplier,
+            FeedLaunchReliabilityLoggingState feedLaunchReliabilityLoggingState,
+            FeedSwipeRefreshLayout swipeRefreshLayout) {
         if (mExploreSurfaceNavigationDelegate == null) {
             mExploreSurfaceNavigationDelegate =
                     new ExploreSurfaceNavigationDelegate(mParentTabSupplier);
@@ -147,11 +161,12 @@ class ExploreSurfaceCoordinator implements FeedSurfaceDelegate {
             }
         }
 
-        FeedSurfaceCoordinator feedSurfaceCoordinator =
-                new FeedSurfaceCoordinator(mActivity, mSnackbarManager, mWindowAndroid, null, null,
-                        sectionHeaderView, isInNightMode, this, mExploreSurfaceNavigationDelegate,
-                        profile, isPlaceholderShown, bottomSheetController, mShareDelegateSupplier,
-                        scrollableContainerDelegate, mTabModelSelector, launchOrigin);
+        FeedSurfaceCoordinator feedSurfaceCoordinator = new FeedSurfaceCoordinator(mActivity,
+                mSnackbarManager, mWindowAndroid, null, null, sectionHeaderView, isInNightMode,
+                this, mExploreSurfaceNavigationDelegate, profile, isPlaceholderShown,
+                bottomSheetController, mShareDelegateSupplier, scrollableContainerDelegate,
+                launchOrigin, PrivacyPreferencesManagerImpl.getInstance(), toolbarSupplier,
+                feedLaunchReliabilityLoggingState, swipeRefreshLayout, /*overScrollDisabled=*/true);
         feedSurfaceCoordinator.getView().setId(R.id.start_surface_explore_view);
         return feedSurfaceCoordinator;
         // TODO(crbug.com/982018): Customize surface background for incognito and dark mode.

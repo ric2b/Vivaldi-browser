@@ -19,7 +19,6 @@
 <translation id="125220115284141797">Bun-roghainn</translation>
 <translation id="1297175357211070620">Ceann-uidhe</translation>
 <translation id="1303101771013849280">Faidhle HTML nan comharran-lìn</translation>
-<translation id="1380436189840894976">A bheil thu airson am modh incognito fhàgail co-dhiù?</translation>
 <translation id="1430915738399379752">Clò-bhuail</translation>
 <translation id="1433811987160647649">Faighnich mus dèanar inntrigeadh</translation>
 <translation id="1451375123200651445">Duilleag-lìn, faidhle singilte</translation>
@@ -34,7 +33,6 @@
 <translation id="1620510694547887537">Camara</translation>
 <translation id="1627276047960621195">Tuairisgeulaichean an fhaidhle</translation>
 <translation id="1682548588986054654">Uinneag incognito ùr</translation>
-<translation id="1698122934742150150">An seisean incognito làithreach a-mhàin</translation>
 <translation id="1706625117072057435">Ìrean an t-sùm</translation>
 <translation id="1708338024780164500">(Neo-ghnìomhach)</translation>
 <translation id="1723824996674794290">Ui&amp;nneag ùr</translation>
@@ -145,10 +143,8 @@
 <translation id="3494769164076977169">Faighnich dhìom ma tha làrach airson faidhlichean a luchdadh a-nuas gu fèin-obrachail an dèidh a’ chiad fhaidhle (mholamaid seo)</translation>
 <translation id="3505030558724226696">Thoir inntrigeadh dhan uidheam air falbh</translation>
 <translation id="3560034655160545939">&amp;Dearbhadh-litreachaidh</translation>
-<translation id="3574917942258583917">A bheil thu airson am modh incognito fhàgail co-dhiù?</translation>
 <translation id="3587482841069643663">Na h-uile</translation>
 <translation id="3627588569887975815">Fosgail an ceangal ann an uinneag inco&amp;gnito</translation>
-<translation id="3668823961463113931">Làmhrachain</translation>
 <translation id="3678156199662914018">Leudachan: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Iarrtas co-roinneadh sgrìn <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Na leig le làraichean a dhùin thu cur no faighinn de dhàta a choileanadh</translation>
@@ -180,7 +176,6 @@
 <translation id="4096508467498758490">Cuir à comas leudachain modh an luchd-leasachaidh</translation>
 <translation id="4100839878934973028">Chuir prògram eile air a’ choimpiutair agad aplacaid ris aig a bheil buaidh air obrachadh Vivaldi ma dh’fhaoidte.</translation>
 <translation id="4109898769411476438">Dùin am brabhsair mus dèan thu ion-phortadh</translation>
-<translation id="4115080753528843955">Cleachdaidh cuid a sheirbheisean susbaint aithnichearan àraidh air an aithnichear thusa gus cothrom a thoirt dhut air susbaint a tha fo dhìon</translation>
 <translation id="4130207949184424187">Dh’atharraich an leudachan seo an duilleag a chì thu nuair a nì thu lorg on Omnibox.</translation>
 <translation id="4131410914670010031">Dubh is geal</translation>
 <translation id="4176463684765177261">À comas</translation>

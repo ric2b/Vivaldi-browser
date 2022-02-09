@@ -28,13 +28,13 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
+#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/login/demo_mode/demo_resources.h"
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
+#include "chrome/browser/ash/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/file_manager/path_util.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
@@ -389,7 +389,13 @@ bool DemoSession::ShouldIgnorePinPolicy(const std::string& app_id_or_package) {
   if (!content::GetNetworkConnectionTracker()->IsOffline())
     return false;
 
-  return base::Contains(ignore_pin_policy_offline_apps_, app_id_or_package);
+  const GURL app_id_as_url(app_id_or_package);
+
+  // Ignore for specified chrome/android apps, all PWAs ("https://") and any
+  // other "http://" web apps as a catchall (although we don't expect any of
+  // these)
+  return base::Contains(ignore_pin_policy_offline_apps_, app_id_or_package) ||
+         app_id_as_url.SchemeIsHTTPOrHTTPS();
 }
 
 void DemoSession::SetExtensionsExternalLoader(

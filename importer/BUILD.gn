@@ -27,6 +27,7 @@ static_library("importer") {
       "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
       "//ppapi/buildflags",
+      "//printing/buildflags",
       "//sql",
       "//third_party/boringssl",
       "//ui/base",

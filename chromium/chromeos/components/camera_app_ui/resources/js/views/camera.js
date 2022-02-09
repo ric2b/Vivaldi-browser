@@ -16,6 +16,7 @@ import {
 import {DeviceInfoUpdater} from '../device/device_info_updater.js';
 import * as dom from '../dom.js';
 import * as error from '../error.js';
+import {I18nString} from '../i18n_string.js';
 import * as metrics from '../metrics.js';
 import * as loadTimeData from '../models/load_time_data.js';
 import * as localStorage from '../models/local_storage.js';
@@ -44,16 +45,20 @@ import {windowController} from '../window_controller.js';
 import {Layout} from './camera/layout.js';
 import {
   Modes,
-  PhotoHandler,  // eslint-disable-line no-unused-vars
+  PhotoHandler,    // eslint-disable-line no-unused-vars
+  ScannerHandler,  // eslint-disable-line no-unused-vars
   setAvc1Parameters,
   Video,
   VideoHandler,  // eslint-disable-line no-unused-vars
 } from './camera/mode/index.js';
 import {Options} from './camera/options.js';
 import {Preview} from './camera/preview.js';
+import {ScannerOptions} from './camera/scanner_options.js';
 import * as timertick from './camera/timertick.js';
 import {VideoEncoderOptions} from './camera/video_encoder_options.js';
-import {View} from './view.js';
+import {PTZPanel} from './ptz_panel.js';
+import {PrimarySettings} from './settings.js';
+import {PTZPanelOptions, View} from './view.js';
 import {WarningType} from './warning.js';
 
 /**
@@ -73,6 +78,7 @@ class CameraSuspendedError extends Error {
  * Camera-view controller.
  * @implements {VideoHandler}
  * @implements {PhotoHandler}
+ * @implements {ScannerHandler}
  */
 export class Camera extends View {
   /**
@@ -107,11 +113,27 @@ export class Camera extends View {
     this.perfLogger_ = perfLogger;
 
     /**
+     * @const {!Array<!View>}
+     * @private
+     */
+    this.subViews_ = [
+      new PrimarySettings(infoUpdater, photoPreferrer, videoPreferrer),
+      new PTZPanel(),
+    ];
+
+    /**
      * Layout handler for the camera view.
      * @type {!Layout}
      * @private
      */
     this.layout_ = new Layout();
+
+    /**
+     * @type {!ScannerOptions}
+     * @private
+     */
+    this.scannerOptions_ =
+        new ScannerOptions(this.start.bind(this), this.infoUpdater_);
 
     /**
      * Video preview for the camera.
@@ -171,7 +193,7 @@ export class Camera extends View {
      */
     this.modes_ = new Modes(
         this.defaultMode_, photoPreferrer, videoPreferrer,
-        this.start.bind(this), this, this);
+        this.start.bind(this), this, this, this);
 
     /**
      * @type {!Facing}
@@ -286,14 +308,14 @@ export class Camera extends View {
     util.bindElementAriaLabelWithState({
       element: videoShutter,
       state: state.State.TAKING,
-      onLabel: 'record_video_stop_button',
-      offLabel: 'record_video_start_button',
+      onLabel: I18nString.RECORD_VIDEO_STOP_BUTTON,
+      offLabel: I18nString.RECORD_VIDEO_START_BUTTON,
     });
     util.bindElementAriaLabelWithState({
       element: pauseShutter,
       state: state.State.RECORDING_PAUSED,
-      onLabel: 'record_video_resume_button',
-      offLabel: 'record_video_pause_button',
+      onLabel: I18nString.RECORD_VIDEO_RESUME_BUTTON,
+      offLabel: I18nString.RECORD_VIDEO_PAUSE_BUTTON,
     });
 
     dom.get('#banner-close', HTMLButtonElement)
@@ -361,7 +383,12 @@ export class Camera extends View {
     state.addObserver(state.State.SCREEN_OFF_AUTO, handleScreenStateChange);
     state.addObserver(state.State.HAS_EXTERNAL_SCREEN, handleScreenStateChange);
 
+    state.addObserver(state.State.ENABLE_MULTISTREAM_RECORDING, () => {
+      this.start();
+    });
+
     this.initVideoEncoderOptions_();
+    await this.initScannerMode_();
   }
 
   /**
@@ -369,9 +396,11 @@ export class Camera extends View {
    */
   initOpenPTZPanel_() {
     this.openPTZPanel_.addEventListener('click', () => {
-      nav.open(
-          ViewName.PTZ_PANEL,
-          {stream: this.preview_.stream, vidPid: this.preview_.getVidPid()});
+      nav.open(ViewName.PTZ_PANEL, new PTZPanelOptions({
+                 stream: assertInstanceof(this.preview_.stream, MediaStream),
+                 vidPid: this.preview_.getVidPid(),
+                 resetPTZ: () => this.preview_.resetPTZ(),
+               }));
       highlight(false);
     });
 
@@ -421,6 +450,16 @@ export class Camera extends View {
   }
 
   /**
+   * @private
+   */
+  async initScannerMode_() {
+    const helper = await ChromeHelper.getInstance();
+    state.set(
+        state.State.PLATFORM_SUPPORT_SCAN_DOCUMENT,
+        await helper.isDocumentModeSupported());
+  }
+
+  /**
    * @param {function(): *} listener
    * @private
    */
@@ -463,6 +502,13 @@ export class Camera extends View {
     return this.locked_ || windowController.isMinimized() ||
         state.get(state.State.SUSPEND) || this.screenOff_ ||
         this.isTabletBackground_();
+  }
+
+  /**
+   * @override
+   */
+  getSubViews() {
+    return this.subViews_;
   }
 
   /**
@@ -571,7 +617,7 @@ export class Camera extends View {
     try {
       await this.resultSaver_.savePhoto(blob, name);
     } catch (e) {
-      toast.show('error_msg_save_file_failed');
+      toast.show(I18nString.ERROR_MSG_SAVE_FILE_FAILED);
       throw e;
     }
   }
@@ -601,6 +647,13 @@ export class Camera extends View {
   /**
    * @override
    */
+  waitPreviewReady() {
+    return this.preview_.waitReadyForTakePhoto();
+  }
+
+  /**
+   * @override
+   */
   async handleResultVideo({resolution, duration, videoSaver, everPaused}) {
     metrics.sendCaptureEvent({
       facing: this.facingMode_,
@@ -612,7 +665,7 @@ export class Camera extends View {
     try {
       await this.resultSaver_.finishSaveVideo(videoSaver);
     } catch (e) {
-      toast.show('error_msg_save_file_failed');
+      toast.show(I18nString.ERROR_MSG_SAVE_FILE_FAILED);
       throw e;
     }
   }
@@ -711,25 +764,19 @@ export class Camera extends View {
           const stream = await this.preview_.open(constraints);
           this.facingMode_ = this.preview_.getFacing();
 
-          const enablePTZ = (() => {
-            if (!this.preview_.isSupportPTZ()) {
-              return false;
+          let enablePTZ = this.preview_.isSupportPTZ();
+          if (enablePTZ) {
+            const modeSupport = deviceOperator === null ||
+                this.modes_.isSupportPTZ(
+                    mode,
+                    captureR,
+                    this.preview_.getResolution(),
+                );
+            if (!modeSupport) {
+              await this.preview_.resetPTZ();
+              enablePTZ = false;
             }
-            if (deviceOperator === null) {
-              // All fake VCD support PTZ controls.
-              return true;
-            }
-            if (this.facingMode_ !== Facing.EXTERNAL) {
-              // PTZ function is excluded from builtin camera until we set up
-              // its AVL calibration standard.
-              return false;
-            }
-            return this.modes_.isSupportPTZ(
-                mode,
-                captureR,
-                this.preview_.getResolution(),
-            );
-          })();
+          }
           state.set(state.State.ENABLE_PTZ, enablePTZ);
 
           this.options_.updateValues(stream, this.facingMode_);
@@ -739,6 +786,7 @@ export class Camera extends View {
           await this.modes_.updateModeSelectionUI(deviceId);
           await this.modes_.updateMode(
               mode, factory, stream, this.facingMode_, deviceId, captureR);
+          await this.scannerOptions_.initialize(this.preview_.video);
           for (const l of this.configureCompleteListener_) {
             l();
           }
@@ -804,7 +852,7 @@ export class Camera extends View {
               this.activeDeviceId_ = currentId;
               const info = await this.infoUpdater_.getDeviceInfo(currentId);
               if (info !== null) {
-                toast.speak('status_msg_camera_switched', info.label);
+                toast.speak(I18nString.STATUS_MSG_CAMERA_SWITCHED, info.label);
               }
               return;
             }
@@ -847,5 +895,6 @@ export class Camera extends View {
     // mode before stopping preview to close extra stream first.
     await this.modes_.clear();
     await this.preview_.close();
+    await this.scannerOptions_.uninitialize();
   }
 }

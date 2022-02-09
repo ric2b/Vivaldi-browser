@@ -21,7 +21,6 @@
 <translation id="125220115284141797">По умолчанию</translation>
 <translation id="1297175357211070620">Принтер</translation>
 <translation id="1303101771013849280">HTML-файл закладок</translation>
-<translation id="1380436189840894976">Закрыть приватное окно?</translation>
 <translation id="1430915738399379752">Печать</translation>
 <translation id="1433811987160647649">Спрашивать разрешение на доступ</translation>
 <translation id="1451375123200651445">Веб-страница, один файл</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Дескрипторы файлов</translation>
 <translation id="1682548588986054654">Новое приватное окно</translation>
-<translation id="1698122934742150150">Только для текущей приватной сессии</translation>
 <translation id="1706625117072057435">Масштабирование</translation>
 <translation id="1708338024780164500">(Неактивно)</translation>
 <translation id="1723824996674794290">&amp;Новое окно</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Неизвестный плагин</translation>
 <translation id="2423578206845792524">&amp;Сохранить картинку как...</translation>
 <translation id="2439110203301358333">Одна из программ на вашем компьютере установила расширение, которое может влиять на работу Vivaldi.</translation>
+<translation id="2443487764245141020">Возможно, сайтам потребуется распознавать ваше устройство с помощью идентификатора</translation>
 <translation id="2445081178310039857">Требуется корневой каталог расширения.</translation>
 <translation id="2470702053775288986">Неподдерживаемые расширения отключены</translation>
 <translation id="2476578072172137802">Настройки для сайтов</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">&amp;Копировать адрес ссылки</translation>
 <translation id="354068948465830244">Возможно чтение и изменение данных сайта</translation>
 <translation id="3560034655160545939">&amp;Проверка правописания</translation>
-<translation id="3574917942258583917">Закрыть приватное окно?</translation>
 <translation id="3587482841069643663">Все</translation>
 <translation id="3627588569887975815">Открыть ссылку в &amp;приватном окне</translation>
 <translation id="3627879631695760395">Установить приложение "<ph name="APP" />"...</translation>
-<translation id="3668823961463113931">Обработчики</translation>
 <translation id="3678156199662914018">Расширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запрос доступа к экрану от <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Запретить закрытым сайтам завершать отправку и получение данных</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Отключить расширения в режиме разработчика</translation>
 <translation id="4100839878934973028">Одна из программ на вашем компьютере установила приложение, которое может влиять на работу Vivaldi.</translation>
 <translation id="4109898769411476438">Закройте другой браузер</translation>
-<translation id="4115080753528843955">Некоторые сервисы используют уникальные идентификаторы для доступа к защищённому содержимому</translation>
 <translation id="4130207949184424187">Расширение изменило поисковую систему по умолчанию в поле поиска.</translation>
 <translation id="4131410914670010031">Чёрно-белая печать</translation>
 <translation id="4176463684765177261">Отключено</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">При установке расширения были следующие предупреждения:</translation>
 <translation id="479536056609751218">Веб-страница, только HTML</translation>
 <translation id="4839303808932127586">&amp;Сохранить видео как...</translation>
+<translation id="4840096453115567876">Выйти из приватного режима?</translation>
 <translation id="488785315393301722">Показать настройки</translation>
 <translation id="4907306957610201395">Категория разрешения</translation>
 <translation id="4912643508233590958">Переходы в активный режим</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Показать &amp;управление</translation>
+<translation id="7374461526650987610">Обработчики протоколов</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память GPU</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Разобрать по копиям</translation>
 <translation id="7629827748548208700">Вкладка: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Отмена</translation>
+<translation id="7659154729610375585">Выйти из приватного режима?</translation>
 <translation id="7661259717474717992">Разрешить сайтам сохранять и читать файлы cookie</translation>
 <translation id="7663719505383602579">Получатель: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Установлено администратором</translation>
@@ -453,6 +452,7 @@
 <translation id="8899851313684471736">Открыть ссылку в новом &amp;окне</translation>
 <translation id="8915370057835397490">Загрузка подсказки</translation>
 <translation id="8916476537757519021">Субфрейм в приватном режиме: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Только для текущего сеанса приватного режима</translation>
 <translation id="895944840846194039">Память JavaScript</translation>
 <translation id="8962083179518285172">Скрыть настройки</translation>
 <translation id="8973557916016709913">Сбросить масштаб</translation>

@@ -7,7 +7,7 @@
 #include "components/os_crypt/os_crypt.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/syncer_error.h"
-#include "sync/vivaldi_profile_sync_service.h"
+#include "sync/vivaldi_sync_service_impl.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
@@ -16,21 +16,21 @@
 namespace vivaldi {
 VivaldiSyncUIHelper::VivaldiSyncUIHelper(
     Profile* profile,
-    VivaldiProfileSyncService* sync_manager)
-    : profile_(profile), sync_manager_(sync_manager) {
+    VivaldiSyncServiceImpl* sync_service)
+    : profile_(profile), sync_service_(sync_service) {
 }
 
 void VivaldiSyncUIHelper::RegisterObserver() {
-  sync_manager_->AddObserver(this);
+  sync_service_->AddObserver(this);
 }
 
 VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
   CycleData cycle_data;
 
   syncer::SyncCycleSnapshot cycle_snapshot =
-      sync_manager_->GetLastCycleSnapshotForDebugging();
+      sync_service_->GetLastCycleSnapshotForDebugging();
   syncer::SyncStatus status;
-  sync_manager_->QueryDetailedSyncStatusForDebugging(&status);
+  sync_service_->QueryDetailedSyncStatusForDebugging(&status);
 
   cycle_data.cycle_start_time = cycle_snapshot.sync_start_time();
   cycle_data.next_retry_time = status.retry_time;
@@ -113,17 +113,17 @@ VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
 }
 
 bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {
-  if (sync_manager_->GetUserSettings()->IsPassphraseRequired()) {
+  if (sync_service_->GetUserSettings()->IsPassphraseRequired()) {
     if (password.empty())
       return false;
-    return sync_manager_->GetUserSettings()->SetDecryptionPassphrase(password);
+    return sync_service_->GetUserSettings()->SetDecryptionPassphrase(password);
   }
 
-  if (sync_manager_->GetUserSettings()->IsUsingExplicitPassphrase())
+  if (sync_service_->GetUserSettings()->IsUsingExplicitPassphrase())
     return false;
 
   if (!password.empty()) {
-    sync_manager_->GetUserSettings()->SetEncryptionPassphrase(password);
+    sync_service_->GetUserSettings()->SetEncryptionPassphrase(password);
     profile_->GetPrefs()->SetInteger(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
         static_cast<int>(
@@ -143,7 +143,7 @@ bool VivaldiSyncUIHelper::SetEncryptionPassword(const std::string& password) {
       vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
       static_cast<int>(
           vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::kNo));
-  sync_manager_->GetUserSettings()->SetEncryptionPassphrase(login_password);
+  sync_service_->GetUserSettings()->SetEncryptionPassphrase(login_password);
   return true;
 }
 
@@ -164,7 +164,7 @@ void VivaldiSyncUIHelper::OnStateChanged(syncer::SyncService* sync) {
                              ->password();
 
   if (!password.empty() &&
-      sync_manager_->GetUserSettings()->SetDecryptionPassphrase(password)) {
+      sync_service_->GetUserSettings()->SetDecryptionPassphrase(password)) {
     profile_->GetPrefs()->SetInteger(
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
         static_cast<int>(
@@ -178,7 +178,7 @@ void VivaldiSyncUIHelper::OnStateChanged(syncer::SyncService* sync) {
 }
 
 std::string VivaldiSyncUIHelper::GetBackupEncryptionToken() {
-  std::string packed_key = sync_manager_->GetEncryptionBootstrapToken();
+  std::string packed_key = sync_service_->GetEncryptionBootstrapToken();
 
   if (packed_key.empty())
     return std::string();
@@ -220,7 +220,7 @@ bool VivaldiSyncUIHelper::RestoreEncryptionToken(
 
   std::string encoded_token;
   base::Base64Encode(encrypted_token, &encoded_token);
-  sync_manager_->SetEncryptionBootstrapToken(encoded_token);
+  sync_service_->SetEncryptionBootstrapToken(encoded_token);
 
   return true;
 }

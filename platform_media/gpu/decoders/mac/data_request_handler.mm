@@ -20,6 +20,8 @@
 
 namespace media {
 
+DispatchQueueRunnerProxy* DispatchQueueRunnerProxy::g_proxy = nullptr;
+
 namespace {
 
 constexpr int kBadRequestErrorCode = 400;
@@ -61,6 +63,14 @@ void DataRequestHandler::Init(ipc_data_source::Info source_info,
   is_streaming_ = source_info.is_streaming;
   data_size_ = source_info.size;
 
+  if (!ipc_queue) {
+    if (DispatchQueueRunnerProxy::enabled()) {
+      ipc_queue = DispatchQueueRunnerProxy::instance()->GetQueue();
+    }
+    if (!ipc_queue) {
+      ipc_queue = dispatch_get_main_queue();
+    }
+  }
   ipc_queue_.reset(ipc_queue, base::scoped_policy::RETAIN);
 
   content_type_.reset(
@@ -258,8 +268,8 @@ void DataRequestHandler::AbortAllDataRequests() {
 }
 
 void DataRequestHandler::Stop() {
-  DCHECK(dispatch_queue_get_label(ipc_queue_) ==
-         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
+  DCHECK_EQ(dispatch_queue_get_label(ipc_queue_),
+            dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " can_read=" << can_read_
           << " waiting_for_reply=" << !source_buffer_
           << " pending_requests_.size()=" << pending_requests_.size();
@@ -355,6 +365,7 @@ void DataRequestHandler::DispatchRead(AVAssetResourceLoadingRequest* request,
   TRACE_EVENT0("IPC_MEDIA", __FUNCTION__);
   before_first_read_ = false;
   source_buffer_.SetReadRange(offset, chunk_size);
+
   ipc_data_source::Buffer::Read(
       std::move(source_buffer_),
       base::BindOnce(&DataRequestHandler::DidReadNextChunk, this));

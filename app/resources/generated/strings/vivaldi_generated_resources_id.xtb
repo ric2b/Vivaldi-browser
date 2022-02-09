@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standar</translation>
 <translation id="1297175357211070620">Tujuan</translation>
 <translation id="1303101771013849280">Penanda Berkas HTML</translation>
-<translation id="1380436189840894976">Tetap keluar dari mode penyamaran?</translation>
 <translation id="1430915738399379752">Cetak</translation>
 <translation id="1433811987160647649">Tanyakan sebelum mengakses</translation>
 <translation id="1451375123200651445">Laman Web, Berkas Tunggal</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskriptor Berkas</translation>
 <translation id="1682548588986054654">Jendela Penyamaran Baru</translation>
-<translation id="1698122934742150150">Sesi penyamaran saat ini saja</translation>
 <translation id="1706625117072057435">Tingkat perbesar/perkecil</translation>
 <translation id="1708338024780164500">(Tidak Aktif)</translation>
 <translation id="1723824996674794290">&amp;Jendela Baru</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Plugin tidak dikenal</translation>
 <translation id="2423578206845792524">Sim&amp;pan gambar sebagai...</translation>
 <translation id="2439110203301358333">Program lain di komputer anda menambahkan ekstensi yang dapat mengubah cara kerja Vivaldi.</translation>
+<translation id="2443487764245141020">Situs mungkin juga perlu mengenali perangkat Anda menggunakan pengidentifikasi</translation>
 <translation id="2445081178310039857">Direktori akar ekstensi diperlukan.</translation>
 <translation id="2470702053775288986">Ekstensi yang tidak didukung dinonaktifkan</translation>
 <translation id="2476578072172137802">Pengaturan Situs</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Salin Ala&amp;mat Tautan</translation>
 <translation id="354068948465830244">Ini dapat membaca dan mengubah data situs</translation>
 <translation id="3560034655160545939">&amp;Periksa ejaan</translation>
-<translation id="3574917942258583917">Tetap keluar dari mode penyamaran?</translation>
 <translation id="3587482841069643663">Semua</translation>
 <translation id="3627588569887975815">Buka tautan di jendela penya&amp;maran</translation>
 <translation id="3627879631695760395">Pasang <ph name="APP" />...</translation>
-<translation id="3668823961463113931">Penangan</translation>
 <translation id="3678156199662914018">Ekstensi: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Permintaan Berbagi Layar</translation>
 <translation id="3708684582558000260">Jangan izinkan situs yang ditutup mengirim atau menerima data</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Nonaktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
 <translation id="4109898769411476438">Tutup Peramban Sebelum Mengimpor</translation>
-<translation id="4115080753528843955">Beberapa layanan konten menggunakan penanda unik dengan tujuan untuk memberikan akses ke konten yang dilindungi</translation>
 <translation id="4130207949184424187">Ekstensi ini telah mengubah halaman yang ditampilkan saat anda menelusuri dari Omnibox.</translation>
 <translation id="4131410914670010031">Hitam dan putih</translation>
 <translation id="4176463684765177261">Dimatikan</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Ada beberapa peringatan ketika mencoba memasang ekstensi ini:</translation>
 <translation id="479536056609751218">Laman Web, HTML Saja</translation>
 <translation id="4839303808932127586">Sim&amp;pan video sebagai...</translation>
+<translation id="4840096453115567876">Tetap keluar dari mode Penyamaran?</translation>
 <translation id="488785315393301722">Tampilkan Detail</translation>
 <translation id="4907306957610201395">Kategori Izin</translation>
 <translation id="4912643508233590958">Bangun saat Nganggur</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Tampilkan &amp;kontrol</translation>
+<translation id="7374461526650987610">Penangan protokol</translation>
 <translation id="7385854874724088939">Ada yang salah saat mencetak. Periksa printer anda dan coba kembali.</translation>
 <translation id="7412226954991670867">Memori GPU</translation>
 <translation id="7421925624202799674">&amp;Lihat Sumber Halaman</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Padukan</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Batal</translation>
+<translation id="7659154729610375585">Tetap keluar dari mode Penyamaran?</translation>
 <translation id="7661259717474717992">Izinkan situs menyimpan dan membaca data reremah</translation>
 <translation id="7663719505383602579">Penerima: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Dipasang oleh Administrator Anda</translation>
@@ -454,6 +453,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8899851313684471736">Buka tautan di &amp;jendela baru</translation>
 <translation id="8915370057835397490">Memuat saran</translation>
 <translation id="8916476537757519021">Subkerangka Penyamaran: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Sesi Penyamaran saat ini saja</translation>
 <translation id="895944840846194039">Memori JavaScript</translation>
 <translation id="8962083179518285172">Sembunyikan Detail</translation>
 <translation id="8973557916016709913">Menghapus tingkat perbesaran</translation>

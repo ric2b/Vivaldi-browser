@@ -7,6 +7,7 @@
 
 #include "platform_media/renderer/decoders/mac/core_audio_demuxer.h"
 
+#include <set>
 #include <string>
 
 #include "base/callback_helpers.h"
@@ -16,20 +17,16 @@
 #include "base/task_runner_util.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
-#include "platform_media/common/mac/scoped_audio_queue_ref.h"
 #include "media/filters/blocking_url_protocol.h"
-#include "platform_media/renderer/decoders/mac/core_audio_demuxer_stream.h"
 #include "net/base/mime_util.h"
 #include "url/gurl.h"
+
+#include "platform_media/renderer/decoders/mac/core_audio_demuxer_stream.h"
 
 namespace {
 
 static const char* kSupportedMimeTypes[] = {
-    "audio/3gpp",
-    "audio/3gpp2",
-    "audio/aac",
-    "audio/aacp",
-    "audio/mp4",
+    "audio/3gpp", "audio/3gpp2", "audio/aac", "audio/aacp", "audio/mp4",
 };
 
 }  // namespace
@@ -51,8 +48,7 @@ CoreAudioDemuxer::CoreAudioDemuxer(DataSource* data_source)
           &CoreAudioDemuxer::OnDataSourceError, base::Unretained(this)))));
 }
 
-CoreAudioDemuxer::~CoreAudioDemuxer() {
-}
+CoreAudioDemuxer::~CoreAudioDemuxer() {}
 
 std::string CoreAudioDemuxer::GetDisplayName() const {
   return "CoreAudioDemuxer";
@@ -67,15 +63,16 @@ void CoreAudioDemuxer::Initialize(DemuxerHost* host,
 }
 
 CoreAudioDemuxerStream* CoreAudioDemuxer::CreateAudioDemuxerStream() {
-  return new CoreAudioDemuxerStream(
-      this, input_format_info_, bit_rate_, CoreAudioDemuxerStream::AUDIO);
+  return new CoreAudioDemuxerStream(this, input_format_info_, bit_rate_,
+                                    CoreAudioDemuxerStream::AUDIO);
 }
 
 bool CoreAudioDemuxerStream::enabled() const {
   return is_enabled_;
 }
 
-void CoreAudioDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
+void CoreAudioDemuxerStream::set_enabled(bool enabled,
+                                         base::TimeDelta timestamp) {
   if (enabled == is_enabled_)
     return;
 
@@ -88,11 +85,9 @@ void CoreAudioDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp
   }
 }
 
-void CoreAudioDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
-}
+void CoreAudioDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {}
 
-void CoreAudioDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
-}
+void CoreAudioDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {}
 
 void CoreAudioDemuxer::Seek(base::TimeDelta time,
                             PipelineStatusCallback status_cb) {
@@ -162,9 +157,8 @@ void CoreAudioDemuxer::OnEnabledAudioTracksChanged(
   CoreAudioDemuxerStream* audio_stream = GetStream(DemuxerStream::AUDIO);
   CHECK(audio_stream);
   bool enabled = !track_ids.empty();
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " : " << (enabled ? "enabling" : "disabling")
-          << " audio stream";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " : "
+          << (enabled ? "enabling" : "disabling") << " audio stream";
   audio_stream->set_enabled(enabled, currTime);
 
   std::set<CoreAudioDemuxerStream*> enabled_streams;
@@ -181,9 +175,8 @@ void CoreAudioDemuxer::OnSelectedVideoTrackChanged(
   CoreAudioDemuxerStream* video_stream = GetStream(DemuxerStream::VIDEO);
   CHECK(video_stream);
   bool enabled = !track_ids.empty();
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " : " << (enabled ? "enabling" : "disabling")
-          << " video stream";
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " : "
+          << (enabled ? "enabling" : "disabling") << " video stream";
   video_stream->set_enabled(enabled, currTime);
 
   std::set<CoreAudioDemuxerStream*> enabled_streams;
@@ -197,11 +190,9 @@ void CoreAudioDemuxer::SetAudioDuration(int64_t duration) {
   host_->SetDuration(base::TimeDelta::FromMilliseconds(duration));
 }
 
-void CoreAudioDemuxer::ReadDataSourceWithCallback(
-    DataSource::ReadCB read_cb) {
+void CoreAudioDemuxer::ReadDataSourceWithCallback(DataSource::ReadCB read_cb) {
   base::PostTaskAndReplyWithResult(
-      blocking_thread_.task_runner().get(),
-      FROM_HERE,
+      blocking_thread_.task_runner().get(), FROM_HERE,
       base::BindOnce(&CoreAudioDemuxer::ReadDataSource, base::Unretained(this)),
       base::BindOnce(std::move(read_cb)));
 }
@@ -229,12 +220,9 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
     return;
   }
 
-  OSStatus err =
-      AudioFileStreamOpen(this,
-                          CoreAudioDemuxer::AudioPropertyListenerProc,
-                          CoreAudioDemuxer::AudioPacketsProc,
-                          kAudioFileMP3Type,
-                          &audio_stream_id_);
+  OSStatus err = AudioFileStreamOpen(
+      this, CoreAudioDemuxer::AudioPropertyListenerProc,
+      CoreAudioDemuxer::AudioPacketsProc, kAudioFileMP3Type, &audio_stream_id_);
   if (err == noErr) {
     err = AudioFileStreamParseBytes(audio_stream_id_, read_size, buffer_, 0);
     AudioFileStreamClose(audio_stream_id_);
@@ -260,7 +248,8 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
       audio_stream_.reset();
       LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": DEMUXER_ERROR_NO_SUPPORTED_STREAMS";
-      std::move(status_cb).Run(PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
+      std::move(status_cb).Run(
+          PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
       return;
     }
 
@@ -284,13 +273,12 @@ void CoreAudioDemuxer::AudioPacketsProc(
     AudioStreamPacketDescription* packet_descriptions) {
   CoreAudioDemuxer* demuxer = reinterpret_cast<CoreAudioDemuxer*>(client_data);
   if (!demuxer->input_format_found_)
-      return;
+    return;
 
   UInt32 bit_rate_size = sizeof(UInt32);
-  OSStatus err = AudioFileStreamGetProperty(demuxer->audio_stream_id_,
-                                            kAudioFileStreamProperty_BitRate,
-                                            &bit_rate_size,
-                                            &demuxer->bit_rate_);
+  OSStatus err = AudioFileStreamGetProperty(
+      demuxer->audio_stream_id_, kAudioFileStreamProperty_BitRate,
+      &bit_rate_size, &demuxer->bit_rate_);
   if (err == noErr) {
     int64_t duration = 0;
     int64_t ds_size = 0;
@@ -328,9 +316,9 @@ void CoreAudioDemuxer::AudioPropertyListenerProc(
   CoreAudioDemuxer* demuxer = reinterpret_cast<CoreAudioDemuxer*>(client_data);
   OSStatus err = noErr;
 
-  char buf[] = {(static_cast<char>(property_id >> 24) & 255),
-                (static_cast<char>(property_id >> 16) & 255),
-                (static_cast<char>(property_id >> 8) & 255),
+  char buf[] = {(static_cast<char>((property_id >> 24) & 255)),
+                (static_cast<char>((property_id >> 16) & 255)),
+                (static_cast<char>((property_id >> 8) & 255)),
                 (static_cast<char>(property_id & 255)), 0};
   VLOG(1) << "Found stream property " << buf;
 
@@ -338,10 +326,9 @@ void CoreAudioDemuxer::AudioPropertyListenerProc(
     case kAudioFileStreamProperty_ReadyToProducePackets: {
       VLOG(3) << "Ready to produce packets";
       UInt32 asbd_size = sizeof(demuxer->input_format_info_);
-      err = AudioFileStreamGetProperty(audio_file_stream,
-                                       kAudioFileStreamProperty_DataFormat,
-                                       &asbd_size,
-                                       &demuxer->input_format_info_);
+      err = AudioFileStreamGetProperty(
+          audio_file_stream, kAudioFileStreamProperty_DataFormat, &asbd_size,
+          &demuxer->input_format_info_);
       if (err)
         LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                    << " Get kAudioFileStreamProperty_DataFormat " << err;

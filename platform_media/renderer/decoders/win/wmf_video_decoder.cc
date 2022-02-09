@@ -38,7 +38,7 @@ void WMFVideoDecoder::Reset(base::OnceClosure closure) {
 
 
 VideoDecoderType WMFVideoDecoder::GetDecoderType() const {
-  return VideoDecoderType::kDecrypting;
+  return VideoDecoderType::kVivWMFDecoder;
 }
 
 }  // namespace media

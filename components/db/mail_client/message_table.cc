@@ -55,24 +55,12 @@ bool MessageTable::CreateMessageTable() {
       " INSERT INTO messages_fts(rowid, toAddress, fromAddress, cc, replyTo, "
       "subject, body) "
       " VALUES(new.searchListId, new.toAddress, new.fromAddress, new.cc, "
-      "new.replyTo, new.subject, new.body); "
+      " new.replyTo, new.subject, new.body); "
       " END;");
 
-  bool deleteTrigger = GetDB().Execute(
-      " CREATE TRIGGER messages_ad AFTER DELETE ON messages "
-      " BEGIN "
-      " INSERT INTO messages_fts(messages_fts, rowid, subject, body) "
-      " VALUES('delete', old.searchListId, old.subject, old.body); "
-      " END;");
+  bool deleteTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_DELETE);
 
-  bool updateTrigger = GetDB().Execute(
-      " CREATE TRIGGER messages_au AFTER UPDATE ON messages "
-      " BEGIN "
-      " INSERT INTO messages_fts(messages_fts, rowid, subject, body) "
-      " VALUES('delete', old.searchListId, old.subject, old.body); "
-      " INSERT INTO messages_fts(rowid, subject, body) "
-      " VALUES(new.searchListId, new.subject, new.body); "
-      " END; ");
+  bool updateTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_UPDATE);
 
   return emailTable && indexTable && insertTrigger && deleteTrigger &&
          updateTrigger;
@@ -113,7 +101,7 @@ bool MessageTable::CreateMessages(
 bool MessageTable::SearchMessages(std::u16string search,
                                   SearchListIdRows* out_rows) {
   sql::Statement statement(
-      GetDB().GetUniqueStatement("SELECT searchListId, body, subject FROM "
+      GetDB().GetUniqueStatement("SELECT searchListId FROM "
                                  "messages_fts where messages_fts MATCH ?"));
 
   statement.BindString16(0, search);
@@ -180,6 +168,28 @@ bool MessageTable::DeleteMessages(std::vector<SearchListID> search_list_ids) {
 bool MessageTable::RebuildDatabase() {
   return GetDB().Execute(
       "INSERT INTO messages_fts(messages_fts) VALUES('rebuild');");
+}
+
+bool MessageTable::UpdateToVersion2() {
+  if (!GetDB().DoesTableExist("messages")) {
+    NOTREACHED() << "messages table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().Execute("DROP TRIGGER messages_au"))
+    return false;
+
+  bool updateTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_UPDATE);
+
+  if (!GetDB().Execute("DROP TRIGGER messages_ad"))
+    return false;
+
+  bool deleteTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_DELETE);
+
+  if (!updateTrigger || !deleteTrigger)
+    return false;
+
+  return RebuildDatabase();
 }
 
 }  // namespace mail_client

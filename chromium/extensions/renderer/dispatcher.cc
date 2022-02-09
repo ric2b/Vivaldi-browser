@@ -13,12 +13,12 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/cxx17_backports.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -115,7 +115,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "v8/include/v8.h"
 
-#include "extensions/vivaldi_script_dispatcher.h"
+#include "extensions/renderer/vivaldi_script_dispatcher.h"
 
 using blink::WebDocument;
 using blink::WebSecurityPolicy;
@@ -462,6 +462,13 @@ void Dispatcher::DidCreateScriptContext(
   }
 
   VLOG(1) << "Num tracked contexts: " << script_context_set_->size();
+
+  ExtensionFrameHelper* frame_helper =
+      ExtensionFrameHelper::Get(content::RenderFrame::FromWebFrame(frame));
+  if (!frame_helper)
+    return;  // The frame is invisible to extensions.
+
+  frame_helper->set_did_create_script_context();
 }
 
 void Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
@@ -924,7 +931,8 @@ void Dispatcher::RegisterNativeHandlers(
   module_system->RegisterNativeHandler(
       "setIcon", std::unique_ptr<NativeHandler>(new SetIconNatives(context)));
   module_system->RegisterNativeHandler(
-      "activityLogger", std::make_unique<APIActivityLogger>(context));
+      "activityLogger", std::make_unique<APIActivityLogger>(
+                            bindings_system->GetIPCMessageSender(), context));
   module_system->RegisterNativeHandler(
       "renderFrameObserverNatives",
       std::unique_ptr<NativeHandler>(new RenderFrameObserverNatives(context)));
@@ -971,7 +979,6 @@ bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
   IPC_MESSAGE_HANDLER(ExtensionMsg_DispatchOnConnect, OnDispatchOnConnect)
   IPC_MESSAGE_HANDLER(ExtensionMsg_DispatchOnDisconnect, OnDispatchOnDisconnect)
   IPC_MESSAGE_HANDLER(ExtensionMsg_DispatchEvent, OnDispatchEvent)
-  IPC_MESSAGE_HANDLER(ExtensionMsg_UpdatePermissions, OnUpdatePermissions)
   IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -1024,13 +1031,6 @@ void Dispatcher::ActivateExtension(const std::string& extension_id) {
   // only activated once.
   if (IsExtensionActive(extension_id))
     return;
-
-  // TODO(crbug.com/1184892): This is a temporary hack to allow
-  // SharedArrayBuffer and wasm-threads in extension processes. Remove once we
-  // add support for extension opt-in into cross-origin isolation.
-  if (extension->is_extension()) {
-    blink::WebV8Features::EnableSharedArrayBuffer();
-  }
 
   active_extension_ids_.insert(extension_id);
 
@@ -1292,9 +1292,8 @@ void Dispatcher::OnDispatchOnDisconnect(int worker_thread_id,
       NULL);  // All render frames.
 }
 
-void Dispatcher::OnDispatchEvent(
-    const ExtensionMsg_DispatchEvent_Params& params,
-    const base::ListValue& event_args) {
+void Dispatcher::OnDispatchEvent(const mojom::DispatchEventParams& params,
+                                 const base::ListValue& event_args) {
   content::RenderFrame* background_frame =
       ExtensionFrameHelper::GetBackgroundPageFrame(params.extension_id);
 
@@ -1348,28 +1347,31 @@ void Dispatcher::TransferBlobs(TransferBlobsCallback callback) {
   std::move(callback).Run();
 }
 
-void Dispatcher::OnUpdatePermissions(
-    const ExtensionMsg_UpdatePermissions_Params& params) {
+void Dispatcher::UpdatePermissions(const std::string& extension_id,
+                                   PermissionSet active_permissions,
+                                   PermissionSet withheld_permissions,
+                                   URLPatternSet policy_blocked_hosts,
+                                   URLPatternSet policy_allowed_hosts,
+                                   bool uses_default_policy_host_restrictions) {
   const Extension* extension =
-      RendererExtensionRegistry::Get()->GetByID(params.extension_id);
+      RendererExtensionRegistry::Get()->GetByID(extension_id);
   if (!extension)
     return;
 
-  if (params.uses_default_policy_host_restrictions) {
+  if (uses_default_policy_host_restrictions) {
     extension->permissions_data()->SetUsesDefaultHostRestrictions(
         kRendererProfileId);
   } else {
     extension->permissions_data()->SetPolicyHostRestrictions(
-        params.policy_blocked_hosts, params.policy_allowed_hosts);
+        policy_blocked_hosts, policy_allowed_hosts);
   }
 
-  std::unique_ptr<const PermissionSet> active =
-      params.active_permissions.ToPermissionSet();
-  std::unique_ptr<const PermissionSet> withheld =
-      params.withheld_permissions.ToPermissionSet();
+  extension->permissions_data()->SetPermissions(
+      std::make_unique<const extensions::PermissionSet>(
+          std::move(active_permissions)),
+      std::make_unique<const extensions::PermissionSet>(
+          std::move(withheld_permissions)));
 
-  extension->permissions_data()->SetPermissions(std::move(active),
-                                                std::move(withheld));
   UpdateOriginPermissions(*extension);
 
   UpdateBindingsForExtension(*extension);

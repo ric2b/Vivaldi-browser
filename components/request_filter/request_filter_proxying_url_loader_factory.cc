@@ -15,6 +15,9 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/completion_repeating_callback.h"
@@ -24,6 +27,9 @@
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/early_hints.mojom.h"
+#include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/parsed_headers.mojom-forward.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 
@@ -198,7 +204,15 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
                 !(options_ & network::mojom::kURLLoadOptionSynchronous),
                 factory_->navigation_id_);
 
+  // The value of `has_any_extra_headers_listeners_` is constant for the
+  // lifetime of InProgressRequest and determines whether the request is made
+  // with the network::mojom::kURLLoadOptionUseHeaderClient option. To prevent
+  // the redirected request from getting into a state where
+  // `current_request_uses_header_client_` is true but the request is not made
+  // with the kURLLoadOptionUseHeaderClient option, also check
+  // `has_any_extra_headers_listeners_` here. See http://crbug.com/1074282.
   current_request_uses_header_client_ =
+      has_any_extra_headers_listeners_ &&
       factory_->url_loader_header_client_receiver_.is_bound() &&
       (request_.url.SchemeIsHTTPOrHTTPS() ||
        request_.url.SchemeIs(url::kUrnScheme)) &&
@@ -333,12 +347,12 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     auto saved_headers = current_response_->headers;
     current_response_ = std::move(head);
     current_response_->headers = saved_headers;
-    ContinueToResponseStarted(net::OK);
+    ContinueToResponseStarted();
   } else {
     current_response_ = std::move(head);
-    HandleResponseOrRedirectHeaders(
-        base::BindOnce(&InProgressRequest::ContinueToResponseStarted,
-                       weak_factory_.GetWeakPtr()));
+    HandleResponseOrRedirectHeaders(base::BindOnce(
+        &InProgressRequest::OverwriteHeadersAndContinueToResponseStarted,
+        weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -510,7 +524,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   header_client_receiver_.reset();
   target_loader_.reset();
 
-  constexpr int kInternalRedirectStatusCode = 307;
+  constexpr int kInternalRedirectStatusCode = net::HTTP_TEMPORARY_REDIRECT;
 
   net::RedirectInfo redirect_info =
       CreateRedirectInfo(request_, redirect_url_, kInternalRedirectStatusCode,
@@ -658,7 +672,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   }
 
   // From here the lifecycle of this request is driven by subsequent events on
-  // either |proxy_loader_binding_|, |proxy_client_binding_|, or
+  // either |proxied_loader_receiver_|, |proxied_client_receiver_|, or
   // |header_client_receiver_|.
 }
 
@@ -783,9 +797,16 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   override_headers_ = nullptr;
 
   if (for_cors_preflight_) {
-    // If this is for CORS preflight, there is no associated client. We notify
-    // the completion here, and deletes |this|.
+    // If this is for CORS preflight, there is no associated client.
     info_->AddResponse(*current_response_);
+    // Do not finish proxied preflight requests that require proxy auth.
+    // The request is not finished yet, give control back to network service
+    // which will start authentication process.
+    if (current_response_->headers &&
+        current_response_->headers->response_code() ==
+            net::HTTP_PROXY_AUTHENTICATION_REQUIRED)
+      return;
+    // We notify the completion here, and delete |this|.
     factory_->request_handler_->OnResponseStarted(factory_->browser_context_,
                                                   &info_.value(), net::OK);
     factory_->request_handler_->OnCompleted(factory_->browser_context_,
@@ -804,7 +825,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
-    ContinueToResponseStarted(int error_code) {
+    OverwriteHeadersAndContinueToResponseStarted(int error_code) {
   DCHECK(!for_cors_preflight_);
   if (error_code != net::OK) {
     OnRequestError(CreateURLLoaderCompletionStatus(error_code),
@@ -812,13 +833,60 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     return;
   }
 
+  DCHECK(!current_request_uses_header_client_ || !override_headers_);
+
+  if (!override_headers_) {
+    ContinueToResponseStarted();
+    return;
+  }
+
+  current_response_->headers = override_headers_;
+
+  // The extension modified the response headers without specifying the
+  // 'extraHeaders' option. We need to repopulate the ParsedHeader to reflect
+  // the modified headers.
+  //
+  // TODO(https://crbug.com/1208142): Once problems with 'extraHeaders' are
+  // sorted out, migrate these headers over to requiring 'extraHeaders' and
+  // remove this code.
+  //
+  // Note: As an optimization, we reparse the ParsedHeaders only for navigation
+  // and worker requests, since they are not used for subresource requests.
+  using URLLoaderFactoryType =
+      content::ContentBrowserClient::URLLoaderFactoryType;
+  switch (factory_->loader_factory_type()) {
+    case URLLoaderFactoryType::kDocumentSubResource:
+    case URLLoaderFactoryType::kWorkerSubResource:
+    case URLLoaderFactoryType::kServiceWorkerSubResource:
+      ContinueToResponseStarted();
+      return;
+    case URLLoaderFactoryType::kNavigation:
+    case URLLoaderFactoryType::kWorkerMainResource:
+    case URLLoaderFactoryType::kServiceWorkerScript:
+    case URLLoaderFactoryType::kDownload:
+      break;
+  }
+
+  proxied_client_receiver_.Pause();
+  content::GetNetworkService()->ParseHeaders(
+      request_.url, current_response_->headers,
+      base::BindOnce(
+          &InProgressRequest::AssignParsedHeadersAndContinueToResponseStarted,
+          weak_factory_.GetWeakPtr()));
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    AssignParsedHeadersAndContinueToResponseStarted(
+        network::mojom::ParsedHeadersPtr parsed_headers) {
+  current_response_->parsed_headers = std::move(parsed_headers);
+  ContinueToResponseStarted();
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    ContinueToResponseStarted() {
   if (state_ == State::kInProgress) {
     state_ = State::kInProgressWithFinalResponseReceived;
   }
-
-  DCHECK(!current_request_uses_header_client_ || !override_headers_);
-  if (override_headers_)
-    current_response_->headers = override_headers_;
 
   std::string redirect_location;
   if (override_headers_ && override_headers_->IsRedirect(&redirect_location)) {
@@ -894,14 +962,14 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   override_headers_ = nullptr;
   redirect_url_ = GURL();
 
-  net::CompletionRepeatingCallback copyable_callback =
-      base::AdaptCallbackForRepeating(std::move(continuation));
+  auto callback_pair = base::SplitOnceCallback(std::move(continuation));
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
       request_.url.SchemeIs(url::kUrnScheme)) {
     DCHECK(info_.has_value());
     int result = factory_->request_handler_->OnHeadersReceived(
-        factory_->browser_context_, &info_.value(), copyable_callback,
-        current_response_->headers.get(), &override_headers_, &redirect_url_);
+        factory_->browser_context_, &info_.value(),
+        std::move(callback_pair.first), current_response_->headers.get(),
+        &override_headers_, &redirect_url_);
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
       const int status_code = current_response_->headers
                                   ? current_response_->headers->response_code()
@@ -934,7 +1002,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     DCHECK_EQ(net::OK, result);
   }
 
-  copyable_callback.Run(net::OK);
+  std::move(callback_pair.second).Run(net::OK);
 }
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnRequestError(
     const network::URLLoaderCompletionStatus& status,

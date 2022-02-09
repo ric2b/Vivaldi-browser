@@ -170,7 +170,7 @@ ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
 
   username_ = params->password_form.username;
 
-  password_manager::PasswordStore::FormDigest form_digest(
+  password_manager::PasswordFormDigest form_digest(
       password_manager::PasswordForm::Scheme::kOther,
       params->password_form.signon_realm, GURL(params->password_form.origin));
 

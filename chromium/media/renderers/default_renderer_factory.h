@@ -63,19 +63,16 @@ class MEDIA_EXPORT DefaultRendererFactory final : public RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       RequestOverlayInfoCB request_overlay_info_cb,
-      const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) final;
+      const gfx::ColorSpace& target_color_space) final;
 
  private:
   std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecoders(
-      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      bool use_platform_media_pipeline);
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner);
   std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecoders(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       RequestOverlayInfoCB request_overlay_info_cb,
       const gfx::ColorSpace& target_color_space,
-      GpuVideoAcceleratorFactories* gpu_factories,
-      bool use_platform_media_pipeline);
+      GpuVideoAcceleratorFactories* gpu_factories);
 
   MediaLog* media_log_;
 

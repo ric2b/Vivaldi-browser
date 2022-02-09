@@ -155,11 +155,17 @@ suite('InternetDetailPage', function() {
     });
   });
 
-  function init() {
+  /**
+   * @param {boolean=} opt_doNotProvidePrefs If provided, determine whether
+   *     prefs should be provided for the element.
+   */
+  function init(opt_doNotProvidePrefs) {
     internetDetailPage =
         document.createElement('settings-internet-detail-page');
     assertTrue(!!internetDetailPage);
-    internetDetailPage.prefs = Object.assign({}, prefs_);
+    if (!opt_doNotProvidePrefs) {
+      internetDetailPage.prefs = Object.assign({}, prefs_);
+    }
     document.body.appendChild(internetDetailPage);
   }
 
@@ -354,7 +360,7 @@ suite('InternetDetailPage', function() {
     });
 
     // Tests that when the route changes to one containing a deep link to
-    // the shared proxy toggle, toggle is foxused.
+    // the shared proxy toggle, toggle is focused.
     test('Deep link to shared proxy toggle', async () => {
       init();
       const mojom = chromeos.networkConfig.mojom;
@@ -385,8 +391,12 @@ suite('InternetDetailPage', function() {
   });
 
   suite('DetailsPageVPN', function() {
-    setup(function() {
-      init();
+    /**
+     * @param {boolean=} opt_doNotProvidePrefs If provided, determine whether
+     *     prefs should be provided for the element.
+     */
+    function initVpn(opt_doNotProvidePrefs) {
+      init(opt_doNotProvidePrefs);
       const mojom = chromeos.networkConfig.mojom;
       mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kVPN, true);
       setNetworksForTest([
@@ -394,9 +404,10 @@ suite('InternetDetailPage', function() {
       ]);
 
       internetDetailPage.init('vpn1_guid', 'VPN', 'vpn1');
-    });
+    }
 
     test('VPN config allowed', function() {
+      initVpn();
       prefs_.vpn_config_allowed.value = true;
       internetDetailPage.prefs = Object.assign({}, prefs_);
       return flushAsync().then(() => {
@@ -407,6 +418,7 @@ suite('InternetDetailPage', function() {
     });
 
     test('VPN config disallowed', function() {
+      initVpn();
       prefs_.vpn_config_allowed.value = false;
       internetDetailPage.prefs = Object.assign({}, prefs_);
       return flushAsync().then(() => {
@@ -415,13 +427,23 @@ suite('InternetDetailPage', function() {
         assertTrue(!!disconnectButton.$$('cr-policy-pref-indicator'));
       });
     });
+
+    // Regression test for issue fixed as part of https://crbug.com/1191626
+    // where page would throw an exception if prefs were undefined. Prefs are
+    // expected to be undefined if InternetDetailPage is loaded directly (e.g.,
+    // when the user clicks on the network in Quick Settings).
+    test('VPN without prefs', function() {
+      initVpn(/*opt_doNotProvidePrefs=*/ true);
+      return flushAsync();
+    });
   });
 
   suite('DetailsPageCellular', function() {
     async function expandConfigurableSection() {
-      const configurableSetions = internetDetailPage.$$('#configurableSetions');
-      assertTrue(!!configurableSetions);
-      configurableSetions.click();
+      const configurableSections =
+          internetDetailPage.$$('#configurableSections');
+      assertTrue(!!configurableSections);
+      configurableSections.click();
       await flushAsync();
       assertTrue(internetDetailPage.showConfigurableSections_);
     }
@@ -539,33 +561,6 @@ suite('InternetDetailPage', function() {
       });
     });
 
-    test('Cellular roaming subtext', async function() {
-      init();
-      const mojom = chromeos.networkConfig.mojom;
-      mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kCellular, true);
-      mojoApi_.setManagedPropertiesForTest(
-          getManagedProperties(mojom.NetworkType.kCellular, 'cellular'));
-      internetDetailPage.init('cellular_guid', 'Cellular', 'cellular');
-      await flushAsync();
-      const roamingToggle = internetDetailPage.$$('#allowDataRoaming');
-      assertTrue(!!roamingToggle);
-      assertEquals(
-          internetDetailPage.i18n('networkAllowDataRoamingDisabled'),
-          roamingToggle.subLabel);
-
-      const cellularNetwork =
-          getManagedProperties(mojom.NetworkType.kCellular, 'cellular');
-      cellularNetwork.typeProperties.cellular.allowRoaming = true;
-      mojoApi_.setManagedPropertiesForTest(cellularNetwork);
-      // Notify device state list change since allow roaming is
-      // device level property in shill.
-      internetDetailPage.onDeviceStateListChanged();
-      await flushAsync();
-      assertEquals(
-          internetDetailPage.i18n('networkAllowDataRoamingEnabledHome'),
-          roamingToggle.subLabel);
-    });
-
     test('Deep link to disconnect button', async () => {
       // Add listener for popstate event fired when the dialog closes and the
       // router navigates backwards.
@@ -600,6 +595,36 @@ suite('InternetDetailPage', function() {
       // will interfere with its routing.
       internetDetailPage.close();
       await popStatePromise;
+    });
+
+    test('Deep link to cellular roaming toggle button', async () => {
+      init();
+      const mojom = chromeos.networkConfig.mojom;
+      mojoApi_.resetForTest();
+      mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kCellular, true);
+      const cellularNetwork =
+          getManagedProperties(mojom.NetworkType.kCellular, 'cellular');
+      cellularNetwork.connectable = false;
+      mojoApi_.setManagedPropertiesForTest(cellularNetwork);
+
+      const params = new URLSearchParams;
+      params.append('guid', 'cellular_guid');
+      params.append('type', 'Cellular');
+      params.append('name', 'cellular');
+      params.append('settingId', '15');
+      settings.Router.getInstance().navigateTo(
+          settings.routes.NETWORK_DETAIL, params);
+
+      await flushAsync();
+
+      const deepLinkElement =
+          internetDetailPage.$$('cellular-roaming-toggle-button')
+              .getCellularRoamingToggle()
+              .$$('cr-toggle');
+      await test_util.waitAfterNextRender(deepLinkElement);
+      assertEquals(
+          deepLinkElement, getDeepActiveElement(),
+          'Cellular roaming toggle button should be focused for settingId=15.');
     });
 
     test('Deep link to sim lock toggle with cellular flag off', async () => {
@@ -696,7 +721,8 @@ suite('InternetDetailPage', function() {
           await flushAsync();
           assertTrue(internetDetailPage.showConfigurableSections_);
           // Check that an element from the primary account section exists.
-          assertTrue(!!internetDetailPage.$$('#allowDataRoaming'));
+          assertTrue(!!internetDetailPage.$$('cellular-roaming-toggle-button')
+                           .getCellularRoamingToggle());
         });
 
     test(
@@ -900,11 +926,13 @@ suite('InternetDetailPage', function() {
       await flushAsync();
 
       const connectDisconnectButton = getButton('connectDisconnect');
-      const allowDataRoamingButton = getButton('allowDataRoaming');
       const infoFields = getButton('infoFields');
       const cellularSimInfoAdvanced = getButton('cellularSimInfoAdvanced');
       const advancedFields = getButton('advancedFields');
       const deviceFields = getButton('deviceFields');
+      const allowDataRoamingButton =
+          internetDetailPage.$$('cellular-roaming-toggle-button')
+              .getCellularRoamingToggle();
       const networkChooseMobile =
           internetDetailPage.$$('network-choose-mobile');
       const networkApnlist = internetDetailPage.$$('network-apnlist');
@@ -1027,20 +1055,33 @@ suite('InternetDetailPage', function() {
       init();
     });
 
-    test('Tether1', function() {
-      init();
-      const mojom = chromeos.networkConfig.mojom;
-      mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kTether, true);
-      setNetworksForTest([
-        OncMojo.getDefaultNetworkState(mojom.NetworkType.kTether, 'tether1'),
-      ]);
+    test(
+        'Create tether network, first connection attempt shows tether dialog',
+        async () => {
+          init();
+          const mojom = chromeos.networkConfig.mojom;
+          mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kTether, true);
+          setNetworksForTest([
+            OncMojo.getDefaultNetworkState(
+                mojom.NetworkType.kTether, 'tether1'),
+          ]);
 
-      internetDetailPage.init('tether1_guid', 'Tether', 'tether1');
-      assertEquals('tether1_guid', internetDetailPage.guid);
-      return flushAsync().then(() => {
-        return mojoApi_.whenCalled('getManagedProperties');
-      });
-    });
+          internetDetailPage.init('tether1_guid', 'Tether', 'tether1');
+          assertEquals('tether1_guid', internetDetailPage.guid);
+          await flushAsync();
+          await mojoApi_.whenCalled('getManagedProperties');
+
+          const connect = internetDetailPage.$$('#connectDisconnect');
+          assertTrue(!!connect);
+
+          const tetherDialog = internetDetailPage.$$('#tetherDialog');
+          assertTrue(!!tetherDialog);
+          assertFalse(tetherDialog.$.dialog.open);
+
+          connect.click();
+          await flushAsync();
+          assertTrue(tetherDialog.$.dialog.open);
+        });
 
     test('Deep link to disconnect tether network', async () => {
       init();

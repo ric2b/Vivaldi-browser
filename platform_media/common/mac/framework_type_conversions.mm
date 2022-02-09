@@ -7,6 +7,7 @@
 
 #include "platform_media/common/mac/framework_type_conversions.h"
 
+#include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
@@ -77,10 +78,10 @@ std::string Loggable(AudioChannelLayoutTag tag) {
 
 std::string FourCCToString(uint32_t fourcc) {
   const char buffer[] = {
-      (fourcc >> 24) & 0xff,
-      (fourcc >> 16) & 0xff,
-      (fourcc >>  8) & 0xff,
-      (fourcc >>  0) & 0xff,
+      static_cast<const char>((fourcc >> 24) & 0xff),
+      static_cast<const char>((fourcc >> 16) & 0xff),
+      static_cast<const char>((fourcc >>  8) & 0xff),
+      static_cast<const char>((fourcc >>  0) & 0xff),
   };
   return std::string(buffer, base::size(buffer));
 }

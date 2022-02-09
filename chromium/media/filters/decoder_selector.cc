@@ -27,6 +27,10 @@
 #include "media/filters/decoder_stream_traits.h"
 #include "media/filters/decrypting_demuxer_stream.h"
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/renderer/decoders/pass_through_decoder.h"
+#endif
+
 namespace media {
 
 namespace {
@@ -253,6 +257,13 @@ void DecoderSelector<StreamType>::OverrideDecoderPriorityCBForTesting(
 
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::CreateDecoders() {
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  if (config_.platform_media_pass_through_) {
+    decoders_.clear();
+    decoders_.push_back(CreatePlatformMediaPassThroughDecoder<StreamType>());
+    return;
+  }
+#endif
   // Post-insert decoders returned by `create_decoders_cb_`, so that
   // any decoders added via `PrependDecoder()` are not overwritten and retain
   // priority (even if they are ultimately de-ranked by

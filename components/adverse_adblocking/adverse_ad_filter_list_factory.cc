@@ -2,6 +2,7 @@
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"

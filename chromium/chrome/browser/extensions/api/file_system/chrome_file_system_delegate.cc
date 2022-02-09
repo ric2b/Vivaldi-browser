@@ -49,7 +49,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/file_manager/volume_manager.h"
+#include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/extensions/api/file_system/consent_provider.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
@@ -114,7 +114,7 @@ void OnConsentReceived(content::BrowserContext* browser_context,
                        scoped_refptr<ExtensionFunction> requester,
                        FileSystemDelegate::FileSystemCallback success_callback,
                        FileSystemDelegate::ErrorCallback error_callback,
-                       const std::string& extension_id,
+                       const url::Origin& origin,
                        const base::WeakPtr<file_manager::Volume>& volume,
                        bool writable,
                        ConsentProvider::Consent result) {
@@ -145,8 +145,9 @@ void OnConsentReceived(content::BrowserContext* browser_context,
     return;
   }
 
+  DCHECK_EQ(origin.scheme(), kExtensionScheme);
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      util::GetStoragePartitionForExtensionId(extension_id, browser_context)
+      util::GetStoragePartitionForExtensionId(origin.host(), browser_context)
           ->GetFileSystemContext();
   storage::ExternalFileSystemBackend* const backend =
       file_system_context->external_backend();
@@ -164,10 +165,7 @@ void OnConsentReceived(content::BrowserContext* browser_context,
 
   const storage::FileSystemURL original_url =
       file_system_context->CreateCrackedFileSystemURL(
-          url::Origin::Create(GURL(std::string(kExtensionScheme) +
-                                   url::kStandardSchemeSeparator +
-                                   extension_id)),
-          storage::kFileSystemTypeExternal, virtual_path);
+          origin, storage::kFileSystemTypeExternal, virtual_path);
 
   // Set a fixed register name, as the automatic one would leak the mount point
   // directory.
@@ -182,7 +180,7 @@ void OnConsentReceived(content::BrowserContext* browser_context,
     return;
   }
 
-  backend->GrantFileAccessToExtension(extension_id, virtual_path);
+  backend->GrantFileAccessToOrigin(origin, virtual_path);
 
   // Grant file permissions to the renderer hosting component.
   content::ChildProcessSecurityPolicy* policy =
@@ -399,7 +397,7 @@ void ChromeFileSystemDelegate::RequestFileSystem(
   ConsentProvider::ConsentCallback callback =
       base::BindOnce(&OnConsentReceived, browser_context, requester,
                      std::move(success_callback), std::move(error_callback),
-                     extension.id(), volume, writable);
+                     extension.origin(), volume, writable);
 
   consent_provider.RequestConsent(extension, requester->render_frame_host(),
                                   volume, writable, std::move(callback));

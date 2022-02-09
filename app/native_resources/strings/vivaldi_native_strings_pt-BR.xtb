@@ -16,7 +16,7 @@
 <translation id="1676595396635191120">Nova Janela Privada</translation>
 <translation id="1702758681952953055">Se um erro persistir, por favor, reporte ele e inclua os seguintes detalhes:</translation>
 <translation id="1728549374069268714">Colar e &amp;ir</translation>
-<translation id="1756026472674246267">Abrir link em nova &amp;guia</translation>
+<translation id="1756026472674246267">Abrir link em nova &amp;aba</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Propriedades de Imagem...</translation>
 <translation id="1920297417712412573">Copiar para &amp;nota</translation>
@@ -39,30 +39,31 @@
 <translation id="292258461174562431">Monstro 4</translation>
 <translation id="2923448633003185837">Colar e Ir</translation>
 <translation id="2977472760057091832">Abrir link em janela &amp;privada</translation>
-<translation id="2989805286512600854">Abrir uma nova guia</translation>
+<translation id="2989805286512600854">Abrir uma nova aba</translation>
 <translation id="3027988479108856431">Infelizmente, suas configurações do Yandex não estão disponíveis enquanto ele estiver em execução. Para importá-las ao Vivaldi, salve seu trabalho e feche todas as janelas do Yandex. Então clique em Continuar.</translation>
 <translation id="3084011186245865060">Paisagem 6</translation>
 <translation id="3093931836425623631">Vivaldi é possível graças ao projeto de código aberto Chromium e vários outros softwares de código aberto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
-<translation id="3156398087075132709">Novo Marcador</translation>
+<translation id="3156398087075132709">Novo Favorito</translation>
 <translation id="3255747772218936245">Instalar atualização</translation>
 <translation id="3259769196742189631">Validar na &amp;W3C</translation>
 <translation id="3302905971452834934">Monstro 1</translation>
 <translation id="3334610655141903168">(sem título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> é a versão mais recente disponível.</translation>
 <translation id="3383198080133834965">Você está atualizado!</translation>
-<translation id="3402602684546832928">Selecione um arquivo de marcadores do Opera</translation>
+<translation id="3402602684546832928">Selecione um arquivo de favoritos do Opera</translation>
 <translation id="3451317331714872347">Paisagem 8</translation>
 <translation id="3457498675806041407">Fechar Vivaldi</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> já foi instalado e será ativado após reinicar o navegador.</translation>
 <translation id="3516213908976398531">Paisagem 11</translation>
 <translation id="3521635864657970829">Deseja realmente fechar esta janela?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
 <translation id="3542768452570884558">Abrir link em nova &amp;janela</translation>
-<translation id="3588820906588687999">Abrir imagem em nova &amp;guia</translation>
+<translation id="3588820906588687999">Abrir imagem em nova &amp;aba</translation>
 <translation id="3601066750251199488">Monstro 3</translation>
 <translation id="3680031241659195730">Uma nova versão do Vivaldi está disponível!</translation>
 <translation id="3708982624815781692">O download foi cancelado.</translation>
-<translation id="3732157130969736834">Adicionar link aos &amp;marcadores</translation>
+<translation id="3732157130969736834">Adicionar link aos &amp;favoritos</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
 <translation id="3795800845758778870">Infelizmente, as configurações do Brave não estão disponíveis enquanto o browser está aberto. Para importar essas configurações, salve o seu trabalho e feche todas as janelas do Brave. Então, clique em Continuar.</translation>
@@ -86,15 +87,15 @@
 <translation id="4582480609585453144">Abrir Link em Segundo Plano</translation>
 <translation id="4636708767492582204">Enviar por &amp;email</translation>
 <translation id="4677434526832593569">Animal 8</translation>
-<translation id="474217410105706308">Silenciar Guia</translation>
+<translation id="474217410105706308">Silenciar Aba</translation>
 <translation id="4881695831933465202">Abrir</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> de <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Speed Dial Importado</translation>
 <translation id="5092656712000637858">Criar pai&amp;nel web desta página</translation>
 <translation id="5177818338935286353">Monstro 7</translation>
 <translation id="5213743983876949565">Animal 1</translation>
-<translation id="5238244642230426581">Marcadores Importados</translation>
-<translation id="527605719918376753">Silenciar guia</translation>
+<translation id="5238244642230426581">Favoritos Importados</translation>
+<translation id="527605719918376753">Silenciar aba</translation>
 <translation id="5305569355661722298">Fechar Janela</translation>
 <translation id="5388358297987318779">&amp;Abrir imagem</translation>
 <translation id="5416008465899576639">Uma nova versão do Vivaldi está disponível.</translation>
@@ -112,7 +113,7 @@
 <translation id="6040143037577758943">Fechar</translation>
 <translation id="6229528619562190452">Clique aqui para atualizar o Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagem como fundo do Speed Dial</translation>
-<translation id="630690498669249215">Arquivo de marcadores do Opera</translation>
+<translation id="630690498669249215">Arquivo de favoritos do Opera</translation>
 <translation id="6339818817272922368">Conta Local</translation>
 <translation id="6438786710866753178">Paisagem 4</translation>
 <translation id="6477028720702061455">Selecione a pasta do perfil do Opera para importar</translation>
@@ -140,9 +141,9 @@
 <translation id="7957213167373139414">Meu Calendário</translation>
 <translation id="8027581147000338959">Abrir em Nova Janela</translation>
 <translation id="8099620695029051217">&amp;Copiar endereço da página</translation>
-<translation id="8197810018650377191">Adicionar página aos &amp;marcadores</translation>
+<translation id="8197810018650377191">Adicionar página aos &amp;favoritos</translation>
 <translation id="8261506727792406068">Deletar</translation>
-<translation id="8331671104904436324">Abrir Guia em Segundo Plano</translation>
+<translation id="8331671104904436324">Abrir Aba em Segundo Plano</translation>
 <translation id="8373293945112511707">Paisagem 1</translation>
 <translation id="8388552048012645975">Baixando atualização...</translation>
 <translation id="8427094907586191051">Paisagem 17</translation>
@@ -153,7 +154,7 @@
 <translation id="8567452685425968223">Extraindo atualização...</translation>
 <translation id="8624587806981488221">&amp;Recarregar imagem</translation>
 <translation id="864444594187862076">Opera versão 15+ (Developer)</translation>
-<translation id="8651348004684669199">Adicionar guia ativa</translation>
+<translation id="8651348004684669199">Adicionar aba ativa</translation>
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Paisagem 14</translation>
@@ -161,8 +162,9 @@
 <translation id="8813277370772331957">Lembre-me depois</translation>
 <translation id="8894900864683381599">Criar pai&amp;nel web deste link</translation>
 <translation id="8912720443398351457">Deseja realmente fechar o Vivaldi?</translation>
-<translation id="8947109330183116400">Selecione um aquivo HTML de marcadores</translation>
+<translation id="8947109330183116400">Selecione um aquivo HTML de favoritos</translation>
 <translation id="9017566390391482291">Selecione a pasta do perfil do Vivaldi para importar</translation>
+<translation id="9048058608784130603">Atualização pendente: <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Editar</translation>
 <translation id="912022491595344261">Abrir Imagem como <ph name="USER" /></translation>
 <translation id="9157539936604258187">&amp;Abrir link</translation>

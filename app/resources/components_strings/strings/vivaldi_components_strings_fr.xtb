@@ -144,6 +144,7 @@
 <translation id="5810442152076338065">Votre connexion à <ph name="DOMAIN" /> est chiffrée à l’aide d’une méthode de chiffrement obsolète.</translation>
 <translation id="5838278095973806738">Vous ne devriez pas saisir d’informations sensibles sur ce site (par exemple, vos mots de passe ou les informations de votre carte de paiement), car elles risquent d’être dérobées par des pirates informatiques.</translation>
 <translation id="5869405914158311789">Ce site est inaccessible</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 en cours d’utilisation} other{# en cours d’utilisation}}</translation>
 <translation id="5932224571077948991">Le site affiche des publicités intrusives ou trompeuses</translation>
 <translation id="6051221802930200923">Le site <ph name="SITE" /> est actuellement inaccessible, car il utilise l’épinglage des certificats. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="6146055958333702838">Vérifiez les câbles et redémarrez votre routeur, votre modem
@@ -219,9 +220,9 @@
 <translation id="8740359287975076522">L’&lt;abbr id="dnsDefinition"&gt;adresse DNS&lt;/abbr&gt; de <ph name="HOST_NAME" /> est introuvable. Diagnostic du problème en cours…</translation>
 <translation id="8820817407110198400">Signets</translation>
 <translation id="8940028675168378100">Bloqué par <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Accéder aux paramètres du site</translation>
 <translation id="9001074447101275817">Le proxy <ph name="DOMAIN" /> nécessite un nom d’utilisateur et un mot de passe.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
-<translation id="9011424611726486705">Ouvrir les paramètres du site</translation>
 <translation id="9025348182339809926">(Non valide)</translation>
 <translation id="9039213469156557790">De plus, cette page inclut d’autres ressources qui ne sont pas sécurisées. Ces ressources peuvent être consultées par des tiers pendant leur transfert, et modifiées par un pirate informatique dans le but de changer le comportement de cette page.</translation>
 <translation id="9062620674789239642">Il a peut-être été déplacé, modifié ou supprimé.</translation>

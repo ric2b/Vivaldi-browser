@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "base/memory/unsafe_shared_memory_region.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/geometry/rect_f.h"

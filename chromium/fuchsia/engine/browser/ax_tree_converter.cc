@@ -11,7 +11,6 @@
 #include <stdint.h>
 #include <vector>
 
-#include "base/bit_cast.h"
 #include "base/numerics/safe_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_tree_id.h"
@@ -141,9 +140,9 @@ fuchsia::accessibility::semantics::States ConvertStates(
   }
 
   // The scroll offsets, if the element is a scrollable container.
-  const auto x_scroll_offset =
+  const float x_scroll_offset =
       node.GetIntAttribute(ax::mojom::IntAttribute::kScrollX);
-  const auto y_scroll_offset =
+  const float y_scroll_offset =
       node.GetIntAttribute(ax::mojom::IntAttribute::kScrollY);
   if (x_scroll_offset || y_scroll_offset)
     states.set_viewport_offset({x_scroll_offset, y_scroll_offset});
@@ -216,6 +215,7 @@ fuchsia::accessibility::semantics::Node AXNodeDataToSemanticNode(
     const ui::AXNodeData& container_node,
     const ui::AXTreeID& tree_id,
     bool is_root,
+    float device_scale_factor,
     NodeIDMapper* id_mapper) {
   fuchsia::accessibility::semantics::Node fuchsia_node;
   fuchsia_node.set_node_id(
@@ -238,6 +238,9 @@ fuchsia::accessibility::semantics::Node AXNodeDataToSemanticNode(
   }
   transform.PostTranslate(container_node.relative_bounds.bounds.x(),
                           container_node.relative_bounds.bounds.y());
+  if (device_scale_factor > 0) {
+    transform.PostScale(1 / device_scale_factor, 1 / device_scale_factor);
+  }
   if (!transform.IsIdentity()) {
     fuchsia_node.set_transform(ConvertTransform(&transform));
   }

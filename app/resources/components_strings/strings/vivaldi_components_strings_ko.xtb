@@ -144,6 +144,7 @@
 <translation id="5810442152076338065"><ph name="DOMAIN" />에 대한 연결이 더 이상 사용되지 않는 암호화 기술을 사용하여 암호화됩니다.</translation>
 <translation id="5838278095973806738">공격자에 의해 도난당할 수 있으므로 이 사이트에 비밀번호나 신용카드 등 민감한 정보를 입력해서는 안 됩니다.</translation>
 <translation id="5869405914158311789">사이트에 연결할 수 없음</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1개 사용 중} other {#개 사용 중}}</translation>
 <translation id="5932224571077948991">사이트에서 방해가 되거나 사용자를 현혹하는 광고를 표시함</translation>
 <translation id="6051221802930200923">현재 <ph name="SITE" />에서 인증서 고정을 사용하기 때문에 방문할 수 없습니다. 네트워크 오류와 공격은 대부분 일시적이므로 나중에 이 페이지가 정상적으로 작동할 수 있습니다.</translation>
 <translation id="6146055958333702838">케이블을 확인하고 사용 중인 라우터, 모뎀 또는 기타 네트워크 기기를
@@ -221,7 +222,6 @@
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />에 의해 차단됨</translation>
 <translation id="9001074447101275817">프록시 <ph name="DOMAIN" />에 사용자 이름 및 비밀번호를 입력해야 합니다.</translation>
 <translation id="9008201768610948239">무시</translation>
-<translation id="9011424611726486705">사이트 설정 열기</translation>
 <translation id="9025348182339809926">(유효하지 않음)</translation>
 <translation id="9039213469156557790">또한 이 페이지에는 안전하지 않은 다른 리소스가 포함되어 있습니다. 이러한 리소스는 전송 중에 다른 사람이 볼 수 있으며 페이지의 작동을 변경하기 위해 공격자가 수정할 수 있습니다.</translation>
 <translation id="9062620674789239642">이동, 수정 또는 삭제되었을 수 있습니다.</translation>

@@ -49,7 +49,7 @@ class RecurrrenceExceptionTable {
 
  protected:
   virtual sql::Database& GetDB() = 0;
-  void FillRecurrenceExceptionRow(const sql::Statement& statement,
+  void FillRecurrenceExceptionRow(sql::Statement& statement,
                                   RecurrenceExceptionRow* exception_row);
 
  private:

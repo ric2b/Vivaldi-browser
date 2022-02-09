@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Адправіць спасылку па электроннай пошце</translation>
 <translation id="1454726940098520109">Больш не пытацца пацвярджэння</translation>
 <translation id="1462666970065907900">Сапраўды хочаце закрыць гэтае акно?</translation>
+<translation id="1480046233931937785">Падзякі</translation>
 <translation id="1526344461589023948">Падчас захавання спампаванага абнаўлення адбылася памылка. Праверце дыск на наяўнасць вольнага месца і паўтарыце спробу.</translation>
 <translation id="1657174850639146440">Пачварка 9</translation>
 <translation id="1676595396635191120">Новае прыватнае акно</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Адкрыць у новай укладцы</translation>
 <translation id="3027988479108856431">Нажаль, налады Yandex недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Yandex і націсніце "Працягнуць".</translation>
 <translation id="3084011186245865060">Краявід 6</translation>
+<translation id="3093931836425623631">Браўзер Vivaldi створаны на аснове адкрытага праекта Chromium і іншага праграмнага забеспячэння з адкрытым зыходным кодам.</translation>
 <translation id="3127383884976966729">Жывёліна 7</translation>
 <translation id="3156398087075132709">Новая закладка</translation>
 <translation id="3255747772218936245">Усталяваць абнаўленне</translation>
@@ -52,6 +54,7 @@
 <translation id="3402602684546832928">Абраць файл закладак Opera</translation>
 <translation id="3451317331714872347">Краявід 8</translation>
 <translation id="3457498675806041407">Пацвердзіце выхад</translation>
+<translation id="3470981972195599598">Версія Vivaldi <ph name="VERSION" /> усталяваная і актывуецца пасля перазапуску браузера.</translation>
 <translation id="3516213908976398531">Краявід 11</translation>
 <translation id="3521635864657970829">Сапраўды хочаце закрыць гэтае акно?</translation>
 <translation id="3540597690227428180">Жывёліна 9</translation>
@@ -161,6 +164,7 @@
 <translation id="8912720443398351457">Сапраўды хочаце выйсці з Vivaldi?</translation>
 <translation id="8947109330183116400">Абраць файл HTML з закладкамі</translation>
 <translation id="9017566390391482291">Абярыце каталог профілю Vivaldi для імпарту</translation>
+<translation id="9048058608784130603">Гатова абнаўленне <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Рэдагаваць</translation>
 <translation id="912022491595344261">Адкрыць выяву як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Адкрыць спасылку</translation>

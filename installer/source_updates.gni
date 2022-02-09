@@ -104,7 +104,6 @@ if (is_linux && !is_component_build) {
     ]
     sources += [
       "//vivaldi/installer/linux/common/appdata.xml.template",
-      "//vivaldi/installer/linux/common/update-widevine",
       "//vivaldi/installer/linux/common/update-ffmpeg",
       "//vivaldi/installer/linux/common/vivaldi.info",
       "//vivaldi/installer/linux/common/wrapper",

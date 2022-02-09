@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standaard</translation>
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Html-bladwijzerbestand</translation>
-<translation id="1380436189840894976">Privémodus toch sluiten?</translation>
 <translation id="1430915738399379752">Afdrukken</translation>
 <translation id="1433811987160647649">Goedkeuring vragen vóór toegang</translation>
 <translation id="1451375123200651445">Webpagina, één bestand</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Camera</translation>
 <translation id="1627276047960621195">Bestandsdescriptors</translation>
 <translation id="1682548588986054654">Nieuw privévenster</translation>
-<translation id="1698122934742150150">Alleen huidige privésessie</translation>
 <translation id="1706625117072057435">Zoomniveaus</translation>
 <translation id="1708338024780164500">(Inactief)</translation>
 <translation id="1723824996674794290">&amp;Nieuw venster</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Onbekende plug-in</translation>
 <translation id="2423578206845792524">Afbeelding &amp;opslaan als...</translation>
 <translation id="2439110203301358333">Een ander programma op je computer heeft een extensie toegevoegd die de manier waarop Vivaldi werkt kan wijzigen.</translation>
+<translation id="2443487764245141020">Misschien willen websites je ook herkennen via een ID</translation>
 <translation id="2445081178310039857">Hoofddirectory van extensie is vereist.</translation>
 <translation id="2470702053775288986">Niet-ondersteunde extensies uitgeschakeld</translation>
 <translation id="2476578072172137802">Website-instellingen</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Koppelingsadr&amp;es kopiëren</translation>
 <translation id="354068948465830244">Kan websitegegevens lezen en wijzigen</translation>
 <translation id="3560034655160545939">&amp;Spellingcontrole</translation>
-<translation id="3574917942258583917">Privémodus toch afsluiten?</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Koppeling openen in privévenster</translation>
 <translation id="3627879631695760395"><ph name="APP" /> installeren...</translation>
-<translation id="3668823961463113931">Handlers</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Verzoek voor scherm delen van <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Gesloten websites mogen het verzenden of ontvangen van gegevens niet voltooien</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Extensies in ontwikkelaarsmodus uitschakelen</translation>
 <translation id="4100839878934973028">Een ander programma op je computer heeft een app toegevoegd die de manier waarop Vivaldi werkt kan wijzigen.</translation>
 <translation id="4109898769411476438">Browser sluiten voor het importeren</translation>
-<translation id="4115080753528843955">Sommige aanbieders gebruiken unieke identificatie voor het verlenen van toegang tot beveiligde inhoud</translation>
 <translation id="4130207949184424187">Deze extensie heeft gewijzigd welke pagina wordt weergegeven wanneer je vanuit het adresveld zoekt.</translation>
 <translation id="4131410914670010031">Zwart/wit</translation>
 <translation id="4176463684765177261">Uitgeschakeld</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Het installeren van deze extensie leverde waarschuwingen op:</translation>
 <translation id="479536056609751218">Webpagina, alleen HTML</translation>
 <translation id="4839303808932127586">&amp;Video opslaan als...</translation>
+<translation id="4840096453115567876">Privémodus toch stoppen?</translation>
 <translation id="488785315393301722">Details weergeven</translation>
 <translation id="4907306957610201395">Permissies</translation>
 <translation id="4912643508233590958">Activeringen vanuit inactief</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Besturingselementen &amp;weergeven</translation>
+<translation id="7374461526650987610">Protocolhandlers</translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7412226954991670867">GPU-geheugen</translation>
 <translation id="7421925624202799674">Paginabron &amp;weergeven</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Sorteren</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Annuleren</translation>
+<translation id="7659154729610375585">Privémodus toch afsluiten?</translation>
 <translation id="7661259717474717992">Websites toestaan cookiegegevens op te slaan en te lezen</translation>
 <translation id="7663719505383602579">Ontvanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Geïnstalleerd door je administrator</translation>
@@ -453,6 +452,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8899851313684471736">Koppeling openen in &amp;nieuw venster</translation>
 <translation id="8915370057835397490">Suggesties worden geladen</translation>
 <translation id="8916476537757519021">Privésubframe: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Alleen huidige privésessie</translation>
 <translation id="895944840846194039">JavaScript-geheugen</translation>
 <translation id="8962083179518285172">Details verbergen</translation>
 <translation id="8973557916016709913">Zoomniveau verwijderen</translation>

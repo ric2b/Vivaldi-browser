@@ -144,6 +144,7 @@
 <translation id="5810442152076338065">Yhteytesi sivustoon <ph name="DOMAIN" /> on salattu vanhentuneella salaustekniikalla.</translation>
 <translation id="5838278095973806738">Älä anna sivustolle salasanoja, luottokorttinumeroita tai muita arkaluonteisia tietoja, sillä hyökkääjät saattavat varastaa ne.</translation>
 <translation id="5869405914158311789">Sivustoon ei saada yhteyttä</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 käytössä}other{# käytössä}}</translation>
 <translation id="5932224571077948991">Sivustolla on häiritseviä tai harhaanjohtavia mainoksia</translation>
 <translation id="6051221802930200923"><ph name="SITE" /> ei juuri nyt ole käytettävissä, koska se käyttää varmenteiden kiinnittämistä. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
 <translation id="6146055958333702838">Tarkista kaikki kaapelit ja käynnistä uudelleen reitittimet, modeemit ja muut
@@ -219,9 +220,9 @@
 <translation id="8740359287975076522">Sivuston <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-osoitetta&lt;/abbr&gt; ei löydy. Ongelmaa diagnosoidaan.</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>
 <translation id="8940028675168378100">Estää <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Siirry sivustoasetuksiin</translation>
 <translation id="9001074447101275817">Välityspalvelin <ph name="DOMAIN" /> vaatii käyttäjänimen ja salasanan.</translation>
 <translation id="9008201768610948239">Ohita</translation>
-<translation id="9011424611726486705">Avaa sivustoasetukset</translation>
 <translation id="9025348182339809926">(Virheellinen)</translation>
 <translation id="9039213469156557790">Sivulla on kuitenkin osia, joita ei ole suojattu. Muut voivat tarkastella näitä osia siirrettäessä, ja hyökkääjä voi muuttaa sivun käyttäytymistä muokkaamalla niitä.</translation>
 <translation id="9062620674789239642">Se on voitu siirtää tai poistaa tai sitä on muutettu.</translation>

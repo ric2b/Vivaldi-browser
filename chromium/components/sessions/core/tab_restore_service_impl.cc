@@ -20,7 +20,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -36,6 +35,8 @@
 
 #include "app/vivaldi_apptools.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
+
+#undef LoadBitmap
 
 namespace sessions {
 
@@ -527,8 +528,7 @@ TabRestoreServiceImpl::PersistenceDelegate::PersistenceDelegate(
       command_storage_manager_(std::make_unique<CommandStorageManager>(
           CommandStorageManager::kTabRestore,
           client_->GetPathToSaveTo(),
-          this,
-          /* use_marker */ true)),
+          this)),
       tab_restore_service_helper_(nullptr),
       entries_to_write_(0),
       entries_written_(0),

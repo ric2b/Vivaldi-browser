@@ -49,8 +49,11 @@ const base::Feature kIOSLegacyTLSInterstitial{"IOSLegacyTLSInterstitial",
 const base::Feature kRecordSnapshotSize{"RecordSnapshotSize",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kWebViewNativeContextMenu{
-    "WebViewNativeContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kWebViewNativeContextMenu{"WebViewNativeContextMenu",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kDisableNonHTMLScreenshotOnIOS15{
+    "DisableNonHTMLScreenshotOnIOS15", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const char kWebViewNativeContextMenuName[] = "type";
 const char kWebViewNativeContextMenuParameterSystem[] = "system";
@@ -80,9 +83,17 @@ bool UseWebViewNativeContextMenuSystem() {
       return false;
     std::string field_trial_param = base::GetFieldTrialParamValueByFeature(
         kWebViewNativeContextMenu, kWebViewNativeContextMenuName);
-    return field_trial_param == kWebViewNativeContextMenuParameterSystem;
+    return field_trial_param.empty() ||
+           field_trial_param == kWebViewNativeContextMenuParameterSystem;
   }
   return false;
+}
+
+bool ShouldTakeScreenshotOnNonHTMLContent() {
+  if (@available(iOS 15, *)) {
+    return !base::FeatureList::IsEnabled(kDisableNonHTMLScreenshotOnIOS15);
+  }
+  return true;
 }
 
 const base::Feature kIOSSharedHighlightingColorChange{

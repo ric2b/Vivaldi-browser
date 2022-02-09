@@ -63,28 +63,10 @@ NavigationPolicy NavigationPolicyFromEventModifiers(int16_t button,
     return kNavigationPolicyCurrentTab;
 
   if (new_tab_modifier) {
-    if (shift) {
-      if (ctrl && vivaldi::IsVivaldiRunning()){
-        return kNavigationPolicyNewWindow;
-      } else {
-      return kNavigationPolicyNewForegroundTab;
-      }
-    }
-    else
-      return kNavigationPolicyNewBackgroundTab;
-  } else {
-    if (shift) {
-      if (vivaldi::IsVivaldiRunning()){
-        return kNavigationPolicyNewForegroundTab;
-      }
-      else{
-      return kNavigationPolicyNewWindow;
-      }
-    }
-    else
-      return kNavigationPolicyDownload;
+    return shift ? (ctrl && vivaldi::IsVivaldiRunning() ? kNavigationPolicyNewWindow: kNavigationPolicyNewForegroundTab)
+                 : kNavigationPolicyNewBackgroundTab;
   }
-  return kNavigationPolicyCurrentTab;
+  return shift ? (vivaldi::IsVivaldiRunning() ? kNavigationPolicyNewForegroundTab : kNavigationPolicyNewWindow) : kNavigationPolicyDownload;
 }
 
 NavigationPolicy NavigationPolicyFromEventInternal(const Event* event) {

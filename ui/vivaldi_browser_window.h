@@ -250,6 +250,7 @@ class VivaldiBrowserWindow final
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
   void FocusInactivePopupForAccessibility() override {}
+  void FocusHelpBubble() override {}
   void RotatePaneFocus(bool forwards) override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
@@ -347,6 +348,7 @@ class VivaldiBrowserWindow final
   void CreateTabSearchBubble() override {}
   void CloseTabSearchBubble() override {}
   FeaturePromoController* GetFeaturePromoController() override;
+  void ShowIncognitoClearBrowsingDataDialog() override {}
   // BrowserWindow overrides end
 
   // BaseWindow overrides
@@ -422,6 +424,10 @@ class VivaldiBrowserWindow final
 
   WindowType type() { return window_type_; }
 
+  void SetWindowState(ui::WindowShowState show_state) {
+    window_state_data_.state = show_state;
+  }
+
   // window for the callback is null on errors or if the user closed the
   // window before the initial content was loaded.
   using DidFinishNavigationCallback =
@@ -446,9 +452,7 @@ class VivaldiBrowserWindow final
 
   struct WindowStateData {
     // State kept to dispatch events on changes.
-    bool is_fullscreen = false;
-    bool is_maximized = false;
-    bool is_minimized = false;
+    ui::WindowShowState state = ui::SHOW_STATE_DEFAULT;
     gfx::Rect bounds;
   };
 
@@ -466,9 +470,7 @@ class VivaldiBrowserWindow final
   void UpdateActivation(bool is_active);
   void OnIconImagesLoaded(gfx::ImageFamily image_family);
 
-  void OnMinimizedChanged(bool minimized);
-  void OnMaximizedChanged(bool maximized);
-  void OnFullscreenChanged(bool fullscreen);
+  void OnStateChanged(ui::WindowShowState state);
   void OnPositionChanged();
   void OnActivationChanged(bool activated);
 

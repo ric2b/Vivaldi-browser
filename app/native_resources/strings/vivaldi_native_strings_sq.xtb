@@ -25,7 +25,7 @@
 <translation id="19598411548897379">Universal</translation>
 <translation id="1985669426322966465">Përditësimi i programit</translation>
 <translation id="2079036669923635404">Klikoni që ta përditësoni Vivaldin në versionin <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Problem me shkarkimin e skedarëve të përditësimit. Lutemi të kontrolloni linjën e internetit dhe provojeni prapë.</translation>
+<translation id="2141974047387702305">Problem me shkarkimin e skedarëve të përditësuar. Lutemi të kontrolloni linjën e internetit dhe provojeni prapë.</translation>
 <translation id="2339641773402824483">Kontrollon përditësimet...</translation>
 <translation id="2441056087170876076">Monstra 2</translation>
 <translation id="2444387452209867610">Vë shënimin</translation>
@@ -42,7 +42,7 @@
 <translation id="2989805286512600854">Hap në skedë të re</translation>
 <translation id="3027988479108856431">Fatkeqësisht, parametrat e Yandex nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3084011186245865060">Peizazhi 6</translation>
-<translation id="3093931836425623631">Vivaldi u bë i mundur falë projektit Chromium dhe programeve kompjuterike që përdoren lirisht.</translation>
+<translation id="3093931836425623631">Vivaldi u bë i mundur falë projektit Chromium dhe programeve kompjuterike që mund të përdoren lirisht.</translation>
 <translation id="3127383884976966729">Kafsha 7</translation>
 <translation id="3156398087075132709">Faqe interesante të re</translation>
 <translation id="3255747772218936245">Instaloj përditësimin</translation>
@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Përzgjidhni skedarin e faqeve interesante nga Opera</translation>
 <translation id="3451317331714872347">Peizazhi 8</translation>
 <translation id="3457498675806041407">Konfirmoni daljen</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> është instaluar që më parë dhe do të aktivizohet kur shfletuesit të hapet sërish.</translation>
 <translation id="3516213908976398531">Peizazhi 11</translation>
 <translation id="3521635864657970829">Vërtet do e mbyllni dritaren?</translation>
 <translation id="3540597690227428180">Kafsha 9</translation>
@@ -163,6 +164,7 @@
 <translation id="8912720443398351457">Vërtet doni të dilni nga Vivaldi?</translation>
 <translation id="8947109330183116400">Përzgjidhni skedarin HTML të faqeve interesante</translation>
 <translation id="9017566390391482291">Përzgjidhni dosjen e profilit të Vivaldit për ta importuar</translation>
+<translation id="9048058608784130603">Pret përditësimin <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Përpunoj</translation>
 <translation id="912022491595344261">Hap imazhin si <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hap lidhjen</translation>

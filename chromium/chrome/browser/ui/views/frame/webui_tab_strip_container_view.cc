@@ -56,7 +56,6 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "content/public/browser/web_ui.h"
-#include "content/public/common/drop_data.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/aura/window.h"
@@ -196,41 +195,27 @@ TabStripUI* GetTabStripUI(content::WebContents* web_contents) {
              : nullptr;
 }
 
-class WebUITabStripWebView : public views::WebView {
+class WebUINewTabButton : public ToolbarButton {
  public:
-  METADATA_HEADER(WebUITabStripWebView);
-  explicit WebUITabStripWebView(content::BrowserContext* context)
-      : views::WebView(context) {}
+  METADATA_HEADER(WebUINewTabButton);
+  explicit WebUINewTabButton(PressedCallback pressed_callback)
+      : ToolbarButton(pressed_callback) {
+    SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));
+    const int button_height = GetLayoutConstant(TOOLBAR_BUTTON_HEIGHT);
+    SetPreferredSize(gfx::Size(button_height, button_height));
+    SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  }
 
-  // content::WebContentsDelegate:
-  bool CanDragEnter(content::WebContents* source,
-                    const content::DropData& data,
-                    blink::DragOperationsMask operations_allowed) override {
-    // TODO(crbug.com/1032592): Prevent dragging across Chromium instances.
-    if (data.custom_data.find(base::ASCIIToUTF16(kWebUITabIdDataType)) !=
-        data.custom_data.end()) {
-      int tab_id;
-      bool found_tab_id = base::StringToInt(
-          data.custom_data.at(base::ASCIIToUTF16(kWebUITabIdDataType)),
-          &tab_id);
-      return found_tab_id && extensions::ExtensionTabUtil::GetTabById(
-                                 tab_id, GetBrowserContext(), false, nullptr);
-    }
-
-    if (data.custom_data.find(base::ASCIIToUTF16(kWebUITabGroupIdDataType)) !=
-        data.custom_data.end()) {
-      std::string group_id = base::UTF16ToUTF8(
-          data.custom_data.at(base::ASCIIToUTF16(kWebUITabGroupIdDataType)));
-      Browser* found_browser = tab_strip_ui::GetBrowserWithGroupId(
-          Profile::FromBrowserContext(GetBrowserContext()), group_id);
-      return found_browser != nullptr;
-    }
-
-    return false;
+  void OnThemeChanged() override {
+    ToolbarButton::OnThemeChanged();
+    const SkColor normal_color = GetThemeProvider()->GetColor(
+        ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
+    SetImage(views::Button::STATE_NORMAL,
+             gfx::CreateVectorIcon(kNewTabToolbarButtonIcon, normal_color));
   }
 };
 
-BEGIN_METADATA(WebUITabStripWebView, views::WebView)
+BEGIN_METADATA(WebUINewTabButton, ToolbarButton)
 END_METADATA
 
 }  // namespace
@@ -459,7 +444,7 @@ WebUITabStripContainerView::WebUITabStripContainerView(
     views::View* omnibox)
     : browser_view_(browser_view),
       web_view_(AddChildView(
-          std::make_unique<WebUITabStripWebView>(browser_view_->GetProfile()))),
+          std::make_unique<views::WebView>(browser_view_->GetProfile()))),
       top_container_(top_container),
       tab_contents_container_(tab_contents_container),
       auto_closer_(std::make_unique<AutoCloser>(
@@ -587,24 +572,11 @@ views::NativeViewHost* WebUITabStripContainerView::GetNativeViewHost() {
 
 std::unique_ptr<views::View> WebUITabStripContainerView::CreateNewTabButton() {
   DCHECK_EQ(nullptr, new_tab_button_);
-  auto new_tab_button = std::make_unique<ToolbarButton>(
+  auto new_tab_button = std::make_unique<WebUINewTabButton>(
       base::BindRepeating(&WebUITabStripContainerView::NewTabButtonPressed,
                           base::Unretained(this)));
-  new_tab_button->SetTooltipText(
-      l10n_util::GetStringUTF16(IDS_TOOLTIP_NEW_TAB));
-  const SkColor normal_color =
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
-  new_tab_button->SetImage(
-      views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(kNewTabToolbarButtonIcon, normal_color));
-
-  const int button_height = GetLayoutConstant(TOOLBAR_BUTTON_HEIGHT);
-  new_tab_button->SetPreferredSize(gfx::Size(button_height, button_height));
-  new_tab_button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-
   new_tab_button_ = new_tab_button.get();
   view_observations_.AddObservation(new_tab_button_);
-
   return new_tab_button;
 }
 
@@ -909,9 +881,7 @@ gfx::Size WebUITabStripContainerView::FlexRule(
   const int width = bounds.width().is_bounded()
                         ? bounds.width().value()
                         : tab_contents_container_->width();
-  const int height = TabStripUILayout::CalculateForWebViewportSize(
-                         tab_contents_container_->size())
-                         .CalculateContainerHeight();
+  const int height = TabStripUILayout::GetContainerHeight();
 
   return gfx::Size(width, height);
 }

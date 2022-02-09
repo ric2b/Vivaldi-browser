@@ -25,9 +25,33 @@ let DialogEnterOptions;
 let WarningEnterOptions;
 
 /**
- * @typedef {{stream: !MediaStream, vidPid: ?string}}
+ * Options for open PTZ panel.
  */
-let PTZPanelOptions;
+export class PTZPanelOptions {
+  /**
+   * @param {{
+   *   stream: !MediaStream,
+   *   vidPid: ?string,
+   *   resetPTZ: function(): !Promise,
+   * }} params
+   */
+  constructor({stream, vidPid, resetPTZ}) {
+    /**
+     * @const {!MediaStream}
+     */
+    this.stream = stream;
+
+    /**
+     * @const {?string}
+     */
+    this.vidPid = vidPid;
+
+    /**
+     * @const {function(): !Promise}
+     */
+    this.resetPTZ = resetPTZ;
+  }
+}
 
 /**
  * @typedef {
@@ -90,6 +114,14 @@ export class View {
    */
   get root() {
     return this.rootElement_;
+  }
+
+  /**
+   * Gets sub-views nested under this view.
+   * @return {!Array<!View>}
+   */
+  getSubViews() {
+    return [];
   }
 
   /**

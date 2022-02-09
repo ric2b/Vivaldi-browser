@@ -166,6 +166,13 @@ class MEDIA_EXPORT Demuxer : public MediaResource {
       base::TimeDelta curr_time,
       TrackChangeCB change_completed_cb) = 0;
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  // Perform any cleanup operation that are required to run on the media thread
+  // before a destructor call on the owner thread. Compared with Stop() this
+  // will always be called even if Initialize() was not called.
+  virtual void VivaldiFinishOnMediaThread() {}
+#endif
+
  private:
   DISALLOW_COPY_AND_ASSIGN(Demuxer);
 };

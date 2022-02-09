@@ -64,7 +64,7 @@ bool OperaAdrFileReader::LoadFile(const base::FilePath& file) {
       entries.SetString(key, val);
     }
   }
-  if (entries.size() > 0) {
+  if (entries.DictSize() > 0) {
     HandleEntry(category, entries);
   }
   return true;

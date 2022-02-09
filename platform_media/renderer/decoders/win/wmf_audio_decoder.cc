@@ -36,7 +36,7 @@ void WMFAudioDecoder::Reset(base::OnceClosure closure) {
 }
 
 AudioDecoderType WMFAudioDecoder::GetDecoderType() const {
-  return AudioDecoderType::kDecrypting;
+  return AudioDecoderType::kVivWMFDecoder;
 }
 
 }  // namespace media

@@ -12,6 +12,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/color_chooser.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/web_contents.h"
@@ -339,7 +340,7 @@ DevtoolsConnectorItem::GetJavaScriptDialogManager(
   return nullptr;
 }
 
-content::ColorChooser* DevtoolsConnectorItem::OpenColorChooser(
+std::unique_ptr<content::ColorChooser> DevtoolsConnectorItem::OpenColorChooser(
     content::WebContents* web_contents,
     SkColor color,
     const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {

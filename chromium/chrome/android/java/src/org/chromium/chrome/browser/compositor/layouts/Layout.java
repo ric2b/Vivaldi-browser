@@ -11,7 +11,6 @@ import android.view.MotionEvent;
 import android.view.ViewGroup;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -43,8 +42,7 @@ import org.vivaldi.browser.common.VivaldiUtils;
  * This layout also pass through all the events that may happen.
  */
 
-public abstract class Layout implements TabContentManager.ThumbnailChangeListener {
-
+public abstract class Layout {
     /**
      * The orientation of the device.
      */
@@ -379,9 +377,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     protected void setTabContentManager(TabContentManager manager) {
         if (manager == null) return;
 
-        if (mTabContentManager != null) mTabContentManager.removeThumbnailChangeListener(this);
         mTabContentManager = manager;
-        mTabContentManager.addThumbnailChangeListener(this);
     }
 
     /**
@@ -664,11 +660,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     public void onTabClosureCommitted(long time, int id, boolean incognito) { }
 
-    @Override
-    public void onThumbnailChange(int id) {
-        requestUpdate();
-    }
-
     /**
      * Steps the animation forward and updates all the animated values.
      * @param time      The current time of the app in ms.
@@ -677,14 +668,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     protected boolean onUpdateAnimation(long time, boolean jumpToEnd) {
         return true;
-    }
-
-    /**
-     * @return Whether or not there is an animation currently being driven by this {@link Layout}.
-     */
-    @VisibleForTesting
-    public boolean isLayoutAnimating() {
-        return false;
     }
 
     /**
@@ -727,14 +710,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     public boolean handlesCloseAll() {
         return false;
-    }
-
-    /**
-     * Whether or not the toolbar IncognitoToggleButton (if present) should be enabled. E.g., it can
-     * be disabled while animating a tab selection to avoid odd behavior.
-     */
-    public boolean shouldAllowIncognitoSwitching() {
-        return true;
     }
 
     /**

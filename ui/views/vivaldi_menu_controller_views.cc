@@ -85,14 +85,14 @@ bool MenuController::StepSiblingMenu(bool next) {
 
   gfx::Rect rect;
   bool has_mnemonics;
+  views::MenuAnchorPosition anchor;
   MenuItemView* alt_menu =
     source->GetMenuItem()->GetDelegate()->GetNextSiblingMenu(
-        next, &has_mnemonics, &rect);
+        next, &has_mnemonics, &rect, &anchor);
   if (!alt_menu ||
       (state_.item && state_.item->GetRootMenuItem() == alt_menu))
     return false;
   delegate_->SiblingMenuCreated(alt_menu);
-  MenuAnchorPosition anchor = views::MenuAnchorPosition::kTopLeft;
   did_capture_ = false;
   UpdateInitialLocation(rect, anchor, false);
   alt_menu->PrepareForRun(false, has_mnemonics,

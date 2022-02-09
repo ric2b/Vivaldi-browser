@@ -6,8 +6,8 @@
 #include <string>
 
 #include "base/macros.h"
-#include "chromium/components/password_manager/core/browser/password_store.h"
-#include "chromium/components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store.h"
+#include "components/password_manager/core/browser/password_store_consumer.h"
 
 class Profile;
 
@@ -49,7 +49,11 @@ class VivaldiAccountPasswordHandler
 
   // Implementing password_manager::PasswordStore::Observer
   void OnLoginsChanged(
+      password_manager::PasswordStoreInterface* store,
       const password_manager::PasswordStoreChangeList& changes) override;
+  void OnLoginsRetained(
+      password_manager::PasswordStoreInterface* store,
+      const std::vector<password_manager::PasswordForm>& retained_passwords) override;
 
  private:
   Delegate* delegate_;

@@ -1,6 +1,32 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 hooks = [
+  # Download and initialize "vpython" VirtualEnv environment packages for
+  # Python2. We do this before running any other hooks so that any other
+  # hooks that might use vpython don't trip over unexpected issues and
+  # don't run slower than they might otherwise need to.
+  {
+    'name': 'vpython_common',
+    'pattern': '.',
+    # TODO(https://crbug.com/1205263): Run this on mac/arm too once it works.
+    'condition': 'not (host_os == "mac" and host_cpu == "arm64")',
+    'action': [ 'vpython',
+                '-vpython-spec', 'chromium/.vpython',
+                '-vpython-tool', 'install',
+    ],
+  },
+  # Download and initialize "vpython" VirtualEnv environment packages for
+  # Python3. We do this before running any other hooks so that any other
+  # hooks that might use vpython don't trip over unexpected issues and
+  # don't run slower than they might otherwise need to.
+  {
+    'name': 'vpython3_common',
+    'pattern': '.',
+    'action': [ 'vpython3',
+                '-vpython-spec', 'chromium/.vpython3',
+                '-vpython-tool', 'install',
+    ],
+  },
   {
     # This clobbers when necessary (based on get_landmines.py). It must be the
     # first hook so that other things that get/generate into the output
@@ -106,16 +132,6 @@ hooks = [
     'name': 'clang',
     'pattern': '.',
     'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py'],
-  },
-  {
-    # Mac doesn't use lld so it's not included in the default clang bundle
-    # there.  lld is however needed in win and Fuchsia cross builds, so
-    # download it there. Should run after the clang hook.
-    'name': 'lld/mac',
-    'pattern': '.',
-    'condition': 'host_os == "mac" and checkout_win',
-    'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py',
-               '--package=lld_mac'],
   },
   {
     # Should run after the clang hook.
@@ -422,17 +438,6 @@ hooks = [
                 '--target=linux',
                 'update',
                 '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
-    ],
-  },
-  # Download and initialize "vpython" VirtualEnv environment packages.
-  {
-    'name': 'vpython_common',
-    'pattern': '.',
-    # TODO(https://crbug.com/1205263): Run this on mac/arm too once it works.
-    'condition': 'not (host_os == "mac" and host_cpu == "arm64")',
-    'action': [ 'vpython',
-                '-vpython-spec', 'chromium/.vpython',
-                '-vpython-tool', 'install',
     ],
   },
   {

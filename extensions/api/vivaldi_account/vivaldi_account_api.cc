@@ -3,6 +3,7 @@
 #include "extensions/api/vivaldi_account/vivaldi_account_api.h"
 
 #include "base/base64.h"
+#include "base/lazy_instance.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "components/os_crypt/os_crypt.h"

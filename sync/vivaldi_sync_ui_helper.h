@@ -11,7 +11,7 @@
 
 namespace vivaldi {
 
-class VivaldiProfileSyncService;
+class VivaldiSyncServiceImpl;
 
 class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
  public:
@@ -38,7 +38,7 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
   };
 
   VivaldiSyncUIHelper(Profile* profile,
-                      VivaldiProfileSyncService* sync_manager);
+                      VivaldiSyncServiceImpl* sync_manager);
   ~VivaldiSyncUIHelper() override;
 
   void RegisterObserver();
@@ -56,7 +56,7 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
 
  private:
   Profile* profile_;
-  VivaldiProfileSyncService* sync_manager_;
+  VivaldiSyncServiceImpl* sync_service_;
 
   bool tried_decrypt_ = false;
 };

@@ -37,7 +37,7 @@
 #include "chrome/common/chrome_paths.h"
 #endif  // defined(OS_MAC)
 #include "chrome/common/pref_names.h"
-#include "components/download/public/background_service/download_service.h"
+#include "components/download/public/background_service/background_download_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"

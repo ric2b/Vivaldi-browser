@@ -46,7 +46,7 @@ class ASH_EXPORT Desk {
     // removes its Observers before calling this.
     virtual void OnDeskDestroyed(const Desk* desk) = 0;
 
-    // Called  when the desk's name changes.
+    // Called when the desk's name changes.
     virtual void OnDeskNameChanged(const std::u16string& new_name) = 0;
   };
 
@@ -171,20 +171,9 @@ class ASH_EXPORT Desk {
   // accounts for cases where the user removes the active desk.
   void RecordAndResetConsecutiveDailyVisits(bool being_removed);
 
-  // Returns the time from base::Time::Now() to Jan 1, 2010 in the local
-  // timezeone in days as an int. We use Jan 1, 2010 as an arbitrary epoch
-  // since it is a well-known date in the past.
-  int GetDaysFromLocalEpoch() const;
-
-  // Overrides the |override_clock_| with |test_clock| for mocking time in
-  // tests.
-  void OverrideClockForTesting(base::Clock* test_clock);
-
-  // Resets |first_day_visited_| and |last_day_visited_| for testing to the
-  // current date.
-  void ResetVisitedMetricsForTesting();
-
  private:
+  friend class DesksTestApi;
+
   void MoveWindowToDeskInternal(aura::Window* window,
                                 Desk* target_desk,
                                 aura::Window* target_root);
@@ -249,8 +238,6 @@ class ASH_EXPORT Desk {
   // creation.
   int first_day_visited_ = -1;
   int last_day_visited_ = -1;
-
-  base::Clock* override_clock_ = nullptr;
 
   // Tracks whether |this| has been interacted with this week. This value is
   // reset by the DesksController.

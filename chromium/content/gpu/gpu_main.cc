@@ -104,6 +104,10 @@
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+#include "platform_media/common/win/mf_util.h"
+#endif
+
 namespace content {
 
 namespace {
@@ -161,6 +165,10 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     // On Linux, reading system memory doesn't work through the GPU sandbox.
     // This value is cached, so access it here to populate the cache.
     base::SysInfo::AmountOfPhysicalMemory();
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
+    media::LoadMFDecodingLibraries(/*demuxer_support=*/true);
+#endif
   }
 
   bool EnsureSandboxInitialized(gpu::GpuWatchdogThread* watchdog_thread,

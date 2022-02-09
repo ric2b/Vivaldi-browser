@@ -39,8 +39,6 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   // AVFMediaReaderRunner.
   static bool IsAvailable();
 
-  static GPU_EXPORT void WarmUp();
-
   // PlatformMediaPipeline implementation.
   void Initialize(ipc_data_source::Info source_info,
                   InitializeCB initialize_cb) override;
@@ -55,7 +53,7 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   dispatch_queue_t reader_queue_ = nullptr;
   std::unique_ptr<AVFMediaReader> reader_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<AVFMediaReaderRunner> weak_ptr_factory_{this};
 

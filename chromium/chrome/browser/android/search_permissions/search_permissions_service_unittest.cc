@@ -346,9 +346,8 @@ TEST_F(SearchPermissionsServiceTest, IsPermissionControlledByDSE) {
       ContentSettingsType::COOKIES, ToOrigin(kExampleURL)));
 
   // If autogrant is reverted, permissions are not controlled by DSE anymore.
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-    permissions::features::kRevertDSEAutomaticPermissions);
+  base::test::ScopedFeatureList features(
+      permissions::features::kRevertDSEAutomaticPermissions);
   EXPECT_FALSE(GetService()->IsPermissionControlledByDSE(
       ContentSettingsType::NOTIFICATIONS, ToOrigin(kExampleURL)));
   EXPECT_FALSE(GetService()->IsPermissionControlledByDSE(
@@ -660,9 +659,8 @@ TEST_F(SearchPermissionsServiceTest, ResetDSEPermissions) {
 
   // After enabling `kRevertDSEAutomaticPermissions` ResetDSEPermissions reverts
   // it to ASK.
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-    permissions::features::kRevertDSEAutomaticPermissions);
+  base::test::ScopedFeatureList features(
+      permissions::features::kRevertDSEAutomaticPermissions);
   SetContentSetting(kGoogleAusURL, ContentSettingsType::GEOLOCATION,
                     CONTENT_SETTING_BLOCK);
   SetContentSetting(kGoogleAusURL, ContentSettingsType::NOTIFICATIONS,
@@ -711,8 +709,7 @@ TEST_F(SearchPermissionsServiceTest, DSEPermissionsCanBeDisabledByFeature) {
       // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by
       // the SearchPermissionsService.
       {
-        base::test::ScopedFeatureList features;
-        features.InitAndEnableFeature(
+        base::test::ScopedFeatureList features(
             permissions::features::kRevertDSEAutomaticPermissions);
         ReinitializeService(false /* clear_pref */);
         EXPECT_EQ(test.expected_setting_after_autogrant_reverted,
@@ -791,8 +788,7 @@ TEST_F(SearchPermissionsServiceTest,
       // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by
       // the SearchPermissionsService.
       {
-        base::test::ScopedFeatureList features;
-        features.InitAndEnableFeature(
+        base::test::ScopedFeatureList features(
             permissions::features::kRevertDSEAutomaticPermissions);
         ReinitializeService(false /* clear_pref */);
         EXPECT_EQ(test.expected_setting_after_autogrant_reverted,
@@ -860,8 +856,7 @@ TEST_F(SearchPermissionsServiceTest,
         // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by
         // the SearchPermissionsService.
         {
-          base::test::ScopedFeatureList features;
-          features.InitAndEnableFeature(
+          base::test::ScopedFeatureList features(
               permissions::features::kRevertDSEAutomaticPermissions);
           ReinitializeService(false /* clear_pref */);
           EXPECT_EQ(test_before.expected_setting_after_autogrant_reverted,
@@ -913,8 +908,7 @@ TEST_F(SearchPermissionsServiceTest, PermissionsDisabledByDefault) {
     // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by the
     // SearchPermissionsService.
     {
-      base::test::ScopedFeatureList features;
-      features.InitAndEnableFeature(
+      base::test::ScopedFeatureList features(
           permissions::features::kRevertDSEAutomaticPermissions);
       ReinitializeService(false /* clear_pref */);
       EXPECT_EQ(CONTENT_SETTING_BLOCK, GetContentSetting(kGoogleURL, type));
@@ -947,8 +941,7 @@ TEST_F(SearchPermissionsServiceTest,
     // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by the
     // SearchPermissionsService.
     {
-      base::test::ScopedFeatureList features;
-      features.InitAndEnableFeature(
+      base::test::ScopedFeatureList features(
           permissions::features::kRevertDSEAutomaticPermissions);
       ReinitializeService(false /* clear_pref */);
       EXPECT_EQ(CONTENT_SETTING_BLOCK, GetContentSetting(kGoogleURL, type));
@@ -976,8 +969,7 @@ TEST_F(SearchPermissionsServiceTest,
       // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by
       // the SearchPermissionsService.
       {
-        base::test::ScopedFeatureList features;
-        features.InitAndEnableFeature(
+        base::test::ScopedFeatureList features(
             permissions::features::kRevertDSEAutomaticPermissions);
         ReinitializeService(false /* clear_pref */);
         EXPECT_EQ(CONTENT_SETTING_ASK, GetContentSetting(kGoogleURL, type));
@@ -1010,8 +1002,7 @@ TEST_F(SearchPermissionsServiceTest,
     // Enable `RevertDSEAutomaticPermissions`. DSE stops being controlled by
     // the SearchPermissionsService.
     {
-      base::test::ScopedFeatureList features;
-      features.InitAndEnableFeature(
+      base::test::ScopedFeatureList features(
           permissions::features::kRevertDSEAutomaticPermissions);
       ReinitializeService(false /* clear_pref */);
       EXPECT_EQ(CONTENT_SETTING_ASK, GetContentSetting(kGoogleAusURL, type));
@@ -1069,9 +1060,8 @@ TEST_F(SearchPermissionsServiceTest,
       // the SearchPermissionsService.
       {
         base::HistogramTester histograms;
-        base::test::ScopedFeatureList features;
-        features.InitAndEnableFeature(
-          permissions::features::kRevertDSEAutomaticPermissions);
+        base::test::ScopedFeatureList features(
+            permissions::features::kRevertDSEAutomaticPermissions);
         ReinitializeService(false /* clear_pref */);
 
         // Test that the expected samples are recorded in histograms.
@@ -1121,9 +1111,8 @@ TEST_F(SearchPermissionsServiceTest, DSEEffectiveSettingMetric) {
   histograms.ExpectBucketCount("Permissions.DSE.EffectiveSetting.Geolocation",
                                CONTENT_SETTING_ALLOW, 2);
 
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-    permissions::features::kRevertDSEAutomaticPermissions);
+  base::test::ScopedFeatureList features(
+      permissions::features::kRevertDSEAutomaticPermissions);
   ReinitializeService(false /* clear_pref */);
 
   histograms.ExpectBucketCount("Permissions.DSE.EffectiveSetting.Notifications",

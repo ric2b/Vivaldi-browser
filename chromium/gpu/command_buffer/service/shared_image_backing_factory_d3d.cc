@@ -104,7 +104,8 @@ Microsoft::WRL::ComPtr<ID3D11Texture2D> ValidateAndOpenSharedHandle(
     return nullptr;
   }
 
-  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(size, format)) {
+  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(
+          size, format, gfx::BufferPlane::DEFAULT)) {
     DLOG(ERROR) << "Invalid image size " << size.ToString() << " for "
                 << gfx::BufferFormatToString(format);
     return nullptr;
@@ -437,6 +438,30 @@ SharedImageBackingFactoryD3D::CreateSharedImageVideoPlanes(
 bool SharedImageBackingFactoryD3D::CanImportGpuMemoryBuffer(
     gfx::GpuMemoryBufferType memory_buffer_type) {
   return (memory_buffer_type == gfx::DXGI_SHARED_HANDLE);
+}
+
+bool SharedImageBackingFactoryD3D::IsSupported(
+    uint32_t usage,
+    viz::ResourceFormat format,
+    bool thread_safe,
+    gfx::GpuMemoryBufferType gmb_type,
+    GrContextType gr_context_type,
+    bool* allow_legacy_mailbox,
+    bool is_pixel_used) {
+  if (is_pixel_used) {
+    return false;
+  }
+  if (gmb_type != gfx::EMPTY_BUFFER && !CanImportGpuMemoryBuffer(gmb_type)) {
+    return false;
+  }
+  // TODO(crbug.com/969114): Not all shared image factory implementations
+  // support concurrent read/write usage.
+  if (usage & SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE) {
+    return false;
+  }
+
+  *allow_legacy_mailbox = false;
+  return true;
 }
 
 }  // namespace gpu

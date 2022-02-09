@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Standart</translation>
 <translation id="1297175357211070620">Hədəf</translation>
 <translation id="1303101771013849280">Əlfəcinlərin HTML faylı</translation>
-<translation id="1380436189840894976">İstənilən halda məxfi rejimidən çıxılsın?</translation>
 <translation id="1430915738399379752">Çap</translation>
 <translation id="1433811987160647649">Girişə icazə soruşmaq</translation>
 <translation id="1451375123200651445">Veb-səhifə, bir fayl</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fayl təsvirediciləri</translation>
 <translation id="1682548588986054654">Yeni məxfi pəncərə</translation>
-<translation id="1698122934742150150">Yalnız cari məxfi sesiya üçün</translation>
 <translation id="1706625117072057435">Miqyas səviyyələri</translation>
 <translation id="1708338024780164500">(Qeyri-aktiv)</translation>
 <translation id="1723824996674794290">&amp;Yeni pəncərə</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Naməlum qoşma</translation>
 <translation id="2423578206845792524">Şəkili belə &amp;saxlayın...</translation>
 <translation id="2439110203301358333">Başqa bir proqram Vivaldi'nin işinə təsir edə biləcək əlavə qoşma quraşdırdı.</translation>
+<translation id="2443487764245141020">Saytlar, identifikator ilə cihazınızı müəyyən edə bilər</translation>
 <translation id="2445081178310039857">Əlavə qoşmanın kök qovluğu tələb olunur.</translation>
 <translation id="2470702053775288986">Dəstəklənməyən qoşma söndürülüb</translation>
 <translation id="2476578072172137802">Saytlar üçün ayarlar</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">K&amp;eçid ünvanını kopyalayın</translation>
 <translation id="354068948465830244">Bu saytın məlumatlarını oxuya və dəyişə bilər</translation>
 <translation id="3560034655160545939">&amp;Orfoqrafiya yoxlaması</translation>
-<translation id="3574917942258583917">İstənilən halda məxfi rejimdən çıxılsın?</translation>
 <translation id="3587482841069643663">Hamısı</translation>
 <translation id="3627588569887975815">Keçidi &amp;məxfi vərəqdə açın</translation>
 <translation id="3627879631695760395"><ph name="APP" /> tətbiqini quraşdırın...</translation>
-<translation id="3668823961463113931">Emalçılar</translation>
 <translation id="3678156199662914018">Əlavə qoşma: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" />Ekran paylaşımı sorğusu</translation>
 <translation id="3708684582558000260">Bağlanmış saytlara verilənləri göndərmək və ya qəbul etmək icazəsi verməyin</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">Tərtibatçı rejimini və qoşmaları söndürün</translation>
 <translation id="4100839878934973028">Başqa bir proqram Vivaldi'nin işinə təsir edə biləcək tətbiq əlavə etdi.</translation>
 <translation id="4109898769411476438">İdxal etməzdən öncə veb-bələdçini bağlayın</translation>
-<translation id="4115080753528843955">Bəzi xidmətlər, qorunan kontentlərə giriş əldə etmək üçün unikal identifikatorlardan istifadə edir</translation>
 <translation id="4130207949184424187">Bu qoşma, axtarı sahəsində istifadə olunacaq axtarış vasitəsini dəyişir.</translation>
 <translation id="4131410914670010031">Ağ-qara çap</translation>
 <translation id="4176463684765177261">Söndürülüb</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Bu qoşmanı quraşdırmağa cəhd edərkən bu xəbərdarlıqlar göstərildi:</translation>
 <translation id="479536056609751218">Veb-səhifə, yalnız HTML</translation>
 <translation id="4839303808932127586">Video'nu belə &amp;saxlayın...</translation>
+<translation id="4840096453115567876">İstənilən halda Gizli rejimdən çıxılsın?</translation>
 <translation id="488785315393301722">Təfərrüatları göstərmək</translation>
 <translation id="4907306957610201395">İcazə kateqoriyası</translation>
 <translation id="4912643508233590958">Boşdayanmada oyanmaq</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">İcazə verilmədi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;İdarəetmələri göstərmək</translation>
+<translation id="7374461526650987610">Protokol nizamlayıcıları</translation>
 <translation id="7385854874724088939">Çap zamanı xəta baş verdi. Printerinizi yoxlayın və yenidən cəhd edin.</translation>
 <translation id="7412226954991670867">GPU Yaddaşı</translation>
 <translation id="7421925624202799674">&amp;Səhifənin koduna baxmaq</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Qarışdırın</translation>
 <translation id="7629827748548208700">Vərəq: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">İmtina</translation>
+<translation id="7659154729610375585">İstənilən halda Gizli rejimdən çıxılsın?</translation>
 <translation id="7661259717474717992">Saytlara kuku məlumatlarını saxlamağa və oxumağa icazə verin</translation>
 <translation id="7663719505383602579">Qəbuledici: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">İnzibatçınız tərəfindən quraşdırılıb</translation>
@@ -454,6 +453,7 @@ Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq 
 <translation id="8899851313684471736">Keçidi yeni &amp;pəncərədə açın</translation>
 <translation id="8915370057835397490">Təkliflər yüklənir</translation>
 <translation id="8916476537757519021">Məxfi rejim alt freymi: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Yalnız cari Gizli sessiya</translation>
 <translation id="895944840846194039">JavaScript yaddaşı</translation>
 <translation id="8962083179518285172">Təsvirini gizlətmək</translation>
 <translation id="8973557916016709913">Miqyası sıfırlamaq</translation>

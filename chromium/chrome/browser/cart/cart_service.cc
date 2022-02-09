@@ -160,7 +160,7 @@ GURL CartService::AppendUTM(const GURL& base_url, bool is_discount_enabled) {
   DCHECK(base_url.is_valid() && IsPartnerMerchant(base_url));
 
   if (kRbdUtmParam.Get()) {
-    return net::AppendQueryParameter(
+    return net::AppendOrReplaceQueryParameter(
         base_url, "utm_source",
         is_discount_enabled ? kRbdUtmTag : kNoRbdUtmTag);
   } else {
@@ -473,7 +473,7 @@ void CartService::AddCartsWithFakeData() {
   // Polulate and add some carts with fake data.
   double time_now = base::Time::Now().ToDoubleT();
   cart_db::ChromeCartContentProto dummy_proto1;
-  GURL dummy_url1 = GURL("https://www.google.com/");
+  GURL dummy_url1 = GURL("https://shopping.google.com");
   dummy_proto1.set_key(std::string(kFakeDataPrefix) + eTLDPlusOne(dummy_url1));
   dummy_proto1.set_merchant("Cart Foo");
   dummy_proto1.set_merchant_cart_url(dummy_url1.spec());
@@ -506,6 +506,19 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto2.set_merchant("Cart Bar");
   dummy_proto2.set_merchant_cart_url(dummy_url2.spec());
   dummy_proto2.set_timestamp(time_now + 5);
+  dummy_proto2.mutable_discount_info()->set_discount_text(
+      l10n_util::GetStringFUTF8(IDS_NTP_MODULES_CART_DISCOUNT_CHIP_AMOUNT,
+                                u"20%"));
+  dummy_proto2.add_product_image_urls(
+      "https://encrypted-tbn3.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQpn38jB2_BANnHUFa7kHJsf6SyubcgeU1lNYO_"
+      "ZxM1Q2ju_ZMjv2EwNh0Zx_zbqYy_mFg_aiIhWYnD5PQ7t-uFzLM5cN77s_2_"
+      "DFNeumI-LMPJMYjW-BOSaA&usqp=CAY");
+  dummy_proto2.add_product_image_urls(
+      "https://encrypted-tbn0.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQyMRYWeM2Yq095nOXTL0-"
+      "EUUnm79kh6hnw8yctJUNrAuse607KEr1CVxEa24r-"
+      "8XHBuhTwcuC4GXeN94h9Kn19DhdBGsXG0qrD74veYSDJNLrUP-sru0jH&usqp=CAY");
   cart_db_->AddCart(dummy_proto2.key(), dummy_proto2,
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));
@@ -519,6 +532,11 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto3.mutable_discount_info()->set_discount_text(
       l10n_util::GetStringFUTF8(IDS_NTP_MODULES_CART_DISCOUNT_CHIP_UP_TO_AMOUNT,
                                 u"$50"));
+  dummy_proto3.add_product_image_urls(
+      "https://encrypted-tbn3.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQpn38jB2_BANnHUFa7kHJsf6SyubcgeU1lNYO_"
+      "ZxM1Q2ju_ZMjv2EwNh0Zx_zbqYy_mFg_aiIhWYnD5PQ7t-uFzLM5cN77s_2_"
+      "DFNeumI-LMPJMYjW-BOSaA&usqp=CAY");
   cart_db_->AddCart(dummy_proto3.key(), dummy_proto3,
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));
@@ -529,6 +547,16 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto4.set_merchant("Cart Qux");
   dummy_proto4.set_merchant_cart_url(dummy_url4.spec());
   dummy_proto4.set_timestamp(time_now + 3);
+  dummy_proto4.add_product_image_urls(
+      "https://encrypted-tbn0.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQyMRYWeM2Yq095nOXTL0-"
+      "EUUnm79kh6hnw8yctJUNrAuse607KEr1CVxEa24r-"
+      "8XHBuhTwcuC4GXeN94h9Kn19DhdBGsXG0qrD74veYSDJNLrUP-sru0jH&usqp=CAY");
+  dummy_proto4.add_product_image_urls(
+      "https://encrypted-tbn1.gstatic.com/"
+      "shopping?q=tbn:ANd9GcT2ew6Aydzu5VzRV756ORGha6fyjKp_On7iTlr_"
+      "tL9vODnlNtFo_xsxj6_lCop-3J0Vk44lHfk-AxoBJDABVHPVFN-"
+      "EiWLcZvzkdpHFqcurm7fBVmWtYKo2rg&usqp=CAY");
   cart_db_->AddCart(dummy_proto4.key(), dummy_proto4,
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));
@@ -539,6 +567,11 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto5.set_merchant("Cart Corge");
   dummy_proto5.set_merchant_cart_url(dummy_url5.spec());
   dummy_proto5.set_timestamp(time_now + 2);
+  dummy_proto5.add_product_image_urls(
+      "https://encrypted-tbn3.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQpn38jB2_BANnHUFa7kHJsf6SyubcgeU1lNYO_"
+      "ZxM1Q2ju_ZMjv2EwNh0Zx_zbqYy_mFg_aiIhWYnD5PQ7t-uFzLM5cN77s_2_"
+      "DFNeumI-LMPJMYjW-BOSaA&usqp=CAY");
   cart_db_->AddCart(dummy_proto5.key(), dummy_proto5,
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));
@@ -549,7 +582,32 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto6.set_merchant("Cart Flob");
   dummy_proto6.set_merchant_cart_url(dummy_url6.spec());
   dummy_proto6.set_timestamp(time_now + 1);
+  dummy_proto6.add_product_image_urls(
+      "https://encrypted-tbn3.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQpn38jB2_BANnHUFa7kHJsf6SyubcgeU1lNYO_"
+      "ZxM1Q2ju_ZMjv2EwNh0Zx_zbqYy_mFg_aiIhWYnD5PQ7t-uFzLM5cN77s_2_"
+      "DFNeumI-LMPJMYjW-BOSaA&usqp=CAY");
+  dummy_proto6.add_product_image_urls(
+      "https://encrypted-tbn0.gstatic.com/"
+      "shopping?q=tbn:ANd9GcQyMRYWeM2Yq095nOXTL0-"
+      "EUUnm79kh6hnw8yctJUNrAuse607KEr1CVxEa24r-"
+      "8XHBuhTwcuC4GXeN94h9Kn19DhdBGsXG0qrD74veYSDJNLrUP-sru0jH&usqp=CAY");
+  dummy_proto6.add_product_image_urls(
+      "https://encrypted-tbn1.gstatic.com/"
+      "shopping?q=tbn:ANd9GcT2ew6Aydzu5VzRV756ORGha6fyjKp_On7iTlr_"
+      "tL9vODnlNtFo_xsxj6_lCop-3J0Vk44lHfk-AxoBJDABVHPVFN-"
+      "EiWLcZvzkdpHFqcurm7fBVmWtYKo2rg&usqp=CAY");
   cart_db_->AddCart(dummy_proto6.key(), dummy_proto6,
+                    base::BindOnce(&CartService::OnOperationFinished,
+                                   weak_ptr_factory_.GetWeakPtr()));
+
+  cart_db::ChromeCartContentProto dummy_proto7;
+  GURL dummy_url7 = GURL("https://www.bestbuy.com/");
+  dummy_proto7.set_key(std::string(kFakeDataPrefix) + eTLDPlusOne(dummy_url7));
+  dummy_proto7.set_merchant("Cart Gob");
+  dummy_proto7.set_merchant_cart_url(dummy_url7.spec());
+  dummy_proto7.set_timestamp(time_now + 2);
+  cart_db_->AddCart(dummy_proto7.key(), dummy_proto7,
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));
 }
@@ -591,7 +649,11 @@ bool CartService::ShouldSkip(const GURL& url) {
 void CartService::OnLoadCarts(CartDB::LoadCallback callback,
                               bool success,
                               std::vector<CartDB::KeyAndValue> proto_pairs) {
-  if (IsHidden() && !IsFakeDataEnabled()) {
+  if (IsFakeDataEnabled()) {
+    std::move(callback).Run(success, std::move(proto_pairs));
+    return;
+  }
+  if (IsHidden()) {
     std::move(callback).Run(success, {});
     return;
   }
@@ -744,7 +806,8 @@ void CartService::OnAddCart(const std::string& domain,
 }
 
 void CartService::UpdateDiscounts(const GURL& cart_url,
-                                  cart_db::ChromeCartContentProto new_proto) {
+                                  cart_db::ChromeCartContentProto new_proto,
+                                  const bool is_tester) {
   if (!cart_url.is_valid()) {
     VLOG(1) << __func__
             << "update discounts with invalid cart_url: " << cart_url;
@@ -757,7 +820,7 @@ void CartService::UpdateDiscounts(const GURL& cart_url,
     std::vector<cart_db::DiscountInfoProto> discount_info_protos;
     for (const cart_db::DiscountInfoProto& proto :
          new_proto.discount_info().discount_info()) {
-      if (!IsDiscountUsed(proto.rule_id())) {
+      if (is_tester || !IsDiscountUsed(proto.rule_id())) {
         discount_info_protos.emplace_back(proto);
       }
     }

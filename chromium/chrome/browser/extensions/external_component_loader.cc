@@ -9,7 +9,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/component_extensions_allowlist/allowlist.h"
-#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "extensions/common/constants.h"
@@ -21,14 +20,10 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #endif
 
-#include "components/prefs/pref_service.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
-
 namespace extensions {
 
 ExternalComponentLoader::ExternalComponentLoader(Profile* profile)
-    : profile_(profile) {
-}
+    : profile_(profile) {}
 
 ExternalComponentLoader::~ExternalComponentLoader() {}
 
@@ -46,15 +41,6 @@ void ExternalComponentLoader::StartLoading() {
                            prefs.get());
   }
 #endif
-  // todo , use flags chrome://flags/#load-media-router-component-extension
-  if (profile_->GetPrefs()->GetBoolean(
-          vivaldiprefs::kPrivacyGoogleComponentExtensionsMediaRouter)) {
-    if (media_router::MediaRouterEnabled(profile_) &&
-        FeatureSwitch::load_media_router_component_extension()->IsEnabled()) {
-      AddExternalExtension(extension_misc::kCastExtensionIdRelease,
-                           prefs.get());
-    }
-  }  //
 
   LoadFinished(std::move(prefs));
 }

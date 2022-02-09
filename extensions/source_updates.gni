@@ -21,8 +21,10 @@ if (!is_android) {
 
 update_target("//extensions/renderer:renderer") {
   sources += [
-    "//vivaldi/extensions/vivaldi_script_dispatcher.cpp",
-    "//vivaldi/extensions/vivaldi_script_dispatcher.h",
+    "//vivaldi/extensions/renderer/vivaldi_script_dispatcher.cpp",
+    "//vivaldi/extensions/renderer/vivaldi_script_dispatcher.h",
+    "//vivaldi/extensions/renderer/vivaldi_utilities_hook_delegate.cc",
+    "//vivaldi/extensions/renderer/vivaldi_utilities_hook_delegate.h",
   ]
 
   deps += [ "//vivaldi/extensions:resources" ]

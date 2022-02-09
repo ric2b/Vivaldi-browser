@@ -120,7 +120,7 @@ bool NotificationTable::UpdateNotificationRow(const NotificationRow& row) {
   return statement.Run();
 }
 
-void NotificationTable::FillNotificationRow(const sql::Statement& s,
+void NotificationTable::FillNotificationRow(sql::Statement& s,
                                             NotificationRow* notification) {
   int column_index = 0;
   NotificationID id = s.ColumnInt64(column_index++);

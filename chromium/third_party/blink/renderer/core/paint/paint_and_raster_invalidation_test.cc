@@ -195,7 +195,7 @@ TEST_P(PaintAndRasterInvalidationTest, SubpixelChange) {
                                          IntRect(0, 0, 50, 100),
                                          PaintInvalidationReason::kGeometry},
                   RasterInvalidationInfo{object, object->DebugName(),
-                                         IntRect(0, 0, 101, 71),
+                                         IntRect(0, 0, 101, 70),
                                          PaintInvalidationReason::kGeometry}));
   GetDocument().View()->SetTracksRasterInvalidations(false);
 
@@ -208,7 +208,7 @@ TEST_P(PaintAndRasterInvalidationTest, SubpixelChange) {
                                          IntRect(0, 0, 50, 100),
                                          PaintInvalidationReason::kGeometry},
                   RasterInvalidationInfo{object, object->DebugName(),
-                                         IntRect(0, 0, 101, 71),
+                                         IntRect(0, 0, 101, 70),
                                          PaintInvalidationReason::kGeometry}));
   GetDocument().View()->SetTracksRasterInvalidations(false);
 }
@@ -230,7 +230,7 @@ TEST_P(PaintAndRasterInvalidationTest, SubpixelVisualRectChangeWithTransform) {
                                          IntRect(0, 0, 100, 200),
                                          PaintInvalidationReason::kGeometry},
                   RasterInvalidationInfo{object, object->DebugName(),
-                                         IntRect(0, 0, 202, 142),
+                                         IntRect(0, 0, 202, 140),
                                          PaintInvalidationReason::kGeometry}));
   GetDocument().View()->SetTracksRasterInvalidations(false);
 
@@ -243,7 +243,7 @@ TEST_P(PaintAndRasterInvalidationTest, SubpixelVisualRectChangeWithTransform) {
                                          IntRect(0, 0, 100, 200),
                                          PaintInvalidationReason::kGeometry},
                   RasterInvalidationInfo{object, object->DebugName(),
-                                         IntRect(0, 0, 202, 142),
+                                         IntRect(0, 0, 202, 140),
                                          PaintInvalidationReason::kGeometry}));
   GetDocument().View()->SetTracksRasterInvalidations(false);
 }
@@ -269,7 +269,7 @@ TEST_P(PaintAndRasterInvalidationTest, SubpixelWithinPixelsChange) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_THAT(GetRasterInvalidationTracking()->Invalidations(),
               UnorderedElementsAre(RasterInvalidationInfo{
-                  object, object->DebugName(), IntRect(0, 0, 50, 100),
+                  object, object->DebugName(), IntRect(0, 1, 50, 99),
                   PaintInvalidationReason::kGeometry}));
   GetDocument().View()->SetTracksRasterInvalidations(false);
 }
@@ -949,6 +949,52 @@ TEST_P(PaintAndRasterInvalidationTest, ScrollingInvalidatesStickyOffset) {
                                    ->StickyTranslation()
                                    ->Translation2D());
   EXPECT_EQ(PhysicalOffset(), inner->FirstFragment().PaintOffset());
+}
+
+TEST_P(PaintAndRasterInvalidationTest, NoDamageDueToFloatingPointError) {
+  SetBodyInnerHTML(R"HTML(
+      <style>
+        #canvas {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 0;
+          height: 0;
+          will-change: transform;
+          transform-origin: top left;
+        }
+        .initial { transform: translateX(0px) scale(1.8); }
+        .updated { transform: translateX(47.22222222222222px) scale(1.8); }
+        #tile {
+          position: absolute;
+          will-change: transform;
+          transform-origin: top left;
+          transform: scale(0.55555555555556);
+        }
+        #tileInner {
+          transform-origin: top left;
+          transform: scale(1.8);
+          width: 200px;
+          height: 200px;
+          background: lightblue;
+        }
+      </style>
+      <div id="canvas" class="initial">
+        <div id="tile">
+          <div id="tileInner"></div>
+        </div>
+      </div>
+  )HTML");
+
+  GetDocument().View()->SetTracksRasterInvalidations(true);
+
+  auto* canvas = GetDocument().getElementById("canvas");
+  canvas->setAttribute(html_names::kClassAttr, "updated");
+  GetDocument().View()->SetPaintArtifactCompositorNeedsUpdate();
+
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(GetRasterInvalidationTracking(1)->HasInvalidations());
+  GetDocument().View()->SetTracksRasterInvalidations(false);
 }
 
 TEST_P(PaintAndRasterInvalidationTest, ResizeElementWhichHasNonCustomResizer) {

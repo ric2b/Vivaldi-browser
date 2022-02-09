@@ -243,7 +243,7 @@ void LoginHandler::Observe(int type,
   // If Auth got cancelled because the password manager wasn't present,
   // don't also cancel all prompts for the same auth info.
   if (!ChromePasswordManagerClient::FromWebContents(
-      controller->GetWebContents())) {
+          login_details->handler()->web_contents())) {
     DCHECK(type == chrome::NOTIFICATION_AUTH_CANCELLED);
     return;
   }

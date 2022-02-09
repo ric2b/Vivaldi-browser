@@ -90,7 +90,8 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
  private:
   void InitModel();
-  void PopulateModel(const Element& child, ui::SimpleMenuModel* menu_model);
+  void PopulateModel(const Element& child, bool dark_text_color,
+                     ui::SimpleMenuModel* menu_model);
   ui::SimpleMenuModel* GetContainerModel(const Container& container, int id,
       ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);

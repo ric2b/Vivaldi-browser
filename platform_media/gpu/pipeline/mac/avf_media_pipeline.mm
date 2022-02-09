@@ -14,11 +14,11 @@
 #include "base/trace_event/trace_event.h"
 #include "media/base/data_buffer.h"
 #include "media/base/video_frame.h"
-#include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/gpu/decoders/mac/avf_data_buffer_queue.h"
 #include "platform_media/gpu/decoders/mac/avf_media_decoder.h"
+#include "platform_media/gpu/pipeline/mac/media_utils_mac.h"
 
 namespace media {
 
@@ -145,12 +145,12 @@ void AVFMediaPipeline::MediaDecoderInitialized(InitializeCB initialize_cb,
 
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "AVFMediaPipeline::Initialize", this);
 
+  auto result = platform_media::mojom::PipelineInitResult::New();
+
   if (!success) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Failed ("
                  << success << ")";
-    std::move(initialize_cb)
-        .Run(false, -1, media::PlatformMediaTimeInfo(),
-             media::PlatformAudioConfig(), media::PlatformVideoConfig());
+    std::move(initialize_cb).Run(std::move(result));
     return;
   }
 
@@ -176,32 +176,33 @@ void AVFMediaPipeline::MediaDecoderInitialized(InitializeCB initialize_cb,
         stream_type, capacity, capacity_available_cb, capacity_depleted_cb);
   }
 
-  media::PlatformAudioConfig audio_config;
   if (media_decoder_->has_audio_track()) {
-    audio_config.format = SampleFormat::kSampleFormatPlanarF32;
-    audio_config.channel_count =
+    result->audio_config.format = SampleFormat::kSampleFormatPlanarF32;
+    result->audio_config.channel_count =
         media_decoder_->audio_stream_format().mChannelsPerFrame;
-    audio_config.samples_per_second =
+    result->audio_config.samples_per_second =
         media_decoder_->audio_stream_format().mSampleRate;
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Using PlatformAudioConfig : " << Loggable(audio_config);
+            << " Using PlatformAudioConfig : "
+            << Loggable(result->audio_config);
   }
 
-  media::PlatformVideoConfig video_config;
   if (media_decoder_->has_video_track()) {
-    video_config = GetPlatformVideoConfig(media_decoder_->video_stream_format(),
-                                          media_decoder_->video_transform());
+    result->video_config =
+        GetPlatformVideoConfig(media_decoder_->video_stream_format(),
+                               media_decoder_->video_transform());
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Using PlatformVideoConfig : " << Loggable(video_config);
+            << " Using PlatformVideoConfig : "
+            << Loggable(result->video_config);
   }
 
-  media::PlatformMediaTimeInfo time_info;
-  time_info.duration = media_decoder_->duration();
-  time_info.start_time = media_decoder_->start_time();
+  result->time_info.duration = media_decoder_->duration();
+  result->time_info.start_time = media_decoder_->start_time();
+  result->bitrate = media_decoder_->bitrate();
 
-  std::move(initialize_cb)
-      .Run(true, media_decoder_->bitrate(), time_info, audio_config,
-           video_config);
+  result->success = true;
+
+  std::move(initialize_cb).Run(std::move(result));
 }
 
 void AVFMediaPipeline::DataBufferCapacityAvailable() {

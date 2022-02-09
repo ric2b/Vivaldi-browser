@@ -12,8 +12,8 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/wallpaper_controller.h"
-#include "ash/public/cpp/wallpaper_controller_observer.h"
+#include "ash/public/cpp/wallpaper/wallpaper_controller.h"
+#include "ash/public/cpp/wallpaper/wallpaper_controller_observer.h"
 #include "ash/shelf/drag_window_from_shelf_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_metrics.h"
@@ -269,6 +269,8 @@ class ASH_EXPORT ShelfLayoutManager
                                const Desk* deactivated) override {}
   void OnDeskSwitchAnimationLaunching() override;
   void OnDeskSwitchAnimationFinished() override;
+  void OnDeskNameChanged(const Desk* desk,
+                         const std::u16string& new_name) override {}
 
   ShelfVisibilityState visibility_state() const {
     return state_.visibility_state;
@@ -333,6 +335,7 @@ class ASH_EXPORT ShelfLayoutManager
   friend class ShelfLayoutManagerWindowDraggingTest;
   friend class NotificationTrayTest;
   friend class UnifiedSystemTrayTest;
+  friend class TrayBackgroundViewTest;
   friend class Shelf;
 
   struct State {
@@ -608,6 +611,9 @@ class ASH_EXPORT ShelfLayoutManager
   // Whether background blur is enabled.
   const bool is_background_blur_enabled_;
 
+  // Whether the AppListBubble is enabled.
+  const bool is_app_list_bubble_enabled_;
+
   // Pretarget handler responsible for hiding the hotseat.
   std::unique_ptr<ui::EventHandler> hotseat_event_handler_;
 
@@ -633,6 +639,8 @@ class ASH_EXPORT ShelfLayoutManager
   ScopedSessionObserver scoped_session_observer_{this};
   base::ScopedObservation<WallpaperController, WallpaperControllerObserver>
       wallpaper_controller_observation_{this};
+
+  display::ScopedDisplayObserver display_observer_{this};
 
   // Location of the most recent mouse drag event in screen coordinate.
   gfx::Point last_mouse_drag_position_;

@@ -118,7 +118,6 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
   // WidgetDelegate implementation.
   void OnWidgetMove() override;
   views::View* GetInitiallyFocusedView() override;
-  bool CanResize() const override;
   bool CanMaximize() const override;
   bool CanMinimize() const override;
   std::u16string GetWindowTitle() const override;
@@ -134,8 +133,8 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
       const gfx::Point& location) override;
   bool ExecuteWindowsCommand(int command_id) override;
   void HandleKeyboardCode(ui::KeyboardCode code) override;
-  gfx::ImageSkia GetWindowAppIcon() override;
-  gfx::ImageSkia GetWindowIcon() override;
+  ui::ImageModel GetWindowAppIcon() override;
+  ui::ImageModel GetWindowIcon() override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(SkPath* mask) const override;
   views::ClientView* CreateClientView(views::Widget* widget) override;

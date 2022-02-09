@@ -20,7 +20,7 @@ namespace media {
 // renderer process that the new data are available.
 class MEDIA_EXPORT IPCDecodingBuffer {
  public:
-  using ReplyCB = base::RepeatingCallback<void(IPCDecodingBuffer buffer)>;
+  using ReplyCB = base::OnceCallback<void(IPCDecodingBuffer buffer)>;
 
   IPCDecodingBuffer();
   IPCDecodingBuffer(IPCDecodingBuffer&&);
@@ -33,7 +33,7 @@ class MEDIA_EXPORT IPCDecodingBuffer {
 
   PlatformStreamType stream_type() const { return impl_->stream_type; }
 
-  void set_reply_cb(const ReplyCB& reply_cb) { impl_->reply_cb = reply_cb; }
+  void set_reply_cb(ReplyCB reply_cb) { impl_->reply_cb = std::move(reply_cb); }
 
   // Send the buffer back to the pipeline to notify about a new media sample
   // available.

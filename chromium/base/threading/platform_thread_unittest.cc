@@ -5,8 +5,8 @@
 #include <stddef.h>
 
 #include "base/compiler_specific.h"
+#include "base/cxx17_backports.h"
 #include "base/process/process.h"
-#include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
@@ -316,9 +316,6 @@ TEST(PlatformThreadTest, CanIncreaseThreadPriority) {
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // On Ubuntu, RLIMIT_NICE and RLIMIT_RTPRIO are 0 by default, so we won't be
   // able to increase priority to any level.
-  constexpr bool kCanIncreasePriority = false;
-#elif defined(OS_FUCHSIA)
-  // Fuchsia doesn't support thread priorities.
   constexpr bool kCanIncreasePriority = false;
 #else
   constexpr bool kCanIncreasePriority = true;

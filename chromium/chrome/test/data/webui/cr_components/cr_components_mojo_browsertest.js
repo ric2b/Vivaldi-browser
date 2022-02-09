@@ -29,3 +29,29 @@ var CrComponentsCustomizeThemesTest =
 TEST_F('CrComponentsCustomizeThemesTest', 'All', function() {
   mocha.run();
 });
+
+// eslint-disable-next-line no-var
+var CrComponentsMostVisitedTest = class extends CrComponentsMojoBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=cr_components/most_visited_test.js';
+  }
+};
+
+TEST_F('CrComponentsMostVisitedTest', 'General', function() {
+  runMochaSuite('General');
+});
+
+// crbug.com/1226996
+GEN('#if defined(OS_LINUX) && !defined(NDEBUG)');
+GEN('#define MAYBE_Modification DISABLED_Modification');
+GEN('#else');
+GEN('#define MAYBE_Modification Modification');
+GEN('#endif');
+TEST_F('CrComponentsMostVisitedTest', 'MAYBE_Modification', function() {
+  runMochaSuite('Modification');
+});
+
+TEST_F('CrComponentsMostVisitedTest', 'Theming', function() {
+  runMochaSuite('Theming');
+});

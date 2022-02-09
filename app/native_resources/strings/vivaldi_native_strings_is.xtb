@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Senda hlekk sem tölvupóst</translation>
 <translation id="1454726940098520109">Ekki sýna staðfestingu aftur</translation>
 <translation id="1462666970065907900">Ertu alveg viss um að þú viljir loka þessum glugga?</translation>
+<translation id="1480046233931937785">Kreditlisti</translation>
 <translation id="1526344461589023948">Villa kom upp þegar reynt var að vista niðurhalsuppfærslur. Vinsamlegast athugaðu hvort tölvan sé með nóg diskapláss og prófaðu aftur síðar.</translation>
 <translation id="1657174850639146440">Skrímsli 9</translation>
 <translation id="1676595396635191120">Nýr einkagluggi</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Opna í nýjum flipa</translation>
 <translation id="3027988479108856431">Því miður eru Yandex stillingarnar þínar ekki aðgengilegar á meðan Yandex er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi vistaðu vinnuna þína og lokaðu öllum Yandex gluggum. Ýttu síðan á Halda áfram.</translation>
 <translation id="3084011186245865060">Landslag 6</translation>
+<translation id="3093931836425623631">Vivaldi byggir á Chromium og öðrum opnum hugbúnaði.</translation>
 <translation id="3127383884976966729">Dýr 7</translation>
 <translation id="3156398087075132709">Nýtt bókamerki</translation>
 <translation id="3255747772218936245">Uppfæra</translation>
@@ -52,6 +54,7 @@
 <translation id="3402602684546832928">Velja Óperu bókamerkjaskrá</translation>
 <translation id="3451317331714872347">Landslag 8</translation>
 <translation id="3457498675806041407">Staðfesta lokun</translation>
+<translation id="3470981972195599598">Uppsetningu á Vivaldi <ph name="VERSION" /> er lokið og virkjast um leið og búið er að endurræsa vafrann.</translation>
 <translation id="3516213908976398531">Landslag 11</translation>
 <translation id="3521635864657970829">Ertu viss um að þú viljir loka glugganum?</translation>
 <translation id="3540597690227428180">Dýr 9</translation>
@@ -161,6 +164,7 @@
 <translation id="8912720443398351457">Ertu viss um að þú viljir hætta í Vivaldi?</translation>
 <translation id="8947109330183116400">Velja HTML bókamerkjaskrá</translation>
 <translation id="9017566390391482291">Veldu möppu sem inniheldur Vivaldi notendamöppu til að flytja inn</translation>
+<translation id="9048058608784130603">Uppfærsla á bið <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Breyta</translation>
 <translation id="912022491595344261">Opna mynd sem <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna hlekk</translation>

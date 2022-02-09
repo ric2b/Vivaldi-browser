@@ -49,14 +49,14 @@
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/crostini/crostini_test_helper.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/login/demo_mode/demo_mode_test_helper.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prefs/browser_prefs.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/app_icon_loader.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon.h"
@@ -109,10 +109,10 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
-#include "components/arc/arc_util.h"
 #include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/arc/mojom/app.mojom.h"
 #include "components/arc/mojom/compatibility_mode.mojom.h"
+#include "components/arc/test/arc_util_test_support.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -388,7 +388,7 @@ class ChromeShelfControllerTest : public BrowserWithTestWindowTest {
         extensions::manifest_keys::kPlatformAppBackgroundScripts,
         std::move(scripts));
 
-    ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
+    SyncServiceFactory::GetInstance()->SetTestingFactory(
         profile(), base::BindRepeating(&BuildTestSyncService));
 
     extensions::TestExtensionSystem* extension_system(
@@ -413,7 +413,7 @@ class ChromeShelfControllerTest : public BrowserWithTestWindowTest {
     // Many pinned app tests assume OS sync is enabled.
     if (chromeos::features::IsSplitSettingsSyncEnabled()) {
       syncer::SyncService* sync_service =
-          ProfileSyncServiceFactory::GetForProfile(profile());
+          SyncServiceFactory::GetForProfile(profile());
       sync_service->GetUserSettings()->SetOsSyncFeatureEnabled(true);
     }
 
@@ -1436,7 +1436,7 @@ TEST_F(ChromeShelfControllerTest, PreinstalledApps) {
 TEST_F(ChromeShelfControllerSplitSettingsSyncTest, PreinstalledApps) {
   // Simulate a user who opted out of sync.
   syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile());
+      SyncServiceFactory::GetForProfile(profile());
   sync_service->GetUserSettings()->SetOsSyncFeatureEnabled(false);
 
   InitShelfController();
@@ -1813,7 +1813,7 @@ TEST_F(ChromeShelfControllerTest, V1AppRunActivateClose) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is running should create a new shelf item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_RUNNING);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_RUNNING, model_->items()[1].status);
@@ -1822,19 +1822,19 @@ TEST_F(ChromeShelfControllerTest, V1AppRunActivateClose) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is running again should have no effect.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_RUNNING);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::STATUS_RUNNING, model_->items()[1].status);
 
   // Reporting that the app is closed should remove its shelf item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_CLOSED);
   EXPECT_EQ(1, model_->item_count());
   EXPECT_FALSE(shelf_controller_->IsAppPinned(extension1_->id()));
   EXPECT_EQ(nullptr,
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is closed again should have no effect.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_CLOSED);
   EXPECT_EQ(1, model_->item_count());
 }
 
@@ -1857,7 +1857,7 @@ TEST_F(ChromeShelfControllerTest, V1AppPinRunCloseUnpin) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is running should just update the existing item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_RUNNING);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_RUNNING, model_->items()[1].status);
@@ -1866,7 +1866,7 @@ TEST_F(ChromeShelfControllerTest, V1AppPinRunCloseUnpin) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is closed should just update the existing item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_CLOSED);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_CLOSED, model_->items()[1].status);
@@ -1893,7 +1893,7 @@ TEST_F(ChromeShelfControllerTest, V1AppRunPinCloseUnpin) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is running should create a new shelf item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_RUNNING);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_RUNNING, model_->items()[1].status);
@@ -1911,7 +1911,7 @@ TEST_F(ChromeShelfControllerTest, V1AppRunPinCloseUnpin) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is closed should just update the existing item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_CLOSED);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_CLOSED, model_->items()[1].status);
@@ -1947,7 +1947,7 @@ TEST_F(ChromeShelfControllerTest, V1AppPinRunUnpinClose) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is running should just update the existing item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_RUNNING);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_RUNNING, model_->items()[1].status);
@@ -1965,7 +1965,7 @@ TEST_F(ChromeShelfControllerTest, V1AppPinRunUnpinClose) {
             shelf_controller_->GetItem(ash::ShelfID(extension1_->id())));
 
   // Reporting that the app is closed should remove its shelf item.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_CLOSED);
   EXPECT_EQ(1, model_->item_count());
   EXPECT_FALSE(shelf_controller_->IsAppPinned(extension1_->id()));
   EXPECT_EQ(nullptr,
@@ -1980,9 +1980,9 @@ TEST_F(ChromeShelfControllerTest, CheckRunningV1AppOrder) {
   EXPECT_EQ(1, model_->item_count());
 
   // Add a few running applications.
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_RUNNING);
-  shelf_controller_->SetV1AppStatus(extension2_->id(), ash::STATUS_RUNNING);
-  shelf_controller_->SetV1AppStatus(web_app::kGmailAppId, ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension2_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(web_app::kGmailAppId, ash::STATUS_RUNNING);
   EXPECT_EQ(4, model_->item_count());
   // Note that this not only checks the order of applications but also the
   // running type.
@@ -2009,16 +2009,16 @@ TEST_F(ChromeShelfControllerTest, CheckRunningV1AppOrder) {
   // Switch again some items and even delete one - making sure that the missing
   // item gets properly handled.
   model_->Move(2, 3);
-  shelf_controller_->SetV1AppStatus(extension1_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension1_->id(), ash::STATUS_CLOSED);
   EXPECT_EQ("Chrome, gmail, app2", GetPinnedAppStatus());
   RestoreUnpinnedRunningApplicationOrder(current_account_id);
   EXPECT_EQ("Chrome, app2, gmail", GetPinnedAppStatus());
 
   // Check that removing more items does not crash and changes nothing.
-  shelf_controller_->SetV1AppStatus(extension2_->id(), ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(extension2_->id(), ash::STATUS_CLOSED);
   RestoreUnpinnedRunningApplicationOrder(current_account_id);
   EXPECT_EQ("Chrome, gmail", GetPinnedAppStatus());
-  shelf_controller_->SetV1AppStatus(web_app::kGmailAppId, ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(web_app::kGmailAppId, ash::STATUS_CLOSED);
   RestoreUnpinnedRunningApplicationOrder(current_account_id);
   EXPECT_EQ("Chrome", GetPinnedAppStatus());
 }
@@ -2921,7 +2921,7 @@ TEST_F(ChromeShelfControllerTest, RestoreDefaultAndRunningV1AppsResyncOrder) {
   EXPECT_EQ("Chrome, App1", GetPinnedAppStatus());
 
   // Set the app status as running, which will add an unpinned item.
-  shelf_controller_->SetV1AppStatus(extension2_->id(), ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(extension2_->id(), ash::STATUS_RUNNING);
   EXPECT_EQ("Chrome, App1, app2", GetPinnedAppStatus());
   AddWebApp(web_app::kGmailAppId);
   EXPECT_EQ("Chrome, App1, Gmail, app2", GetPinnedAppStatus());
@@ -3109,7 +3109,7 @@ TEST_F(ChromeShelfControllerTest, Policy) {
 
   // Removing |extension1_| from the policy should not be reflected in the
   // shelf and pin will exist.
-  policy_value.Remove(0, nullptr);
+  policy_value.EraseListIter(policy_value.GetList().begin());
   profile()->GetTestingPrefService()->SetManagedPref(
       prefs::kPolicyPinnedLauncherApps,
       base::Value::ToUniquePtrValue(policy_value.Clone()));
@@ -4607,6 +4607,7 @@ TEST_F(ChromeShelfControllerTest, InternalAppWindowPropertyChanged) {
   EXPECT_FALSE(shelf_controller_->GetItem(shelf_id));
 }
 
+// TODO(b/194627475): Move these tests to chrome_shelf_controller_browsertest.cc
 class ChromeShelfControllerDemoModeTest : public ChromeShelfControllerTest {
  protected:
   ChromeShelfControllerDemoModeTest() { auto_start_arc_test_ = true; }
@@ -4631,6 +4632,18 @@ class ChromeShelfControllerDemoModeTest : public ChromeShelfControllerTest {
     demo_mode_test_helper_.reset();
 
     ChromeShelfControllerTest::TearDown();
+  }
+
+  web_app::AppId InstallExternalWebApp(std::string start_url) {
+    auto web_app_info = std::make_unique<WebApplicationInfo>();
+    web_app_info->start_url = GURL(start_url);
+    web_app::AppId web_app_id =
+        web_app::test::InstallWebApp(profile(), std::move(web_app_info));
+    web_app::ExternallyInstalledWebAppPrefs web_app_prefs(
+        browser()->profile()->GetPrefs());
+    web_app_prefs.Insert(GURL(start_url), web_app_id,
+                         web_app::ExternalInstallSource::kExternalPolicy);
+    return web_app_id;
   }
 
  private:
@@ -4662,7 +4675,13 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOnline) {
   AppendPrefValue(&policy_value, appinfo.package_name);
   AppendPrefValue(&policy_value, online_only_appinfo.package_name);
 
-  // If the device is offline, extension2 and onlineonly should be unpinned.
+  constexpr char kWebAppUrl[] = "https://test-pwa.com/";
+  web_app::AppId web_app_id = InstallExternalWebApp(kWebAppUrl);
+  AppendPrefValue(&policy_value, kWebAppUrl);
+
+  // If the device is offline, extension2, onlineonly, and TestPWA should
+  // be unpinned. Since the device is online here, these apps should still be
+  // pinned, even though we're ignoring them here.
   ash::DemoSession::Get()->OverrideIgnorePinPolicyAppsForTesting(
       {extension2_->id(), online_only_appinfo.package_name});
 
@@ -4688,6 +4707,10 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOnline) {
   EXPECT_TRUE(shelf_controller_->IsAppPinned(online_only_app_id));
   EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
             GetPinnableForAppID(online_only_app_id, profile()));
+
+  EXPECT_TRUE(shelf_controller_->IsAppPinned(web_app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
+            GetPinnableForAppID(web_app_id, profile()));
 }
 
 TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOffline) {
@@ -4715,7 +4738,12 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOffline) {
   AppendPrefValue(&policy_value, appinfo.package_name);
   AppendPrefValue(&policy_value, online_only_appinfo.package_name);
 
-  // If the device is offline, extension2 and onlineonly should be unpinned.
+  constexpr char kWebAppUrl[] = "https://test-pwa.com/";
+  web_app::AppId web_app_id = InstallExternalWebApp(kWebAppUrl);
+  AppendPrefValue(&policy_value, kWebAppUrl);
+
+  // If the device is offline, extension2 and onlineonly, and TestPWA should be
+  // unpinned.
   ash::DemoSession::Get()->OverrideIgnorePinPolicyAppsForTesting(
       {extension2_->id(), online_only_appinfo.package_name});
 
@@ -4724,8 +4752,8 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOffline) {
       base::Value::ToUniquePtrValue(policy_value.Clone()));
   app_service_test().FlushMojoCalls();
 
-  // Since the device is online, the policy pinned apps that shouldn't be pinned
-  // in Demo Mode are unpinned.
+  // Since the device is offline, the policy pinned apps that shouldn't be
+  // pinned in Demo Mode are unpinned.
   EXPECT_TRUE(shelf_controller_->IsAppPinned(extension1_->id()));
   EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
             GetPinnableForAppID(extension1_->id(), profile()));
@@ -4742,6 +4770,10 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOffline) {
   EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
             GetPinnableForAppID(online_only_app_id, profile()));
 
+  EXPECT_FALSE(shelf_controller_->IsAppPinned(web_app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(web_app_id, profile()));
+
   // Pin a Chrome app that would have been pinned by policy but was suppressed
   // for Demo Mode.
   shelf_controller_->PinAppWithID(extension2_->id());
@@ -4752,9 +4784,16 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOffline) {
   // Pin an ARC app that would have been pinned by policy but was suppressed
   // for Demo Mode.
   shelf_controller_->PinAppWithID(online_only_app_id);
-  EXPECT_TRUE(shelf_controller_->IsAppPinned(app_id));
+  EXPECT_TRUE(shelf_controller_->IsAppPinned(online_only_app_id));
   EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
             GetPinnableForAppID(online_only_app_id, profile()));
+
+  // Pin a web app that would have been pinned by policy but was suppressed for
+  // Demo Mode
+  shelf_controller_->PinAppWithID(web_app_id);
+  EXPECT_TRUE(shelf_controller_->IsAppPinned(web_app_id));
+  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
+            GetPinnableForAppID(web_app_id, profile()));
 }
 
 TEST_F(ChromeShelfControllerTest, CrostiniTerminalPinUnpin) {
@@ -4788,8 +4827,7 @@ TEST_F(ChromeShelfControllerTest, UnpinnableComponentApps) {
   InitShelfController();
 
   const char* kPinnableApp = file_manager::kFileManagerAppId;
-  const char* kNoPinApps[] = {file_manager::kGalleryAppId,
-                              extension_misc::kFeedbackExtensionId};
+  const char* kNoPinApps[] = {extension_misc::kFeedbackExtensionId};
 
   EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
             GetPinnableForAppID(kPinnableApp, profile()));
@@ -4945,7 +4983,7 @@ TEST_F(ChromeShelfControllerWebAppTest, WebAppPinRunUnpinClose) {
   EXPECT_NE(nullptr, shelf_controller_->GetItem(ash::ShelfID(app_id)));
 
   // Reporting that the app is running should just update the existing item.
-  shelf_controller_->SetV1AppStatus(app_id, ash::STATUS_RUNNING);
+  shelf_controller_->SetAppStatus(app_id, ash::STATUS_RUNNING);
   EXPECT_EQ(2, model_->item_count());
   EXPECT_EQ(ash::TYPE_PINNED_APP, model_->items()[1].type);
   EXPECT_EQ(ash::STATUS_RUNNING, model_->items()[1].status);
@@ -4961,7 +4999,7 @@ TEST_F(ChromeShelfControllerWebAppTest, WebAppPinRunUnpinClose) {
   EXPECT_NE(nullptr, shelf_controller_->GetItem(ash::ShelfID(app_id)));
 
   // Reporting that the app is closed should remove its shelf item.
-  shelf_controller_->SetV1AppStatus(app_id, ash::STATUS_CLOSED);
+  shelf_controller_->SetAppStatus(app_id, ash::STATUS_CLOSED);
   EXPECT_EQ(1, model_->item_count());
   EXPECT_FALSE(shelf_controller_->IsAppPinned(app_id));
   EXPECT_EQ(nullptr, shelf_controller_->GetItem(ash::ShelfID(app_id)));

@@ -193,14 +193,14 @@ bool VivaldiNativeAppWindowViewsWin::ExecuteWindowsCommand(int command_id) {
 
 // NOTE(pettern@vivaldi.com): Returning empty icons will make Windows
 // grab the icons from the resource section instead, fixing VB-34191.
-gfx::ImageSkia VivaldiNativeAppWindowViewsWin::GetWindowAppIcon() {
+ui::ImageModel VivaldiNativeAppWindowViewsWin::GetWindowAppIcon() {
   if (window()->browser()->is_type_popup()) {
     return VivaldiNativeAppWindowViews::GetWindowAppIcon();
   }
 
-  return gfx::ImageSkia();
+  return ui::ImageModel();
 }
 
-gfx::ImageSkia VivaldiNativeAppWindowViewsWin::GetWindowIcon() {
-  return gfx::ImageSkia();
+ui::ImageModel VivaldiNativeAppWindowViewsWin::GetWindowIcon() {
+  return ui::ImageModel();
 }

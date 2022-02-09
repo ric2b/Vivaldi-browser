@@ -18,9 +18,6 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/ipc_demuxer.h"
-#include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
-#include "platform_media/renderer/decoders/pass_through_video_decoder.h"
 #if defined(OS_MAC)
 #include "platform_media/renderer/decoders/mac/at_audio_decoder.h"
 #include "platform_media/renderer/decoders/mac/viv_video_decoder.h"
@@ -62,26 +59,19 @@ DefaultRendererFactory::~DefaultRendererFactory() = default;
 
 std::vector<std::unique_ptr<AudioDecoder>>
 DefaultRendererFactory::CreateAudioDecoders(
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    bool use_platform_media_pipeline) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner) {
   // Create our audio decoders and renderer.
   std::vector<std::unique_ptr<AudioDecoder>> audio_decoders;
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (use_platform_media_pipeline) {
-    audio_decoders.push_back(
-        std::make_unique<PassThroughAudioDecoder>(media_task_runner));
-  } else {
 #if defined(OS_MAC)
-    audio_decoders.push_back(
-        std::make_unique<ATAudioDecoder>(media_task_runner));
+  audio_decoders.push_back(std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
-//    RETURN_ON_FAILURE(InitializeMediaFoundation(),
-//                      "Could not initialize Media Foundation", {});
-    audio_decoders.push_back(
-        std::make_unique<WMFAudioDecoder>(media_task_runner));
+  //    RETURN_ON_FAILURE(InitializeMediaFoundation(),
+  //                      "Could not initialize Media Foundation", {});
+  audio_decoders.push_back(
+      std::make_unique<WMFAudioDecoder>(media_task_runner));
 #endif
-  }
 #endif
 
   decoder_factory_->CreateAudioDecoders(media_task_runner, media_log_,
@@ -94,25 +84,13 @@ DefaultRendererFactory::CreateVideoDecoders(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     RequestOverlayInfoCB request_overlay_info_cb,
     const gfx::ColorSpace& target_color_space,
-    GpuVideoAcceleratorFactories* gpu_factories,
-    bool use_platform_media_pipeline) {
+    GpuVideoAcceleratorFactories* gpu_factories) {
   // Create our video decoders and renderer.
   std::vector<std::unique_ptr<VideoDecoder>> video_decoders;
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (use_platform_media_pipeline) {
-    video_decoders.push_back(
-        std::make_unique<PassThroughVideoDecoder>(media_task_runner));
-  } else {
-#endif
 
   decoder_factory_->CreateVideoDecoders(
       media_task_runner, gpu_factories, media_log_,
       std::move(request_overlay_info_cb), target_color_space, &video_decoders);
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  }
-#endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(OS_MAC)
@@ -136,8 +114,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
     RequestOverlayInfoCB request_overlay_info_cb,
-    const gfx::ColorSpace& target_color_space,
-    bool use_platform_media_pipeline) {
+    const gfx::ColorSpace& target_color_space) {
   DCHECK(audio_renderer_sink);
 
   std::unique_ptr<AudioRenderer> audio_renderer(new AudioRendererImpl(
@@ -149,8 +126,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       // RendererFactory is owned by WMPI and gets called after WMPI destructor
       // finishes.
       base::BindRepeating(&DefaultRendererFactory::CreateAudioDecoders,
-                          base::Unretained(this), media_task_runner,
-                          use_platform_media_pipeline),
+                          base::Unretained(this), media_task_runner),
 #if defined(OS_ANDROID)
       media_log_));
 #else
@@ -179,8 +155,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       base::BindRepeating(&DefaultRendererFactory::CreateVideoDecoders,
                           base::Unretained(this), media_task_runner,
                           std::move(request_overlay_info_cb),
-                          target_color_space, gpu_factories,
-                          use_platform_media_pipeline),
+                          target_color_space, gpu_factories),
       true, media_log_, std::move(gmb_pool)));
 
   return std::make_unique<RendererImpl>(

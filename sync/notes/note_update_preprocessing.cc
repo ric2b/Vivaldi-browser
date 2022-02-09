@@ -159,6 +159,11 @@ bool AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
     specifics->mutable_notes()->set_guid(
         base::ToLowerASCII(update_entity.originator_client_item_id()));
     DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
+  } else if (update_entity.originator_cache_guid().empty() &&
+             update_entity.originator_client_item_id().empty()) {
+    // There's no GUID that could be inferred from empty originator
+    // information.
+    return false;
   } else {
     specifics->mutable_notes()->set_guid(
         InferGuidForLegacyNote(update_entity.originator_cache_guid(),

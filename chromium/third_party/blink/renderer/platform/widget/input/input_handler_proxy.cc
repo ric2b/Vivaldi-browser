@@ -227,12 +227,8 @@ InputHandlerProxy::InputHandlerProxy(cc::InputHandler& input_handler,
       cursor_control_handler_(std::make_unique<CursorControlHandler>()) {
   DCHECK(client);
   input_handler_->BindToClient(this);
-  cc::ScrollElasticityHelper* scroll_elasticity_helper =
-      input_handler_->CreateScrollElasticityHelper();
-  if (scroll_elasticity_helper) {
-    elastic_overscroll_controller_ =
-        ElasticOverscrollController::Create(scroll_elasticity_helper);
-  }
+
+  UpdateElasticOverscroll();
   compositor_event_queue_ = std::make_unique<CompositorThreadEventQueue>();
   scroll_predictor_ =
       base::FeatureList::IsEnabled(blink::features::kResamplingScrollEvents)
@@ -535,6 +531,27 @@ void InputHandlerProxy::DispatchQueuedInputEvents() {
     DispatchSingleInputEvent(compositor_event_queue_->Pop(), now);
 }
 
+void InputHandlerProxy::UpdateElasticOverscroll() {
+  bool can_use_elastic_overscroll = true;
+#if defined(OS_ANDROID)
+  // On android, elastic overscroll introduces quite a bit of motion which can
+  // effect those sensitive to it. Disable when prefers_reduced_motion_ is
+  // disabled.
+  can_use_elastic_overscroll = !prefers_reduced_motion_;
+#endif
+  if (!can_use_elastic_overscroll && elastic_overscroll_controller_) {
+    elastic_overscroll_controller_.reset();
+    input_handler_->DestroyScrollElasticityHelper();
+  } else if (can_use_elastic_overscroll && !elastic_overscroll_controller_) {
+    cc::ScrollElasticityHelper* scroll_elasticity_helper =
+        input_handler_->CreateScrollElasticityHelper();
+    if (scroll_elasticity_helper) {
+      elastic_overscroll_controller_ =
+          ElasticOverscrollController::Create(scroll_elasticity_helper);
+    }
+  }
+}
+
 void InputHandlerProxy::InjectScrollbarGestureScroll(
     const WebInputEvent::Type type,
     const gfx::PointF& position_in_widget,
@@ -575,7 +592,9 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
   DCHECK(!scrollbar_latency_info.FindLatency(
       ui::INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT, nullptr));
 
-  absl::optional<cc::EventMetrics::ScrollUpdateType> scroll_update_type;
+  cc::EventMetrics::ScrollParams scroll_params(
+      synthetic_gesture_event->GetScrollInputType(), /*is_inertial=*/false);
+
   if (type == WebInputEvent::Type::kGestureScrollBegin) {
     last_injected_gesture_was_begin_ = true;
   } else {
@@ -589,9 +608,10 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
               ? ui::INPUT_EVENT_LATENCY_FIRST_SCROLL_UPDATE_ORIGINAL_COMPONENT
               : ui::INPUT_EVENT_LATENCY_SCROLL_UPDATE_ORIGINAL_COMPONENT,
           original_timestamp);
-      scroll_update_type = last_injected_gesture_was_begin_
-                               ? cc::EventMetrics::ScrollUpdateType::kStarted
-                               : cc::EventMetrics::ScrollUpdateType::kContinued;
+      scroll_params.update_type =
+          last_injected_gesture_was_begin_
+              ? cc::EventMetrics::ScrollUpdateType::kStarted
+              : cc::EventMetrics::ScrollUpdateType::kContinued;
     }
 
     last_injected_gesture_was_begin_ = false;
@@ -599,8 +619,7 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
 
   std::unique_ptr<cc::EventMetrics> metrics =
       cc::EventMetrics::CreateFromExisting(
-          synthetic_gesture_event->GetTypeAsUiEventType(), scroll_update_type,
-          synthetic_gesture_event->GetScrollInputType(),
+          synthetic_gesture_event->GetTypeAsUiEventType(), scroll_params,
           cc::EventMetrics::DispatchStage::kArrivedInRendererCompositor,
           original_metrics);
   auto gesture_event_with_callback_update = std::make_unique<EventWithCallback>(
@@ -1364,6 +1383,14 @@ void InputHandlerProxy::Animate(base::TimeTicks time) {
 void InputHandlerProxy::ReconcileElasticOverscrollAndRootScroll() {
   if (elastic_overscroll_controller_)
     elastic_overscroll_controller_->ReconcileStretchAndScroll();
+}
+
+void InputHandlerProxy::SetPrefersReducedMotion(bool prefers_reduced_motion) {
+  if (prefers_reduced_motion_ == prefers_reduced_motion)
+    return;
+  prefers_reduced_motion_ = prefers_reduced_motion;
+
+  UpdateElasticOverscroll();
 }
 
 void InputHandlerProxy::UpdateRootLayerStateForSynchronousInputHandler(

@@ -18,10 +18,6 @@
 #include "ui/vivaldi_bookmark_menu_mac.h"
 #include "ui/vivaldi_main_menu.h"
 
-
-// This tag value must be used in the js code setting up the menus.
-const int kSeparatorTag = 55555;
-
 namespace menubar = extensions::vivaldi::menubar;
 
 namespace vivaldi {
@@ -31,7 +27,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
 // Menu delegate that supports replacing items with the specified tag that
 // is defined in init. It is assumed all are listed one after another and that
-// the section starts with a separator with tag value kSeparatorTag
+// the section starts with a separator with tag value
+// IDC_VIV_WINDOW_SEPARATOR_MAC
 @interface MainMenuDelegate : NSObject<NSMenuDelegate> {
  @private
   std::vector<menubar::MenuItem> items_;
@@ -106,7 +103,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
   // Locate the separator in front of the new tab items
   long startIndex = -1;
   for (long i=0; i<menu.numberOfItems; i++) {
-    if ([menu itemAtIndex:i].tag == kSeparatorTag) {
+    if ([menu itemAtIndex:i].tag == IDC_VIV_WINDOW_SEPARATOR_MAC) {
       startIndex = i;
       break;
     }
@@ -485,13 +482,24 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       [subMenu setTitle:base::SysUTF8ToNSString(item.name)];
       switch (item.id) {
         case IDC_EDIT_MENU:
-          // Some (one) item is added by AppKit at end of the menu and we leave
-          // that alone.
           for (NSMenuItem* item in [subMenu itemArray]) {
-            if ([item action] !=
-                    NSSelectorFromString(@"orderFrontCharacterPalette:")) {
-              [subMenu removeItem:item];
+            if (item.tag == IDC_SPELLCHECK_MENU ||
+                item.tag == IDC_VIV_SUBSTITUTIONS_MENU_MAC ||
+                item.tag == IDC_VIV_SPEECH_MENU_MAC ||
+                item.tag == IDC_VIV_EDIT_SEPARATOR_MAC) {
+              // Set up in vivaldi_main_menu_buider.mm It seems we have to do
+              // it there to get it working. This means this submenu with
+              // content is not configurable.
+              continue;
+            } else if (item.action ==
+                       NSSelectorFromString(@"orderFrontCharacterPalette:") ||
+                       item.action ==
+                       NSSelectorFromString(@"startDictation:")) {
+              // These two are added by AppKit at end of the menu and we leave
+              // them alone.
+              continue;
             }
+            [subMenu removeItem:item];
           }
           index = 0; // Our items always start from the top of the menu.
           break;
@@ -537,10 +545,11 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
           // This menu has issues on macOS 10.15+ (VB-58755)
           // We remove all items we have added ourself and start adding after
-          // the "magic" separator with the kSeparatorTag value
-          // (see vivaldi_main_menu_builder.mm). This means we can not configure
-          // all of this menu.
-          index = [subMenu indexOfItem:[subMenu itemWithTag:kSeparatorTag]];
+          // the "magic" separator with the tag value
+          // IDC_VIV_WINDOW_SEPARATOR_MAC (see vivaldi_main_menu_builder.mm).
+          // This means we can not configure all of this menu.
+          index = [subMenu indexOfItem:
+              [subMenu itemWithTag:IDC_VIV_WINDOW_SEPARATOR_MAC]];
           for (NSMenuItem* item in [subMenu itemArray]) {
             // MacOS adds a window list at bottom. Items are tagged with 0.
             if ([subMenu indexOfItem:item] > index && item.tag != 0) {

@@ -344,7 +344,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
             // Reload the NativePage (if any), since the old NativePage has a reference to the old
             // activity.
-            if (isNativePage()) maybeShowNativePage(getUrlString(), true);
+            if (isNativePage()) maybeShowNativePage(getUrl().getSpec(), true);
         }
 
         // Notify the event to observers only when we do the reparenting task, not when we simply
@@ -391,14 +391,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         return mId;
     }
 
-    // TODO(crbug.com/1113249) move getUrl() and getUrlString() to CriticalPersistedTabData
-    @Override
-    public String getUrlString() {
-        return getUrl().getSpec();
-    }
-
     @CalledByNative
     @Override
+    // TODO(crbug.com/1113249) move getUrl() to CriticalPersistedTabData
     public GURL getUrl() {
         if (!isInitialized()) {
             return GURL.emptyGURL();
@@ -843,32 +838,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     }
 
     @Override
-    public void setAddApi2TransitionToFutureNavigations(boolean shouldAdd) {
-        if (mNativeTabAndroid != 0) {
-            TabImplJni.get().setAddApi2TransitionToFutureNavigations(mNativeTabAndroid, shouldAdd);
-        }
-    }
-
-    @Override
-    public boolean getAddApi2TransitionToFutureNavigations() {
-        return (mNativeTabAndroid != 0)
-                && TabImplJni.get().getAddApi2TransitionToFutureNavigations(mNativeTabAndroid);
-    }
-
-    @Override
-    public void setHideFutureNavigations(boolean hide) {
-        if (mNativeTabAndroid != 0) {
-            TabImplJni.get().setHideFutureNavigations(mNativeTabAndroid, hide);
-        }
-    }
-
-    @Override
-    public boolean getHideFutureNavigations() {
-        return (mNativeTabAndroid != 0)
-                && TabImplJni.get().getHideFutureNavigations(mNativeTabAndroid);
-    }
-
-    @Override
     public void setIsTabSaveEnabled(boolean isTabSaveEnabled) {
         mIsTabSaveEnabledSupplier.set(isTabSaveEnabled);
     }
@@ -989,7 +958,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 appId = CriticalPersistedTabData.from(this).getOpenerAppId();
                 themeColor = CriticalPersistedTabData.from(this).getThemeColor();
                 hasThemeColor = themeColor != TabState.UNSPECIFIED_THEME_COLOR
-                        && ColorUtils.isValidThemeColor(themeColor);
+                        && !ColorUtils.isThemeColorTooBright(themeColor);
             } else if (tabState != null) {
                 appId = tabState.openerAppId;
                 themeColor = tabState.getThemeColor();
@@ -1298,19 +1267,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         return mPendingLoadParams;
     }
 
-    @Override
-    public void setShouldBlockNewNotificationRequests(boolean value) {
-        if (mNativeTabAndroid != 0) {
-            TabImplJni.get().setShouldBlockNewNotificationRequests(mNativeTabAndroid, value);
-        }
-    }
-
-    @Override
-    public boolean getShouldBlockNewNotificationRequests() {
-        return mNativeTabAndroid != 0
-                && TabImplJni.get().getShouldBlockNewNotificationRequests(mNativeTabAndroid);
-    }
-
     /**
      * Performs any subclass-specific tasks when the Tab crashes.
      */
@@ -1504,6 +1460,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             if (!ChromeApplicationImpl.isVivaldi())
             updateThemeColor(TabState.UNSPECIFIED_THEME_COLOR);
         });
+        // Vivaldi
+        mOverrideUserAgent = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.ALWAYS_SHOW_DESKTOP, false);
     }
 
     /**
@@ -1817,12 +1776,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 long nativeTabAndroid, WebContents webContents, int width, int height);
         void setActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url, String title);
         void loadOriginalImage(long nativeTabAndroid);
-        void setAddApi2TransitionToFutureNavigations(long nativeTabAndroid, boolean shouldAdd);
-        boolean getAddApi2TransitionToFutureNavigations(long nativeTabAndroid);
-        void setHideFutureNavigations(long nativeTabAndroid, boolean hide);
-        boolean getHideFutureNavigations(long nativeTabAndroid);
-        void setShouldBlockNewNotificationRequests(long nativeTabAndroid, boolean value);
-        boolean getShouldBlockNewNotificationRequests(long nativeTabAndroid);
         boolean handleNonNavigationAboutURL(GURL url);
 
         // Vivaldi: Native exchange of webcontents.

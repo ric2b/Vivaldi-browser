@@ -130,9 +130,11 @@ void ContextMenuController::InitModel() {
     models_.push_back(base::WrapUnique(root_menu_model_));
   }
 
+  bool dark_text_color = menu_->HasDarkTextColor();
+
   // Add items from JS
   for (const context_menu::Element& child: params_->properties.children) {
-    PopulateModel(child, root_menu_model_);
+    PopulateModel(child, dark_text_color, root_menu_model_);
   }
 
   // Add developer tools items
@@ -144,6 +146,7 @@ void ContextMenuController::InitModel() {
 }
 
 void ContextMenuController::PopulateModel(const Element& child,
+                                          bool dark_text_color,
                                           ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
   if (child.item) {
@@ -192,7 +195,7 @@ void ContextMenuController::PopulateModel(const Element& child,
 
           menu_model->AddSubMenu(id, label, child_menu_model);
           for (const Element& it: *child.children) {
-            PopulateModel(it, child_menu_model);
+            PopulateModel(it, dark_text_color, child_menu_model);
           }
           SanitizeModel(child_menu_model);
         }
@@ -224,8 +227,7 @@ void ContextMenuController::PopulateModel(const Element& child,
       id_to_url_map_[id] = item.url.get();
       LoadFavicon(id, *item.url);
     } else if (item.icons && item.icons->size() == 2) {
-      // Fixed for now. Using same format as main menus api.
-      bool dark_text_color = true;
+      // Using same format as main menus api.
       SetIcon(id, item.icons->at(dark_text_color ? 0 : 1), menu_model);
     } else if (rv_context_menu_ && item.action) {
       ui::ImageModel img = rv_context_menu_->GetImageForAction(*item.action);

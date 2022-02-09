@@ -23,4 +23,7 @@ interface VivaldiTabsPrivate {
   GetAccessKeysForPage() => (array<AccessKey> access_keys);
   GetScrollPosition() => (int64 x, int64 y);
   GetSpatialNavigationRects() => (array<SpatnavRect> rects);
+
+  // Determine language of given text, if possible. Returns language code, if detected.
+  DetermineTextLanguage(string text) => (string langCode);
 };

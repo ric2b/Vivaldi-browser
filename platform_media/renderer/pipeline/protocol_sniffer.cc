@@ -9,7 +9,6 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 
 #include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "media/base/container_names.h"
 #include "media/base/data_source.h"
@@ -129,7 +128,7 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
 }
 
 void SniffReadDone(std::unique_ptr<uint8_t[]> data,
-                   ProtocolSniffer::Callback callback,
+                   ProtocolSniffer::SniffProtocolResult callback,
                    int size_read) {
   std::string mime_type;
   if (size_read > 0) {
@@ -166,7 +165,7 @@ bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
 
 // static
 void ProtocolSniffer::SniffProtocol(DataSource* data_source,
-                                    Callback callback) {
+                                    SniffProtocolResult callback) {
   DCHECK(data_source);
 
   // We read the first 8192 bytes, same as FFmpeg.
@@ -177,13 +176,10 @@ void ProtocolSniffer::SniffProtocol(DataSource* data_source,
   // before base::BindOnce() can be evaluated and call the move constructor for
   // data_holder.
   uint8_t* data = data_holder.get();
-
-  // As we embedd move-only instances into the callback, we need to use
-  // AdaptCallbackForRepeating/BindOnce, not just Bind.
   data_source->Read(
       0, kDataSize, data,
-      base::AdaptCallbackForRepeating(base::BindOnce(
-          &SniffReadDone, std::move(data_holder), std::move(callback))));
+      base::BindOnce(
+          &SniffReadDone, std::move(data_holder), std::move(callback)));
 }
 
 }  // namespace media

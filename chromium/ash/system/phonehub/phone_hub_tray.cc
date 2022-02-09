@@ -31,6 +31,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 
 namespace ash {
@@ -234,6 +235,10 @@ void PhoneHubTray::HideStatusHeaderView() {
 void PhoneHubTray::CloseBubble() {
   if (!bubble_)
     return;
+
+  auto* bubble_view = bubble_->GetBubbleView();
+  if (bubble_view)
+    bubble_view->ResetDelegate();
 
   DCHECK(content_view_);
   phone_hub_metrics::LogScreenOnBubbleClose(

@@ -65,7 +65,7 @@ VivaldiTranslateClient::VivaldiTranslateClient(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
   translate_driver_ = std::make_unique<translate::ContentTranslateDriver>(
-      &web_contents->GetController(),
+      *web_contents, & web_contents->GetController(),
       UrlLanguageHistogramFactory::GetForBrowserContext(
           web_contents->GetBrowserContext()),
           TranslateModelServiceFactory::GetOrBuildForKey(
@@ -357,7 +357,7 @@ void VivaldiTranslateClient::ManualTranslateWhenReady() {
     manual_translate_on_ready_ = true;
   } else {
     translate::TranslateManager* manager = GetTranslateManager();
-    manager->InitiateManualTranslation(true);
+    manager->ShowTranslateUI(true);
   }
 }
 #endif
@@ -418,7 +418,7 @@ void VivaldiTranslateClient::OnLanguageDetermined(
 #if defined(OS_ANDROID)
   // See ChromeTranslateClient::ManualTranslateOnReady
   if (manual_translate_on_ready_) {
-    GetTranslateManager()->InitiateManualTranslation(true);
+    GetTranslateManager()->ShowTranslateUI(true);
     manual_translate_on_ready_ = false;
   }
 #endif

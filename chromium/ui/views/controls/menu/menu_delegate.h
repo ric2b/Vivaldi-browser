@@ -15,6 +15,7 @@
 #include "ui/gfx/font_list.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
+#include "ui/views/view.h"
 #include "ui/views/views_export.h"
 
 using ui::OSExchangeData;
@@ -175,6 +176,16 @@ class VIEWS_EXPORT MenuDelegate {
       DropPosition position,
       const ui::DropTargetEvent& event);
 
+  // Invoked to get a callback to perform the drop operation later. This is ONLY
+  // invoked if CanDrop() returned true for the parent menu item, and
+  // GetDropOperation() returned an operation other than DragOperation::kNone.
+  //
+  // |menu| is the menu the drop occurred on.
+  virtual views::View::DropCallback GetDropCallback(
+      MenuItemView* menu,
+      DropPosition position,
+      const ui::DropTargetEvent& event);
+
   // Invoked to determine if it is possible for the user to drag the specified
   // menu item.
   virtual bool CanDrag(MenuItemView* menu);
@@ -227,10 +238,12 @@ class VIEWS_EXPORT MenuDelegate {
 
   virtual MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
                                               const gfx::Point& screen_point,
-                                              gfx::Rect* rect);
+                                              gfx::Rect* rect,
+                                              MenuAnchorPosition* anchor);
   virtual MenuItemView* GetNextSiblingMenu(bool next,
                                            bool* has_mnemonics,
-                                           gfx::Rect* rect);
+                                           gfx::Rect* rect,
+                                           MenuAnchorPosition* anchor);
   // Added by Vivaldi. To be used when menu does not fit the screen or would
   // overlap the menu bar button.
   virtual bool VivaldiShouldTryPositioningInMenuBar() const;

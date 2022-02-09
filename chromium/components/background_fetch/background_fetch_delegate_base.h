@@ -22,16 +22,16 @@ class BrowserContext;
 }
 
 namespace download {
-class DownloadService;
+class BackgroundDownloadService;
 }  // namespace download
 
 namespace background_fetch {
 
 struct JobDetails;
 
-// Implementation of BackgroundFetchDelegate using the DownloadService. This
-// base class is shared by multiple embedders, with specializations providing
-// their own UI.
+// Implementation of BackgroundFetchDelegate using the
+// BackgroundDownloadService. This base class is shared by multiple embedders,
+// with specializations providing their own UI.
 class BackgroundFetchDelegateBase : public content::BackgroundFetchDelegate {
  public:
   explicit BackgroundFetchDelegateBase(content::BrowserContext* context);
@@ -98,7 +98,8 @@ class BackgroundFetchDelegateBase : public content::BackgroundFetchDelegate {
   // Called in response to UI interactions.
   void PauseDownload(const std::string& job_id);
   void ResumeDownload(const std::string& job_id);
-  void CancelDownload(const std::string& job_id);
+  // |job_id| is passed as a copy since the Abort workflow may invalidate it.
+  void CancelDownload(std::string job_id);
 
   // Called when the UI has finished showing. If `activated` is true, it was
   // tapped, otherwise it was dismissed.
@@ -106,7 +107,7 @@ class BackgroundFetchDelegateBase : public content::BackgroundFetchDelegate {
 
  protected:
   // Return the download service for `context_`.
-  virtual download::DownloadService* GetDownloadService() = 0;
+  virtual download::BackgroundDownloadService* GetDownloadService() = 0;
 
   // Called when a new JobDetails object has been created and inserted in
   // |job_details_map_|.

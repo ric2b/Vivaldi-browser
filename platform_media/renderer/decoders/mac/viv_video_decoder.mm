@@ -232,7 +232,7 @@ void VivVideoDecoder::DestroyAsync(std::unique_ptr<VivVideoDecoder> decoder) {
 }
 
 VideoDecoderType VivVideoDecoder::GetDecoderType() const {
-  return VideoDecoderType::kDecrypting;
+  return VideoDecoderType::kVivVTVideo;
 }
 
 void VivVideoDecoder::Output(void* source_frame_refcon,
@@ -913,8 +913,9 @@ bool VivVideoDecoder::ConfigureDecoder() {
   // output size for a 1:1 ratio. (Note though that VideoToolbox does not handle
   // top or left crops correctly.) We expect the visible rect to be integral.
   CGRect visible_rect = CMVideoFormatDescriptionGetCleanAperture(format_, true);
-  CMVideoDimensions visible_dimensions = {visible_rect.size.width,
-                                          visible_rect.size.height};
+  CMVideoDimensions visible_dimensions = {
+      static_cast<int32_t>(visible_rect.size.width),
+      static_cast<int32_t>(visible_rect.size.height)};
 
   base::ScopedCFTypeRef<CFMutableDictionaryRef> image_config(
       BuildImageConfig(visible_dimensions));

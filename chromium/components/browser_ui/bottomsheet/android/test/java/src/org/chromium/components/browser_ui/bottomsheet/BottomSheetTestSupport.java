@@ -98,6 +98,10 @@ public class BottomSheetTestSupport {
         mController.forceDismissAllContent();
     }
 
+    public void forceClickOutsideTheSheet() {
+        getBottomSheet().setSheetState(SheetState.HIDDEN, false, StateChangeReason.TAP_SCRIM);
+    }
+
     /** @return The bottom sheet view. */
     private BottomSheet getBottomSheet() {
         return (BottomSheet) mController.getBottomSheetViewForTesting();
@@ -121,7 +125,7 @@ public class BottomSheetTestSupport {
         CallbackHelper stateChangeHelper = new CallbackHelper();
         BottomSheetObserver observer = new EmptyBottomSheetObserver() {
             @Override
-            public void onSheetStateChanged(int newState) {
+            public void onSheetStateChanged(int newState, int reason) {
                 if (state == newState) stateChangeHelper.notifyCalled();
             }
         };

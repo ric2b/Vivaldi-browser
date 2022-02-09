@@ -25,7 +25,7 @@
 <translation id="5613020302032141669">Shigjeta majtas</translation>
 <translation id="5754277640426581776">{MINUTES, plural, =1 {1 min} other {# min}}</translation>
 <translation id="5768079895599174203">{DAYS, plural, =1 {1 ditë e } other {# ditë e }}</translation>
-<translation id="5906667377645263094">{SECONDS, plural, =1 {duhet edhe 1 sekondë} other {duhen edhe # sekonda}}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, =1 {do edhe 1 sekondë} other {do edhe # sekonda}}</translation>
 <translation id="5943826764092288734">{HOURS, plural, =1 {1 orë} other {# orë}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6404817160109697034">{SECONDS, plural, =1 {1 sek më parë} other {# sek më parë}}</translation>
@@ -33,9 +33,9 @@
 <translation id="6863590663815976734">{HOURS, plural, =1 {duhet edhe 1 orë} other {duhen edhe # orë}}</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6974053822202609517">Nga e djathta në të majtë</translation>
-<translation id="7238427729722629793">{MINUTES, plural, =1 {duhet edhe 1 min} other {duhen edhe # min}}</translation>
+<translation id="7238427729722629793">{MINUTES, plural, =1 {do edhe 1 min} other {do edhe # min}}</translation>
 <translation id="7365057348334984696">{MINUTES, plural, =1 {1 min më parë} other {# min më parë}}</translation>
-<translation id="7410957453383678442">{MINUTES, plural, =1 {duhet edhe 1 minutë} other {duhen edhe # minuta}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, =1 {do edhe 1 minutë} other {do edhe # minuta}}</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
 <translation id="8106081041558092062">{HOURS, plural, =1 {1 orë më parë} other {# orë më parë}}</translation>
 <translation id="8131263257437993507">{SECONDS, plural, =1 {duhet edhe 1 sek} other {duhen edhe # sek}}</translation>

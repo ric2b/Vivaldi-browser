@@ -14,7 +14,6 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.appcompat.content.res.AppCompatResources;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
@@ -40,6 +39,7 @@ import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsDelegate;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsObserver;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
@@ -58,6 +58,8 @@ import java.text.DateFormat;
 import java.util.Date;
 
 // Vivaldi
+import androidx.appcompat.content.res.AppCompatResources;
+
 import org.chromium.build.BuildConfig;
 
 /**
@@ -221,8 +223,8 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
 
     @Override
     public PageInfoSubpageController createHistoryController(
-            PageInfoMainController mainController, PageInfoRowView rowView, String url) {
-        return new PageInfoHistoryController(mainController, rowView, this, url);
+            PageInfoMainController mainController, PageInfoRowView rowView, String host) {
+        return new PageInfoHistoryController(mainController, rowView, this, host);
     }
 
     /**
@@ -274,7 +276,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
                     return;
                 }
                 callback.onResult(
-                        AppCompatResources.getDrawable(mContext, R.drawable.chromelogo16));
+                        TintedDrawable.constructTintedDrawable(mContext, R.drawable.chromelogo16));
             } else {
                 callback.onResult(null);
             }
@@ -296,5 +298,13 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         FragmentActivity activity = ((FragmentActivity) mContext);
         if (activity.isFinishing()) return null;
         return activity.getSupportFragmentManager();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean isIncognito() {
+        return mProfile.isOffTheRecord();
     }
 }

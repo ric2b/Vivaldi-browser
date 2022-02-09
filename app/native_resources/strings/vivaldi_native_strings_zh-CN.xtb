@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">使用邮件发送链接</translation>
 <translation id="1454726940098520109">不再显示确认信息</translation>
 <translation id="1462666970065907900">确认要关闭此窗口？</translation>
+<translation id="1480046233931937785">贡献者</translation>
 <translation id="1526344461589023948">保存下载的更新文件时出错。请检查是否有足够的存储空间然后重试。</translation>
 <translation id="1657174850639146440">怪兽 9</translation>
 <translation id="1676595396635191120">新建隐身窗口</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">在新标签页打开</translation>
 <translation id="3027988479108856431">很遗憾，你的 Yandex 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Yandex 窗口然后点击继续。</translation>
 <translation id="3084011186245865060">风景 6</translation>
+<translation id="3093931836425623631">Chromium 开源项目及其它开源软件使创建 Vivaldi 成为可能。</translation>
 <translation id="3127383884976966729">动物 7</translation>
 <translation id="3156398087075132709">新建书签</translation>
 <translation id="3255747772218936245">安装更新</translation>
@@ -52,6 +54,7 @@
 <translation id="3402602684546832928">选择 Opera 书签文件</translation>
 <translation id="3451317331714872347">风景 8</translation>
 <translation id="3457498675806041407">确认退出</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" />安装完毕并将在重启浏览器后生效。</translation>
 <translation id="3516213908976398531">风景 11</translation>
 <translation id="3521635864657970829">确认关闭这个窗口吗？</translation>
 <translation id="3540597690227428180">动物 9</translation>
@@ -86,7 +89,7 @@
 <translation id="4677434526832593569">动物 8</translation>
 <translation id="474217410105706308">使此页面静音</translation>
 <translation id="4881695831933465202">打开</translation>
-<translation id="498766871928286903"><ph name="DOWNLOADED" /> 已下载，总共 <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
+<translation id="498766871928286903">已下载 <ph name="DOWNLOADED" />，共 <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">导入的快速拨号</translation>
 <translation id="5092656712000637858">添加页面到网页面板</translation>
 <translation id="5177818338935286353">怪兽 7</translation>
@@ -145,7 +148,7 @@
 <translation id="8388552048012645975">正在下载更新...</translation>
 <translation id="8427094907586191051">风景 17</translation>
 <translation id="8439034818057146672">准备安装 Vivaldi 新版本。</translation>
-<translation id="8446668873108041390">以停用通过 AppleScript 运行 JavaScript。启用“设置&gt;隐私&gt;Apple Events”选项以允许从 Apple Events 执行JavaScript。</translation>
+<translation id="8446668873108041390">已停用通过 AppleScript 运行 JavaScript。启用「设置 &gt; 隐私 &gt; Apple Events」选项以允许执行来自 Apple Events 的 JavaScript。</translation>
 <translation id="8539196077526389150">风景 13</translation>
 <translation id="8562339533180097902">立即关闭 Vivaldi 并开始安装</translation>
 <translation id="8567452685425968223">正在执行更新...</translation>
@@ -161,6 +164,7 @@
 <translation id="8912720443398351457">确认退出Vivaldi吗？</translation>
 <translation id="8947109330183116400">选择 HTML 书签文件</translation>
 <translation id="9017566390391482291">选择 Vivaldi 配置文件夹以导入</translation>
+<translation id="9048058608784130603">准备更新至 <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">编辑</translation>
 <translation id="912022491595344261">以<ph name="USER" />身份打开图像</translation>
 <translation id="9157539936604258187">打开链接</translation>

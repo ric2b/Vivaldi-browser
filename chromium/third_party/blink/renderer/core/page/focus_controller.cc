@@ -918,7 +918,6 @@ void FocusController::FocusHasChanged() {
   }
 
   NotifyFocusChangedObservers();
-  page_->GetPageScheduler()->OnFocusChanged(focused);
 }
 
 void FocusController::SetFocused(bool focused) {

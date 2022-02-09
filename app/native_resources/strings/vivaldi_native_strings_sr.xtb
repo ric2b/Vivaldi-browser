@@ -53,7 +53,8 @@
 <translation id="3383198080133834965">Имате најновију верзију!</translation>
 <translation id="3402602684546832928">Изаберите датотеку са обележивачима из Opera</translation>
 <translation id="3451317331714872347">Пејзаж 8</translation>
-<translation id="3457498675806041407">Потврда затварања прегледача</translation>
+<translation id="3457498675806041407">Потврда изласка</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> је већ инсталиран и активираће се након поновног покретања прегледача.</translation>
 <translation id="3516213908976398531">Пејзаж 11</translation>
 <translation id="3521635864657970829">Да ли заиста желите да затворите овај прозор?</translation>
 <translation id="3540597690227428180">Животиња 9</translation>
@@ -77,7 +78,7 @@
 <translation id="4074744496918018786">Отвори слику у приватном прозору</translation>
 <translation id="4324492550286218827">Пејзаж 2</translation>
 <translation id="4406101500523955324">Отвори у новом приватном прозору</translation>
-<translation id="4420816922321010053">Да ли заиста желите да затворите Vivaldi?</translation>
+<translation id="4420816922321010053">Да ли заиста желите да изађете из Vivaldi прегледача?</translation>
 <translation id="443008484043213881">Алати</translation>
 <translation id="4456211719108566931">Чудовиште 6</translation>
 <translation id="4512900838580567989">Отвори везу у новој картици у позадини</translation>
@@ -136,7 +137,7 @@
 <translation id="7727481996062361502">Верификација ажурирања...</translation>
 <translation id="7793738202466490491">Додај као догађај календара</translation>
 <translation id="7848222781052558334">Верификација дигиталног потписа преузетих датотека није успела.</translation>
-<translation id="7865983598101744945">Потврда затварања прегледача</translation>
+<translation id="7865983598101744945">Потврда изласка</translation>
 <translation id="7957213167373139414">Мој календар</translation>
 <translation id="8027581147000338959">Отвори у новом прозору</translation>
 <translation id="8099620695029051217">Копирај адресу странице</translation>
@@ -160,9 +161,10 @@
 <translation id="8773635261052182196">Више нећете видети ова обавештења. Можете их омогућити поново у подешавањима Vivaldi прегледача.</translation>
 <translation id="8813277370772331957">Подсети ме касније</translation>
 <translation id="8894900864683381599">Додај везу као веб панел</translation>
-<translation id="8912720443398351457">Да ли заиста желите да затворите Vivaldi?</translation>
+<translation id="8912720443398351457">Да ли заиста желите да изађете из Vivaldi прегледача?</translation>
 <translation id="8947109330183116400">Изаберите HTML датотеку са обележивачима</translation>
 <translation id="9017566390391482291">Изаберите фасциклу профила Vivaldi прегледача за увоз</translation>
+<translation id="9048058608784130603">Ажурирање <ph name="VERSION" /> је на чекању</translation>
 <translation id="9065203028668620118">Уреди</translation>
 <translation id="912022491595344261">Отвори слику као <ph name="USER" /></translation>
 <translation id="9157539936604258187">Отвори везу</translation>

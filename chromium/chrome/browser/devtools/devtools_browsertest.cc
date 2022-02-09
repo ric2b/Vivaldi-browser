@@ -11,6 +11,7 @@
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -18,7 +19,6 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -108,6 +108,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
@@ -1941,7 +1942,13 @@ IN_PROC_BROWSER_TEST_F(DevToolsReattachAfterCrashTest,
   RunTestWithPanel("network");
 }
 
-IN_PROC_BROWSER_TEST_F(DevToolsTest, AutoAttachToWindowOpen) {
+// Very flaky on Linux only.  http://crbug.com/1216219
+#if defined(OS_LINUX)
+#define MAYBE_AutoAttachToWindowOpen DISABLED_AutoAttachToWindowOpen
+#else
+#define MAYBE_AutoAttachToWindowOpen AutoAttachToWindowOpen
+#endif
+IN_PROC_BROWSER_TEST_F(DevToolsTest, MAYBE_AutoAttachToWindowOpen) {
   OpenDevToolsWindow(kWindowOpenTestPage, false);
   DevToolsWindowTesting::Get(window_)->SetOpenNewWindowForPopups(true);
   DevToolsWindowCreationObserver observer;
@@ -2043,6 +2050,10 @@ class RemoteDebuggingTest : public extensions::ExtensionApiTest {
 #endif
 IN_PROC_BROWSER_TEST_F(RemoteDebuggingTest, MAYBE_RemoteDebugger) {
   ASSERT_TRUE(RunExtensionTest("target_list")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(RemoteDebuggingTest, DiscoveryPage) {
+  ASSERT_TRUE(RunExtensionTest("discovery_page")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsTest, PolicyDisallowed) {

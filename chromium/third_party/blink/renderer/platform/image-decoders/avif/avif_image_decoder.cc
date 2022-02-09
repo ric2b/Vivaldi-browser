@@ -44,6 +44,12 @@ namespace {
 // known.
 constexpr uint64_t kMaxAvifFileSize = 0x10000000;  // 256 MB
 
+const char* AvifDecoderErrorMessage(const avifDecoder* decoder) {
+  // decoder->diag.error is a char array that stores a null-terminated C string.
+  return *decoder->diag.error != '\0' ? decoder->diag.error
+                                      : "(no error message)";
+}
+
 // Builds a gfx::ColorSpace from the ITU-T H.273 (CICP) color description in the
 // image. This color space is used to create the gfx::ColorTransform for the
 // YUV-to-RGB conversion. If the image does not have an ICC profile, this color
@@ -197,7 +203,7 @@ void YUVAToRGBA(const avifImage* image,
   avifGetPixelFormatInfo(image->yuvFormat, &format_info);
   gfx::Point3F pixel;
   const int max_channel_i = (1 << image->depth) - 1;
-  const float max_channel = float{max_channel_i};
+  const float max_channel = static_cast<float>(max_channel_i);
   for (uint32_t j = 0; j < image->height; ++j) {
     const int uv_j = j >> format_info.chromaShiftY;
 
@@ -307,7 +313,7 @@ size_t AVIFImageDecoder::DecodedYUVWidthBytes(cc::YUVIndex index) const {
   //
   // The comments for Dav1dPicAllocator in dav1d/picture.h require the pixel
   // width be padded to a multiple of 128 pixels.
-  int aligned_width = base::bits::Align(Size().Width(), 128);
+  int aligned_width = base::bits::AlignUp(Size().Width(), 128);
   if (index == cc::YUVIndex::kU || index == cc::YUVIndex::kV) {
     aligned_width >>= chroma_shift_x_;
   }
@@ -639,6 +645,14 @@ bool AVIFImageDecoder::UpdateDemuxer() {
     if (!decoder_)
       return false;
 
+    // For simplicity, use a hardcoded maxThreads of 2, independent of the image
+    // size and processor count. Note: even if we want maxThreads to depend on
+    // the image size, it is impossible to do so because maxThreads is passed to
+    // dav1d_open() inside avifDecoderParse(), but the image size is not known
+    // until avifDecoderParse() returns successfully. See
+    // https://github.com/AOMediaCodec/libavif/issues/636.
+    decoder_->maxThreads = 2;
+
     // TODO(wtc): Currently libavif always prioritizes the animation, but that's
     // not correct. It should instead select animation or still image based on
     // the preferred and major brands listed in the file.
@@ -820,8 +834,14 @@ avifResult AVIFImageDecoder::DecodeImage(size_t index) {
   // |index| should be less than what DecodeFrameCount() returns, so we should
   // not get the AVIF_RESULT_NO_IMAGES_REMAINING error.
   DCHECK_NE(ret, AVIF_RESULT_NO_IMAGES_REMAINING);
-  if (ret != AVIF_RESULT_OK)
+  if (ret != AVIF_RESULT_OK) {
+    if (ret != AVIF_RESULT_WAITING_ON_IO) {
+      DVLOG(1) << "avifDecoderNthImage(" << index
+               << ") failed: " << avifResultToString(ret) << ": "
+               << AvifDecoderErrorMessage(decoder_.get());
+    }
     return ret;
+  }
 
   const auto* image = decoder_->image;
   // Frame size must be equal to container size.
@@ -850,9 +870,11 @@ void AVIFImageDecoder::UpdateColorTransform(const gfx::ColorSpace& frame_cs,
 
   // For YUV-to-RGB color conversion we can pass an invalid dst color space to
   // skip the code for full color conversion.
+  gfx::ColorTransform::Options options;
+  options.src_bit_depth = bit_depth;
+  options.dst_bit_depth = bit_depth;
   color_transform_ = gfx::ColorTransform::NewColorTransform(
-      frame_cs, bit_depth, gfx::ColorSpace(), bit_depth,
-      gfx::ColorTransform::Intent::INTENT_PERCEPTUAL);
+      frame_cs, gfx::ColorSpace(), options);
 }
 
 bool AVIFImageDecoder::RenderImage(const avifImage* image, ImageFrame* buffer) {
@@ -882,11 +904,11 @@ bool AVIFImageDecoder::RenderImage(const avifImage* image, ImageFrame* buffer) {
   // supported.
   if (IsColorSpaceSupportedByPCVR(image)) {
     // Create temporary frame wrapping the YUVA planes.
-    scoped_refptr<media::VideoFrame> frame;
     auto pixel_format = AvifToVideoPixelFormat(image->yuvFormat, image->depth);
     if (pixel_format == media::PIXEL_FORMAT_UNKNOWN)
       return false;
     auto size = gfx::Size(image->width, image->height);
+    scoped_refptr<media::VideoFrame> frame;
     if (image->alphaPlane) {
       DCHECK_EQ(pixel_format, media::PIXEL_FORMAT_I420);
       pixel_format = media::PIXEL_FORMAT_I420A;
@@ -901,6 +923,8 @@ bool AVIFImageDecoder::RenderImage(const avifImage* image, ImageFrame* buffer) {
           image->yuvRowBytes[1], image->yuvRowBytes[2], image->yuvPlanes[0],
           image->yuvPlanes[1], image->yuvPlanes[2], base::TimeDelta());
     }
+    if (!frame)
+      return false;
     frame->set_color_space(frame_cs);
 
     // Really only handles 709, 601, 2020, JPEG 8-bit conversions and uses

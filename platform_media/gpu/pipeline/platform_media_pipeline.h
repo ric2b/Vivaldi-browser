@@ -16,7 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 
-#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/common/platform_media.mojom.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 #include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 
@@ -30,14 +30,10 @@ struct PlatformVideoConfig;
 // on specific platforms.  It represents a full decoding pipeline - it reads
 // raw input data from a DataSource and outputs decoded and properly formatted
 // audio and/or video samples.
-class MEDIA_EXPORT PlatformMediaPipeline {
+class PlatformMediaPipeline {
  public:
   using InitializeCB =
-      base::OnceCallback<void(bool success,
-                              int bitrate,
-                              const PlatformMediaTimeInfo& time_info,
-                              const PlatformAudioConfig& audio_config,
-                              const PlatformVideoConfig& video_config)>;
+      base::OnceCallback<void(platform_media::mojom::PipelineInitResultPtr)>;
   using SeekCB = base::OnceCallback<void(bool success)>;
 
   // The implementation is in a platform-specific file.

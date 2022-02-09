@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_controller_views.h"
 
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
@@ -189,13 +188,15 @@ views::MenuItemView* BookmarkMenuController::GetSiblingMenu(
 views::MenuItemView* BookmarkMenuController::GetVivaldiSiblingMenu(
     views::MenuItemView* menu,
     const gfx::Point& screen_point,
-    gfx::Rect* rect) {
+    gfx::Rect* rect,
+    views::MenuAnchorPosition* anchor) {
   int start_index;
   const BookmarkNode* node = vivaldi::GetNodeByPosition(
       menu_delegate_->GetBookmarkModel(), screen_point, &start_index, rect);
   if (!node || !node->is_folder())
     return nullptr;
   menu_delegate_->SetActiveMenu(node, start_index);
+  *anchor = views::MenuAnchorPosition::kTopLeft;
   return this->menu();
 }
 

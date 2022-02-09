@@ -72,6 +72,7 @@ class WalletMetadataSpecifics;
 class WalletPostalAddress;
 class WebAppSpecifics;
 class WifiConfigurationSpecifics;
+class WorkspaceDeskSpecifics;
 
 class NotesSpecifics;
 }  // namespace sync_pb
@@ -259,6 +260,9 @@ std::unique_ptr<base::DictionaryValue> WebAppSpecificsToValue(
 
 std::unique_ptr<base::DictionaryValue> WifiConfigurationSpecificsToValue(
     const sync_pb::WifiConfigurationSpecifics& wifi_configuration_specifics);
+
+std::unique_ptr<base::DictionaryValue> WorkspaceDeskSpecificsToValue(
+    const sync_pb::WorkspaceDeskSpecifics& workspace_desk_specifics);
 
 // ToValue functions that allow omitting specifics.
 

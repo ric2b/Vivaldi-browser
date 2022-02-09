@@ -39,6 +39,7 @@
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ejecutar el diagnóstico de red<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notificaciones</translation>
+<translation id="2491414235131909199">Esta página ha sido bloqueada por una extensión</translation>
 <translation id="2501278716633472235">Regresar</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027">El sitio <ph name="HOST_NAME" /> envió una respuesta inválida.</translation>
@@ -143,6 +144,7 @@
 <translation id="5810442152076338065">Tu conexión con <ph name="DOMAIN" /> está cifrada con un conjunto de cifrado obsoleto.</translation>
 <translation id="5838278095973806738">No deberías ingresar información confidencial en este sitio (p. ej. tarjetas de crédito o contraseñas), porque los atacantes podrían robarla.</translation>
 <translation id="5869405914158311789">Este sitio es inaccesible</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 en uso}other{# en uso}}</translation>
 <translation id="5932224571077948991">El sitio muestra anuncios invasivos o engañosos</translation>
 <translation id="6051221802930200923">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web usa fijación de certificados (certificate pinning). Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="6146055958333702838">Revisa los cables y reinicia el enrutador, módem o cualquier otro
@@ -218,9 +220,9 @@
 <translation id="8740359287975076522">No se pudo encontrar la &lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Se está diagnosticando el problema.</translation>
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Ir a los ajustes del sitio</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
-<translation id="9011424611726486705">Abrir ajustes del sitio</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Además, esta página incluye otros recursos no seguros. Mientras transitan, estos pueden ser vistos por otros y un atacante puede modificarlos para cambiar el comportamiento de la página.</translation>
 <translation id="9062620674789239642">Es posible que haya sido trasladado, editado o eliminado.</translation>

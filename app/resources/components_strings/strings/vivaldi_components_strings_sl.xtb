@@ -144,6 +144,7 @@
 <translation id="5810442152076338065">Povezava z domeno <ph name="DOMAIN" /> je šifrirana z zastarelo šifrirno zbirko.</translation>
 <translation id="5838278095973806738">Na tem spletnem mestu ne vnašajte občutljivih informacij (npr. gesel ali številk kreditnih kartic), ker jih lahko ukradejo napadalci.</translation>
 <translation id="5869405914158311789">Tega spletnega mesta ni mogoče doseči</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1 {1 v uporabi} one {# v uporabi} two {# v uporabi} few {# v uporabi} other {# v uporabi}}</translation>
 <translation id="5932224571077948991">Spletno mesto prikazuje vsiljive ali zavajajoče oglase</translation>
 <translation id="6051221802930200923">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, ker uporablja pripenjanje certifikata. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="6146055958333702838">Preverite kable in znova zaženite usmerjevalnike, modeme ali druge omrežne 
@@ -219,9 +220,9 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; ni bilo mogoče najti. Poteka diagnosticiranje težave.</translation>
 <translation id="8820817407110198400">Zaznamki</translation>
 <translation id="8940028675168378100">Blokiral <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Pojdi na nastavitve spletnega mesta</translation>
 <translation id="9001074447101275817">Strežnik proxy <ph name="DOMAIN" /> zahteva uporabniško ime in geslo.</translation>
 <translation id="9008201768610948239">Prezri</translation>
-<translation id="9011424611726486705">Odpri nastavitve spletnega mesta</translation>
 <translation id="9025348182339809926">(Neveljavno)</translation>
 <translation id="9039213469156557790">Poleg tega so na tej strani druga sredstva, ki niso varna. Ta sredstva lahko med prenosom pregledujejo drugi, morebitni napadalec pa jih lahko spremeni, tako da se spremeni način delovanja strani.</translation>
 <translation id="9062620674789239642">Morda je premaknjena, urejana ali izbrisana.</translation>

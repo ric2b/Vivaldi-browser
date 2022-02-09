@@ -10,16 +10,23 @@
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/ui/assistant_view_ids.h"
+#include "ash/assistant/ui/colors/assistant_colors.h"
+#include "ash/assistant/ui/colors/assistant_colors_util.h"
 #include "ash/assistant/ui/main_stage/assistant_onboarding_view.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
+#include "ash/public/cpp/style/color_provider.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/colors/cros_colors.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/view.h"
 
 namespace ash {
 
@@ -61,6 +68,25 @@ void AssistantZeroStateView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
 }
 
+void AssistantZeroStateView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+
+  greeting_label_->SetBackgroundColor(ash::assistant::ResolveAssistantColor(
+      assistant_colors::ColorName::kBgAssistantPlate));
+
+  // TODO(crbug.com/1176919): We cannot use ScopedLightModeAsDefault from
+  // ash/assistant/ui as it causes a circular dependency. Find a better way to
+  // resolve cros_colors color.
+  SkColor text_color_primary =
+      features::IsDarkLightModeEnabled()
+          ? ColorProvider::Get()->GetContentLayerColor(
+                ColorProvider::ContentLayerType::kTextColorPrimary)
+          : cros_colors::ResolveColor(cros_colors::ColorName::kTextColorPrimary,
+                                      /*is_dark_mode=*/false,
+                                      /*use_debug_colors=*/false);
+  greeting_label_->SetEnabledColor(text_color_primary);
+}
+
 void AssistantZeroStateView::OnAssistantControllerDestroying() {
   AssistantUiController::Get()->GetModel()->RemoveObserver(this);
   DCHECK(assistant_controller_observation_.IsObservingSource(
@@ -94,10 +120,8 @@ void AssistantZeroStateView::InitLayout() {
   greeting_label_ = AddChildView(std::make_unique<views::Label>());
   greeting_label_->SetID(AssistantViewID::kGreetingLabel);
   greeting_label_->SetAutoColorReadabilityEnabled(false);
-  greeting_label_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
   greeting_label_->SetBorder(
       views::CreateEmptyBorder(kGreetingLabelTopMarginDip, 0, 0, 0));
-  greeting_label_->SetEnabledColor(kTextColorPrimary);
   greeting_label_->SetFontList(
       assistant::ui::GetDefaultFontList()
           .DeriveWithSizeDelta(8)

@@ -18,8 +18,9 @@
 #include "base/strings/sys_string_conversions.h"
 
 #include "platform_media/common/mac/framework_type_conversions.h"
-#include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
 #include "platform_media/common/platform_logging_util.h"
+#include "platform_media/gpu/pipeline/mac/media_utils_mac.h"
+
 #import "platform_media/gpu/decoders/mac/data_source_loader.h"
 
 namespace media {
@@ -187,8 +188,7 @@ AVFMediaReader::StreamReader::StreamReader() = default;
 
 AVFMediaReader::StreamReader::~StreamReader() = default;
 
-AVFMediaReader::AVFMediaReader(dispatch_queue_t queue)
-    : bitrate_(-1), queue_(queue) {
+AVFMediaReader::AVFMediaReader(dispatch_queue_t queue) : queue_(queue) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 }
 
@@ -331,7 +331,8 @@ bool AVFMediaReader::CalculateBitrate() {
   for (PlatformStreamType stream_type : AllStreamTypes()) {
     bitrate += [GetTrack(stream_type) estimatedDataRate];
   }
-  if (!base::IsValueInRangeForNumericType<decltype(bitrate_)>(bitrate))
+  if (!base::IsValueInRangeForNumericType<decltype(bitrate_)>(bitrate) ||
+      bitrate < 0.0)
     return false;
 
   bitrate_ = bitrate;

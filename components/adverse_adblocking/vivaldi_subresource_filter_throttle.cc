@@ -7,12 +7,10 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/metrics/histogram_macros.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
-#include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/content_activation_list_utils.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/navigation_console_logger.h"

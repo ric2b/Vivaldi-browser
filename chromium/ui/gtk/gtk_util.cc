@@ -57,17 +57,6 @@ void CommonInitFromCommandLine(const base::CommandLine& command_line) {
   GtkInit(command_line.argv());
 }
 
-GdkModifierType GetImeFlags(const ui::KeyEvent& key_event) {
-  auto* properties = key_event.properties();
-  if (!properties)
-    return static_cast<GdkModifierType>(0);
-  auto it = properties->find(ui::kPropertyKeyboardImeFlag);
-  DCHECK(it == properties->end() || it->second.size() == 1);
-  uint8_t flags = (it != properties->end()) ? it->second[0] : 0;
-  return static_cast<GdkModifierType>(flags
-                                      << ui::kPropertyKeyboardImeFlagOffset);
-}
-
 GtkCssContext AppendCssNodeToStyleContextImpl(
     GtkCssContext context,
     GType gtype,
@@ -598,21 +587,24 @@ int GetKeyEventProperty(const ui::KeyEvent& key_event,
 
 GdkModifierType GetGdkKeyEventState(const ui::KeyEvent& key_event) {
   // ui::KeyEvent uses a normalized modifier state which is not respected by
-  // Gtk, so we need to get the state from the display backend. Gtk instead
-  // follows the X11 spec in which the state of a key event is expected to be
-  // the mask of modifier keys _prior_ to this event. Some IMEs rely on this
-  // behavior. See https://crbug.com/1086946#c11.
-
-  GdkModifierType state = GetImeFlags(key_event);
-  if (key_event.key_code() != ui::VKEY_PROCESSKEY) {
-    // This is an synthetized event when |key_code| is VKEY_PROCESSKEY.
-    // In such a case there is no event being dispatching in the display
-    // backend.
-    state = static_cast<GdkModifierType>(
-        state | GtkUi::GetPlatform()->GetGdkKeyState());
+  // Gtk, so instead we obtain the original value from annotated properties.
+  // See also x11_event_translation.cc where it is annotated.
+  // cf) https://crbug.com/1086946#c11.
+  const ui::Event::Properties* properties = key_event.properties();
+  if (!properties)
+    return static_cast<GdkModifierType>(0);
+  auto it = properties->find(ui::kPropertyKeyboardState);
+  if (it == properties->end())
+    return static_cast<GdkModifierType>(0);
+  DCHECK_EQ(it->second.size(), 4u);
+  // Stored in little endian.
+  int result = 0;
+  int bitshift = 0;
+  for (uint8_t value : it->second) {
+    result |= value << bitshift;
+    bitshift += 8;
   }
-
-  return state;
+  return static_cast<GdkModifierType>(result);
 }
 
 GdkEvent* GdkEventFromKeyEvent(const ui::KeyEvent& key_event) {
@@ -744,7 +736,6 @@ absl::optional<SkColor> SkColorFromColorId(ui::ColorId color_id) {
     case ui::kColorNotificationBackgroundInactive:
       return GetBgColor("");
     case ui::kColorDialogForeground:
-    case ui::kColorAvatarIconIncognito:
       return GetFgColor("GtkLabel#label");
     case ui::kColorBubbleFooterBackground:
     case ui::kColorSyncInfoBackground:
@@ -793,7 +784,6 @@ absl::optional<SkColor> SkColorFromColorId(ui::ColorId color_id) {
     case ui::kColorMenuItemForegroundDisabled:
       return GetFgColor(StrCat(
           {GtkCssMenu(), " ", GtkCssMenuItem(), ":disabled GtkLabel#label"}));
-    case ui::kColorAvatarIconGuest:
     case ui::kColorMenuItemForegroundSecondary:
       if (GtkCheckVersion(3, 20)) {
         return GetFgColor(
@@ -802,7 +792,6 @@ absl::optional<SkColor> SkColorFromColorId(ui::ColorId color_id) {
       return GetFgColor(StrCat({GtkCssMenu(), " ", GtkCssMenuItem(),
                                 " GtkLabel#label.accelerator"}));
     case ui::kColorMenuSeparator:
-    case ui::kColorAvatarHeaderArt:
       if (GtkCheckVersion(3, 20)) {
         return GetSeparatorColor(
             StrCat({GtkCssMenu(), " GtkSeparator#separator.horizontal"}));
@@ -1049,6 +1038,15 @@ absl::optional<SkColor> SkColorFromColorId(ui::ColorId color_id) {
       return GetFgColor("GtkSpinner#spinner");
     case ui::kColorThrobberPreconnect:
       return GetFgColor("GtkSpinner#spinner:disabled");
+
+      // Guest and Incognito Avatar
+    case ui::kColorAvatarIconIncognito:
+      return GetFgColor("GtkLabel#label");
+    case ui::kColorAvatarIconGuest:
+      return color_utils::DeriveDefaultIconColor(GetFgColor("GtkLabel#label"));
+    case ui::kColorAvatarHeaderArt:
+      return color_utils::AlphaBlend(GetFgColor("GtkLabel#label"),
+                                     GetBgColor(""), gfx::kGoogleGreyAlpha300);
 
     // Alert icons
     // Fallback to the same colors as Aura.

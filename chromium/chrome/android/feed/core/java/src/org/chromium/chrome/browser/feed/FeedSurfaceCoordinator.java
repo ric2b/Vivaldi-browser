@@ -12,6 +12,7 @@ import android.graphics.Canvas;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -21,14 +22,15 @@ import android.widget.FrameLayout;
 import android.widget.ScrollView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.CommandLine;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.continuous_search.ContinuousFeedNavigationHelper;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feed.settings.FeedAutoplaySettingsFragment;
 import org.chromium.chrome.browser.feed.shared.FeedSurfaceDelegate;
@@ -48,14 +50,15 @@ import org.chromium.chrome.browser.ntp.cards.promo.enhanced_protection.EnhancedP
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderListProperties;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderViewBinder;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.ui.PersonalizedSigninPromoView;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.toolbar.top.Toolbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
+import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
@@ -65,6 +68,7 @@ import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.displaystyle.ViewResizer;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.third_party.android.swiperefresh.SwipeRefreshLayout;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
@@ -80,7 +84,8 @@ import java.util.List;
 /**
  * Provides a surface that displays an interest feed rendered list of content suggestions.
  */
-public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
+public class FeedSurfaceCoordinator
+        implements FeedSurfaceProvider, FeedIPHDelegate, SwipeRefreshLayout.OnRefreshListener {
     @VisibleForTesting
     public static final String FEED_STREAM_CREATED_TIME_MS_UMA = "FeedStreamCreatedTime";
 
@@ -97,7 +102,8 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     private final BottomSheetController mBottomSheetController;
     private final WindowAndroid mWindowAndroid;
     private final Supplier<ShareDelegate> mShareSupplier;
-    private final TabModelSelector mTabModelSelector;
+    private final Handler mHandler;
+    private final boolean mOverScrollDisabled;
 
     private UiConfig mUiConfig;
     private FrameLayout mRootView;
@@ -114,7 +120,7 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     private @Nullable Profile mProfile;
     private @Nullable NativePageNavigationDelegate mPageNavigationDelegate;
     private @Nullable FeedSurfaceLifecycleManager mFeedSurfaceLifecycleManager;
-    private @Nullable PersonalizedSigninPromoView mSigninPromoView;
+    private @Nullable View mSigninPromoView;
     private @Nullable FeedStreamViewResizer mStreamViewResizer;
     // This is the "default"/interest feed stream, not necessarily the current stream.
     // TODO(chili): Remove the necessity of this.
@@ -140,6 +146,15 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     private @Nullable ScrollableContainerDelegate mScrollableContainerDelegate;
 
     private @Nullable HeaderIphScrollListener mHeaderIphScrollListener;
+    private @Nullable RefreshIphScrollListener mRefreshIphScrollListener;
+
+    private final FeedLaunchReliabilityLoggingState mLaunchReliabilityLoggingState;
+    private FeedLaunchReliabilityLogger mLaunchReliabilityLogger;
+    private final PrivacyPreferencesManagerImpl mPrivacyPreferencesManager;
+
+    private final Supplier<Toolbar> mToolbarSupplier;
+
+    private FeedSwipeRefreshLayout mSwipeRefreshLayout;
 
     @IntDef({StreamTabId.FOR_YOU, StreamTabId.FOLLOWING})
     public @interface StreamTabId {
@@ -238,6 +253,11 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
      * @param bottomSheetController The bottom sheet controller.
      * @param shareDelegateSupplier The supplier for the share delegate used to share articles.
      * @param launchOrigin The origin of what launched the feed.
+     * @param privacyPreferencesManager Manages the privacy preferences.
+     * @param toolbarSupplier Supplies the {@link Toolbar}.
+     * @param FeedLaunchReliabilityLoggingState Holds the state for feed surface creation.
+     * @param swipeRefreshLayout The layout to support pull-to-refresh.
+     * @param overScrollDisabled Whether the overscroll effect is disabled.
      */
     public FeedSurfaceCoordinator(Activity activity, SnackbarManager snackbarManager,
             WindowAndroid windowAndroid, @Nullable SnapScrollHelper snapScrollHelper,
@@ -247,7 +267,11 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             boolean isPlaceholderShownInitially, BottomSheetController bottomSheetController,
             Supplier<ShareDelegate> shareDelegateSupplier,
             @Nullable ScrollableContainerDelegate externalScrollableContainerDelegate,
-            TabModelSelector tabModelSelector, @NewTabPageLaunchOrigin int launchOrigin) {
+            @NewTabPageLaunchOrigin int launchOrigin,
+            PrivacyPreferencesManagerImpl privacyPreferencesManager,
+            @NonNull Supplier<Toolbar> toolbarSupplier,
+            FeedLaunchReliabilityLoggingState launchReliabilityLoggingState,
+            @Nullable FeedSwipeRefreshLayout swipeRefreshLayout, boolean overScrollDisabled) {
         FeedSurfaceTracker.getInstance().initServiceBridge();
         mActivity = activity;
         mSnackbarManager = snackbarManager;
@@ -261,7 +285,11 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         mWindowAndroid = windowAndroid;
         mShareSupplier = shareDelegateSupplier;
         mScrollableContainerDelegate = externalScrollableContainerDelegate;
-        mTabModelSelector = tabModelSelector;
+        mLaunchReliabilityLoggingState = launchReliabilityLoggingState;
+        mPrivacyPreferencesManager = privacyPreferencesManager;
+        mToolbarSupplier = toolbarSupplier;
+        mSwipeRefreshLayout = swipeRefreshLayout;
+        mOverScrollDisabled = overScrollDisabled;
 
         Resources resources = mActivity.getResources();
         mDefaultMarginPixels = mActivity.getResources().getDimensionPixelSize(
@@ -272,6 +300,8 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         mRootView = new RootView(mActivity);
         mRootView.setPadding(0, resources.getDimensionPixelOffset(R.dimen.tab_strip_height), 0, 0);
         mUiConfig = new UiConfig(mRootView);
+
+        mHandler = new Handler(Looper.getMainLooper());
 
         if (isEnhancedProtectionPromoEnabled()) {
             mEnhancedProtectionPromoController =
@@ -296,13 +326,29 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         mMediator =
                 new FeedSurfaceMediator(this, mActivity, snapScrollHelper, mPageNavigationDelegate,
                         mSectionHeaderModel, getTabIdFromLaunchOrigin(launchOrigin));
+
         // Creates streams, initiates content changes.
         mMediator.updateContent();
         FeedSurfaceTracker.getInstance().trackSurface(this);
+
+        // Enable pull-to-refresh.
+        if (mSwipeRefreshLayout != null) {
+            mSwipeRefreshLayout.enableSwipe(externalScrollableContainerDelegate);
+            mSwipeRefreshLayout.addOnRefreshListener(this);
+        }
     }
 
     @Override
     public void destroy() {
+        if (mSwipeRefreshLayout != null) {
+            if (mSwipeRefreshLayout.isRefreshing()) {
+                mSwipeRefreshLayout.setRefreshing(false);
+                updateReloadButtonVisibility(/*isReloading=*/false);
+            }
+            mSwipeRefreshLayout.removeOnRefreshListener(this);
+            mSwipeRefreshLayout.disableSwipe();
+            mSwipeRefreshLayout = null;
+        }
         stopIph();
         mMediator.destroy();
         if (mFeedSurfaceLifecycleManager != null) mFeedSurfaceLifecycleManager.destroy();
@@ -352,6 +398,23 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     public void captureThumbnail(Canvas canvas) {
         ViewUtils.captureBitmap(mRootView, canvas);
         mMediator.onThumbnailCaptured();
+    }
+
+    @Override
+    public void onRefresh() {
+        updateReloadButtonVisibility(/*isReloading=*/true);
+        mStream.triggerRefresh((Boolean v) -> {
+            if (mSwipeRefreshLayout == null) return;
+            updateReloadButtonVisibility(/*isReloading=*/false);
+            mSwipeRefreshLayout.setRefreshing(false);
+        });
+    }
+
+    void updateReloadButtonVisibility(boolean isReloading) {
+        Toolbar toolbar = mToolbarSupplier.get();
+        if (toolbar != null) {
+            toolbar.updateReloadButtonVisibility(isReloading);
+        }
     }
 
     /**
@@ -429,20 +492,34 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
 
     private RecyclerView setUpView() {
         mContentManager = new NtpListContentManager();
-        Context context = new ContextThemeWrapper(
-                mActivity, (mShowDarkBackground ? R.style.Dark : R.style.Light));
+        Context context = new ContextThemeWrapper(mActivity,
+                (mShowDarkBackground ? R.style.ThemeOverlay_Feed_Dark
+                                     : R.style.ThemeOverlay_Feed_Light));
         ProcessScope processScope = FeedSurfaceTracker.getInstance().getXSurfaceProcessScope();
         if (processScope != null) {
             mSurfaceScope = processScope.obtainSurfaceScope(new FeedSurfaceScopeDependencyProvider(
-                    mActivity, context, mShowDarkBackground, mStream));
+                    mActivity, context, mShowDarkBackground, () -> {
+                        if (mMediator.getFirstStream() == null) return false;
+                        return mMediator.getFirstStream().isActivityLoggingEnabled();
+                    }));
         } else {
             mSurfaceScope = null;
         }
 
         if (mSurfaceScope != null) {
             mHybridListRenderer = mSurfaceScope.provideListRenderer();
+
+            if (isReliabilityLoggingEnabled()) {
+                mLaunchReliabilityLogger = mSurfaceScope.getFeedLaunchReliabilityLogger();
+                mLaunchReliabilityLoggingState.onLoggerAvailable(mLaunchReliabilityLogger);
+            }
         } else {
             mHybridListRenderer = new NativeViewListRenderer(context);
+        }
+
+        if (mLaunchReliabilityLogger == null) {
+            // No-op logger.
+            mLaunchReliabilityLogger = new FeedLaunchReliabilityLogger() {};
         }
 
         RecyclerView view;
@@ -451,6 +528,7 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             view = (RecyclerView) mHybridListRenderer.bind(mContentManager);
             view.setId(R.id.feed_stream_recycler_view);
             view.setClipToPadding(false);
+            view.setBackgroundColor(mActivity.getResources().getColor(R.color.default_bg_color));
         } else {
             view = null;
         }
@@ -477,6 +555,11 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         return mContentManager;
     }
 
+    /** @return Returns this surface's {@link FeedLaunchReliabilityLogger}. */
+    public FeedLaunchReliabilityLogger getLaunchReliabilityLogger() {
+        return mLaunchReliabilityLogger;
+    }
+
     /**
      * Create a {@link Stream} for this class.
      */
@@ -489,15 +572,22 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             mScrollViewResizer.detach();
             mScrollViewResizer = null;
         }
+        mRecyclerView = setUpView();
 
         mStreamCreatedTimeMs = SystemClock.elapsedRealtime();
         mStream = createFeedStream(true);
-        mRecyclerView = setUpView();
         mFeedSurfaceLifecycleManager = mDelegate.createStreamLifecycleManager(mActivity, this);
-
         mRecyclerView.setBackgroundResource(R.color.default_bg_color);
 
-        mRootView.addView(mRecyclerView);
+        // For New Tab Page, mSwipeRefreshLayout has not been added to a view container. We need to
+        // do it here.
+        if (mSwipeRefreshLayout != null && mSwipeRefreshLayout.getParent() == null) {
+            mRootView.addView(mSwipeRefreshLayout);
+            mSwipeRefreshLayout.addView(mRecyclerView);
+        } else {
+            mRootView.addView(mRecyclerView);
+        }
+
         mStreamViewResizer = FeedStreamViewResizer.createAndAttach(
                 mActivity, mRecyclerView, mUiConfig, mDefaultMarginPixels, mWideMarginPixels);
 
@@ -518,11 +608,6 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         }
         setHeaders(headerList);
 
-        ContinuousFeedNavigationHelper feedNavigationHelper =
-                new ContinuousFeedNavigationHelper(mTabModelSelector);
-        mStream.addOnContentChangedListener(feedNavigationHelper);
-        mStream.addInteractionListener(feedNavigationHelper);
-
         // Work around https://crbug.com/943873 where default focus highlight shows up after
         // toggling dark mode.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -532,6 +617,10 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         // Explicitly request focus on the scroll container to avoid UrlBar being focused after
         // the scroll container for policy is removed.
         mRecyclerView.requestFocus();
+
+        if (mOverScrollDisabled) {
+            mRecyclerView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        }
     }
 
     /**
@@ -627,11 +716,11 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         return mSectionHeaderModel;
     }
 
-    /** @return The {@link PersonalizedSigninPromoView} for this class. */
-    PersonalizedSigninPromoView getSigninPromoView() {
+    /** @return The {@link View} for this class. */
+    View getSigninPromoView() {
         if (mSigninPromoView == null) {
             LayoutInflater inflater = LayoutInflater.from(mRootView.getContext());
-            mSigninPromoView = (PersonalizedSigninPromoView) inflater.inflate(
+            mSigninPromoView = inflater.inflate(
                     R.layout.personalized_signin_promo_view_modern_content_suggestions, mRootView,
                     false);
         }
@@ -709,43 +798,33 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         if (mStream == null) return;
 
         // Provide a delegate for the container of the feed surface that is handled by the feed
-        // coordinator itself when not provided externally (e.g., by the Start surface).
+        // coordinator itself when not provided externally (e.g., by the NewTabPage).
         if (mScrollableContainerDelegate == null) {
             mScrollableContainerDelegate = new ScrollableContainerDelegateImpl();
         }
 
-        FeedSurfaceCoordinator coordinator = this;
-        HeaderIphScrollListener.Delegate delegate = new HeaderIphScrollListener.Delegate() {
-            @Override
-            public Tracker getFeatureEngagementTracker() {
-                return TrackerFactory.getTrackerForProfile(mProfile);
-            }
-            @Override
-            public void showMenuIph() {
-                UserEducationHelper helper = new UserEducationHelper(mActivity, new Handler());
-                mSectionHeaderView.showMenuIph(helper);
-            }
-            @Override
-            public boolean isFeedExpanded() {
-                return mSectionHeaderModel.get(SectionHeaderListProperties.IS_SECTION_ENABLED_KEY);
-            }
-            @Override
-            public boolean isSignedIn() {
-                return IdentityServicesProvider.get()
-                        .getSigninManager(Profile.getLastUsedRegularProfile())
-                        .getIdentityManager()
-                        .hasPrimaryAccount();
-            }
-            @Override
-            public boolean isFeedHeaderPositionInContainerSuitableForIPH(
-                    float headerMaxPosFraction) {
-                return coordinator.isFeedHeaderPositionInContainerSuitableForIPH(
-                        headerMaxPosFraction);
-            }
-        };
+        createHeaderIphScrollListener();
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_INTERACTIVE_REFRESH)) {
+            createRefreshIphScrollListener();
+        }
+    }
+
+    private void createHeaderIphScrollListener() {
         mHeaderIphScrollListener =
-                new HeaderIphScrollListener(delegate, mScrollableContainerDelegate);
+                new HeaderIphScrollListener(this, mScrollableContainerDelegate, () -> {
+                    UserEducationHelper helper = new UserEducationHelper(mActivity, mHandler);
+                    mSectionHeaderView.showMenuIph(helper);
+                });
         mScrollableContainerDelegate.addScrollListener(mHeaderIphScrollListener);
+    }
+
+    private void createRefreshIphScrollListener() {
+        mRefreshIphScrollListener =
+                new RefreshIphScrollListener(this, mScrollableContainerDelegate, () -> {
+                    UserEducationHelper helper = new UserEducationHelper(mActivity, mHandler);
+                    mSwipeRefreshLayout.showIPH(helper);
+                });
+        mScrollableContainerDelegate.addScrollListener(mRefreshIphScrollListener);
     }
 
     /**
@@ -756,13 +835,38 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     void stopIph() {
         if (mStream != null && mScrollableContainerDelegate != null
                 && mHeaderIphScrollListener != null) {
-            mScrollableContainerDelegate.removeScrollListener(mHeaderIphScrollListener);
+            if (mHeaderIphScrollListener != null) {
+                mScrollableContainerDelegate.removeScrollListener(mHeaderIphScrollListener);
+                mHeaderIphScrollListener = null;
+            }
+            if (mRefreshIphScrollListener != null) {
+                mScrollableContainerDelegate.removeScrollListener(mRefreshIphScrollListener);
+                mRefreshIphScrollListener = null;
+            }
         }
-        mHeaderIphScrollListener = null;
         mScrollableContainerDelegate = null;
     }
 
-    private boolean isFeedHeaderPositionInContainerSuitableForIPH(float headerMaxPosFraction) {
+    @Override
+    public Tracker getFeatureEngagementTracker() {
+        return TrackerFactory.getTrackerForProfile(mProfile);
+    }
+
+    @Override
+    public boolean isFeedExpanded() {
+        return mSectionHeaderModel.get(SectionHeaderListProperties.IS_SECTION_ENABLED_KEY);
+    }
+
+    @Override
+    public boolean isSignedIn() {
+        return IdentityServicesProvider.get()
+                .getSigninManager(Profile.getLastUsedRegularProfile())
+                .getIdentityManager()
+                .hasPrimaryAccount();
+    }
+
+    @Override
+    public boolean isFeedHeaderPositionInContainerSuitableForIPH(float headerMaxPosFraction) {
         assert headerMaxPosFraction >= 0.0f
                 && headerMaxPosFraction <= 1.0f
             : "Max position fraction should be ranging between 0.0 and 1.0";
@@ -776,5 +880,27 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         }
 
         return true;
+    }
+
+    @Override
+    public long getCurrentTimeMs() {
+        return System.currentTimeMillis();
+    }
+
+    @Override
+    public long getLastFetchTimeMs() {
+        return (mStream == null) ? 0 : mStream.getLastFetchTimeMs();
+    }
+
+    @Override
+    public boolean canScrollUp() {
+        return mSwipeRefreshLayout.canScrollVertically(-1);
+    }
+
+    private boolean isReliabilityLoggingEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_RELIABILITY_LOGGING)
+                && (mPrivacyPreferencesManager.isMetricsReportingEnabled()
+                        || CommandLine.getInstance().hasSwitch(
+                                "force-enable-feed-reliability-logging"));
     }
 }

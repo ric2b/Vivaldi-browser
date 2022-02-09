@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 import {assertInstanceof, assertString} from '../../../chrome_util.js';
+import {reportError} from '../../../error.js';
+import {I18nString} from '../../../i18n_string.js';
 import {Filenamer} from '../../../models/file_namer.js';
 import * as filesystem from '../../../models/file_system.js';
 import {DeviceOperator, parseMetadata} from '../../../mojo/device_operator.js';
@@ -10,6 +12,8 @@ import {CrosImageCapture} from '../../../mojo/image_capture.js';
 import * as state from '../../../state.js';
 import * as toast from '../../../toast.js';
 import {
+  ErrorLevel,
+  ErrorType,
   Facing,  // eslint-disable-line no-unused-vars
   PerfEvent,
   Resolution,
@@ -54,6 +58,12 @@ export class PhotoHandler {
    * @abstract
    */
   getPreviewFrame() {}
+
+  /**
+   * @return {!Promise}
+   * @abstract
+   */
+  waitPreviewReady() {}
 }
 
 /**
@@ -137,7 +147,7 @@ export class Photo extends ModeBase {
       state.set(PerfEvent.PHOTO_CAPTURE_SHUTTER, false, {hasError: true});
       state.set(
           PerfEvent.PHOTO_CAPTURE_POST_PROCESSING, false, {hasError: true});
-      toast.show('error_msg_take_photo_failed');
+      toast.show(I18nString.ERROR_MSG_TAKE_PHOTO_FAILED);
       throw e;
     }
   }
@@ -164,6 +174,7 @@ export class Photo extends ModeBase {
         imageHeight: caps.imageHeight.max,
       });
     }
+    await this.handler_.waitPreviewReady();
     const results = await this.crosImageCapture_.takePhoto(photoSettings);
     return results[0];
   }
@@ -233,30 +244,20 @@ export class Photo extends ModeBase {
     const isSuccess = await deviceOperator.removeMetadataObserver(
         deviceId, this.metadataObserverId_);
     if (!isSuccess) {
-      console.error(`Failed to remove metadata observer with id: ${
-          this.metadataObserverId_}`);
+      reportError(
+          ErrorType.REMOVE_METADATA_OBSERVER_FAILURE, ErrorLevel.ERROR,
+          new Error(`Failed to remove metadata observer with id: ${
+              this.metadataObserverId_}`));
     }
     this.metadataObserverId_ = null;
   }
 }
 
 /**
- * Factory for creating photo mode capture object.
+ * Base factory for photo related modes.
+ * @abstract
  */
-export class PhotoFactory extends ModeFactory {
-  /**
-   * @param {!PhotoHandler} handler
-   */
-  constructor(handler) {
-    super();
-
-    /**
-     * @const {!PhotoHandler}
-     * @protected
-     */
-    this.handler_ = handler;
-  }
-
+export class PhotoBaseFactory extends ModeFactory {
   /**
    * @override
    */
@@ -270,6 +271,24 @@ export class PhotoFactory extends ModeFactory {
       await deviceOperator.setStillCaptureResolution(
           deviceId, assertInstanceof(this.captureResolution_, Resolution));
     }
+  }
+}
+
+/**
+ * Factory for creating photo mode capture object.
+ */
+export class PhotoFactory extends PhotoBaseFactory {
+  /**
+   * @param {!PhotoHandler} handler
+   */
+  constructor(handler) {
+    super();
+
+    /**
+     * @const {!PhotoHandler}
+     * @protected
+     */
+    this.handler_ = handler;
   }
 
   /**

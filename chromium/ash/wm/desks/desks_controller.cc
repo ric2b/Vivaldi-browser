@@ -8,7 +8,8 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/public/cpp/ash_features.h"
+#include "ash/constants/ash_features.h"
+#include "ash/public/cpp/desk_template.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -23,6 +24,7 @@
 #include "ash/wm/desks/desks_animations.h"
 #include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/full_restore/full_restore_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -34,14 +36,22 @@
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
+#include "base/bind.h"
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/i18n/number_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #include "base/timer/timer.h"
+#include "components/full_restore/app_launch_info.h"
+#include "components/full_restore/full_restore_utils.h"
+#include "components/full_restore/restore_data.h"
+#include "components/full_restore/window_info.h"
+#include "components/user_manager/user_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/wm/public/activation_client.h"
@@ -171,6 +181,42 @@ bool IsApplistActiveInTabletMode(const aura::Window* active_window) {
   return active_window == app_list_controller->GetWindow();
 }
 
+// Observer to observe the desk switch animation and destroy itself when the
+// animation is finished.
+class DeskSwitchAnimationObserver : public DesksController::Observer {
+ public:
+  explicit DeskSwitchAnimationObserver(
+      base::OnceCallback<void(bool)> complete_callback)
+      : complete_callback_(std::move(complete_callback)) {
+    DesksController::Get()->AddObserver(this);
+  }
+  DeskSwitchAnimationObserver(const DeskSwitchAnimationObserver& other) =
+      delete;
+  DeskSwitchAnimationObserver& operator=(
+      const DeskSwitchAnimationObserver& rhs) = delete;
+
+  ~DeskSwitchAnimationObserver() override {
+    DesksController::Get()->RemoveObserver(this);
+  }
+
+  // DesksController::Observer:
+  void OnDeskAdded(const Desk* desk) override {}
+  void OnDeskRemoved(const Desk* desk) override {}
+  void OnDeskReordered(int old_index, int new_index) override {}
+  void OnDeskActivationChanged(const Desk* activated,
+                               const Desk* deactivated) override {}
+  void OnDeskSwitchAnimationLaunching() override {}
+  void OnDeskSwitchAnimationFinished() override {
+    std::move(complete_callback_).Run(/*success=*/true);
+    delete this;
+  }
+  void OnDeskNameChanged(const Desk* desk,
+                         const std::u16string& new_name) override {}
+
+ private:
+  base::OnceCallback<void(bool)> complete_callback_;
+};
+
 }  // namespace
 
 // Helper class which wraps around a OneShotTimer and used for recording how
@@ -266,7 +312,12 @@ DesksController::~DesksController() {
 
 // static
 DesksController* DesksController::Get() {
-  return Shell::Get()->desks_controller();
+  // Sometimes it's necessary to get the instance even before the
+  // constructor is done. For example,
+  // |DesksController::NotifyDeskNameChanged())| could be called
+  // during the construction of |DesksController|, and at this point
+  // |Shell::desks_controller_| has not been assigned yet.
+  return static_cast<DesksController*>(DesksHelper::Get());
 }
 
 // static
@@ -295,7 +346,7 @@ DesksController::GetVisibleOnAllDesksWindowsOnRoot(
 
 void DesksController::RestorePrimaryUserActiveDeskIndex(int active_desk_index) {
   DCHECK_GE(active_desk_index, 0);
-  DCHECK_LT(active_desk_index, int{desks_.size()});
+  DCHECK_LT(active_desk_index, static_cast<int>(desks_.size()));
   user_to_active_desk_index_[Shell::Get()
                                  ->session_controller()
                                  ->GetPrimaryUserSession()
@@ -426,8 +477,8 @@ void DesksController::ReorderDesk(int old_index, int new_index) {
   DCHECK_NE(old_index, new_index);
   DCHECK_GE(old_index, 0);
   DCHECK_GE(new_index, 0);
-  DCHECK_LT(old_index, int{desks_.size()});
-  DCHECK_LT(new_index, int{desks_.size()});
+  DCHECK_LT(old_index, static_cast<int>(desks_.size()));
+  DCHECK_LT(new_index, static_cast<int>(desks_.size()));
   desks_util::ReorderItem(desks_, old_index, new_index);
 
   for (auto& observer : observers_)
@@ -506,6 +557,7 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
       // overview shutdown animation is complete. See https://crbug.com/1001586.
       const bool immediate_exit = source == DesksSwitchSource::kUserSwitch;
       overview_controller->EndOverview(
+          OverviewEndAction::kDeskActivation,
           immediate_exit ? OverviewEnterExitType::kImmediateExit
                          : OverviewEnterExitType::kNormal);
     }
@@ -689,6 +741,12 @@ void DesksController::NotifyAllDesksForContentChanged() {
     desk->NotifyContentChanged();
 }
 
+void DesksController::NotifyDeskNameChanged(const Desk* desk,
+                                            const std::u16string& new_name) {
+  for (auto& observer : observers_)
+    observer.OnDeskNameChanged(desk, new_name);
+}
+
 void DesksController::RevertDeskNameToDefault(Desk* desk) {
   DCHECK(HasDesk(desk));
   desk->SetName(GetDeskDefaultName(GetDeskIndex(desk)), /*set_by_user=*/false);
@@ -776,7 +834,7 @@ int DesksController::GetDeskIndex(const Desk* desk) const {
 
 aura::Window* DesksController::GetDeskContainer(aura::Window* target_root,
                                                 int desk_index) {
-  if (desk_index < 0 || desk_index >= int{desks_.size()})
+  if (desk_index < 0 || desk_index >= static_cast<int>(desks_.size()))
     return nullptr;
   return desks_[desk_index]->GetDeskContainerForRoot(target_root);
 }
@@ -816,6 +874,78 @@ void DesksController::SendToDeskAtIndex(aura::Window* window, int desk_index) {
   MoveWindowFromActiveDeskTo(window, desks_[desk_index].get(),
                              window->GetRootWindow(),
                              DesksMoveWindowFromActiveDeskSource::kSendToDesk);
+}
+
+std::unique_ptr<DeskTemplate> DesksController::CaptureActiveDeskAsTemplate()
+    const {
+  DCHECK(current_account_id_.is_valid());
+
+  std::unique_ptr<DeskTemplate> desk_template =
+      std::make_unique<DeskTemplate>();
+  desk_template->set_template_name(active_desk_->name());
+
+  // Construct |restore_data| for |desk_template|.
+  std::unique_ptr<full_restore::RestoreData> restore_data =
+      std::make_unique<full_restore::RestoreData>();
+  auto* shell = Shell::Get();
+  auto mru_windows =
+      shell->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
+  for (auto* window : mru_windows) {
+    std::unique_ptr<full_restore::AppLaunchInfo> app_launch_info =
+        shell->shell_delegate()->GetAppLaunchDataForDeskTemplate(window);
+    if (!app_launch_info)
+      continue;
+
+    // We need to copy |app_launch_info->app_id| to |app_id| as the below
+    // function AddAppLaunchInfo() will destroy |app_launch_info|.
+    const std::string app_id = app_launch_info->app_id;
+    const int32_t window_id = window->GetProperty(full_restore::kWindowIdKey);
+    restore_data->AddAppLaunchInfo(std::move(app_launch_info));
+
+    std::unique_ptr<full_restore::WindowInfo> window_info = BuildWindowInfo(
+        window, /*activation_index=*/absl::nullopt, mru_windows);
+    // Clear WindowInfo's |desk_id| as a window in template will always launch
+    // to a newly created desk.
+    window_info->desk_id.reset();
+    // Clear WindowInfo's `visible_on_all_workspaces` as according to the PRD
+    // we don't want the window that is created from desk template is visible
+    // on other desks.
+    window_info->visible_on_all_workspaces.reset();
+    restore_data->ModifyWindowInfo(app_id, window_id, *window_info);
+  }
+  desk_template->set_desk_restore_data(std::move(restore_data));
+
+  return desk_template;
+}
+
+void DesksController::CreateAndActivateNewDeskForTemplate(
+    const std::u16string& template_name,
+    base::OnceCallback<void(bool)> callback) {
+  if (!CanCreateDesks()) {
+    std::move(callback).Run(/*success=*/false);
+    return;
+  }
+
+  // If there is an ongoing animation, we should stop it before creating and
+  // activating the new desk, which triggers its own animation.
+  if (animation_)
+    animation_.reset();
+
+  // Change the desk name if the current name already exists.
+  int count = 1;
+  std::u16string desk_name = template_name;
+  while (HasDeskWithName(desk_name)) {
+    desk_name = std::u16string(template_name)
+                    .append(u" (" + base::FormatNumber(count) + u")");
+    count++;
+  }
+
+  NewDesk(DesksCreationRemovalSource::kLaunchTemplate);
+  Desk* desk = desks().back().get();
+  desk->SetName(desk_name, /*set_by_user=*/true);
+  new DeskSwitchAnimationObserver(std::move(callback));
+  ActivateDesk(desk, DesksSwitchSource::kLaunchTemplate);
+  DCHECK(animation_);
 }
 
 void DesksController::UpdateDesksDefaultNames() {
@@ -911,6 +1041,14 @@ bool DesksController::HasDesk(const Desk* desk) const {
   return iter != desks_.end();
 }
 
+bool DesksController::HasDeskWithName(const std::u16string& desk_name) const {
+  auto iter = std::find_if(desks_.begin(), desks_.end(),
+                           [desk_name](const std::unique_ptr<Desk>& d) {
+                             return d->name() == desk_name;
+                           });
+  return iter != desks_.end();
+}
+
 void DesksController::ActivateDeskInternal(const Desk* desk,
                                            bool update_window_activation) {
   DCHECK(HasDesk(desk));
@@ -966,7 +1104,8 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
   const int removed_desk_index = std::distance(desks_.begin(), iter);
   // Update workspaces of windows in desks that have higher indices than the
   // removed desk since indices of those desks shift by one.
-  for (int i = removed_desk_index + 1; i < int{desks_.size()}; i++) {
+  for (int i = removed_desk_index + 1; i < static_cast<int>(desks_.size());
+       i++) {
     for (auto* window : desks_[i]->windows())
       window->SetProperty(aura::client::kWindowWorkspaceKey, i - 1);
   }

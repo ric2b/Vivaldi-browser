@@ -73,7 +73,7 @@ class WMFDecoderImpl {
   // Performs decoder config checks specific to the WMFDecoder, beyond the
   // generic DecoderConfig::IsValidConfig() check.
   static bool IsValidConfig(const DecoderConfig& config);
-  static std::string GetModuleName(const DecoderConfig& config);
+  static HMODULE GetModuleLibrary();
   static GUID GetMediaObjectGUID(const DecoderConfig& config);
   static Microsoft::WRL::ComPtr<IMFTransform> CreateWMFDecoder(
       const DecoderConfig& config);
@@ -85,7 +85,6 @@ class WMFDecoderImpl {
   HRESULT SetOutputMediaTypeInternal(GUID subtype, IMFMediaType* media_type);
   size_t CalculateOutputBufferSize(
       const MFT_OUTPUT_STREAM_INFO& stream_info) const;
-  bool InitializeDecoderFunctions();
 
   // Methods used during decoding.
   HRESULT ProcessInput(const scoped_refptr<DecoderBuffer>& input);
@@ -118,15 +117,6 @@ class WMFDecoderImpl {
 
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;
-
-  // We always call MFGetStrideForBitmapInfoHeader() through this pointer.
-  // This guarantees the call succeeds both on Vista and newer systems.  On
-  // Vista, the function is provided by evr.dll, but we build Opera on newer
-  // Windows, where the function is provided by mfplat.dll.  We set up this
-  // pointer to the function in evr.dll explicitly.  Luckily, on newer Windows
-  // evr.dll still provides a stub that calls the function in mfplat.dll, so
-  // this approach always works.
-  decltype(MFGetStrideForBitmapInfoHeader)* get_stride_function_;
 
   DebugBufferLogger debug_buffer_logger_;
 };

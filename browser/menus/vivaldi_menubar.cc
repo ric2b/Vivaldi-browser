@@ -26,7 +26,7 @@
 namespace vivaldi {
 
 static bool IsBookmarkCommand(int command_id) {
-  return command_id >= IDC_FIRST_BOOKMARK_MENU;
+  return command_id >= IDC_FIRST_UNBOUNDED_MENU;
 }
 
 SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
@@ -127,7 +127,7 @@ void Menubar::PopulateMenu(views::MenuItemView* parent, ui::MenuModel* model) {
   for (int i = 0, max = model->GetItemCount(); i < max; ++i) {
     // Add the menu item at the end.
     int menu_index =
-        parent->HasSubmenu() ? int{parent->GetSubmenu()->children().size()} : 0;
+        parent->HasSubmenu() ? static_cast<int>(parent->GetSubmenu()->children().size()) : 0;
     AddMenuItem(parent, menu_index, model, i, model->GetTypeAt(i));
 
     if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
@@ -296,7 +296,8 @@ bool Menubar::GetAccelerator(int id, ui::Accelerator* accelerator) const {
 }
 
 views::MenuItemView* Menubar::GetVivaldiSiblingMenu(views::MenuItemView* menu,
-    const gfx::Point& screen_point, gfx::Rect* rect) {
+    const gfx::Point& screen_point, gfx::Rect* rect,
+    views::MenuAnchorPosition* anchor) {
 
   for (const MenubarMenuEntry& e: params_->siblings) {
     if (e.rect.Contains(screen_point)) {
@@ -304,6 +305,7 @@ views::MenuItemView* Menubar::GetVivaldiSiblingMenu(views::MenuItemView* menu,
         return nullptr;
       }
       *rect = e.rect;
+      *anchor = views::MenuAnchorPosition::kTopLeft;
       SetActiveMenu(e.id);
       return id_to_menu_map_[active_menu_id_];
     }
@@ -311,8 +313,11 @@ views::MenuItemView* Menubar::GetVivaldiSiblingMenu(views::MenuItemView* menu,
   return nullptr;
 }
 
-views::MenuItemView* Menubar::GetNextSiblingMenu(bool next, bool* has_mnemonics,
-                                                 gfx::Rect* rect) {
+views::MenuItemView* Menubar::GetNextSiblingMenu(
+    bool next,
+    bool* has_mnemonics,
+    gfx::Rect* rect,
+    views::MenuAnchorPosition* anchor) {
   if (params_->siblings.size() == 0) {
     return nullptr;
   }
@@ -338,7 +343,7 @@ views::MenuItemView* Menubar::GetNextSiblingMenu(bool next, bool* has_mnemonics,
   }
   *has_mnemonics = true;
   return GetVivaldiSiblingMenu(nullptr,
-      params_->siblings.at(index).rect.origin(), rect);
+      params_->siblings.at(index).rect.origin(), rect, anchor);
 }
 
 // Note: This is not used by bookmarks. That uses a separate system.

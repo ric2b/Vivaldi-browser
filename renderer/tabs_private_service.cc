@@ -2,6 +2,8 @@
 
 #include "renderer/tabs_private_service.h"
 
+#include "components/translate/core/common/translate_util.h"
+#include "components/translate/core/language_detection/language_detection_util.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/web/web_element_collection.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -138,6 +140,23 @@ void VivaldiTabsPrivateService::GetSpatialNavigationRects(
     navigation_rects.push_back(std::move(spatnav_rect));
   }
   std::move(callback).Run(std::move(navigation_rects));
+}
+
+void VivaldiTabsPrivateService::DetermineTextLanguage(
+    const std::string& text,
+    DetermineTextLanguageCallback callback) {
+  bool is_model_reliable = false;
+  float model_reliability_score = 0.0;
+  std::string language;
+
+  if (translate::IsTFLiteLanguageDetectionEnabled()) {
+    // Implement when relevant
+    NOTREACHED();
+  } else {
+    language = translate::DetermineTextLanguage(text, &is_model_reliable,
+                                                model_reliability_score);
+  }
+  std::move(callback).Run(std::move(language));
 }
 
 }  // namespace vivaldi

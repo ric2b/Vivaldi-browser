@@ -187,7 +187,7 @@ HistoryPrivateEventRouter::HistoryPrivateEventRouter(
     history::HistoryService* history_service)
     : profile_(profile), history_service_observer_(this) {
   DCHECK(profile);
-  history_service_observer_.Add(history_service);
+  history_service_observer_.Observe(history_service);
 }
 
 HistoryPrivateEventRouter::~HistoryPrivateEventRouter() {}

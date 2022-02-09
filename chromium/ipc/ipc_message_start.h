@@ -16,21 +16,14 @@ enum IPCMessageStart {
   TestMsgStart,
   WorkerMsgStart,
   NaClMsgStart,
-  GpuChannelMsgStart,
-  MediaMsgStart,
   PpapiMsgStart,
   ExtensionMsgStart,
   ChromotingMsgStart,
   NaClHostMsgStart,
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  MediaPipelineMsgStart,
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
   EncryptedMediaMsgStart,
   GinJavaBridgeMsgStart,
-  ChromeUtilityPrintingMsgStart,
   ExtensionsGuestViewMsgStart,
   GuestViewMsgStart,
-  MediaPlayerDelegateMsgStart,
   ExtensionWorkerMsgStart,
   VivaldiMsgStart,
   LastIPCMsgStart  // Must come last.

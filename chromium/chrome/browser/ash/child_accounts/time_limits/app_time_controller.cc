@@ -209,7 +209,9 @@ void AppTimeController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kPerAppTimeLimitsAllowlistPolicy);
 }
 
-AppTimeController::AppTimeController(Profile* profile)
+AppTimeController::AppTimeController(
+    Profile* profile,
+    base::RepeatingClosure on_policy_updated_callback)
     : profile_(profile),
       app_service_wrapper_(std::make_unique<AppServiceWrapper>(profile)),
       app_registry_(
@@ -218,13 +220,28 @@ AppTimeController::AppTimeController(Profile* profile)
                                                 profile->GetPrefs())),
       web_time_activity_provider_(std::make_unique<WebTimeActivityProvider>(
           this,
-          app_service_wrapper_.get())) {
+          app_service_wrapper_.get())),
+      on_policy_updated_callback_(on_policy_updated_callback) {
   DCHECK(profile);
+}
 
+AppTimeController::~AppTimeController() {
+  app_registry_->RemoveAppStateObserver(this);
+
+  auto* time_zone_settings = system::TimezoneSettings::GetInstance();
+  if (time_zone_settings)
+    time_zone_settings->RemoveObserver(this);
+
+  auto* system_clock_client = SystemClockClient::Get();
+  if (system_clock_client)
+    system_clock_client->RemoveObserver(this);
+}
+
+void AppTimeController::Init() {
   if (WebTimeLimitEnforcer::IsEnabled())
     web_time_enforcer_ = std::make_unique<WebTimeLimitEnforcer>(this);
 
-  PrefService* pref_service = profile->GetPrefs();
+  PrefService* pref_service = profile_->GetPrefs();
   RegisterProfilePrefObservers(pref_service);
   TimeLimitsAllowlistPolicyUpdated(prefs::kPerAppTimeLimitsAllowlistPolicy);
   TimeLimitsPolicyUpdated(prefs::kPerAppTimeLimitsPolicy);
@@ -266,18 +283,6 @@ AppTimeController::AppTimeController(Profile* profile)
     web_time_enforcer_->OnWebTimeLimitReached(
         web_time_limit->daily_limit().value());
   }
-}
-
-AppTimeController::~AppTimeController() {
-  app_registry_->RemoveAppStateObserver(this);
-
-  auto* time_zone_settings = system::TimezoneSettings::GetInstance();
-  if (time_zone_settings)
-    time_zone_settings->RemoveObserver(this);
-
-  auto* system_clock_client = SystemClockClient::Get();
-  if (system_clock_client)
-    system_clock_client->RemoveObserver(this);
 }
 
 bool AppTimeController::IsExtensionAllowlisted(
@@ -388,6 +393,8 @@ void AppTimeController::TimeLimitsPolicyUpdated(const std::string& pref_name) {
             .size();
 
     base::UmaHistogramCounts1000(kBlockedAppsCountMetric, blocked_apps);
+
+    on_policy_updated_callback_.Run();
   }
 }
 

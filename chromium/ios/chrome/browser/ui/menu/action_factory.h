@@ -17,7 +17,6 @@ class GURL;
 
 // Factory providing methods to create UIActions with consistent titles, images
 // and metrics structure.
-API_AVAILABLE(ios(13.0))
 @interface ActionFactory : NSObject
 
 // Initializes a factory instance for the current |browser| to create action
@@ -106,10 +105,6 @@ API_AVAILABLE(ios(13.0))
 // invoke the |block| when executed.
 - (UIAction*)actionToOpenOfflineVersionInNewTabWithBlock:(ProceduralBlock)block;
 
-// Creates a UIAction instance configured for executing JavaScript evalutation
-// The action will invoke the |block| when executed.
-- (UIAction*)actionToOpenJavascriptWithBlock:(ProceduralBlock)block;
-
 // Creates a UIAction instance for adding to the reading list.
 - (UIAction*)actionToAddToReadingListWithBlock:(ProceduralBlock)block;
 
@@ -121,6 +116,28 @@ API_AVAILABLE(ios(13.0))
 
 // Creates a UIAction instance for closing a tab.
 - (UIAction*)actionToCloseTabWithBlock:(ProceduralBlock)block;
+
+// Creates a UIAction instance for saving an image.
+- (UIAction*)actionSaveImageWithBlock:(ProceduralBlock)block;
+
+// Creates a UIAction instance for copying an image.
+- (UIAction*)actionCopyImageWithBlock:(ProceduralBlock)block;
+
+// Creates a UIAction instance for opening an image |URL| in current tab and
+// invoke the given |completion| block after execution.
+- (UIAction*)actionOpenImageWithURL:(const GURL)URL
+                         completion:(ProceduralBlock)completion;
+
+// Creates a UIAction instance for opening an image |params| in a new tab and
+// invoke the given |completion| block after execution.
+- (UIAction*)actionOpenImageInNewTabWithUrlLoadParams:(UrlLoadParams)params
+                                           completion:
+                                               (ProceduralBlock)completion;
+
+// Creates a UIAction instance for searching an image with given search service
+// |title|. Invokes the given |completion| block after execution.
+- (UIAction*)actionSearchImageWithTitle:(NSString*)title
+                                  Block:(ProceduralBlock)block;
 
 @end
 

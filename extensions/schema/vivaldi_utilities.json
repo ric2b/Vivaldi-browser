@@ -31,6 +31,12 @@
         }
       },
       {
+        "id": "BroadcastAction",
+        "type": "string",
+        "description": "Identifies broadcast type.",
+        "enum": [ "open", "minimizeAll" ]
+      },
+      {
         "id": "DialogName",
         "type": "string",
         "description": "Name of the dialog to set position for.",
@@ -92,9 +98,9 @@
             "type": "boolean",
             "description": "The url is a correctly formatted url. This might be true even if the protocol is not valid."
           },
-          "schemeValid": {
+          "isBrowserUrl": {
             "type": "boolean",
-            "description": "The protocol scheme is known and one we can show directly."
+            "description": "The url can be shown directly by the browser."
           },
           "schemeParsed": {
             "type": "string",
@@ -103,10 +109,6 @@
           "normalizedUrl": {
             "type": "string",
             "description": "Returns the raw spec, i.e., the full text of the URL, in canonical UTF-8, if the URL is valid."
-          },
-          "externalHandler": {
-            "type": "boolean",
-            "description": "The protocol scheme will be passed to a confirmation and run in an external protocol handler."
           }
         }
       },
@@ -126,57 +128,46 @@
         }
       },
       {
-        "id": "UrlFragment",
-        "type": "object",
-        "description": "To be used in context of UrlFragments below. A fragment should be considered not present if 'begin' and 'end' are both 0.",
-        "properties": {
-          "fragment": {
-            "type": "string",
-            "description": "The URL fragment."
-
-          },
-          "begin": {
-            "type": "integer",
-            "description": "Start offset of the fragment within the URL."
-          },
-          "end": {
-            "type": "integer",
-            "description": "End offset of the fragment within the URL."
-          }
-        }
-      },
-      {
         "id": "UrlFragments",
         "type": "object",
         "description": "Object with url fragments, including top level domain which is eTLD aware.",
         "properties": {
           "scheme": {
-            "$ref": "UrlFragment",
-            "description": "If URL cannot be parsed at all, this will be empty"
+            "type": "string",
+            "optional": true,
+            "description": "If URL cannot be parsed at all, this will be absent"
           },
           "username": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "password": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "host": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "port": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "path": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "query": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "ref": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           },
           "tld": {
-            "$ref": "UrlFragment"
+            "type": "string",
+            "optional": true
           }
         }
       },
@@ -371,12 +362,27 @@
             "name": "url"
           }
         ],
+        "returns": {
+          "$ref": "UrlValidResults"
+        }
+      },
+      {
+        "name": "canOpenUrlExternally",
+        "type": "function",
+        "description": "Check if the browser can potentially open the URL using an external application or an extension. This should only be called if it is already known that the URL is a valid one and is not handled by the browser directly to get a valid result.",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The URL to check",
+            "name": "url"
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "parameters": [
             {
               "name": "results",
-              "$ref": "UrlValidResults"
+              "type": "boolean"
             }
           ]
         }
@@ -392,15 +398,9 @@
             "name": "url"
           }
         ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-                "name": "fragments",
-                "$ref": "UrlFragments",
-                "description": "The URL split up in fragments."
-            }
-          ]
+        "returns": {
+          "$ref": "UrlFragments",
+          "description": "The URL split up in fragments."
         }
       },
       {
@@ -486,14 +486,8 @@
         "type": "function",
         "description": "Gets the Vivaldi version and Chromium versions.",
         "parameters": [],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "results",
-              "$ref": "GetVersionResults"
-            }
-          ]
+        "returns": {
+          "$ref": "GetVersionResults"
         }
       },
       {
@@ -707,6 +701,38 @@
         }
       },
       {
+        "name": "broadcastMessage",
+        "type": "function",
+        "description": "Broadcast urls to other windows. Works from regular to private windows as well.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "number"
+          },
+          {
+            "name": "action",
+            "$ref": "BroadcastAction"
+          },
+          {
+            "name": "prompt",
+            "type": "boolean",
+            "description": "Set to true to allow user intervention (if applicable)."
+          },
+          {
+            "name": "urls",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+            ]
+          }
+        ]
+      },
+      {
         "name": "setDefaultContentSettings",
         "type": "function",
         "description": "Set Vivaldi default content settings.",
@@ -788,6 +814,23 @@
         "type": "function",
         "description": "Opens Vivaldi task manager dialog.",
         "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
+        "name": "createQRCode",
+        "type": "function",
+        "description": "Opens the QR Code bubble window for the given page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "id",
+            "description": "The id of the page.",
+            "minimum": 0
+          }
+        ],
         "returns_async": {
           "name": "callback",
           "parameters": []
@@ -1111,6 +1154,22 @@
             }
           ]
         }
+      },
+      {
+        "name": "getGAPIKey",
+        "type": "function",
+        "description": "Returns G API key.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's G API key."
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -1182,6 +1241,33 @@
         "type": "function",
         "description": "Fired when the Razer Chroma API has been initialized.",
         "parameters": []
+      },
+      {
+        "name": "onBroadcastMessage",
+        "type": "function",
+        "description": "Test.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "Id of window."
+          },
+          {
+            "name": "action",
+            "$ref": "BroadcastAction"
+          },
+          {
+            "name": "prompt",
+            "type": "boolean",
+            "description": "Set to true to allow user intervention (if applicable)."
+          },
+          {
+            "name": "urls",
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of urls to open."
+          }
+        ]
       },
       {
         "name": "onShowQRCode",

@@ -26,11 +26,12 @@ class MEDIA_EXPORT ProtocolSniffer {
  public:
   // Called when sniffing is complete.  |mime_type| contains the media type
   // detected, or is empty on failure to detect.
-  using Callback = base::OnceCallback<void(std::string mime_type)>;
+  using SniffProtocolResult = base::OnceCallback<void(std::string mime_type)>;
 
   static bool ShouldSniffProtocol(const std::string& content_type);
 
-  static void SniffProtocol(DataSource* data_source, Callback callback);
+  static void SniffProtocol(DataSource* data_source,
+                            SniffProtocolResult callback);
 };
 
 }  // namespace media

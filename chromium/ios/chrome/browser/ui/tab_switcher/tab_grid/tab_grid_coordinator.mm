@@ -50,6 +50,7 @@
 #import "ios/chrome/browser/ui/snackbar/snackbar_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_context_menu_helper.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
@@ -327,8 +328,6 @@
     // incognito (crbug.com/1136882).
     TabGridPage currentActivePage = self.baseViewController.activePage;
     dispatch_async(dispatch_get_main_queue(), ^{
-      self.baseViewController.childViewControllerForStatusBarStyle = nil;
-
       self.transitionHandler = [[TabGridTransitionHandler alloc]
           initWithLayoutProvider:self.baseViewController];
       self.transitionHandler.animationDisabled = !animated;
@@ -340,6 +339,13 @@
                    self.bvcContainer = nil;
                    [self.baseViewController contentDidAppear];
                  }];
+
+      // On iOS 15+, snapshotting views with afterScreenUpdates:YES waits 0.5s
+      // for the status bar style to update. Work around that delay by taking
+      // the snapshot first (during
+      // |transitionFromBrowser:toTabGrid:activePage:withCompletion|) and then
+      // updating the status bar style afterwards.
+      self.baseViewController.childViewControllerForStatusBarStyle = nil;
     });
   }
   self.tabGridEnterTime = base::TimeTicks::Now();
@@ -419,6 +425,10 @@
     if (!GetFirstResponder()) {
       // It is possible to already have a first responder (for example the
       // omnibox). In that case, we don't want to mark BVC as first responder.
+      // TODO(crbug.com/1223090): Adding DCHECK below to confirm hypothesis
+      // that |-becomeFirstResponder| is crashing due to |currentBVC| not
+      // being in the view hierarchy.
+      DCHECK(self.bvcContainer.currentBVC.view.window);
       [self.bvcContainer.currentBVC becomeFirstResponder];
     }
     if (completion) {
@@ -426,9 +436,6 @@
     }
     self.firstPresentation = NO;
   };
-
-  self.baseViewController.childViewControllerForStatusBarStyle =
-      self.bvcContainer.currentBVC;
 
   [self.baseViewController contentWillDisappearAnimated:animated];
 
@@ -442,6 +449,14 @@
              withCompletion:^{
                extendedCompletion();
              }];
+
+  // On iOS 15+, snapshotting views with afterScreenUpdates:YES waits 0.5s for
+  // the status bar style to update. Work around that delay by taking the
+  // snapshot first (during
+  // |transitionFromTabGrid:toBrowser:activePage:withCompletion|) and then
+  // updating the status bar style afterwards.
+  self.baseViewController.childViewControllerForStatusBarStyle =
+      self.bvcContainer.currentBVC;
 }
 
 #pragma mark - Private
@@ -587,6 +602,10 @@
   baseViewController.incognitoTabsDragDropHandler = self.incognitoTabsMediator;
   baseViewController.regularTabsImageDataSource = self.regularTabsMediator;
   baseViewController.incognitoTabsImageDataSource = self.incognitoTabsMediator;
+  baseViewController.regularTabsShareableItemsProvider =
+      self.regularTabsMediator;
+  baseViewController.incognitoTabsShareableItemsProvider =
+      self.incognitoTabsMediator;
 
   self.incognitoAuthMediator = [[IncognitoReauthMediator alloc]
       initWithConsumer:self.baseViewController.incognitoTabsConsumer
@@ -691,6 +710,8 @@
   // setting the handler to nil.
   self.baseViewController.handler = nil;
   self.recentTabsContextMenuHelper = nil;
+  self.regularTabsGridContextMenuHelper = nil;
+  self.incognitoTabsGridContextMenuHelper = nil;
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
   [self.dispatcher stopDispatchingForProtocol:@protocol(ApplicationCommands)];
@@ -814,6 +835,67 @@
   [self.actionSheetCoordinator start];
 }
 
+- (void)
+    showCloseItemsConfirmationActionSheetWithTabGridMediator:
+        (TabGridMediator*)tabGridMediator
+                                                       items:
+                                                           (NSArray<NSString*>*)
+                                                               items
+                                                      anchor:(UIBarButtonItem*)
+                                                                 buttonAnchor {
+  if (tabGridMediator == self.regularTabsMediator) {
+    base::RecordAction(base::UserMetricsAction(
+        "MobileTabGridSelectionCloseRegularTabsConfirmationPresented"));
+  } else {
+    base::RecordAction(base::UserMetricsAction(
+        "MobileTabGridSelectionCloseIncognitoTabsConfirmationPresented"));
+  }
+
+  self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                           title:nil
+                         message:nil
+                   barButtonItem:buttonAnchor];
+
+  self.actionSheetCoordinator.alertStyle = UIAlertControllerStyleActionSheet;
+
+  [self.actionSheetCoordinator
+      addItemWithTitle:base::SysUTF16ToNSString(
+                           l10n_util::GetPluralStringFUTF16(
+                               IDS_IOS_TAB_GRID_CLOSE_ALL_TABS_CONFIRMATION,
+                               items.count))
+                action:^{
+                  base::RecordAction(base::UserMetricsAction(
+                      "MobileTabGridSelectionCloseTabsConfirmed"));
+                  [tabGridMediator closeItemsWithIDs:items];
+                }
+                 style:UIAlertActionStyleDestructive];
+  [self.actionSheetCoordinator
+      addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                action:^{
+                  base::RecordAction(base::UserMetricsAction(
+                      "MobileTabGridSelectionCloseTabsCanceled"));
+                }
+                 style:UIAlertActionStyleCancel];
+  [self.actionSheetCoordinator start];
+}
+
+- (void)tabGridMediator:(TabGridMediator*)tabGridMediator
+              shareURLs:(NSArray<URLWithTitle*>*)URLs
+                 anchor:(UIBarButtonItem*)buttonAnchor {
+  ActivityParams* params = [[ActivityParams alloc]
+      initWithURLs:URLs
+          scenario:ActivityScenario::TabGridSelectionMode];
+
+  self.sharingCoordinator = [[SharingCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.regularBrowser
+                          params:params
+                          anchor:buttonAnchor];
+  [self.sharingCoordinator start];
+}
+
 #pragma mark - TabGridViewControllerDelegate
 
 - (TabGridPage)activePageForTabGridViewController:
@@ -895,14 +977,13 @@
 
 - (void)shareURL:(const GURL&)URL
            title:(NSString*)title
+        scenario:(ActivityScenario)scenario
         fromView:(UIView*)view {
-  ActivityParams* params =
-      [[ActivityParams alloc] initWithURL:URL
-                                    title:title
-                                 scenario:ActivityScenario::RecentTabsEntry];
+  ActivityParams* params = [[ActivityParams alloc] initWithURL:URL
+                                                         title:title
+                                                      scenario:scenario];
   self.sharingCoordinator = [[SharingCoordinator alloc]
       initWithBaseViewController:self.baseViewController
-                                     .remoteTabsViewController
                          browser:self.regularBrowser
                           params:params
                       originView:view];
@@ -910,12 +991,12 @@
 }
 
 - (void)addToReadingListURL:(const GURL&)URL title:(NSString*)title {
+  ReadingListAddCommand* command =
+      [[ReadingListAddCommand alloc] initWithURL:URL title:title];
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands
   // protocol clean up.
   id<BrowserCommands> readingListAdder = static_cast<id<BrowserCommands>>(
       self.regularBrowser->GetCommandDispatcher());
-  ReadingListAddCommand* command =
-      [[ReadingListAddCommand alloc] initWithURL:URL title:title];
   [readingListAdder addToReadingList:command];
 }
 

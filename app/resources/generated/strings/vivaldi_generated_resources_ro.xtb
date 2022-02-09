@@ -29,7 +29,6 @@
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Cameră video</translation>
 <translation id="1682548588986054654">Fereastră incognito nouă</translation>
-<translation id="1698122934742150150">Numai sesiunea privată actuală</translation>
 <translation id="1706625117072057435">Niveluri de zoom</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
 <translation id="1723824996674794290">Fereastră &amp;nouă</translation>
@@ -117,7 +116,6 @@
 <translation id="3505030558724226696">Revocă accesul la dispozitiv</translation>
 <translation id="3560034655160545939">&amp;Verificare ortografică</translation>
 <translation id="3587482841069643663">Toate</translation>
-<translation id="3668823961463113931">Handlere</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitare de partajare a ecranului de către <ph name="APP_NAME" /></translation>
 <translation id="3744111561329211289">Sincronizare în fundal</translation>

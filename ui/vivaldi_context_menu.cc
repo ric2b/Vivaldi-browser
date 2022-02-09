@@ -28,6 +28,10 @@ VivaldiContextMenu::GetToolkitDelegate() {
   return nullptr;
 }
 
+bool VivaldiContextMenu::HasDarkTextColor() {
+  return true;
+}
+
 BookmarkMenuContainer::BookmarkMenuContainer(Delegate* a_delegate)
   :edge(Below), delegate(a_delegate) {}
 BookmarkMenuContainer::~BookmarkMenuContainer() {}

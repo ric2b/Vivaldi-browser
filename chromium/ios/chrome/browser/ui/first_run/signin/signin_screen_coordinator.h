@@ -7,7 +7,7 @@
 
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
-#import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
+@protocol FirstRunScreenDelegate;
 
 // Coordinator to present sign-in screen.
 @interface SigninScreenCoordinator : ChromeCoordinator

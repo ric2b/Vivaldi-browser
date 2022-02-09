@@ -6,12 +6,16 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 
 #include "app/vivaldi_apptools.h"
-#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/test/base/testing_browser_process.h"
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/adverse_ad_filter_test_harness.h"
+#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
+#include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/test_password_store.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 
 #include "content/public/common/content_client.h"
@@ -38,6 +42,13 @@ class VivaldiSubresourceFilterTest
         CreateSubresourceFilterThrottleManagerForWebContents(web_contents());
     browser_content_client_.reset(new VivaldiContentBrowserClient);
     content::SetBrowserClientForTesting(browser_content_client_.get());
+
+    PasswordStoreFactory::GetInstance()->SetTestingFactory(
+        profile(),
+        base::BindRepeating(
+            &::password_manager::BuildPasswordStore<
+                content::BrowserContext, ::password_manager::TestPasswordStore>));
+
   }
   void TearDown() override {
     TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);

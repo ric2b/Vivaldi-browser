@@ -185,6 +185,9 @@ void WebSocket::WebSocketEventHandler::OnCreateURLRequest(
     net::URLRequest* url_request) {
   url_request->SetUserData(WebSocket::kUserDataKey,
                            std::make_unique<UnownedPointer>(impl_));
+  impl_->net_log_source_id_ = url_request->net_log().source().id;
+  impl_->throttling_token_ = network::ScopedThrottlingToken::MaybeCreate(
+      impl_->net_log_source_id_, impl_->throttling_profile_id_);
 }
 
 void WebSocket::WebSocketEventHandler::OnAddChannelResponse(
@@ -412,7 +415,8 @@ WebSocket::WebSocket(
     mojo::PendingRemote<mojom::TrustedHeaderClient> header_client,
     absl::optional<WebSocketThrottler::PendingConnection>
         pending_connection_tracker,
-    base::TimeDelta delay)
+    base::TimeDelta delay,
+    const absl::optional<base::UnguessableToken>& throttling_profile_id)
     : factory_(factory),
       url_loader_network_observer_(std::move(url_loader_network_observer)),
       handshake_client_(std::move(handshake_client)),
@@ -432,7 +436,8 @@ WebSocket::WebSocket(
                         mojo::SimpleWatcher::ArmingPolicy::MANUAL,
                         base::ThreadTaskRunnerHandle::Get()),
       reassemble_short_messages_(base::FeatureList::IsEnabled(
-          network::features::kWebSocketReassembleShortMessages)) {
+          network::features::kWebSocketReassembleShortMessages)),
+      throttling_profile_id_(throttling_profile_id) {
   DCHECK(handshake_client_);
   // |delay| should be zero if this connection is not throttled.
   DCHECK(pending_connection_tracker.has_value() || delay.is_zero());
@@ -537,13 +542,14 @@ bool WebSocket::AllowCookies(const GURL& url) const {
              url, site_for_cookies_) == net::OK;
 }
 
-int WebSocket::OnBeforeStartTransaction(net::CompletionOnceCallback callback,
-                                        net::HttpRequestHeaders* headers) {
+int WebSocket::OnBeforeStartTransaction(
+    const net::HttpRequestHeaders& headers,
+    net::NetworkDelegate::OnBeforeStartTransactionCallback callback) {
   if (header_client_) {
     header_client_->OnBeforeSendHeaders(
-        *headers, base::BindOnce(&WebSocket::OnBeforeSendHeadersComplete,
-                                 weak_ptr_factory_.GetWeakPtr(),
-                                 std::move(callback), headers));
+        headers,
+        base::BindOnce(&WebSocket::OnBeforeSendHeadersComplete,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
     return net::ERR_IO_PENDING;
   }
   return net::OK;
@@ -840,17 +846,14 @@ void WebSocket::OnAuthRequiredComplete(
 }
 
 void WebSocket::OnBeforeSendHeadersComplete(
-    net::CompletionOnceCallback callback,
-    net::HttpRequestHeaders* out_headers,
+    net::NetworkDelegate::OnBeforeStartTransactionCallback callback,
     int result,
     const absl::optional<net::HttpRequestHeaders>& headers) {
   if (!channel_) {
     // Something happened before the OnBeforeSendHeaders response arrives.
     return;
   }
-  if (headers)
-    *out_headers = headers.value();
-  std::move(callback).Run(result);
+  std::move(callback).Run(result, headers);
 }
 
 void WebSocket::OnHeadersReceivedComplete(

@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "build/build_config.h"
@@ -32,7 +33,7 @@
 #endif
 
 class AutocompleteProvider;
-class OmniboxPedal;
+class OmniboxAction;
 class SuggestionAnswer;
 class TemplateURL;
 class TemplateURLService;
@@ -238,7 +239,7 @@ struct AutocompleteMatch {
   // Gets the vector icon identifier for the icon to be shown for this match. If
   // |is_bookmark| is true, returns a bookmark icon rather than what the type
   // would normally determine.  Note that in addition to |type|, the icon chosen
-  // may depend on match contents (e.g. Drive |document_type| or |pedal|).
+  // may depend on match contents (e.g. Drive |document_type| or |action|).
   // The reason |is_bookmark| is passed as a parameter and is not baked into the
   // AutocompleteMatch is likely that 1) this info is not used elsewhere in the
   // Autocomplete machinery except before displaying the match and 2) obtaining
@@ -319,8 +320,8 @@ struct AutocompleteMatch {
   // usually this surfaces a clock icon to the user.
   static bool IsSearchHistoryType(Type type);
 
-  // Returns true if matches with given |type| may be attached with a |pedal|.
-  static bool IsPedalCompatibleType(Type type);
+  // Returns true if matches with given `type` may be attach an `action`.
+  static bool IsActionCompatibleType(Type type);
 
   // Convenience function to check if |type| is one of the suggest types we
   // need to skip for search vs url partitions - url, text or image in the
@@ -569,23 +570,23 @@ struct AutocompleteMatch {
   std::u16string inline_autocompletion;
   // Whether rich autocompletion triggered; i.e. this suggestion *is or could
   // have been* rich autocompleted. This is usually redundant and checking
-  // whether either of |prefix_autocompletion| or |split_autocompletion| are
+  // whether either of `prefix_autocompletion` or `split_autocompletion` are
   // non-empty should be used instead to determine if this suggestion *is* rich
-  // autocompelted. But for counterfactual variations, the latter 2 aren't
+  // autocompleted. But for counterfactual variations, the latter 2 aren't
   // copied when deduping matches to avoid showing rich autocompletion and so
   // can't be used to trigger logging.
-  // TODO(manukh): remove |rich_autocompletion_triggered| when counterfactual
-  // experiments end.
+  // TODO(manukh): remove `rich_autocompletion_triggered` when counterfactual
+  //  experiments end.
   bool rich_autocompletion_triggered = false;
   // The inline autocompletion to display before the user's input in the
   // omnibox, if this match becomes the default match. Always empty if
   // non-prefix autocompletion is disabled.
   std::u16string prefix_autocompletion;
   // A representation of inline autocompletion that supports splitting the
-  // user input. See |SplitAutocompletion|| comments. Always empty if split
+  // user input. See `SplitAutocompletion()` comments. Always empty if split
   // autocompletion is disabled.
   // TODO(manukh) If split rich autocompletion launches, all 3 autocompletions
-  // can be represented by |split_autocompletion|.
+  //  can be represented by `split_autocompletion`.
   SplitAutocompletion split_autocompletion;
 
   // If false, the omnibox should prevent this match from being the
@@ -700,9 +701,8 @@ struct AutocompleteMatch {
   // Set in matches originating from keyword results.
   bool from_keyword = false;
 
-  // Set to a matching pedal if appropriate.  The pedal is not owned, and the
-  // owning OmniboxPedalProvider must outlive this.
-  OmniboxPedal* pedal = nullptr;
+  // Set to a matching action if appropriate.
+  scoped_refptr<OmniboxAction> action;
 
   // True if this match is from a previous result.
   bool from_previous = false;

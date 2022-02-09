@@ -14,7 +14,7 @@
 
 #include "base/callback.h"
 #include "base/threading/thread_checker.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 
 // Windows Media Foundation headers
 #include <mfapi.h>
@@ -35,7 +35,7 @@ class WMFByteStream : public WMFByteStream_UnknownBase {
   WMFByteStream();
   ~WMFByteStream() override;
 
-  void Initialize(scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+  void Initialize(scoped_refptr<base::SequencedTaskRunner> main_task_runner,
                   ipc_data_source::Buffer source_buffer,
                   bool is_streaming,
                   int64_t stream_length);
@@ -67,7 +67,7 @@ class WMFByteStream : public WMFByteStream_UnknownBase {
   HRESULT STDMETHODCALLTYPE Close() override;
 
  private:
-  scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
 
   // source_buffer_ is null when we are waiting for the media data reply.
   ipc_data_source::Buffer source_buffer_;

@@ -11,8 +11,8 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           &gt;
-          [LANの設定]
-          の順に移動して、[LANにプロキシサーバーを使用する] チェックボックスをオフにします。</translation>
+          [LAN の設定]
+          の順に移動して、[LAN にプロキシサーバーを使用する] チェックボックスをオフにします。</translation>
 <translation id="4932161901409251843">このオプションを無効にするには:
           Vivaldi メニュー &gt;
           <ph name="SETTINGS_TITLE" />
@@ -21,7 +21,7 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           の順に移動して、設定が [プロキシなし] または [直接] になっていることを確認します。</translation>
-<translation id="5248344925342018662">保護されたVivaldi ページを表示しています</translation>
+<translation id="5248344925342018662">保護された Vivaldi ページを表示しています</translation>
 <translation id="7023871570427738255">Vivaldi メニュー &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;

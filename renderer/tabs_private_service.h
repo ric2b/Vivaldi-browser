@@ -26,6 +26,8 @@ class VivaldiTabsPrivateService
   void GetScrollPosition(GetScrollPositionCallback callback) override;
   void GetSpatialNavigationRects(
       GetSpatialNavigationRectsCallback callback) override;
+  void DetermineTextLanguage(const std::string& text,
+                             DetermineTextLanguageCallback callback) override;
 
   void BindTabsPrivateService(
       mojo::PendingAssociatedReceiver<

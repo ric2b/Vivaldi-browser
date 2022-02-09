@@ -6,6 +6,8 @@
 #ifndef PLATFORM_MEDIA_RENDERER_DECODERS_MAC_VIV_VIDEO_DECODER_H_
 #define PLATFORM_MEDIA_RENDERER_DECODERS_MAC_VIV_VIDEO_DECODER_H_
 
+#include <set>
+
 #include <VideoToolbox/VideoToolbox.h>
 
 #include "base/containers/queue.h"

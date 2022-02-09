@@ -147,6 +147,11 @@ class MEDIA_EXPORT AudioDecoderConfig {
   // being explicitly marked in discard padding.
   bool should_discard_decoder_delay_ = true;
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+public:
+  bool platform_media_pass_through_ = false;
+#endif
+
   // Not using DISALLOW_COPY_AND_ASSIGN here intentionally to allow the compiler
   // generated copy constructor and assignment operator. Since the extra data is
   // typically small, the performance impact is minimal.

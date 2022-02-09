@@ -203,6 +203,8 @@ GL_FUNCTIONS = [
 { 'return_type': 'void',
   'versions' : [{'name': 'glBlitFramebuffer',
                  'extensions': ['GL_ARB_framebuffer_object']},
+                {'name': 'glBlitFramebufferNV',
+                 'extensions': ['GL_NV_framebuffer_blit']},
                 {'name': 'glBlitFramebufferANGLE'},
                 {'name': 'glBlitFramebufferEXT'}],
   'arguments': 'GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, '
@@ -2923,6 +2925,7 @@ FUNCTION_SETS = [
       'GLES2/gl2extchromium.h'
     ], [
       "GL_ANGLE_robust_resource_initialization",
+      "GL_ANGLE_webgl_compatibility",
       "GL_ARB_texture_swizzle",
       "GL_EXT_texture_swizzle",
       "GL_EXT_texture_format_BGRA8888",

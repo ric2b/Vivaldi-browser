@@ -690,8 +690,7 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
 
   if (Contains(updated_hidden_extensions.GetList(),
                base::Value(params->extension_id))) {
-    updated_hidden_extensions.Remove(base::Value(params->extension_id),
-                                     nullptr);
+    updated_hidden_extensions.EraseListValue(base::Value(params->extension_id));
   } else {
     updated_hidden_extensions.AppendString(params->extension_id);
   }

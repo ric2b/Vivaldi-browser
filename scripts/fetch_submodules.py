@@ -12,8 +12,6 @@ SRC = os.path.dirname(os.path.dirname(os.path.relpath(__file__)))
 BLACKLISTED_MODULES = []
 BLACKLISTED_OS = ["android_sdk_sources"]
 BLACKLISTED_OS_CONDITION = ["checkout_"+x for x in BLACKLISTED_OS]
-BASE_URL= "ssh://git.viv.int/srv/git/vivaldi"
-CHROMIUM_URL = BASE_URL + "/chromium/src.git"
 
 def __GetModuleInfoFromDeps(deps_info, selected_os=[], git=None):
   submodules = {}
@@ -41,7 +39,7 @@ def __GetModuleInfoFromDeps(deps_info, selected_os=[], git=None):
     elif selected_os:
        continue # only check out the selected OS when it is selected
 
-    url, commit = ref.split("@")[:2]
+    url, commit = ref.rsplit("@", 1)[:2]
     if commit != None and mod not in BLACKLISTED_MODULES:
       submodules[mod] = {
             "url":git.ResolveURL(url, True) if git else url,

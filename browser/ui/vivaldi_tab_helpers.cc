@@ -3,6 +3,7 @@
 #include "browser/ui/vivaldi_tab_helpers.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/profiles/profile.h"
 //#include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
 #include "chrome/browser/subresource_filter/chrome_content_subresource_filter_throttle_manager_factory.h"
 

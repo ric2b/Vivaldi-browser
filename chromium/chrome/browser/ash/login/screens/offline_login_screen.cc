@@ -14,10 +14,10 @@
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/signin_ui.h"
 #include "chrome/browser/ash/login/wizard_context.h"
+#include "chrome/browser/ash/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/ui/webui/chromeos/login/offline_login_screen_handler.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -147,8 +147,8 @@ void OfflineLoginScreen::HandleCompleteAuth(const std::string& email,
                   "account type="
                << AccountId::AccountTypeToString(account_id.GetAccountType());
     LoginDisplayHost::default_host()->GetSigninUI()->ShowSigninError(
-        SigninError::kOfflineFailedNetworkNotConnected,
-        /*details=*/std::string(), /*login_attempts=*/1);
+        SigninError::kNewUserFailedNetworkNotConnected,
+        /*details=*/std::string());
     return;
   }
 

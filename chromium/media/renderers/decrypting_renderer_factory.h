@@ -35,8 +35,7 @@ class MEDIA_EXPORT DecryptingRendererFactory final : public RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       RequestOverlayInfoCB request_overlay_info_cb,
-      const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) final;
+      const gfx::ColorSpace& target_color_space) final;
 
  private:
   MediaLog* media_log_;

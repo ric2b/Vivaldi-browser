@@ -430,7 +430,7 @@ Browser* VivaldiSessionService::CreateRestoredBrowser(
     params.initial_bounds = bounds;
   }
   params.initial_show_state = show_state;
-  params.is_session_restore = true;
+  params.creation_source = Browser::CreationSource::kSessionRestore;
   params.is_vivaldi = true;
   return Browser::Create(params);
 }

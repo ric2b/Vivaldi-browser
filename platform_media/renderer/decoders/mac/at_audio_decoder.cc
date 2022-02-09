@@ -22,7 +22,6 @@
 #include "media/base/demuxer_stream.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
 #include "platform_media/common/platform_logging_util.h"
-#include "platform_media/common/platform_mime_util.h"
 #include "platform_media/renderer/decoders/mac/at_aac_helper.h"
 
 namespace media {
@@ -211,7 +210,7 @@ ATAudioDecoder::ATAudioDecoder(
 ATAudioDecoder::~ATAudioDecoder() = default;
 
 AudioDecoderType ATAudioDecoder::GetDecoderType() const {
-  return AudioDecoderType::kDecrypting;
+  return AudioDecoderType::kVivATAudio;
 }
 
 void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
@@ -237,17 +236,6 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   if (!codec_helper_) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Unsupported codec: " << GetCodecName(config.codec());
-    task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            std::move(init_cb),
-            media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
-    return;
-  }
-
-  if (!IsPlatformAudioDecoderAvailable(config.codec())) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " PlatformAudioDecoder Not Available for codec : " << GetCodecName(config.codec());
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(

@@ -21,7 +21,6 @@
 <translation id="125220115284141797">Alapértelmezett</translation>
 <translation id="1297175357211070620">Cél</translation>
 <translation id="1303101771013849280">Könyvjelzők HTML-fájlja</translation>
-<translation id="1380436189840894976">Mindenképp kilépsz az inkognitómódból?</translation>
 <translation id="1430915738399379752">Nyomtatás</translation>
 <translation id="1433811987160647649">Kérdezzen rá hozzáférés előtt</translation>
 <translation id="1451375123200651445">Weboldal, egyetlen fájl</translation>
@@ -38,7 +37,6 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fájlleírók</translation>
 <translation id="1682548588986054654">Új inkognitó ablak</translation>
-<translation id="1698122934742150150">Csak a jelenlegi inkognitó munkamenet</translation>
 <translation id="1706625117072057435">Nagyítási/kicsinyítési szintek</translation>
 <translation id="1708338024780164500">(Inaktív)</translation>
 <translation id="1723824996674794290">&amp;Új ablak</translation>
@@ -87,6 +85,7 @@
 <translation id="241082044617551207">Ismeretlen beépülő modul</translation>
 <translation id="2423578206845792524">Ké&amp;p mentése másként...</translation>
 <translation id="2439110203301358333">A számítógépen lévő egyik program olyan bővítményt adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
+<translation id="2443487764245141020">A webhelyeknek is fel kell ismerniük, hogy eszközöd azonosítót használ</translation>
 <translation id="2445081178310039857">A bővítmény gyökérkönyvtárát kötelező megadni.</translation>
 <translation id="2470702053775288986">Nem támogatott kiterjesztések kikapcsolva</translation>
 <translation id="2476578072172137802">Webhelybeállítások</translation>
@@ -157,11 +156,9 @@
 <translation id="3511307672085573050">Hivatkozás címén&amp;ek másolása</translation>
 <translation id="354068948465830244">Olvashatod és módosíthatod a webhelyadatokat</translation>
 <translation id="3560034655160545939">Helyesírá&amp;s-ellenőrzés</translation>
-<translation id="3574917942258583917">Mindenképp bezárod az inkognitómódot?</translation>
 <translation id="3587482841069643663">Mind</translation>
 <translation id="3627588569887975815">Hivatkozás megnyitása inko&amp;gnitó ablakban</translation>
 <translation id="3627879631695760395"><ph name="APP" /> telepítése…</translation>
-<translation id="3668823961463113931">Kezelők</translation>
 <translation id="3678156199662914018">Bővítmény: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Képernyő-megosztási kérés</translation>
 <translation id="3708684582558000260">A bezárt webhelyek nem fejezhetik be az adatküldést és -fogadást</translation>
@@ -195,7 +192,6 @@
 <translation id="4096508467498758490">A fejlesztői módban futó bővítmények kikapcsolása</translation>
 <translation id="4100839878934973028">A számítógépen lévő egyik program olyan alkalmazást adott hozzá, amely módosíthatja a Vivaldi működését.</translation>
 <translation id="4109898769411476438">Importálás előtt zárd be a böngészőt</translation>
-<translation id="4115080753528843955">Egyes tartalomszolgáltatások egyedi azonosítókat használnak a védett tartalmak eléréséhez</translation>
 <translation id="4130207949184424187">Ez a bővítmény módosította, hogy melyik oldal jelenjen meg a cím- és keresősávban indított kereséskor.</translation>
 <translation id="4131410914670010031">Fekete-fehér</translation>
 <translation id="4176463684765177261">Kikapcsolva</translation>
@@ -224,6 +220,7 @@
 <translation id="4726710629007580002">Figyelmeztetések jelentkeztek a bővítmény telepítési kísérletekor:</translation>
 <translation id="479536056609751218">Weboldal, csak HTML</translation>
 <translation id="4839303808932127586">Vi&amp;deo mentése másként...</translation>
+<translation id="4840096453115567876">Mindenképp kilépsz az inkognitó módból?</translation>
 <translation id="488785315393301722">Részletek megjelenítése</translation>
 <translation id="4907306957610201395">Engedélykategória</translation>
 <translation id="4912643508233590958">Tétlen aktiválások</translation>
@@ -363,6 +360,7 @@
 <translation id="7287143125007575591">Hozzáférés megtagadva.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Vezérlők megjelenítése</translation>
+<translation id="7374461526650987610">Protokollkezelők</translation>
 <translation id="7385854874724088939">Valami nem sikerült a nyomtatás során. Ellenőrizd a nyomtatót, és próbáld újra.</translation>
 <translation id="7412226954991670867">GPU memória</translation>
 <translation id="7421925624202799674">&amp;Oldal forrásának megtekintése</translation>
@@ -375,6 +373,7 @@
 <translation id="7576690715254076113">Szétválogatás</translation>
 <translation id="7629827748548208700">Lap: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Mégse</translation>
+<translation id="7659154729610375585">Mindenképp bezárod az inkognitó módot?</translation>
 <translation id="7661259717474717992">A webhelyek süti-adatokat menthetnek el és olvashatnak</translation>
 <translation id="7663719505383602579">Fogadó fél: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Rendszergazda által telepítve</translation>
@@ -453,6 +452,7 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8899851313684471736">Hivatkozás megnyitása új &amp;ablakban</translation>
 <translation id="8915370057835397490">Javaslatok betöltése</translation>
 <translation id="8916476537757519021">Inkognitó subframe: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8929696694736010839">Csak a jelenlegi inkognitó munkamenet</translation>
 <translation id="895944840846194039">JavaScript-memória</translation>
 <translation id="8962083179518285172">Részletek elrejtése</translation>
 <translation id="8973557916016709913">Nagyítási szint eltávolítása</translation>

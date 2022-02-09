@@ -170,6 +170,12 @@ void NoteModelTypeProcessor::OnUpdateReceived(
     return;
   }
 
+// Before applying incremental updates, run a quirk to mitigate some data
+  // corruption issue introduced by crbug.com/1231450.
+  for (syncer::UpdateResponseData& update : updates) {
+    MaybeFixGuidInSpecificsDueToPastBug(*note_tracker_, &update.entity);
+  }
+
   // Incremental updates.
   ScopedRemoteUpdateNotes update_notes(notes_model_,
                                        notes_model_observer_.get());
@@ -515,7 +521,9 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
   }
   data_dictionary->SetInteger("LOCAL_EXTERNAL_ID", node->id());
   data_dictionary->SetInteger("positionIndex", index);
-  data_dictionary->Set("metadata", syncer::EntityMetadataToValue(*metadata));
+  data_dictionary->SetKey("metadata",
+                          base::Value::FromUniquePtrValue(
+                              syncer::EntityMetadataToValue(*metadata)));
   data_dictionary->SetString("modelType", "Notes");
   all_nodes->Append(std::move(data_dictionary));
 

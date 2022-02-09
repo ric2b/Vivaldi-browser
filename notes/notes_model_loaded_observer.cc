@@ -8,7 +8,7 @@
 #include "app/vivaldi_apptools.h"
 #include "notes/notes_model.h"
 
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 
 namespace vivaldi {
 
@@ -19,7 +19,7 @@ void NotesModelLoadedObserver::NotesModelLoaded(NotesModel* model,
                                                 bool ids_reassigned) {
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     // Causes lazy-load if sync is enabled.
-    ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
+    SyncServiceFactory::GetInstance()->GetForProfile(profile_);
   }
   model->RemoveObserver(this);
   delete this;

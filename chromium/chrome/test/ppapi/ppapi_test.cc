@@ -49,10 +49,6 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/gl/gl_switches.h"
 
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 using content::RenderViewHost;
 using content::TestMessageHandler;
 
@@ -86,11 +82,8 @@ void PPAPITestMessageHandler::Reset() {
 }
 
 PPAPITestBase::InfoBarObserver::InfoBarObserver(PPAPITestBase* test_base)
-    : test_base_(test_base),
-      expecting_infobar_(false),
-      should_accept_(false),
-      infobar_observer_(this) {
-  infobar_observer_.Add(GetInfoBarManager());
+    : test_base_(test_base), expecting_infobar_(false), should_accept_(false) {
+  infobar_observation_.Observe(GetInfoBarManager());
 }
 
 PPAPITestBase::InfoBarObserver::~InfoBarObserver() {
@@ -116,7 +109,8 @@ void PPAPITestBase::InfoBarObserver::OnInfoBarAdded(
 
 void PPAPITestBase::InfoBarObserver::OnManagerShuttingDown(
     infobars::InfoBarManager* manager) {
-  infobar_observer_.Remove(manager);
+  ASSERT_TRUE(infobar_observation_.IsObservingSource(manager));
+  infobar_observation_.Reset();
 }
 
 void PPAPITestBase::InfoBarObserver::VerifyInfoBarState() {
@@ -321,12 +315,10 @@ void OutOfProcessPPAPITest::SetUpCommandLine(base::CommandLine* command_line) {
 }
 
 void OutOfProcessPPAPITest::RunTest(const std::string& test_case) {
-  // TODO(crbug.com/1231528): Investigate why this test fails on Win 7 bots.
 #if defined(OS_WIN)
-  if (test_case == "Printing" &&
-      base::win::GetVersion() <= base::win::Version::WIN7) {
+  // See crbug.com/1231528 for context.
+  if (test_case == "Printing")
     return;
-  }
 #endif
 
   PPAPITestBase::RunTest(test_case);

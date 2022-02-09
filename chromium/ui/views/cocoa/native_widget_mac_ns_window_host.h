@@ -146,7 +146,9 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void SetBoundsInScreen(const gfx::Rect& bounds);
 
   // Tell the window to transition to being fullscreen or not-fullscreen.
-  void SetFullscreen(bool fullscreen);
+  // If `delay` is given, this sets the target fullscreen state and then posts
+  // a delayed task to request the window transition. See crbug.com/1210548.
+  void SetFullscreen(bool fullscreen, base::TimeDelta delay = {});
 
   // The ultimate fullscreen state that is being targeted (irrespective of any
   // active transitions).
@@ -218,11 +220,13 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // Used by NativeWidgetPrivate::GetGlobalCapture.
   static NSView* GetGlobalCaptureView();
 
-  // Add and Update the remote window controls overlay view for a PWA.
+  // Add, update and remove the remote window controls overlay view for a PWA.
   void AddRemoteWindowControlsOverlayView(
       remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
   void UpdateRemoteWindowControlsOverlayView(
       const gfx::Rect& bounds,
+      remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
+  void RemoveRemoteWindowControlsOverlayView(
       remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
 
  private:
@@ -230,6 +234,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   void UpdateCompositorProperties();
   void DestroyCompositor();
+
+  // This is used to request a delayed fullscreen window transition after some
+  // other window placement occurs; see SetFullscreen() and crbug.com/1210548.
+  static void SetFullscreenAfterDelay(uint64_t bridged_native_widget_id);
 
   // Sort |attached_native_view_host_views_| by the order in which their
   // NSViews should appear as subviews. This does a recursive pre-order

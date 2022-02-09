@@ -24,9 +24,8 @@ import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.ui.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ui.SigninPromoController;
-import org.chromium.chrome.browser.signin.ui.SigninPromoUtil;
-import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.chrome.browser.sync.ProfileSyncService.SyncStateChangedListener;
+import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncService.SyncStateChangedListener;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
@@ -83,7 +82,7 @@ public class SyncPromoPreference
                 .addSignInAllowedObserver(this);
         mProfileDataCache.addObserver(this);
         FirstRunSignInProcessor.updateSigninManagerFirstRunCheckDone();
-        ProfileSyncService syncService = ProfileSyncService.get();
+        SyncService syncService = SyncService.get();
         if (syncService != null) {
             syncService.addSyncStateChangedListener(this);
         }
@@ -100,7 +99,7 @@ public class SyncPromoPreference
                 .getSigninManager(Profile.getLastUsedRegularProfile())
                 .removeSignInAllowedObserver(this);
         mProfileDataCache.removeObserver(this);
-        ProfileSyncService syncService = ProfileSyncService.get();
+        SyncService syncService = SyncService.get();
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
         }
@@ -189,16 +188,10 @@ public class SyncPromoPreference
         if (mSigninPromoController == null) {
             return;
         }
-
         PersonalizedSigninPromoView syncPromoView =
                 (PersonalizedSigninPromoView) holder.findViewById(R.id.signin_promo_view_container);
-        if (mState == State.PERSONALIZED_SIGNIN_PROMO) {
-            SigninPromoUtil.setupSigninPromoViewFromCache(mSigninPromoController, mProfileDataCache,
-                    syncPromoView, this::onPromoDismissClicked);
-        } else {
-            SigninPromoUtil.setupSyncPromoViewFromCache(mSigninPromoController, mProfileDataCache,
-                    syncPromoView, this::onPromoDismissClicked);
-        }
+        mSigninPromoController.setUpSyncPromoView(
+                mProfileDataCache, syncPromoView, this::onPromoDismissClicked);
     }
 
     public void onPromoDismissClicked() {
@@ -213,7 +206,7 @@ public class SyncPromoPreference
         update();
     }
 
-    // ProfileSyncServiceListener implementation.
+    // SyncService.SyncStateChangedListener implementation.
     @Override
     public void syncStateChanged() {
         update();

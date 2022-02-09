@@ -117,4 +117,18 @@ class ChromePreferenceKeyChecker extends BaseChromePreferenceKeyChecker {
             return mKeysInUse.contains(key);
         }
     }
+
+    @Override
+    void checkIsPrefixInUse(KeyPrefix prefix) {
+        if (mLegacyPrefixes.contains(prefix)) {
+            return;
+        }
+
+        if (mKeysInUse.contains(prefix.pattern())) {
+            return;
+        }
+
+        throw new RuntimeException("SharedPreferences KeyPrefix \"" + prefix.pattern()
+                + "\" is not registered in ChromePreferenceKeys.createKeysInUse()");
+    }
 }

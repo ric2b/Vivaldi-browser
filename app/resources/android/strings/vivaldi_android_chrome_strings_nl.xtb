@@ -6,6 +6,7 @@
 <translation id="1644574205037202324">Geschiedenis</translation>
 <translation id="17513872634828108">Open tabs</translation>
 <translation id="1829244130665387512">Zoeken op pagina</translation>
+<translation id="1910514478706885609">In nieuwe tabgroep openen</translation>
 <translation id="2038563949887743358">'Desktopwebsite aanvragen' inschakelen</translation>
 <translation id="2306442503286132111">Bladwijzer opgeslagen in map <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Uiterlijk</translation>
@@ -17,7 +18,8 @@ other{<ph name="BOOKMARKS_COUNT_MANY" /> bladwijzers}}</translation>
 <translation id="3076631378407175873">Auteursrecht <ph name="YEAR" /> Vivaldi Technologies AS. Alle rechten voorbehouden.</translation>
 <translation id="3234355010754616171">Nieuwe privétab</translation>
 <translation id="3377025655491224618">Privétab</translation>
-<translation id="3518985090088779359">Akkoord, doorgaan</translation>
+<translation id="3504699618187058974">Tabgroepen</translation>
+<translation id="3518985090088779359">Accepteren &amp; doorgaan</translation>
 <translation id="3700829948786686853">Welkom bij Vivaldi</translation>
 <translation id="3719826155360621982">Startpagina</translation>
 <translation id="385051799172605136">Terug</translation>

@@ -106,10 +106,8 @@ void WriteValue(base::Pickle* m, const base::Value* value, int recursion) {
       break;
     }
     case base::Value::Type::DOUBLE: {
-      double val;
-      result = value->GetAsDouble(&val);
-      DCHECK(result);
-      WriteParam(m, val);
+      DCHECK(value->is_int() || value->is_double());
+      WriteParam(m, value->GetDouble());
       break;
     }
     case base::Value::Type::STRING: {
@@ -354,8 +352,7 @@ void ParamTraits<unsigned int>::Log(const param_type& p, std::string* l) {
 }
 
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
-    defined(OS_FUCHSIA) || (defined(OS_ANDROID) && defined(ARCH_CPU_64_BITS)) || \
-    defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    defined(OS_FUCHSIA) || (defined(OS_ANDROID) && defined(ARCH_CPU_64_BITS))
 void ParamTraits<long>::Log(const param_type& p, std::string* l) {
   l->append(base::NumberToString(p));
 }

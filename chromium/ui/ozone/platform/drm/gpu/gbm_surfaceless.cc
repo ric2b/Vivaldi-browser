@@ -299,6 +299,8 @@ void GbmSurfaceless::FenceRetired(PendingFrame* frame) {
 void GbmSurfaceless::OnSubmission(gfx::SwapResult result,
                                   gfx::GpuFenceHandle release_fence) {
   submitted_frame_->swap_result = result;
+  // TODO(edcourtney): Re-enable fences here after fixing performance
+  // regression.
 }
 
 void GbmSurfaceless::OnPresentation(const gfx::PresentationFeedback& feedback) {
@@ -312,8 +314,9 @@ void GbmSurfaceless::OnPresentation(const gfx::PresentationFeedback& feedback) {
   submitted_frame_->overlays.clear();
 
   gfx::SwapResult result = submitted_frame_->swap_result;
-  std::move(submitted_frame_->completion_callback)
-      .Run(gfx::SwapCompletionResult(result));
+  if (submitted_frame_->completion_callback)
+    std::move(submitted_frame_->completion_callback)
+        .Run(gfx::SwapCompletionResult(result));
   std::move(submitted_frame_->presentation_callback).Run(feedback_copy);
   submitted_frame_.reset();
 

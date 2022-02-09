@@ -54,6 +54,7 @@
 <translation id="3402602684546832928">Välj Opera-bokmärkesfil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Bekräfta stängning</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> är redan installerad och kommer att aktiveras efter att webbläsaren har startats om.</translation>
 <translation id="3516213908976398531">Landskap 11</translation>
 <translation id="3521635864657970829">Är du säker på att du vill stänga det här fönstret?</translation>
 <translation id="3540597690227428180">Djur 9</translation>
@@ -80,7 +81,7 @@
 <translation id="4420816922321010053">Är du säker på att du vill stänga Vivaldi?</translation>
 <translation id="443008484043213881">Verktyg</translation>
 <translation id="4456211719108566931">Monster 6</translation>
-<translation id="4512900838580567989">Öppna länk i bakgrundsflik</translation>
+<translation id="4512900838580567989">Öppna länk i ny bakgrundsflik</translation>
 <translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4548358047305717967">Öppna bild i bakgrundsflik</translation>
 <translation id="4582480609585453144">Öppna länk i bakgrundsflik</translation>
@@ -104,7 +105,7 @@
 <translation id="5648110075441906505">Öppna bild i nytt fönster</translation>
 <translation id="5656371807944747581">Uppdateringsfel!</translation>
 <translation id="5716238312826274098">Inaktivera aviseringar</translation>
-<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> är nu tillgänglig (du har <ph name="OLD_VERSION" />). Vill du ladda ner den nu?</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> är nu tillgängligt (du har <ph name="OLD_VERSION" />). Vill du ladda ner den nu?</translation>
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Ny mapp</translation>
 <translation id="588258955323874662">Fullskärm</translation>
@@ -152,17 +153,18 @@
 <translation id="8562339533180097902">Stäng Vivaldi och installera nu</translation>
 <translation id="8567452685425968223">Extraherar uppdatering...</translation>
 <translation id="8624587806981488221">&amp;Läs in bilden igen</translation>
-<translation id="864444594187862076">Opera version 15+ (developer)</translation>
+<translation id="864444594187862076">Opera version 15+ (Utvecklare)</translation>
 <translation id="8651348004684669199">Lägg till aktiv flik</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
-<translation id="8773635261052182196">Du kommer inte längre se aviseringar. Du kan aktivera dem igen från Vivaldiinställningarna.</translation>
+<translation id="8773635261052182196">Du kommer inte längre se dessa aviseringar. Du kan aktivera dem igen från Vivaldiinställningarna.</translation>
 <translation id="8813277370772331957">Påminn mig senare</translation>
 <translation id="8894900864683381599">Lägg till länk till webbpanel</translation>
 <translation id="8912720443398351457">Är du säker på att du vill stänga Vivaldi?</translation>
 <translation id="8947109330183116400">Välj HTML-bokmärkesfil</translation>
 <translation id="9017566390391482291">Välj Vivaldi-profilmapp för import</translation>
+<translation id="9048058608784130603">Väntar på uppdatering <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Redigera</translation>
 <translation id="912022491595344261">Öppna bild som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Öppna länk</translation>

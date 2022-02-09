@@ -31,6 +31,7 @@
 
 namespace ui {
 
+class ScenicWindowDelegate;
 class ScenicWindowManager;
 
 class COMPONENT_EXPORT(OZONE) ScenicWindow : public PlatformWindow,
@@ -60,6 +61,8 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow : public PlatformWindow,
 
   // Returns a ViewRef associated with this window.
   fuchsia::ui::views::ViewRef CloneViewRef();
+
+  bool virtual_keyboard_enabled() const { return virtual_keyboard_enabled_; }
 
   // PlatformWindow implementation.
   gfx::Rect GetBounds() const override;
@@ -111,6 +114,7 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow : public PlatformWindow,
 
   ScenicWindowManager* const manager_;
   PlatformWindowDelegate* const delegate_;
+  ScenicWindowDelegate* const scenic_window_delegate_;
   gfx::AcceleratedWidget const window_id_;
 
   // Dispatches Scenic input events as Chrome ui::Events.
@@ -163,6 +167,7 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow : public PlatformWindow,
   absl::optional<fuchsia::ui::gfx::ViewProperties> view_properties_;
 
   bool visible_ = false;
+  bool virtual_keyboard_enabled_ = false;
 
   // Tracks if the View was previously hidden due to having a size of zero.
   // If the View was previously zero sized, then we need to re-attach it to

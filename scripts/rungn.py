@@ -102,7 +102,7 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
 
       # Copied from Chromium
       def CallPythonScopeScript(command, **kwargs):
-        response = subprocess.check_output(command, **kwargs)
+        response = subprocess.check_output(command, **kwargs).decode("utf-8")
 
         _globals = {"__builtins__":None}
         _locals = {}
@@ -163,7 +163,7 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
       extra_bootstrap_args = []
       if os.access(os.path.join(sourcedir, "thirdparty", "gn", "src", "last_commit_position.h"), os.F_OK):
         extra_bootstrap_args.append("--no-last-commit-position")
-      if subprocess.call(["python",
+      if subprocess.call(["python3",
         os.path.join(sourcedir, "thirdparty", "gn", "build",
                      "gen.py"),
         "--out-path", gn_releasedir,

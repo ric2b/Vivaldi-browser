@@ -10,6 +10,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_style.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/request_type.h"
 #include "components/strings/grit/components_strings.h"
@@ -54,35 +55,45 @@ class BubbleButtonController : public views::ButtonController {
 
 PermissionChip::PermissionChip(
     permissions::PermissionPrompt::Delegate* delegate,
-    const gfx::VectorIcon& icon,
-    std::u16string message,
-    bool should_start_open)
-    : delegate_(delegate), should_start_open_(should_start_open) {
-  DCHECK(delegate);
+    DisplayParams initializer)
+    : delegate_(delegate),
+      should_start_open_(initializer.should_start_open),
+      should_expand_(initializer.should_expand) {
+  DCHECK(delegate_);
   SetUseDefaultFillLayout(true);
 
   chip_button_ = AddChildView(std::make_unique<OmniboxChipButton>(
       base::BindRepeating(&PermissionChip::ChipButtonPressed,
                           base::Unretained(this)),
-      icon, message, true));
-
+      initializer.icon, initializer.message, initializer.is_prominent));
+  chip_button_->SetTheme(initializer.theme);
   chip_button_->SetButtonController(std::make_unique<BubbleButtonController>(
       chip_button_, this,
       std::make_unique<views::Button::DefaultButtonControllerDelegate>(
           chip_button_)));
-
   chip_button_->SetExpandAnimationEndedCallback(base::BindRepeating(
       &PermissionChip::ExpandAnimationEnded, base::Unretained(this)));
-
-  chip_button_->SetTheme(OmniboxChipButton::Theme::kBlue);
 
   Show(should_start_open_);
 }
 
 PermissionChip::~PermissionChip() {
+  views::Widget* const bubble_widget = GetPromptBubbleWidget();
+  if (bubble_widget) {
+    bubble_widget->RemoveObserver(this);
+    bubble_widget->Close();
+  }
   CHECK(!IsInObserverList());
   collapse_timer_.AbandonAndStop();
   dismiss_timer_.AbandonAndStop();
+}
+
+void PermissionChip::OpenBubble() {
+  // The prompt bubble is either not opened yet or already closed on
+  // deactivation.
+  DCHECK(!GetPromptBubbleWidget());
+
+  prompt_bubble_tracker_.SetView(CreateBubble());
 }
 
 void PermissionChip::Hide() {
@@ -94,6 +105,19 @@ void PermissionChip::Reshow() {
     return;
   SetVisible(true);
   Show(/*always_open_bubble=*/false);
+}
+
+void PermissionChip::Collapse(bool allow_restart) {
+  if (allow_restart && (IsMouseHovered() || IsBubbleShowing())) {
+    StartCollapseTimer();
+  } else {
+    chip_button_->AnimateCollapse();
+    StartDismissTimer();
+  }
+}
+
+void PermissionChip::ShowBlockedBadge() {
+  chip_button_->SetShowBlockedBadge(true);
 }
 
 void PermissionChip::OnMouseEntered(const ui::MouseEvent& event) {
@@ -110,7 +134,7 @@ void PermissionChip::AddedToWidget() {
   }
 }
 
-void PermissionChip::OnWidgetClosing(views::Widget* widget) {
+void PermissionChip::OnWidgetDestroying(views::Widget* widget) {
   widget->RemoveObserver(this);
   // If permission request is still active after the prompt was closed,
   // collapse the chip.
@@ -118,13 +142,24 @@ void PermissionChip::OnWidgetClosing(views::Widget* widget) {
 }
 
 bool PermissionChip::IsBubbleShowing() const {
-  return false;
+  return prompt_bubble_tracker_.view() != nullptr;
+}
+
+views::Widget* PermissionChip::GetPromptBubbleWidgetForTesting() {
+  return GetPromptBubbleWidget();
+}
+
+views::Widget* PermissionChip::GetPromptBubbleWidget() {
+  return prompt_bubble_tracker_.view()
+             ? prompt_bubble_tracker_.view()->GetWidget()
+             : nullptr;
 }
 
 void PermissionChip::Show(bool always_open_bubble) {
   // TODO(olesiamarukhno): Add tests for animation logic.
   chip_button_->ResetAnimation();
-  if (!delegate_->WasCurrentRequestAlreadyDisplayed() || always_open_bubble) {
+  if (should_expand_ &&
+      (!delegate_->WasCurrentRequestAlreadyDisplayed() || always_open_bubble)) {
     chip_button_->AnimateExpand();
   } else {
     StartDismissTimer();
@@ -159,20 +194,20 @@ void PermissionChip::StartCollapseTimer() {
                      /*allow_restart=*/true));
 }
 
-void PermissionChip::Collapse(bool allow_restart) {
-  if (allow_restart && (IsMouseHovered() || IsBubbleShowing())) {
-    StartCollapseTimer();
-  } else {
-    chip_button_->AnimateCollapse();
-    StartDismissTimer();
-  }
-}
-
 void PermissionChip::StartDismissTimer() {
-  constexpr auto kDelayBeforeDismissingRequest =
-      base::TimeDelta::FromSeconds(6);
-  dismiss_timer_.Start(FROM_HERE, kDelayBeforeDismissingRequest, this,
-                       &PermissionChip::Dismiss);
+  if (should_expand_) {
+    if (base::FeatureList::IsEnabled(
+            permissions::features::kPermissionChipAutoDismiss)) {
+      auto delay = base::TimeDelta::FromMilliseconds(
+          permissions::features::kPermissionChipAutoDismissDelay.Get());
+      dismiss_timer_.Start(FROM_HERE, delay, this, &PermissionChip::Dismiss);
+    }
+  } else {
+    // Abusive origins do not support expand animation, hence the dismiss timer
+    // should be longer.
+    dismiss_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(18), this,
+                         &PermissionChip::Dismiss);
+  }
 }
 
 void PermissionChip::Dismiss() {

@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/check_op.h"
+#include "base/cxx17_backports.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
@@ -14,7 +15,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -23,7 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
-#include "components/omnibox/browser/actions/omnibox_pedal.h"
+#include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/document_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
@@ -212,7 +212,7 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
                              : nullptr),
       keyword(match.keyword),
       from_keyword(match.from_keyword),
-      pedal(match.pedal),
+      action(match.action),
       from_previous(match.from_previous),
       search_terms_args(
           match.search_terms_args
@@ -271,7 +271,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   associated_keyword = std::move(match.associated_keyword);
   keyword = std::move(match.keyword);
   from_keyword = std::move(match.from_keyword);
-  pedal = std::move(match.pedal);
+  action = std::move(match.action);
   from_previous = std::move(match.from_previous);
   search_terms_args = std::move(match.search_terms_args);
   post_content = std::move(match.post_content);
@@ -336,7 +336,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
           : nullptr);
   keyword = match.keyword;
   from_keyword = match.from_keyword;
-  pedal = match.pedal;
+  action = match.action;
   from_previous = match.from_previous;
   search_terms_args.reset(
       match.search_terms_args
@@ -699,7 +699,7 @@ bool AutocompleteMatch::IsSearchHistoryType(Type type) {
 }
 
 // static
-bool AutocompleteMatch::IsPedalCompatibleType(Type type) {
+bool AutocompleteMatch::IsActionCompatibleType(Type type) {
   // Note: There is a PEDAL type, but it is deprecated because Pedals always
   // attach to matches of other types instead of creating dedicated matches.
   return type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY;
@@ -1069,7 +1069,7 @@ bool AutocompleteMatch::IsTrivialAutocompletion() const {
 bool AutocompleteMatch::SupportsDeletion() const {
   return deletable ||
          std::any_of(duplicate_matches.begin(), duplicate_matches.end(),
-                     [](auto m) { return m.deletable; });
+                     [](const auto& m) { return m.deletable; });
 }
 
 AutocompleteMatch
@@ -1198,11 +1198,11 @@ void AutocompleteMatch::UpgradeMatchWithPropertiesFrom(
     relevance = duplicate_match.relevance;
   }
 
-  // Take the |pedal|, if any, so that it will be presented instead of buried.
-  if (!pedal && duplicate_match.pedal &&
-      AutocompleteMatch::IsPedalCompatibleType(type)) {
-    pedal = duplicate_match.pedal;
-    duplicate_match.pedal = nullptr;
+  // Take the |action|, if any, so that it will be presented instead of buried.
+  if (!action && duplicate_match.action &&
+      AutocompleteMatch::IsActionCompatibleType(type)) {
+    action = duplicate_match.action;
+    duplicate_match.action = nullptr;
   }
 
   // Copy |rich_autocompletion_triggered| for counterfactual logging. Only copy

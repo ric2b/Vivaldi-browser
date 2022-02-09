@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 
@@ -28,6 +29,7 @@ class VivaldiExtensionHost
     : public extensions::ExtensionFunctionDispatcher::Delegate {
  public:
   VivaldiExtensionHost(content::BrowserContext* browser_context,
+                       const GURL& url,
                        extensions::mojom::ViewType host_type,
                        content::WebContents* webcontents);
 

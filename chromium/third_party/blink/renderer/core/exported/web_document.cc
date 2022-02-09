@@ -110,8 +110,8 @@ WebString WebDocument::GetReferrer() const {
   return ConstUnwrap<Document>()->referrer();
 }
 
-absl::optional<SkColor> WebDocument::ThemeColor() const {
-  absl::optional<Color> color = ConstUnwrap<Document>()->ThemeColor();
+absl::optional<SkColor> WebDocument::ThemeColor() {
+  absl::optional<Color> color = Unwrap<Document>()->ThemeColor();
   if (color)
     return color->Rgb();
   return absl::nullopt;
@@ -289,6 +289,26 @@ uint64_t WebDocument::GetVisualViewportScrollingElementIdForTesting() {
 
 bool WebDocument::IsLoaded() {
   return !ConstUnwrap<Document>()->Parser();
+}
+
+bool WebDocument::IsPrerendering() {
+  return ConstUnwrap<Document>()->IsPrerendering();
+}
+
+bool WebDocument::IsAccessibilityEnabled() {
+  return ConstUnwrap<Document>()->IsAccessibilityEnabled();
+}
+
+void WebDocument::AddPostPrerenderingActivationStep(
+    base::OnceClosure callback) {
+  return Unwrap<Document>()->AddPostPrerenderingActivationStep(
+      std::move(callback));
+}
+
+void WebDocument::SetCookieManager(
+    CrossVariantMojoRemote<network::mojom::RestrictedCookieManagerInterfaceBase>
+        cookie_manager) {
+  Unwrap<Document>()->SetCookieManager(std::move(cookie_manager));
 }
 
 WebDocument::WebDocument(Document* elem) : WebNode(elem) {}

@@ -12,8 +12,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/stl_util.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/stl_util.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -54,7 +54,7 @@ class DataRequestHandlerTest;
 @property(nonatomic, readonly) long long currentOffset;
 @property(nonatomic, readonly) BOOL requestsAllDataToEndOfResource;
 
-- (void)respondWithData:(NSData *)data;
+- (void)respondWithData:(NSData*)data;
 
 @end
 
@@ -88,10 +88,6 @@ constexpr int kMaxReadChunkSize = kIPCSourceSharedMemorySize;
 
 class TestDataSource {
  public:
-  TestDataSource()
-      : eos_(false),
-        error_(false) {}
-
   void set_data(const std::vector<uint8_t>& data) { data_ = data; }
   void set_eos(bool eos) { eos_ = eos; }
   void set_error(bool error) { error_ = error; }
@@ -120,14 +116,13 @@ class TestDataSource {
       memcpy(writable_mapping_.memory(),
              data_.data() + buffer.GetReadPosition(), size);
     }
-    buffer.SetReadSize(size);
-
+    last_read_size_ = size;
     buffer_ = std::move(buffer);
   }
 
   void CallPendingCallback() {
     CHECK(buffer_);
-    ipc_data_source::Buffer::SendReply(std::move(buffer_));
+    ipc_data_source::Buffer::OnRawDataRead(last_read_size_, std::move(buffer_));
   }
 
   ipc_data_source::Buffer buffer_;
@@ -135,8 +130,9 @@ class TestDataSource {
 
  private:
   std::vector<uint8_t> data_;
-  bool eos_;
-  bool error_;
+  bool eos_ = false;
+  bool error_ = false;
+  int last_read_size_ = 0;
 };
 
 // The data members describing the state of the request are accessed from two
@@ -152,13 +148,9 @@ class DataRequestHandlerTest : public testing::Test {
 
   struct Request {
     Request() = default;
-    ~Request() {
-      CHECK(!loading_request);
-    }
+    ~Request() { CHECK(!loading_request); }
 
-    bool finished() const {
-      return success || read_error || aborted;
-    }
+    bool finished() const { return success || read_error || aborted; }
 
     AVAssetResourceLoadingRequest* loading_request = nil;
     bool data_available = false;
@@ -201,15 +193,14 @@ class DataRequestHandlerTest : public testing::Test {
     requests_[key] = std::make_unique<Request>();
 
     MockAVAssetResourceLoadingDataRequest* data_request =
-        [[MockAVAssetResourceLoadingDataRequest alloc]
-            initWithTest:this
-                 withKey:key
-              withLength:length
-              withOffset:offset];
+        [[MockAVAssetResourceLoadingDataRequest alloc] initWithTest:this
+                                                            withKey:key
+                                                         withLength:length
+                                                         withOffset:offset];
 
     MockAVAssetResourceLoadingRequest* loading_request_mock =
-        [[MockAVAssetResourceLoadingRequest alloc]
-            initWithTest:this withKey:key];
+        [[MockAVAssetResourceLoadingRequest alloc] initWithTest:this
+                                                        withKey:key];
     loading_request_mock.dataRequest = data_request;
 
     // Pretend the mock is a real thing.
@@ -259,9 +250,7 @@ class DataRequestHandlerTest : public testing::Test {
     return requests_[key].get();
   }
 
-  bool is_finished(NSNumber* key) {
-    return request(key)->finished();
-  }
+  bool is_finished(NSNumber* key) { return request(key)->finished(); }
 
   void OnDataAvailable(AVAssetResourceLoadingDataRequest* data_request,
                        NSNumber* key,
@@ -310,7 +299,6 @@ class DataRequestHandlerTest : public testing::Test {
   size_t loading_request_instance_count_ = 0;
 };
 
-
 }  // namespace
 }  // namespace media
 
@@ -350,11 +338,11 @@ class DataRequestHandlerTest : public testing::Test {
 @synthesize requestedOffset = requested_offset_;
 @synthesize currentOffset = current_offset_;
 
- -(BOOL)requestsAllDataToEndOfResource {
-   return requested_length_ < 0;
- }
+- (BOOL)requestsAllDataToEndOfResource {
+  return requested_length_ < 0;
+}
 
-- (void)respondWithData:(NSData *)data {
+- (void)respondWithData:(NSData*)data {
   size_t read_size = [data length];
   const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data.bytes);
   current_offset_ += read_size;
@@ -403,7 +391,7 @@ class DataRequestHandlerTest : public testing::Test {
   [self finishLoadingWithError:nil];
 }
 
-- (void)finishLoadingWithError:(NSError *)error {
+- (void)finishLoadingWithError:(NSError*)error {
   finished_ = false;
   test_->OnFinishLoading(reinterpret_cast<AVAssetResourceLoadingRequest*>(self),
                          key_, error);
@@ -508,8 +496,7 @@ TEST_F(DataRequestHandlerTest, ConcurrentRequests) {
 
   std::vector<uint8_t> data(length * 2);
   for (int i = 0; i < 2; ++i) {
-    std::fill(data.begin() + length * i,
-              data.begin() + length * (i + 1), i);
+    std::fill(data.begin() + length * i, data.begin() + length * (i + 1), i);
   }
   data_source_.set_data(data);
 

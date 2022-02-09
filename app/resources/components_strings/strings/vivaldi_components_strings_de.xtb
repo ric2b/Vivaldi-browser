@@ -143,6 +143,7 @@
 <translation id="5810442152076338065">Ihre Verbindung zu <ph name="DOMAIN" /> ist mit einer veralteten Verschlüsselungs-Suite verschlüsselt.</translation>
 <translation id="5838278095973806738">Sie sollten keine vertraulichen Informationen wie Passwörter oder Kreditkartendaten auf dieser Website eingeben, da sie von Angreifern gestohlen werden könnten.</translation>
 <translation id="5869405914158311789">Diese Website ist nicht erreichbar</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 wird verwendet} other {# werden verwendet}}</translation>
 <translation id="5932224571077948991">Website zeigt aufdringliche oder irreführende Werbung an</translation>
 <translation id="6051221802930200923">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da die Website Zertifikats-Pinning verwendet. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
 <translation id="6146055958333702838">Überprüfen Sie alle Kabel und starten Sie alle verwendeten Router, Modems oder
@@ -218,9 +219,9 @@
 <translation id="8740359287975076522">Die &lt;abbr id="dnsDefinition"&gt;DNS-Adresse&lt;/abbr&gt; von <ph name="HOST_NAME" /> wurde nicht gefunden. Eine Problemdiagnose wird durchgeführt.</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
 <translation id="8940028675168378100">Geblockt von <ph name="BLOCKER_NAME" /></translation>
+<translation id="8963117664422609631">Website-Einstellungen aufrufen</translation>
 <translation id="9001074447101275817">Für den Proxy <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="9008201768610948239">Ignorieren</translation>
-<translation id="9011424611726486705">Website-Einstellungen öffnen</translation>
 <translation id="9025348182339809926">(Ungültig)</translation>
 <translation id="9039213469156557790">Darüber hinaus enthält diese Seite auch andere Ressourcen, die nicht sicher sind. Diese Ressourcen können von anderen während der Übertragung abgefangen und von einem Angreifer modifiziert werden, um das Verhalten der Seite zu ändern.</translation>
 <translation id="9062620674789239642">Eventuell wurde sie verschoben, bearbeitet oder gelöscht.</translation>

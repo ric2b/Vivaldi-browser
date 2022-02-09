@@ -185,7 +185,6 @@ public class VariationsSeedFetcher {
 
             SeedFetchInfo fetchInfo =
                     downloadContent(VariationsPlatform.ANDROID, restrictMode, milestone, channel);
-            recordFetchResultOrCode(fetchInfo.seedFetchResult);
             if (fetchInfo.seedInfo != null) {
                 SeedInfo info = fetchInfo.seedInfo;
                 VariationsSeedBridge.setVariationsFirstRunSeed(info.seedData, info.signature,
@@ -262,6 +261,7 @@ public class VariationsSeedFetcher {
             if (connection != null) {
                 connection.disconnect();
             }
+            recordFetchResultOrCode(fetchInfo.seedFetchResult);
             return fetchInfo;
         }
     }

@@ -30,6 +30,7 @@
   "accessibilityPrivate": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
+    "platforms": ["chromeos"],
     "allowlist": [
       "0D209B5E4401BB8E7873B5AB5B1346A1CB067015",  // http://crbug.com/1039158
       "2FCBCE08B34CCA1728A85F1EFBD9A34DD2558B2E"
@@ -97,11 +98,22 @@
     "extension_types": ["platform_app"],
     "allowlist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"] // Vivaldi
   }],
-  "certificateProvider": {
+  "certificateProvider": [{
     "channel": "stable",
     "platforms": ["chromeos"],
     "extension_types": ["extension", "platform_app"]
-  },
+  }, {
+    // https://crbug.com/1194693
+    "channel": "stable",
+    "component_extensions_auto_granted": false,
+    "extension_types": ["login_screen_extension"],
+    "location": "policy",
+    "platforms": ["chromeos"],
+    "allowlist": [
+      "6B748A5C005F21B7CBCF4170C2F883E435DEB511",   // CSSI Smart Card Middleware
+      "075FF17D52ED6E3C2E5EC4D99F188E7A25AF47EA"    // Beta CSSI Smart Card Middleware
+    ]
+  }],
   "chromePrivate": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"],
@@ -309,7 +321,7 @@
     "channel": "stable",
     "extension_types": ["extension"],
     "location": "policy",
-    "platforms": ["chromeos"]
+    "platforms": ["chromeos", "lacros"]
   }, {
     "channel": "stable",
     "dependencies": ["behavior:imprivata_login_screen_extension"],
@@ -516,13 +528,22 @@
       "3F5995FE79A861F019C6F093BEF98D73FA9D3A5F"  // Login screen APIs in-sesesion test extension
     ]
   }],
-  "loginScreenStorage": {
+  "loginScreenStorage": [{
     "channel": "stable",
     "dependencies": ["behavior:imprivata_extension"],
     "extension_types": ["extension","login_screen_extension"],
     "location": "policy",
     "platforms": ["chromeos"]
-  },
+  }, {
+    "channel": "canary",
+    "extension_types": ["extension","login_screen_extension"],
+    "location": "policy",
+    "platforms": ["chromeos"],
+    "allowlist": [
+      "7FE4A999359A456C4B0FB7B7AD85CEA29CA50519", // Login screen APIs test extension
+      "3F5995FE79A861F019C6F093BEF98D73FA9D3A5F"  // Login screen APIs in-sesesion test extension
+    ]
+  }],
   "loginScreenUi": [{
     "channel": "stable",
     "dependencies": ["behavior:imprivata_login_screen_extension"],
@@ -542,6 +563,17 @@
     "channel": "stable",
     "extension_types": ["extension"],
     "platforms": ["chromeos"]
+  }, {
+    // https://crbug.com/1194693
+    "channel": "stable",
+    "component_extensions_auto_granted": false,
+    "extension_types": ["login_screen_extension"],
+    "location": "policy",
+    "platforms": ["chromeos"],
+    "allowlist": [
+      "6B748A5C005F21B7CBCF4170C2F883E435DEB511",   // CSSI Smart Card Middleware
+      "075FF17D52ED6E3C2E5EC4D99F188E7A25AF47EA"    // Beta CSSI Smart Card Middleware
+    ]
   }, {
     "channel": "stable",
     "dependencies": ["behavior:imprivata_login_screen_extension"],
@@ -642,7 +674,7 @@
     "channel": "stable",
     "extension_types": ["platform_app"]
   }],
-  "notifications": {
+  "notifications": [{
     // The chrome.notifications functionality listed in notifications.idl is
     // available only to extension/platform_app types. The implementation of
     // that functionality enforces that restriction in
@@ -653,7 +685,18 @@
     "extension_types": [
       "extension", "legacy_packaged_app", "hosted_app", "platform_app"
     ]
-  },
+  }, {
+    // https://crbug.com/1194693
+    "channel": "stable",
+    "component_extensions_auto_granted": false,
+    "extension_types": ["login_screen_extension"],
+    "location": "policy",
+    "platforms": ["chromeos"],
+    "allowlist": [
+      "6B748A5C005F21B7CBCF4170C2F883E435DEB511",   // CSSI Smart Card Middleware
+      "075FF17D52ED6E3C2E5EC4D99F188E7A25AF47EA"    // Beta CSSI Smart Card Middleware
+    ]
+  }],
   "echoPrivate": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
@@ -824,16 +867,6 @@
       "A9A9FC0228ADF541F0334F22BEFB8F9C245B21D7"   // https://crbug.com/839189
     ]
   }],
-  "autofillAssistantPrivate": {
-    "channel": "trunk",
-    "extension_types": ["extension"],
-    "location": "component",
-    "allowlist": [
-      // api_test extension "jjeoclcdfjddkdjokiejckgcildcflpp"
-      // https://crbug.com/1015753
-      "64B58C7B53E3E1447FD0DEA62C5E654206179F99"
-    ]
-  },
   "signedInDevices": {
     "channel": "dev",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"]
@@ -988,6 +1021,17 @@
     "allowlist": [
       "B44D08FD98F1523ED5837D78D0A606EA9D6206E5",  // Web Store
       "2653F6F6C39BC6EEBD36A09AFB92A19782FF7EB4"   // Enterprise Web Store
+    ]
+  },
+  "wmDesksPrivate": {
+    "channel": "stable",
+    "extension_types": ["extension", "platform_app"],
+    "platforms": ["chromeos"],
+    "allowlist": [
+      // Extension id hash for API test.
+      "74801F84D31D23D08BEA48AB82C6A6120EDB4D45",
+      "6A4D7AEC6414492BD25219C7A479265BF1177D42",  // http://crbug.com/1206836
+      "F80B163C896D50A685E0B683BEEEA94217F253D6"   // http://crbug.com/1206836
     ]
   }
 }
